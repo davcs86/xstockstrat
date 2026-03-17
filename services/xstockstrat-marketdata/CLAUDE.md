@@ -12,8 +12,20 @@ Go gRPC service that is the **sole integration point for Alpaca's market data AP
 ## Language
 Go 1.22
 
-## gRPC Port
-`50053`
+## Ports
+
+| Protocol | Port | Purpose |
+|---|---|---|
+| gRPC | `50053` | Internal service-to-service (protobuf) |
+| HTTP (Connect-RPC) | `8053` | Connect-RPC + n8n webhooks (HTTP/1.1 + HTTP/2 via h2c) |
+
+## Connect-RPC
+
+Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8053`.
+
+- Handler registration: `cmd/server/main.go` — uses `marketdatav1connect.NewMarketDataServiceHandler` wrapped with `h2c.NewHandler`
+- Callers (frontends, n8n) use HTTP `8053`; internal services use gRPC `50053`
+- Transport: `golang.org/x/net/http2/h2c` supports HTTP/1.1 and HTTP/2 cleartext on same port
 
 ## Dependencies
 
@@ -65,10 +77,13 @@ Namespace: `marketdata`
 
 ```
 GRPC_PORT=50053
+HTTP_PORT=8053
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable
+APP_ENV=dev                            # dev | production
+TRADING_MODE=paper                     # paper | live
 ALPACA_API_KEY=<secret>
 ALPACA_API_SECRET=<secret>
 ALPACA_BASE_URL=https://paper-api.alpaca.markets

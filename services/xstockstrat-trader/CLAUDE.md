@@ -1,7 +1,7 @@
 # xstockstrat-trader — CLAUDE.md
 
 ## Role
-Next.js 14 frontend for trading execution and order management. Uses the App Router with server-side Route Handlers as gRPC-to-HTTP adapters. Browser components communicate with Next.js API routes; API routes communicate with gRPC backend services. Receives live alerts via SSE streaming from `xstockstrat-notify`.
+Next.js 14 frontend for trading execution and order management. Uses the App Router with server-side Route Handlers as Connect-RPC-to-HTTP adapters. Browser components communicate with Next.js API routes; API routes communicate with backend services via Connect-RPC HTTP. Receives live alerts via SSE streaming from `xstockstrat-notify`.
 
 ## Language
 TypeScript / Next.js 14 (App Router)
@@ -16,19 +16,26 @@ Browser (React Client Components)
   └── SWR → /api/orders, /api/portfolio   (polling)
   └── EventSource → /api/alerts/stream     (SSE, live alerts)
         └── Next.js Route Handlers (server-side)
-              ├── gRPC → xstockstrat-trading
-              ├── gRPC → xstockstrat-portfolio
-              └── gRPC stream → xstockstrat-notify (proxied as SSE)
+              ├── Connect-RPC → xstockstrat-trading:8051
+              ├── Connect-RPC → xstockstrat-portfolio:8052
+              ├── Connect-RPC → xstockstrat-notify:8059
+              └── Connect-RPC → xstockstrat-identity:8058
 ```
+
+## Connect-RPC Client
+
+- Transport factory: `src/lib/connectTransport.ts` — `createTransport(baseUrl)` returns `createNodeHttpTransport` server-side or `createConnectTransport` browser-side
+- All API routes import this factory; no `@grpc/grpc-js` dependency
+- Dependencies: `@connectrpc/connect`, `@connectrpc/connect-node`, `@connectrpc/connect-web`, `@bufbuild/protobuf`
 
 ## Dependencies
 
 | Dependency | Type | Reason |
 |---|---|---|
-| xstockstrat-trading | gRPC (server-side) | Place, cancel, list orders |
-| xstockstrat-portfolio | gRPC (server-side) | Portfolio equity, positions, P&L |
-| xstockstrat-notify | gRPC stream (server-side) | Live alert delivery via SSE |
-| xstockstrat-identity | gRPC (server-side) | Token validation |
+| xstockstrat-trading | Connect-RPC HTTP `8051` | Place, cancel, list orders |
+| xstockstrat-portfolio | Connect-RPC HTTP `8052` | Portfolio equity, positions, P&L |
+| xstockstrat-notify | Connect-RPC HTTP `8059` | Alert delivery |
+| xstockstrat-identity | Connect-RPC HTTP `8058` | Token validation |
 
 ## Config Keys Consumed
 
@@ -55,12 +62,13 @@ This ensures the order book and portfolio summary only show data for the selecte
 ## Environment Variables
 
 ```
-# .env.local
-TRADING_ENDPOINT=xstockstrat-trading:50051
-PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
-NOTIFY_ENDPOINT=xstockstrat-notify:50059
-IDENTITY_ENDPOINT=xstockstrat-identity:50058
-NEXT_PUBLIC_APP_ENV=development
+# Connect-RPC HTTP endpoints (not raw gRPC ports)
+TRADING_HTTP_ENDPOINT=http://xstockstrat-trading:8051
+PORTFOLIO_HTTP_ENDPOINT=http://xstockstrat-portfolio:8052
+NOTIFY_HTTP_ENDPOINT=http://xstockstrat-notify:8059
+IDENTITY_HTTP_ENDPOINT=http://xstockstrat-identity:8058
+APP_ENV=dev                            # dev | production
+TRADING_MODE=paper                     # paper | live
 ```
 
 ## Running Locally

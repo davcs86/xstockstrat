@@ -42,6 +42,8 @@ services:
       GRPC_PORT: "50060"
       HTTP_PORT: "8060"
       DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      APP_ENV: dev
+      TRADING_MODE: paper
     ports:
       - "50060:50060"
       - "8060:8060"
@@ -63,6 +65,8 @@ services:
       HTTP_PORT: "8057"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      APP_ENV: dev
+      TRADING_MODE: paper
     ports:
       - "50057:50057"
       - "8057:8057"
@@ -88,6 +92,8 @@ services:
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
       JWT_SECRET: dev-jwt-secret-change-in-production
+      APP_ENV: dev
+      TRADING_MODE: paper
     ports:
       - "50058:50058"
       - "8058:8058"
@@ -110,6 +116,8 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      APP_ENV: dev
+      TRADING_MODE: paper
     ports:
       - "50059:50059"
       - "8059:8059"
@@ -138,6 +146,8 @@ services:
       ALPACA_BASE_URL: https://paper-api.alpaca.markets
       ALPACA_DATA_URL: https://data.alpaca.markets
       ALPACA_PAPER: "true"
+      APP_ENV: dev
+      TRADING_MODE: paper
     ports:
       - "50053:50053"
       - "8053:8053"
@@ -161,6 +171,8 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      APP_ENV: dev
+      TRADING_MODE: paper
     ports:
       - "50054:50054"
       - "8054:8054"
@@ -184,6 +196,8 @@ services:
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      APP_ENV: dev
+      TRADING_MODE: paper
     ports:
       - "50055:50055"
       - "8055:8055"
@@ -210,6 +224,8 @@ services:
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      APP_ENV: dev
+      TRADING_MODE: paper
     ports:
       - "50056:50056"
       - "8056:8056"
@@ -236,6 +252,8 @@ services:
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      APP_ENV: dev
+      TRADING_MODE: paper
     ports:
       - "50052:50052"
       - "8052:8052"
@@ -262,6 +280,8 @@ services:
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      APP_ENV: dev
+      TRADING_MODE: paper
     ports:
       - "50051:50051"
       - "8051:8051"
@@ -282,10 +302,13 @@ services:
       dockerfile: Dockerfile
     container_name: xstockstrat-trader
     environment:
-      TRADING_ENDPOINT: xstockstrat-trading:50051
-      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
-      NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      IDENTITY_ENDPOINT: xstockstrat-identity:50058
+      # Connect-RPC HTTP endpoints (replaces raw gRPC endpoints)
+      TRADING_HTTP_ENDPOINT: http://xstockstrat-trading:8051
+      PORTFOLIO_HTTP_ENDPOINT: http://xstockstrat-portfolio:8052
+      NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
+      IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
+      APP_ENV: dev
+      TRADING_MODE: paper
     ports:
       - "3000:3000"
     networks:
@@ -304,11 +327,14 @@ services:
       dockerfile: Dockerfile
     container_name: xstockstrat-insights
     environment:
-      ANALYSIS_ENDPOINT: xstockstrat-analysis:50056
-      INDICATORS_ENDPOINT: xstockstrat-indicators:50054
-      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
-      NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      IDENTITY_ENDPOINT: xstockstrat-identity:50058
+      # Connect-RPC HTTP endpoints (replaces raw gRPC endpoints)
+      ANALYSIS_HTTP_ENDPOINT: http://xstockstrat-analysis:8056
+      INDICATORS_HTTP_ENDPOINT: http://xstockstrat-indicators:8054
+      MARKETDATA_HTTP_ENDPOINT: http://xstockstrat-marketdata:8053
+      NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
+      IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
+      APP_ENV: dev
+      TRADING_MODE: paper
     ports:
       - "3001:3001"
     networks:
@@ -317,4 +343,25 @@ services:
       - xstockstrat-analysis
       - xstockstrat-indicators
       - xstockstrat-marketdata
+    restart: unless-stopped
+
+  # ── Config UI ───────────────────────────────────────────────────────────
+  xstockstrat-config-ui:
+    build:
+      context: ./services/xstockstrat-config-ui
+      dockerfile: Dockerfile
+    container_name: xstockstrat-config-ui
+    environment:
+      # Connect-RPC HTTP endpoint for xstockstrat-config
+      CONFIG_ENDPOINT: http://xstockstrat-config:8060
+      DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      APP_ENV: dev
+      TRADING_MODE: paper
+    ports:
+      - "3002:3002"
+    networks:
+      - xstockstrat
+    depends_on:
+      - xstockstrat-config
+      - timescaledb
     restart: unless-stopped

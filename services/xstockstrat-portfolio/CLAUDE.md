@@ -8,8 +8,20 @@ Go gRPC service that tracks open positions, portfolio equity, and P&L. Maintains
 ## Language
 Go 1.22
 
-## gRPC Port
-`50052`
+## Ports
+
+| Protocol | Port | Purpose |
+|---|---|---|
+| gRPC | `50052` | Internal service-to-service (protobuf) |
+| HTTP (Connect-RPC) | `8052` | Connect-RPC + n8n webhooks (HTTP/1.1 + HTTP/2 via h2c) |
+
+## Connect-RPC
+
+Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8052`.
+
+- Handler registration: `cmd/server/main.go` — uses `portfoliov1connect.NewPortfolioServiceHandler` wrapped with `h2c.NewHandler`
+- Callers (frontends, n8n) use HTTP `8052`; internal services use gRPC `50052`
+- Transport: `golang.org/x/net/http2/h2c` supports HTTP/1.1 and HTTP/2 cleartext on same port
 
 ## Dependencies
 
@@ -58,9 +70,12 @@ Namespace: `portfolio`
 
 ```
 GRPC_PORT=50052
+HTTP_PORT=8052
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable
+APP_ENV=dev                            # dev | production
+TRADING_MODE=paper                     # paper | live
 ```

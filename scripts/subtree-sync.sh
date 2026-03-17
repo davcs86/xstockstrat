@@ -31,6 +31,7 @@ SERVICES=(
   xstockstrat-config
   xstockstrat-trader
   xstockstrat-insights
+  xstockstrat-config-ui
 )
 
 usage() {

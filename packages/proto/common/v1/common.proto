@@ -51,3 +51,11 @@ enum TradingMode {
   TRADING_MODE_PAPER = 1;
   TRADING_MODE_LIVE = 2;
 }
+
+// Environment distinguishes dev from production deployments.
+// Used by xstockstrat-config to scope config values per deployment environment.
+enum Environment {
+  ENVIRONMENT_UNSPECIFIED = 0;
+  ENVIRONMENT_DEV = 1;
+  ENVIRONMENT_PRODUCTION = 2;
+}

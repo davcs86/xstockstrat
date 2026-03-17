@@ -1,13 +1,18 @@
 import * as grpc from '@grpc/grpc-js';
+import * as http from 'http';
 import { Pool } from 'pg';
+import { ConnectRouter } from '@connectrpc/connect';
+import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { getLogger } from './services/logger';
 import { ConfigServiceImpl } from './grpc/configServiceImpl';
 import { createConfigServiceDefinition } from './grpc/serviceDefinition';
+import { createConnectRouter } from './connect/connectRouter';
 
 const log = getLogger('config:server');
 
 async function main() {
   const grpcPort = process.env.GRPC_PORT ?? '50060';
+  const httpPort = process.env.HTTP_PORT ?? '8060';
   const databaseUrl = process.env.DATABASE_URL ?? '';
 
   // NOTE: xstockstrat-config does NOT subscribe to itself.
@@ -18,28 +23,49 @@ async function main() {
   await pool.query('SELECT 1');
   log.info('Database connected');
 
-  const server = new grpc.Server();
   const configImpl = new ConfigServiceImpl(pool);
   await configImpl.initialize();
 
-  server.addService(createConfigServiceDefinition(), configImpl);
+  // ── gRPC server (internal service-to-service, port 50060) ──────────────
+  const grpcServer = new grpc.Server();
+  grpcServer.addService(createConfigServiceDefinition(), configImpl);
 
-  server.bindAsync(
+  grpcServer.bindAsync(
     `0.0.0.0:${grpcPort}`,
     grpc.ServerCredentials.createInsecure(),
     (err, port) => {
       if (err) {
-        log.error('Failed to bind', { error: err.message });
+        log.error('Failed to bind gRPC', { error: err.message });
         process.exit(1);
       }
-      server.start();
-      log.info(`Config service listening on port ${port}`);
+      grpcServer.start();
+      log.info(`Config gRPC service listening on port ${port}`);
     }
   );
 
+  // ── Connect-RPC HTTP server (browser + external clients, port 8060) ────
+  const connectHandler = connectNodeAdapter({ routes: createConnectRouter(configImpl) });
+  const httpServer = http.createServer((req, res) => {
+    // Add CORS headers for browser clients
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Connect-Protocol-Version, Connect-Timeout-Ms');
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    connectHandler(req, res);
+  });
+
+  httpServer.listen(parseInt(httpPort, 10), () => {
+    log.info(`Config Connect-RPC HTTP service listening on port ${httpPort}`);
+  });
+
   const shutdown = () => {
     log.info('Shutting down config service...');
-    server.tryShutdown(() => {
+    httpServer.close();
+    grpcServer.tryShutdown(() => {
       pool.end();
       process.exit(0);
     });
