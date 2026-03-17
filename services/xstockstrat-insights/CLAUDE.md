@@ -3,6 +3,8 @@
 ## Role
 Next.js 14 analytics and insights dashboard. Displays strategy backtests, performance scoring, indicator charts, and historical market data. Read-heavy; no order placement.
 
+**Note on paper vs live**: Strategy backtests are independent simulations run by `xstockstrat-analysis` against historical market data — they are not derived from paper or live order history. No paper/live mode toggle is needed in this service. If future pages show real trade history or realized P&L from the portfolio service, a `trading_mode` filter should be added at that point.
+
 ## Language
 TypeScript / Next.js 14 (App Router)
 
