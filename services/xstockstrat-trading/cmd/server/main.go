@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
+	"github.com/xstockstrat/trading/internal/broker"
 	"github.com/xstockstrat/trading/internal/config"
 	"github.com/xstockstrat/trading/internal/handler"
 	"github.com/xstockstrat/trading/internal/service"
@@ -42,8 +43,20 @@ func main() {
 	}
 	slog.Info("config snapshot received, starting trading service")
 
+	// Alpaca broker client — xstockstrat-trading is the sole integration point
+	// for Alpaca's broker/order APIs. Mode (paper vs live) is resolved at order
+	// placement time from the trading.broker.paper config key (overrides env).
+	brokerClient := broker.NewClient(broker.ClientConfig{
+		APIKey:    cfg.AlpacaAPIKey,
+		APISecret: cfg.AlpacaAPISecret,
+		PaperURL:  cfg.AlpacaPaperURL,
+		LiveURL:   cfg.AlpacaLiveURL,
+		Paper:     cfg.AlpacaPaper,
+	})
+	slog.Info("broker client initialized", "paper", cfg.AlpacaPaper)
+
 	// Wire service layer
-	svc, err := service.NewTradingService(cfg, cfgWatcher)
+	svc, err := service.NewTradingService(cfg, cfgWatcher, brokerClient)
 	if err != nil {
 		slog.Error("service init failed", "error", err)
 		os.Exit(1)

@@ -32,6 +32,8 @@ message Order {
   google.protobuf.Timestamp updated_at = 14;
   string strategy_id = 15;
   string user_id = 16;
+  xstockstrat.common.v1.TradingMode trading_mode = 17;
+  string broker_order_id = 18; // Alpaca-assigned order ID, populated after broker submission
 }
 
 enum OrderSide {
@@ -72,6 +74,8 @@ message PlaceOrderRequest {
   string user_id = 9;
   string client_order_id = 10;
   bool requires_approval = 11;
+  // If UNSPECIFIED, the service uses trading.broker.paper config key to determine mode.
+  xstockstrat.common.v1.TradingMode trading_mode = 12;
 }
 
 message CancelOrderRequest {

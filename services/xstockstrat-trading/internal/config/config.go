@@ -14,19 +14,28 @@ import (
 
 // Config holds all runtime config for the trading service.
 type Config struct {
-	GRPCPort           string
-	ConfigEndpoint     string
-	LedgerEndpoint     string
-	PortfolioEndpoint  string
-	IndicatorsEndpoint string
-	NotifyEndpoint     string
-	DBConnStr          string
+	GRPCPort             string
+	HTTPPort             string
+	ConfigEndpoint       string
+	LedgerEndpoint       string
+	PortfolioEndpoint    string
+	IndicatorsEndpoint   string
+	NotifyEndpoint       string
+	DBConnStr            string
 	RequireApprovalAbove float64 // order qty threshold requiring manual approval
+	// Alpaca broker credentials — used only by xstockstrat-trading for order submission.
+	// Secrets: sourced from env vars, never from the config service.
+	AlpacaAPIKey    string
+	AlpacaAPISecret string
+	AlpacaPaperURL  string // default: https://paper-api.alpaca.markets
+	AlpacaLiveURL   string // default: https://api.alpaca.markets
+	AlpacaPaper     bool   // default: true; set false for live trading
 }
 
 func LoadFromEnv() *Config {
 	return &Config{
 		GRPCPort:             getEnv("GRPC_PORT", "50051"),
+		HTTPPort:             getEnv("HTTP_PORT", "8051"),
 		ConfigEndpoint:       getEnv("CONFIG_ENDPOINT", "xstockstrat-config:50060"),
 		LedgerEndpoint:       getEnv("LEDGER_ENDPOINT", "xstockstrat-ledger:50057"),
 		PortfolioEndpoint:    getEnv("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052"),
@@ -34,6 +43,11 @@ func LoadFromEnv() *Config {
 		NotifyEndpoint:       getEnv("NOTIFY_ENDPOINT", "xstockstrat-notify:50059"),
 		DBConnStr:            getEnv("DATABASE_URL", ""),
 		RequireApprovalAbove: 0, // loaded from config service at runtime
+		AlpacaAPIKey:         getEnv("ALPACA_API_KEY", ""),
+		AlpacaAPISecret:      getEnv("ALPACA_API_SECRET", ""),
+		AlpacaPaperURL:       getEnv("ALPACA_PAPER_URL", "https://paper-api.alpaca.markets"),
+		AlpacaLiveURL:        getEnv("ALPACA_LIVE_URL", "https://api.alpaca.markets"),
+		AlpacaPaper:          getEnvBool("ALPACA_PAPER", true),
 	}
 }
 
@@ -42,6 +56,14 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	return v == "true" || v == "1" || v == "yes"
 }
 
 // Watcher subscribes to xstockstrat-config WatchConfig stream.

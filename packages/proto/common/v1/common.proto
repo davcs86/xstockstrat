@@ -43,3 +43,11 @@ message TimeRange {
   google.protobuf.Timestamp start = 1;
   google.protobuf.Timestamp end = 2;
 }
+
+// TradingMode distinguishes paper (simulated) from live (real-money) order routing.
+// Used by both xstockstrat-trading and xstockstrat-portfolio.
+enum TradingMode {
+  TRADING_MODE_UNSPECIFIED = 0;
+  TRADING_MODE_PAPER = 1;
+  TRADING_MODE_LIVE = 2;
+}

@@ -39,6 +39,7 @@ message Position {
   double unrealized_pnl_pct = 7;
   double cost_basis = 8;
   google.protobuf.Timestamp opened_at = 9;
+  xstockstrat.common.v1.TradingMode trading_mode = 10;
 }
 
 message PortfolioSnapshot {
@@ -48,6 +49,7 @@ message PortfolioSnapshot {
   double cash = 4;
   double day_pnl = 5;
   int32 open_positions = 6;
+  xstockstrat.common.v1.TradingMode trading_mode = 7;
 }
 
 message PnLResponse {
@@ -58,11 +60,21 @@ message PnLResponse {
   xstockstrat.common.v1.TimeRange range = 5;
 }
 
-message GetPortfolioRequest { string user_id = 1; }
-message GetPositionRequest { string user_id = 1; string symbol = 2; }
+// If trading_mode is UNSPECIFIED, returns positions for all modes.
+message GetPortfolioRequest {
+  string user_id = 1;
+  xstockstrat.common.v1.TradingMode trading_mode = 2;
+}
+message GetPositionRequest {
+  string user_id = 1;
+  string symbol = 2;
+  xstockstrat.common.v1.TradingMode trading_mode = 3;
+}
 message ListPositionsRequest {
   string user_id = 1;
   xstockstrat.common.v1.PageRequest page = 2;
+  // Filter by trading mode; UNSPECIFIED returns all positions.
+  xstockstrat.common.v1.TradingMode trading_mode = 3;
 }
 message ListPositionsResponse {
   repeated Position positions = 1;
@@ -71,9 +83,15 @@ message ListPositionsResponse {
 message GetPnLRequest {
   string user_id = 1;
   xstockstrat.common.v1.TimeRange range = 2;
+  // Filter by trading mode; UNSPECIFIED returns combined P&L.
+  xstockstrat.common.v1.TradingMode trading_mode = 3;
 }
 message GetSnapshotRequest {
   string portfolio_id = 1;
   google.protobuf.Timestamp at_time = 2;
 }
-message StreamPortfolioUpdatesRequest { string user_id = 1; }
+message StreamPortfolioUpdatesRequest {
+  string user_id = 1;
+  // Filter by trading mode; UNSPECIFIED streams all modes.
+  xstockstrat.common.v1.TradingMode trading_mode = 2;
+}
