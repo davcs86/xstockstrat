@@ -177,6 +177,9 @@ func (s *TradingService) ListOrders(ctx context.Context, req *tradingv1.ListOrde
 		if req.Status != tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED && o.Status != req.Status {
 			continue
 		}
+		if req.TradingMode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED && o.TradingMode != req.TradingMode {
+			continue
+		}
 		orders = append(orders, o)
 	}
 	return &tradingv1.ListOrdersResponse{Orders: orders}, nil

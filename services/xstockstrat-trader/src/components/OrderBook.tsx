@@ -1,11 +1,16 @@
 'use client';
 import useSWR from 'swr';
+import type { TradingMode } from '@/app/page';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 // ── OrderBook ──────────────────────────────────────────────────────────────
-export function OrderBook() {
-  const { data, error, isLoading } = useSWR('/api/orders', fetcher, { refreshInterval: 5000 });
+export function OrderBook({ mode }: { mode: TradingMode }) {
+  const { data, error, isLoading } = useSWR(
+    `/api/orders?trading_mode=${mode}`,
+    fetcher,
+    { refreshInterval: 5000 },
+  );
 
   const statusColor: Record<string, string> = {
     ORDER_STATUS_NEW: 'text-blue-400',
@@ -18,7 +23,10 @@ export function OrderBook() {
 
   return (
     <div className="rounded-xl bg-gray-900 border border-gray-800 p-5">
-      <h2 className="text-base font-semibold mb-4 text-gray-200">Orders</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base font-semibold text-gray-200">Orders</h2>
+        <ModeBadge mode={mode} />
+      </div>
       {isLoading && <p className="text-sm text-gray-500">Loading…</p>}
       {error && <p className="text-sm text-red-400">Failed to load orders</p>}
       {data?.orders && (
@@ -52,7 +60,7 @@ export function OrderBook() {
             </tbody>
           </table>
           {data.orders.length === 0 && (
-            <p className="text-sm text-gray-600 text-center py-6">No orders</p>
+            <p className="text-sm text-gray-600 text-center py-6">No {mode} orders</p>
           )}
         </div>
       )}
@@ -61,8 +69,12 @@ export function OrderBook() {
 }
 
 // ── PortfolioSummary ───────────────────────────────────────────────────────
-export function PortfolioSummary() {
-  const { data, isLoading, error } = useSWR('/api/portfolio', fetcher, { refreshInterval: 10000 });
+export function PortfolioSummary({ mode }: { mode: TradingMode }) {
+  const { data, isLoading, error } = useSWR(
+    `/api/portfolio?trading_mode=${mode}`,
+    fetcher,
+    { refreshInterval: 10000 },
+  );
 
   if (isLoading) return (
     <div className="rounded-xl bg-gray-900 border border-gray-800 p-5">
@@ -80,7 +92,10 @@ export function PortfolioSummary() {
 
   return (
     <div className="rounded-xl bg-gray-900 border border-gray-800 p-5 space-y-4">
-      <h2 className="text-base font-semibold text-gray-200">Portfolio</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold text-gray-200">Portfolio</h2>
+        <ModeBadge mode={mode} />
+      </div>
 
       <div className="space-y-2">
         <Stat label="Equity" value={`$${Number(data.equity).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />
@@ -110,6 +125,19 @@ export function PortfolioSummary() {
         </div>
       )}
     </div>
+  );
+}
+
+// ── Shared helpers ─────────────────────────────────────────────────────────
+function ModeBadge({ mode }: { mode: TradingMode }) {
+  return (
+    <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+      mode === 'paper'
+        ? 'bg-yellow-500/20 text-yellow-400'
+        : 'bg-emerald-500/20 text-emerald-400'
+    }`}>
+      {mode === 'paper' ? 'PAPER' : 'LIVE'}
+    </span>
   );
 }
 

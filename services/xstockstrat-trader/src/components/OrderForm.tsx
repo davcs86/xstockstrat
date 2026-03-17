@@ -1,10 +1,15 @@
 'use client';
 import { useState } from 'react';
+import type { TradingMode } from '@/app/page';
 
 type OrderSide = 'buy' | 'sell';
 type OrderType = 'market' | 'limit' | 'stop' | 'stop_limit';
 
-export function OrderForm() {
+interface OrderFormProps {
+  mode: TradingMode;
+}
+
+export function OrderForm({ mode }: OrderFormProps) {
   const [symbol, setSymbol] = useState('');
   const [side, setSide] = useState<OrderSide>('buy');
   const [orderType, setOrderType] = useState<OrderType>('market');
@@ -28,6 +33,7 @@ export function OrderForm() {
           order_type: orderType,
           qty: parseFloat(qty),
           limit_price: limitPrice ? parseFloat(limitPrice) : undefined,
+          trading_mode: mode,
         }),
       });
       const data = await res.json();
@@ -42,10 +48,18 @@ export function OrderForm() {
   };
 
   const needsLimitPrice = orderType === 'limit' || orderType === 'stop_limit';
+  const isPaper = mode === 'paper';
 
   return (
     <div className="rounded-xl bg-gray-900 border border-gray-800 p-5">
-      <h2 className="text-base font-semibold mb-4 text-gray-200">Place Order</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base font-semibold text-gray-200">Place Order</h2>
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+          isPaper ? 'bg-yellow-500/20 text-yellow-400' : 'bg-emerald-500/20 text-emerald-400'
+        }`}>
+          {isPaper ? 'PAPER' : 'LIVE'}
+        </span>
+      </div>
       <form onSubmit={handleSubmit} className="space-y-3">
         {/* Symbol */}
         <input

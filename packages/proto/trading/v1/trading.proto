@@ -98,6 +98,8 @@ message ListOrdersRequest {
   OrderStatus status = 3;
   xstockstrat.common.v1.TimeRange range = 4;
   xstockstrat.common.v1.PageRequest page = 5;
+  // Filter by trading mode; UNSPECIFIED returns orders for all modes.
+  xstockstrat.common.v1.TradingMode trading_mode = 6;
 }
 
 message ListOrdersResponse {

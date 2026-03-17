@@ -34,11 +34,21 @@ Browser (React Client Components)
 
 No direct WatchConfig subscription (frontend does not connect to config service directly). Config values relevant to the trader UI are served through API routes that read from backend services.
 
+## Paper vs Live Mode
+
+The dashboard has a global **PAPER / LIVE toggle** in the header (`page.tsx`). The selected mode:
+- Is passed as a prop to `OrderForm`, `OrderBook`, and `PortfolioSummary`
+- Is sent in the `trading_mode` field of every `POST /api/orders` request
+- Is used as a query filter on `GET /api/orders?trading_mode=paper|live`
+- Is used as a query filter on `GET /api/portfolio?trading_mode=paper|live`
+
+This ensures the order book and portfolio summary only show data for the selected mode. The API route helpers map `'paper'→1` and `'live'→2` to match the `TradingMode` proto enum.
+
 ## Key Pages
 
 | Route | Description |
 |---|---|
-| `/` | Trading dashboard — order form, order book, portfolio summary, alerts |
+| `/` | Trading dashboard — mode toggle, order form, order book, portfolio summary, alerts |
 | `/orders/[id]` | Order detail view |
 | `/positions` | Full positions list with P&L breakdown |
 
