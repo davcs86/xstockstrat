@@ -5,14 +5,19 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"connectrpc.com/connect"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
+	marketdatav1connect "github.com/xstockstrat/contracts/gen/go/marketdata/v1/marketdatav1connect"
 	"github.com/xstockstrat/marketdata/internal/alpaca"
 	"github.com/xstockstrat/marketdata/internal/config"
 	"github.com/xstockstrat/marketdata/internal/handler"
@@ -68,7 +73,26 @@ func main() {
 	marketdatav1.RegisterMarketDataServiceServer(grpcServer, hdl)
 	reflection.Register(grpcServer)
 
-	slog.Info("marketdata service starting", "port", cfg.GRPCPort)
+	// Connect-RPC HTTP server (port 8053) — supports HTTP/1.1 + HTTP/2 via h2c
+	connectPath, connectHdl := marketdatav1connect.NewMarketDataServiceHandler(
+		hdl,
+		connect.WithInterceptors(),
+	)
+	mux := http.NewServeMux()
+	mux.Handle(connectPath, connectHdl)
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	httpServer := &http.Server{
+		Addr:    fmt.Sprintf(":%s", cfg.HTTPPort),
+		Handler: h2c.NewHandler(mux, &http2.Server{}),
+	}
+
+	slog.Info("marketdata service starting", "grpc_port", cfg.GRPCPort, "http_port", cfg.HTTPPort)
+
+	go func() {
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("http server error", "error", err)
+		}
+	}()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -76,6 +100,7 @@ func main() {
 		<-quit
 		slog.Info("shutting down marketdata service")
 		grpcServer.GracefulStop()
+		httpServer.Shutdown(ctx)
 		cancel()
 	}()
 

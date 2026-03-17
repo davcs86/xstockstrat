@@ -6,9 +6,11 @@ option go_package = "github.com/xstockstrat/contracts/gen/go/config/v1;configv1"
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
+import "common/v1/common.proto";
 
 // ConfigService — live configuration via server-streaming WatchConfig.
 // All services call WatchConfig at startup and stream config updates.
+// Config values are scoped by environment (dev/production) and trading_mode (paper/live/all).
 service ConfigService {
   // Subscribe to config updates for a given namespace/service.
   // Server streams updates as config changes; initial snapshot is the first message.
@@ -28,6 +30,8 @@ message WatchConfigRequest {
   string namespace = 1;   // e.g. "indicators", "trading", "platform"
   string client_id = 2;   // service instance identifier
   string version = 3;     // last known version (for delta updates)
+  xstockstrat.common.v1.Environment environment = 4;    // dev or production; defaults to dev
+  xstockstrat.common.v1.TradingMode trading_mode = 5;   // paper or live; 'all' rows included always
 }
 
 message ConfigSnapshot {
@@ -37,6 +41,8 @@ message ConfigSnapshot {
   map<string, ConfigValue> values = 4;
   ConfigUpdateType update_type = 5;
   repeated string changed_keys = 6; // populated for DELTA updates
+  xstockstrat.common.v1.Environment environment = 7;
+  xstockstrat.common.v1.TradingMode trading_mode = 8;
 }
 
 message ConfigValue {
@@ -61,6 +67,8 @@ enum ConfigUpdateType {
 
 message GetConfigRequest {
   string namespace = 1;
+  xstockstrat.common.v1.Environment environment = 2;
+  xstockstrat.common.v1.TradingMode trading_mode = 3;
 }
 
 message SetConfigRequest {
@@ -69,6 +77,8 @@ message SetConfigRequest {
   ConfigValue value = 3;
   string author = 4;
   string reason = 5;
+  xstockstrat.common.v1.Environment environment = 6;
+  xstockstrat.common.v1.TradingMode trading_mode = 7;
 }
 
 message SetConfigResponse {
@@ -78,6 +88,8 @@ message SetConfigResponse {
 
 message ListKeysRequest {
   string namespace = 1;
+  xstockstrat.common.v1.Environment environment = 2;
+  xstockstrat.common.v1.TradingMode trading_mode = 3;
 }
 
 message ListKeysResponse {
@@ -90,4 +102,6 @@ message ConfigKeyMeta {
   string default_value = 3;
   bool is_secret = 4;
   string consuming_service = 5;
+  xstockstrat.common.v1.Environment environment = 6;
+  xstockstrat.common.v1.TradingMode trading_mode = 7;
 }

@@ -8,26 +8,27 @@
 - `scripts/` — codegen, bootstrap, and CI helpers
 - Root-level config governance documentation (this file)
 
-All service repos are siblings under `services/`. They consume generated code from `packages/proto/` and coordinate via gRPC.
+All service repos are siblings under `services/`. They consume generated code from `packages/proto/` and coordinate via Connect-RPC (HTTP/1.1 + HTTP/2 with protobuf). Internal service-to-service calls use gRPC ports; browser/external clients use HTTP Connect-RPC ports.
 
 ---
 
 ## Service Registry
 
-| Service | Language | Role | Port |
-|---|---|---|---|
-| xstockstrat-trading | Go | Order execution, trade lifecycle | 50051 |
-| xstockstrat-portfolio | Go | Position tracking, P&L | 50052 |
-| xstockstrat-marketdata | Go | Alpaca feed ingestion, OHLCV storage | 50053 |
-| xstockstrat-indicators | Python | Formula engine, sandboxed execution | 50054 |
-| xstockstrat-ingest | Python | Raw data normalization, event publishing | 50055 |
-| xstockstrat-analysis | Python | Strategy scoring, backtesting | 50056 |
-| xstockstrat-ledger | Node.js | Append-only event store | 50057 |
-| xstockstrat-identity | Node.js | Auth, API keys, JWT | 50058 |
-| xstockstrat-notify | Node.js | gRPC streaming alert delivery | 50059 |
-| xstockstrat-config | Node.js | Live config WatchConfig gRPC stream | 50060 |
-| xstockstrat-trader | Next.js | Trading UI frontend | 3000 |
-| xstockstrat-insights | Next.js | Analytics/insights dashboard | 3001 |
+| Service | Language | Role | gRPC Port | HTTP (Connect-RPC) Port |
+|---|---|---|---|---|
+| xstockstrat-trading | Go | Order execution, trade lifecycle | 50051 | 8051 |
+| xstockstrat-portfolio | Go | Position tracking, P&L | 50052 | 8052 |
+| xstockstrat-marketdata | Go | Alpaca feed ingestion, OHLCV storage | 50053 | 8053 |
+| xstockstrat-indicators | Python | Formula engine, sandboxed execution | 50054 | 8054 |
+| xstockstrat-ingest | Python | Raw data normalization, event publishing | 50055 | 8055 |
+| xstockstrat-analysis | Python | Strategy scoring, backtesting | 50056 | 8056 |
+| xstockstrat-ledger | Node.js | Append-only event store | 50057 | 8057 |
+| xstockstrat-identity | Node.js | Auth, API keys, JWT | 50058 | 8058 |
+| xstockstrat-notify | Node.js | Connect-RPC streaming alert delivery | 50059 | 8059 |
+| xstockstrat-config | Node.js | Live config WatchConfig stream | 50060 | 8060 |
+| xstockstrat-trader | Next.js | Trading UI frontend | — | 3000 |
+| xstockstrat-insights | Next.js | Analytics/insights dashboard | — | 3001 |
+| xstockstrat-config-ui | Next.js | Config management UI | — | 3002 |
 
 ---
 
@@ -37,7 +38,7 @@ All service repos are siblings under `services/`. They consume generated code fr
 Go        → xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata
 Python    → xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis
 Node.js   → xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, xstockstrat-config
-Next.js   → xstockstrat-trader, xstockstrat-insights
+Next.js   → xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
 ```
 
 ---
@@ -83,14 +84,16 @@ See `_tasks/x-approval-flow.md` for full detail. Summary:
 
 ## Config Governance Rules
 
-All runtime configuration is served by **xstockstrat-config** via gRPC `WatchConfig` streaming RPC. Rules:
+All runtime configuration is served by **xstockstrat-config** via `WatchConfig` streaming RPC (gRPC on port 50060 / Connect-RPC on port 8060). Rules:
 
 1. **No hardcoded config values** in service source code. All env-specific values must be registered in the config service.
 2. **Config key naming convention**: `<service-short-name>.<category>.<key>` — e.g., `indicators.sandbox.timeout_ms`
-3. **All services subscribe to xstockstrat-config at startup** before accepting traffic.
-4. **Config changes flow via n8n** → config webhook handler → config service gRPC → WatchConfig stream → all subscribers.
-5. **Sensitive keys** (API keys, secrets) use the `secret.*` prefix and are resolved from the secret store at runtime; they are never stored in config service state.
-6. **Default values** must be declared in each service's `CLAUDE.md` under "Config Keys".
+3. **All services subscribe to xstockstrat-config at startup** before accepting traffic. They must pass `environment` and `trading_mode` in the WatchConfig request.
+4. **Config values are scoped** by `environment` (`dev`/`production`) and `trading_mode` (`paper`/`live`/`all`). Rows with `trading_mode='all'` apply to all modes.
+5. **Config changes flow via n8n** → config webhook handler → config service → WatchConfig stream → all subscribers.
+6. **Sensitive keys** (API keys, secrets) use the `secret.*` prefix and are resolved from the secret store at runtime; they are never stored in config service state.
+7. **Default values** must be declared in each service's `CLAUDE.md` under "Config Keys".
+8. **Config UI** available at `http://localhost:3002` — manage config values by environment and trading mode.
 
 ### Global Config Keys
 
@@ -121,12 +124,14 @@ All services run their own migrations against their own schema. Migration tool: 
 
 ## n8n Cloud Integration
 
-Each service exposes HTTP webhook handlers (under `/webhooks/n8n/`) that translate incoming n8n payloads to internal gRPC calls. n8n workflows trigger on external events (alerts, schedule, external APIs) and call these handlers.
+Each service exposes HTTP webhook handlers (under `/webhooks/n8n/`) on the HTTP port (80XX) alongside the Connect-RPC routes. n8n workflows trigger on external events (alerts, schedule, external APIs) and call these handlers.
 
 Pattern:
 ```
 n8n Cloud → POST /webhooks/n8n/<action> → service webhook handler → internal gRPC client → target service
 ```
+
+Connect-RPC is also directly callable from n8n via HTTP POST to the service's Connect-RPC endpoint (port 80XX), using JSON or protobuf encoding.
 
 ---
 
