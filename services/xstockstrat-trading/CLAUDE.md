@@ -1,7 +1,11 @@
 # xstockstrat-trading — CLAUDE.md
 
 ## Role
-Go gRPC service responsible for order execution and trade lifecycle management. Bridges strategy signals to the broker (via xstockstrat-marketdata's Alpaca client). Writes all order events to xstockstrat-ledger.
+Go gRPC service responsible for order execution and trade lifecycle management. Submits orders to Alpaca's broker REST API (paper or live). Writes all order events to xstockstrat-ledger.
+
+**Alpaca API ownership**: `xstockstrat-trading` is the sole integration point for Alpaca's **broker/order APIs** (`/v2/orders`, `/v2/account`). `xstockstrat-marketdata` owns Alpaca's **market data APIs** — these are separate API surfaces and separate responsibilities.
+
+**Paper vs live**: Mode is resolved per order. Priority: `PlaceOrderRequest.trading_mode` > `trading.broker.paper` (live config) > `ALPACA_PAPER` (env). Paper routes to `https://paper-api.alpaca.markets`; live routes to `https://api.alpaca.markets`.
 
 ## Language
 Go 1.22
@@ -35,6 +39,8 @@ All config values are served by **xstockstrat-config** namespace `trading`.
 | `trading.maintenance_mode` | bool | `false` | If true, reject all new orders |
 | `platform.ledger_endpoint` | string | — | xstockstrat-ledger address |
 | `platform.maintenance_mode` | bool | `false` | Platform-wide halt |
+| `trading.broker.paper` | bool | `true` | Route orders to paper API when true; live API when false |
+| `trading.broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout |
 
 ## n8n Webhooks
 
@@ -66,17 +72,26 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 | `order.rejected` | `order:{order_id}` | Broker rejected order |
 | `order.approval_requested` | `approval:{order_id}` | Approval required |
 | `order.approved` | `approval:{order_id}` | Manual approval granted |
+| `order.broker_submitted` | `order:{order_id}` | Order accepted by Alpaca broker |
+| `order.broker_rejected` | `order:{order_id}` | Alpaca broker rejected the order |
 
 ## Environment Variables
 
 ```
 GRPC_PORT=50051
+HTTP_PORT=8051
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
 INDICATORS_ENDPOINT=xstockstrat-indicators:50054
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable
+# Alpaca broker credentials (secrets — never stored in config service)
+ALPACA_API_KEY=<secret>
+ALPACA_API_SECRET=<secret>
+ALPACA_PAPER_URL=https://paper-api.alpaca.markets
+ALPACA_LIVE_URL=https://api.alpaca.markets
+ALPACA_PAPER=true
 ```
 
 ## Running Locally
