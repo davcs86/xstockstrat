@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package xstockstrat.ledger.v1;
+
+option go_package = "github.com/xstockstrat/contracts/gen/go/ledger/v1;ledgerv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "common/v1/common.proto";
+
+// LedgerService — append-only event store.
+// All services write events here. Events are immutable once written.
+service LedgerService {
+  rpc AppendEvent(AppendEventRequest) returns (AppendEventResponse);
+  rpc QueryEvents(QueryEventsRequest) returns (QueryEventsResponse);
+  rpc StreamEvents(StreamEventsRequest) returns (stream LedgerEvent);
+  rpc GetEvent(GetEventRequest) returns (LedgerEvent);
+}
+
+message LedgerEvent {
+  string event_id = 1;          // UUID, server-assigned
+  string event_type = 2;        // e.g. "order.created", "trade.filled"
+  string source_service = 3;    // originating service name
+  string correlation_id = 4;    // trace/request correlation
+  google.protobuf.Timestamp occurred_at = 5;
+  google.protobuf.Timestamp recorded_at = 6; // server write time
+  google.protobuf.Struct payload = 7;         // event body (JSON-like)
+  map<string, string> metadata = 8;
+  int64 sequence = 9;           // monotonically increasing per stream_key
+  string stream_key = 10;       // partition key (e.g. "order:uuid")
+}
+
+message AppendEventRequest {
+  string event_type = 1;
+  string source_service = 2;
+  string correlation_id = 3;
+  string stream_key = 4;
+  google.protobuf.Struct payload = 5;
+  map<string, string> metadata = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+}
+
+message AppendEventResponse {
+  string event_id = 1;
+  int64 sequence = 2;
+  google.protobuf.Timestamp recorded_at = 3;
+}
+
+message QueryEventsRequest {
+  string stream_key = 1;        // optional filter
+  string event_type = 2;        // optional filter
+  string source_service = 3;    // optional filter
+  xstockstrat.common.v1.TimeRange time_range = 4;
+  xstockstrat.common.v1.PageRequest page = 5;
+  int64 from_sequence = 6;      // replay from sequence
+}
+
+message QueryEventsResponse {
+  repeated LedgerEvent events = 1;
+  xstockstrat.common.v1.PageResponse page = 2;
+}
+
+message StreamEventsRequest {
+  string stream_key = 1;
+  string event_type = 2;
+  int64 from_sequence = 3;      // 0 = live tail, >0 = replay then tail
+}
+
+message GetEventRequest {
+  string event_id = 1;
+}

@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package xstockstrat.notify.v1;
+
+option go_package = "github.com/xstockstrat/contracts/gen/go/notify/v1;notifyv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// NotifyService — gRPC server-streaming alert delivery.
+// Services emit alerts via EmitAlert; subscribers receive via StreamAlerts.
+service NotifyService {
+  // Emit an alert from any service
+  rpc EmitAlert(EmitAlertRequest) returns (EmitAlertResponse);
+
+  // Server-streaming: subscribe to alerts matching filters
+  // Server pushes alerts as they arrive — connection is long-lived
+  rpc StreamAlerts(StreamAlertsRequest) returns (stream Alert);
+
+  // Acknowledge receipt of alert
+  rpc AcknowledgeAlert(AcknowledgeAlertRequest) returns (AcknowledgeAlertResponse);
+
+  // List historical alerts
+  rpc ListAlerts(ListAlertsRequest) returns (ListAlertsResponse);
+}
+
+message Alert {
+  string alert_id = 1;
+  AlertSeverity severity = 2;
+  string category = 3;          // e.g. "trade", "risk", "system", "indicator"
+  string title = 4;
+  string body = 5;
+  string source_service = 6;
+  string target_user_id = 7;    // empty = broadcast
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Struct context = 9;  // arbitrary structured context
+  repeated string tags = 10;
+  bool acknowledged = 11;
+  string correlation_id = 12;
+}
+
+enum AlertSeverity {
+  ALERT_SEVERITY_UNSPECIFIED = 0;
+  ALERT_SEVERITY_INFO = 1;
+  ALERT_SEVERITY_WARNING = 2;
+  ALERT_SEVERITY_ERROR = 3;
+  ALERT_SEVERITY_CRITICAL = 4;
+}
+
+message EmitAlertRequest {
+  AlertSeverity severity = 1;
+  string category = 2;
+  string title = 3;
+  string body = 4;
+  string source_service = 5;
+  string target_user_id = 6;
+  google.protobuf.Struct context = 7;
+  repeated string tags = 8;
+  string correlation_id = 9;
+}
+
+message EmitAlertResponse {
+  string alert_id = 1;
+  google.protobuf.Timestamp created_at = 2;
+}
+
+message StreamAlertsRequest {
+  string user_id = 1;               // filter by user; empty = all
+  repeated string categories = 2;   // filter by category; empty = all
+  repeated AlertSeverity severities = 3; // filter by severity; empty = all
+  bool include_acknowledged = 4;
+}
+
+message AcknowledgeAlertRequest {
+  string alert_id = 1;
+  string user_id = 2;
+}
+
+message AcknowledgeAlertResponse {
+  bool success = 1;
+}
+
+message ListAlertsRequest {
+  string user_id = 1;
+  repeated string categories = 2;
+  int32 limit = 3;
+  string page_token = 4;
+}
+
+message ListAlertsResponse {
+  repeated Alert alerts = 1;
+  string next_page_token = 2;
+}

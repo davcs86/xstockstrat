@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package xstockstrat.config.v1;
+
+option go_package = "github.com/xstockstrat/contracts/gen/go/config/v1;configv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// ConfigService — live configuration via server-streaming WatchConfig.
+// All services call WatchConfig at startup and stream config updates.
+service ConfigService {
+  // Subscribe to config updates for a given namespace/service.
+  // Server streams updates as config changes; initial snapshot is the first message.
+  rpc WatchConfig(WatchConfigRequest) returns (stream ConfigSnapshot);
+
+  // One-shot config fetch (startup fast-path before stream establishes)
+  rpc GetConfig(GetConfigRequest) returns (ConfigSnapshot);
+
+  // Admin: set or update a config value
+  rpc SetConfig(SetConfigRequest) returns (SetConfigResponse);
+
+  // Admin: list all keys for a namespace
+  rpc ListKeys(ListKeysRequest) returns (ListKeysResponse);
+}
+
+message WatchConfigRequest {
+  string namespace = 1;   // e.g. "indicators", "trading", "platform"
+  string client_id = 2;   // service instance identifier
+  string version = 3;     // last known version (for delta updates)
+}
+
+message ConfigSnapshot {
+  string namespace = 1;
+  string version = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  map<string, ConfigValue> values = 4;
+  ConfigUpdateType update_type = 5;
+  repeated string changed_keys = 6; // populated for DELTA updates
+}
+
+message ConfigValue {
+  oneof value {
+    string string_val = 1;
+    int64 int_val = 2;
+    double float_val = 3;
+    bool bool_val = 4;
+    google.protobuf.Struct json_val = 5;
+  }
+  bool is_secret = 6;       // true = value is redacted; resolved at runtime
+  string description = 7;
+  string default_value = 8;
+}
+
+enum ConfigUpdateType {
+  CONFIG_UPDATE_TYPE_UNSPECIFIED = 0;
+  CONFIG_UPDATE_TYPE_SNAPSHOT = 1;  // full config dump
+  CONFIG_UPDATE_TYPE_DELTA = 2;     // only changed_keys changed
+  CONFIG_UPDATE_TYPE_RELOAD = 3;    // force full reload signal
+}
+
+message GetConfigRequest {
+  string namespace = 1;
+}
+
+message SetConfigRequest {
+  string namespace = 1;
+  string key = 2;
+  ConfigValue value = 3;
+  string author = 4;
+  string reason = 5;
+}
+
+message SetConfigResponse {
+  string version = 1;
+  google.protobuf.Timestamp updated_at = 2;
+}
+
+message ListKeysRequest {
+  string namespace = 1;
+}
+
+message ListKeysResponse {
+  repeated ConfigKeyMeta keys = 1;
+}
+
+message ConfigKeyMeta {
+  string key = 1;
+  string description = 2;
+  string default_value = 3;
+  bool is_secret = 4;
+  string consuming_service = 5;
+}

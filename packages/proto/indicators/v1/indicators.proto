@@ -1,0 +1,120 @@
+syntax = "proto3";
+
+package xstockstrat.indicators.v1;
+
+option go_package = "github.com/xstockstrat/contracts/gen/go/indicators/v1;indicatorsv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "common/v1/common.proto";
+
+// IndicatorsService — formula engine and sandboxed Python execution.
+// Sandbox timeout and memory limits are configured via xstockstrat-config.
+service IndicatorsService {
+  // Compute a built-in indicator (e.g. SMA, EMA, RSI, MACD, BB)
+  rpc ComputeIndicator(ComputeIndicatorRequest) returns (ComputeIndicatorResponse);
+
+  // Execute a custom Python formula in a sandboxed environment
+  // Timeout and memory cap sourced from config: indicators.sandbox.*
+  rpc ExecuteFormula(ExecuteFormulaRequest) returns (ExecuteFormulaResponse);
+
+  // List available built-in indicators
+  rpc ListIndicators(ListIndicatorsRequest) returns (ListIndicatorsResponse);
+
+  // Register a custom formula definition
+  rpc RegisterFormula(RegisterFormulaRequest) returns (RegisterFormulaResponse);
+
+  // Get a registered formula
+  rpc GetFormula(GetFormulaRequest) returns (FormulaDefinition);
+}
+
+message ComputeIndicatorRequest {
+  string indicator = 1;        // "SMA", "EMA", "RSI", "MACD", "BB", "ATR", "VWAP"
+  repeated double values = 2;  // input time-series values
+  map<string, double> params = 3; // e.g. {"period": 14}
+  xstockstrat.common.v1.TimeRange range = 4;
+  string symbol = 5;
+  string timeframe = 6;
+}
+
+message ComputeIndicatorResponse {
+  repeated IndicatorPoint result = 1;
+  string indicator = 2;
+  map<string, double> params_used = 3;
+}
+
+message IndicatorPoint {
+  google.protobuf.Timestamp time = 1;
+  double value = 2;
+  map<string, double> extra = 3;  // e.g. MACD has signal, histogram
+}
+
+message ExecuteFormulaRequest {
+  string formula_id = 1;           // registered formula ID, or...
+  string formula_source = 2;       // ...inline Python source (one of these required)
+  google.protobuf.Struct input_data = 3;  // data passed to formula as `data` variable
+  map<string, string> env = 4;     // extra env vars (non-secret)
+  int32 timeout_ms_override = 5;   // 0 = use config value
+  int64 memory_bytes_override = 6; // 0 = use config value
+}
+
+message ExecuteFormulaResponse {
+  bool success = 1;
+  google.protobuf.Struct output = 2;
+  string stdout = 3;
+  string stderr = 4;
+  int64 execution_ms = 5;
+  int64 memory_used_bytes = 6;
+  string error = 7;
+  SandboxExitReason exit_reason = 8;
+}
+
+enum SandboxExitReason {
+  SANDBOX_EXIT_REASON_UNSPECIFIED = 0;
+  SANDBOX_EXIT_REASON_SUCCESS = 1;
+  SANDBOX_EXIT_REASON_TIMEOUT = 2;
+  SANDBOX_EXIT_REASON_MEMORY_EXCEEDED = 3;
+  SANDBOX_EXIT_REASON_RUNTIME_ERROR = 4;
+  SANDBOX_EXIT_REASON_IMPORT_BLOCKED = 5;
+}
+
+message FormulaDefinition {
+  string formula_id = 1;
+  string name = 2;
+  string description = 3;
+  string source = 4;
+  string author = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  bool is_public = 8;
+  map<string, string> input_schema = 9;  // expected input keys and types
+}
+
+message ListIndicatorsRequest {}
+
+message ListIndicatorsResponse {
+  repeated IndicatorMeta indicators = 1;
+}
+
+message IndicatorMeta {
+  string name = 1;
+  string description = 2;
+  repeated string required_params = 3;
+  repeated string optional_params = 4;
+}
+
+message RegisterFormulaRequest {
+  string name = 1;
+  string description = 2;
+  string source = 3;
+  bool is_public = 4;
+  map<string, string> input_schema = 5;
+}
+
+message RegisterFormulaResponse {
+  string formula_id = 1;
+}
+
+message GetFormulaRequest {
+  string formula_id = 1;
+}

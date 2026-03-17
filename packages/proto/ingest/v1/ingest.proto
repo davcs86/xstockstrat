@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package xstockstrat.ingest.v1;
+
+option go_package = "github.com/xstockstrat/contracts/gen/go/ingest/v1;ingestv1";
+
+import "google/protobuf/timestamp.proto";
+import "common/v1/common.proto";
+
+service IngestService {
+  rpc TriggerBackfill(TriggerBackfillRequest) returns (TriggerBackfillResponse);
+  rpc GetBackfillStatus(GetBackfillStatusRequest) returns (BackfillJob);
+  rpc ListBackfillJobs(ListBackfillJobsRequest) returns (ListBackfillJobsResponse);
+  rpc NormalizeRawData(NormalizeRawDataRequest) returns (NormalizeRawDataResponse);
+}
+
+message BackfillJob {
+  string job_id = 1;
+  repeated string symbols = 2;
+  string timeframe = 3;
+  xstockstrat.common.v1.TimeRange range = 4;
+  BackfillStatus status = 5;
+  int64 bars_processed = 6;
+  int64 bars_total = 7;
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp completed_at = 9;
+  string error = 10;
+}
+
+enum BackfillStatus {
+  BACKFILL_STATUS_UNSPECIFIED = 0;
+  BACKFILL_STATUS_QUEUED = 1;
+  BACKFILL_STATUS_RUNNING = 2;
+  BACKFILL_STATUS_COMPLETED = 3;
+  BACKFILL_STATUS_FAILED = 4;
+  BACKFILL_STATUS_PARTIAL = 5;
+}
+
+message TriggerBackfillRequest {
+  repeated string symbols = 1;
+  string timeframe = 2;
+  xstockstrat.common.v1.TimeRange range = 3;
+  bool overwrite = 4;
+}
+
+message TriggerBackfillResponse {
+  string job_id = 1;
+  BackfillStatus status = 2;
+}
+
+message GetBackfillStatusRequest { string job_id = 1; }
+
+message ListBackfillJobsRequest {
+  BackfillStatus status_filter = 1;
+  xstockstrat.common.v1.PageRequest page = 2;
+}
+
+message ListBackfillJobsResponse {
+  repeated BackfillJob jobs = 1;
+  xstockstrat.common.v1.PageResponse page = 2;
+}
+
+message NormalizeRawDataRequest {
+  string source = 1;
+  bytes raw_data = 2;
+  string format = 3; // "csv", "json", "alpaca_v2"
+}
+
+message NormalizeRawDataResponse {
+  int64 rows_normalized = 1;
+  repeated string errors = 2;
+}

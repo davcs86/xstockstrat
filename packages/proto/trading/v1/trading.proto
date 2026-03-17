@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package xstockstrat.trading.v1;
+
+option go_package = "github.com/xstockstrat/contracts/gen/go/trading/v1;tradingv1";
+
+import "google/protobuf/timestamp.proto";
+import "common/v1/common.proto";
+
+service TradingService {
+  rpc PlaceOrder(PlaceOrderRequest) returns (Order);
+  rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+  rpc GetOrder(GetOrderRequest) returns (Order);
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+  rpc StreamOrderUpdates(StreamOrderUpdatesRequest) returns (stream Order);
+}
+
+message Order {
+  string order_id = 1;
+  string client_order_id = 2;
+  string symbol = 3;
+  OrderSide side = 4;
+  OrderType order_type = 5;
+  OrderStatus status = 6;
+  double qty = 7;
+  double filled_qty = 8;
+  double limit_price = 9;
+  double stop_price = 10;
+  double filled_avg_price = 11;
+  string time_in_force = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+  string strategy_id = 15;
+  string user_id = 16;
+}
+
+enum OrderSide {
+  ORDER_SIDE_UNSPECIFIED = 0;
+  ORDER_SIDE_BUY = 1;
+  ORDER_SIDE_SELL = 2;
+}
+
+enum OrderType {
+  ORDER_TYPE_UNSPECIFIED = 0;
+  ORDER_TYPE_MARKET = 1;
+  ORDER_TYPE_LIMIT = 2;
+  ORDER_TYPE_STOP = 3;
+  ORDER_TYPE_STOP_LIMIT = 4;
+  ORDER_TYPE_TRAILING_STOP = 5;
+}
+
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  ORDER_STATUS_NEW = 1;
+  ORDER_STATUS_PARTIALLY_FILLED = 2;
+  ORDER_STATUS_FILLED = 3;
+  ORDER_STATUS_CANCELED = 4;
+  ORDER_STATUS_EXPIRED = 5;
+  ORDER_STATUS_REJECTED = 6;
+  ORDER_STATUS_PENDING_APPROVAL = 7;
+}
+
+message PlaceOrderRequest {
+  string symbol = 1;
+  OrderSide side = 2;
+  OrderType order_type = 3;
+  double qty = 4;
+  double limit_price = 5;
+  double stop_price = 6;
+  string time_in_force = 7;
+  string strategy_id = 8;
+  string user_id = 9;
+  string client_order_id = 10;
+  bool requires_approval = 11;
+}
+
+message CancelOrderRequest {
+  string order_id = 1;
+  string user_id = 2;
+}
+
+message CancelOrderResponse {
+  bool success = 1;
+  Order order = 2;
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message ListOrdersRequest {
+  string user_id = 1;
+  string strategy_id = 2;
+  OrderStatus status = 3;
+  xstockstrat.common.v1.TimeRange range = 4;
+  xstockstrat.common.v1.PageRequest page = 5;
+}
+
+message ListOrdersResponse {
+  repeated Order orders = 1;
+  xstockstrat.common.v1.PageResponse page = 2;
+}
+
+message StreamOrderUpdatesRequest {
+  string user_id = 1;
+  repeated OrderStatus status_filter = 2;
+}

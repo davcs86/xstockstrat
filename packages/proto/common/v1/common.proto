@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package xstockstrat.common.v1;
+
+option go_package = "github.com/xstockstrat/contracts/gen/go/common/v1;commonv1";
+
+import "google/protobuf/timestamp.proto";
+
+// Pagination
+message PageRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message PageResponse {
+  string next_page_token = 1;
+  int32 total_count = 2;
+}
+
+// Standard error envelope
+message Error {
+  string code = 1;
+  string message = 2;
+  map<string, string> details = 3;
+}
+
+// Money / decimal representation
+message Decimal {
+  int64 units = 1;       // integer part
+  int32 nanos = 2;       // fractional part (0..999_999_999)
+  string currency = 3;   // ISO 4217
+}
+
+// Asset identifier
+message Asset {
+  string symbol = 1;
+  string exchange = 2;
+  string asset_class = 3; // equity, crypto, option
+}
+
+// Time range
+message TimeRange {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+}

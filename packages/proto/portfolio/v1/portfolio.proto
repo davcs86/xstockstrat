@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package xstockstrat.portfolio.v1;
+
+option go_package = "github.com/xstockstrat/contracts/gen/go/portfolio/v1;portfoliov1";
+
+import "google/protobuf/timestamp.proto";
+import "common/v1/common.proto";
+
+service PortfolioService {
+  rpc GetPortfolio(GetPortfolioRequest) returns (Portfolio);
+  rpc GetPosition(GetPositionRequest) returns (Position);
+  rpc ListPositions(ListPositionsRequest) returns (ListPositionsResponse);
+  rpc GetPnL(GetPnLRequest) returns (PnLResponse);
+  rpc GetSnapshot(GetSnapshotRequest) returns (PortfolioSnapshot);
+  rpc StreamPortfolioUpdates(StreamPortfolioUpdatesRequest) returns (stream PortfolioSnapshot);
+}
+
+message Portfolio {
+  string portfolio_id = 1;
+  string user_id = 2;
+  double equity = 3;
+  double cash = 4;
+  double buying_power = 5;
+  double day_pnl = 6;
+  double day_pnl_pct = 7;
+  double total_pnl = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  repeated Position positions = 10;
+}
+
+message Position {
+  string symbol = 1;
+  double qty = 2;
+  double avg_entry_price = 3;
+  double current_price = 4;
+  double market_value = 5;
+  double unrealized_pnl = 6;
+  double unrealized_pnl_pct = 7;
+  double cost_basis = 8;
+  google.protobuf.Timestamp opened_at = 9;
+}
+
+message PortfolioSnapshot {
+  string portfolio_id = 1;
+  google.protobuf.Timestamp snapshot_time = 2;
+  double equity = 3;
+  double cash = 4;
+  double day_pnl = 5;
+  int32 open_positions = 6;
+}
+
+message PnLResponse {
+  double realized_pnl = 1;
+  double unrealized_pnl = 2;
+  double total_pnl = 3;
+  double day_pnl = 4;
+  xstockstrat.common.v1.TimeRange range = 5;
+}
+
+message GetPortfolioRequest { string user_id = 1; }
+message GetPositionRequest { string user_id = 1; string symbol = 2; }
+message ListPositionsRequest {
+  string user_id = 1;
+  xstockstrat.common.v1.PageRequest page = 2;
+}
+message ListPositionsResponse {
+  repeated Position positions = 1;
+  xstockstrat.common.v1.PageResponse page = 2;
+}
+message GetPnLRequest {
+  string user_id = 1;
+  xstockstrat.common.v1.TimeRange range = 2;
+}
+message GetSnapshotRequest {
+  string portfolio_id = 1;
+  google.protobuf.Timestamp at_time = 2;
+}
+message StreamPortfolioUpdatesRequest { string user_id = 1; }

@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package xstockstrat.analysis.v1;
+
+option go_package = "github.com/xstockstrat/contracts/gen/go/analysis/v1;analysisv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "common/v1/common.proto";
+
+service AnalysisService {
+  rpc RunBacktest(RunBacktestRequest) returns (BacktestResult);
+  rpc ScoreStrategy(ScoreStrategyRequest) returns (StrategyScore);
+  rpc ListStrategies(ListStrategiesRequest) returns (ListStrategiesResponse);
+  rpc GetStrategyReport(GetStrategyReportRequest) returns (StrategyReport);
+}
+
+message RunBacktestRequest {
+  string strategy_id = 1;
+  xstockstrat.common.v1.TimeRange range = 2;
+  repeated string symbols = 3;
+  double initial_capital = 4;
+  google.protobuf.Struct strategy_params = 5;
+}
+
+message BacktestResult {
+  string backtest_id = 1;
+  string strategy_id = 2;
+  double total_return = 3;
+  double annualized_return = 4;
+  double sharpe_ratio = 5;
+  double max_drawdown = 6;
+  double win_rate = 7;
+  int32 total_trades = 8;
+  double profit_factor = 9;
+  google.protobuf.Timestamp completed_at = 10;
+  repeated TradeRecord trades = 11;
+}
+
+message TradeRecord {
+  string symbol = 1;
+  string side = 2;
+  double qty = 3;
+  double entry_price = 4;
+  double exit_price = 5;
+  double pnl = 6;
+  google.protobuf.Timestamp entry_time = 7;
+  google.protobuf.Timestamp exit_time = 8;
+}
+
+message ScoreStrategyRequest {
+  string strategy_id = 1;
+  xstockstrat.common.v1.TimeRange range = 2;
+}
+
+message StrategyScore {
+  string strategy_id = 1;
+  double overall_score = 2;
+  map<string, double> component_scores = 3; // e.g. sharpe, drawdown, consistency
+  string rating = 4; // A/B/C/D/F
+}
+
+message StrategyReport {
+  string strategy_id = 1;
+  BacktestResult latest_backtest = 2;
+  StrategyScore score = 3;
+  google.protobuf.Struct metadata = 4;
+}
+
+message ListStrategiesRequest {
+  xstockstrat.common.v1.PageRequest page = 1;
+  string user_id = 2;
+}
+
+message ListStrategiesResponse {
+  repeated StrategyScore strategies = 1;
+  xstockstrat.common.v1.PageResponse page = 2;
+}
+
+message GetStrategyReportRequest { string strategy_id = 1; }

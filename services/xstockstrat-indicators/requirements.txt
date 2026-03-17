@@ -1,0 +1,9 @@
+grpcio>=1.63.0
+grpcio-reflection>=1.63.0
+grpcio-tools>=1.63.0
+protobuf>=5.26.0
+numpy>=1.26.0
+pandas>=2.2.0
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.7.0

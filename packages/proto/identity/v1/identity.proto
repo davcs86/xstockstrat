@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package xstockstrat.identity.v1;
+
+option go_package = "github.com/xstockstrat/contracts/gen/go/identity/v1;identityv1";
+
+import "google/protobuf/timestamp.proto";
+
+service IdentityService {
+  rpc AuthenticateUser(AuthenticateUserRequest) returns (AuthTokenResponse);
+  rpc ValidateToken(ValidateTokenRequest) returns (TokenClaims);
+  rpc RefreshToken(RefreshTokenRequest) returns (AuthTokenResponse);
+  rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse);
+  rpc CreateApiKey(CreateApiKeyRequest) returns (ApiKey);
+  rpc ValidateApiKey(ValidateApiKeyRequest) returns (TokenClaims);
+  rpc ListApiKeys(ListApiKeysRequest) returns (ListApiKeysResponse);
+  rpc RevokeApiKey(RevokeApiKeyRequest) returns (RevokeApiKeyResponse);
+}
+
+message AuthenticateUserRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message AuthTokenResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  TokenClaims claims = 4;
+}
+
+message TokenClaims {
+  string user_id = 1;
+  string email = 2;
+  repeated string roles = 3;
+  google.protobuf.Timestamp issued_at = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message ValidateTokenRequest { string token = 1; }
+message RefreshTokenRequest { string refresh_token = 1; }
+message RevokeTokenRequest { string token = 1; }
+message RevokeTokenResponse { bool success = 1; }
+
+message ApiKey {
+  string key_id = 1;
+  string key_prefix = 2;  // first 8 chars only (rest is hashed)
+  string user_id = 3;
+  string name = 4;
+  repeated string scopes = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp expires_at = 7;
+}
+
+message CreateApiKeyRequest {
+  string user_id = 1;
+  string name = 2;
+  repeated string scopes = 3;
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+message ValidateApiKeyRequest { string api_key = 1; }
+message ListApiKeysRequest { string user_id = 1; }
+message ListApiKeysResponse { repeated ApiKey keys = 1; }
+message RevokeApiKeyRequest { string key_id = 1; string user_id = 2; }
+message RevokeApiKeyResponse { bool success = 1; }

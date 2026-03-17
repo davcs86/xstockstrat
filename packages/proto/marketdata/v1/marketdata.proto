@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+package xstockstrat.marketdata.v1;
+
+option go_package = "github.com/xstockstrat/contracts/gen/go/marketdata/v1;marketdatav1";
+
+import "google/protobuf/timestamp.proto";
+import "common/v1/common.proto";
+
+// MarketDataService — sole Alpaca integration point.
+// Stores OHLCV and quote data in TimescaleDB hypertables.
+service MarketDataService {
+  // Stream live bar data for symbols
+  rpc StreamBars(StreamBarsRequest) returns (stream Bar);
+
+  // Stream live quotes
+  rpc StreamQuotes(StreamQuotesRequest) returns (stream Quote);
+
+  // Historical OHLCV query
+  rpc GetBars(GetBarsRequest) returns (GetBarsResponse);
+
+  // Latest quote snapshot
+  rpc GetLatestQuote(GetLatestQuoteRequest) returns (Quote);
+
+  // Trigger historical backfill (used by xstockstrat-ingest)
+  rpc BackfillBars(BackfillBarsRequest) returns (BackfillBarsResponse);
+
+  // Get available symbols
+  rpc ListAssets(ListAssetsRequest) returns (ListAssetsResponse);
+}
+
+message Bar {
+  string symbol = 1;
+  google.protobuf.Timestamp time = 2;
+  double open = 3;
+  double high = 4;
+  double low = 5;
+  double close = 6;
+  int64 volume = 7;
+  double vwap = 8;
+  int32 trade_count = 9;
+  string timeframe = 10;  // "1m", "5m", "1h", "1d"
+  string source = 11;     // always "alpaca" for this service
+}
+
+message Quote {
+  string symbol = 1;
+  google.protobuf.Timestamp time = 2;
+  double ask_price = 3;
+  int32 ask_size = 4;
+  double bid_price = 5;
+  int32 bid_size = 6;
+  string source = 7;
+}
+
+message StreamBarsRequest {
+  repeated string symbols = 1;
+  string timeframe = 2;          // "1m", "5m", "1h", "1d"
+  bool include_premarket = 3;
+  bool include_afterhours = 4;
+}
+
+message StreamQuotesRequest {
+  repeated string symbols = 1;
+}
+
+message GetBarsRequest {
+  string symbol = 1;
+  string timeframe = 2;
+  xstockstrat.common.v1.TimeRange range = 3;
+  xstockstrat.common.v1.PageRequest page = 4;
+}
+
+message GetBarsResponse {
+  repeated Bar bars = 1;
+  xstockstrat.common.v1.PageResponse page = 2;
+}
+
+message GetLatestQuoteRequest {
+  string symbol = 1;
+}
+
+message BackfillBarsRequest {
+  repeated string symbols = 1;
+  string timeframe = 2;
+  xstockstrat.common.v1.TimeRange range = 3;
+  bool overwrite_existing = 4;
+}
+
+message BackfillBarsResponse {
+  int64 bars_written = 1;
+  repeated string failed_symbols = 2;
+}
+
+message ListAssetsRequest {
+  string asset_class = 1;  // optional: "us_equity", "crypto"
+  bool tradable_only = 2;
+}
+
+message ListAssetsResponse {
+  repeated xstockstrat.common.v1.Asset assets = 1;
+}
