@@ -6,8 +6,21 @@ Node.js gRPC service providing **server-streaming alert delivery**. Services emi
 ## Language
 Node.js 20 + TypeScript
 
-## gRPC Port
-`50059`
+## Ports
+
+| Protocol | Port | Purpose |
+|---|---|---|
+| gRPC | `50059` | Internal service-to-service (protobuf) |
+| HTTP (Connect-RPC) | `8059` | Connect-RPC + n8n webhooks |
+
+## Connect-RPC
+
+Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8059`.
+
+- Router: `src/connect/connectRouter.ts` — exposes `EmitAlert`, `AcknowledgeAlert` via `connectNodeAdapter`
+- Entry: `src/index.ts` — HTTP server with CORS headers mounts the Connect router
+- Note: `StreamAlerts` (server-streaming) remains gRPC-only on port `50059`; frontends poll via SSE proxied through Next.js API routes
+- Callers (n8n, frontends) use HTTP `8059`; internal services use gRPC `50059`
 
 ## Key Design
 
@@ -45,9 +58,12 @@ Namespace: `notify`
 
 ```
 GRPC_PORT=50059
+HTTP_PORT=8059
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable
+APP_ENV=dev                            # dev | production
+TRADING_MODE=paper                     # paper | live
 ```
 
 ## Running Locally

@@ -6,8 +6,20 @@ Python gRPC service for strategy backtesting, scoring, and report generation. Re
 ## Language
 Python 3.12 (asyncio, grpc.aio)
 
-## gRPC Port
-`50056`
+## Ports
+
+| Protocol | Port | Purpose |
+|---|---|---|
+| gRPC | `50056` | Internal service-to-service (protobuf) |
+| HTTP (Connect-RPC) | `8056` | Connect-RPC + n8n webhooks |
+
+## Connect-RPC
+
+Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8056` via `asyncio.gather`.
+
+- Handler: `app/main.py` — `start_connect_server(servicer)` runs uvicorn with `ConnectHandler` ASGI wrapper
+- `asyncio.gather(grpc_server.wait_for_termination(), start_connect_server(servicer))` starts both concurrently
+- Callers (n8n, frontends) use HTTP `8056`; internal services use gRPC `50056`
 
 ## Dependencies
 
@@ -51,10 +63,13 @@ Namespace: `analysis`
 
 ```
 GRPC_PORT=50056
+HTTP_PORT=8056
 CONFIG_ENDPOINT=xstockstrat-config:50060
 MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
 INDICATORS_ENDPOINT=xstockstrat-indicators:50054
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable
+APP_ENV=dev                            # dev | production
+TRADING_MODE=paper                     # paper | live
 ```

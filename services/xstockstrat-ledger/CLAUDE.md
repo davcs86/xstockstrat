@@ -6,8 +6,20 @@ Node.js gRPC service implementing an **append-only event store**. Every service 
 ## Language
 Node.js 20 + TypeScript
 
-## gRPC Port
-`50057`
+## Ports
+
+| Protocol | Port | Purpose |
+|---|---|---|
+| gRPC | `50057` | Internal service-to-service (protobuf) |
+| HTTP (Connect-RPC) | `8057` | Connect-RPC + n8n webhooks |
+
+## Connect-RPC
+
+Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8057`.
+
+- Router: `src/connect/connectRouter.ts` — exposes `AppendEvent`, `QueryEvents` via `connectNodeAdapter`
+- Entry: `src/index.ts` — HTTP server with CORS headers mounts the Connect router
+- Callers (n8n, frontends) use HTTP `8057`; internal services use gRPC `50057`
 
 ## Critical Invariants
 
@@ -64,8 +76,11 @@ Namespace: `ledger`
 
 ```
 GRPC_PORT=50057
+HTTP_PORT=8057
 CONFIG_ENDPOINT=xstockstrat-config:50060
 DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable
+APP_ENV=dev                            # dev | production
+TRADING_MODE=paper                     # paper | live
 ```
 
 ## Running Locally

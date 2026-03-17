@@ -10,8 +10,20 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 ## Language
 Go 1.22
 
-## gRPC Port
-`50051`
+## Ports
+
+| Protocol | Port | Purpose |
+|---|---|---|
+| gRPC | `50051` | Internal service-to-service (protobuf) |
+| HTTP (Connect-RPC) | `8051` | Connect-RPC + n8n webhooks (HTTP/1.1 + HTTP/2 via h2c) |
+
+## Connect-RPC
+
+Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8051`. Both servers delegate to the same handler implementation.
+
+- Handler registration: `cmd/server/main.go` — uses `tradingv1connect.NewTradingServiceHandler` wrapped with `h2c.NewHandler`
+- Callers (frontends, n8n) use HTTP `8051`; internal services use gRPC `50051`
+- Transport: `golang.org/x/net/http2/h2c` supports HTTP/1.1 and HTTP/2 cleartext on same port
 
 ## Dependencies
 
@@ -86,6 +98,8 @@ PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
 INDICATORS_ENDPOINT=xstockstrat-indicators:50054
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable
+APP_ENV=dev                            # dev | production
+TRADING_MODE=paper                     # paper | live
 # Alpaca broker credentials (secrets — never stored in config service)
 ALPACA_API_KEY=<secret>
 ALPACA_API_SECRET=<secret>
