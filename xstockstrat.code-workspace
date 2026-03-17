@@ -1,0 +1,147 @@
+{
+  "folders": [
+    {
+      "name": "xstockstrat-orchestration (root)",
+      "path": "."
+    },
+    {
+      "name": "packages/proto",
+      "path": "packages/proto"
+    },
+    {
+      "name": "xstockstrat-trading (Go)",
+      "path": "services/xstockstrat-trading"
+    },
+    {
+      "name": "xstockstrat-portfolio (Go)",
+      "path": "services/xstockstrat-portfolio"
+    },
+    {
+      "name": "xstockstrat-marketdata (Go)",
+      "path": "services/xstockstrat-marketdata"
+    },
+    {
+      "name": "xstockstrat-indicators (Python)",
+      "path": "services/xstockstrat-indicators"
+    },
+    {
+      "name": "xstockstrat-ingest (Python)",
+      "path": "services/xstockstrat-ingest"
+    },
+    {
+      "name": "xstockstrat-analysis (Python)",
+      "path": "services/xstockstrat-analysis"
+    },
+    {
+      "name": "xstockstrat-ledger (Node.js)",
+      "path": "services/xstockstrat-ledger"
+    },
+    {
+      "name": "xstockstrat-identity (Node.js)",
+      "path": "services/xstockstrat-identity"
+    },
+    {
+      "name": "xstockstrat-notify (Node.js)",
+      "path": "services/xstockstrat-notify"
+    },
+    {
+      "name": "xstockstrat-config (Node.js)",
+      "path": "services/xstockstrat-config"
+    },
+    {
+      "name": "xstockstrat-trader (Next.js)",
+      "path": "services/xstockstrat-trader"
+    },
+    {
+      "name": "xstockstrat-insights (Next.js)",
+      "path": "services/xstockstrat-insights"
+    },
+    {
+      "name": "xstockstrat-config-ui (Next.js)",
+      "path": "services/xstockstrat-config-ui"
+    }
+  ],
+  "settings": {
+    "editor.formatOnSave": true,
+    "files.exclude": {
+      "**/.git": true,
+      "**/__pycache__": true,
+      "**/*.pyc": true,
+      "**/.mypy_cache": true,
+      "**/.pytest_cache": true,
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/.next": true,
+      "**/bin": true,
+      "**/obj": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/.next": true,
+      "**/dist": true,
+      "**/packages/proto/gen": true
+    },
+    "go.useLanguageServer": true,
+    "go.toolsManagement.autoUpdate": true,
+    "[go]": {
+      "editor.defaultFormatter": "golang.go",
+      "editor.formatOnSave": true,
+      "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+      }
+    },
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.autoImportCompletions": true,
+    "[python]": {
+      "editor.defaultFormatter": "ms-python.black-formatter",
+      "editor.formatOnSave": true
+    },
+    "[typescript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[typescriptreact]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[javascript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[javascriptreact]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[json]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[proto3]": {
+      "editor.defaultFormatter": "bufbuild.vscode-buf"
+    },
+    "eslint.workingDirectories": [
+      { "directory": "services/xstockstrat-ledger", "changeProcessCWD": true },
+      { "directory": "services/xstockstrat-identity", "changeProcessCWD": true },
+      { "directory": "services/xstockstrat-notify", "changeProcessCWD": true },
+      { "directory": "services/xstockstrat-config", "changeProcessCWD": true },
+      { "directory": "services/xstockstrat-trader", "changeProcessCWD": true },
+      { "directory": "services/xstockstrat-insights", "changeProcessCWD": true },
+      { "directory": "services/xstockstrat-config-ui", "changeProcessCWD": true }
+    ],
+    "tailwindCSS.includeLanguages": {
+      "typescriptreact": "html"
+    },
+    "typescript.tsdk": "node_modules/typescript/lib"
+  },
+  "extensions": {
+    "recommendations": [
+      "golang.go",
+      "ms-python.python",
+      "ms-python.pylance",
+      "ms-python.black-formatter",
+      "bufbuild.vscode-buf",
+      "zxh404.vscode-proto3",
+      "dbaeumer.vscode-eslint",
+      "esbenp.prettier-vscode",
+      "ms-vscode.vscode-typescript-next",
+      "bradlc.vscode-tailwindcss",
+      "ms-azuretools.vscode-docker",
+      "mikestead.dotenv"
+    ]
+  }
+}
