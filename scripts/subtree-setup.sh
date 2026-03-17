@@ -24,6 +24,7 @@ declare -A SERVICE_DESCRIPTIONS=(
   [xstockstrat-config]="Live config WatchConfig gRPC stream (Node.js, gRPC port 50060)"
   [xstockstrat-trader]="Trading UI frontend (Next.js, port 3000)"
   [xstockstrat-insights]="Analytics and insights dashboard (Next.js, port 3001)"
+  [xstockstrat-config-ui]="Config management UI — view, edit, and audit runtime config values (Next.js, port 3002)"
 )
 
 SERVICES=(
@@ -39,6 +40,7 @@ SERVICES=(
   xstockstrat-config
   xstockstrat-trader
   xstockstrat-insights
+  xstockstrat-config-ui
 )
 
 echo "======================================================"
@@ -108,6 +110,6 @@ for svc in "${SERVICES[@]}"; do
 done
 
 echo "======================================================"
-echo " Setup complete! All 12 service repos are live."
+echo " Setup complete! All 13 service repos are live."
 echo " Use ./scripts/subtree-sync.sh to push/pull changes."
 echo "======================================================"
