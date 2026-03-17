@@ -1,0 +1,23 @@
+repos:
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint
+        entry: pnpm run lint
+        language: system
+        types: [ts]
+        pass_filenames: false
+
+      - id: prettier
+        name: prettier
+        entry: pnpm run format:check
+        language: system
+        pass_filenames: false
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-json
+      - id: check-merge-conflict
