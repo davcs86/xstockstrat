@@ -75,7 +75,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-	tradingv1.RegisterTradingServiceServer(grpcServer, grpcHdl)
+	tradingv1.RegisterTradingServiceServer(grpcServer, grpcHdl.GRPCHandler())
 	reflection.Register(grpcServer)
 
 	// HTTP server: n8n webhooks + Connect-RPC (single mux, port 8051)

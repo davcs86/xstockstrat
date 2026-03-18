@@ -1,12 +1,12 @@
 """
-xstockstrat-indicators — gRPC + Connect-RPC server entry point.
+xstockstrat-indicators — gRPC + HTTP server entry point.
 
 Formula engine + sandboxed Python execution.
 Timeout and memory cap sourced from xstockstrat-config at startup.
 
 Ports:
   GRPC_PORT (50054)  — gRPC (HTTP/2), internal service-to-service
-  HTTP_PORT (8054)   — Connect-RPC (HTTP/1.1 + HTTP/2), browser + external clients
+  HTTP_PORT (8054)   — Connect-RPC compatible HTTP (JSON), browser + external clients
 """
 import asyncio
 import logging
@@ -15,11 +15,11 @@ import signal
 
 import grpc
 import uvicorn
-from connectrpc.asgi import ConnectHandler
 from grpc_reflection.v1alpha import reflection
 
 from app.config.watcher import ConfigWatcher
-from app.grpc.servicer import IndicatorsServicer
+from app.handlers.servicer import IndicatorsServicer
+from app.http_server import build_app
 from gen.indicators.v1 import indicators_pb2_grpc
 from gen.indicators.v1.indicators_pb2 import DESCRIPTOR as INDICATORS_DESCRIPTOR
 
@@ -34,21 +34,18 @@ HTTP_PORT = int(os.environ.get("HTTP_PORT", "8054"))
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
 
 
-async def start_connect_server(servicer: IndicatorsServicer) -> None:
-    """Start Connect-RPC ASGI server on HTTP_PORT."""
-    connect_app = ConnectHandler(
-        servicer=servicer,
-        service_descriptor=INDICATORS_DESCRIPTOR.services_by_name["IndicatorsService"],
-    )
+async def start_http_server(servicer: IndicatorsServicer) -> None:
+    """Start FastAPI HTTP server on HTTP_PORT (Connect-RPC compatible JSON API)."""
+    app = build_app(servicer)
     config = uvicorn.Config(
-        app=connect_app,
+        app=app,
         host="0.0.0.0",
         port=HTTP_PORT,
         loop="asyncio",
         log_level="info",
     )
     server = uvicorn.Server(config)
-    log.info("indicators Connect-RPC HTTP service starting on port %d", HTTP_PORT)
+    log.info("indicators HTTP service starting on port %d", HTTP_PORT)
     await server.serve()
 
 
@@ -85,7 +82,7 @@ async def serve():
     # Run both servers concurrently
     await asyncio.gather(
         grpc_server.wait_for_termination(),
-        start_connect_server(servicer),
+        start_http_server(servicer),
     )
 
 

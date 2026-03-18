@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,6 +32,9 @@ type TradingService struct {
 	notify notifyv1.NotifyServiceClient
 	// In-memory order store (replace with DB repository in production)
 	orders map[string]*tradingv1.Order
+	// Fan-out channels for StreamOrderUpdates
+	mu   sync.Mutex
+	subs map[string]chan *tradingv1.Order
 }
 
 func NewTradingService(cfg *config.Config, cfgW *config.Watcher, brokerClient *broker.Client) (*TradingService, error) {
@@ -49,7 +53,39 @@ func NewTradingService(cfg *config.Config, cfgW *config.Watcher, brokerClient *b
 		ledger: ledgerv1.NewLedgerServiceClient(ledgerConn),
 		notify: notifyv1.NewNotifyServiceClient(notifyConn),
 		orders: make(map[string]*tradingv1.Order),
+		subs:   make(map[string]chan *tradingv1.Order),
 	}, nil
+}
+
+// SubscribeOrderUpdates registers a subscriber channel for order update broadcasts.
+func (s *TradingService) SubscribeOrderUpdates(id string) <-chan *tradingv1.Order {
+	ch := make(chan *tradingv1.Order, 64)
+	s.mu.Lock()
+	s.subs[id] = ch
+	s.mu.Unlock()
+	return ch
+}
+
+// UnsubscribeOrderUpdates removes a subscriber channel.
+func (s *TradingService) UnsubscribeOrderUpdates(id string) {
+	s.mu.Lock()
+	if ch, ok := s.subs[id]; ok {
+		close(ch)
+		delete(s.subs, id)
+	}
+	s.mu.Unlock()
+}
+
+// broadcastOrder fans out an order update to all subscribers.
+func (s *TradingService) broadcastOrder(order *tradingv1.Order) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, ch := range s.subs {
+		select {
+		case ch <- order:
+		default:
+		}
+	}
 }
 
 func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrderRequest) (*tradingv1.Order, error) {
