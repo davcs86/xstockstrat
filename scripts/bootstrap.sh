@@ -29,7 +29,7 @@ check_tool "buf"     "https://buf.build/docs/installation"
 check_tool "go"      "https://go.dev/dl/"
 check_tool "python3" "https://www.python.org/downloads/"
 check_tool "node"    "https://nodejs.org/"
-check_tool "npm"     "comes with node"
+check_tool "pnpm"    "corepack enable or https://pnpm.io/installation"
 check_tool "docker"  "https://docs.docker.com/get-docker/"
 check_tool "psql"    "https://www.postgresql.org/download/"
 
@@ -49,13 +49,13 @@ echo ""
 echo "==> Installing Node.js dependencies..."
 for svc in xstockstrat-ledger xstockstrat-identity xstockstrat-notify xstockstrat-config; do
   echo "  → $svc"
-  (cd "$REPO_ROOT/services/$svc" && npm install --silent)
+  (cd "$REPO_ROOT/services/$svc" && pnpm install --frozen-lockfile)
 done
 
 echo "==> Installing Next.js frontend dependencies..."
-for svc in xstockstrat-trader xstockstrat-insights; do
+for svc in xstockstrat-trader xstockstrat-insights xstockstrat-config-ui; do
   echo "  → $svc"
-  (cd "$REPO_ROOT/services/$svc" && npm install --silent)
+  (cd "$REPO_ROOT/services/$svc" && pnpm install --frozen-lockfile)
 done
 
 # ── 4. Install Python dependencies ────────────────────────────────────────

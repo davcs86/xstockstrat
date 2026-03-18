@@ -77,7 +77,7 @@ TRADING_MODE=paper   # paper | live — default scope for this instance
 ## Running Locally
 
 ```bash
-npm install
-npm run migrate
-npm run dev
+pnpm install
+pnpm run migrate
+pnpm run dev
 ```
