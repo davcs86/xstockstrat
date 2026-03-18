@@ -13,6 +13,29 @@ volumes:
 services:
 
   # ── Infrastructure ──────────────────────────────────────────────────────
+
+  # OpenTelemetry Collector — central fan-out gateway for logs, metrics, traces.
+  # All services push OTLP to this container; it forwards to Grafana Cloud.
+  # Requires GRAFANA_OTLP_ENDPOINT and GRAFANA_OTLP_TOKEN in .env.
+  # See packages/otel/otel-collector-config.yaml and
+  #     _tasks/x-observability-otel-grafana.md for setup instructions.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.103.0
+    container_name: xstockstrat-otel-collector
+    command: ["--config=/etc/otel/otel-collector-config.yaml"]
+    environment:
+      GRAFANA_OTLP_ENDPOINT: ${GRAFANA_OTLP_ENDPOINT:-http://localhost:4317}
+      GRAFANA_OTLP_TOKEN: ${GRAFANA_OTLP_TOKEN:-placeholder}
+    volumes:
+      - ./packages/otel/otel-collector-config.yaml:/etc/otel/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "13133:13133" # Health check endpoint
+    networks:
+      - xstockstrat
+    restart: unless-stopped
+
   timescaledb:
     image: timescale/timescaledb:latest-pg16
     container_name: xstockstrat-db
@@ -44,6 +67,10 @@ services:
       DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
       APP_ENV: dev
       TRADING_MODE: paper
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: xstockstrat-config
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50060:50060"
       - "8060:8060"
@@ -67,6 +94,10 @@ services:
       DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
       APP_ENV: dev
       TRADING_MODE: paper
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: xstockstrat-ledger
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50057:50057"
       - "8057:8057"
@@ -94,6 +125,10 @@ services:
       JWT_SECRET: dev-jwt-secret-change-in-production
       APP_ENV: dev
       TRADING_MODE: paper
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: xstockstrat-identity
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50058:50058"
       - "8058:8058"
@@ -118,6 +153,10 @@ services:
       DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
       APP_ENV: dev
       TRADING_MODE: paper
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: xstockstrat-notify
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50059:50059"
       - "8059:8059"
@@ -148,6 +187,10 @@ services:
       ALPACA_PAPER: "true"
       APP_ENV: dev
       TRADING_MODE: paper
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: xstockstrat-marketdata
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50053:50053"
       - "8053:8053"
@@ -173,6 +216,10 @@ services:
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       APP_ENV: dev
       TRADING_MODE: paper
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: xstockstrat-indicators
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50054:50054"
       - "8054:8054"
@@ -198,6 +245,10 @@ services:
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       APP_ENV: dev
       TRADING_MODE: paper
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: xstockstrat-ingest
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50055:50055"
       - "8055:8055"
@@ -226,6 +277,10 @@ services:
       DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
       APP_ENV: dev
       TRADING_MODE: paper
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: xstockstrat-analysis
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50056:50056"
       - "8056:8056"
@@ -254,6 +309,10 @@ services:
       DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
       APP_ENV: dev
       TRADING_MODE: paper
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: xstockstrat-portfolio
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50052:50052"
       - "8052:8052"
@@ -282,6 +341,10 @@ services:
       DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
       APP_ENV: dev
       TRADING_MODE: paper
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: xstockstrat-trading
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50051:50051"
       - "8051:8051"
@@ -309,6 +372,10 @@ services:
       IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
       APP_ENV: dev
       TRADING_MODE: paper
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: xstockstrat-trader
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "3000:3000"
     networks:
@@ -335,6 +402,10 @@ services:
       IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
       APP_ENV: dev
       TRADING_MODE: paper
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: xstockstrat-insights
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "3001:3001"
     networks:
@@ -357,6 +428,10 @@ services:
       DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
       APP_ENV: dev
       TRADING_MODE: paper
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: xstockstrat-config-ui
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "3002:3002"
     networks:

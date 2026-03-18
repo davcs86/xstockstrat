@@ -1,0 +1,97 @@
+# packages/otel/otel-collector-config.yaml
+#
+# OpenTelemetry Collector configuration for local development.
+# Used by the `otel-collector` service in docker-compose.yml.
+#
+# Receives OTLP from all xstockstrat services on:
+#   - gRPC :4317  (preferred for Go and Python services)
+#   - HTTP :4318  (preferred for Node.js services)
+#
+# Exports all three signal types (logs, metrics, traces) to Grafana Cloud via OTLP.
+# Requires GRAFANA_OTLP_ENDPOINT and GRAFANA_OTLP_TOKEN in the environment
+# (provided via docker-compose from your local .env file).
+#
+# For production (DO App Platform), services push OTLP directly to Grafana Cloud —
+# no collector deployment is needed there. See _tasks/x-observability-otel-grafana.md.
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Drop spans/metrics/logs when memory exceeds limit — prevents OOM in dev
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+
+  # Batch before exporting — reduces outbound requests to Grafana Cloud
+  batch:
+    timeout: 10s
+    send_batch_size: 1000
+    send_batch_max_size: 2000
+
+  # Attach environment and trading_mode to all telemetry as resource attributes
+  # These are read from the collector's own environment at startup.
+  resource:
+    attributes:
+      - key: environment
+        value: dev
+        action: upsert
+      - key: trading_mode
+        value: paper
+        action: upsert
+      - key: platform
+        value: xstockstrat
+        action: upsert
+
+exporters:
+  # Grafana Cloud OTLP gateway — handles logs, metrics, and traces in one endpoint.
+  # GRAFANA_OTLP_ENDPOINT: https://otlp-gateway-<region>.grafana.net/otlp
+  # GRAFANA_OTLP_TOKEN:    Basic base64(<instanceId>:<apiKey>)  (Grafana provides pre-encoded)
+  otlphttp/grafana:
+    endpoint: ${env:GRAFANA_OTLP_ENDPOINT}
+    headers:
+      Authorization: "Basic ${env:GRAFANA_OTLP_TOKEN}"
+    compression: gzip
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 120s
+
+  # Debug exporter: logs a summary of received telemetry to collector stdout.
+  # Safe to leave enabled in dev — remove in prod to reduce noise.
+  debug:
+    verbosity: basic
+    sampling_initial: 5
+    sampling_thereafter: 100
+
+service:
+  extensions: [health_check, pprof]
+
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlphttp/grafana, debug]
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlphttp/grafana, debug]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlphttp/grafana, debug]
