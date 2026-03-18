@@ -30,9 +30,30 @@ main          ← production deployments (live trading)
 Rules:
 - **Always branch from `main-dev`**, never from `main`.
 - **Never push directly to `main-dev` or `main`** — all changes go through PRs.
-- `main` only accepts PRs from `main-dev` (enforce via GitHub branch protection).
+  Direct pushes are blocked by branch protection (see Setup below).
+- `main` only accepts PRs from `main-dev` (convention; enforced by the required review gate).
 - Hotfixes that cannot wait for the `main-dev` → `main` cycle: branch from `main`,
   fix, PR to `main` with explicit lead approval, then immediately back-merge into `main-dev`.
+
+### One-time setup (run once after repo creation)
+
+```bash
+./scripts/setup-branch-protection.sh
+```
+
+This configures the following rules on both `main-dev` and `main` via `gh api`:
+
+| Rule | Value |
+|---|---|
+| Required status check | `CI / Proto lint and breaking check` |
+| Require branch up-to-date before merge | yes (strict) |
+| Required PR reviews | 1 approving review |
+| Dismiss stale reviews on new commits | yes |
+| Block direct pushes | yes |
+
+The `CI / Proto lint and breaking check` check is produced by `.github/workflows/ci.yml`
+(workflow name `CI`, job name `Proto lint and breaking check`). **PRs cannot be merged
+until this check passes** — `buf lint` and `buf breaking` failures block the merge button.
 
 ---
 
@@ -81,12 +102,14 @@ git push -u origin feature/<short-description>
 # then open PR via GitHub UI or: gh pr create --base main-dev
 ```
 
-The **CI workflow** (`.github/workflows/ci.yml`) runs automatically and must pass:
+The **CI workflow** (`.github/workflows/ci.yml`) runs automatically. Its
+`CI / Proto lint and breaking check` status check is **required** — GitHub blocks
+the merge button until it passes:
 - `buf lint packages/proto/`
 - `buf breaking packages/proto/ --against '.git#branch=origin/main'`
 
 Required for merge:
-- All CI checks green
+- `CI / Proto lint and breaking check` green (enforced by branch protection)
 - At least 1 service owner approval (2 for breaking proto changes — see `x-approval-flow.md`)
 
 ### 4. Merge to `main-dev` → deploys to dev (paper trading)
@@ -118,8 +141,8 @@ gh pr create --base main --head main-dev --title "<feature summary>"
 ```
 
 Required for merge:
-- All CI checks green
-- At least 1 reviewer approval
+- `CI / Proto lint and breaking check` green (enforced by branch protection)
+- At least 1 reviewer approval (enforced by branch protection)
 - Confirmation that the feature has been validated on dev (paper trading) environment
 - For config key additions: key registered and documented per `x-config-rollout.md`
 - For proto changes: migration note in `x-config-rollout.md` if needed
