@@ -1,6 +1,8 @@
 import { Pool } from 'pg';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
+import * as jwt from 'jsonwebtoken';
+import * as bcrypt from 'bcrypt';
 import { ConfigWatcher } from '../services/configWatcher';
 import { getLogger } from '../services/logger';
 
@@ -27,7 +29,6 @@ export class IdentityServiceImpl {
 
   /**
    * AuthenticateUser — validates credentials, returns JWT pair.
-   * TODO: replace stub with real bcrypt password verification against identity.users table.
    */
   async authenticateUser(call: any, callback: any) {
     const { email, password } = call.request;
@@ -36,60 +37,166 @@ export class IdentityServiceImpl {
     }
     try {
       const result = await this.pool.query(
-        'SELECT user_id, password_hash, roles FROM identity.users WHERE email = $1',
+        'SELECT user_id, password_hash, roles FROM identity.users WHERE email = $1 AND is_active = true',
         [email]
       );
       if (result.rows.length === 0) {
         return callback({ code: 16, message: 'invalid credentials' });
       }
       const user = result.rows[0];
-      // TODO: bcrypt.compare(password, user.password_hash)
+
+      const passwordValid = await bcrypt.compare(password, user.password_hash);
+      if (!passwordValid) {
+        return callback({ code: 16, message: 'invalid credentials' });
+      }
+
       const now = Math.floor(Date.now() / 1000);
-      const claims = {
+      const expiresAt = now + this.accessTtlSeconds;
+      const claimsPayload = {
         user_id: user.user_id,
         email,
         roles: user.roles ?? [],
-        issued_at: { seconds: now },
-        expires_at: { seconds: now + this.accessTtlSeconds },
+        issued_at: now,
+        expires_at: expiresAt,
       };
-      // TODO: sign with jsonwebtoken using this.jwtSecret
-      const accessToken = `stub.${Buffer.from(JSON.stringify(claims)).toString('base64')}.sig`;
+
+      const accessToken = (jwt as any).sign(claimsPayload, this.jwtSecret, {
+        expiresIn: this.accessTtlSeconds,
+      });
+
       const refreshToken = uuidv4();
+      const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+
+      await this.pool.query(
+        `INSERT INTO identity.refresh_tokens (user_id, token_hash, expires_at)
+         VALUES ($1, $2, NOW() + ($3 || ' seconds')::interval)`,
+        [user.user_id, refreshTokenHash, this.refreshTtlSeconds]
+      );
+
+      log.info('User authenticated', { userId: user.user_id });
       callback(null, {
         access_token: accessToken,
         refresh_token: refreshToken,
-        expires_at: { seconds: now + this.accessTtlSeconds },
-        claims,
+        expires_at: { seconds: expiresAt },
+        claims: {
+          user_id: user.user_id,
+          email,
+          roles: user.roles ?? [],
+          issued_at: { seconds: now },
+          expires_at: { seconds: expiresAt },
+        },
       });
     } catch (err: any) {
+      log.error('authenticateUser failed', { error: err.message });
       callback({ code: 13, message: err.message });
     }
   }
 
   /**
-   * ValidateToken — parses and validates JWT, returns claims.
+   * ValidateToken — verifies JWT signature and expiry, returns claims.
    */
   async validateToken(call: any, callback: any) {
     const { token } = call.request;
     if (!token) return callback({ code: 3, message: 'token required' });
     try {
-      // TODO: jsonwebtoken.verify(token, this.jwtSecret)
-      const parts = token.split('.');
-      if (parts.length < 2) return callback({ code: 16, message: 'invalid token' });
-      const claims = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-      callback(null, claims);
+      const decoded = (jwt as any).verify(token, this.jwtSecret) as any;
+      callback(null, {
+        user_id: decoded.user_id ?? '',
+        email: decoded.email ?? '',
+        roles: decoded.roles ?? [],
+        issued_at: { seconds: decoded.issued_at ?? Math.floor(Date.now() / 1000) },
+        expires_at: { seconds: decoded.expires_at ?? decoded.exp ?? 0 },
+      });
     } catch (err: any) {
-      callback({ code: 16, message: 'invalid token' });
+      callback({ code: 16, message: 'invalid or expired token' });
     }
   }
 
+  /**
+   * RefreshToken — validates refresh token, rotates it, issues new JWT pair.
+   */
   async refreshToken(call: any, callback: any) {
-    // TODO: validate refresh token against identity.refresh_tokens table
-    callback({ code: 12, message: 'not implemented' });
+    const { refresh_token } = call.request;
+    if (!refresh_token) return callback({ code: 3, message: 'refresh_token required' });
+
+    const tokenHash = crypto.createHash('sha256').update(refresh_token).digest('hex');
+    try {
+      const result = await this.pool.query(
+        `SELECT rt.token_id, rt.user_id, u.email, u.roles
+         FROM identity.refresh_tokens rt
+         JOIN identity.users u ON u.user_id = rt.user_id
+         WHERE rt.token_hash = $1
+           AND rt.revoked_at IS NULL
+           AND rt.expires_at > NOW()
+           AND u.is_active = true`,
+        [tokenHash]
+      );
+      if (result.rows.length === 0) {
+        return callback({ code: 16, message: 'invalid or expired refresh token' });
+      }
+      const { token_id, user_id, email, roles } = result.rows[0];
+
+      // Revoke old refresh token (rotation)
+      await this.pool.query(
+        'UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE token_id = $1',
+        [token_id]
+      );
+
+      const now = Math.floor(Date.now() / 1000);
+      const expiresAt = now + this.accessTtlSeconds;
+      const claimsPayload = { user_id, email, roles: roles ?? [], issued_at: now, expires_at: expiresAt };
+
+      const newAccessToken = (jwt as any).sign(claimsPayload, this.jwtSecret, {
+        expiresIn: this.accessTtlSeconds,
+      });
+
+      const newRefreshToken = uuidv4();
+      const newRefreshTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
+      await this.pool.query(
+        `INSERT INTO identity.refresh_tokens (user_id, token_hash, expires_at)
+         VALUES ($1, $2, NOW() + ($3 || ' seconds')::interval)`,
+        [user_id, newRefreshTokenHash, this.refreshTtlSeconds]
+      );
+
+      log.info('Token refreshed', { userId: user_id });
+      callback(null, {
+        access_token: newAccessToken,
+        refresh_token: newRefreshToken,
+        expires_at: { seconds: expiresAt },
+        claims: {
+          user_id,
+          email,
+          roles: roles ?? [],
+          issued_at: { seconds: now },
+          expires_at: { seconds: expiresAt },
+        },
+      });
+    } catch (err: any) {
+      log.error('refreshToken failed', { error: err.message });
+      callback({ code: 13, message: err.message });
+    }
   }
 
+  /**
+   * RevokeToken — revokes all active refresh tokens for the token's owner.
+   */
   async revokeToken(call: any, callback: any) {
-    callback(null, { success: true });
+    const { token } = call.request;
+    if (!token) return callback(null, { success: true });
+    try {
+      // Decode without verify to handle expired tokens
+      const decoded = (jwt as any).decode(token) as any;
+      if (decoded?.user_id) {
+        await this.pool.query(
+          'UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
+          [decoded.user_id]
+        );
+        log.info('Tokens revoked', { userId: decoded.user_id });
+      }
+      callback(null, { success: true });
+    } catch (err: any) {
+      callback({ code: 13, message: err.message });
+    }
   }
 
   async createApiKey(call: any, callback: any) {
