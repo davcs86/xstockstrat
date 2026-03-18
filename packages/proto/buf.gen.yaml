@@ -1,35 +1,37 @@
 version: v1
 plugins:
-  # Go — protoc-gen-go + grpc (retained for backwards compatibility)
-  - plugin: buf.build/protocolbuffers/go
+  # Go — protobuf messages
+  - name: go
     out: gen/go
     opt:
       - paths=source_relative
-  - plugin: buf.build/grpc/go
+
+  # Go — gRPC service stubs
+  - name: go-grpc
     out: gen/go
     opt:
       - paths=source_relative
       - require_unimplemented_servers=false
 
   # Go — Connect-RPC handler + client stubs
-  - plugin: buf.build/connectrpc/go
+  - name: connect-go
     out: gen/go
     opt:
       - paths=source_relative
 
-  # Python — protoc-gen-python + grpc (retained for backwards compatibility)
-  - plugin: buf.build/protocolbuffers/python
-    out: gen/python
-  - plugin: buf.build/grpc/python
+  # Python — protobuf messages
+  - name: python
     out: gen/python
 
-  # Python — Connect-RPC
-  - plugin: buf.build/connectrpc/python
+  # Python — gRPC service stubs
+  - name: grpc_python
     out: gen/python
+    path: /usr/local/bin/protoc-gen-grpc_python
 
-  # TypeScript (Node + browser via ts-proto, retained for backwards compatibility)
-  - plugin: buf.build/community/stephenh-ts-proto
+  # TypeScript — ts-proto (grpc-js compatible)
+  - name: ts_proto
     out: gen/ts
+    path: /opt/node22/bin/protoc-gen-ts_proto
     opt:
       - esModuleInterop=true
       - outputServices=grpc-js
@@ -37,8 +39,9 @@ plugins:
       - useOptionals=messages
       - stringEnums=true
 
-  # TypeScript — Connect-RPC ES (for browser + Node.js fetch-based clients)
-  - plugin: buf.build/connectrpc/es
+  # TypeScript — Connect-RPC ES (browser + Node.js fetch-based clients)
+  - name: connect-es
     out: gen/ts
+    path: /opt/node22/bin/protoc-gen-connect-es
     opt:
       - target=ts
