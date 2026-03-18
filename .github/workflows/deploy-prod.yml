@@ -1,0 +1,19 @@
+name: Deploy prod
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Deploy to DigitalOcean App Platform
+        run: doctl apps update ${{ secrets.DO_PROD_APP_ID }} --spec .do/app.yaml
