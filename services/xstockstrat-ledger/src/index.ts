@@ -7,6 +7,7 @@ import { createLedgerServiceDefinition } from './grpc/serviceDefinition';
 import { createConnectRouter } from './connect/connectRouter';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { Pool } from 'pg';
+import { createN8nRouter } from './n8n/webhookRouter';
 
 const log = getLogger('ledger:server');
 
@@ -31,7 +32,7 @@ async function main() {
 
   // ── gRPC server (internal service-to-service, port 50057) ──────────────
   const grpcServer = new grpc.Server();
-  grpcServer.addService(createLedgerServiceDefinition(), ledgerImpl);
+  grpcServer.addService(createLedgerServiceDefinition(), ledgerImpl as unknown as grpc.UntypedServiceImplementation);
 
   grpcServer.bindAsync(
     `0.0.0.0:${grpcPort}`,
@@ -48,11 +49,18 @@ async function main() {
 
   // ── Connect-RPC HTTP server (browser + external clients, port 8057) ────
   const connectHandler = connectNodeAdapter({ routes: createConnectRouter(ledgerImpl) });
+  const n8nRouter = createN8nRouter(ledgerImpl);
   const httpServer = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Connect-Protocol-Version, Connect-Timeout-Ms');
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+    if (req.method === 'GET' && req.url === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', service: 'xstockstrat-ledger' }));
+      return;
+    }
+    if (req.url?.startsWith('/webhooks/n8n/')) { n8nRouter(req, res); return; }
     connectHandler(req, res);
   });
   httpServer.listen(parseInt(httpPort, 10), () => {

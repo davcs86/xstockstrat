@@ -8,6 +8,7 @@ import { IdentityServiceImpl } from './grpc/identityServiceImpl';
 import { createConnectRouter } from './connect/connectRouter';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { getLogger } from './services/logger';
+import { createN8nRouter } from './n8n/webhookRouter';
 
 const log = getLogger('identity:server');
 
@@ -35,7 +36,7 @@ async function main() {
   const grpcServer = new grpc.Server();
   grpcServer.addService(
     proto.xstockstrat.identity.v1.IdentityService.service,
-    identityImpl,
+    identityImpl as unknown as grpc.UntypedServiceImplementation,
   );
 
   grpcServer.bindAsync(
@@ -50,11 +51,18 @@ async function main() {
 
   // ── Connect-RPC HTTP server (browser + external clients, port 8058) ────
   const connectHandler = connectNodeAdapter({ routes: createConnectRouter(identityImpl) });
+  const n8nRouter = createN8nRouter(identityImpl);
   const httpServer = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Connect-Protocol-Version, Connect-Timeout-Ms');
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+    if (req.method === 'GET' && req.url === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', service: 'xstockstrat-identity' }));
+      return;
+    }
+    if (req.url?.startsWith('/webhooks/n8n/')) { n8nRouter(req, res); return; }
     connectHandler(req, res);
   });
   httpServer.listen(parseInt(httpPort, 10), () => {
