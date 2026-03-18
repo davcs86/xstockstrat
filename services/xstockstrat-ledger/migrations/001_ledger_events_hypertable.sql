@@ -22,11 +22,8 @@ CREATE TABLE IF NOT EXISTS ledger.events (
     PRIMARY KEY (event_id, recorded_at)
 );
 
--- Immutability enforcement: deny UPDATE and DELETE at DB level
-CREATE OR REPLACE RULE ledger_no_update AS ON UPDATE TO ledger.events DO INSTEAD NOTHING;
-CREATE OR REPLACE RULE ledger_no_delete AS ON DELETE TO ledger.events DO INSTEAD NOTHING;
-
 -- Convert to TimescaleDB hypertable (partition by day)
+-- NOTE: Rules are not supported on hypertables; immutability is enforced via triggers below.
 SELECT create_hypertable(
     'ledger.events',
     'recorded_at',
@@ -55,6 +52,22 @@ CREATE INDEX IF NOT EXISTS idx_events_correlation
     ON ledger.events (correlation_id) WHERE correlation_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_events_sequence
     ON ledger.events (sequence);
+
+-- Immutability enforcement: deny UPDATE and DELETE via triggers (rules not supported on hypertables)
+CREATE OR REPLACE FUNCTION ledger.deny_mutation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'ledger.events is append-only: % is not permitted', TG_OP;
+END;
+$$;
+
+CREATE TRIGGER ledger_no_update
+    BEFORE UPDATE ON ledger.events
+    FOR EACH ROW EXECUTE FUNCTION ledger.deny_mutation();
+
+CREATE TRIGGER ledger_no_delete
+    BEFORE DELETE ON ledger.events
+    FOR EACH ROW EXECUTE FUNCTION ledger.deny_mutation();
 
 -- NOTIFY trigger for live streaming (used by StreamEvents RPC)
 CREATE OR REPLACE FUNCTION ledger.notify_event_inserted()

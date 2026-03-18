@@ -92,7 +92,7 @@ WITH NO DATA;
 
 SELECT add_continuous_aggregate_policy(
     'marketdata.ohlcv_1h',
-    start_offset  => INTERVAL '2 hours',
+    start_offset  => INTERVAL '3 hours',
     end_offset    => INTERVAL '5 minutes',
     schedule_interval => INTERVAL '5 minutes'
 );

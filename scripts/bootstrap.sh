@@ -84,7 +84,7 @@ if ! docker ps --format '{{.Names}}' | grep -q "xstockstrat-db"; then
     -e POSTGRES_PASSWORD=devpassword \
     -e POSTGRES_DB=xstockstrat \
     -p 5432:5432 \
-    timescale/timescaledb-ha:pg16-latest
+    timescale/timescaledb:latest-pg16
   echo "  Waiting for TimescaleDB to be ready..."
   sleep 5
   until docker exec xstockstrat-db pg_isready -U xstockstrat -q; do sleep 1; done
