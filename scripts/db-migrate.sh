@@ -23,6 +23,10 @@ run_migrations() {
   done
 }
 
+echo "==> Enabling TimescaleDB extension..."
+psql "$DB_URL" -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+echo ""
+
 echo "==> Running migrations (dependency order)..."
 echo ""
 
