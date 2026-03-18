@@ -1,6 +1,5 @@
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-alpine AS builder
 WORKDIR /app
-# Copy proto gen first for caching
 COPY ../../packages/proto/gen/go /proto/gen/go
 COPY go.mod go.sum ./
 RUN go mod download
