@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main-dev
+      - main
+
+jobs:
+  proto-lint:
+    name: Proto lint and breaking check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history required for buf breaking --against '.git#branch=origin/main'
+          fetch-depth: 0
+
+      - uses: bufbuild/buf-setup-action@v1
+
+      - name: buf lint
+        run: buf lint packages/proto/
+
+      - name: buf breaking (against origin/main)
+        run: buf breaking packages/proto/ --against '.git#branch=origin/main'

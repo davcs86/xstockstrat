@@ -19,6 +19,12 @@ services:
         value: "50051"
       - key: CONNECT_PORT
         value: "8051"
+      - key: TRADING_MODE
+        value: live
+      - key: ALPACA_PAPER
+        value: "false"
+      - key: ALPACA_BASE_URL
+        value: https://api.alpaca.markets
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -50,6 +56,8 @@ services:
         value: "50052"
       - key: CONNECT_PORT
         value: "8052"
+      - key: TRADING_MODE
+        value: live
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -75,6 +83,12 @@ services:
         value: "50053"
       - key: CONNECT_PORT
         value: "8053"
+      - key: TRADING_MODE
+        value: live
+      - key: ALPACA_PAPER
+        value: "false"
+      - key: ALPACA_BASE_URL
+        value: https://api.alpaca.markets
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -102,6 +116,8 @@ services:
         value: "50054"
       - key: CONNECT_PORT
         value: "8054"
+      - key: TRADING_MODE
+        value: live
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -124,6 +140,12 @@ services:
         value: "50055"
       - key: CONNECT_PORT
         value: "8055"
+      - key: TRADING_MODE
+        value: live
+      - key: ALPACA_PAPER
+        value: "false"
+      - key: ALPACA_BASE_URL
+        value: https://api.alpaca.markets
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -148,6 +170,8 @@ services:
         value: "50056"
       - key: CONNECT_PORT
         value: "8056"
+      - key: TRADING_MODE
+        value: live
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -176,6 +200,8 @@ services:
         value: "50057"
       - key: CONNECT_PORT
         value: "8057"
+      - key: TRADING_MODE
+        value: live
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: NOTIFY_ENDPOINT
@@ -199,6 +225,8 @@ services:
         value: "50058"
       - key: CONNECT_PORT
         value: "8058"
+      - key: TRADING_MODE
+        value: live
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -221,6 +249,8 @@ services:
         value: "50059"
       - key: CONNECT_PORT
         value: "8059"
+      - key: TRADING_MODE
+        value: live
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -242,6 +272,8 @@ services:
         value: "50060"
       - key: CONNECT_PORT
         value: "8060"
+      - key: TRADING_MODE
+        value: live
 
   # ── Next.js frontends ──────────────────────────────────────────────────────
 
@@ -256,6 +288,8 @@ services:
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
+      - key: TRADING_MODE
+        value: live
       - key: TRADING_ENDPOINT
         value: ${xstockstrat-trading.PRIVATE_URL}
 
@@ -270,6 +304,8 @@ services:
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
+      - key: TRADING_MODE
+        value: live
       - key: ANALYSIS_ENDPOINT
         value: ${xstockstrat-analysis.PRIVATE_URL}
 
@@ -284,6 +320,8 @@ services:
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
+      - key: TRADING_MODE
+        value: live
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
 
