@@ -54,6 +54,7 @@ This configures the following rules on both `main-dev` and `main` via `gh api`:
 The `CI / Proto lint and breaking check` check is produced by `.github/workflows/ci.yml`
 (workflow name `CI`, job name `Proto lint and breaking check`). **PRs cannot be merged
 until this check passes** — `buf lint` and `buf breaking` failures block the merge button.
+
 ---
 
 ## Step-by-step Lifecycle
