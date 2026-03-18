@@ -5,7 +5,7 @@ Publishes normalized events to xstockstrat-ledger.
 
 Ports:
   GRPC_PORT (50055)  — gRPC (HTTP/2), internal service-to-service
-  HTTP_PORT (8055)   — Connect-RPC (HTTP/1.1 + HTTP/2), browser + external clients
+  HTTP_PORT (8055)   — Connect-RPC compatible HTTP (JSON), browser + external clients
 """
 import asyncio
 import logging
@@ -14,11 +14,11 @@ import signal
 
 import grpc
 import uvicorn
-from connectrpc.asgi import ConnectHandler
 from grpc_reflection.v1alpha import reflection
 
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IngestServicer
+from app.http_server import build_app
 from gen.ingest.v1 import ingest_pb2_grpc
 from gen.ingest.v1.ingest_pb2 import DESCRIPTOR as INGEST_DESCRIPTOR
 
@@ -32,15 +32,12 @@ MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketd
 LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
 
 
-async def start_connect_server(servicer: IngestServicer) -> None:
-    """Start Connect-RPC ASGI server on HTTP_PORT."""
-    connect_app = ConnectHandler(
-        servicer=servicer,
-        service_descriptor=INGEST_DESCRIPTOR.services_by_name["IngestService"],
-    )
-    config = uvicorn.Config(app=connect_app, host="0.0.0.0", port=HTTP_PORT, loop="asyncio", log_level="info")
+async def start_http_server(servicer: IngestServicer) -> None:
+    """Start FastAPI HTTP server on HTTP_PORT (Connect-RPC compatible JSON API)."""
+    app = build_app(servicer)
+    config = uvicorn.Config(app=app, host="0.0.0.0", port=HTTP_PORT, loop="asyncio", log_level="info")
     server = uvicorn.Server(config)
-    log.info("ingest Connect-RPC HTTP service starting on port %d", HTTP_PORT)
+    log.info("ingest HTTP service starting on port %d", HTTP_PORT)
     await server.serve()
 
 
@@ -80,7 +77,7 @@ async def serve():
 
     await asyncio.gather(
         grpc_server.wait_for_termination(),
-        start_connect_server(servicer),
+        start_http_server(servicer),
     )
 
 

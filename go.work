@@ -1,7 +1,8 @@
 go 1.23
 
 use (
-	./services/xstockstrat-trading
-	./services/xstockstrat-portfolio
+	./packages/proto
 	./services/xstockstrat-marketdata
+	./services/xstockstrat-portfolio
+	./services/xstockstrat-trading
 )

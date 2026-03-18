@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -9,13 +10,16 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"connectrpc.com/connect"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	marketdatav1connect "github.com/xstockstrat/contracts/gen/go/marketdata/v1/marketdatav1connect"
 	"github.com/xstockstrat/marketdata/internal/alpaca"
@@ -60,7 +64,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	svc := service.NewMarketDataService(alpacaClient, repo, cfgWatcher)
+	svc, err := service.NewMarketDataService(alpacaClient, repo, cfgWatcher, cfg.LedgerEndpoint, cfg.NotifyEndpoint)
+	if err != nil {
+		slog.Error("service init failed", "error", err)
+		os.Exit(1)
+	}
 	hdl := handler.NewMarketDataHandler(svc)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.GRPCPort))
@@ -70,7 +78,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-	marketdatav1.RegisterMarketDataServiceServer(grpcServer, hdl)
+	marketdatav1.RegisterMarketDataServiceServer(grpcServer, hdl.GRPCHandler())
 	reflection.Register(grpcServer)
 
 	// Connect-RPC HTTP server (port 8053) — supports HTTP/1.1 + HTTP/2 via h2c
@@ -81,6 +89,71 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle(connectPath, connectHdl)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	mux.HandleFunc("/webhooks/n8n/backfill", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			Symbols   []string `json:"symbols"`
+			Timeframe string   `json:"timeframe"`
+			Start     string   `json:"start"`
+			End       string   `json:"end"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+		req := &marketdatav1.BackfillBarsRequest{
+			Symbols:   body.Symbols,
+			Timeframe: body.Timeframe,
+		}
+		if body.Start != "" {
+			if t, err := time.Parse(time.RFC3339, body.Start); err == nil {
+				req.Range = &commonv1.TimeRange{Start: timestamppb.New(t)}
+			}
+		}
+		if body.End != "" {
+			if t, err := time.Parse(time.RFC3339, body.End); err == nil {
+				if req.Range == nil {
+					req.Range = &commonv1.TimeRange{}
+				}
+				req.Range.End = timestamppb.New(t)
+			}
+		}
+		go func() {
+			resp, err := svc.BackfillBars(context.Background(), req)
+			if err != nil {
+				slog.Error("n8n backfill failed", "error", err)
+				return
+			}
+			slog.Info("n8n backfill complete", "bars_written", resp.BarsWritten)
+		}()
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(map[string]string{"status": "backfill_started"})
+	})
+	mux.HandleFunc("/webhooks/n8n/subscribe", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			Symbols   []string `json:"symbols"`
+			Timeframe string   `json:"timeframe"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+		if len(body.Symbols) == 0 {
+			http.Error(w, "symbols required", http.StatusBadRequest)
+			return
+		}
+		go svc.StartBarStream(ctx, body.Symbols, body.Timeframe)
+		go svc.StartQuoteStream(ctx, body.Symbols)
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(map[string]string{"status": "subscribed"})
+	})
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%s", cfg.HTTPPort),
 		Handler: h2c.NewHandler(mux, &http2.Server{}),

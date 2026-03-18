@@ -9,6 +9,9 @@ RUN uv sync --frozen --no-dev
 COPY ../../packages/proto/gen/python /proto/gen/python
 RUN uv pip install --system -e /proto/gen/python
 
+# Expose gen/ as a Python namespace package so "from gen.xxx.v1 import" works
+RUN ln -s /proto/gen/python /app/gen
+
 COPY . .
 EXPOSE 50056
 EXPOSE 8056

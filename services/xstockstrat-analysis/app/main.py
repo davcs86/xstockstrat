@@ -3,7 +3,7 @@ xstockstrat-analysis — Strategy scoring and backtesting service.
 
 Ports:
   GRPC_PORT (50056)  — gRPC (HTTP/2), internal service-to-service
-  HTTP_PORT (8056)   — Connect-RPC (HTTP/1.1 + HTTP/2), browser + external clients
+  HTTP_PORT (8056)   — Connect-RPC compatible HTTP (JSON), browser + external clients
 """
 import asyncio
 import logging
@@ -12,11 +12,11 @@ import signal
 
 import grpc
 import uvicorn
-from connectrpc.asgi import ConnectHandler
 from grpc_reflection.v1alpha import reflection
 
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer
+from app.http_server import build_app
 from gen.analysis.v1 import analysis_pb2_grpc
 from gen.analysis.v1.analysis_pb2 import DESCRIPTOR as ANALYSIS_DESCRIPTOR
 
@@ -31,15 +31,12 @@ INDICATORS_ENDPOINT = os.environ.get("INDICATORS_ENDPOINT", "xstockstrat-indicat
 LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
 
 
-async def start_connect_server(servicer: AnalysisServicer) -> None:
-    """Start Connect-RPC ASGI server on HTTP_PORT."""
-    connect_app = ConnectHandler(
-        servicer=servicer,
-        service_descriptor=ANALYSIS_DESCRIPTOR.services_by_name["AnalysisService"],
-    )
-    config = uvicorn.Config(app=connect_app, host="0.0.0.0", port=HTTP_PORT, loop="asyncio", log_level="info")
+async def start_http_server(servicer: AnalysisServicer) -> None:
+    """Start FastAPI HTTP server on HTTP_PORT (Connect-RPC compatible JSON API)."""
+    app = build_app(servicer)
+    config = uvicorn.Config(app=app, host="0.0.0.0", port=HTTP_PORT, loop="asyncio", log_level="info")
     server = uvicorn.Server(config)
-    log.info("analysis Connect-RPC HTTP service starting on port %d", HTTP_PORT)
+    log.info("analysis HTTP service starting on port %d", HTTP_PORT)
     await server.serve()
 
 
@@ -77,7 +74,7 @@ async def serve():
 
     await asyncio.gather(
         grpc_server.wait_for_termination(),
-        start_connect_server(servicer),
+        start_http_server(servicer),
     )
 
 
