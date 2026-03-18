@@ -463,6 +463,526 @@ curl -X POST http://localhost:8060/webhooks/n8n/config-update \
 
 ---
 
+## Phase 7 — Observability
+
+> Can be applied incrementally alongside any phase. Recommended to wire Phase 7A–7B during
+> Phase 0, and instrument each service as it is built in Phases 1–5.
+
+### Decision Record
+
+#### Current State
+
+| Concern | State at project start |
+|---|---|
+| Log destination | stdout only (container logs) |
+| Log format | JSON (prod) / colorized (dev) — already structured |
+| Metrics | None |
+| Tracing | None |
+| Error tracking | None |
+| Health checks | None exposed |
+| Instrumentation | No OTel SDK in any service |
+
+All services emit **structured JSON logs** to stdout — the correct foundation. The gap is
+collection, aggregation, and querying.
+
+#### Architecture Constraint: DO App Platform = Push Model
+
+DO App Platform does not expose the underlying host. A Prometheus pull scraper cannot reach
+`/metrics` endpoints on App Platform services. All observability data must be **pushed** from
+the application to an external backend. This rules out a plain self-hosted Prometheus pull
+setup without a push gateway.
+
+#### Options Evaluated
+
+| Option | Cost | Verdict |
+|---|---|---|
+| **Grafana Cloud** (Loki + Mimir + Tempo, OTLP push) | $0 free tier (50 GB logs, 10k series, 50 GB traces/mo, 14-day retention); ~$10–30/mo paid | **Chosen** |
+| **Self-Hosted PLG on DO Droplet** ($24/mo, 4 GB RAM) | ~$24/mo flat, no per-GB fees, full data sovereignty | Escape hatch for production |
+| **Managed OpenSearch** | $48–96+/mo, JVM-heavy, logs-only without extra stack | Rejected — overkill, 10–50x Loki cost |
+| **Better Stack / Logtail** | Free 1 GB/mo; $25/mo for 5 GB/day | Rejected — logs-only, no metrics/traces |
+| **DO Native Monitoring** | Free | Rejected — infra Droplet metrics only, unavailable on App Platform |
+
+#### Decision
+
+**Grafana Cloud free tier + OpenTelemetry.** OTel is the CNCF-standard vendor-neutral
+instrumentation layer for Go, Python, and Node.js. Grafana Cloud free tier covers the full
+dev/paper-trading phase at $0. When volume grows, choose between staying on Grafana Cloud
+(pay-as-you-go) or migrating the backend to a self-hosted PLG Droplet (~$24/mo flat).
+
+| Phase | Setup | Monthly Cost |
+|---|---|---|
+| Dev / paper trading | Grafana Cloud free tier | **$0** |
+| Early production | Grafana Cloud paid | ~$10–30 |
+| Scale / data sovereignty | Self-hosted PLG on DO Droplet | ~$24 flat |
+
+---
+
+### Architecture
+
+```
+Services (Go / Python / Node.js / Next.js)
+  └── OTel SDK (per-language, configured via env vars)
+        └── OTLP push (gRPC :4317 or HTTP :4318)
+              └── OTel Collector  ← central gateway (local dev only)
+                    ├── Loki exporter  → Grafana Cloud (logs)
+                    ├── Mimir exporter → Grafana Cloud (metrics)
+                    └── Tempo exporter → Grafana Cloud (traces)
+                          └── Grafana UI → dashboards, alerts, SLOs
+```
+
+**Local dev:** OTel Collector runs as a Docker Compose service (`packages/otel/`). Services
+push OTLP to `otel-collector:4317`.
+
+**Production (DO App Platform):** Services push OTLP **directly** to the Grafana Cloud OTLP
+gateway. No collector deployment needed — simplifies the DO App Platform surface.
+
+---
+
+### Phase 7A — Grafana Cloud Setup (manual, one-time)
+
+> Performed by: platform lead
+
+1. Create a Grafana Cloud account at `https://grafana.com/auth/sign-up/create-user`
+2. Create a **stack** (e.g. `xstockstrat`). Note your stack slug and region
+   (e.g. `prod-us-central-0`)
+3. Under **Home → Connections → Add new connection → OpenTelemetry**, copy:
+   - `GRAFANA_OTLP_ENDPOINT` — e.g. `https://otlp-gateway-prod-us-central-0.grafana.net/otlp`
+   - `GRAFANA_OTLP_TOKEN` — base64-encoded `<instanceId>:<apiKey>` (pre-encoded by Grafana)
+4. Store both in your secret store. Set as env vars on all services and on the OTel Collector
+   container in prod.
+5. For local dev, add to `.env` (never commit `.env`).
+
+> The Grafana Cloud OTLP gateway accepts logs, metrics, and traces on a single endpoint.
+
+---
+
+### Phase 7B — OTel Collector (Local Dev)
+
+**Config file:** `packages/otel/otel-collector-config.yaml`
+**Docker Compose service:** `otel-collector` (added to `docker-compose.yml`)
+
+The collector is an infrastructure dependency in `docker-compose.yml`. All services send
+OTLP to `otel-collector:4317` locally; the collector forwards to Grafana Cloud using
+`GRAFANA_OTLP_ENDPOINT` and `GRAFANA_OTLP_TOKEN` from `.env`.
+
+```bash
+# Verify collector is running
+docker compose up -d otel-collector
+docker compose logs otel-collector --tail=20
+# Expect: "Everything is ready. Begin running and processing data."
+
+# Smoke test with telemetrygen
+docker run --rm --network xstockstrat \
+  ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  traces --otlp-endpoint otel-collector:4317 --otlp-insecure --duration 5s
+# Then verify traces appear in Grafana Cloud → Explore → Tempo
+```
+
+---
+
+### Phase 7C — Go Service Instrumentation
+
+Applies to: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
+
+#### Add dependencies to each `go.mod`
+
+```bash
+cd services/xstockstrat-trading   # repeat for portfolio, marketdata
+go get go.opentelemetry.io/otel@v1.28.0
+go get go.opentelemetry.io/otel/sdk@v1.28.0
+go get go.opentelemetry.io/otel/sdk/metric@v1.28.0
+go get go.opentelemetry.io/otel/sdk/log@v0.6.0
+go get go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp@v0.50.0
+go get go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp@v0.50.0
+go get go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp@v0.6.0
+go get go.opentelemetry.io/contrib/bridges/otelslog@v0.4.0
+go get go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc@v0.53.0
+```
+
+#### Create `internal/telemetry/otel.go` in each service
+
+```go
+package telemetry
+
+import (
+    "context"
+    "os"
+
+    "go.opentelemetry.io/otel"
+    "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+    "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+    "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+    "go.opentelemetry.io/otel/propagation"
+    sdklog "go.opentelemetry.io/otel/sdk/log"
+    sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+    sdktrace "go.opentelemetry.io/otel/sdk/trace"
+    semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+    "go.opentelemetry.io/otel/sdk/resource"
+)
+
+// Init configures the global OTEL tracer, meter, and log providers.
+// OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME must be set in env.
+// Returns a shutdown function — call it on process exit.
+func Init(ctx context.Context, serviceName string) (shutdown func(context.Context) error, err error) {
+    if os.Getenv("OTEL_ENABLED") != "true" {
+        return func(context.Context) error { return nil }, nil
+    }
+
+    res, err := resource.New(ctx,
+        resource.WithAttributes(semconv.ServiceName(serviceName)),
+        resource.WithFromEnv(),
+    )
+    if err != nil {
+        return nil, err
+    }
+
+    traceExp, err := otlptracehttp.New(ctx)
+    if err != nil {
+        return nil, err
+    }
+    tp := sdktrace.NewTracerProvider(
+        sdktrace.WithBatcher(traceExp),
+        sdktrace.WithResource(res),
+    )
+    otel.SetTracerProvider(tp)
+    otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+        propagation.TraceContext{}, propagation.Baggage{},
+    ))
+
+    metricExp, err := otlpmetrichttp.New(ctx)
+    if err != nil {
+        return nil, err
+    }
+    mp := sdkmetric.NewMeterProvider(
+        sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExp)),
+        sdkmetric.WithResource(res),
+    )
+    otel.SetMeterProvider(mp)
+
+    logExp, err := otlploghttp.New(ctx)
+    if err != nil {
+        return nil, err
+    }
+    lp := sdklog.NewLoggerProvider(
+        sdklog.WithProcessor(sdklog.NewBatchProcessor(logExp)),
+        sdklog.WithResource(res),
+    )
+
+    shutdown = func(ctx context.Context) error {
+        _ = tp.Shutdown(ctx)
+        _ = mp.Shutdown(ctx)
+        _ = lp.Shutdown(ctx)
+        return nil
+    }
+    return shutdown, nil
+}
+```
+
+#### Wire into `cmd/server/main.go`
+
+```go
+// After slog.SetDefault(logger), before cfgWatcher.WaitForSnapshot:
+otelShutdown, err := telemetry.Init(ctx, "xstockstrat-trading")
+if err != nil {
+    slog.Error("otel init failed", "error", err)
+    // Non-fatal: observability is best-effort
+}
+defer func() {
+    shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+    _ = otelShutdown(shutCtx)
+}()
+```
+
+#### Add gRPC interceptors for trace propagation
+
+```go
+// grpc.NewServer:
+grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()))
+// outbound grpc.Dial:
+grpc.WithStatsHandler(otelgrpc.NewClientHandler())
+```
+
+---
+
+### Phase 7D — Python Service Instrumentation
+
+Applies to: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
+
+#### Add to `pyproject.toml` dependencies
+
+```toml
+"opentelemetry-sdk>=1.26.0",
+"opentelemetry-exporter-otlp-proto-http>=1.26.0",
+"opentelemetry-instrumentation-grpc>=0.47b0",
+"opentelemetry-instrumentation-logging>=0.47b0",
+```
+
+#### Create `app/telemetry.py` in each service
+
+```python
+import os
+import logging
+
+from opentelemetry import trace, metrics
+from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+
+log = logging.getLogger(__name__)
+
+
+def init(service_name: str) -> None:
+    """Configure global OTEL providers. No-op when OTEL_ENABLED != 'true'."""
+    if os.environ.get("OTEL_ENABLED") != "true":
+        return
+
+    resource = Resource(attributes={SERVICE_NAME: service_name})
+
+    provider = TracerProvider(resource=resource)
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+    trace.set_tracer_provider(provider)
+
+    reader = PeriodicExportingMetricReader(OTLPMetricExporter(), export_interval_millis=10_000)
+    meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
+    metrics.set_meter_provider(meter_provider)
+
+    # Injects trace_id / span_id into stdlib log records
+    LoggingInstrumentor().instrument(set_logging_format=True)
+
+    log.info("opentelemetry initialized", extra={"service": service_name})
+```
+
+#### Wire into `app/main.py`
+
+```python
+# Before config watcher, after basicConfig:
+from app.telemetry import init as init_otel
+init_otel("xstockstrat-indicators")  # use the service name
+```
+
+---
+
+### Phase 7E — Node.js Service Instrumentation
+
+Applies to: `xstockstrat-config`, `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`
+
+#### Add dependencies
+
+```bash
+pnpm add \
+  @opentelemetry/sdk-node \
+  @opentelemetry/auto-instrumentations-node \
+  @opentelemetry/exporter-trace-otlp-http \
+  @opentelemetry/exporter-metrics-otlp-http \
+  @opentelemetry/exporter-logs-otlp-http \
+  @opentelemetry/sdk-logs \
+  @opentelemetry/winston-transport
+```
+
+#### Create `src/telemetry.ts` in each service
+
+```typescript
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
+import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+
+let sdk: NodeSDK | undefined;
+
+export function initTelemetry(serviceName: string): void {
+  if (process.env.OTEL_ENABLED !== 'true') return;
+
+  sdk = new NodeSDK({
+    serviceName,
+    traceExporter: new OTLPTraceExporter(),
+    metricReader: new PeriodicExportingMetricReader({
+      exporter: new OTLPMetricExporter(),
+      exportIntervalMillis: 10_000,
+    }),
+    logRecordProcessors: [new BatchLogRecordProcessor(new OTLPLogExporter())],
+    instrumentations: [
+      getNodeAutoInstrumentations({
+        '@opentelemetry/instrumentation-fs': { enabled: false }, // noisy
+      }),
+    ],
+  });
+
+  sdk.start();
+}
+
+export async function shutdownTelemetry(): Promise<void> {
+  await sdk?.shutdown();
+}
+```
+
+#### Add Winston → OTLP bridge in `src/services/logger.ts`
+
+```typescript
+import { OpenTelemetryTransportV3 } from '@opentelemetry/winston-transport';
+
+// In getLogger(), add to transports when OTEL is enabled:
+const otelEnabled = process.env.OTEL_ENABLED === 'true';
+
+return createLogger({
+  // ...existing config...
+  transports: [
+    new transports.Console(),
+    ...(otelEnabled ? [new OpenTelemetryTransportV3()] : []),
+  ],
+});
+```
+
+#### Wire into service entry point (`src/index.ts`)
+
+```typescript
+// Before anything else:
+import { initTelemetry, shutdownTelemetry } from './telemetry';
+initTelemetry('xstockstrat-config'); // use the service name
+
+process.on('SIGTERM', async () => {
+  await shutdownTelemetry();
+  process.exit(0);
+});
+```
+
+---
+
+### Phase 7F — DO App Platform Env Vars
+
+> Performed by: platform lead via `doctl` or the DO console.
+
+Add to **every service block** in `.do/app.yaml` (prod) and `.do/app.dev.yaml` (dev):
+
+```yaml
+- key: OTEL_ENABLED
+  value: "true"
+- key: OTEL_SERVICE_NAME
+  value: "xstockstrat-<service-name>"        # e.g. xstockstrat-trading
+- key: OTEL_EXPORTER_OTLP_ENDPOINT
+  type: SECRET
+  value: "<GRAFANA_OTLP_ENDPOINT>"
+- key: OTEL_EXPORTER_OTLP_HEADERS
+  type: SECRET
+  value: "Authorization=Basic <GRAFANA_OTLP_TOKEN>"
+- key: OTEL_RESOURCE_ATTRIBUTES
+  value: "environment=production,trading_mode=paper"
+```
+
+```bash
+# Apply spec update
+doctl apps update $APP_ID --spec .do/app.yaml
+```
+
+---
+
+### Phase 7G — Dashboards & Alerting
+
+#### Recommended starter dashboards
+
+| Dashboard | Source |
+|---|---|
+| Go service metrics (goroutines, GC, HTTP) | Grafana Dashboard ID `10826` |
+| gRPC server metrics | Build from `rpc.server.*` OTel semantic conventions |
+| Request rate / error rate / latency | Build from `http.server.request.duration` histogram |
+| Log volume by service + level | Loki: `sum by (service_name, level) (rate({job="xstockstrat"}[5m]))` |
+| Distributed trace explorer | Grafana Tempo — use TraceQL |
+
+#### Key Loki queries
+
+```logql
+{service_name="xstockstrat-trading"} | json | level="error"
+{service_name=~"xstockstrat-.*"}     | json | line_format "{{.message}}"
+```
+
+#### Key Tempo TraceQL queries
+
+```traceql
+{ span.service.name = "xstockstrat-trading" && status = error }
+{ span.rpc.system = "grpc" && duration > 500ms }
+{ span.service.name = "xstockstrat-ledger" && span.rpc.method = "AppendEvent" }
+```
+
+#### Initial alert rules
+
+| Alert | Query | Threshold |
+|---|---|---|
+| High error rate | `sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m])) by (service_name)` | > 5 req/s |
+| Service log errors | `sum(rate({service_name=~"xstockstrat-.*"} \| json \| level="error" [5m]))` | > 10/min |
+| p99 latency spike | `histogram_quantile(0.99, rate(http_server_request_duration_seconds_bucket[5m]))` | > 2s |
+| Platform maintenance mode | Loki alert on `maintenance_mode=true` config event | Any |
+
+Route alerts via Grafana's notification policies to Slack/email/PagerDuty, or wire through
+`xstockstrat-notify` via a Grafana webhook.
+
+---
+
+### Verification Checkpoint 7
+
+```bash
+# OTel Collector running
+docker compose up -d otel-collector
+docker compose logs otel-collector --tail=20
+# Expect: "Everything is ready. Begin running and processing data."
+
+# Smoke test pipeline
+docker run --rm --network xstockstrat \
+  ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest \
+  traces --otlp-endpoint otel-collector:4317 --otlp-insecure --duration 5s
+# Verify traces appear in Grafana Cloud → Explore → Tempo
+
+# Per-service: start any instrumented service and verify OTLP data flows
+docker compose up xstockstrat-config
+# Make a GetConfig call, then check Grafana Cloud Loki and Tempo
+# for service_name="xstockstrat-config"
+```
+
+---
+
+### Environment Variable Reference
+
+All OTel env vars follow the OpenTelemetry specification and are read automatically by each
+SDK — no custom parsing required in service code.
+
+| Variable | Example Value | Set In |
+|---|---|---|
+| `OTEL_ENABLED` | `true` | `.env`, docker-compose, DO app spec |
+| `OTEL_SERVICE_NAME` | `xstockstrat-trading` | `.env`, docker-compose, DO app spec |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4317` (local) / Grafana Cloud URL (prod) | `.env`, DO secret |
+| `OTEL_EXPORTER_OTLP_HEADERS` | `Authorization=Basic <token>` | `.env`, DO secret |
+| `OTEL_RESOURCE_ATTRIBUTES` | `environment=dev,trading_mode=paper` | `.env`, docker-compose |
+
+#### Config service keys to register
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `platform.otel.enabled` | bool | false | Master switch for OTEL export |
+| `platform.otel.endpoint` | string | — | OTLP endpoint (set via secret) |
+| `platform.otel.sample_rate` | float | 1.0 | Trace sample rate (0.0–1.0) |
+
+---
+
+### Rollback
+
+OTel instrumentation is designed to be non-fatal:
+- **Go**: `otelShutdown` returns an error but `main()` continues
+- **Python**: `init()` catches exceptions and logs them; server still starts
+- **Node.js**: `sdk.start()` errors are caught; app still starts
+
+To disable without redeploying: set `OTEL_ENABLED=false` (or remove the var).
+Config key `platform.otel.enabled=false` can be pushed via `xstockstrat-config`
+for a live switch without a restart.
+
+---
+
 ## Cross-Cutting Concerns
 
 Apply across all phases — implement progressively as each service is built:
@@ -476,7 +996,7 @@ Apply across all phases — implement progressively as each service is built:
 | **Error envelope** | All services | Use `common.v1.Error` for structured error responses |
 | **Pagination** | All list RPCs | Use `common.v1.PageRequest/PageResponse` consistently |
 | **Health endpoints** | All services | `GET /health` on HTTP port returns `{"status":"ok","service":"..."}` |
-| **Observability** | All services | Structured JSON logs; OpenTelemetry traces on all gRPC calls |
+| **Observability** | All services | Structured JSON logs to stdout; OTel SDK + Grafana Cloud — see Phase 7 |
 
 ---
 
@@ -491,6 +1011,7 @@ Phase 0  (foundation)
               │           └─► Phase 4 (trading)
               │                 └─► Phase 5A/5B/5C (config-ui, insights, trader) — parallel
               └─► Phase 6 (integration + n8n, after all services pass their checkpoints)
+                    └─► Phase 7 (observability — apply incrementally per service as built)
 ```
 
 **Critical path (serial)**: `config → ledger → marketdata → trading → trader UI`
@@ -501,6 +1022,7 @@ Phase 0  (foundation)
 - Phase 3A/3B/3C
 - Phase 5A/5B/5C
 - UI development (Phase 5) can begin alongside Phase 4
+- Phase 7 instrumentation can be applied to each service as it reaches Verification Checkpoint
 
 ---
 
@@ -518,6 +1040,9 @@ Phase 0  (foundation)
 | Node.js services | `services/xstockstrat-{ledger,identity,notify,config}/` |
 | Next.js UIs | `services/xstockstrat-{trader,insights,config-ui}/` |
 | Docker Compose | `docker-compose.yml` |
+| OTel Collector config | `packages/otel/otel-collector-config.yaml` |
+| DO prod app spec | `.do/app.yaml` |
+| DO dev app spec | `.do/app.dev.yaml` |
 | Bootstrap script | `scripts/bootstrap.sh` |
 | DB migration script | `scripts/db-migrate.sh` |
 | Proto gen script | `scripts/buf-gen.sh` |
