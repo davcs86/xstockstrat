@@ -53,8 +53,8 @@ TRADING_MODE=paper
 ## Running Locally
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 ## Notes

@@ -69,7 +69,7 @@ TRADING_MODE=paper                     # paper | live
 ## Running Locally
 
 ```bash
-npm install
-npm run migrate
-npm run dev
+pnpm install
+pnpm run migrate
+pnpm run dev
 ```
