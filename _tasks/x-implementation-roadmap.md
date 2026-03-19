@@ -23,11 +23,11 @@ The implementation follows the **dependency graph** strictly: services that othe
 
 2. **Bootstrap environment**
    - `./scripts/bootstrap.sh` — installs buf, sets up TimescaleDB, creates schemas, seeds config
-   - Verify all 5 schemas created: `trading`, `portfolio`, `marketdata`, `ledger`, `config`
+   - Verify all 6 schemas created: `trading`, `portfolio`, `marketdata`, `ledger`, `config`, `ingest`
 
 3. **Run all database migrations**
    - `./scripts/db-migrate.sh`
-   - Verify hypertables created: `ohlcv`, `quotes`, `orders`, `snapshots`, `events`
+   - Verify hypertables created: `ohlcv`, `quotes`, `orders`, `snapshots`, `events`, `newsletter_signals`
 
 4. **Validate Docker Compose**
    - `docker compose config` — check all services and deps are valid
@@ -41,11 +41,11 @@ ls packages/proto/gen/go packages/proto/gen/python packages/proto/gen/ts
 
 # TimescaleDB schemas
 psql $DATABASE_URL -c "\dn"
-# Expected: trading, portfolio, marketdata, ledger, config
+# Expected: trading, portfolio, marketdata, ledger, config, ingest
 
 # Hypertables created
 psql $DATABASE_URL -c "SELECT hypertable_name FROM timescaledb_information.hypertables;"
-# Expected: ohlcv, quotes, orders, snapshots, events
+# Expected: ohlcv, quotes, orders, snapshots, events, newsletter_signals
 ```
 
 ---
@@ -157,12 +157,19 @@ grpcurl -d '{"alert":{"category":"system","severity":"INFO","message":"Phase 1 c
 - `StreamQuotes(StreamQuotesRequest) → stream Quote` — real-time NBBO quotes from Alpaca
 - `GetBars(GetBarsRequest) → GetBarsResponse` — query `ohlcv` hypertable with timeframe/symbol/time range filters
 - `GetLatestQuote(GetLatestQuoteRequest) → Quote` — last row from `quotes` hypertable
-- `BackfillBars(BackfillBarsRequest) → BackfillBarsResponse` — trigger async historical pull from Alpaca data API
+- `BackfillBars(BackfillBarsRequest) → BackfillBarsResponse` — trigger async historical pull; routes through source registry by `req.Source`
 - `ListAssets(ListAssetsRequest) → ListAssetsResponse` — query Alpaca assets list
 - Startup: `WatchConfig` for `marketdata.*` keys (Alpaca credentials via `secret.alpaca_api_key`)
 - `EmitAlert` to notify on feed disconnect/reconnect events
 
-**Config Keys**: `marketdata.alpaca_base_url`, `marketdata.feed` (iex/sip), `marketdata.backfill_batch_size`
+**Source registry pattern** (required — not single Alpaca client):
+- Implement a `SourceRegistry` in `internal/service/` that holds named `SourceClient` implementations
+- Register Alpaca at startup as `sourceRegistry.Register("alpaca", alpacaClient)`; additional providers added alongside it
+- All `BackfillBars` and `Stream*` calls dispatch via `sourceRegistry.Get(req.Source)` (defaults to `"alpaca"`)
+- `source` value propagated from client through DB insert (`source TEXT NOT NULL DEFAULT 'alpaca'`) and proto response
+- See `_tasks/x-add-data-source.md` Part 1 for the full multi-source client interface
+
+**Config Keys**: `marketdata.alpaca_base_url`, `marketdata.feed` (iex/sip), `marketdata.backfill_batch_size`, `marketdata.<source>.enabled` per additional provider
 
 ### 2B. xstockstrat-portfolio (Port 50052 / 8052)
 
@@ -220,16 +227,38 @@ psql $DATABASE_URL -c "SELECT COUNT(*) FROM marketdata.ohlcv WHERE symbol='AAPL'
 - Sandbox: `restrictedpython` or `subprocess` isolation; block dangerous imports
 - Config keys: `indicators.sandbox.timeout_ms`, `indicators.sandbox.memory_bytes`
 
+**Signal-aware formulas** (new dependency on xstockstrat-ingest):
+- Callers (analysis or external) fetch active signals via `ingest.QuerySignals` before calling `ExecuteFormula`
+- Newsletter signals are passed in `input_data` struct alongside OHLCV bars
+- The sandbox receives `data["newsletter_signals"]` as a list and can weight them in composite scoring
+- See `_tasks/x-add-data-source.md` Part 3 for formula pattern and example composite formula
+
 ### 3B. xstockstrat-ingest (Port 50055 / 8055)
 
 **File**: `services/xstockstrat-ingest/`
 **Proto**: `packages/proto/ingest/v1/ingest.proto`
 
+**⚠️ Architecture note**: ingest now owns a database schema. It is no longer a stateless coordinator — it persists newsletter/signal data in its own TimescaleDB hypertable.
+
+**DB migration** (run before implementing RPCs):
+- `services/xstockstrat-ingest/migrations/002_newsletter_signals.sql`
+- Creates `ingest.newsletter_signals` hypertable (7-day chunks by `ingested_at`)
+- See `_tasks/x-add-data-source.md` Part 2, Step 1 for the full DDL
+
 **Implement**:
 - `TriggerBackfill(TriggerBackfillRequest) → TriggerBackfillResponse` — create `BackfillJob`, call `BackfillBars` on marketdata
 - `GetBackfillStatus(GetBackfillStatusRequest) → BackfillJob` — query job state (QUEUED → RUNNING → COMPLETED/FAILED)
 - `ListBackfillJobs` / `NormalizeRawData`
+- `IngestSignal(IngestSignalRequest) → IngestSignalResponse` — persist `ExternalSignal` to `ingest.newsletter_signals`; emit `ingest.signal.ingested` ledger event
+- `QuerySignals(QuerySignalsRequest) → QuerySignalsResponse` — query signals by source/symbol/direction/active window; consumed by indicators + analysis
+- n8n webhook: `POST /webhooks/n8n/ingest-signal` — receives parsed newsletter payloads from n8n workflows
 - Ingest is the coordinator for historical data loading; marketdata is the executor
+
+**Proto changes required** (non-breaking — new RPCs + messages, 1 service owner approval):
+- Add `IngestSignal`, `QuerySignals` RPCs to `IngestService`
+- Add `ExternalSignal`, `IngestSignalRequest/Response`, `QuerySignalsRequest/Response` messages
+- Run `buf lint && buf breaking --against '.git#branch=main'` then `buf generate`
+- See `_tasks/x-add-data-source.md` Part 2, Step 2 for the full proto diff
 
 ### 3C. xstockstrat-analysis (Port 50056 / 8056)
 
@@ -237,10 +266,15 @@ psql $DATABASE_URL -c "SELECT COUNT(*) FROM marketdata.ohlcv WHERE symbol='AAPL'
 **Proto**: `packages/proto/analysis/v1/analysis.proto`
 
 **Implement**:
-- `RunBacktest(RunBacktestRequest) → BacktestResult` — call `GetBars` (marketdata), compute via `ComputeIndicator`/`ExecuteFormula` (indicators), read trade history from ledger
+- `RunBacktest(RunBacktestRequest) → BacktestResult` — call `GetBars` (marketdata), `QuerySignals` (ingest), compute via `ComputeIndicator`/`ExecuteFormula` (indicators), read trade history from ledger
 - `ScoreStrategy(ScoreStrategyRequest) → StrategyScore` — Sharpe ratio, max drawdown, win rate, profit factor → grade A–F
 - `ListStrategies` / `GetStrategyReport`
 - Runs as a batch computation; results cached to DB
+
+**Signal-weighted backtesting** (new dependency on xstockstrat-ingest):
+- `RunBacktestRequest.strategy_params` (Struct) accepts `signal_sources`, `signal_weight`, `technical_weight`, `min_conviction`
+- At each backtest timestep, analysis calls `QuerySignals` for active signals and passes them into `ExecuteFormula`
+- See `_tasks/x-add-data-source.md` Part 3 for the full `RunBacktest` call pattern
 
 ### Verification Checkpoint 3
 
@@ -260,10 +294,47 @@ grpcurl -d '{"symbol":"AAPL","start":"2024-01-01T00:00:00Z","end":"2024-12-31T00
   localhost:50055 xstockstrat.ingest.v1.IngestService/TriggerBackfill
 # Expected: TriggerBackfillResponse with job_id; poll GetBackfillStatus until COMPLETED
 
-# Analysis: RunBacktest
+# Ingest: IngestSignal (newsletter signal smoke test)
+grpcurl -d '{
+  "signal": {
+    "source": "unusual_whales",
+    "symbol": "AAPL",
+    "direction": "buy",
+    "conviction": 0.8,
+    "valid_from": "2024-01-01T00:00:00Z",
+    "headline": "Large call sweep detected"
+  }
+}' localhost:50055 xstockstrat.ingest.v1.IngestService/IngestSignal
+# Expected: IngestSignalResponse with signal_id set
+
+# Ingest: QuerySignals
+grpcurl -d '{"symbol":"AAPL","active_window":{"start":"2024-01-01T00:00:00Z","end":"2024-01-15T00:00:00Z"}}' \
+  localhost:50055 xstockstrat.ingest.v1.IngestService/QuerySignals
+# Expected: QuerySignalsResponse with the signal inserted above
+
+# DB: Verify newsletter_signals hypertable
+psql $DATABASE_URL -c "SELECT source, symbol, direction, conviction FROM ingest.newsletter_signals LIMIT 5;"
+
+# Analysis: RunBacktest (plain)
 grpcurl -d '{"strategy_id":"sma_crossover","symbol":"AAPL","start":"2024-01-01T00:00:00Z","end":"2024-12-31T00:00:00Z","trading_mode":"PAPER"}' \
   localhost:50056 xstockstrat.analysis.v1.AnalysisService/RunBacktest
 # Expected: BacktestResult with sharpe_ratio, max_drawdown, win_rate
+
+# Analysis: RunBacktest with signal weighting
+grpcurl -d '{
+  "strategy_id":"composite_newsletter_strategy",
+  "symbol":"AAPL",
+  "start":"2024-01-01T00:00:00Z",
+  "end":"2024-12-31T00:00:00Z",
+  "trading_mode":"PAPER",
+  "strategy_params": {
+    "signal_sources": ["unusual_whales"],
+    "signal_weight": 0.4,
+    "technical_weight": 0.6,
+    "min_conviction": 0.6
+  }
+}' localhost:50056 xstockstrat.analysis.v1.AnalysisService/RunBacktest
+# Expected: BacktestResult with signal-influenced scoring
 
 # Sandbox timeout enforcement
 grpcurl -d '{"formula":"import time; time.sleep(999)","inputs":{}}' \
@@ -403,6 +474,7 @@ curl http://localhost:3000/health
    - Configure n8n to call `POST http://trading:8051/webhooks/n8n/place-order` on external signal
    - Configure n8n to call `POST http://notify:8059/webhooks/n8n/emit-alert` on risk event
    - Configure n8n to call `POST http://ledger:8057/webhooks/n8n/replay-events` for audit
+   - Configure per-newsletter n8n workflows → `POST http://ingest:8055/webhooks/n8n/ingest-signal` (email/RSS/CSV paths — see `_tasks/x-add-data-source.md` Part 2, Step 6)
 
 2. **Cross-service integration tests**
    - Full paper trade lifecycle: signal → order → fill → portfolio update → ledger event → notify alert
@@ -1019,10 +1091,12 @@ Phase 0  (foundation)
 **Parallelizable**:
 - Phase 1B/1C/1D among themselves
 - Phase 2A and 2B
-- Phase 3A/3B/3C
+- Phase 3A/3B/3C — but note: 3B (ingest) must reach `IngestSignal`/`QuerySignals` before 3A (indicators) and 3C (analysis) can implement signal-weighted formulas
 - Phase 5A/5B/5C
 - UI development (Phase 5) can begin alongside Phase 4
 - Phase 7 instrumentation can be applied to each service as it reaches Verification Checkpoint
+
+**Ingest dependency note**: ingest now has upstream DB requirements (its own `ingest` schema + `newsletter_signals` hypertable). Ensure `db-migrate.sh` runs the ingest migration (`002_newsletter_signals.sql`) before Phase 3B implementation begins. indicators and analysis gain a new upstream dependency on ingest for signal-aware execution.
 
 ---
 
