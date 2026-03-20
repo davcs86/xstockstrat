@@ -1,7 +1,13 @@
 # xstockstrat-analysis — CLAUDE.md
 
 ## Role
-Python gRPC service for strategy backtesting, scoring, and report generation. Reads historical market data from xstockstrat-marketdata and computed indicators from xstockstrat-indicators. Writes backtest results to xstockstrat-ledger.
+Python gRPC service for strategy backtesting, scoring, and report generation. Reads historical market data from xstockstrat-marketdata and computed indicators from xstockstrat-indicators. Optionally fetches newsletter signals from xstockstrat-ingest for signal-weighted strategies. Writes backtest results to xstockstrat-ledger.
+
+As of Phase 3, RunBacktest executes a real SMA crossover engine (no more synthetic stubs) that:
+1. Fetches OHLCV bars via `MarketDataService.GetBars`
+2. Computes fast/slow SMAs via `IndicatorsService.ComputeIndicator`
+3. Optionally calls `IngestService.QuerySignals` for newsletter signal weighting
+4. Simulates trades bar-by-bar and computes Sharpe, drawdown, win rate, profit factor
 
 ## Language
 Python 3.12 (asyncio, grpc.aio)
@@ -26,10 +32,24 @@ Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8056` via `asyncio.gat
 | Dependency | Type | Reason |
 |---|---|---|
 | xstockstrat-config | gRPC WatchConfig | Live config at startup |
-| xstockstrat-marketdata | gRPC read | Historical OHLCV data |
-| xstockstrat-indicators | gRPC read | Indicator signals for strategy |
-| xstockstrat-ledger | gRPC write | Store backtest results |
+| xstockstrat-marketdata | gRPC read | Historical OHLCV data for backtesting |
+| xstockstrat-indicators | gRPC read | SMA/EMA/indicator computation |
+| xstockstrat-ingest | gRPC read | QuerySignals for signal-weighted backtesting |
+| xstockstrat-ledger | gRPC write | Store backtest lifecycle events |
 | xstockstrat-notify | gRPC write | Alert on completed backtests |
+
+## Backtesting Strategy
+
+Default: **SMA crossover** (fast=20, slow=50)
+- Buy when fast SMA crosses above slow SMA (golden cross) and combined conviction >= threshold
+- Sell when fast SMA crosses below slow SMA (death cross)
+- Position sizing: 95% of current equity per symbol
+
+Signal-weighted mode (set via `strategy_params`):
+- `signal_sources`: list of ingest source names (e.g. `["unusual_whales"]`)
+- `signal_weight`: 0.0–1.0 (share of score from newsletter signals; rest from technicals)
+- `technical_weight`: 0.0–1.0 (complement of signal_weight)
+- `min_conviction`: 0.0–1.0 (minimum combined score to enter a position)
 
 ## Config Keys Consumed
 
@@ -67,6 +87,7 @@ HTTP_PORT=8056
 CONFIG_ENDPOINT=xstockstrat-config:50060
 MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
 INDICATORS_ENDPOINT=xstockstrat-indicators:50054
+INGEST_ENDPOINT=xstockstrat-ingest:50055
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable

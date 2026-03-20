@@ -2,6 +2,7 @@
 xstockstrat-ingest — Raw data normalization and historical backfill orchestrator.
 Calls xstockstrat-marketdata to trigger Alpaca backfills.
 Publishes normalized events to xstockstrat-ledger.
+Persists newsletter signals to TimescaleDB (ingest.newsletter_signals hypertable).
 
 Ports:
   GRPC_PORT (50055)  — gRPC (HTTP/2), internal service-to-service
@@ -12,6 +13,7 @@ import logging
 import os
 import signal
 
+import asyncpg
 import grpc
 import uvicorn
 from grpc_reflection.v1alpha import reflection
@@ -30,6 +32,7 @@ HTTP_PORT = int(os.environ.get("HTTP_PORT", "8055"))
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
 MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053")
 LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://xstockstrat:devpassword@localhost:5432/xstockstrat")
 
 
 async def start_http_server(servicer: IngestServicer) -> None:
@@ -46,6 +49,10 @@ async def serve():
     await cfg_watcher.wait_for_snapshot(timeout_seconds=10)
     log.info("config snapshot received")
 
+    # Open asyncpg connection pool for signal persistence
+    db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
+    log.info("database pool established")
+
     marketdata_channel = grpc.aio.insecure_channel(MARKETDATA_ENDPOINT)
     ledger_channel = grpc.aio.insecure_channel(LEDGER_ENDPOINT)
 
@@ -53,6 +60,7 @@ async def serve():
         config_watcher=cfg_watcher,
         marketdata_channel=marketdata_channel,
         ledger_channel=ledger_channel,
+        db_pool=db_pool,
     )
 
     # ── gRPC server (internal, port 50055) ────────────────────────────────
@@ -70,7 +78,10 @@ async def serve():
     await grpc_server.start()
 
     def handle_shutdown(sig, _):
-        asyncio.get_event_loop().create_task(grpc_server.stop(grace=5))
+        async def _stop():
+            await grpc_server.stop(grace=5)
+            await db_pool.close()
+        asyncio.get_event_loop().create_task(_stop())
 
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)

@@ -12,6 +12,10 @@ service IngestService {
   rpc GetBackfillStatus(GetBackfillStatusRequest) returns (BackfillJob);
   rpc ListBackfillJobs(ListBackfillJobsRequest) returns (ListBackfillJobsResponse);
   rpc NormalizeRawData(NormalizeRawDataRequest) returns (NormalizeRawDataResponse);
+  // Signal ingestion — persists newsletter/external signals to ingest.newsletter_signals hypertable
+  rpc IngestSignal(IngestSignalRequest) returns (IngestSignalResponse);
+  // Signal query — returns active signals filtered by source/symbol/direction and time window
+  rpc QuerySignals(QuerySignalsRequest) returns (QuerySignalsResponse);
 }
 
 message BackfillJob {
@@ -69,4 +73,33 @@ message NormalizeRawDataRequest {
 message NormalizeRawDataResponse {
   int64 rows_normalized = 1;
   repeated string errors = 2;
+}
+
+// ExternalSignal represents a newsletter or signal-source trade recommendation.
+message ExternalSignal {
+  string source     = 1;  // "unusual_whales" | "marketwatch" | "dividendology" | "pure_power_picks" | "simply_wall_st"
+  string symbol     = 2;  // ticker (e.g. "AAPL")
+  string direction  = 3;  // "buy" | "sell" | "hold" | "watchlist"
+  double conviction = 4;  // 0.0 – 1.0 confidence (0.0 if not provided by source)
+  google.protobuf.Timestamp valid_from  = 5;
+  google.protobuf.Timestamp valid_until = 6;  // omit for open-ended
+  string headline   = 7;
+  string raw_url    = 8;
+  repeated string tags = 9;
+}
+
+message IngestSignalRequest  { ExternalSignal signal = 1; }
+message IngestSignalResponse { int64 signal_id = 1; }
+
+message QuerySignalsRequest {
+  string source    = 1;  // optional filter
+  string symbol    = 2;  // optional filter
+  string direction = 3;  // optional filter
+  xstockstrat.common.v1.TimeRange active_window = 4;  // signals valid within this range
+  xstockstrat.common.v1.PageRequest page = 5;
+}
+
+message QuerySignalsResponse {
+  repeated ExternalSignal signals = 1;
+  xstockstrat.common.v1.PageResponse page = 2;
 }
