@@ -1,0 +1,119 @@
+{
+  "name": "xstockstrat — Ingest Signal (Email / IMAP)",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [{ "mode": "everyMinute" }]
+        },
+        "mailbox": "INBOX",
+        "action": "read",
+        "postProcessAction": "read",
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "customEmailConfig": "[\"UNSEEN\"]"
+        }
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000001",
+      "name": "Email Trigger (IMAP)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "credentials": {
+        "imap": {
+          "id": "imap-credential-id",
+          "name": "Newsletter IMAP Account"
+        }
+      },
+      "notes": "Configure IMAP credentials for the newsletter email account. Sets polling every minute for unread messages."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract signal fields from the email body.\n// Customize the parsing logic for each newsletter source:\n//   - Unusual Whales: look for ticker + call/put sweep language\n//   - Dividendology: look for ex-dividend dates\n//   - Pure Power Picks: look for BUY/SELL + ticker in subject\n//   - MarketWatch: look for analyst upgrade/downgrade language\n//   - Simply Wall St.: look for overvalued/undervalued language\n\nconst email = $input.item.json;\nconst subject = email.subject || '';\nconst body = email.textPlain || email.textHtml || '';\nconst from = email.from?.value?.[0]?.address || '';\n\n// Determine source from sender domain\nlet source = 'unknown';\nif (from.includes('unusualwhales')) source = 'unusual_whales';\nelse if (from.includes('marketwatch') || from.includes('wsj.com')) source = 'marketwatch';\nelse if (from.includes('dividendology')) source = 'dividendology';\nelse if (from.includes('purpowerpicks') || from.includes('pure-power')) source = 'pure_power_picks';\nelse if (from.includes('simplywallst')) source = 'simply_wall_st';\n\n// --- Ticker extraction ---\n// Match $TICKER or standalone uppercase 1-5 letter word in subject\nconst tickerMatch = subject.match(/\\$([A-Z]{1,5})/) || subject.match(/\\b([A-Z]{1,5})\\b/);\nconst symbol = tickerMatch ? tickerMatch[1] : null;\n\nif (!symbol) {\n  // Skip emails with no detectable ticker\n  return [];\n}\n\n// --- Direction extraction ---\nconst lowerBody = (subject + ' ' + body).toLowerCase();\nlet direction = 'watchlist';\nif (/\\b(buy|bullish|long|call sweep|upgrade|undervalued|accumulate)\\b/.test(lowerBody)) {\n  direction = 'buy';\n} else if (/\\b(sell|bearish|short|put sweep|downgrade|overvalued|reduce)\\b/.test(lowerBody)) {\n  direction = 'sell';\n} else if (/\\b(hold|neutral|maintain)\\b/.test(lowerBody)) {\n  direction = 'hold';\n}\n\n// --- Tags ---\nconst tags = [];\nif (/call sweep|unusual option/i.test(body)) tags.push('unusual_options', 'call_sweep');\nif (/put sweep/i.test(body)) tags.push('unusual_options', 'put_sweep');\nif (/dark pool/i.test(body)) tags.push('dark_pool');\nif (/dividend|ex-div/i.test(body)) tags.push('dividend', 'income');\nif (/upgrade/i.test(body)) tags.push('analyst', 'upgrade');\nif (/downgrade/i.test(body)) tags.push('analyst', 'downgrade');\nif (/momentum|swing/i.test(body)) tags.push('momentum', 'swing');\nif (/fair value|valuation/i.test(body)) tags.push('fundamental', 'fair_value');\n\n// --- Valid window ---\nconst now = new Date();\nconst validFrom = now.toISOString();\nconst validUntil = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString(); // 5-day default\n\nreturn [{\n  json: {\n    source,\n    symbol,\n    direction,\n    conviction: 0.5, // default; override per-source if extractable\n    valid_from: validFrom,\n    valid_until: validUntil,\n    headline: subject.slice(0, 255),\n    raw_url: '',\n    tags,\n  }\n}];"
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000002",
+      "name": "Parse Email Signal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $json.source }}",
+              "rightValue": "unknown",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "cond-2",
+              "leftValue": "={{ $json.symbol }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000003",
+      "name": "Filter Valid Signals",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://xstockstrat-ingest:8055/webhooks/n8n/ingest-signal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000004",
+      "name": "POST to Ingest Service",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Email Trigger (IMAP)": {
+      "main": [
+        [{ "node": "Parse Email Signal", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Email Signal": {
+      "main": [
+        [{ "node": "Filter Valid Signals", "type": "main", "index": 0 }]
+      ]
+    },
+    "Filter Valid Signals": {
+      "main": [
+        [{ "node": "POST to Ingest Service", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["xstockstrat", "ingest", "signals", "email"],
+  "notes": "Polls an IMAP mailbox every minute for newsletter emails (Unusual Whales, Dividendology, Pure Power Picks, MarketWatch, Simply Wall St.). Parses ticker and direction from subject/body, then POSTs to the ingest-signal webhook. Configure IMAP credentials in n8n Settings. Customize 'Parse Email Signal' node for each source's specific format."
+}
