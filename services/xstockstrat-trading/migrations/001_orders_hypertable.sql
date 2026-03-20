@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS trading.orders (
     limit_price         NUMERIC(18,8),
     stop_price          NUMERIC(18,8),
     filled_avg_price    NUMERIC(18,8),
+    broker_order_id     TEXT,
+    trading_mode        TEXT        NOT NULL DEFAULT 'paper',
     time_in_force       TEXT,
     strategy_id         TEXT,
     user_id             TEXT        NOT NULL,

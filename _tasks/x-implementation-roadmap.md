@@ -346,7 +346,7 @@ grpcurl -d '{"formula":"import time; time.sleep(999)","inputs":{}}' \
 
 ---
 
-## Phase 4 — Trading Core
+## Phase 4 — Trading Core ✅ DONE
 
 > The highest-dependency service. Requires all Phase 1–3 services operational.
 
