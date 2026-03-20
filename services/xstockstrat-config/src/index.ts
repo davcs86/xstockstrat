@@ -1,3 +1,6 @@
+import { initTelemetry, shutdownTelemetry } from './telemetry';
+initTelemetry('xstockstrat-config');
+
 import * as grpc from '@grpc/grpc-js';
 import * as http from 'http';
 import { Pool } from 'pg';
@@ -10,6 +13,11 @@ import { createConnectRouter } from './connect/connectRouter';
 import { createN8nRouter } from './n8n/webhookRouter';
 
 const log = getLogger('config:server');
+
+process.on('SIGTERM', async () => {
+  await shutdownTelemetry();
+  process.exit(0);
+});
 
 async function main() {
   const grpcPort = process.env.GRPC_PORT ?? '50060';

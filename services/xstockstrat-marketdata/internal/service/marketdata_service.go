@@ -14,6 +14,7 @@ import (
 	"github.com/xstockstrat/marketdata/internal/alpaca"
 	"github.com/xstockstrat/marketdata/internal/config"
 	"github.com/xstockstrat/marketdata/internal/repository"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -42,11 +43,11 @@ func NewMarketDataService(
 	ledgerEndpoint string,
 	notifyEndpoint string,
 ) (*MarketDataService, error) {
-	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	if err != nil {
 		return nil, fmt.Errorf("dial ledger: %w", err)
 	}
-	notifyConn, err := grpc.NewClient(notifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	notifyConn, err := grpc.NewClient(notifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}

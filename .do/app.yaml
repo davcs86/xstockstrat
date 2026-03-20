@@ -40,6 +40,18 @@ services:
       - key: DB_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: OTEL_ENABLED
+        value: "true"
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-trading
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: REPLACE_WITH_GRAFANA_OTLP_ENDPOINT
+        type: SECRET
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        value: REPLACE_WITH_AUTHORIZATION_BASIC_TOKEN
+        type: SECRET
+      - key: OTEL_RESOURCE_ATTRIBUTES
+        value: "environment=production,trading_mode=live"
 
   - name: xstockstrat-portfolio
     github:
@@ -67,6 +79,18 @@ services:
       - key: DB_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: OTEL_ENABLED
+        value: "true"
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-portfolio
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: REPLACE_WITH_GRAFANA_OTLP_ENDPOINT
+        type: SECRET
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        value: REPLACE_WITH_AUTHORIZATION_BASIC_TOKEN
+        type: SECRET
+      - key: OTEL_RESOURCE_ATTRIBUTES
+        value: "environment=production,trading_mode=live"
 
   - name: xstockstrat-marketdata
     github:
@@ -98,6 +122,18 @@ services:
       - key: DB_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: OTEL_ENABLED
+        value: "true"
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-marketdata
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: REPLACE_WITH_GRAFANA_OTLP_ENDPOINT
+        type: SECRET
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        value: REPLACE_WITH_AUTHORIZATION_BASIC_TOKEN
+        type: SECRET
+      - key: OTEL_RESOURCE_ATTRIBUTES
+        value: "environment=production,trading_mode=live"
 
   # ── Python services ────────────────────────────────────────────────────────
 
@@ -124,6 +160,18 @@ services:
         value: ${xstockstrat-ledger.PRIVATE_URL}
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_URL}
+      - key: OTEL_ENABLED
+        value: "true"
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-indicators
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: REPLACE_WITH_GRAFANA_OTLP_ENDPOINT
+        type: SECRET
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        value: REPLACE_WITH_AUTHORIZATION_BASIC_TOKEN
+        type: SECRET
+      - key: OTEL_RESOURCE_ATTRIBUTES
+        value: "environment=production,trading_mode=live"
 
   - name: xstockstrat-ingest
     github:
@@ -154,6 +202,18 @@ services:
         value: ${xstockstrat-notify.PRIVATE_URL}
       - key: MARKETDATA_ENDPOINT
         value: ${xstockstrat-marketdata.PRIVATE_URL}
+      - key: OTEL_ENABLED
+        value: "true"
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-ingest
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: REPLACE_WITH_GRAFANA_OTLP_ENDPOINT
+        type: SECRET
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        value: REPLACE_WITH_AUTHORIZATION_BASIC_TOKEN
+        type: SECRET
+      - key: OTEL_RESOURCE_ATTRIBUTES
+        value: "environment=production,trading_mode=live"
 
   - name: xstockstrat-analysis
     github:
@@ -182,6 +242,18 @@ services:
         value: ${xstockstrat-marketdata.PRIVATE_URL}
       - key: INDICATORS_ENDPOINT
         value: ${xstockstrat-indicators.PRIVATE_URL}
+      - key: OTEL_ENABLED
+        value: "true"
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-analysis
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: REPLACE_WITH_GRAFANA_OTLP_ENDPOINT
+        type: SECRET
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        value: REPLACE_WITH_AUTHORIZATION_BASIC_TOKEN
+        type: SECRET
+      - key: OTEL_RESOURCE_ATTRIBUTES
+        value: "environment=production,trading_mode=live"
 
   # ── Node.js services ───────────────────────────────────────────────────────
 
@@ -209,6 +281,18 @@ services:
       - key: DB_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: OTEL_ENABLED
+        value: "true"
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-ledger
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: REPLACE_WITH_GRAFANA_OTLP_ENDPOINT
+        type: SECRET
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        value: REPLACE_WITH_AUTHORIZATION_BASIC_TOKEN
+        type: SECRET
+      - key: OTEL_RESOURCE_ATTRIBUTES
+        value: "environment=production,trading_mode=live"
 
   - name: xstockstrat-identity
     github:
@@ -233,6 +317,18 @@ services:
         value: ${xstockstrat-ledger.PRIVATE_URL}
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_URL}
+      - key: OTEL_ENABLED
+        value: "true"
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-identity
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: REPLACE_WITH_GRAFANA_OTLP_ENDPOINT
+        type: SECRET
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        value: REPLACE_WITH_AUTHORIZATION_BASIC_TOKEN
+        type: SECRET
+      - key: OTEL_RESOURCE_ATTRIBUTES
+        value: "environment=production,trading_mode=live"
 
   - name: xstockstrat-notify
     github:
@@ -255,6 +351,18 @@ services:
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
         value: ${xstockstrat-ledger.PRIVATE_URL}
+      - key: OTEL_ENABLED
+        value: "true"
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-notify
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: REPLACE_WITH_GRAFANA_OTLP_ENDPOINT
+        type: SECRET
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        value: REPLACE_WITH_AUTHORIZATION_BASIC_TOKEN
+        type: SECRET
+      - key: OTEL_RESOURCE_ATTRIBUTES
+        value: "environment=production,trading_mode=live"
 
   - name: xstockstrat-config
     github:
@@ -274,6 +382,18 @@ services:
         value: "8060"
       - key: TRADING_MODE
         value: live
+      - key: OTEL_ENABLED
+        value: "true"
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-config
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: REPLACE_WITH_GRAFANA_OTLP_ENDPOINT
+        type: SECRET
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        value: REPLACE_WITH_AUTHORIZATION_BASIC_TOKEN
+        type: SECRET
+      - key: OTEL_RESOURCE_ATTRIBUTES
+        value: "environment=production,trading_mode=live"
 
   # ── Next.js frontends ──────────────────────────────────────────────────────
 

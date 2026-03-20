@@ -9,10 +9,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"connectrpc.com/connect"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
@@ -23,11 +25,26 @@ import (
 	"github.com/xstockstrat/trading/internal/handler"
 	"github.com/xstockstrat/trading/internal/repository"
 	"github.com/xstockstrat/trading/internal/service"
+	"github.com/xstockstrat/trading/internal/telemetry"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	otelShutdown, err := telemetry.Init(ctx, "xstockstrat-trading")
+	if err != nil {
+		slog.Error("otel init failed", "error", err)
+		// Non-fatal: observability is best-effort
+	}
+	defer func() {
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutCancel()
+		_ = otelShutdown(shutCtx)
+	}()
 
 	cfg := config.LoadFromEnv()
 
@@ -38,9 +55,6 @@ func main() {
 		slog.Error("config watcher init failed", "error", err)
 		os.Exit(1)
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	if err := cfgWatcher.WaitForSnapshot(ctx); err != nil {
 		slog.Error("config snapshot timeout", "error", err)
@@ -86,7 +100,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()))
 	tradingv1.RegisterTradingServiceServer(grpcServer, grpcHdl.GRPCHandler())
 	reflection.Register(grpcServer)
 

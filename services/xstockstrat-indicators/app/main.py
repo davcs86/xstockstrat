@@ -29,6 +29,9 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+from app.telemetry import init as init_otel  # noqa: E402
+init_otel("xstockstrat-indicators")
+
 GRPC_PORT = os.environ.get("GRPC_PORT", "50054")
 HTTP_PORT = int(os.environ.get("HTTP_PORT", "8054"))
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")

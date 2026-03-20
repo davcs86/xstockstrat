@@ -27,6 +27,9 @@ from gen.ingest.v1.ingest_pb2 import DESCRIPTOR as INGEST_DESCRIPTOR
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
 
+from app.telemetry import init as init_otel  # noqa: E402
+init_otel("xstockstrat-ingest")
+
 GRPC_PORT = os.environ.get("GRPC_PORT", "50055")
 HTTP_PORT = int(os.environ.get("HTTP_PORT", "8055"))
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")

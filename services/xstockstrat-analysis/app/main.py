@@ -23,6 +23,9 @@ from gen.analysis.v1.analysis_pb2 import DESCRIPTOR as ANALYSIS_DESCRIPTOR
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
 
+from app.telemetry import init as init_otel  # noqa: E402
+init_otel("xstockstrat-analysis")
+
 GRPC_PORT = os.environ.get("GRPC_PORT", "50056")
 HTTP_PORT = int(os.environ.get("HTTP_PORT", "8056"))
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")

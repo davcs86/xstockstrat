@@ -1,3 +1,6 @@
+import { initTelemetry, shutdownTelemetry } from './telemetry';
+initTelemetry('xstockstrat-ledger');
+
 import * as grpc from '@grpc/grpc-js';
 import * as http from 'http';
 import { getLogger } from './services/logger';
@@ -70,6 +73,7 @@ async function main() {
   // Graceful shutdown
   const shutdown = async () => {
     log.info('Shutting down ledger service...');
+    await shutdownTelemetry();
     httpServer.close();
     grpcServer.tryShutdown(() => {
       pool.end();

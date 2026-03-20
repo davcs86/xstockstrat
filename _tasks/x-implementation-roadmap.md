@@ -539,10 +539,14 @@ curl -X POST http://localhost:8060/webhooks/n8n/config-update \
 
 ---
 
-## Phase 7 — Observability
+## Phase 7 — Observability ✅ DONE (2026-03-20)
 
 > Can be applied incrementally alongside any phase. Recommended to wire Phase 7A–7B during
 > Phase 0, and instrument each service as it is built in Phases 1–5.
+>
+> **Completion notes**: Phase 7B was pre-existing. Phase 7A (Grafana Cloud account) is a manual
+> one-time step — placeholder secrets in `.do/app.yaml` and `.do/app.dev.yaml` must be replaced
+> via DO console. Go exporters pending network access (see `_tasks/x-phase7-deviations.md`).
 
 ### Decision Record
 

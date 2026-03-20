@@ -1,3 +1,6 @@
+import { initTelemetry, shutdownTelemetry } from './telemetry';
+initTelemetry('xstockstrat-notify');
+
 import * as grpc from '@grpc/grpc-js';
 import * as http from 'http';
 import { Pool } from 'pg';
@@ -59,7 +62,8 @@ async function main() {
     log.info(`Notify Connect-RPC HTTP service listening on port ${httpPort}`);
   });
 
-  const shutdown = () => {
+  const shutdown = async () => {
+    await shutdownTelemetry();
     httpServer.close();
     grpcServer.tryShutdown(() => { pool.end(); process.exit(0); });
   };

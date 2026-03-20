@@ -11,6 +11,7 @@ import (
 
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -67,7 +68,7 @@ type Watcher struct {
 
 // NewWatcher dials the config service and starts the background watch loop.
 func NewWatcher(endpoint, namespace string) (*Watcher, error) {
-	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	if err != nil {
 		return nil, fmt.Errorf("dial config service %s: %w", endpoint, err)
 	}

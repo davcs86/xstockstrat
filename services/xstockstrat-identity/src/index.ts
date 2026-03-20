@@ -1,3 +1,6 @@
+import { initTelemetry, shutdownTelemetry } from './telemetry';
+initTelemetry('xstockstrat-identity');
+
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import * as http from 'http';
@@ -69,7 +72,8 @@ async function main() {
     log.info(`Identity Connect-RPC HTTP service listening on port ${httpPort}`);
   });
 
-  const shutdown = () => {
+  const shutdown = async () => {
+    await shutdownTelemetry();
     httpServer.close();
     grpcServer.tryShutdown(() => { pool.end(); process.exit(0); });
   };
