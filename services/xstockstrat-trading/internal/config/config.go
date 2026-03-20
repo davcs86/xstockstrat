@@ -157,3 +157,14 @@ func (w *Watcher) GetBool(key string, def bool) bool {
 	}
 	return v.GetBoolVal()
 }
+
+func (w *Watcher) GetFloat(key string, def float64) float64 {
+	if w.snapshot == nil {
+		return def
+	}
+	v, ok := w.snapshot.Values[key]
+	if !ok {
+		return def
+	}
+	return v.GetFloatVal()
+}
