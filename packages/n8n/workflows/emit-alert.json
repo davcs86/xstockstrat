@@ -1,0 +1,82 @@
+{
+  "name": "xstockstrat — Emit Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "xstockstrat-emit-alert",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "xstockstrat-emit-alert"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map incoming payload to the notify emit-alert webhook format.\n// Expected input:\n//   { severity, category, title, body, source_service?, target_user_id?,\n//     tags?, context? }\n// severity: INFO | WARNING | ERROR | CRITICAL\n// category: trade | risk | system | indicator\nconst payload = $input.item.json.body || $input.item.json;\n\nconst validSeverities = ['INFO', 'WARNING', 'ERROR', 'CRITICAL'];\nconst validCategories = ['trade', 'risk', 'system', 'indicator'];\n\nconst severity = (payload.severity || 'INFO').toUpperCase();\nconst category = (payload.category || 'system').toLowerCase();\n\nif (!validSeverities.includes(severity)) {\n  throw new Error(`Invalid severity: ${severity}. Must be one of ${validSeverities.join(', ')}`);\n}\nif (!validCategories.includes(category)) {\n  throw new Error(`Invalid category: ${category}. Must be one of ${validCategories.join(', ')}`);\n}\nif (!payload.message && !payload.body) {\n  throw new Error('Missing required field: message or body');\n}\n\nreturn {\n  json: {\n    severity,\n    category,\n    title: payload.title || `${category} alert`,\n    message: payload.message || payload.body,\n    source_service: payload.source_service || 'n8n',\n    target_user_id: payload.target_user_id || '',\n    tags: Array.isArray(payload.tags) ? payload.tags : [],\n    context: payload.context || {},\n    correlation_id: payload.correlation_id || '',\n  }\n};"
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000002",
+      "name": "Map Alert Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://xstockstrat-notify:8059/webhooks/n8n/emit-alert",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000003",
+      "name": "POST to Notify Service",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'ok', alert_id: $json.alert_id || $json.id || null }) }}",
+        "options": {}
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000004",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Map Alert Payload", "type": "main", "index": 0 }]
+      ]
+    },
+    "Map Alert Payload": {
+      "main": [
+        [{ "node": "POST to Notify Service", "type": "main", "index": 0 }]
+      ]
+    },
+    "POST to Notify Service": {
+      "main": [
+        [{ "node": "Respond", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["xstockstrat", "notify"],
+  "notes": "Receives a risk or system event from n8n and emits an alert via xstockstrat-notify. Supports all alert categories: trade, risk, system, indicator. Severity must be INFO, WARNING, ERROR, or CRITICAL."
+}

@@ -1,0 +1,105 @@
+{
+  "name": "xstockstrat — Ingest Signal (RSS Feed)",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://feeds.unusualwhales.com/rss",
+        "options": {}
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000001",
+      "name": "RSS Feed Trigger",
+      "type": "n8n-nodes-base.rssFeedReadTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "Replace the URL with the actual RSS feed URL for your newsletter source. Polls for new items automatically."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse an RSS feed item into an xstockstrat signal.\n// Adapt the field extraction to match the specific feed structure.\n//\n// Common RSS fields available:\n//   item.title, item.content, item.contentSnippet, item.link,\n//   item.pubDate, item.creator, item.categories\n\nconst item = $input.item.json;\nconst title = item.title || '';\nconst content = item.content || item.contentSnippet || item.summary || '';\nconst link = item.link || item.url || '';\nconst pubDate = item.pubDate || item.isoDate || new Date().toISOString();\n\n// --- Source detection ---\n// Customize this URL-based source mapping for each registered feed\nlet source = 'unknown';\nif (link.includes('unusualwhales.com')) source = 'unusual_whales';\nelse if (link.includes('marketwatch.com') || link.includes('wsj.com')) source = 'marketwatch';\nelse if (link.includes('dividendology.com')) source = 'dividendology';\nelse if (link.includes('purpowerpicks') || link.includes('pure-power')) source = 'pure_power_picks';\nelse if (link.includes('simplywallst.com')) source = 'simply_wall_st';\n\n// --- Ticker extraction ---\nconst tickerMatch = title.match(/\\$([A-Z]{1,5})/) ||\n                    content.match(/\\$([A-Z]{1,5})/);\nconst symbol = tickerMatch ? tickerMatch[1] : null;\n\nif (!symbol || source === 'unknown') return [];\n\n// --- Direction ---\nconst text = (title + ' ' + content).toLowerCase();\nlet direction = 'watchlist';\nif (/\\b(buy|bullish|long|call|upgrade|undervalued|accumulate)\\b/.test(text)) direction = 'buy';\nelse if (/\\b(sell|bearish|short|put|downgrade|overvalued|reduce)\\b/.test(text)) direction = 'sell';\nelse if (/\\b(hold|neutral|maintain)\\b/.test(text)) direction = 'hold';\n\n// --- Conviction from categories/tags ---\nlet conviction = 0.5;\nif (Array.isArray(item.categories)) {\n  if (item.categories.some(c => /high conviction|strong/i.test(c))) conviction = 0.85;\n  else if (item.categories.some(c => /low conviction|weak/i.test(c))) conviction = 0.3;\n}\n\n// --- Tags ---\nconst tags = [];\nif (/unusual option|sweep/i.test(text)) tags.push('unusual_options');\nif (/call sweep/i.test(text)) tags.push('call_sweep');\nif (/put sweep/i.test(text)) tags.push('put_sweep');\nif (/dark pool/i.test(text)) tags.push('dark_pool');\nif (/dividend|ex-div/i.test(text)) tags.push('dividend', 'income');\nif (/upgrade/i.test(text)) tags.push('analyst', 'upgrade');\nif (/downgrade/i.test(text)) tags.push('analyst', 'downgrade');\nif (/momentum|swing/i.test(text)) tags.push('momentum');\nif (/earnings/i.test(text)) tags.push('earnings');\n\n// --- Valid window: pubDate + 5 days ---\nconst validFrom = new Date(pubDate).toISOString();\nconst validUntil = new Date(new Date(pubDate).getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();\n\nreturn [{\n  json: {\n    source,\n    symbol,\n    direction,\n    conviction,\n    valid_from: validFrom,\n    valid_until: validUntil,\n    headline: title.slice(0, 255),\n    raw_url: link,\n    tags,\n  }\n}];"
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000002",
+      "name": "Parse RSS Item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $json.source }}",
+              "rightValue": "unknown",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "cond-2",
+              "leftValue": "={{ $json.symbol }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000003",
+      "name": "Filter Valid Signals",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://xstockstrat-ingest:8055/webhooks/n8n/ingest-signal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000004",
+      "name": "POST to Ingest Service",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "RSS Feed Trigger": {
+      "main": [
+        [{ "node": "Parse RSS Item", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse RSS Item": {
+      "main": [
+        [{ "node": "Filter Valid Signals", "type": "main", "index": 0 }]
+      ]
+    },
+    "Filter Valid Signals": {
+      "main": [
+        [{ "node": "POST to Ingest Service", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["xstockstrat", "ingest", "signals", "rss"],
+  "notes": "Polls an RSS/Atom feed for new newsletter signal items, parses ticker and direction, and ingests via xstockstrat-ingest. Replace the feed URL in the RSS Trigger node. For multiple feeds, duplicate this workflow per source. The 'Parse RSS Item' node auto-detects source from the item URL domain."
+}

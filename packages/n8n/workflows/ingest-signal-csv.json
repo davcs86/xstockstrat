@@ -1,0 +1,105 @@
+{
+  "name": "xstockstrat — Ingest Signal (Manual CSV Upload)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a7b8c9d0-0007-0007-0007-000000000001",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-csv",
+              "name": "csv_content",
+              "value": "source,symbol,direction,conviction,valid_from,valid_until,headline,raw_url,tags\nunusual_whales,AAPL,buy,0.8,2024-01-01T00:00:00Z,2024-01-10T00:00:00Z,Large call sweep detected,,unusual_options;call_sweep\npure_power_picks,NVDA,buy,0.75,2024-01-01T00:00:00Z,2024-01-07T00:00:00Z,Momentum breakout setup,,momentum;swing",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000002",
+      "name": "CSV Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300],
+      "notes": "Replace csv_content with your actual CSV data. Columns: source,symbol,direction,conviction,valid_from,valid_until,headline,raw_url,tags (semicolon-separated tags)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse CSV content into individual signal objects.\n// CSV format:\n//   source,symbol,direction,conviction,valid_from,valid_until,headline,raw_url,tags\n// tags column: semicolon-separated list (e.g. momentum;swing)\n\nconst csvContent = $input.item.json.csv_content || '';\nconst lines = csvContent.trim().split('\\n');\n\nif (lines.length < 2) {\n  throw new Error('CSV must have a header row and at least one data row');\n}\n\nconst headers = lines[0].split(',').map(h => h.trim());\nconst requiredCols = ['source', 'symbol', 'direction', 'valid_from'];\nfor (const col of requiredCols) {\n  if (!headers.includes(col)) throw new Error(`Missing required CSV column: ${col}`);\n}\n\nconst signals = [];\nfor (let i = 1; i < lines.length; i++) {\n  const line = lines[i].trim();\n  if (!line) continue;\n\n  const values = line.split(',');\n  const row = {};\n  headers.forEach((h, idx) => { row[h] = (values[idx] || '').trim(); });\n\n  if (!row.source || !row.symbol || !row.direction || !row.valid_from) {\n    console.log(`Skipping row ${i}: missing required fields`);\n    continue;\n  }\n\n  signals.push({\n    source: row.source,\n    symbol: row.symbol.toUpperCase(),\n    direction: row.direction.toLowerCase(),\n    conviction: row.conviction ? parseFloat(row.conviction) : 0.5,\n    valid_from: row.valid_from,\n    valid_until: row.valid_until || null,\n    headline: row.headline || '',\n    raw_url: row.raw_url || '',\n    tags: row.tags ? row.tags.split(';').map(t => t.trim()).filter(Boolean) : [],\n  });\n}\n\nconsole.log(`Parsed ${signals.length} signals from CSV`);\nreturn signals.map(s => ({ json: s }));"
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000003",
+      "name": "Parse CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://xstockstrat-ingest:8055/webhooks/n8n/ingest-signal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 15000,
+          "batching": {
+            "batch": {
+              "batchSize": 1
+            }
+          }
+        }
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000004",
+      "name": "POST Each Signal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300],
+      "notes": "Sends each signal as a separate HTTP POST. n8n processes each item from the CSV parse node individually."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect and summarize ingestion results.\nconst items = $input.all();\nconst succeeded = items.filter(i => i.json.signal_id || i.json.id).length;\nconst failed = items.length - succeeded;\n\nconsole.log(`CSV ingest complete: ${succeeded} succeeded, ${failed} failed`);\n\nreturn [{\n  json: {\n    total: items.length,\n    succeeded,\n    failed,\n    results: items.map(i => i.json),\n  }\n}];"
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000005",
+      "name": "Summarize Ingest Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [{ "node": "CSV Input", "type": "main", "index": 0 }]
+      ]
+    },
+    "CSV Input": {
+      "main": [
+        [{ "node": "Parse CSV", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse CSV": {
+      "main": [
+        [{ "node": "POST Each Signal", "type": "main", "index": 0 }]
+      ]
+    },
+    "POST Each Signal": {
+      "main": [
+        [{ "node": "Summarize Ingest Results", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["xstockstrat", "ingest", "signals", "csv"],
+  "notes": "Manual workflow for bulk-ingesting newsletter signals from a CSV. Paste CSV content into the 'CSV Input' node. Column format: source,symbol,direction,conviction,valid_from,valid_until,headline,raw_url,tags (tags semicolon-separated). Each row becomes one IngestSignal call. For the gRPC NormalizeRawData path see x-add-data-source.md Part 2 Option C."
+}

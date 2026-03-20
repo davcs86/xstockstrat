@@ -465,9 +465,11 @@ curl http://localhost:3000/health
 
 ---
 
-## Phase 6 — Integration & n8n
+## Phase 6 — Integration & n8n ✅ DONE
 
 > End-to-end wiring of all n8n workflows and cross-service integration tests.
+>
+> Implementation notes: see `_tasks/x-phase6-deviations.md`
 
 ### Tasks
 
