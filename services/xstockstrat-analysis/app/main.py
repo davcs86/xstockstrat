@@ -28,6 +28,7 @@ HTTP_PORT = int(os.environ.get("HTTP_PORT", "8056"))
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
 MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053")
 INDICATORS_ENDPOINT = os.environ.get("INDICATORS_ENDPOINT", "xstockstrat-indicators:50054")
+INGEST_ENDPOINT = os.environ.get("INGEST_ENDPOINT", "xstockstrat-ingest:50055")
 LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
 
 
@@ -49,6 +50,7 @@ async def serve():
         config_watcher=cfg_watcher,
         marketdata_channel=grpc.aio.insecure_channel(MARKETDATA_ENDPOINT),
         indicators_channel=grpc.aio.insecure_channel(INDICATORS_ENDPOINT),
+        ingest_channel=grpc.aio.insecure_channel(INGEST_ENDPOINT),
         ledger_channel=grpc.aio.insecure_channel(LEDGER_ENDPOINT),
     )
 

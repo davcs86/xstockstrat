@@ -211,7 +211,7 @@ psql $DATABASE_URL -c "SELECT COUNT(*) FROM marketdata.ohlcv WHERE symbol='AAPL'
 
 ---
 
-## Phase 3 — Processing Layer
+## Phase 3 — Processing Layer ✅ DONE
 
 > Services that compute on data. Can be developed in parallel after Phase 2.
 
@@ -341,6 +341,8 @@ grpcurl -d '{"formula":"import time; time.sleep(999)","inputs":{}}' \
   localhost:50054 xstockstrat.indicators.v1.IndicatorsService/ExecuteFormula
 # Expected: SandboxExitReason = TIMEOUT
 ```
+
+> Implementation notes: see `_tasks/x-phase3-deviations.md`
 
 ---
 

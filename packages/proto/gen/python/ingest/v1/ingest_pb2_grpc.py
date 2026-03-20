@@ -54,6 +54,16 @@ class IngestServiceStub(object):
                 request_serializer=ingest_dot_v1_dot_ingest__pb2.NormalizeRawDataRequest.SerializeToString,
                 response_deserializer=ingest_dot_v1_dot_ingest__pb2.NormalizeRawDataResponse.FromString,
                 _registered_method=True)
+        self.IngestSignal = channel.unary_unary(
+                '/xstockstrat.ingest.v1.IngestService/IngestSignal',
+                request_serializer=ingest_dot_v1_dot_ingest__pb2.IngestSignalRequest.SerializeToString,
+                response_deserializer=ingest_dot_v1_dot_ingest__pb2.IngestSignalResponse.FromString,
+                _registered_method=True)
+        self.QuerySignals = channel.unary_unary(
+                '/xstockstrat.ingest.v1.IngestService/QuerySignals',
+                request_serializer=ingest_dot_v1_dot_ingest__pb2.QuerySignalsRequest.SerializeToString,
+                response_deserializer=ingest_dot_v1_dot_ingest__pb2.QuerySignalsResponse.FromString,
+                _registered_method=True)
 
 
 class IngestServiceServicer(object):
@@ -83,6 +93,20 @@ class IngestServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def IngestSignal(self, request, context):
+        """Signal ingestion — persists newsletter/external signals to ingest.newsletter_signals hypertable
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def QuerySignals(self, request, context):
+        """Signal query — returns active signals filtered by source/symbol/direction and time window
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_IngestServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -105,6 +129,16 @@ def add_IngestServiceServicer_to_server(servicer, server):
                     servicer.NormalizeRawData,
                     request_deserializer=ingest_dot_v1_dot_ingest__pb2.NormalizeRawDataRequest.FromString,
                     response_serializer=ingest_dot_v1_dot_ingest__pb2.NormalizeRawDataResponse.SerializeToString,
+            ),
+            'IngestSignal': grpc.unary_unary_rpc_method_handler(
+                    servicer.IngestSignal,
+                    request_deserializer=ingest_dot_v1_dot_ingest__pb2.IngestSignalRequest.FromString,
+                    response_serializer=ingest_dot_v1_dot_ingest__pb2.IngestSignalResponse.SerializeToString,
+            ),
+            'QuerySignals': grpc.unary_unary_rpc_method_handler(
+                    servicer.QuerySignals,
+                    request_deserializer=ingest_dot_v1_dot_ingest__pb2.QuerySignalsRequest.FromString,
+                    response_serializer=ingest_dot_v1_dot_ingest__pb2.QuerySignalsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -215,6 +249,60 @@ class IngestService(object):
             '/xstockstrat.ingest.v1.IngestService/NormalizeRawData',
             ingest_dot_v1_dot_ingest__pb2.NormalizeRawDataRequest.SerializeToString,
             ingest_dot_v1_dot_ingest__pb2.NormalizeRawDataResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def IngestSignal(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.ingest.v1.IngestService/IngestSignal',
+            ingest_dot_v1_dot_ingest__pb2.IngestSignalRequest.SerializeToString,
+            ingest_dot_v1_dot_ingest__pb2.IngestSignalResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def QuerySignals(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.ingest.v1.IngestService/QuerySignals',
+            ingest_dot_v1_dot_ingest__pb2.QuerySignalsRequest.SerializeToString,
+            ingest_dot_v1_dot_ingest__pb2.QuerySignalsResponse.FromString,
             options,
             channel_credentials,
             insecure,
