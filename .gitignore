@@ -3,6 +3,7 @@
 **/*.exe
 **/*.test
 **/tmp/
+**/coverage.out
 
 # Python
 **/__pycache__/
@@ -13,6 +14,10 @@
 **/*.egg-info/
 **/dist/
 **/.pytest_cache/
+**/.coverage
+
+# Coverage reports (Node.js c8)
+**/coverage/
 
 # Node / Next.js
 **/node_modules/

@@ -10,6 +10,8 @@
     "dev": "ts-node src/index.ts",
     "migrate": "node-pg-migrate up",
     "proto:gen": "cd ../../packages/proto && buf generate",
+    "test": "node --experimental-strip-types --test src/__tests__/*.test.ts",
+    "test:coverage": "c8 --reporter=text --reporter=lcov --lines 40 node --experimental-strip-types --test src/__tests__/*.test.ts",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write src",
@@ -33,6 +35,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.12.12",
+    "c8": "^10.1.2",
     "@types/pg": "^8.11.6",
     "@types/uuid": "^9.0.8",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
