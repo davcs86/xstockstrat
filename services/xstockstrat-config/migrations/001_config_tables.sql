@@ -58,6 +58,7 @@ INSERT INTO config.config_values (namespace, key, value_type, value_data, descri
   ('trading',  'approval.require_above_notional', 'float',  '50000', 'Notional threshold for approval',      '50000',  'xstockstrat-trading'),
   ('trading',  'risk.max_position_pct',           'float',  '0.05',  'Max single position % of portfolio',   '0.05',   'xstockstrat-trading'),
   ('trading',  'risk.daily_loss_limit',           'float',  '0.02',  'Halt if day loss > 2%',                '0.02',   'xstockstrat-trading'),
+  ('trading',  'fill_poller.interval_ms',         'float',  '5000',  'Fill poller interval in milliseconds', '5000',   'xstockstrat-trading'),
   ('indicators','sandbox.timeout_ms',             'int',    '5000',  'Formula execution timeout ms',         '5000',   'xstockstrat-indicators'),
   ('indicators','sandbox.memory_bytes',           'int',    '134217728', 'Formula memory cap bytes',         '134217728','xstockstrat-indicators'),
   ('indicators','sandbox.allowed_imports',        'string', 'numpy,pandas,math,statistics', 'Allowed imports','numpy,pandas,math,statistics','xstockstrat-indicators'),
