@@ -1,3 +1,6 @@
+import { initTelemetry } from './telemetry';
+initTelemetry();
+
 import * as grpc from '@grpc/grpc-js';
 import * as http from 'http';
 import { getLogger } from './services/logger';

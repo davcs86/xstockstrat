@@ -17,6 +17,7 @@ from grpc_reflection.v1alpha import reflection
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer
 from app.http_server import build_app
+from app.telemetry import init_telemetry
 from gen.analysis.v1 import analysis_pb2_grpc
 from gen.analysis.v1.analysis_pb2 import DESCRIPTOR as ANALYSIS_DESCRIPTOR
 
@@ -42,6 +43,8 @@ async def start_http_server(servicer: AnalysisServicer) -> None:
 
 
 async def serve():
+    init_telemetry()
+
     cfg_watcher = ConfigWatcher(endpoint=CONFIG_ENDPOINT, namespace="analysis")
     await cfg_watcher.wait_for_snapshot(timeout_seconds=10)
     log.info("config snapshot received")

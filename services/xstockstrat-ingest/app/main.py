@@ -21,6 +21,7 @@ from grpc_reflection.v1alpha import reflection
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IngestServicer
 from app.http_server import build_app
+from app.telemetry import init_telemetry
 from gen.ingest.v1 import ingest_pb2_grpc
 from gen.ingest.v1.ingest_pb2 import DESCRIPTOR as INGEST_DESCRIPTOR
 
@@ -45,6 +46,8 @@ async def start_http_server(servicer: IngestServicer) -> None:
 
 
 async def serve():
+    init_telemetry()
+
     cfg_watcher = ConfigWatcher(endpoint=CONFIG_ENDPOINT, namespace="ingest")
     await cfg_watcher.wait_for_snapshot(timeout_seconds=10)
     log.info("config snapshot received")
