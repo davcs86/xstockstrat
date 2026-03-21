@@ -23,3 +23,95 @@ jobs:
 
       - name: buf breaking (against origin/main)
         run: buf breaking packages/proto/ --against '.git#branch=origin/main'
+
+  go-lint:
+    name: Go lint and test (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - xstockstrat-trading
+          - xstockstrat-marketdata
+          - xstockstrat-portfolio
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: services/${{ matrix.service }}/go.sum
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.59
+          working-directory: services/${{ matrix.service }}
+
+      - name: go test
+        run: go test ./... -race -count=1
+
+  python-lint:
+    name: Python lint (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - xstockstrat-indicators
+          - xstockstrat-ingest
+          - xstockstrat-analysis
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: install ruff
+        run: pip install ruff
+
+      - name: ruff check
+        run: ruff check .
+
+      - name: ruff format check
+        run: ruff format --check .
+
+  node-lint:
+    name: Node lint (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - xstockstrat-config
+          - xstockstrat-ledger
+          - xstockstrat-identity
+          - xstockstrat-notify
+          - xstockstrat-trader
+          - xstockstrat-insights
+          - xstockstrat-config-ui
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: install pnpm
+        run: npm install -g pnpm@9.15.0
+
+      - name: install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: lint
+        run: pnpm run lint
