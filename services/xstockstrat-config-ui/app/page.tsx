@@ -6,6 +6,9 @@
  * and stored in a URL search param: ?env=dev&mode=paper (defaults).
  */
 import Link from 'next/link';
+import { Card, CardContent } from '@components/ui/card';
+import { Badge } from '@components/ui/badge';
+import { cn } from '@components/ui/utils';
 
 // Known namespaces from the platform. In production this could be fetched from the config service.
 const KNOWN_NAMESPACES = [
@@ -28,20 +31,27 @@ export default function HomePage({ searchParams }: { searchParams: SearchParams 
   const mode = searchParams.mode ?? 'paper';
 
   return (
-    <div>
-      <div className="flex items-center gap-4 mb-6">
-        <h1 className="text-lg font-semibold">Configuration Namespaces</h1>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-4">
+        <div>
+          <h1 className="text-lg font-semibold">Configuration Namespaces</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Select a namespace to view and edit config values</p>
+        </div>
         <EnvModeSwitcher env={env} mode={mode} />
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
         {KNOWN_NAMESPACES.map((ns) => (
           <Link
             key={ns}
             href={`/${ns}?env=${env}&mode=${mode}`}
-            className="block border border-gray-700 rounded-lg p-4 hover:border-green-500 transition-colors"
           >
-            <div className="text-sm font-semibold text-green-400">{ns}</div>
-            <div className="text-xs text-gray-500 mt-1">namespace</div>
+            <Card className="hover:border-primary/50 hover:bg-card/80 transition-all cursor-pointer h-full">
+              <CardContent className="pt-4 pb-4">
+                <div className="text-sm font-semibold text-primary font-mono">{ns}</div>
+                <div className="text-xs text-muted-foreground mt-1">namespace</div>
+              </CardContent>
+            </Card>
           </Link>
         ))}
       </div>
@@ -51,35 +61,43 @@ export default function HomePage({ searchParams }: { searchParams: SearchParams 
 
 function EnvModeSwitcher({ env, mode }: { env: string; mode: string }) {
   return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="text-gray-500">env:</span>
-      {['dev', 'production'].map((e) => (
-        <a
-          key={e}
-          href={`/?env=${e}&mode=${mode}`}
-          className={`px-2 py-1 rounded border ${
-            env === e
-              ? 'border-green-500 text-green-400'
-              : 'border-gray-700 text-gray-400 hover:border-gray-500'
-          }`}
-        >
-          {e}
-        </a>
-      ))}
-      <span className="text-gray-500 ml-2">mode:</span>
-      {['paper', 'live'].map((m) => (
-        <a
-          key={m}
-          href={`/?env=${env}&mode=${m}`}
-          className={`px-2 py-1 rounded border ${
-            mode === m
-              ? 'border-blue-500 text-blue-400'
-              : 'border-gray-700 text-gray-400 hover:border-gray-500'
-          }`}
-        >
-          {m}
-        </a>
-      ))}
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <span className="text-muted-foreground font-medium">ENV:</span>
+      <div className="flex gap-1">
+        {['dev', 'production'].map((e) => (
+          <a
+            key={e}
+            href={`/?env=${e}&mode=${mode}`}
+            className={cn(
+              'px-2.5 py-1 rounded-md border text-xs font-medium transition-colors',
+              env === e
+                ? 'border-primary/50 bg-primary/10 text-primary'
+                : 'border-border text-muted-foreground hover:border-border/80 hover:text-foreground',
+            )}
+          >
+            {e}
+          </a>
+        ))}
+      </div>
+      <span className="text-muted-foreground font-medium ml-1">MODE:</span>
+      <div className="flex gap-1">
+        {['paper', 'live'].map((m) => (
+          <a
+            key={m}
+            href={`/?env=${env}&mode=${m}`}
+            className={cn(
+              'px-2.5 py-1 rounded-md border text-xs font-medium transition-colors',
+              mode === m
+                ? m === 'paper'
+                  ? 'border-paper/50 bg-paper/10 text-paper'
+                  : 'border-buy/50 bg-buy/10 text-buy'
+                : 'border-border text-muted-foreground hover:border-border/80 hover:text-foreground',
+            )}
+          >
+            {m}
+          </a>
+        ))}
+      </div>
     </div>
   );
 }

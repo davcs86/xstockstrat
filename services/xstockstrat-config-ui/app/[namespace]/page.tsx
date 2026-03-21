@@ -7,6 +7,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Card, CardContent } from '@components/ui/card';
+import { Badge } from '@components/ui/badge';
+import { Button } from '@components/ui/button';
+import { Input } from '@components/ui/input';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@components/ui/table';
+import { cn } from '@components/ui/utils';
 
 interface ConfigKey {
   key: string;
@@ -70,7 +76,6 @@ export default function NamespacePage({ params, searchParams }: Props) {
         }),
       });
       setEditingKey(null);
-      // Refresh
       const data: ListKeysResponse = await fetch(
         `/api/config?namespace=${namespace}&env=${env}&mode=${mode}`
       ).then((r) => r.json());
@@ -81,82 +86,100 @@ export default function NamespacePage({ params, searchParams }: Props) {
   }
 
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-6">
-        <Link href={`/?env=${env}&mode=${mode}`} className="text-gray-500 hover:text-gray-300 text-sm">
-          &larr; namespaces
+    <div className="space-y-4">
+      {/* Breadcrumb */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Link href={`/?env=${env}&mode=${mode}`} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+          ← namespaces
         </Link>
-        <h1 className="text-lg font-semibold">
-          <span className="text-green-400">{namespace}</span>
-          <span className="text-gray-500 text-sm ml-2">
-            env: {env} &middot; mode: {mode}
-          </span>
+        <span className="text-muted-foreground">/</span>
+        <h1 className="text-base font-semibold">
+          <span className="text-primary font-mono">{namespace}</span>
         </h1>
+        <div className="flex gap-1.5 ml-1">
+          <Badge variant="secondary" className="text-xs">{env}</Badge>
+          <Badge variant={mode === 'paper' ? 'paper' : 'live'} className="text-xs">{mode}</Badge>
+        </div>
       </div>
 
-      {loading && <p className="text-gray-500 text-sm">Loading...</p>}
-      {error && <p className="text-red-400 text-sm">Error: {error}</p>}
+      {loading && <p className="text-muted-foreground text-sm">Loading…</p>}
+      {error && <p className="text-destructive text-sm">Error: {error}</p>}
 
       {!loading && !error && (
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="text-left text-gray-500 border-b border-gray-800">
-              <th className="py-2 pr-4">Key</th>
-              <th className="py-2 pr-4">Value</th>
-              <th className="py-2 pr-4">Description</th>
-              <th className="py-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {keys.map((k) => (
-              <tr key={k.key} className="border-b border-gray-900 hover:bg-gray-900/30">
-                <td className="py-2 pr-4 text-green-400 font-mono">{k.key}</td>
-                <td className="py-2 pr-4 font-mono">
-                  {editingKey === k.key ? (
-                    <input
-                      className="bg-gray-900 border border-gray-600 rounded px-2 py-1 text-xs w-48 focus:outline-none focus:border-green-500"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      autoFocus
-                    />
-                  ) : k.isSecret ? (
-                    <span className="text-gray-600">[secret]</span>
-                  ) : (
-                    <span className="text-gray-300">{k.defaultValue || '—'}</span>
-                  )}
-                </td>
-                <td className="py-2 pr-4 text-gray-500 text-xs">{k.description}</td>
-                <td className="py-2">
-                  {!k.isSecret && editingKey !== k.key && (
-                    <button
-                      onClick={() => { setEditingKey(k.key); setEditValue(k.defaultValue); }}
-                      className="text-xs text-blue-400 hover:text-blue-300 mr-3"
-                    >
-                      edit
-                    </button>
-                  )}
-                  {editingKey === k.key && (
-                    <>
-                      <button
-                        onClick={() => handleSave(k.key)}
-                        disabled={saving}
-                        className="text-xs text-green-400 hover:text-green-300 mr-3 disabled:opacity-50"
-                      >
-                        {saving ? 'saving...' : 'save'}
-                      </button>
-                      <button
-                        onClick={() => setEditingKey(null)}
-                        className="text-xs text-gray-500 hover:text-gray-400"
-                      >
-                        cancel
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <Card>
+          <CardContent className="pt-4 p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[220px]">Key</TableHead>
+                  <TableHead className="w-[200px]">Value</TableHead>
+                  <TableHead className="hidden md:table-cell">Description</TableHead>
+                  <TableHead className="w-[120px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {keys.map((k) => (
+                  <TableRow key={k.key}>
+                    <TableCell className="font-mono text-primary">{k.key}</TableCell>
+                    <TableCell className="font-mono">
+                      {editingKey === k.key ? (
+                        <Input
+                          className="h-7 text-xs w-40"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          autoFocus
+                        />
+                      ) : k.isSecret ? (
+                        <span className="text-muted-foreground italic text-xs">[secret]</span>
+                      ) : (
+                        <span className="text-foreground/80">{k.defaultValue || '—'}</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground text-xs">{k.description}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        {!k.isSecret && editingKey !== k.key && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => { setEditingKey(k.key); setEditValue(k.defaultValue); }}
+                            className="h-7 px-2 text-xs text-primary hover:text-primary"
+                          >
+                            Edit
+                          </Button>
+                        )}
+                        {editingKey === k.key && (
+                          <>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => handleSave(k.key)}
+                              disabled={saving}
+                              className="h-7 px-2 text-xs"
+                            >
+                              {saving ? 'Saving…' : 'Save'}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingKey(null)}
+                              className="h-7 px-2 text-xs text-muted-foreground"
+                            >
+                              Cancel
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {keys.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-8">No config keys found for this namespace</p>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   );

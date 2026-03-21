@@ -1,8 +1,11 @@
 'use client';
 import { useState } from 'react';
+import { AppShell } from '@/components/AppShell';
 import { OrderForm } from '@/components/OrderForm';
 import { OrderBook, PortfolioSummary } from '@/components/OrderBook';
 import { AlertStream } from '@/components/AlertStream';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 export type TradingMode = 'paper' | 'live';
 
@@ -10,46 +13,52 @@ export default function TradingDashboard() {
   const [mode, setMode] = useState<TradingMode>('paper');
 
   return (
-    <main className="min-h-screen bg-gray-950 text-gray-100 p-6">
-      <header className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold tracking-tight">xstockstrat Trader</h1>
+    <AppShell
+      title="xstockstrat Trader"
+      actions={
+        <div className="flex items-center gap-2">
           <ModeToggle mode={mode} onChange={setMode} />
+          <AlertStream />
         </div>
-        <AlertStream />
-      </header>
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-3">
-          <PortfolioSummary mode={mode} />
-        </div>
-        <div className="col-span-5">
-          <OrderBook mode={mode} />
-        </div>
-        <div className="col-span-4">
-          <OrderForm mode={mode} />
+      }
+    >
+      <div className="p-4 sm:p-6 space-y-4">
+        {/* Mobile: stacked; md: 3-column grid */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+          <div className="md:col-span-3">
+            <PortfolioSummary mode={mode} />
+          </div>
+          <div className="md:col-span-4 order-3 md:order-none">
+            <OrderForm mode={mode} />
+          </div>
+          <div className="md:col-span-5 order-2 md:order-none">
+            <OrderBook mode={mode} />
+          </div>
         </div>
       </div>
-    </main>
+    </AppShell>
   );
 }
 
 function ModeToggle({ mode, onChange }: { mode: TradingMode; onChange: (m: TradingMode) => void }) {
   return (
-    <div className="flex items-center gap-1 rounded-lg bg-gray-800 p-1">
+    <div className="flex items-center gap-1 rounded-lg bg-secondary p-1">
       {(['paper', 'live'] as TradingMode[]).map((m) => (
-        <button
+        <Button
           key={m}
+          size="sm"
+          variant="ghost"
           onClick={() => onChange(m)}
-          className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
+          className={
             mode === m
               ? m === 'paper'
-                ? 'bg-yellow-500 text-gray-900'
-                : 'bg-emerald-600 text-white'
-              : 'text-gray-400 hover:text-gray-200'
-          }`}
+                ? 'bg-paper/20 text-paper hover:bg-paper/30 h-7 px-3'
+                : 'bg-buy/20 text-buy hover:bg-buy/30 h-7 px-3'
+              : 'text-muted-foreground hover:text-foreground h-7 px-3'
+          }
         >
           {m === 'paper' ? 'PAPER' : 'LIVE'}
-        </button>
+        </Button>
       ))}
     </div>
   );

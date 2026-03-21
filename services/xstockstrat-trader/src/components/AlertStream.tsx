@@ -1,5 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { Bell } from 'lucide-react';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet';
+import { Separator } from './ui/separator';
 
 interface Alert {
   alert_id: string;
@@ -11,19 +16,17 @@ interface Alert {
 }
 
 const severityLabel: Record<number, string> = { 1: 'INFO', 2: 'WARN', 3: 'ERROR', 4: 'CRITICAL' };
-const severityColor: Record<number, string> = {
-  1: 'bg-blue-900/40 border-blue-700 text-blue-300',
-  2: 'bg-yellow-900/40 border-yellow-700 text-yellow-300',
-  3: 'bg-red-900/40 border-red-700 text-red-300',
-  4: 'bg-red-950/60 border-red-500 text-red-200',
+const severityVariant: Record<number, 'info' | 'warning' | 'destructive' | 'destructive'> = {
+  1: 'info',
+  2: 'warning',
+  3: 'destructive',
+  4: 'destructive',
 };
 
 export function AlertStream() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    // Connect to SSE endpoint that proxies xstockstrat-notify StreamAlerts
     const es = new EventSource('/api/alerts/stream');
     es.onmessage = (e) => {
       try {
@@ -36,52 +39,63 @@ export function AlertStream() {
   }, []);
 
   const unread = alerts.length;
-  const highSeverity = alerts.filter((a) => a.severity >= 3).length;
+  const hasHighSeverity = alerts.some((a) => a.severity >= 3);
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="relative flex items-center gap-2 rounded-lg bg-gray-800 hover:bg-gray-700 px-3 py-2 text-sm transition-colors"
-      >
-        <span>🔔</span>
-        {unread > 0 && (
-          <span className={`text-xs font-bold ${highSeverity > 0 ? 'text-red-400' : 'text-blue-400'}`}>
-            {unread}
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-10 w-80 max-h-96 overflow-y-auto rounded-xl bg-gray-900 border border-gray-700 shadow-xl z-50">
-          <div className="flex items-center justify-between p-3 border-b border-gray-800">
-            <span className="text-sm font-semibold">Alerts</span>
-            <button
-              onClick={() => { setAlerts([]); setOpen(false); }}
-              className="text-xs text-gray-500 hover:text-gray-300"
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button variant="outline" size="icon" className="relative">
+          <Bell className="h-4 w-4" />
+          {unread > 0 && (
+            <span
+              className={`absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${
+                hasHighSeverity ? 'bg-destructive text-white' : 'bg-primary text-primary-foreground'
+              }`}
             >
-              Clear
-            </button>
+              {unread > 9 ? '9+' : unread}
+            </span>
+          )}
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-[360px] sm:w-[400px]">
+        <SheetHeader>
+          <div className="flex items-center justify-between pr-6">
+            <SheetTitle>Alerts</SheetTitle>
+            {alerts.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={() => setAlerts([])} className="text-muted-foreground text-xs h-7">
+                Clear all
+              </Button>
+            )}
           </div>
-
+        </SheetHeader>
+        <Separator className="my-4" />
+        <div className="overflow-y-auto max-h-[calc(100vh-8rem)]">
           {alerts.length === 0 ? (
-            <p className="p-4 text-sm text-gray-600">No alerts</p>
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <Bell className="h-8 w-8 mb-2 opacity-30" />
+              <p className="text-sm">No alerts</p>
+            </div>
           ) : (
-            <ul className="divide-y divide-gray-800">
+            <ul className="space-y-2">
               {alerts.map((a) => (
-                <li key={a.alert_id} className={`p-3 border-l-2 ${severityColor[a.severity] ?? severityColor[1]}`}>
-                  <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-xs font-bold uppercase">{severityLabel[a.severity]}</span>
-                    <span className="text-xs text-gray-500">{a.category}</span>
+                <li
+                  key={a.alert_id}
+                  className="rounded-lg border border-border bg-card p-3 space-y-1"
+                >
+                  <div className="flex items-center justify-between">
+                    <Badge variant={severityVariant[a.severity] ?? 'info'}>
+                      {severityLabel[a.severity]}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">{a.category}</span>
                   </div>
                   <p className="text-sm font-medium">{a.title}</p>
-                  {a.body && <p className="text-xs text-gray-400 mt-0.5">{a.body}</p>}
+                  {a.body && <p className="text-xs text-muted-foreground">{a.body}</p>}
                 </li>
               ))}
             </ul>
           )}
         </div>
-      )}
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }

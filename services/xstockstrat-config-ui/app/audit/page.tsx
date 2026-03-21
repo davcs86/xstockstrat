@@ -7,6 +7,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
+import { Card, CardContent } from '@components/ui/card';
+import { Badge } from '@components/ui/badge';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@components/ui/table';
 
 interface AuditEntry {
   id: string;
@@ -36,51 +39,75 @@ export default function AuditPage() {
   }, []);
 
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/" className="text-gray-500 hover:text-gray-300 text-sm">
-          &larr; namespaces
+    <div className="space-y-4">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2">
+        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+          ← namespaces
         </Link>
-        <h1 className="text-lg font-semibold">Audit Log</h1>
+        <span className="text-muted-foreground">/</span>
+        <h1 className="text-base font-semibold">Audit Log</h1>
       </div>
 
-      {loading && <p className="text-gray-500 text-sm">Loading...</p>}
+      {loading && <p className="text-muted-foreground text-sm">Loading…</p>}
 
       {!loading && (
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="text-left text-gray-500 border-b border-gray-800">
-              <th className="py-2 pr-4">When</th>
-              <th className="py-2 pr-4">Namespace / Key</th>
-              <th className="py-2 pr-4">Old</th>
-              <th className="py-2 pr-4">New</th>
-              <th className="py-2 pr-4">By</th>
-              <th className="py-2 pr-4">Env / Mode</th>
-              <th className="py-2">Reason</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((e) => (
-              <tr key={e.id} className="border-b border-gray-900 hover:bg-gray-900/30">
-                <td className="py-2 pr-4 text-gray-500 text-xs whitespace-nowrap">
-                  {formatDistanceToNow(new Date(e.changedAt), { addSuffix: true })}
-                </td>
-                <td className="py-2 pr-4 font-mono text-xs">
-                  <span className="text-green-400">{e.namespace}</span>
-                  <span className="text-gray-500">.</span>
-                  <span className="text-gray-200">{e.key}</span>
-                </td>
-                <td className="py-2 pr-4 text-red-400 font-mono text-xs">{e.oldValue || '—'}</td>
-                <td className="py-2 pr-4 text-blue-400 font-mono text-xs">{e.newValue}</td>
-                <td className="py-2 pr-4 text-gray-400 text-xs">{e.changedBy}</td>
-                <td className="py-2 pr-4 text-gray-500 text-xs">
-                  {e.environment} / {e.tradingMode}
-                </td>
-                <td className="py-2 text-gray-500 text-xs">{e.reason}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <Card>
+          <CardContent className="pt-0 p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[120px]">When</TableHead>
+                  <TableHead>Namespace / Key</TableHead>
+                  <TableHead className="hidden sm:table-cell w-[120px]">Old Value</TableHead>
+                  <TableHead className="w-[120px]">New Value</TableHead>
+                  <TableHead className="hidden md:table-cell w-[100px]">By</TableHead>
+                  <TableHead className="hidden lg:table-cell w-[120px]">Env / Mode</TableHead>
+                  <TableHead className="hidden xl:table-cell">Reason</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {entries.map((e) => (
+                  <TableRow key={e.id}>
+                    <TableCell className="text-muted-foreground whitespace-nowrap">
+                      {formatDistanceToNow(new Date(e.changedAt), { addSuffix: true })}
+                    </TableCell>
+                    <TableCell className="font-mono">
+                      <span className="text-primary">{e.namespace}</span>
+                      <span className="text-muted-foreground">.</span>
+                      <span className="text-foreground">{e.key}</span>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell font-mono text-destructive/80">
+                      {e.oldValue || '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-primary/80">
+                      {e.newValue}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground">
+                      {e.changedBy}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <div className="flex gap-1">
+                        <Badge variant="secondary" className="text-xs">{e.environment}</Badge>
+                        <Badge variant={e.tradingMode === 'paper' ? 'paper' : 'live'} className="text-xs">{e.tradingMode}</Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden xl:table-cell text-muted-foreground">
+                      {e.reason}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {entries.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      No audit entries yet
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
