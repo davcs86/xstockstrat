@@ -1,6 +1,11 @@
 'use client';
 import { useState } from 'react';
 import type { TradingMode } from '@/app/page';
+import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Badge } from './ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 type OrderSide = 'buy' | 'sell';
 type OrderType = 'market' | 'limit' | 'stop' | 'stop_limit';
@@ -48,102 +53,92 @@ export function OrderForm({ mode }: OrderFormProps) {
   };
 
   const needsLimitPrice = orderType === 'limit' || orderType === 'stop_limit';
-  const isPaper = mode === 'paper';
 
   return (
-    <div className="rounded-xl bg-gray-900 border border-gray-800 p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-gray-200">Place Order</h2>
-        <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-          isPaper ? 'bg-yellow-500/20 text-yellow-400' : 'bg-emerald-500/20 text-emerald-400'
-        }`}>
-          {isPaper ? 'PAPER' : 'LIVE'}
-        </span>
-      </div>
-      <form onSubmit={handleSubmit} className="space-y-3">
-        {/* Symbol */}
-        <input
-          className="w-full bg-gray-800 rounded px-3 py-2 text-sm uppercase placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          placeholder="Symbol (e.g. AAPL)"
-          value={symbol}
-          onChange={(e) => setSymbol(e.target.value)}
-          required
-        />
-
-        {/* Side */}
-        <div className="flex gap-2">
-          {(['buy', 'sell'] as OrderSide[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSide(s)}
-              className={`flex-1 py-2 rounded text-sm font-medium transition-colors ${
-                side === s
-                  ? s === 'buy' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-              }`}
-            >
-              {s.toUpperCase()}
-            </button>
-          ))}
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle>Place Order</CardTitle>
+          <Badge variant={mode === 'paper' ? 'paper' : 'live'}>
+            {mode === 'paper' ? 'PAPER' : 'LIVE'}
+          </Badge>
         </div>
-
-        {/* Order type */}
-        <select
-          className="w-full bg-gray-800 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          value={orderType}
-          onChange={(e) => setOrderType(e.target.value as OrderType)}
-        >
-          <option value="market">Market</option>
-          <option value="limit">Limit</option>
-          <option value="stop">Stop</option>
-          <option value="stop_limit">Stop Limit</option>
-        </select>
-
-        {/* Qty */}
-        <input
-          type="number"
-          min="0.0001"
-          step="any"
-          className="w-full bg-gray-800 rounded px-3 py-2 text-sm placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          placeholder="Quantity"
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          required
-        />
-
-        {/* Limit price */}
-        {needsLimitPrice && (
-          <input
-            type="number"
-            min="0"
-            step="any"
-            className="w-full bg-gray-800 rounded px-3 py-2 text-sm placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            placeholder="Limit price"
-            value={limitPrice}
-            onChange={(e) => setLimitPrice(e.target.value)}
-            required={needsLimitPrice}
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <Input
+            className="uppercase"
+            placeholder="Symbol (e.g. AAPL)"
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value)}
+            required
           />
-        )}
 
-        <button
-          type="submit"
-          disabled={status === 'submitting'}
-          className={`w-full py-2.5 rounded font-semibold text-sm transition-colors ${
-            side === 'buy'
-              ? 'bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-900'
-              : 'bg-red-600 hover:bg-red-500 disabled:bg-red-900'
-          } text-white`}
-        >
-          {status === 'submitting' ? 'Placing…' : `${side.toUpperCase()} ${symbol || '—'}`}
-        </button>
+          {/* Buy / Sell toggle */}
+          <div className="grid grid-cols-2 gap-2">
+            {(['buy', 'sell'] as OrderSide[]).map((s) => (
+              <Button
+                key={s}
+                type="button"
+                variant={side === s ? (s === 'buy' ? 'buy' : 'sell') : 'outline'}
+                onClick={() => setSide(s)}
+                className="w-full"
+              >
+                {s.toUpperCase()}
+              </Button>
+            ))}
+          </div>
 
-        {message && (
-          <p className={`text-xs mt-1 ${status === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>
-            {message}
-          </p>
-        )}
-      </form>
-    </div>
+          <Select value={orderType} onValueChange={(v) => setOrderType(v as OrderType)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Order type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="market">Market</SelectItem>
+              <SelectItem value="limit">Limit</SelectItem>
+              <SelectItem value="stop">Stop</SelectItem>
+              <SelectItem value="stop_limit">Stop Limit</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Input
+            type="number"
+            min="0.0001"
+            step="any"
+            placeholder="Quantity"
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+            required
+          />
+
+          {needsLimitPrice && (
+            <Input
+              type="number"
+              min="0"
+              step="any"
+              placeholder="Limit price"
+              value={limitPrice}
+              onChange={(e) => setLimitPrice(e.target.value)}
+              required={needsLimitPrice}
+            />
+          )}
+
+          <Button
+            type="submit"
+            variant={side === 'buy' ? 'buy' : 'sell'}
+            disabled={status === 'submitting'}
+            className="w-full"
+          >
+            {status === 'submitting' ? 'Placing…' : `${side.toUpperCase()} ${symbol || '—'}`}
+          </Button>
+
+          {message && (
+            <p className={`text-xs ${status === 'error' ? 'text-destructive' : 'text-buy'}`}>
+              {message}
+            </p>
+          )}
+        </form>
+      </CardContent>
+    </Card>
   );
 }

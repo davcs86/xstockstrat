@@ -1,16 +1,13 @@
 'use client';
 import { useState } from 'react';
 import useSWR from 'swr';
-import Link from 'next/link';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AppShell } from '@/components/AppShell';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/components/ui/utils';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -62,7 +59,6 @@ export default function StrategyDetailPage({ params }: { params: { id: string } 
 
   const result = backtestResult ?? report?.latestBacktest;
 
-  // Build equity curve from trades if available
   const equityCurve = (() => {
     if (!result?.trades?.length) return [];
     let equity = parseFloat(form.initial_capital) || 100000;
@@ -73,186 +69,198 @@ export default function StrategyDetailPage({ params }: { params: { id: string } 
   })();
 
   return (
-    <main className="min-h-screen bg-gray-950 text-gray-100 p-6">
-      <header className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <Link href="/strategies" className="text-gray-500 hover:text-gray-300 text-sm">
-            &larr; strategies
-          </Link>
+    <AppShell>
+      <div className="p-4 sm:p-6 space-y-4">
+        <div className="mb-2">
+          <h1 className="text-xl font-bold tracking-tight font-mono">{id}</h1>
         </div>
-        <h1 className="text-2xl font-bold tracking-tight font-mono">{id}</h1>
-      </header>
 
-      <div className="grid grid-cols-12 gap-4">
-        {/* Left: score + backtest runner */}
-        <div className="col-span-4 space-y-4">
-          {/* Score card */}
-          {report?.score && (
-            <div className="rounded-xl bg-gray-900 border border-gray-800 p-5">
-              <h2 className="text-sm font-semibold mb-3">Strategy Score</h2>
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-4xl font-bold text-emerald-400">{report.score.rating}</span>
-                <span className="text-2xl text-gray-400">
-                  {(report.score.overallScore * 100).toFixed(0)}%
-                </span>
-              </div>
-              <div className="space-y-1.5">
-                {Object.entries(
-                  (report.score.componentScores ?? {}) as Record<string, number>,
-                ).map(([key, val]) => (
-                  <div key={key} className="flex justify-between text-xs">
-                    <span className="text-gray-500 capitalize">{key}</span>
-                    <span className="text-gray-300">{(val * 100).toFixed(0)}</span>
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* Left sidebar: score + backtest runner */}
+          <div className="w-full lg:w-80 shrink-0 space-y-4">
+            {/* Score card */}
+            {report?.score && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Strategy Score</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-3 mb-4">
+                    <span className="text-4xl font-bold text-buy">{report.score.rating}</span>
+                    <span className="text-2xl text-muted-foreground tabular-nums">
+                      {(report.score.overallScore * 100).toFixed(0)}%
+                    </span>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                  <div className="space-y-1.5">
+                    {Object.entries(
+                      (report.score.componentScores ?? {}) as Record<string, number>,
+                    ).map(([key, val]) => (
+                      <div key={key} className="flex justify-between text-xs">
+                        <span className="text-muted-foreground capitalize">{key}</span>
+                        <span className="text-foreground tabular-nums">{(val * 100).toFixed(0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-          {/* Backtest runner form */}
-          <div className="rounded-xl bg-gray-900 border border-gray-800 p-5">
-            <h2 className="text-sm font-semibold mb-3">Run Backtest</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Symbol</label>
-                <input
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
-                  value={form.symbol}
-                  onChange={(e) => setForm({ ...form, symbol: e.target.value })}
-                  placeholder="AAPL"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Start Date</label>
-                <input
-                  type="date"
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
-                  value={form.start}
-                  onChange={(e) => setForm({ ...form, start: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">End Date</label>
-                <input
-                  type="date"
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
-                  value={form.end}
-                  onChange={(e) => setForm({ ...form, end: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Initial Capital ($)</label>
-                <input
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
-                  value={form.initial_capital}
-                  onChange={(e) => setForm({ ...form, initial_capital: e.target.value })}
-                />
-              </div>
-              <button
-                onClick={runBacktest}
-                disabled={running}
-                className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded px-4 py-2 text-sm font-semibold transition-colors"
-              >
-                {running ? 'Running…' : 'Run Backtest'}
-              </button>
-              {runError && <p className="text-xs text-red-400">{runError}</p>}
-            </div>
+            {/* Backtest runner form */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Run Backtest</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Symbol</label>
+                    <Input
+                      value={form.symbol}
+                      onChange={(e) => setForm({ ...form, symbol: e.target.value })}
+                      placeholder="AAPL"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Start Date</label>
+                    <Input
+                      type="date"
+                      value={form.start}
+                      onChange={(e) => setForm({ ...form, start: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">End Date</label>
+                    <Input
+                      type="date"
+                      value={form.end}
+                      onChange={(e) => setForm({ ...form, end: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Initial Capital ($)</label>
+                    <Input
+                      value={form.initial_capital}
+                      onChange={(e) => setForm({ ...form, initial_capital: e.target.value })}
+                    />
+                  </div>
+                  <Button
+                    onClick={runBacktest}
+                    disabled={running}
+                    className="w-full"
+                  >
+                    {running ? 'Running…' : 'Run Backtest'}
+                  </Button>
+                  {runError && <p className="text-xs text-destructive">{runError}</p>}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right: results */}
+          <div className="flex-1 min-w-0 space-y-4">
+            {result && (
+              <>
+                {/* Metrics grid */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Backtest Results</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <MetricCard
+                        label="Total Return"
+                        value={`${((result.totalReturn ?? 0) * 100).toFixed(2)}%`}
+                        positive={(result.totalReturn ?? 0) >= 0}
+                      />
+                      <MetricCard
+                        label="Sharpe Ratio"
+                        value={(result.sharpeRatio ?? 0).toFixed(3)}
+                        positive={(result.sharpeRatio ?? 0) >= 1}
+                      />
+                      <MetricCard
+                        label="Max Drawdown"
+                        value={`${((result.maxDrawdown ?? 0) * 100).toFixed(2)}%`}
+                        neutral
+                      />
+                      <MetricCard
+                        label="Win Rate"
+                        value={`${((result.winRate ?? 0) * 100).toFixed(1)}%`}
+                        positive={(result.winRate ?? 0) >= 0.5}
+                      />
+                      <MetricCard label="Total Trades" value={String(result.totalTrades ?? 0)} />
+                      <MetricCard
+                        label="Profit Factor"
+                        value={(result.profitFactor ?? 0).toFixed(2)}
+                        positive={(result.profitFactor ?? 0) >= 1}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Equity curve */}
+                {equityCurve.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Equity Curve</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <LineChart data={equityCurve}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 20% 14%)" />
+                          <XAxis
+                            dataKey="trade"
+                            tick={{ fill: 'hsl(215 16% 47%)', fontSize: 11 }}
+                            label={{ value: 'Trade #', position: 'insideBottom', fill: 'hsl(215 16% 47%)', fontSize: 11 }}
+                          />
+                          <YAxis tick={{ fill: 'hsl(215 16% 47%)', fontSize: 11 }} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: 'hsl(222 47% 7%)',
+                              border: '1px solid hsl(222 20% 14%)',
+                              borderRadius: 8,
+                            }}
+                            labelStyle={{ color: 'hsl(215 16% 47%)' }}
+                            formatter={(v: any) => [`$${Number(v).toLocaleString()}`, 'Equity']}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="equity"
+                            stroke="hsl(163 100% 44%)"
+                            dot={false}
+                            strokeWidth={2}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
+
+            {isLoading && !result && (
+              <Card>
+                <CardContent className="pt-5">
+                  <p className="text-sm text-muted-foreground">Loading report…</p>
+                </CardContent>
+              </Card>
+            )}
+            {!isLoading && !result && (
+              <Card>
+                <CardContent className="pt-5">
+                  <p className="text-sm text-muted-foreground">
+                    No backtest results yet. Run a backtest using the form on the left.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
-
-        {/* Right: results */}
-        <div className="col-span-8 space-y-4">
-          {result && (
-            <>
-              {/* Metrics grid */}
-              <div className="rounded-xl bg-gray-900 border border-gray-800 p-5">
-                <h2 className="text-sm font-semibold mb-4">Backtest Results</h2>
-                <div className="grid grid-cols-3 gap-4">
-                  <Metric
-                    label="Total Return"
-                    value={`${((result.totalReturn ?? 0) * 100).toFixed(2)}%`}
-                    positive={(result.totalReturn ?? 0) >= 0}
-                  />
-                  <Metric
-                    label="Sharpe Ratio"
-                    value={(result.sharpeRatio ?? 0).toFixed(3)}
-                    positive={(result.sharpeRatio ?? 0) >= 1}
-                  />
-                  <Metric
-                    label="Max Drawdown"
-                    value={`${((result.maxDrawdown ?? 0) * 100).toFixed(2)}%`}
-                    positive={false}
-                    neutral
-                  />
-                  <Metric
-                    label="Win Rate"
-                    value={`${((result.winRate ?? 0) * 100).toFixed(1)}%`}
-                    positive={(result.winRate ?? 0) >= 0.5}
-                  />
-                  <Metric label="Total Trades" value={String(result.totalTrades ?? 0)} />
-                  <Metric
-                    label="Profit Factor"
-                    value={(result.profitFactor ?? 0).toFixed(2)}
-                    positive={(result.profitFactor ?? 0) >= 1}
-                  />
-                </div>
-              </div>
-
-              {/* Equity curve */}
-              {equityCurve.length > 0 && (
-                <div className="rounded-xl bg-gray-900 border border-gray-800 p-5">
-                  <h2 className="text-sm font-semibold mb-4">Equity Curve</h2>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={equityCurve}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                      <XAxis
-                        dataKey="trade"
-                        tick={{ fill: '#6b7280', fontSize: 11 }}
-                        label={{ value: 'Trade #', position: 'insideBottom', fill: '#6b7280', fontSize: 11 }}
-                      />
-                      <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#111827',
-                          border: '1px solid #374151',
-                          borderRadius: 8,
-                        }}
-                        labelStyle={{ color: '#9ca3af' }}
-                        formatter={(v: any) => [`$${Number(v).toLocaleString()}`, 'Equity']}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="equity"
-                        stroke="#10b981"
-                        dot={false}
-                        strokeWidth={2}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </>
-          )}
-
-          {isLoading && !result && (
-            <div className="rounded-xl bg-gray-900 border border-gray-800 p-5">
-              <p className="text-sm text-gray-500">Loading report…</p>
-            </div>
-          )}
-          {!isLoading && !result && (
-            <div className="rounded-xl bg-gray-900 border border-gray-800 p-5">
-              <p className="text-sm text-gray-600">
-                No backtest results yet. Run a backtest using the form on the left.
-              </p>
-            </div>
-          )}
-        </div>
       </div>
-    </main>
+    </AppShell>
   );
 }
 
-function Metric({
+function MetricCard({
   label,
   value,
   positive,
@@ -263,17 +271,17 @@ function Metric({
   positive?: boolean;
   neutral?: boolean;
 }) {
-  const color = neutral
-    ? 'text-gray-300'
+  const valueClass = neutral
+    ? 'text-foreground'
     : positive === true
-      ? 'text-emerald-400'
+      ? 'text-buy'
       : positive === false
-        ? 'text-red-400'
-        : 'text-gray-200';
+        ? 'text-destructive'
+        : 'text-foreground';
   return (
-    <div className="bg-gray-800/50 rounded-lg p-3">
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <p className={`text-lg font-bold tabular-nums ${color}`}>{value}</p>
+    <div className="rounded-lg bg-secondary p-3">
+      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+      <p className={cn('text-lg font-bold tabular-nums', valueClass)}>{value}</p>
     </div>
   );
 }

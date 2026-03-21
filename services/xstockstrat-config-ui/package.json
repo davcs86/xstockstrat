@@ -23,7 +23,15 @@
     "@connectrpc/connect-web": "^1.4.0",
     "pg": "^8.11.5",
     "swr": "^2.2.5",
-    "date-fns": "^3.6.0"
+    "date-fns": "^3.6.0",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-select": "^2.1.2",
+    "@radix-ui/react-separator": "^1.1.0",
+    "@radix-ui/react-dialog": "^1.1.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.5.4",
+    "lucide-react": "^0.460.0"
   },
   "devDependencies": {
     "@types/node": "^20",
@@ -35,6 +43,7 @@
     "prettier": "^3.3.0",
     "typescript": "^5",
     "tailwindcss": "^3.4.3",
+    "tailwindcss-animate": "^1.0.7",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.38"
   }
