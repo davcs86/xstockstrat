@@ -172,7 +172,7 @@ export class LedgerServiceImpl {
   }
 }
 
-function rowToEvent(row: any) {
+export function rowToEvent(row: any) {
   return {
     event_id: row.event_id,
     event_type: row.event_type,

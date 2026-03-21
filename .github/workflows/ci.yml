@@ -32,11 +32,11 @@ jobs:
       matrix:
         include:
           - service: xstockstrat-trading
-            coverage_threshold: 30
+            coverage_threshold: 40
           - service: xstockstrat-marketdata
-            coverage_threshold: 0
+            coverage_threshold: 40
           - service: xstockstrat-portfolio
-            coverage_threshold: 0
+            coverage_threshold: 40
     defaults:
       run:
         working-directory: services/${{ matrix.service }}
@@ -122,6 +122,12 @@ jobs:
           - service: xstockstrat-indicators
             coverage_threshold: 50
             cov_source: app
+          - service: xstockstrat-ingest
+            coverage_threshold: 40
+            cov_source: app
+          - service: xstockstrat-analysis
+            coverage_threshold: 40
+            cov_source: app
     defaults:
       run:
         working-directory: services/${{ matrix.service }}
@@ -190,6 +196,12 @@ jobs:
       matrix:
         include:
           - service: xstockstrat-config
+            coverage_threshold: 40
+          - service: xstockstrat-ledger
+            coverage_threshold: 40
+          - service: xstockstrat-identity
+            coverage_threshold: 40
+          - service: xstockstrat-notify
             coverage_threshold: 40
     defaults:
       run:

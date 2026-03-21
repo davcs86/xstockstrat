@@ -169,7 +169,7 @@ export class NotifyServiceImpl {
   }
 }
 
-function rowToAlert(row: any) {
+export function rowToAlert(row: any) {
   return {
     alert_id: row.alert_id,
     severity: row.severity,
