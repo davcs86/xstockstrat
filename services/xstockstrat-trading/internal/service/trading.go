@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -44,21 +45,28 @@ type TradingService struct {
 	subs map[string]chan *tradingv1.Order
 }
 
+// clientKeepAlive prevents silent connection drops on idle inter-service links.
+var clientKeepAlive = grpc.WithKeepaliveParams(keepalive.ClientParameters{
+	Time:                30 * time.Second,
+	Timeout:             10 * time.Second,
+	PermitWithoutStream: true,
+})
+
 func NewTradingService(
 	cfg *config.Config,
 	cfgW *config.Watcher,
 	brokerClient *broker.Client,
 	repo *repository.TradingRepo,
 ) (*TradingService, error) {
-	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive)
 	if err != nil {
 		return nil, fmt.Errorf("dial ledger: %w", err)
 	}
-	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive)
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
-	portfolioConn, err := grpc.NewClient(cfg.PortfolioEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	portfolioConn, err := grpc.NewClient(cfg.PortfolioEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive)
 	if err != nil {
 		return nil, fmt.Errorf("dial portfolio: %w", err)
 	}
@@ -319,10 +327,13 @@ func (s *TradingService) StreamOrderUpdates(req *tradingv1.StreamOrderUpdatesReq
 	return nil
 }
 
-// StartFillPoller polls submitted broker orders every 5s to detect fills.
-// On status change it emits the appropriate ledger event and notify alert.
+// StartFillPoller polls submitted broker orders to detect fills.
+// Interval is read from the live config key `trading.fill_poller.interval_ms`
+// (default 5000 ms) so it can be adjusted without restarting the service.
 func (s *TradingService) StartFillPoller(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Second)
+	const defaultIntervalMs = 5000.0
+	currentInterval := time.Duration(defaultIntervalMs) * time.Millisecond
+	ticker := time.NewTicker(currentInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -330,6 +341,16 @@ func (s *TradingService) StartFillPoller(ctx context.Context) {
 			return
 		case <-ticker.C:
 			s.pollFills(ctx)
+			// Re-read interval from live config on every tick so changes take
+			// effect at the next cycle without a service restart.
+			intervalMs := s.cfgW.GetFloat("trading.fill_poller.interval_ms", defaultIntervalMs)
+			if intervalMs > 0 {
+				newInterval := time.Duration(intervalMs) * time.Millisecond
+				if newInterval != currentInterval {
+					currentInterval = newInterval
+					ticker.Reset(currentInterval)
+				}
+			}
 		}
 	}
 }

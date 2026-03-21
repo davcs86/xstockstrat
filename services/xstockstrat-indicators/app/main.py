@@ -18,6 +18,7 @@ import uvicorn
 from grpc_reflection.v1alpha import reflection
 
 from app.config.watcher import ConfigWatcher
+from app.telemetry import init_telemetry
 from app.handlers.servicer import IndicatorsServicer
 from app.http_server import build_app
 from gen.indicators.v1 import indicators_pb2_grpc
@@ -50,6 +51,8 @@ async def start_http_server(servicer: IndicatorsServicer) -> None:
 
 
 async def serve():
+    init_telemetry()
+
     # Subscribe to config before accepting traffic
     log.info("connecting to config service at %s", CONFIG_ENDPOINT)
     config_watcher = ConfigWatcher(endpoint=CONFIG_ENDPOINT, namespace="indicators")
