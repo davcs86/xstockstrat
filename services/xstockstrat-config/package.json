@@ -10,6 +10,7 @@
     "dev": "ts-node src/index.ts",
     "migrate": "node-pg-migrate up",
     "test": "node --experimental-strip-types --test src/__tests__/*.test.ts",
+    "test:coverage": "c8 --reporter=text --reporter=lcov --lines 40 node --experimental-strip-types --test src/__tests__/*.test.ts",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write src",
@@ -42,6 +43,7 @@
     "node-pg-migrate": "^7.3.2",
     "prettier": "^3.3.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "c8": "^10.1.2"
   }
 }
