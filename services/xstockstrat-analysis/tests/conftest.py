@@ -2,6 +2,7 @@
 pytest conftest: add the shared proto stubs to sys.path so that
 `from gen.xxx.v1 import ...` works in tests without a running container.
 """
+
 import pathlib
 import sys
 import types

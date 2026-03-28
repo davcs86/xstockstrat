@@ -8,6 +8,7 @@ Ports:
   GRPC_PORT (50055)  — gRPC (HTTP/2), internal service-to-service
   HTTP_PORT (8055)   — Connect-RPC compatible HTTP (JSON), browser + external clients
 """
+
 import asyncio
 import logging
 import os
@@ -33,7 +34,9 @@ HTTP_PORT = int(os.environ.get("HTTP_PORT", "8055"))
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
 MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053")
 LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://xstockstrat:devpassword@localhost:5432/xstockstrat")
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", "postgres://xstockstrat:devpassword@localhost:5432/xstockstrat"
+)
 
 
 async def start_http_server(servicer: IngestServicer) -> None:
@@ -86,6 +89,7 @@ async def serve():
         async def _stop():
             await grpc_server.stop(grace=5)
             await db_pool.close()
+
         asyncio.get_event_loop().create_task(_stop())
 
     signal.signal(signal.SIGINT, handle_shutdown)

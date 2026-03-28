@@ -13,6 +13,7 @@ Also exposes:
   POST /webhooks/n8n/compute-indicator  → ComputeIndicator
   POST /webhooks/n8n/execute-formula    → ExecuteFormula
 """
+
 import logging
 
 from fastapi import FastAPI, HTTPException, Request
@@ -35,28 +36,25 @@ def build_app(servicer) -> FastAPI:
     # ── Connect-RPC compatible routes ─────────────────────────────────────────
     @app.post("/xstockstrat.indicators.v1.IndicatorsService/ComputeIndicator")
     async def compute_indicator(request: Request):
-        return await _call(request, indicators_pb2.ComputeIndicatorRequest,
-                           servicer.ComputeIndicator)
+        return await _call(
+            request, indicators_pb2.ComputeIndicatorRequest, servicer.ComputeIndicator
+        )
 
     @app.post("/xstockstrat.indicators.v1.IndicatorsService/ExecuteFormula")
     async def execute_formula(request: Request):
-        return await _call(request, indicators_pb2.ExecuteFormulaRequest,
-                           servicer.ExecuteFormula)
+        return await _call(request, indicators_pb2.ExecuteFormulaRequest, servicer.ExecuteFormula)
 
     @app.post("/xstockstrat.indicators.v1.IndicatorsService/ListIndicators")
     async def list_indicators(request: Request):
-        return await _call(request, indicators_pb2.ListIndicatorsRequest,
-                           servicer.ListIndicators)
+        return await _call(request, indicators_pb2.ListIndicatorsRequest, servicer.ListIndicators)
 
     @app.post("/xstockstrat.indicators.v1.IndicatorsService/RegisterFormula")
     async def register_formula(request: Request):
-        return await _call(request, indicators_pb2.RegisterFormulaRequest,
-                           servicer.RegisterFormula)
+        return await _call(request, indicators_pb2.RegisterFormulaRequest, servicer.RegisterFormula)
 
     @app.post("/xstockstrat.indicators.v1.IndicatorsService/GetFormula")
     async def get_formula(request: Request):
-        return await _call(request, indicators_pb2.GetFormulaRequest,
-                           servicer.GetFormula)
+        return await _call(request, indicators_pb2.GetFormulaRequest, servicer.GetFormula)
 
     # ── n8n webhook routes ────────────────────────────────────────────────────
     @app.post("/webhooks/n8n/compute-indicator")
@@ -90,6 +88,7 @@ def build_app(servicer) -> FastAPI:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 async def _call(request: Request, req_cls, handler_fn):
     """Deserialise JSON body into req_cls proto, call handler, return JSON."""
     try:
@@ -106,8 +105,10 @@ async def _call(request: Request, req_cls, handler_fn):
 
 class _NoopContext:
     """Minimal stand-in for grpc.aio.ServicerContext when called from HTTP."""
+
     async def abort(self, code, details):
         from fastapi import HTTPException
+
         raise HTTPException(status_code=400, detail=details)
 
     async def send_initial_metadata(self, *args, **kwargs):

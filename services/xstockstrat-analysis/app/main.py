@@ -5,6 +5,7 @@ Ports:
   GRPC_PORT (50056)  — gRPC (HTTP/2), internal service-to-service
   HTTP_PORT (8056)   — Connect-RPC compatible HTTP (JSON), browser + external clients
 """
+
 import asyncio
 import logging
 import os

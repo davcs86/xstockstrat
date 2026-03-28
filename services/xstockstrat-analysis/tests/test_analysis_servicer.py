@@ -4,16 +4,17 @@ Unit tests for AnalysisServicer RPC methods that don't require gRPC connections.
 ScoreStrategy, ListStrategies, and GetStrategyReport are exercised by
 populating _backtests/_strategies directly, same pattern as ingest.
 """
+
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from gen.analysis.v1 import analysis_pb2
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2
-from app.handlers.servicer import AnalysisServicer
+
 from app.config.watcher import ConfigWatcher
+from app.handlers.servicer import AnalysisServicer
 
 
 def make_servicer() -> AnalysisServicer:
@@ -67,7 +68,9 @@ class TestScoreStrategy:
     @pytest.mark.asyncio
     async def test_returns_score_with_rating(self):
         svc = make_servicer()
-        svc._backtests["strat-a"] = _make_backtest("strat-a", sharpe=1.5, drawdown=0.05, win_rate=0.65)
+        svc._backtests["strat-a"] = _make_backtest(
+            "strat-a", sharpe=1.5, drawdown=0.05, win_rate=0.65
+        )
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
 

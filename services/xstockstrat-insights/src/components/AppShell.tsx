@@ -8,12 +8,6 @@ import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet';
 import { Separator } from './ui/separator';
 
-interface InsightsNavItem {
-  label: string;
-  href: string;
-  external?: boolean;
-}
-
 const PLATFORM_NAV = [
   { label: 'Trader', href: 'http://localhost:3000', icon: <TrendingUp className="h-4 w-4" /> },
   { label: 'Insights', href: 'http://localhost:3001', icon: <BarChart2 className="h-4 w-4" /> },

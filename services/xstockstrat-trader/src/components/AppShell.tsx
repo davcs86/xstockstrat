@@ -1,7 +1,6 @@
 'use client';
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { BarChart2, TrendingUp, Settings, Menu, Activity } from 'lucide-react';
 import { cn } from './ui/utils';
 import { Button } from './ui/button';

@@ -5,6 +5,7 @@ pytest conftest: add the shared proto stubs to sys.path so that
 The proto stubs live at ../../packages/proto/gen/python relative to the
 service root, mirroring the Dockerfile's `ln -s /proto/gen/python /app/gen`.
 """
+
 import pathlib
 import sys
 import types

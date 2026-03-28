@@ -4,7 +4,6 @@ import { AppShell } from '@/components/AppShell';
 import { OrderForm } from '@/components/OrderForm';
 import { OrderBook, PortfolioSummary } from '@/components/OrderBook';
 import { AlertStream } from '@/components/AlertStream';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 export type TradingMode = 'paper' | 'live';

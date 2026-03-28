@@ -49,6 +49,9 @@ jobs:
           go-version: "1.23"
           cache-dependency-path: services/${{ matrix.service }}/go.sum
 
+      - name: go mod download
+        run: go mod download
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
@@ -178,7 +181,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: install pnpm
         run: npm install -g pnpm@9.15.0
@@ -207,7 +210,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: install pnpm
         run: npm install -g pnpm@9.15.0
@@ -254,7 +257,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: install pnpm
         run: npm install -g pnpm@9.15.0

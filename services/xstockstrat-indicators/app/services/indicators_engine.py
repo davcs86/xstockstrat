@@ -3,6 +3,7 @@ Built-in technical indicator computation engine.
 Supports: SMA, EMA, RSI, MACD, BB (Bollinger Bands), ATR, VWAP, STOCH.
 Uses numpy/pandas for efficient vectorized computation.
 """
+
 import logging
 from typing import Any
 
@@ -21,13 +22,13 @@ def compute(indicator: str, values: list[float], params: dict[str, float]) -> li
     arr = np.array(values, dtype=float)
 
     dispatch = {
-        "SMA":   _sma,
-        "EMA":   _ema,
-        "RSI":   _rsi,
-        "MACD":  _macd,
-        "BB":    _bb,
-        "ATR":   _atr,
-        "VWAP":  _vwap,
+        "SMA": _sma,
+        "EMA": _ema,
+        "RSI": _rsi,
+        "MACD": _macd,
+        "BB": _bb,
+        "ATR": _atr,
+        "VWAP": _vwap,
         "STOCH": _stoch,
     }
 
@@ -133,12 +134,12 @@ def _stoch(arr: np.ndarray, params: dict) -> list[dict]:
 
 
 INDICATOR_REGISTRY = {
-    "SMA":   {"description": "Simple Moving Average",         "required": ["period"]},
-    "EMA":   {"description": "Exponential Moving Average",    "required": ["period"]},
-    "RSI":   {"description": "Relative Strength Index",       "required": ["period"]},
-    "MACD":  {"description": "MACD",                          "required": ["fast", "slow", "signal"]},  # noqa: E501
-    "BB":    {"description": "Bollinger Bands",               "required": ["period", "std_dev"]},
-    "ATR":   {"description": "Average True Range",            "required": ["period"]},
-    "VWAP":  {"description": "Volume Weighted Average Price", "required": []},
-    "STOCH": {"description": "Stochastic Oscillator",        "required": ["period"]},
+    "SMA": {"description": "Simple Moving Average", "required": ["period"]},
+    "EMA": {"description": "Exponential Moving Average", "required": ["period"]},
+    "RSI": {"description": "Relative Strength Index", "required": ["period"]},
+    "MACD": {"description": "MACD", "required": ["fast", "slow", "signal"]},  # noqa: E501
+    "BB": {"description": "Bollinger Bands", "required": ["period", "std_dev"]},
+    "ATR": {"description": "Average True Range", "required": ["period"]},
+    "VWAP": {"description": "Volume Weighted Average Price", "required": []},
+    "STOCH": {"description": "Stochastic Oscillator", "required": ["period"]},
 }

@@ -3,6 +3,7 @@
 Activated only when OTEL_ENABLED=true. All imports are deferred so the
 service starts cleanly if the OTel packages are absent.
 """
+
 import logging
 import os
 

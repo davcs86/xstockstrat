@@ -3,13 +3,10 @@
 These tests are pure-Python, numpy/pandas only — no gRPC or network calls.
 Run with: pytest tests/
 """
-import math
 
-import numpy as np
 import pytest
 
 from app.services.indicators_engine import compute
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

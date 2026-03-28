@@ -7,7 +7,6 @@
  */
 import Link from 'next/link';
 import { Card, CardContent } from '@components/ui/card';
-import { Badge } from '@components/ui/badge';
 import { cn } from '@components/ui/utils';
 
 // Known namespaces from the platform. In production this could be fetched from the config service.

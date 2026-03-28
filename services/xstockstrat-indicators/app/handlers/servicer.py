@@ -1,6 +1,7 @@
 """
 IndicatorsServicer — gRPC servicer implementation.
 """
+
 import logging
 
 import grpc
@@ -14,7 +15,6 @@ log = logging.getLogger(__name__)
 
 
 class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
-
     def __init__(self, config_watcher: ConfigWatcher):
         self._cfg = config_watcher
         self._formulas: dict[str, indicators_pb2.FormulaDefinition] = {}
@@ -89,11 +89,11 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         )
 
         exit_reason_map = {
-            "success":          indicators_pb2.SANDBOX_EXIT_REASON_SUCCESS,
-            "timeout":          indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT,
-            "memory_exceeded":  indicators_pb2.SANDBOX_EXIT_REASON_MEMORY_EXCEEDED,
-            "runtime_error":    indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR,
-            "import_blocked":   indicators_pb2.SANDBOX_EXIT_REASON_IMPORT_BLOCKED,
+            "success": indicators_pb2.SANDBOX_EXIT_REASON_SUCCESS,
+            "timeout": indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT,
+            "memory_exceeded": indicators_pb2.SANDBOX_EXIT_REASON_MEMORY_EXCEEDED,
+            "runtime_error": indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR,
+            "import_blocked": indicators_pb2.SANDBOX_EXIT_REASON_IMPORT_BLOCKED,
         }
 
         output_struct = Struct()

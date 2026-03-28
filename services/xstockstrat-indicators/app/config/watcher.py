@@ -2,6 +2,7 @@
 Config watcher for xstockstrat-indicators.
 Subscribes to xstockstrat-config WatchConfig stream at startup.
 """
+
 import asyncio
 import logging
 

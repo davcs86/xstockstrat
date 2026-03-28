@@ -9,6 +9,7 @@ RunBacktest implements a real SMA crossover engine that:
 
 ScoreStrategy grades backtests using Sharpe ratio, max drawdown, and win rate.
 """
+
 import logging
 import math
 import uuid
@@ -28,9 +29,14 @@ log = logging.getLogger(__name__)
 
 
 class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
-
-    def __init__(self, config_watcher: ConfigWatcher, marketdata_channel, indicators_channel,
-                 ingest_channel, ledger_channel):
+    def __init__(
+        self,
+        config_watcher: ConfigWatcher,
+        marketdata_channel,
+        indicators_channel,
+        ingest_channel,
+        ledger_channel,
+    ):
         self._cfg = config_watcher
         self._marketdata = marketdata_pb2_grpc.MarketDataServiceStub(marketdata_channel)
         self._indicators = indicators_pb2_grpc.IndicatorsServiceStub(indicators_channel)
@@ -44,19 +50,26 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         commission = self._cfg.get_float("analysis.backtest.default_commission_pct", 0.001)
         slippage = self._cfg.get_float("analysis.backtest.default_slippage_pct", 0.0005)
 
-        log.info("running backtest id=%s strategy=%s symbols=%s",
-                 backtest_id, request.strategy_id, list(request.symbols))
+        log.info(
+            "running backtest id=%s strategy=%s symbols=%s",
+            backtest_id,
+            request.strategy_id,
+            list(request.symbols),
+        )
 
         # Emit start event
         from google.protobuf.struct_pb2 import Struct
+
         payload = Struct()
         payload.update({"backtest_id": backtest_id, "strategy_id": request.strategy_id})
-        await self._ledger.AppendEvent(ledger_pb2.AppendEventRequest(
-            event_type="analysis.backtest.started",
-            source_service="xstockstrat-analysis",
-            stream_key=f"backtest:{backtest_id}",
-            payload=payload,
-        ))
+        await self._ledger.AppendEvent(
+            ledger_pb2.AppendEventRequest(
+                event_type="analysis.backtest.started",
+                source_service="xstockstrat-analysis",
+                stream_key=f"backtest:{backtest_id}",
+                payload=payload,
+            )
+        )
 
         # Extract strategy params from the Struct
         params = {}
@@ -131,26 +144,39 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Emit completion event
         payload2 = Struct()
-        payload2.update({
-            "backtest_id": backtest_id,
-            "total_return": result.total_return,
-            "sharpe_ratio": result.sharpe_ratio,
-            "max_drawdown": result.max_drawdown,
-            "total_trades": result.total_trades,
-        })
-        await self._ledger.AppendEvent(ledger_pb2.AppendEventRequest(
-            event_type="analysis.backtest.completed",
-            source_service="xstockstrat-analysis",
-            stream_key=f"backtest:{backtest_id}",
-            payload=payload2,
-        ))
+        payload2.update(
+            {
+                "backtest_id": backtest_id,
+                "total_return": result.total_return,
+                "sharpe_ratio": result.sharpe_ratio,
+                "max_drawdown": result.max_drawdown,
+                "total_trades": result.total_trades,
+            }
+        )
+        await self._ledger.AppendEvent(
+            ledger_pb2.AppendEventRequest(
+                event_type="analysis.backtest.completed",
+                source_service="xstockstrat-analysis",
+                stream_key=f"backtest:{backtest_id}",
+                payload=payload2,
+            )
+        )
 
         return result
 
     async def _backtest_symbol(
-        self, symbol, range_msg, fast_period, slow_period,
-        signal_sources, signal_weight, technical_weight, min_conviction,
-        initial_equity, commission, slippage,
+        self,
+        symbol,
+        range_msg,
+        fast_period,
+        slow_period,
+        signal_sources,
+        signal_weight,
+        technical_weight,
+        min_conviction,
+        initial_equity,
+        commission,
+        slippage,
     ):
         """Run SMA crossover backtest for a single symbol.
 
@@ -222,7 +248,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # 4. Simulate trades bar by bar
         trades = []
         equity = initial_equity
-        position = 0.0    # shares held
+        position = 0.0  # shares held
         entry_price = 0.0
         entry_time = None
         daily_equity = [equity]
@@ -291,16 +317,18 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 entry_ts = Timestamp()
                 entry_ts.CopyFrom(entry_time)
 
-                trades.append(analysis_pb2.TradeRecord(
-                    symbol=symbol,
-                    side="long",
-                    qty=position,
-                    entry_price=entry_price,
-                    exit_price=fill_price,
-                    pnl=pnl,
-                    entry_time=entry_ts,
-                    exit_time=exit_ts,
-                ))
+                trades.append(
+                    analysis_pb2.TradeRecord(
+                        symbol=symbol,
+                        side="long",
+                        qty=position,
+                        entry_price=entry_price,
+                        exit_price=fill_price,
+                        pnl=pnl,
+                        entry_time=entry_ts,
+                        exit_time=exit_ts,
+                    )
+                )
                 equity += proceeds
                 position = 0.0
                 entry_price = 0.0
@@ -319,16 +347,18 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             now_ts.CopyFrom(last_bar.timestamp)
             entry_ts2 = Timestamp()
             entry_ts2.CopyFrom(entry_time)
-            trades.append(analysis_pb2.TradeRecord(
-                symbol=symbol,
-                side="long",
-                qty=position,
-                entry_price=entry_price,
-                exit_price=fill_price,
-                pnl=pnl,
-                entry_time=entry_ts2,
-                exit_time=now_ts,
-            ))
+            trades.append(
+                analysis_pb2.TradeRecord(
+                    symbol=symbol,
+                    side="long",
+                    qty=position,
+                    entry_price=entry_price,
+                    exit_price=fill_price,
+                    pnl=pnl,
+                    entry_time=entry_ts2,
+                    exit_time=now_ts,
+                )
+            )
             equity += proceeds
             daily_equity[-1] = equity
 
@@ -384,17 +414,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Emit ledger event
         from google.protobuf.struct_pb2 import Struct
+
         payload = Struct()
         payload.update(
             {"strategy_id": request.strategy_id, "overall_score": overall, "rating": rating}
         )
         try:
-            await self._ledger.AppendEvent(ledger_pb2.AppendEventRequest(
-                event_type="analysis.strategy.scored",
-                source_service="xstockstrat-analysis",
-                stream_key=f"strategy:{request.strategy_id}",
-                payload=payload,
-            ))
+            await self._ledger.AppendEvent(
+                ledger_pb2.AppendEventRequest(
+                    event_type="analysis.strategy.scored",
+                    source_service="xstockstrat-analysis",
+                    stream_key=f"strategy:{request.strategy_id}",
+                    payload=payload,
+                )
+            )
         except Exception as e:
             log.warning("failed to emit ledger event for score: %s", e)
 
@@ -407,8 +440,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     async def GetStrategyReport(self, request, context):
         score = self._strategies.get(request.strategy_id)
         if score is None:
-            await context.abort(grpc.StatusCode.NOT_FOUND,
-                                f"strategy {request.strategy_id} not found")
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"strategy {request.strategy_id} not found"
+            )
             return
         result = self._backtests.get(request.strategy_id)
         return analysis_pb2.StrategyReport(
@@ -419,6 +453,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _unwrap_value(v):
     """Unwrap a google.protobuf.Value to a Python scalar."""

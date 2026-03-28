@@ -3,6 +3,7 @@ Connect-RPC compatible HTTP server for xstockstrat-ingest.
 
 Exposes IngestService methods via HTTP POST (JSON encoding) and n8n webhooks.
 """
+
 import logging
 
 from fastapi import FastAPI, HTTPException, Request
@@ -25,33 +26,27 @@ def build_app(servicer) -> FastAPI:
     # ── Connect-RPC compatible routes ─────────────────────────────────────────
     @app.post("/xstockstrat.ingest.v1.IngestService/TriggerBackfill")
     async def trigger_backfill(request: Request):
-        return await _call(request, ingest_pb2.TriggerBackfillRequest,
-                           servicer.TriggerBackfill)
+        return await _call(request, ingest_pb2.TriggerBackfillRequest, servicer.TriggerBackfill)
 
     @app.post("/xstockstrat.ingest.v1.IngestService/GetBackfillStatus")
     async def get_backfill_status(request: Request):
-        return await _call(request, ingest_pb2.GetBackfillStatusRequest,
-                           servicer.GetBackfillStatus)
+        return await _call(request, ingest_pb2.GetBackfillStatusRequest, servicer.GetBackfillStatus)
 
     @app.post("/xstockstrat.ingest.v1.IngestService/ListBackfillJobs")
     async def list_backfill_jobs(request: Request):
-        return await _call(request, ingest_pb2.ListBackfillJobsRequest,
-                           servicer.ListBackfillJobs)
+        return await _call(request, ingest_pb2.ListBackfillJobsRequest, servicer.ListBackfillJobs)
 
     @app.post("/xstockstrat.ingest.v1.IngestService/NormalizeRawData")
     async def normalize_raw_data(request: Request):
-        return await _call(request, ingest_pb2.NormalizeRawDataRequest,
-                           servicer.NormalizeRawData)
+        return await _call(request, ingest_pb2.NormalizeRawDataRequest, servicer.NormalizeRawData)
 
     @app.post("/xstockstrat.ingest.v1.IngestService/IngestSignal")
     async def ingest_signal(request: Request):
-        return await _call(request, ingest_pb2.IngestSignalRequest,
-                           servicer.IngestSignal)
+        return await _call(request, ingest_pb2.IngestSignalRequest, servicer.IngestSignal)
 
     @app.post("/xstockstrat.ingest.v1.IngestService/QuerySignals")
     async def query_signals(request: Request):
-        return await _call(request, ingest_pb2.QuerySignalsRequest,
-                           servicer.QuerySignals)
+        return await _call(request, ingest_pb2.QuerySignalsRequest, servicer.QuerySignals)
 
     # ── n8n webhook routes ────────────────────────────────────────────────────
     @app.post("/webhooks/n8n/trigger-backfill")
