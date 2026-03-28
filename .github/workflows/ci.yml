@@ -22,7 +22,8 @@ jobs:
         run: buf lint packages/proto/
 
       - name: buf breaking (against origin/main)
-        run: buf breaking packages/proto/ --against '.git#branch=origin/main'
+        working-directory: packages/proto
+        run: buf breaking . --against '../../.git#branch=origin/main,subdir=packages/proto'
 
   go-lint:
     name: Go lint and test (${{ matrix.service }})

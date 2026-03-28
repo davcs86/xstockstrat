@@ -7,10 +7,9 @@ import logging
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from gen.ingest.v1 import ingest_pb2
 from google.protobuf import json_format
 from google.protobuf.message import DecodeError
-
-from gen.ingest.v1 import ingest_pb2
 
 log = logging.getLogger(__name__)
 
@@ -93,8 +92,9 @@ def build_app(servicer) -> FastAPI:
         }
         """
         body = await request.json()
+        from datetime import datetime
+
         from google.protobuf.timestamp_pb2 import Timestamp
-        from datetime import datetime, timezone
 
         def _parse_ts(s: str | None) -> Timestamp | None:
             if not s:

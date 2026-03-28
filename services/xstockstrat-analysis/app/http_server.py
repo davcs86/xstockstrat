@@ -7,10 +7,9 @@ import logging
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from gen.analysis.v1 import analysis_pb2
 from google.protobuf import json_format
 from google.protobuf.message import DecodeError
-
-from gen.analysis.v1 import analysis_pb2
 
 log = logging.getLogger(__name__)
 

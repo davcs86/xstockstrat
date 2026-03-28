@@ -76,7 +76,7 @@ type Watcher struct {
 }
 
 func NewWatcher(endpoint, namespace string) (*Watcher, error) {
-	conn, err := grpc.Dial(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("dial config service: %w", err)
 	}

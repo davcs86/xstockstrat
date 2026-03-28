@@ -4,11 +4,8 @@ Subscribes to xstockstrat-config WatchConfig stream at startup.
 """
 import asyncio
 import logging
-import time
-from typing import Optional
 
 import grpc
-
 from gen.config.v1 import config_pb2, config_pb2_grpc
 
 log = logging.getLogger(__name__)
@@ -23,7 +20,7 @@ class ConfigWatcher:
     def __init__(self, endpoint: str, namespace: str):
         self.endpoint = endpoint
         self.namespace = namespace
-        self._snapshot: Optional[config_pb2.ConfigSnapshot] = None
+        self._snapshot: config_pb2.ConfigSnapshot | None = None
         self._snapshot_event = asyncio.Event()
         self._channel = grpc.aio.insecure_channel(endpoint)
         self._stub = config_pb2_grpc.ConfigServiceStub(self._channel)
@@ -53,7 +50,7 @@ class ConfigWatcher:
     async def wait_for_snapshot(self, timeout_seconds: float = 10.0):
         try:
             await asyncio.wait_for(self._snapshot_event.wait(), timeout=timeout_seconds)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise RuntimeError(
                 f"Timed out waiting for config snapshot from {self.endpoint} "
                 f"namespace={self.namespace}"
@@ -102,5 +99,7 @@ class ConfigWatcher:
 
     @property
     def sandbox_allowed_imports(self) -> list[str]:
-        raw = self.get_str("indicators.sandbox.allowed_imports", default="numpy,pandas,math,statistics")
+        raw = self.get_str(
+            "indicators.sandbox.allowed_imports", default="numpy,pandas,math,statistics"
+        )
         return [m.strip() for m in raw.split(",") if m.strip()]

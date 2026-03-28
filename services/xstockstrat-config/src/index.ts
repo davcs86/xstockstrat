@@ -4,7 +4,6 @@ initTelemetry();
 import * as grpc from '@grpc/grpc-js';
 import * as http from 'http';
 import { Pool } from 'pg';
-import { ConnectRouter } from '@connectrpc/connect';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { getLogger } from './services/logger';
 import { ConfigServiceImpl } from './grpc/configServiceImpl';

@@ -18,13 +18,11 @@ Security model:
 import json
 import logging
 import os
-import resource
 import subprocess
 import sys
 import tempfile
 import textwrap
 from dataclasses import dataclass
-from typing import Any
 
 log = logging.getLogger(__name__)
 

@@ -147,7 +147,7 @@ export class LedgerServiceImpl {
         if (!req.event_type || event.event_type === req.event_type) {
           call.write(event);
         }
-      } catch {}
+      } catch { /* ignore parse errors for malformed NOTIFY payloads */ }
     });
 
     call.on('cancelled', () => {
