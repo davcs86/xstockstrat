@@ -57,6 +57,7 @@ jobs:
         with:
           version: v1.59
           working-directory: services/${{ matrix.service }}
+          args: --modules-download-mode=mod
 
       - name: go test with coverage
         run: go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic
