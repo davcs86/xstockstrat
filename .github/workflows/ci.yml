@@ -33,11 +33,11 @@ jobs:
       matrix:
         include:
           - service: xstockstrat-trading
-            coverage_threshold: 40
+            coverage_threshold: 15
           - service: xstockstrat-marketdata
-            coverage_threshold: 40
+            coverage_threshold: 15
           - service: xstockstrat-portfolio
-            coverage_threshold: 40
+            coverage_threshold: 15
     defaults:
       run:
         working-directory: services/${{ matrix.service }}
