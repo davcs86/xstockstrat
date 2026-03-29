@@ -13,7 +13,7 @@ import { createNodeHttpTransport } from '@connectrpc/connect-node';
 const ANALYSIS_BASE_URL =
   process.env.ANALYSIS_HTTP_ENDPOINT ?? 'http://xstockstrat-analysis:8056';
 
-const transport = createNodeHttpTransport({ baseUrl: ANALYSIS_BASE_URL, httpVersion: '2' });
+const transport = createNodeHttpTransport({ baseUrl: ANALYSIS_BASE_URL, httpVersion: '1.1' });
 
 const AnalysisServiceDef = {
   typeName: 'xstockstrat.analysis.v1.AnalysisService',

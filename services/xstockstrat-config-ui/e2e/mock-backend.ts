@@ -58,7 +58,12 @@ export function startMockBackend(): Promise<void> {
         'Content-Type': 'application/connect+json',
         'Access-Control-Allow-Origin': '*',
       });
-      res.end(JSON.stringify(body));
+      const jsonBytes = Buffer.from(JSON.stringify(body));
+      const envelope = Buffer.alloc(5 + jsonBytes.length);
+      envelope[0] = 0; // flags: no compression, regular message
+      envelope.writeUInt32BE(jsonBytes.length, 1); // 4-byte BE message length
+      jsonBytes.copy(envelope, 5);
+      res.end(envelope);
     });
 
     server.on('error', reject);
