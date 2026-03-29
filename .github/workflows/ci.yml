@@ -51,6 +51,8 @@ jobs:
 
       - name: go mod download
         run: go mod download
+        env:
+          GOWORK: "off"
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
@@ -58,6 +60,8 @@ jobs:
           version: v1.59
           working-directory: services/${{ matrix.service }}
           args: --modules-download-mode=mod
+        env:
+          GOWORK: "off"
 
       - name: go test with coverage
         run: go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic

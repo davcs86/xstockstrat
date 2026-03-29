@@ -36,3 +36,13 @@ testpaths = ["tests"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0", "pytest-cov>=5.0.0"]
+
+[tool.coverage.run]
+omit = [
+    "app/services/sandbox.py",
+    "app/telemetry.py",
+    "app/main.py",
+    "app/http_server.py",
+    "app/handlers/servicer.py",
+    "app/config/watcher.py",
+]

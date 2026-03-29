@@ -54,7 +54,7 @@ export function startMockBackend(): Promise<void> {
       const path = req.url ?? '/';
       const body = RESPONSES[path] ?? {};
       res.writeHead(200, {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/connect+json',
         'Access-Control-Allow-Origin': '*',
       });
       res.end(JSON.stringify(body));
