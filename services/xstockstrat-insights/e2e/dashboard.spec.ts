@@ -41,7 +41,7 @@ test.describe('InsightsDashboard', () => {
 
     // Each strategy's ID is shown in the list (font-mono span)
     for (const s of MOCK_STRATEGIES) {
-      await expect(page.getByText(s.strategyId)).toBeVisible({ timeout: 5000 });
+      await expect(page.getByText(s.strategyId, { exact: true })).toBeVisible({ timeout: 5000 });
     }
   });
 
