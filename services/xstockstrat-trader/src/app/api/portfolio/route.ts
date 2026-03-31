@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { portfolioClient } from '@/lib/connectClients';
+
+const PORTFOLIO_BASE_URL =
+  process.env.PORTFOLIO_HTTP_ENDPOINT ?? 'http://xstockstrat-portfolio:8052';
 
 function toTradingModeEnum(mode?: string | null): number {
   if (mode === 'live') return 2;
@@ -12,10 +14,18 @@ export async function GET(req: NextRequest) {
   const userId = searchParams.get('user_id') ?? 'default';
   const tradingMode = toTradingModeEnum(searchParams.get('trading_mode'));
   try {
-    const portfolio = await (portfolioClient as any).getPortfolio({
-      userId,
-      ...(tradingMode !== 0 && { tradingMode }),
-    });
+    const res = await fetch(
+      `${PORTFOLIO_BASE_URL}/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/connect+json' },
+        body: JSON.stringify({
+          userId,
+          ...(tradingMode !== 0 && { tradingMode }),
+        }),
+      },
+    );
+    const portfolio = await res.json();
     return NextResponse.json(portfolio);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

@@ -22,6 +22,9 @@ async function rpc(method: string, body: object): Promise<Response> {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    if (!body.symbol) {
+      return NextResponse.json({ error: 'symbol is required' }, { status: 400 });
+    }
     const res = await rpc('xstockstrat.trading.v1.TradingService/PlaceOrder', {
       symbol: body.symbol,
       side: body.side === 'buy' ? 1 : 2,
