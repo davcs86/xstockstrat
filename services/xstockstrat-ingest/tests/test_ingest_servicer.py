@@ -5,20 +5,19 @@ The servicer is instantiated with MagicMock channels; internal state
 (_jobs, _db) is manipulated directly to exercise business logic without
 a running gRPC server or database.
 """
+
 import asyncio
-import csv
-import io
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from gen.common.v1 import common_pb2
+from gen.config.v1 import config_pb2
+from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: F401 (imported via conftest path)
 from google.protobuf.timestamp_pb2 import Timestamp
 
-from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: F401 (imported via conftest path)
-from gen.config.v1 import config_pb2
-from gen.common.v1 import common_pb2
-from app.handlers.servicer import IngestServicer
 from app.config.watcher import ConfigWatcher
+from app.handlers.servicer import IngestServicer
 
 
 def make_servicer() -> IngestServicer:
@@ -61,9 +60,7 @@ class TestListBackfillJobs:
         svc._jobs["j2"] = self._make_job("j2", ingest_pb2.BACKFILL_STATUS_COMPLETED)
         svc._jobs["j3"] = self._make_job("j3", ingest_pb2.BACKFILL_STATUS_COMPLETED)
 
-        req = ingest_pb2.ListBackfillJobsRequest(
-            status_filter=ingest_pb2.BACKFILL_STATUS_COMPLETED
-        )
+        req = ingest_pb2.ListBackfillJobsRequest(status_filter=ingest_pb2.BACKFILL_STATUS_COMPLETED)
         resp = await svc.ListBackfillJobs(req, context=MagicMock())
         assert len(resp.jobs) == 2
         assert all(j.status == ingest_pb2.BACKFILL_STATUS_COMPLETED for j in resp.jobs)
@@ -403,7 +400,9 @@ class TestIngestSignal:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
 
-        resp = await svc.IngestSignal(self._make_signal_req(has_valid_until=True), context=MagicMock())
+        resp = await svc.IngestSignal(
+            self._make_signal_req(has_valid_until=True), context=MagicMock()
+        )
         assert resp.signal_id == 99
 
     @pytest.mark.asyncio

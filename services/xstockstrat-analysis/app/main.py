@@ -5,6 +5,7 @@ Ports:
   GRPC_PORT (50056)  — gRPC (HTTP/2), internal service-to-service
   HTTP_PORT (8056)   — Connect-RPC compatible HTTP (JSON), browser + external clients
 """
+
 import asyncio
 import logging
 import os
@@ -12,14 +13,14 @@ import signal
 
 import grpc
 import uvicorn
+from gen.analysis.v1 import analysis_pb2_grpc
+from gen.analysis.v1.analysis_pb2 import DESCRIPTOR as ANALYSIS_DESCRIPTOR
 from grpc_reflection.v1alpha import reflection
 
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer
 from app.http_server import build_app
 from app.telemetry import init_telemetry
-from gen.analysis.v1 import analysis_pb2_grpc
-from gen.analysis.v1.analysis_pb2 import DESCRIPTOR as ANALYSIS_DESCRIPTOR
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
@@ -36,7 +37,9 @@ LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
 async def start_http_server(servicer: AnalysisServicer) -> None:
     """Start FastAPI HTTP server on HTTP_PORT (Connect-RPC compatible JSON API)."""
     app = build_app(servicer)
-    config = uvicorn.Config(app=app, host="0.0.0.0", port=HTTP_PORT, loop="asyncio", log_level="info")
+    config = uvicorn.Config(
+        app=app, host="0.0.0.0", port=HTTP_PORT, loop="asyncio", log_level="info"
+    )
     server = uvicorn.Server(config)
     log.info("analysis HTTP service starting on port %d", HTTP_PORT)
     await server.serve()

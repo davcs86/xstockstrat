@@ -3,13 +3,10 @@
 These tests are pure-Python, numpy/pandas only — no gRPC or network calls.
 Run with: pytest tests/
 """
-import math
 
-import numpy as np
 import pytest
 
 from app.services.indicators_engine import compute
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -106,16 +103,16 @@ class TestMACD:
     def test_macd_keys(self):
         result = compute("MACD", PRICES_20, {"fast": 3, "slow": 6, "signal": 3})
         for r in result:
-            # Each entry must have macd, signal, histogram keys.
-            assert "macd" in r
+            # Each entry must have value (MACD line), signal, histogram keys.
+            assert "value" in r
             assert "signal" in r
             assert "histogram" in r
 
     def test_macd_histogram_equals_macd_minus_signal(self):
         result = compute("MACD", PRICES_20, {"fast": 3, "slow": 6, "signal": 3})
         for r in result:
-            if r["macd"] is not None and r["signal"] is not None:
-                assert r["histogram"] == pytest.approx(r["macd"] - r["signal"], abs=1e-6)
+            if r["value"] is not None and r["signal"] is not None:
+                assert r["histogram"] == pytest.approx(r["value"] - r["signal"], abs=1e-6)
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +125,7 @@ class TestBB:
         result = compute("BB", PRICES_20, {"period": 5, "std_dev": 2})
         for r in result:
             assert "upper" in r
-            assert "middle" in r
+            assert "value" in r
             assert "lower" in r
 
     def test_bb_upper_above_lower(self):
@@ -140,8 +137,8 @@ class TestBB:
     def test_bb_middle_between_bands(self):
         result = compute("BB", PRICES_20, {"period": 5, "std_dev": 2})
         for r in result:
-            if all(r[k] is not None for k in ("upper", "middle", "lower")):
-                assert r["lower"] <= r["middle"] <= r["upper"]
+            if all(r[k] is not None for k in ("upper", "value", "lower")):
+                assert r["lower"] <= r["value"] <= r["upper"]
 
 
 # ---------------------------------------------------------------------------

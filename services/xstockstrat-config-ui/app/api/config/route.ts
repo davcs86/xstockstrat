@@ -5,34 +5,17 @@
  * POST /api/config                                        → SetConfig
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { createNodeHttpTransport } from '@connectrpc/connect-node';
-import { createClient } from '@connectrpc/connect';
 
 const CONFIG_ENDPOINT =
   process.env.CONFIG_ENDPOINT ?? 'http://xstockstrat-config:8060';
 
-const transport = createNodeHttpTransport({ baseUrl: CONFIG_ENDPOINT, httpVersion: '2' });
-
-// Minimal service descriptor for connect client (replace with buf-generated once stubs exist)
-const ConfigServiceDef = {
-  typeName: 'xstockstrat.config.v1.ConfigService',
-  methods: {
-    listKeys: {
-      name: 'ListKeys',
-      I: {} as any,
-      O: {} as any,
-      kind: 'unary' as const,
-    },
-    setConfig: {
-      name: 'SetConfig',
-      I: {} as any,
-      O: {} as any,
-      kind: 'unary' as const,
-    },
-  },
-} as const;
-
-const client = createClient(ConfigServiceDef as any, transport);
+async function rpc(method: string, body: object): Promise<Response> {
+  return fetch(`${CONFIG_ENDPOINT}/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/connect+json' },
+    body: JSON.stringify(body),
+  });
+}
 
 function envToProto(env: string): number {
   return env === 'production' ? 2 : 1;
@@ -48,11 +31,12 @@ export async function GET(req: NextRequest) {
   const mode = searchParams.get('mode') ?? 'paper';
 
   try {
-    const response = await (client as any).listKeys({
+    const res = await rpc('xstockstrat.config.v1.ConfigService/ListKeys', {
       namespace,
       environment: envToProto(env),
       tradingMode: modeToProto(mode),
     });
+    const response = await res.json();
     return NextResponse.json(response);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -64,7 +48,7 @@ export async function POST(req: NextRequest) {
   const { namespace, key, value, env, mode, author, reason } = body;
 
   try {
-    const response = await (client as any).setConfig({
+    const res = await rpc('xstockstrat.config.v1.ConfigService/SetConfig', {
       namespace,
       key,
       value: { stringVal: String(value) },
@@ -73,6 +57,7 @@ export async function POST(req: NextRequest) {
       environment: envToProto(env ?? 'dev'),
       tradingMode: modeToProto(mode ?? 'paper'),
     });
+    const response = await res.json();
     return NextResponse.json(response);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

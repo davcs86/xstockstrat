@@ -11,7 +11,7 @@ import { createClient } from '@connectrpc/connect';
 import { createNodeHttpTransport } from '@connectrpc/connect-node';
 
 function makeTransport(baseUrl: string) {
-  return createNodeHttpTransport({ baseUrl, httpVersion: '2' });
+  return createNodeHttpTransport({ baseUrl, httpVersion: '1.1' });
 }
 
 // ── Base URLs ──────────────────────────────────────────────────────────────

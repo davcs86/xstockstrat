@@ -145,7 +145,7 @@ describe('revokeToken', () => {
     const call = makeCall({ token: '' });
 
     await new Promise<void>((resolve) => {
-      impl.revokeToken(call, (err: any, resp: any) => {
+      impl.revokeToken(call, (_err: any, _resp: any) => {
         // Either succeeds with revoked:true or errors — just verify no crash
         resolve();
       });

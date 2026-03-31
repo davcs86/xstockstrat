@@ -15,26 +15,60 @@ Security model:
   - No filesystem writes, no network access (no socket/urllib/requests)
   - __builtins__ filtered to safe subset
 """
+
 import json
 import logging
 import os
-import resource
 import subprocess
 import sys
 import tempfile
 import textwrap
 from dataclasses import dataclass
-from typing import Any
 
 log = logging.getLogger(__name__)
 
 # Built-in functions allowed in sandbox (conservative subset)
 _SAFE_BUILTINS = {
-    "abs", "all", "any", "bool", "dict", "dir", "divmod", "enumerate",
-    "filter", "float", "format", "frozenset", "getattr", "hasattr", "hash",
-    "int", "isinstance", "issubclass", "iter", "len", "list", "map", "max",
-    "min", "next", "object", "pow", "print", "range", "repr", "reversed",
-    "round", "set", "slice", "sorted", "str", "sum", "tuple", "type", "zip",
+    "abs",
+    "all",
+    "any",
+    "bool",
+    "dict",
+    "dir",
+    "divmod",
+    "enumerate",
+    "filter",
+    "float",
+    "format",
+    "frozenset",
+    "getattr",
+    "hasattr",
+    "hash",
+    "int",
+    "isinstance",
+    "issubclass",
+    "iter",
+    "len",
+    "list",
+    "map",
+    "max",
+    "min",
+    "next",
+    "object",
+    "pow",
+    "print",
+    "range",
+    "repr",
+    "reversed",
+    "round",
+    "set",
+    "slice",
+    "sorted",
+    "str",
+    "sum",
+    "tuple",
+    "type",
+    "zip",
 }
 
 
@@ -142,7 +176,7 @@ def execute_formula(
         for line in stdout.splitlines():
             if line.startswith("__OUTPUT__:"):
                 try:
-                    output = json.loads(line[len("__OUTPUT__:"):])
+                    output = json.loads(line[len("__OUTPUT__:") :])
                 except json.JSONDecodeError:
                     pass
 

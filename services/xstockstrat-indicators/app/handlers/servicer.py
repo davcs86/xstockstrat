@@ -1,21 +1,20 @@
 """
 IndicatorsServicer — gRPC servicer implementation.
 """
+
 import logging
-from typing import Any
 
 import grpc
+from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc
 from google.protobuf.struct_pb2 import Struct
 
 from app.config.watcher import ConfigWatcher
 from app.services import indicators_engine, sandbox
-from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc
 
 log = logging.getLogger(__name__)
 
 
 class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
-
     def __init__(self, config_watcher: ConfigWatcher):
         self._cfg = config_watcher
         self._formulas: dict[str, indicators_pb2.FormulaDefinition] = {}
@@ -54,13 +53,17 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         if request.formula_id:
             formula = self._formulas.get(request.formula_id)
             if formula is None:
-                await context.abort(grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found")
+                await context.abort(
+                    grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
+                )
                 return
             source = formula.source
         elif request.formula_source:
             source = request.formula_source
         else:
-            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "formula_id or formula_source required")
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT, "formula_id or formula_source required"
+            )
             return
 
         # Resolve sandbox limits from config (override if specified in request)
@@ -86,11 +89,11 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         )
 
         exit_reason_map = {
-            "success":          indicators_pb2.SANDBOX_EXIT_REASON_SUCCESS,
-            "timeout":          indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT,
-            "memory_exceeded":  indicators_pb2.SANDBOX_EXIT_REASON_MEMORY_EXCEEDED,
-            "runtime_error":    indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR,
-            "import_blocked":   indicators_pb2.SANDBOX_EXIT_REASON_IMPORT_BLOCKED,
+            "success": indicators_pb2.SANDBOX_EXIT_REASON_SUCCESS,
+            "timeout": indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT,
+            "memory_exceeded": indicators_pb2.SANDBOX_EXIT_REASON_MEMORY_EXCEEDED,
+            "runtime_error": indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR,
+            "import_blocked": indicators_pb2.SANDBOX_EXIT_REASON_IMPORT_BLOCKED,
         }
 
         output_struct = Struct()
@@ -104,7 +107,9 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             execution_ms=result.execution_ms,
             memory_used_bytes=result.memory_used_bytes,
             error=result.error,
-            exit_reason=exit_reason_map.get(result.exit_reason, indicators_pb2.SANDBOX_EXIT_REASON_UNSPECIFIED),
+            exit_reason=exit_reason_map.get(
+                result.exit_reason, indicators_pb2.SANDBOX_EXIT_REASON_UNSPECIFIED
+            ),
         )
 
     async def ListIndicators(self, request, context):
@@ -120,8 +125,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
 
     async def RegisterFormula(self, request, context):
         import uuid
+
         from google.protobuf.timestamp_pb2 import Timestamp
-        import time
 
         formula_id = str(uuid.uuid4())
         now = Timestamp()
@@ -143,6 +148,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
     async def GetFormula(self, request, context):
         formula = self._formulas.get(request.formula_id)
         if formula is None:
-            await context.abort(grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found")
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
+            )
             return
         return formula

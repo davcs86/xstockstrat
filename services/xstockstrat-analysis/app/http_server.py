@@ -3,14 +3,14 @@ Connect-RPC compatible HTTP server for xstockstrat-analysis.
 
 Exposes AnalysisService methods via HTTP POST (JSON encoding) and n8n webhooks.
 """
+
 import logging
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from gen.analysis.v1 import analysis_pb2
 from google.protobuf import json_format
 from google.protobuf.message import DecodeError
-
-from gen.analysis.v1 import analysis_pb2
 
 log = logging.getLogger(__name__)
 
@@ -26,23 +26,21 @@ def build_app(servicer) -> FastAPI:
     # ── Connect-RPC compatible routes ─────────────────────────────────────────
     @app.post("/xstockstrat.analysis.v1.AnalysisService/RunBacktest")
     async def run_backtest(request: Request):
-        return await _call(request, analysis_pb2.RunBacktestRequest,
-                           servicer.RunBacktest)
+        return await _call(request, analysis_pb2.RunBacktestRequest, servicer.RunBacktest)
 
     @app.post("/xstockstrat.analysis.v1.AnalysisService/ScoreStrategy")
     async def score_strategy(request: Request):
-        return await _call(request, analysis_pb2.ScoreStrategyRequest,
-                           servicer.ScoreStrategy)
+        return await _call(request, analysis_pb2.ScoreStrategyRequest, servicer.ScoreStrategy)
 
     @app.post("/xstockstrat.analysis.v1.AnalysisService/ListStrategies")
     async def list_strategies(request: Request):
-        return await _call(request, analysis_pb2.ListStrategiesRequest,
-                           servicer.ListStrategies)
+        return await _call(request, analysis_pb2.ListStrategiesRequest, servicer.ListStrategies)
 
     @app.post("/xstockstrat.analysis.v1.AnalysisService/GetStrategyReport")
     async def get_strategy_report(request: Request):
-        return await _call(request, analysis_pb2.GetStrategyReportRequest,
-                           servicer.GetStrategyReport)
+        return await _call(
+            request, analysis_pb2.GetStrategyReportRequest, servicer.GetStrategyReport
+        )
 
     # ── n8n webhook routes ────────────────────────────────────────────────────
     @app.post("/webhooks/n8n/run-backtest")

@@ -5,9 +5,9 @@
  * Environment and trading_mode are selected globally via the EnvModeSwitcher
  * and stored in a URL search param: ?env=dev&mode=paper (defaults).
  */
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent } from '@components/ui/card';
-import { Badge } from '@components/ui/badge';
 import { cn } from '@components/ui/utils';
 
 // Known namespaces from the platform. In production this could be fetched from the config service.
@@ -27,6 +27,9 @@ const KNOWN_NAMESPACES = [
 type SearchParams = { env?: string; mode?: string };
 
 export default function HomePage({ searchParams }: { searchParams: SearchParams }) {
+  if (!searchParams.env && !searchParams.mode) {
+    redirect('/?env=dev&mode=paper');
+  }
   const env = searchParams.env ?? 'dev';
   const mode = searchParams.mode ?? 'paper';
 

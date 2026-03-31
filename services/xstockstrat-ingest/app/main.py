@@ -8,6 +8,7 @@ Ports:
   GRPC_PORT (50055)  — gRPC (HTTP/2), internal service-to-service
   HTTP_PORT (8055)   — Connect-RPC compatible HTTP (JSON), browser + external clients
 """
+
 import asyncio
 import logging
 import os
@@ -16,14 +17,14 @@ import signal
 import asyncpg
 import grpc
 import uvicorn
+from gen.ingest.v1 import ingest_pb2_grpc
+from gen.ingest.v1.ingest_pb2 import DESCRIPTOR as INGEST_DESCRIPTOR
 from grpc_reflection.v1alpha import reflection
 
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IngestServicer
 from app.http_server import build_app
 from app.telemetry import init_telemetry
-from gen.ingest.v1 import ingest_pb2_grpc
-from gen.ingest.v1.ingest_pb2 import DESCRIPTOR as INGEST_DESCRIPTOR
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
@@ -33,13 +34,17 @@ HTTP_PORT = int(os.environ.get("HTTP_PORT", "8055"))
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
 MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053")
 LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://xstockstrat:devpassword@localhost:5432/xstockstrat")
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", "postgres://xstockstrat:devpassword@localhost:5432/xstockstrat"
+)
 
 
 async def start_http_server(servicer: IngestServicer) -> None:
     """Start FastAPI HTTP server on HTTP_PORT (Connect-RPC compatible JSON API)."""
     app = build_app(servicer)
-    config = uvicorn.Config(app=app, host="0.0.0.0", port=HTTP_PORT, loop="asyncio", log_level="info")
+    config = uvicorn.Config(
+        app=app, host="0.0.0.0", port=HTTP_PORT, loop="asyncio", log_level="info"
+    )
     server = uvicorn.Server(config)
     log.info("ingest HTTP service starting on port %d", HTTP_PORT)
     await server.serve()
@@ -84,6 +89,7 @@ async def serve():
         async def _stop():
             await grpc_server.stop(grace=5)
             await db_pool.close()
+
         asyncio.get_event_loop().create_task(_stop())
 
     signal.signal(signal.SIGINT, handle_shutdown)

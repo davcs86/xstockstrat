@@ -8,6 +8,7 @@ Ports:
   GRPC_PORT (50054)  — gRPC (HTTP/2), internal service-to-service
   HTTP_PORT (8054)   — Connect-RPC compatible HTTP (JSON), browser + external clients
 """
+
 import asyncio
 import logging
 import os
@@ -15,14 +16,14 @@ import signal
 
 import grpc
 import uvicorn
+from gen.indicators.v1 import indicators_pb2_grpc
+from gen.indicators.v1.indicators_pb2 import DESCRIPTOR as INDICATORS_DESCRIPTOR
 from grpc_reflection.v1alpha import reflection
 
 from app.config.watcher import ConfigWatcher
-from app.telemetry import init_telemetry
 from app.handlers.servicer import IndicatorsServicer
 from app.http_server import build_app
-from gen.indicators.v1 import indicators_pb2_grpc
-from gen.indicators.v1.indicators_pb2 import DESCRIPTOR as INDICATORS_DESCRIPTOR
+from app.telemetry import init_telemetry
 
 logging.basicConfig(
     level=logging.INFO,

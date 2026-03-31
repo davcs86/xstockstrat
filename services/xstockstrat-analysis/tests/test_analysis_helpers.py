@@ -4,15 +4,14 @@ Unit tests for pure helper functions in AnalysisServicer.
 Tests target _compute_metrics, _unwrap_value, and _compute_signal_score —
 all module-level functions with no gRPC dependencies.
 """
-import math
+
+from datetime import UTC
 from unittest.mock import MagicMock
 
 import pytest
-from google.protobuf.struct_pb2 import Value, ListValue, Struct
-from google.protobuf.timestamp_pb2 import Timestamp
+from google.protobuf.struct_pb2 import ListValue, Struct, Value
 
-from app.handlers.servicer import _compute_metrics, _unwrap_value, _compute_signal_score
-
+from app.handlers.servicer import _compute_metrics, _compute_signal_score, _unwrap_value
 
 # ---------------------------------------------------------------------------
 # _compute_metrics
@@ -138,11 +137,14 @@ def _make_bar(timestamp_seconds: int = 1704067200) -> MagicMock:
 
 
 def _seconds_to_datetime(seconds: int):
-    from datetime import datetime, timezone
-    return datetime.fromtimestamp(seconds, tz=timezone.utc).replace(tzinfo=None)
+    from datetime import datetime
+
+    return datetime.fromtimestamp(seconds, tz=UTC).replace(tzinfo=None)
 
 
-def _make_signal(direction: str, conviction: float, valid_from_sec: int = 0, valid_until_sec: int = 0) -> MagicMock:
+def _make_signal(
+    direction: str, conviction: float, valid_from_sec: int = 0, valid_until_sec: int = 0
+) -> MagicMock:
     sig = MagicMock()
     sig.direction = direction
     sig.conviction = conviction

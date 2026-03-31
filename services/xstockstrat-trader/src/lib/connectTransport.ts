@@ -20,7 +20,7 @@ const isServer = typeof window === 'undefined';
  */
 export function createTransport(baseUrl: string) {
   if (isServer) {
-    return createNodeHttpTransport({ baseUrl, httpVersion: '2' });
+    return createNodeHttpTransport({ baseUrl, httpVersion: '1.1' });
   }
   return createConnectTransport({ baseUrl });
 }

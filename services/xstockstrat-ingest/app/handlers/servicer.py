@@ -2,25 +2,27 @@
 IngestServicer — orchestrates historical backfills via xstockstrat-marketdata,
 normalises raw data payloads, and persists newsletter signals to TimescaleDB.
 """
+
 import asyncio
 import logging
 import uuid
-from datetime import timezone
+from datetime import UTC
 
 import grpc
+from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc
+from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
+from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
-from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc
-from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc
-from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
 
 log = logging.getLogger(__name__)
 
 
 class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
-
-    def __init__(self, config_watcher: ConfigWatcher, marketdata_channel, ledger_channel, db_pool=None):
+    def __init__(
+        self, config_watcher: ConfigWatcher, marketdata_channel, ledger_channel, db_pool=None
+    ):  # noqa: E501
         self._cfg = config_watcher
         self._marketdata = marketdata_pb2_grpc.MarketDataServiceStub(marketdata_channel)
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
@@ -63,23 +65,33 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 if resp.failed_symbols
                 else ingest_pb2.BACKFILL_STATUS_COMPLETED
             )
-            log.info("backfill job %s completed bars=%d failed=%s", job_id, resp.bars_written, resp.failed_symbols)
+            log.info(
+                "backfill job %s completed bars=%d failed=%s",
+                job_id,
+                resp.bars_written,
+                resp.failed_symbols,
+            )
 
             # Emit ledger event
             from google.protobuf.struct_pb2 import Struct
+
             payload = Struct()
-            payload.update({
-                "job_id": job_id,
-                "symbols": list(request.symbols),
-                "bars_written": resp.bars_written,
-                "failed_symbols": list(resp.failed_symbols),
-            })
-            await self._ledger.AppendEvent(ledger_pb2.AppendEventRequest(
-                event_type="ingest.backfill.completed",
-                source_service="xstockstrat-ingest",
-                stream_key=f"backfill:{job_id}",
-                payload=payload,
-            ))
+            payload.update(
+                {
+                    "job_id": job_id,
+                    "symbols": list(request.symbols),
+                    "bars_written": resp.bars_written,
+                    "failed_symbols": list(resp.failed_symbols),
+                }
+            )
+            await self._ledger.AppendEvent(
+                ledger_pb2.AppendEventRequest(
+                    event_type="ingest.backfill.completed",
+                    source_service="xstockstrat-ingest",
+                    stream_key=f"backfill:{job_id}",
+                    payload=payload,
+                )
+            )
         except Exception as e:
             job.status = ingest_pb2.BACKFILL_STATUS_FAILED
             job.error = str(e)
@@ -114,13 +126,16 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         return ingest_pb2.NormalizeRawDataResponse(rows_normalized=rows, errors=errors)
 
     async def _normalize_csv(self, raw: bytes) -> int:
-        import csv, io
+        import csv
+        import io
+
         reader = csv.DictReader(io.StringIO(raw.decode()))
         count = sum(1 for _ in reader)
         return count
 
     async def _normalize_json(self, raw: bytes, fmt: str) -> int:
         import json
+
         data = json.loads(raw)
         return len(data) if isinstance(data, list) else 1
 
@@ -132,20 +147,23 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
 
         signal = request.signal
         if not signal.source or not signal.symbol or not signal.direction:
-            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "source, symbol, and direction are required")
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT, "source, symbol, and direction are required"
+            )
             return
 
         valid_directions = {"buy", "sell", "hold", "watchlist"}
         if signal.direction not in valid_directions:
-            await context.abort(grpc.StatusCode.INVALID_ARGUMENT,
-                                f"direction must be one of {valid_directions}")
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT, f"direction must be one of {valid_directions}"
+            )
             return
 
         # Convert protobuf Timestamps to Python datetimes
-        valid_from = signal.valid_from.ToDatetime(tzinfo=timezone.utc)
+        valid_from = signal.valid_from.ToDatetime(tzinfo=UTC)
         valid_until = None
         if signal.HasField("valid_until") and signal.valid_until.seconds > 0:
-            valid_until = signal.valid_until.ToDatetime(tzinfo=timezone.utc)
+            valid_until = signal.valid_until.ToDatetime(tzinfo=UTC)
 
         conviction = signal.conviction if signal.conviction > 0.0 else None
 
@@ -153,7 +171,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             row = await self._db.fetchrow(
                 """
                 INSERT INTO ingest.newsletter_signals
-                    (source, symbol, direction, conviction, valid_from, valid_until, headline, raw_url, tags)
+                    (source, symbol, direction, conviction,
+                     valid_from, valid_until, headline, raw_url, tags)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 RETURNING id
                 """,
@@ -173,25 +192,35 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             await context.abort(grpc.StatusCode.INTERNAL, f"database error: {e}")
             return
 
-        log.info("ingested signal id=%d source=%s symbol=%s direction=%s",
-                 signal_id, signal.source, signal.symbol, signal.direction)
+        log.info(
+            "ingested signal id=%d source=%s symbol=%s direction=%s",
+            signal_id,
+            signal.source,
+            signal.symbol,
+            signal.direction,
+        )
 
         # Emit ledger event
         from google.protobuf.struct_pb2 import Struct
+
         payload = Struct()
-        payload.update({
-            "signal_id": signal_id,
-            "source": signal.source,
-            "symbol": signal.symbol,
-            "direction": signal.direction,
-        })
+        payload.update(
+            {
+                "signal_id": signal_id,
+                "source": signal.source,
+                "symbol": signal.symbol,
+                "direction": signal.direction,
+            }
+        )
         try:
-            await self._ledger.AppendEvent(ledger_pb2.AppendEventRequest(
-                event_type="ingest.signal.ingested",
-                source_service="xstockstrat-ingest",
-                stream_key=f"signal:{signal.source}:{signal.symbol}",
-                payload=payload,
-            ))
+            await self._ledger.AppendEvent(
+                ledger_pb2.AppendEventRequest(
+                    event_type="ingest.signal.ingested",
+                    source_service="xstockstrat-ingest",
+                    stream_key=f"signal:{signal.source}:{signal.symbol}",
+                    payload=payload,
+                )
+            )
         except Exception as e:
             log.warning("failed to emit ledger event for signal %d: %s", signal_id, e)
 
@@ -225,12 +254,15 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
 
         # Active window filter: signals whose validity overlaps with requested range
         has_active_window = (
-            request.HasField("active_window")
-            and request.active_window.start.seconds > 0
+            request.HasField("active_window") and request.active_window.start.seconds > 0
         )
         if has_active_window:
-            window_start = request.active_window.start.ToDatetime(tzinfo=timezone.utc)
-            window_end = request.active_window.end.ToDatetime(tzinfo=timezone.utc) if request.active_window.end.seconds > 0 else None
+            window_start = request.active_window.start.ToDatetime(tzinfo=UTC)
+            window_end = (
+                request.active_window.end.ToDatetime(tzinfo=UTC)
+                if request.active_window.end.seconds > 0
+                else None
+            )
 
             conditions.append(f"valid_from <= ${idx}")
             params.append(window_end or window_start)
@@ -261,7 +293,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 ORDER BY ingested_at DESC
                 LIMIT ${idx} OFFSET ${idx + 1}
                 """,
-                *params, limit, offset_int,
+                *params,
+                limit,
+                offset_int,
             )
         except Exception as e:
             log.error("failed to query signals: %s", e)
@@ -292,6 +326,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
 
         next_token = str(offset_int + len(rows)) if len(rows) == limit else ""
         from gen.common.v1 import common_pb2
+
         return ingest_pb2.QuerySignalsResponse(
             signals=signals,
             page=common_pb2.PageResponse(next_page_token=next_token, total_count=len(signals)),
