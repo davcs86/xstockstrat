@@ -1,0 +1,173 @@
+{
+  "$metadata": {
+    "description": "xstockstrat component manifest — maps each shared UI component to its variants, sizes, and the services that use it. All components follow the shadcn/ui pattern (Radix UI + CVA + Tailwind).",
+    "componentLibrary": "Radix UI + class-variance-authority + tailwind-merge",
+    "services": {
+      "xstockstrat-trader": {
+        "port": 3000,
+        "role": "Trading UI — order entry, order book, portfolio summary, live alerts",
+        "componentPath": "services/xstockstrat-trader/src/components"
+      },
+      "xstockstrat-insights": {
+        "port": 3001,
+        "role": "Analytics & insights dashboard — strategy scores, backtesting results, charts",
+        "componentPath": "services/xstockstrat-insights/src/components"
+      },
+      "xstockstrat-config-ui": {
+        "port": 3002,
+        "role": "Config management — live config values by environment and trading mode, audit log",
+        "componentPath": "services/xstockstrat-config-ui/components"
+      }
+    }
+  },
+  "shared": {
+    "AppShell": {
+      "description": "Top-level layout with sticky header, cross-service navigation and optional right-side action slot. Present in all three services.",
+      "props": {
+        "title": { "type": "string", "default": "xstockstrat Trader" },
+        "actions": { "type": "ReactNode", "optional": true }
+      },
+      "layout": {
+        "header": {
+          "height": "56px",
+          "elements": ["logo (Activity icon + title)", "vertical separator", "desktop nav links", "right actions slot", "mobile sheet trigger"]
+        },
+        "main": "flex-1, full width"
+      },
+      "nav": {
+        "items": [
+          { "label": "Trader", "href": "http://localhost:3000", "icon": "TrendingUp" },
+          { "label": "Insights", "href": "http://localhost:3001", "icon": "BarChart2" },
+          { "label": "Config", "href": "http://localhost:3002", "icon": "Settings" }
+        ]
+      }
+    },
+    "Button": {
+      "description": "Primary interactive element. Built with CVA, supports asChild via Radix Slot.",
+      "source": "src/components/ui/button.tsx",
+      "variants": {
+        "variant": {
+          "default": "Primary green fill — bg-primary / text-primary-foreground",
+          "destructive": "Red fill — bg-destructive / text-destructive-foreground",
+          "outline": "Transparent + border — border-border hover:bg-accent",
+          "secondary": "Secondary surface fill — bg-secondary",
+          "ghost": "No background, hover fills accent — hover:bg-accent",
+          "link": "Text-only with underline on hover — text-primary",
+          "buy": "Domain BUY — bg-buy text-background font-semibold",
+          "sell": "Domain SELL — bg-sell text-white font-semibold"
+        },
+        "size": {
+          "default": "h-10 px-4 py-2 — 40px height",
+          "sm": "h-8 px-3 text-xs — 32px height",
+          "lg": "h-11 px-8 — 44px height",
+          "icon": "h-10 w-10 square — icon-only"
+        }
+      },
+      "defaults": { "variant": "default", "size": "default" }
+    },
+    "Badge": {
+      "description": "Status / label pill. Rounded-full. No interactive states.",
+      "source": "src/components/ui/badge.tsx",
+      "variants": {
+        "variant": {
+          "default": "bg-primary/100 text-primary-foreground",
+          "secondary": "bg-secondary text-secondary-foreground",
+          "destructive": "bg-destructive text-destructive-foreground",
+          "outline": "border text-foreground — no background fill",
+          "buy": "bg-buy/20 text-buy — translucent green",
+          "sell": "bg-sell/20 text-sell — translucent red",
+          "paper": "bg-paper/20 text-paper — translucent yellow",
+          "live": "bg-buy/20 text-buy — alias for buy mode",
+          "warning": "bg-yellow-500/20 text-yellow-400",
+          "info": "bg-blue-500/20 text-blue-400"
+        }
+      },
+      "dimensions": { "padding": "px-2.5 py-0.5", "fontSize": "text-xs" }
+    },
+    "Card": {
+      "description": "Container surface with border, rounded corners and card background token. Composed of sub-components.",
+      "source": "src/components/ui/card.tsx",
+      "subComponents": {
+        "Card": "rounded-xl border border-border bg-card text-card-foreground shadow-sm",
+        "CardHeader": "flex flex-col space-y-1.5 p-5 pb-3",
+        "CardTitle": "text-base font-semibold leading-none tracking-tight",
+        "CardDescription": "text-sm text-muted-foreground",
+        "CardContent": "p-5 pt-0",
+        "CardFooter": "flex items-center p-5 pt-0"
+      }
+    },
+    "Input": {
+      "description": "Text input field. Styled to match the dark theme (--input border + background).",
+      "source": "src/components/ui/input.tsx"
+    },
+    "Select": {
+      "description": "Accessible dropdown select built on Radix UI Select primitive.",
+      "source": "src/components/ui/select.tsx",
+      "radixPrimitive": "@radix-ui/react-select"
+    },
+    "Separator": {
+      "description": "Horizontal or vertical visual divider. Used in AppShell header and forms.",
+      "source": "src/components/ui/separator.tsx",
+      "radixPrimitive": "@radix-ui/react-separator",
+      "orientations": ["horizontal", "vertical"]
+    },
+    "Sheet": {
+      "description": "Slide-in panel (drawer). Used for mobile navigation in AppShell.",
+      "source": "src/components/ui/sheet.tsx",
+      "radixPrimitive": "@radix-ui/react-dialog",
+      "sides": ["left", "right", "top", "bottom"]
+    },
+    "Table": {
+      "description": "Data table. Used in OrderBook and config table views.",
+      "source": "src/components/ui/table.tsx",
+      "subComponents": ["Table", "TableHeader", "TableBody", "TableFooter", "TableRow", "TableHead", "TableCell", "TableCaption"]
+    }
+  },
+  "trader": {
+    "OrderForm": {
+      "description": "Buy/sell order entry form. Integrates with xstockstrat-trading gRPC via Connect-RPC.",
+      "props": { "mode": { "type": "TradingMode", "values": ["paper", "live"] } },
+      "elements": ["symbol input", "quantity input", "order type select", "buy/sell buttons"]
+    },
+    "OrderBook": {
+      "description": "Live order list and portfolio summary card. Polls xstockstrat-trading + xstockstrat-portfolio.",
+      "subComponents": {
+        "OrderBook": "Scrollable table of open/filled orders with status badges",
+        "PortfolioSummary": "Card showing total equity, cash, P&L with buy/sell colour coding"
+      }
+    },
+    "AlertStream": {
+      "description": "Server-Sent Events (SSE) alert badge in the header. Connects to xstockstrat-notify via /api/alerts/stream.",
+      "states": ["idle (bell icon)", "active (badge with count)"]
+    },
+    "ModeToggle": {
+      "description": "PAPER / LIVE toggle in the top-right header actions. Controls TradingMode state.",
+      "variants": {
+        "paper": "bg-paper/20 text-paper",
+        "live": "bg-buy/20 text-buy"
+      }
+    }
+  },
+  "insights": {
+    "StrategyList": {
+      "description": "Grid/list of scored strategies. Fetched from xstockstrat-analysis.",
+      "route": "/strategies"
+    },
+    "StrategyDetail": {
+      "description": "Full backtest results page with lightweight-charts price chart.",
+      "route": "/strategies/[id]",
+      "chartLib": "lightweight-charts (TradingView)"
+    }
+  },
+  "config-ui": {
+    "ConfigTable": {
+      "description": "Editable table of config key-value pairs. Scoped by environment + trading_mode dropdowns.",
+      "route": "/[namespace]",
+      "operations": ["view", "edit value", "add key", "delete key"]
+    },
+    "AuditLog": {
+      "description": "Read-only append-only audit trail of config changes. Queries ledger schema via pg.",
+      "route": "/audit"
+    }
+  }
+}

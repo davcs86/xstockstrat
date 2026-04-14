@@ -1,0 +1,13 @@
+{
+  "name": "@xstockstrat/figma",
+  "version": "1.0.0",
+  "description": "Figma design token export for xstockstrat UI services (trader, insights, config-ui)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "export": "node export.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
