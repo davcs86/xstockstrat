@@ -1,0 +1,14 @@
+FROM postgres:16-alpine
+
+RUN apk add --no-cache bash curl
+
+# Pin version for reproducibility — bump here when upgrading golang-migrate
+ARG MIGRATE_VERSION=4.17.1
+RUN curl -fsSL \
+    "https://github.com/golang-migrate/migrate/releases/download/v${MIGRATE_VERSION}/migrate.linux-amd64.tar.gz" \
+    | tar xz -C /usr/local/bin migrate
+
+COPY . /repo
+WORKDIR /repo
+
+ENTRYPOINT ["/repo/scripts/db-migrate.sh"]

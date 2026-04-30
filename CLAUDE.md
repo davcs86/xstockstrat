@@ -118,7 +118,15 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 | xstockstrat-trading | trading | orders | time (1 day chunks) |
 | xstockstrat-portfolio | portfolio | snapshots | time (1 day chunks) |
 
-All services run their own migrations against their own schema. Migration tool: **golang-migrate** (Go), **Alembic** (Python), **db-migrate** (Node).
+All services run migrations against their own schema, orchestrated centrally by `scripts/db-migrate.sh` using **golang-migrate**. State is tracked in a `schema_migrations` table inside each service's schema so re-runs only apply new files.
+
+**Migration file convention**: `NNN_description.up.sql` + `NNN_description.down.sql` in `services/<service>/migrations/`. NNN is a zero-padded sequence number continuing from the last file in that service's directory.
+
+**To add a new migration:**
+1. Create `services/<service>/migrations/NNN_description.up.sql` with the schema change
+2. Create a matching `NNN_description.down.sql` (rollback SQL, or a stub comment if rollback is not supported)
+3. Test locally: `./scripts/db-migrate.sh`
+4. On DigitalOcean, the `db-migrator` PRE_DEPLOY job runs automatically on every deploy — no manual step needed
 
 ---
 

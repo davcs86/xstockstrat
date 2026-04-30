@@ -15,7 +15,7 @@ All 5 RPCs (ComputeIndicator, ExecuteFormula, ListIndicators, RegisterFormula, G
 ## 3B — xstockstrat-ingest
 
 ### Migration naming
-The migration is named `002_newsletter_signals.sql` (as specified in the roadmap) even though it is the first — and only — migration file for ingest. The service was previously stateless (no DB), so there is no `001_` migration. The `db-migrate.sh` script applies SQL files alphabetically, so this works correctly.
+The migration was originally named `002_newsletter_signals.sql` per the roadmap spec, but has been renumbered to `001_newsletter_signals.up.sql` now that golang-migrate is the migration runner. golang-migrate requires sequential numbering starting from 1 with no gaps; the old `002_` name would have caused an error. The `.up.sql` / `.down.sql` suffix pair is the golang-migrate convention adopted across all services.
 
 ### Proto stub regeneration
 `buf` was not available in the environment. Python stubs were regenerated using:

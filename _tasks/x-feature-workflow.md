@@ -204,6 +204,37 @@ Follow `x-config-rollout.md` for the full rollout and rollback procedure.
 
 ---
 
+## Database Schema Changes
+
+When a feature requires a new table, column, index, or any other schema change:
+
+1. **Create the migration files** in the relevant service's `migrations/` directory:
+   ```
+   services/<service>/migrations/NNN_description.up.sql
+   services/<service>/migrations/NNN_description.down.sql
+   ```
+   NNN continues from the last number in that directory (e.g., if `002_` exists, use `003_`).
+   The `.down.sql` file should contain the rollback SQL, or a stub comment if rollback is not supported.
+
+2. **Test locally:**
+   ```bash
+   ./scripts/db-migrate.sh          # apply all pending migrations
+   ./scripts/db-migrate.sh version  # verify version advanced in the right service schema
+   ```
+
+3. **On DigitalOcean**, migrations run automatically — the `db-migrator` PRE_DEPLOY job
+   in `.do/app.dev.yaml` / `.do/app.yaml` runs `db-migrate.sh` before any service restarts
+   on every deploy. No manual step needed.
+
+4. **Migration tracking**: golang-migrate records applied versions in `<schema>.schema_migrations`.
+   Re-running `db-migrate.sh` is safe — already-applied migrations are skipped.
+
+> **Do not modify existing `.up.sql` files after they have been merged to `main-dev`.** Instead,
+> add a new numbered migration. Editing an applied migration breaks the version hash and will
+> cause `migrate` to report a dirty state on all deployed databases.
+
+---
+
 ## Proto Contract Changes
 
 All `.proto` changes must:

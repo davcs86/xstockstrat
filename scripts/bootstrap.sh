@@ -32,6 +32,7 @@ check_tool "node"    "https://nodejs.org/"
 check_tool "pnpm"    "corepack enable or https://pnpm.io/installation"
 check_tool "docker"  "https://docs.docker.com/get-docker/"
 check_tool "psql"    "https://www.postgresql.org/download/"
+check_tool "migrate" "go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest"
 
 if [ "$MISSING" -eq 1 ]; then
   echo ""

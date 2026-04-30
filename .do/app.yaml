@@ -325,6 +325,23 @@ services:
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
 
+jobs:
+  # Runs golang-migrate against all service schemas before services start.
+  # kind: PRE_DEPLOY ensures this completes before any service restarts.
+  - name: db-migrator
+    kind: PRE_DEPLOY
+    github:
+      repo: davcs86/xstockstrat-orchestration
+      branch: main
+      deploy_on_push: false
+    dockerfile_path: scripts/Dockerfile.migrate
+    instance_count: 1
+    instance_size_slug: basic-xs
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
+
 databases:
   - name: db
     engine: PG

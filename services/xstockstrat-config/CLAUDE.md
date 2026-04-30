@@ -47,7 +47,7 @@ Config change (via SetConfig RPC or n8n webhook)
 
 ## Config Keys Managed
 
-See `migrations/001_config_tables.sql` for the canonical seed list and full platform config schema.
+See `migrations/001_config_tables.up.sql` for the canonical seed list and full platform config schema.
 
 ## n8n Webhooks
 
