@@ -309,28 +309,36 @@ The CI/CD workflows in `.github/workflows/deploy-dev.yml` and `.github/workflows
 
 ---
 
-## Step 10 — Run Database Migrations
+## Step 10 — Database Migrations (Automated)
 
-After the app is deployed and the database is reachable, run migrations for all 13 services in dependency order:
+Migrations are now automated via the `db-migrator` App Platform Job defined in
+`.do/app.yaml` / `.do/app.dev.yaml`. On every `doctl apps update` deploy, the
+`PRE_DEPLOY` job runs `scripts/db-migrate.sh` (via `scripts/Dockerfile.migrate`)
+before any service restarts. Only new migration files are applied — already-run
+migrations are skipped because golang-migrate tracks state in a `schema_migrations`
+table inside each service's schema.
+
+**No manual action needed** for routine deployments.
+
+### First-time setup on an existing database
+
+If the managed database was already bootstrapped before migration tracking was
+introduced (i.e., schemas exist but `schema_migrations` tables do not), seed the
+version state once so the job doesn't re-apply old migrations:
 
 ```bash
 # Use the connection string from DigitalOcean console → Databases → Connection Details
 DATABASE_URL="postgresql://doadmin:<password>@<host>:25060/defaultdb?sslmode=require" \
-  ./scripts/db-migrate.sh
+  ./scripts/db-migrate.sh force
 ```
 
-`scripts/db-migrate.sh` runs migrations in this order:
-1. xstockstrat-config (schema + config_values, config_audit tables)
-2. xstockstrat-identity (users, sessions, api_keys)
-3. xstockstrat-ledger (events hypertable)
-4. xstockstrat-notify (alerts)
-5. xstockstrat-marketdata (ohlcv, quotes hypertables + continuous aggregates)
-6. xstockstrat-trading (orders hypertable)
-7. xstockstrat-portfolio (positions, snapshots hypertable)
-8. xstockstrat-ingest (newsletter_signals hypertable)
-9. xstockstrat-indicators, xstockstrat-analysis (no DB schema)
+See `_tasks/x-db-seed-migration-state.md` for the full one-time runbook.
 
-> **Note:** For services with no DB schema (indicators, analysis), the migration step is a no-op. The TimescaleDB extension must already be enabled (Step 3b) before running this script.
+### Monitoring migration job logs
+
+```bash
+doctl apps logs $DO_PROD_APP_ID --component db-migrator --follow
+```
 
 ---
 
