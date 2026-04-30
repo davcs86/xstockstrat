@@ -215,10 +215,10 @@ Each ingested signal is stored in a new `ingest.newsletter_signals` hypertable w
 
 ## Step 1 — Add the `newsletter_signals` Migration
 
-Create the migration file in the **ingest service** (Python, db-migrate):
+Create the migration files in the **ingest service** following the golang-migrate convention:
 
 ```sql
--- services/xstockstrat-ingest/migrations/002_newsletter_signals.sql
+-- services/xstockstrat-ingest/migrations/001_newsletter_signals.up.sql
 
 CREATE SCHEMA IF NOT EXISTS ingest;
 
@@ -244,10 +244,18 @@ CREATE INDEX ON ingest.newsletter_signals (source, ingested_at DESC);
 CREATE INDEX ON ingest.newsletter_signals (valid_from, valid_until);
 ```
 
-Run via:
-```bash
-./scripts/db-migrate.sh xstockstrat-ingest
+Also create a stub down file:
+```sql
+-- services/xstockstrat-ingest/migrations/001_newsletter_signals.down.sql
+-- rollback not supported for this migration
 ```
+
+Apply locally:
+```bash
+./scripts/db-migrate.sh
+```
+
+On DigitalOcean the migration runs automatically via the `db-migrator` PRE_DEPLOY job on deploy.
 
 ## Step 2 — Add the Proto Contract
 

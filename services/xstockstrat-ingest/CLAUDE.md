@@ -37,7 +37,7 @@ Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8055` via `asyncio.gat
 
 - Schema: `ingest`
 - Table: `ingest.newsletter_signals` — TimescaleDB hypertable (7-day chunks by `ingested_at`)
-- Migration: `migrations/002_newsletter_signals.sql`
+- Migration: `migrations/001_newsletter_signals.up.sql`
 
 ## Config Keys Consumed
 
