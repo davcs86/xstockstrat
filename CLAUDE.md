@@ -4,7 +4,7 @@
 
 **xstockstrat-orchestration** is the spine repository for the xstockstrat platform — a hybrid multi-repo stock strategy system built on the **Spine pattern**. This repo owns:
 - `packages/proto/` — single source of truth for all gRPC/Protobuf contracts
-- `_tasks/` — cross-service workflow runbooks
+- `docs/` — runbooks, setup guides, and implementation roadmap
 - `scripts/` — codegen, bootstrap, and CI helpers
 - Root-level config governance documentation (this file)
 
@@ -47,7 +47,7 @@ Next.js   → xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
 
 The **Spine** is this orchestration repo. It does not contain runtime service code. It owns:
 1. **Proto contracts** (`packages/proto/`) — all `.proto` files; all generated stubs live here after `buf generate`
-2. **Task runbooks** (`_tasks/`) — step-by-step operational workflows
+2. **Docs** (`docs/`) — runbooks, setup guides, and implementation roadmap (`docs/runbooks/`, `docs/setup/`, `docs/roadmap/`)
 3. **Scripts** (`scripts/`) — `buf-gen.sh`, `bootstrap.sh`, `db-migrate.sh`
 4. **Config schema** — canonical list of config keys consumed by each service
 
@@ -60,17 +60,17 @@ Services reference this repo as a git submodule or via the generated package reg
 - All `.proto` changes require a PR to **this repo** first.
 - Breaking changes (field removal, type change, service rename) require:
   1. Deprecation comment in `.proto` for one release cycle
-  2. Migration note in `_tasks/x-config-rollout.md`
+  2. Migration note in `docs/runbooks/config-rollout.md`
   3. Approval from 2 service owners (see Approval Flow below)
 - `buf lint` and `buf breaking` run on every PR via CI.
 - Generated stubs are committed to `packages/proto/gen/` and versioned.
-- For v1/v2 breaking-change workflow, see `_tasks/x-proto-versioning.md`.
+- For v1/v2 breaking-change workflow, see `docs/runbooks/proto-versioning.md`.
 
 ---
 
 ## Approval Flow
 
-See `_tasks/x-approval-flow.md` for full detail. Summary:
+See `docs/runbooks/approval-flow.md` for full detail. Summary:
 
 | Change Type | Required Approvers |
 |---|---|
@@ -174,7 +174,7 @@ Generated output:
 
 - **buf lint + breaking check** on every proto PR
 - **Per-service CI** runs in each service repo on push
-- **Integration tests** defined in `_tasks/` runbooks and run via scripts
+- **Integration tests** defined in `docs/runbooks/` and run via scripts
 
 ---
 

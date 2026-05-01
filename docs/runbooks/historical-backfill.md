@@ -1,5 +1,4 @@
-# _tasks/x-historical-backfill.md
-# xstockstrat — Historical Data Backfill Runbook
+# Historical Data Backfill Runbook
 
 ## Overview
 
@@ -197,7 +196,7 @@ After a successful backfill:
 1. Run data quality SQL checks above
 2. Refresh continuous aggregates: `CALL refresh_continuous_aggregate('marketdata.ohlcv_1h', NULL, NULL);`
 3. Verify xstockstrat-analysis can load bars for target date range
-4. Update `_tasks/x-historical-backfill.md` with completed date ranges (append to "Completed Backfills" section below)
+4. Update `docs/runbooks/historical-backfill.md` with completed date ranges (append to "Completed Backfills" section below)
 
 ---
 

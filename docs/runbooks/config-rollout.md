@@ -1,5 +1,4 @@
-# _tasks/x-config-rollout.md
-# xstockstrat — Config Rollout Runbook
+# Config Rollout Runbook
 
 ## Overview
 
@@ -51,7 +50,7 @@ Secret values use the `secret.` prefix within their category:
 - [ ] Read the root `CLAUDE.md` governance rules
 - [ ] Confirm the key exists in `config.config_values` (or you intend to create it)
 - [ ] For **new keys**: open a PR to root `CLAUDE.md` to document the key in the service's config table
-- [ ] For **breaking changes** (type change, key removal): get approval per `_tasks/x-approval-flow.md`
+- [ ] For **breaking changes** (type change, key removal): get approval per `docs/runbooks/approval-flow.md`
 - [ ] Identify all consuming services from the root `CLAUDE.md` service registry
 - [ ] Stage the change in a non-production namespace first if available
 - [ ] Write your rollback values before applying

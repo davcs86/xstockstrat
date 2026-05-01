@@ -1,4 +1,4 @@
-# x-setup-n8n — n8n Cloud Account & Workflow Setup
+# n8n Cloud Account & Workflow Setup
 
 This runbook walks through creating an n8n Cloud account, importing the pre-built xstockstrat workflows, configuring credentials, and connecting them to the deployed services. n8n is the automation layer that bridges external events (newsletters, RSS feeds, scheduled triggers) to the service webhook handlers.
 
@@ -389,7 +389,7 @@ Each newsletter source requires its own n8n workflow. The `ingest-signal-email.j
 4. Register config keys (same as above)
 5. Activate and log the source
 
-See `_tasks/x-add-data-source.md` Part 2, Step 6 for more detailed per-newsletter workflow guidance.
+See `docs/runbooks/add-data-source.md` Part 2, Step 6 for more detailed per-newsletter workflow guidance.
 
 ---
 

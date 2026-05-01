@@ -1,5 +1,4 @@
-# _tasks/x-indicator-builder.md
-# xstockstrat — Indicator Builder Runbook
+# Indicator Builder Runbook
 
 ## Overview
 
@@ -152,7 +151,7 @@ print("execution_ms:", resp.execution_ms)
 
 ## Changing Sandbox Limits
 
-To adjust sandbox limits for all formulas, use the config rollout process (`_tasks/x-config-rollout.md`):
+To adjust sandbox limits for all formulas, use the config rollout process (`docs/runbooks/config-rollout.md`):
 
 ```json
 {

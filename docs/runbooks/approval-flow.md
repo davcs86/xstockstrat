@@ -1,5 +1,4 @@
-# _tasks/x-approval-flow.md
-# xstockstrat — Order Approval Flow Runbook
+# Order Approval Flow Runbook
 
 ## Overview
 
@@ -119,4 +118,4 @@ When you receive an approval alert:
 
 ## Config Rollout for Threshold Changes
 
-To adjust approval thresholds, follow `_tasks/x-config-rollout.md`. Changes to `trading.approval.*` keys take effect immediately on all active WatchConfig subscribers (no restart required).
+To adjust approval thresholds, follow `docs/runbooks/config-rollout.md`. Changes to `trading.approval.*` keys take effect immediately on all active WatchConfig subscribers (no restart required).

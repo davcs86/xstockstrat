@@ -1,4 +1,4 @@
-# x-setup-alpaca — Alpaca Account & API Key Setup
+# Alpaca Account & API Key Setup
 
 This runbook walks through creating an Alpaca account, generating API keys, and wiring credentials into the xstockstrat platform. Alpaca is the sole broker and market data provider for all trading operations.
 
@@ -243,7 +243,7 @@ Check xstockstrat-marketdata logs for `"alpaca stream connected"` and incoming b
 
 ## Step 9 — Historical Backfill
 
-To populate the TimescaleDB OHLCV hypertable with historical data for backtesting, use the backfill trigger. See `_tasks/x-historical-backfill.md` for full guidance.
+To populate the TimescaleDB OHLCV hypertable with historical data for backtesting, use the backfill trigger. See `docs/runbooks/historical-backfill.md` for full guidance.
 
 Quick start:
 

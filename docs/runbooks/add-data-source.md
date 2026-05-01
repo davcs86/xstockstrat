@@ -1,5 +1,4 @@
-# _tasks/x-add-data-source.md
-# xstockstrat — Adding Data Sources & Signal Feeds
+# Adding Data Sources & Signal Feeds
 
 ## Overview
 
@@ -599,10 +598,10 @@ print(f"Win rate: {result.win_rate:.2%}")
 
 | Runbook | When to use |
 |---|---|
-| [`x-historical-backfill.md`](x-historical-backfill.md) | Backfill OHLCV bars from Alpaca (or new source after client is wired) |
-| [`x-approval-flow.md`](x-approval-flow.md) | Proto change approval process for new `IngestSignal` RPC |
-| [`x-config-rollout.md`](x-config-rollout.md) | Registering new config keys via xstockstrat-config |
-| [`x-indicator-builder.md`](x-indicator-builder.md) | Building and registering composite indicator formulas |
+| [`historical-backfill.md`](historical-backfill.md) | Backfill OHLCV bars from Alpaca (or new source after client is wired) |
+| [`approval-flow.md`](approval-flow.md) | Proto change approval process for new `IngestSignal` RPC |
+| [`config-rollout.md`](config-rollout.md) | Registering new config keys via xstockstrat-config |
+| [`indicator-builder.md`](indicator-builder.md) | Building and registering composite indicator formulas |
 
 ---
 
