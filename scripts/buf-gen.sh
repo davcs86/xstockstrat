@@ -2,14 +2,24 @@
 # scripts/buf-gen.sh
 # Generate TypeScript, Python, and Go stubs from packages/proto/
 # Run from repo root: ./scripts/buf-gen.sh
+#
+# Prerequisites (local dev):
+#   Go plugins:   go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+#                 go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+#                 go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
+#   Python:       pip install grpcio-tools
+#   TypeScript:   npm install -g ts-proto
+#
+# Plugin binaries are looked up on PATH. The PATH export below covers the
+# default local dev install locations.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROTO_DIR="$REPO_ROOT/packages/proto"
 
-# Ensure Go plugin binaries are on PATH
-export PATH="$PATH:/root/go/bin:/opt/node22/bin"
+# Add common plugin install locations to PATH for local dev
+export PATH="$PATH:/root/go/bin:${HOME}/go/bin:/opt/node22/bin"
 
 cd "$PROTO_DIR"
 
@@ -23,31 +33,11 @@ if git show-ref --verify refs/heads/main &>/dev/null; then
   buf breaking --against "$REPO_ROOT/.git#branch=main,subdir=packages/proto"
 fi
 
-# ── 3. Collect proto files ─────────────────────────────────────────────────
-PROTOS=$(find . -name "*.proto" ! -path "./gen/*" | sort)
-INCLUDE_PATHS="-I. -I/usr/local/include"
-
+# ── 3. Generate all stubs via buf generate ───────────────────────────────��─
 mkdir -p gen/go gen/python gen/ts
 
-# ── 4. Generate Go stubs ───────────────────────────────────────────────────
-echo "==> Generating Go stubs (protoc-gen-go + go-grpc + connect-go)"
-# shellcheck disable=SC2086
-protoc $INCLUDE_PATHS \
-  --plugin=protoc-gen-go=/root/go/bin/protoc-gen-go \
-  --plugin=protoc-gen-go-grpc=/root/go/bin/protoc-gen-go-grpc \
-  --plugin=protoc-gen-connect-go=/root/go/bin/protoc-gen-connect-go \
-  --go_out=gen/go --go_opt=paths=source_relative \
-  --go-grpc_out=gen/go --go-grpc_opt=paths=source_relative,require_unimplemented_servers=false \
-  --connect-go_out=gen/go --connect-go_opt=paths=source_relative \
-  $PROTOS
-
-# ── 5. Generate Python stubs ───────────────────────────────────────────────
-echo "==> Generating Python stubs (grpcio-tools)"
-# shellcheck disable=SC2086
-python3 -m grpc_tools.protoc $INCLUDE_PATHS \
-  --python_out=gen/python \
-  --grpc_python_out=gen/python \
-  $PROTOS
+echo "==> buf generate (Go + Python + TypeScript stubs)"
+buf generate
 
 # Write a minimal setup.py so pip install -e . works
 cat > gen/python/setup.py << 'PYSETUP'
@@ -59,26 +49,21 @@ setup(
 )
 PYSETUP
 
-# ── 6. Generate TypeScript stubs ───────────────────────────────────────────
-echo "==> Generating TypeScript stubs (ts-proto + connect-es)"
-# shellcheck disable=SC2086
-protoc $INCLUDE_PATHS \
-  --plugin=protoc-gen-ts_proto=/opt/node22/bin/protoc-gen-ts_proto \
-  --ts_proto_out=gen/ts \
-  "--ts_proto_opt=esModuleInterop=true,outputServices=grpc-js,env=node,useOptionals=messages,stringEnums=true" \
-  $PROTOS
-
-# shellcheck disable=SC2086
-protoc $INCLUDE_PATHS \
-  --plugin=protoc-gen-connect-es=/opt/node22/bin/protoc-gen-connect-es \
-  --connect-es_out=gen/ts \
-  "--connect-es_opt=target=ts" \
-  $PROTOS
+# ── 4. Compile TypeScript stubs to JS ──────────────────────────────────────
+echo "==> Compiling gen/ts to JavaScript (tsc)"
+if [ -f "$REPO_ROOT/pnpm-lock.yaml" ]; then
+  # Workspace install exists — use filter to build just the proto package
+  (cd "$REPO_ROOT" && pnpm --filter @xstockstrat/proto run build)
+else
+  # Fallback: standalone tsc inside gen/ts (requires npm install first)
+  (cd "$REPO_ROOT/packages/proto/gen/ts" && npx tsc)
+fi
 
 echo ""
 echo "Generated stubs:"
-echo "  Go:         $PROTO_DIR/gen/go/"
-echo "  Python:     $PROTO_DIR/gen/python/"
-echo "  TypeScript: $PROTO_DIR/gen/ts/"
+echo "  Go:            $PROTO_DIR/gen/go/"
+echo "  Python:        $PROTO_DIR/gen/python/"
+echo "  TypeScript:    $PROTO_DIR/gen/ts/"
+echo "  TypeScript JS: $PROTO_DIR/gen/ts/dist/"
 echo ""
 echo "==> Done."

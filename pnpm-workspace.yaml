@@ -1,0 +1,3 @@
+packages:
+  - 'packages/proto/gen/ts'
+  - 'services/*'

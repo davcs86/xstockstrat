@@ -25,6 +25,66 @@ jobs:
         working-directory: packages/proto
         run: buf breaking . --against '../../.git#branch=origin/main,subdir=packages/proto'
 
+  proto-freshness:
+    name: Proto stubs are up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: bufbuild/buf-setup-action@v1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Install Go proto plugins
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python grpcio-tools
+        run: pip install grpcio-tools
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install TypeScript proto plugins
+        run: |
+          npm install -g ts-proto
+          echo "$(npm prefix -g)/bin" >> "$GITHUB_PATH"
+
+      - name: Regenerate stubs
+        run: ./scripts/buf-gen.sh
+
+      - name: Check for stale stubs
+        run: |
+          git diff --exit-code packages/proto/gen/ || \
+          (echo "Committed stubs are stale — run ./scripts/buf-gen.sh and commit the result" && exit 1)
+
+  buf-push:
+    name: Publish proto definitions to BSR
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [proto-lint, proto-freshness]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: bufbuild/buf-push-action@v1
+        with:
+          input: packages/proto
+          buf_token: ${{ secrets.BUF_TOKEN }}
+
   go-lint:
     name: Go lint and test (${{ matrix.service }})
     runs-on: ubuntu-latest
@@ -193,9 +253,6 @@ jobs:
           - xstockstrat-trader
           - xstockstrat-insights
           - xstockstrat-config-ui
-    defaults:
-      run:
-        working-directory: services/${{ matrix.service }}
     steps:
       - uses: actions/checkout@v4
 
@@ -206,10 +263,14 @@ jobs:
       - name: install pnpm
         run: npm install -g pnpm@9.15.0
 
-      - name: install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: build proto stubs
+        run: pnpm --filter @xstockstrat/proto run build
 
       - name: lint
+        working-directory: services/${{ matrix.service }}
         run: pnpm run lint
 
   frontend-e2e:
@@ -269,9 +330,6 @@ jobs:
             coverage_threshold: 40
           - service: xstockstrat-notify
             coverage_threshold: 40
-    defaults:
-      run:
-        working-directory: services/${{ matrix.service }}
     steps:
       - uses: actions/checkout@v4
 
@@ -282,10 +340,14 @@ jobs:
       - name: install pnpm
         run: npm install -g pnpm@9.15.0
 
-      - name: install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: build proto stubs
+        run: pnpm --filter @xstockstrat/proto run build
 
       - name: test with coverage
+        working-directory: services/${{ matrix.service }}
         run: pnpm run test:coverage
 
       - name: upload coverage artifact

@@ -23,15 +23,14 @@ plugins:
   - name: python
     out: gen/python
 
-  # Python — gRPC service stubs
+  # Python — gRPC service stubs (protoc-gen-grpc_python from grpcio-tools)
   - name: grpc_python
     out: gen/python
-    path: /usr/local/bin/protoc-gen-grpc_python
 
   # TypeScript — ts-proto (grpc-js compatible)
+  # Install: npm install -g ts-proto
   - name: ts_proto
     out: gen/ts
-    path: /opt/node22/bin/protoc-gen-ts_proto
     opt:
       - esModuleInterop=true
       - outputServices=grpc-js
@@ -40,8 +39,10 @@ plugins:
       - stringEnums=true
 
   # TypeScript — Connect-RPC ES (browser + Node.js fetch-based clients)
-  - name: connect-es
-    out: gen/ts
-    path: /opt/node22/bin/protoc-gen-connect-es
-    opt:
-      - target=ts
+  # Install: npm install -g @connectrpc/protoc-gen-connect-es
+  # NOTE: Requires protoc-gen-es (_pb.ts files) to be generated first.
+  #       Uncomment once protoc-gen-es is added to this config.
+  # - name: connect-es
+  #   out: gen/ts
+  #   opt:
+  #     - target=ts
