@@ -49,12 +49,13 @@ function makeImpl(rows: any[] = [], throws?: Error) {
   return new NotifyServiceImpl(pool, {});
 }
 
+// makeAlert produces fan-out alert objects (camelCase — proto field names)
 function makeAlert(overrides: any = {}) {
   return {
-    alert_id: 'a1',
+    alertId: 'a1',
     severity: 2,
     category: 'trading',
-    target_user_id: '',
+    targetUserId: '',
     acknowledged: false,
     ...overrides,
   };
@@ -68,6 +69,7 @@ describe('rowToAlert', () => {
   it('maps row to alert proto shape', () => {
     if (!rowToAlert) return;
     const now = new Date('2024-01-01T00:00:00Z');
+    // DB rows use snake_case column names
     const row = {
       alert_id: 'a1',
       severity: 2,
@@ -82,9 +84,9 @@ describe('rowToAlert', () => {
       tags: ['risk'],
     };
     const alert = rowToAlert(row);
-    assert.strictEqual(alert.alert_id, 'a1');
+    assert.strictEqual(alert.alertId, 'a1');
     assert.strictEqual(alert.severity, 2);
-    assert.strictEqual(alert.created_at.seconds, Math.floor(now.getTime() / 1000));
+    assert.strictEqual(alert.createdAt.seconds, Math.floor(now.getTime() / 1000));
     assert.deepStrictEqual(alert.tags, ['risk']);
   });
 
@@ -104,8 +106,8 @@ describe('rowToAlert', () => {
       tags: null,
     };
     const alert = rowToAlert(row);
-    assert.strictEqual(alert.target_user_id, '');
-    assert.strictEqual(alert.correlation_id, '');
+    assert.strictEqual(alert.targetUserId, '');
+    assert.strictEqual(alert.correlationId, '');
     assert.deepStrictEqual(alert.tags, []);
   });
 });
@@ -115,10 +117,10 @@ describe('rowToAlert', () => {
 // ---------------------------------------------------------------------------
 
 describe('matchesSubscriber', () => {
-  it('allows broadcast alert (no target_user_id)', () => {
+  it('allows broadcast alert (no targetUserId)', () => {
     const impl = makeImpl();
     if (!impl) return;
-    const alert = makeAlert({ target_user_id: '' });
+    const alert = makeAlert({ targetUserId: '' });
     const sub = { userId: 'user-1', categories: [], severities: [], includeAcknowledged: false, call: {} };
     assert.strictEqual((impl as any).matchesSubscriber(alert, sub), true);
   });
@@ -126,7 +128,7 @@ describe('matchesSubscriber', () => {
   it('allows alert targeting specific user when sub matches', () => {
     const impl = makeImpl();
     if (!impl) return;
-    const alert = makeAlert({ target_user_id: 'user-1' });
+    const alert = makeAlert({ targetUserId: 'user-1' });
     const sub = { userId: 'user-1', categories: [], severities: [], includeAcknowledged: false, call: {} };
     assert.strictEqual((impl as any).matchesSubscriber(alert, sub), true);
   });
@@ -134,7 +136,7 @@ describe('matchesSubscriber', () => {
   it('blocks alert targeting different user', () => {
     const impl = makeImpl();
     if (!impl) return;
-    const alert = makeAlert({ target_user_id: 'user-2' });
+    const alert = makeAlert({ targetUserId: 'user-2' });
     const sub = { userId: 'user-1', categories: [], severities: [], includeAcknowledged: false, call: {} };
     assert.strictEqual((impl as any).matchesSubscriber(alert, sub), false);
   });
@@ -191,7 +193,7 @@ describe('streamAlerts', () => {
 
     const cancelHandlers: Array<() => void> = [];
     const mockCall = {
-      request: { user_id: 'user-1', categories: [], severities: [], include_acknowledged: false },
+      request: { userId: 'user-1', categories: [], severities: [], includeAcknowledged: false },
       on(event: string, handler: () => void) {
         if (event === 'cancelled') cancelHandlers.push(handler);
       },

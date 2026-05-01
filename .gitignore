@@ -23,6 +23,9 @@
 **/node_modules/
 **/.next/
 **/dist/
+# Keep compiled proto stubs so consumers don't need a build step
+!packages/proto/gen/ts/dist/
+**/node-compile-cache/
 **/.turbo/
 **/*.tsbuildinfo
 **/.env.local

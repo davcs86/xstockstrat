@@ -12,12 +12,12 @@ import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 
 // We import ConfigWatcher but need to prevent it from dialling a gRPC channel.
-// The constructor calls protoLoader.loadSync (sync file I/O) and creates a
-// channel. We cannot easily mock that without jest, so instead we test the
-// getter logic by patching the snapshot after construction via `as any`.
+// The constructor creates a ConfigServiceClient and calls startWatch(), both
+// of which are async-safe for unreachable endpoints. We test the getter logic
+// by patching the snapshot directly via `as any`.
 //
-// If proto file resolution fails in this test environment the import will
-// throw — we guard for that with a graceful skip.
+// If the @xstockstrat/proto package is unavailable in the test environment the
+// import will throw — we guard for that with a graceful skip.
 
 let ConfigWatcher: typeof import('../services/configWatcher').ConfigWatcher;
 
@@ -26,7 +26,7 @@ before(async () => {
     const mod = await import('../services/configWatcher.js');
     ConfigWatcher = mod.ConfigWatcher;
   } catch {
-    // Proto file unavailable in test environment — tests will be skipped.
+    // Proto package unavailable in test environment — tests will be skipped.
   }
 });
 
@@ -51,10 +51,10 @@ describe('ConfigWatcher getters', () => {
     (w as any).snapshot = {
       namespace: 'test',
       version: '1',
-      update_type: 0,
-      changed_keys: [],
+      updateType: 0,
+      changedKeys: [],
       values: {
-        'platform.log_level': { string_val: 'debug' },
+        'platform.log_level': { stringVal: 'debug' },
       },
     };
 
@@ -69,10 +69,10 @@ describe('ConfigWatcher getters', () => {
     (w as any).snapshot = {
       namespace: 'test',
       version: '1',
-      update_type: 0,
-      changed_keys: [],
+      updateType: 0,
+      changedKeys: [],
       values: {
-        'platform.maintenance_mode': { bool_val: true },
+        'platform.maintenance_mode': { boolVal: true },
       },
     };
 
@@ -87,10 +87,10 @@ describe('ConfigWatcher getters', () => {
     (w as any).snapshot = {
       namespace: 'test',
       version: '1',
-      update_type: 0,
-      changed_keys: [],
+      updateType: 0,
+      changedKeys: [],
       values: {
-        'ledger.retention.years': { int_val: 5 },
+        'ledger.retention.years': { intVal: 5 },
       },
     };
 
@@ -105,10 +105,10 @@ describe('ConfigWatcher getters', () => {
     (w as any).snapshot = {
       namespace: 'test',
       version: '1',
-      update_type: 0,
-      changed_keys: [],
+      updateType: 0,
+      changedKeys: [],
       values: {
-        'trading.risk.max_position_pct': { float_val: 0.05 },
+        'trading.risk.max_position_pct': { floatVal: 0.05 },
       },
     };
 

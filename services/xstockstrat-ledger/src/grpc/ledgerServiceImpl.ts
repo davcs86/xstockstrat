@@ -30,25 +30,25 @@ export class LedgerServiceImpl {
          RETURNING sequence, recorded_at`,
         [
           eventId,
-          req.event_type,
-          req.source_service,
-          req.correlation_id || null,
-          req.stream_key,
+          req.eventType,
+          req.sourceService,
+          req.correlationId || null,
+          req.streamKey,
           JSON.stringify(req.payload ?? {}),
           JSON.stringify(req.metadata ?? {}),
-          req.occurred_at ? new Date(req.occurred_at.seconds * 1000) : now,
+          req.occurredAt ? new Date(req.occurredAt.seconds * 1000) : now,
           now,
         ]
       );
 
       const row = result.rows[0];
       callback(null, {
-        event_id: eventId,
+        eventId,
         sequence: row.sequence,
-        recorded_at: { seconds: Math.floor(row.recorded_at.getTime() / 1000) },
+        recordedAt: { seconds: Math.floor(row.recorded_at.getTime() / 1000) },
       });
     } catch (err: any) {
-      log.error('appendEvent failed', { error: err.message, stream_key: req.stream_key });
+      log.error('appendEvent failed', { error: err.message, streamKey: req.streamKey });
       callback({ code: 13, message: `Internal error: ${err.message}` });
     }
   }
@@ -62,33 +62,33 @@ export class LedgerServiceImpl {
     const params: any[] = [];
     let p = 1;
 
-    if (req.stream_key) {
+    if (req.streamKey) {
       conditions.push(`stream_key = $${p++}`);
-      params.push(req.stream_key);
+      params.push(req.streamKey);
     }
-    if (req.event_type) {
+    if (req.eventType) {
       conditions.push(`event_type = $${p++}`);
-      params.push(req.event_type);
+      params.push(req.eventType);
     }
-    if (req.source_service) {
+    if (req.sourceService) {
       conditions.push(`source_service = $${p++}`);
-      params.push(req.source_service);
+      params.push(req.sourceService);
     }
-    if (req.time_range?.start) {
+    if (req.timeRange?.start) {
       conditions.push(`occurred_at >= $${p++}`);
-      params.push(new Date(req.time_range.start.seconds * 1000));
+      params.push(new Date(req.timeRange.start.seconds * 1000));
     }
-    if (req.time_range?.end) {
+    if (req.timeRange?.end) {
       conditions.push(`occurred_at <= $${p++}`);
-      params.push(new Date(req.time_range.end.seconds * 1000));
+      params.push(new Date(req.timeRange.end.seconds * 1000));
     }
-    if (req.from_sequence) {
+    if (req.fromSequence) {
       conditions.push(`sequence >= $${p++}`);
-      params.push(req.from_sequence);
+      params.push(req.fromSequence);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const limit = req.page?.page_size || 100;
+    const limit = req.page?.pageSize || 100;
     params.push(limit + 1);
 
     try {
@@ -102,7 +102,7 @@ export class LedgerServiceImpl {
 
       callback(null, {
         events: rows.map(rowToEvent),
-        page: { next_page_token: hasMore ? rows[rows.length - 1].event_id : '' },
+        page: { nextPageToken: hasMore ? rows[rows.length - 1].event_id : '' },
       });
     } catch (err: any) {
       callback({ code: 13, message: err.message });
@@ -124,7 +124,7 @@ export class LedgerServiceImpl {
            AND ($2::text IS NULL OR event_type = $2)
            AND sequence >= $3
          ORDER BY sequence ASC`,
-        [req.stream_key || null, req.event_type || null, req.from_sequence || 0],
+        [req.streamKey || null, req.eventType || null, req.fromSequence || 0],
       );
 
       for (const row of result.rows) {
@@ -137,14 +137,15 @@ export class LedgerServiceImpl {
 
     // Tail live via pg LISTEN
     const client = await this.pool.connect();
-    const channel = `ledger_stream_${req.stream_key?.replace(/[^a-z0-9]/gi, '_') ?? 'all'}`;
+    const channel = `ledger_stream_${req.streamKey?.replace(/[^a-z0-9]/gi, '_') ?? 'all'}`;
     await client.query(`LISTEN "${channel}"`);
 
     client.on('notification', (msg) => {
       if (!msg.payload) return;
       try {
+        // Notification payload is JSON from a DB trigger — uses DB column names (snake_case)
         const event = JSON.parse(msg.payload);
-        if (!req.event_type || event.event_type === req.event_type) {
+        if (!req.eventType || event.event_type === req.eventType) {
           call.write(event);
         }
       } catch { /* ignore parse errors for malformed NOTIFY payloads */ }
@@ -159,10 +160,10 @@ export class LedgerServiceImpl {
     try {
       const result = await this.pool.query(
         'SELECT * FROM ledger.events WHERE event_id = $1',
-        [call.request.event_id],
+        [call.request.eventId],
       );
       if (result.rows.length === 0) {
-        callback({ code: 5, message: `Event ${call.request.event_id} not found` });
+        callback({ code: 5, message: `Event ${call.request.eventId} not found` });
         return;
       }
       callback(null, rowToEvent(result.rows[0]));
@@ -174,15 +175,15 @@ export class LedgerServiceImpl {
 
 export function rowToEvent(row: any) {
   return {
-    event_id: row.event_id,
-    event_type: row.event_type,
-    source_service: row.source_service,
-    correlation_id: row.correlation_id ?? '',
-    stream_key: row.stream_key,
+    eventId: row.event_id,
+    eventType: row.event_type,
+    sourceService: row.source_service,
+    correlationId: row.correlation_id ?? '',
+    streamKey: row.stream_key,
     payload: row.payload,
     metadata: row.metadata ?? {},
-    occurred_at: { seconds: Math.floor(new Date(row.occurred_at).getTime() / 1000) },
-    recorded_at: { seconds: Math.floor(new Date(row.recorded_at).getTime() / 1000) },
+    occurredAt: { seconds: Math.floor(new Date(row.occurred_at).getTime() / 1000) },
+    recordedAt: { seconds: Math.floor(new Date(row.recorded_at).getTime() / 1000) },
     sequence: row.sequence,
   };
 }

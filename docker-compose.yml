@@ -58,8 +58,8 @@ services:
   # ── Config Service (must start before all others) ───────────────────────
   xstockstrat-config:
     build:
-      context: ./services/xstockstrat-config
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/xstockstrat-config/Dockerfile
     container_name: xstockstrat-config
     environment:
       GRPC_PORT: "50060"
@@ -84,8 +84,8 @@ services:
   # ── Ledger Service ──────────────────────────────────────────────────────
   xstockstrat-ledger:
     build:
-      context: ./services/xstockstrat-ledger
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/xstockstrat-ledger/Dockerfile
     container_name: xstockstrat-ledger
     environment:
       GRPC_PORT: "50057"
@@ -113,8 +113,8 @@ services:
   # ── Identity Service ────────────────────────────────────────────────────
   xstockstrat-identity:
     build:
-      context: ./services/xstockstrat-identity
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/xstockstrat-identity/Dockerfile
     container_name: xstockstrat-identity
     environment:
       GRPC_PORT: "50058"
@@ -142,8 +142,8 @@ services:
   # ── Notify Service ──────────────────────────────────────────────────────
   xstockstrat-notify:
     build:
-      context: ./services/xstockstrat-notify
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/xstockstrat-notify/Dockerfile
     container_name: xstockstrat-notify
     environment:
       GRPC_PORT: "50059"

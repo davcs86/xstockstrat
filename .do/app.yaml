@@ -190,7 +190,6 @@ services:
       repo: davcs86/xstockstrat-orchestration
       branch: main
       deploy_on_push: false
-    source_dir: services/xstockstrat-ledger
     dockerfile_path: services/xstockstrat-ledger/Dockerfile
     http_port: 8057
     instance_count: 1
@@ -215,7 +214,6 @@ services:
       repo: davcs86/xstockstrat-orchestration
       branch: main
       deploy_on_push: false
-    source_dir: services/xstockstrat-identity
     dockerfile_path: services/xstockstrat-identity/Dockerfile
     http_port: 8058
     instance_count: 1
@@ -239,7 +237,6 @@ services:
       repo: davcs86/xstockstrat-orchestration
       branch: main
       deploy_on_push: false
-    source_dir: services/xstockstrat-notify
     dockerfile_path: services/xstockstrat-notify/Dockerfile
     http_port: 8059
     instance_count: 1
@@ -261,7 +258,6 @@ services:
       repo: davcs86/xstockstrat-orchestration
       branch: main
       deploy_on_push: false
-    source_dir: services/xstockstrat-config
     dockerfile_path: services/xstockstrat-config/Dockerfile
     http_port: 8060
     instance_count: 1

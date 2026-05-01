@@ -64,6 +64,7 @@ Services reference this repo as a git submodule or via the generated package reg
   3. Approval from 2 service owners (see Approval Flow below)
 - `buf lint` and `buf breaking` run on every PR via CI.
 - Generated stubs are committed to `packages/proto/gen/` and versioned.
+- For v1/v2 breaking-change workflow, see `_tasks/x-proto-versioning.md`.
 
 ---
 

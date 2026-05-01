@@ -1,0 +1,7 @@
+# Generated proto stubs — suppress diff in GitHub PRs
+packages/proto/gen/go/**     linguist-generated=true
+packages/proto/gen/python/** linguist-generated=true
+packages/proto/gen/ts/**     linguist-generated=true
+
+# Lockfiles
+pnpm-lock.yaml               linguist-generated=true

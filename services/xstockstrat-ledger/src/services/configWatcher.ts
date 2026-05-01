@@ -5,43 +5,17 @@
  * All services call waitForSnapshot() before accepting traffic.
  */
 import * as grpc from '@grpc/grpc-js';
-import * as protoLoader from '@grpc/proto-loader';
-import path from 'path';
 import { EventEmitter } from 'events';
+import { ConfigServiceClient, ConfigSnapshot, ConfigValue } from '@xstockstrat/proto/config/v1/config';
+import { Environment, TradingMode } from '@xstockstrat/proto/common/v1/common';
 import { getLogger } from './logger';
 
 const log = getLogger('config:watcher');
 
-const PROTO_PATH = path.resolve(
-  __dirname,
-  '../../../packages/proto/config/v1/config.proto'
-);
-
-const packageDef = protoLoader.loadSync(PROTO_PATH, {
-  keepCase: false,
-  longs: String,
-  enums: String,
-  defaults: true,
-  oneofs: true,
-});
-const proto = grpc.loadPackageDefinition(packageDef) as any;
-
-export type ConfigValue =
-  | { string_val: string }
-  | { int_val: number }
-  | { float_val: number }
-  | { bool_val: boolean };
-
-export interface ConfigSnapshot {
-  namespace: string;
-  version: string;
-  values: Record<string, ConfigValue>;
-  update_type: number;
-  changed_keys: string[];
-}
+export type { ConfigSnapshot, ConfigValue };
 
 export class ConfigWatcher extends EventEmitter {
-  private stub: any;
+  private stub: InstanceType<typeof ConfigServiceClient>;
   private snapshot: ConfigSnapshot | null = null;
   private snapshotReceived = false;
   private resolveSnapshot!: () => void;
@@ -52,11 +26,7 @@ export class ConfigWatcher extends EventEmitter {
     private readonly namespace: string,
   ) {
     super();
-    const channel = new proto.xstockstrat.config.v1.ConfigService(
-      endpoint,
-      grpc.credentials.createInsecure(),
-    );
-    this.stub = channel;
+    this.stub = new ConfigServiceClient(endpoint, grpc.credentials.createInsecure());
     this.snapshotPromise = new Promise((resolve) => {
       this.resolveSnapshot = resolve;
     });
@@ -64,7 +34,18 @@ export class ConfigWatcher extends EventEmitter {
   }
 
   private startWatch() {
-    const stream = this.stub.watchConfig({ namespace: this.namespace, client_id: `node-${this.namespace}-${process.pid}` });
+    const appEnv = process.env.APP_ENV ?? 'dev';
+    const tradingModeEnv = process.env.TRADING_MODE ?? 'paper';
+    const environment = appEnv === 'production' ? Environment.ENVIRONMENT_PRODUCTION : Environment.ENVIRONMENT_DEV;
+    const tradingMode = tradingModeEnv === 'live' ? TradingMode.TRADING_MODE_LIVE : TradingMode.TRADING_MODE_PAPER;
+
+    const stream = this.stub.watchConfig({
+      namespace: this.namespace,
+      clientId: `node-${this.namespace}-${process.pid}`,
+      version: '',
+      environment,
+      tradingMode,
+    });
 
     stream.on('data', (snap: ConfigSnapshot) => {
       this.snapshot = snap;
@@ -73,7 +54,7 @@ export class ConfigWatcher extends EventEmitter {
         this.resolveSnapshot();
       }
       this.emit('update', snap);
-      log.debug(`Config updated namespace=${snap.namespace} version=${snap.version} keys=${snap.changed_keys?.join(',')}`);
+      log.debug(`Config updated namespace=${snap.namespace} version=${snap.version} keys=${snap.changedKeys?.join(',')}`);
     });
 
     stream.on('error', (err: Error) => {
@@ -100,23 +81,23 @@ export class ConfigWatcher extends EventEmitter {
   }
 
   getString(key: string, def = ''): string {
-    const v = this.snapshot?.values[key] as any;
-    return v?.string_val ?? def;
+    const v = this.snapshot?.values[key];
+    return v?.stringVal ?? def;
   }
 
   getInt(key: string, def = 0): number {
-    const v = this.snapshot?.values[key] as any;
-    return v?.int_val ?? def;
+    const v = this.snapshot?.values[key];
+    return v?.intVal ?? def;
   }
 
   getFloat(key: string, def = 0): number {
-    const v = this.snapshot?.values[key] as any;
-    return v?.float_val ?? def;
+    const v = this.snapshot?.values[key];
+    return v?.floatVal ?? def;
   }
 
   getBool(key: string, def = false): boolean {
-    const v = this.snapshot?.values[key] as any;
-    return v?.bool_val ?? def;
+    const v = this.snapshot?.values[key];
+    return v?.boolVal ?? def;
   }
 
   getSnapshot(): ConfigSnapshot | null {

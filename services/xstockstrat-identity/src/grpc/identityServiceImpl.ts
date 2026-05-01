@@ -52,6 +52,7 @@ export class IdentityServiceImpl {
 
       const now = Math.floor(Date.now() / 1000);
       const expiresAt = now + this.accessTtlSeconds;
+      // JWT payload uses snake_case claim names — these are internal JWT fields, not proto fields
       const claimsPayload = {
         user_id: user.user_id,
         email,
@@ -75,15 +76,15 @@ export class IdentityServiceImpl {
 
       log.info('User authenticated', { userId: user.user_id });
       callback(null, {
-        access_token: accessToken,
-        refresh_token: refreshToken,
-        expires_at: { seconds: expiresAt },
+        accessToken,
+        refreshToken,
+        expiresAt: { seconds: expiresAt },
         claims: {
-          user_id: user.user_id,
+          userId: user.user_id,
           email,
           roles: user.roles ?? [],
-          issued_at: { seconds: now },
-          expires_at: { seconds: expiresAt },
+          issuedAt: { seconds: now },
+          expiresAt: { seconds: expiresAt },
         },
       });
     } catch (err: any) {
@@ -101,11 +102,11 @@ export class IdentityServiceImpl {
     try {
       const decoded = (jwt as any).verify(token, this.jwtSecret) as any;
       callback(null, {
-        user_id: decoded.user_id ?? '',
+        userId: decoded.user_id ?? '',
         email: decoded.email ?? '',
         roles: decoded.roles ?? [],
-        issued_at: { seconds: decoded.issued_at ?? Math.floor(Date.now() / 1000) },
-        expires_at: { seconds: decoded.expires_at ?? decoded.exp ?? 0 },
+        issuedAt: { seconds: decoded.issued_at ?? Math.floor(Date.now() / 1000) },
+        expiresAt: { seconds: decoded.expires_at ?? decoded.exp ?? 0 },
       });
     } catch (err: any) {
       callback({ code: 16, message: 'invalid or expired token' });
@@ -116,10 +117,10 @@ export class IdentityServiceImpl {
    * RefreshToken — validates refresh token, rotates it, issues new JWT pair.
    */
   async refreshToken(call: any, callback: any) {
-    const { refresh_token } = call.request;
-    if (!refresh_token) return callback({ code: 3, message: 'refresh_token required' });
+    const { refreshToken } = call.request;
+    if (!refreshToken) return callback({ code: 3, message: 'refreshToken required' });
 
-    const tokenHash = crypto.createHash('sha256').update(refresh_token).digest('hex');
+    const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
     try {
       const result = await this.pool.query(
         `SELECT rt.token_id, rt.user_id, u.email, u.roles
@@ -160,15 +161,15 @@ export class IdentityServiceImpl {
 
       log.info('Token refreshed', { userId: user_id });
       callback(null, {
-        access_token: newAccessToken,
-        refresh_token: newRefreshToken,
-        expires_at: { seconds: expiresAt },
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+        expiresAt: { seconds: expiresAt },
         claims: {
-          user_id,
+          userId: user_id,
           email,
           roles: roles ?? [],
-          issued_at: { seconds: now },
-          expires_at: { seconds: expiresAt },
+          issuedAt: { seconds: now },
+          expiresAt: { seconds: expiresAt },
         },
       });
     } catch (err: any) {
@@ -200,7 +201,7 @@ export class IdentityServiceImpl {
   }
 
   async createApiKey(call: any, callback: any) {
-    const { user_id, name, scopes } = call.request;
+    const { userId, name, scopes } = call.request;
     const rawKey = `xss_${crypto.randomBytes(32).toString('hex')}`;
     const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
     const keyId = uuidv4();
@@ -210,16 +211,16 @@ export class IdentityServiceImpl {
       await this.pool.query(
         `INSERT INTO identity.api_keys (key_id, user_id, name, key_prefix, key_hash, scopes, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [keyId, user_id, name, rawKey.slice(0, 8), keyHash, scopes ?? [], now]
+        [keyId, userId, name, rawKey.slice(0, 8), keyHash, scopes ?? [], now]
       );
-      log.info('API key created', { key_id: keyId, user_id });
+      log.info('API key created', { keyId, userId });
       callback(null, {
-        key_id: keyId,
-        key_prefix: rawKey.slice(0, 8),
-        user_id,
+        keyId,
+        keyPrefix: rawKey.slice(0, 8),
+        userId,
         name,
         scopes: scopes ?? [],
-        created_at: { seconds: Math.floor(now.getTime() / 1000) },
+        createdAt: { seconds: Math.floor(now.getTime() / 1000) },
       });
     } catch (err: any) {
       callback({ code: 13, message: err.message });
@@ -227,9 +228,9 @@ export class IdentityServiceImpl {
   }
 
   async validateApiKey(call: any, callback: any) {
-    const { api_key } = call.request;
-    if (!api_key) return callback({ code: 3, message: 'api_key required' });
-    const keyHash = crypto.createHash('sha256').update(api_key).digest('hex');
+    const { apiKey } = call.request;
+    if (!apiKey) return callback({ code: 3, message: 'apiKey required' });
+    const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
     try {
       const result = await this.pool.query(
         `SELECT k.user_id, k.scopes, u.email, u.roles
@@ -242,11 +243,11 @@ export class IdentityServiceImpl {
       const r = result.rows[0];
       const now = Math.floor(Date.now() / 1000);
       callback(null, {
-        user_id: r.user_id,
+        userId: r.user_id,
         email: r.email,
         roles: [...(r.roles ?? []), ...(r.scopes ?? [])],
-        issued_at: { seconds: now },
-        expires_at: { seconds: now + 3600 },
+        issuedAt: { seconds: now },
+        expiresAt: { seconds: now + 3600 },
       });
     } catch (err: any) {
       callback({ code: 13, message: err.message });
@@ -254,17 +255,20 @@ export class IdentityServiceImpl {
   }
 
   async listApiKeys(call: any, callback: any) {
-    const { user_id } = call.request;
+    const { userId } = call.request;
     try {
       const result = await this.pool.query(
         'SELECT key_id, key_prefix, user_id, name, scopes, created_at FROM identity.api_keys WHERE user_id = $1',
-        [user_id]
+        [userId]
       );
       callback(null, {
         keys: result.rows.map(r => ({
-          key_id: r.key_id, key_prefix: r.key_prefix, user_id: r.user_id,
-          name: r.name, scopes: r.scopes,
-          created_at: { seconds: Math.floor(new Date(r.created_at).getTime() / 1000) },
+          keyId: r.key_id,
+          keyPrefix: r.key_prefix,
+          userId: r.user_id,
+          name: r.name,
+          scopes: r.scopes,
+          createdAt: { seconds: Math.floor(new Date(r.created_at).getTime() / 1000) },
         }))
       });
     } catch (err: any) {
@@ -275,7 +279,7 @@ export class IdentityServiceImpl {
   async revokeApiKey(call: any, callback: any) {
     try {
       await this.pool.query('DELETE FROM identity.api_keys WHERE key_id = $1 AND user_id = $2',
-        [call.request.key_id, call.request.user_id]);
+        [call.request.keyId, call.request.userId]);
       callback(null, { success: true });
     } catch (err: any) {
       callback({ code: 13, message: err.message });

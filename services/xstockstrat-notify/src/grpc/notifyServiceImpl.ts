@@ -43,28 +43,28 @@ export class NotifyServiceImpl {
           req.category,
           req.title,
           req.body,
-          req.source_service,
-          req.target_user_id || null,
+          req.sourceService,
+          req.targetUserId || null,
           JSON.stringify(req.context ?? {}),
           req.tags ?? [],
-          req.correlation_id || null,
+          req.correlationId || null,
           now,
         ]
       );
 
       // Fan-out to active StreamAlerts subscribers
       const alert = {
-        alert_id: alertId,
+        alertId,
         severity: req.severity,
         category: req.category,
         title: req.title,
         body: req.body,
-        source_service: req.source_service,
-        target_user_id: req.target_user_id ?? '',
+        sourceService: req.sourceService,
+        targetUserId: req.targetUserId ?? '',
         context: req.context,
         tags: req.tags ?? [],
-        correlation_id: req.correlation_id ?? '',
-        created_at: { seconds: Math.floor(now.getTime() / 1000) },
+        correlationId: req.correlationId ?? '',
+        createdAt: { seconds: Math.floor(now.getTime() / 1000) },
         acknowledged: false,
       };
 
@@ -82,8 +82,8 @@ export class NotifyServiceImpl {
       log.info('Alert emitted', { alertId, category: req.category, severity: req.severity, delivered: deliveredCount });
 
       callback(null, {
-        alert_id: alertId,
-        created_at: { seconds: Math.floor(now.getTime() / 1000) },
+        alertId,
+        createdAt: { seconds: Math.floor(now.getTime() / 1000) },
       });
     } catch (err: any) {
       log.error('emitAlert failed', { error: err.message });
@@ -101,10 +101,10 @@ export class NotifyServiceImpl {
     const subId = uuidv4();
 
     const subscriber: StreamSubscriber = {
-      userId: req.user_id ?? '',
+      userId: req.userId ?? '',
       categories: req.categories ?? [],
       severities: req.severities ?? [],
-      includeAcknowledged: req.include_acknowledged ?? false,
+      includeAcknowledged: req.includeAcknowledged ?? false,
       call,
     };
     this.subscribers.set(subId, subscriber);
@@ -126,7 +126,7 @@ export class NotifyServiceImpl {
     try {
       await this.pool.query(
         'UPDATE notify.alerts SET acknowledged = true, acknowledged_by = $1, acknowledged_at = NOW() WHERE alert_id = $2',
-        [call.request.user_id, call.request.alert_id]
+        [call.request.userId, call.request.alertId]
       );
       callback(null, { success: true });
     } catch (err: any) {
@@ -141,7 +141,7 @@ export class NotifyServiceImpl {
         `SELECT * FROM notify.alerts
          WHERE ($1::text IS NULL OR target_user_id = $1 OR target_user_id IS NULL)
          ORDER BY created_at DESC LIMIT $2`,
-        [req.user_id || null, req.limit || 50]
+        [req.userId || null, req.limit || 50]
       );
       callback(null, { alerts: result.rows.map(rowToAlert) });
     } catch (err: any) {
@@ -151,7 +151,7 @@ export class NotifyServiceImpl {
 
   private matchesSubscriber(alert: any, sub: StreamSubscriber): boolean {
     // User filter: broadcast (no target) OR matches target
-    if (sub.userId && alert.target_user_id && alert.target_user_id !== sub.userId) {
+    if (sub.userId && alert.targetUserId && alert.targetUserId !== sub.userId) {
       return false;
     }
     // Category filter
@@ -171,16 +171,16 @@ export class NotifyServiceImpl {
 
 export function rowToAlert(row: any) {
   return {
-    alert_id: row.alert_id,
+    alertId: row.alert_id,
     severity: row.severity,
     category: row.category,
     title: row.title,
     body: row.body,
-    source_service: row.source_service,
-    target_user_id: row.target_user_id ?? '',
-    created_at: { seconds: Math.floor(new Date(row.created_at).getTime() / 1000) },
+    sourceService: row.source_service,
+    targetUserId: row.target_user_id ?? '',
+    createdAt: { seconds: Math.floor(new Date(row.created_at).getTime() / 1000) },
     acknowledged: row.acknowledged,
-    correlation_id: row.correlation_id ?? '',
+    correlationId: row.correlation_id ?? '',
     tags: row.tags ?? [],
   };
 }

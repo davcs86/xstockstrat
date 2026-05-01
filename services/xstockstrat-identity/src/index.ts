@@ -2,9 +2,8 @@ import { initTelemetry } from './telemetry';
 initTelemetry();
 
 import * as grpc from '@grpc/grpc-js';
-import * as protoLoader from '@grpc/proto-loader';
 import * as http from 'http';
-import path from 'path';
+import { IdentityServiceService } from '@xstockstrat/proto/identity/v1/identity';
 import { Pool } from 'pg';
 import { ConfigWatcher } from './services/configWatcher';
 import { IdentityServiceImpl } from './grpc/identityServiceImpl';
@@ -27,18 +26,12 @@ async function main() {
 
   const pool = new Pool({ connectionString: databaseUrl });
 
-  const PROTO_PATH = path.resolve(__dirname, '../../../packages/proto/identity/v1/identity.proto');
-  const pkgDef = protoLoader.loadSync(PROTO_PATH, {
-    keepCase: false, longs: String, enums: String, defaults: true, oneofs: true
-  });
-  const proto = grpc.loadPackageDefinition(pkgDef) as any;
-
   const identityImpl = new IdentityServiceImpl(pool, configWatcher);
 
   // ── gRPC server (internal service-to-service, port 50058) ──────────────
   const grpcServer = new grpc.Server();
   grpcServer.addService(
-    proto.xstockstrat.identity.v1.IdentityService.service,
+    IdentityServiceService,
     identityImpl as unknown as grpc.UntypedServiceImplementation,
   );
 
