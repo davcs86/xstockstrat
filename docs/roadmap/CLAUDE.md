@@ -9,3 +9,11 @@
 | `phase6-deviations.md` | **Phase 6 DONE** — Webhook endpoint name discrepancies (set-config vs config-update, query-events vs replay-events), n8n workflow storage in `packages/n8n/workflows/`, integration test approach (curl over grpcurl), auth enforcement scope. |
 
 **Pending phases:** Phase 0 (foundation setup), Phase 2 (data layer: marketdata + portfolio), Phase 7 (observability). See `implementation-roadmap.md` for full specs.
+
+---
+
+## Feature Implementations
+
+Active and in-progress feature SDD artifacts live in [`features/`](features/CLAUDE.md).
+Each feature tracks lifecycle status from `idea` through `launched` or `demoted/canceled`.
+Run `/sdd-status` for a summary table, or read `features/<slug>/feature.md` for a specific feature.

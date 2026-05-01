@@ -236,3 +236,20 @@ This creates each service's GitHub repo, splits the `services/<name>/` history, 
 - Always run `subtree-sync.sh pull <service>` before starting work if someone else may have pushed directly to a service repo.
 - `git subtree pull` uses `--squash` to keep monorepo history clean.
 - Service remotes are named after the service (e.g., `xstockstrat-config`). View all with `git remote -v`.
+
+---
+
+## Feature Roadmap
+
+Active and completed feature implementations are tracked under `docs/roadmap/features/`. Each feature directory contains:
+- `feature.md` — lifecycle status (`idea`/`draft`/`spec-ready`/`implementation-ready`/`in-progress`/`code-completed`/`launched`/`rolled-back`/`demoted/canceled`), links to all artifacts
+- `product-spec.md` — requirements, affected services, governance gates
+- `implementation-spec.md` — numbered steps with concrete code references and statuses
+- `context.md` — append-only session log of decisions, deviations, files modified
+
+**When starting any session involving an in-progress feature:**
+1. Run `/sdd-status` to see all features and their lifecycle status.
+2. Read `docs/roadmap/features/<slug>/context.md` before touching any related files — it contains critical decisions from prior sessions.
+3. Do NOT rely on conversation context from a previous session. Always re-read context.md.
+
+SDD skills: `/sdd-story` → `/sdd-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime)
