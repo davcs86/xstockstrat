@@ -158,10 +158,10 @@ describe('revokeToken', () => {
 // ---------------------------------------------------------------------------
 
 describe('createApiKey', () => {
-  it('rejects when user_id is missing', async () => {
+  it('rejects when userId is missing', async () => {
     const impl = makeImpl();
     if (!impl) return;
-    const call = makeCall({ user_id: '' });
+    const call = makeCall({ userId: '' });
 
     await new Promise<void>((resolve) => {
       impl.createApiKey(call, (err: any) => {
