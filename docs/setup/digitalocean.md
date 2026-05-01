@@ -1,4 +1,4 @@
-# x-setup-digitalocean — DigitalOcean Account & App Platform Setup
+# DigitalOcean Account & App Platform Setup
 
 This runbook walks through creating and configuring the DigitalOcean infrastructure that hosts all 13 xstockstrat services. Two App Platform deployments exist — one for paper trading (dev, `main-dev` branch) and one for live trading (prod, `main` branch).
 
@@ -25,8 +25,8 @@ Architecture spec files:
 - You have already cloned the repo locally and have `.env.example` ready to copy
 - `doctl` CLI installed (see Step 2)
 - `gh` CLI installed and authenticated (`gh auth login`)
-- All Alpaca credentials ready (see `_tasks/x-setup-alpaca.md`)
-- All Grafana Cloud OTLP credentials ready (see `_tasks/x-setup-grafana-cloud.md`)
+- All Alpaca credentials ready (see `docs/setup/alpaca.md`)
+- All Grafana Cloud OTLP credentials ready (see `docs/setup/grafana-cloud.md`)
 
 ---
 
@@ -258,7 +258,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-<region>.grafana.net/otlp
 OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <base64-token>
 ```
 
-See `_tasks/x-setup-grafana-cloud.md` for how to obtain these values.
+See `docs/setup/grafana-cloud.md` for how to obtain these values.
 
 ---
 
@@ -332,7 +332,7 @@ DATABASE_URL="postgresql://doadmin:<password>@<host>:25060/defaultdb?sslmode=req
   ./scripts/db-migrate.sh force
 ```
 
-See `_tasks/x-db-seed-migration-state.md` for the full one-time runbook.
+See `docs/runbooks/db-seed-migration-state.md` for the full one-time runbook.
 
 ### Monitoring migration job logs
 
@@ -400,4 +400,4 @@ Run `CREATE EXTENSION IF NOT EXISTS timescaledb;` on the managed database before
 | `main` | xstockstrat-prod | live | api.alpaca.markets |
 | `feature/*` | none (CI tests only) | — | — |
 
-Never push directly to `main-dev` or `main` — always use PRs. See `_tasks/x-feature-workflow.md`.
+Never push directly to `main-dev` or `main` — always use PRs. See `docs/runbooks/feature-workflow.md`.

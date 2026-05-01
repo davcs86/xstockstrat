@@ -67,7 +67,7 @@ git pull origin main-dev
 git checkout -b feature/<short-description>
 ```
 
-For proto contract changes, review `x-approval-flow.md` before starting — breaking
+For proto contract changes, review `docs/runbooks/approval-flow.md` before starting — breaking
 changes require sign-off before the first commit.
 
 ### 2. Develop locally
@@ -110,7 +110,7 @@ the merge button until it passes:
 
 Required for merge:
 - `CI / Proto lint and breaking check` green (enforced by branch protection)
-- At least 1 service owner approval (2 for breaking proto changes — see `x-approval-flow.md`)
+- At least 1 service owner approval (2 for breaking proto changes — see `docs/runbooks/approval-flow.md`)
 
 ### 4. Merge to `main-dev` → deploys to dev (paper trading)
 
@@ -130,7 +130,7 @@ Verify the deployment:
 - Review ledger events and config state via the dev config-ui.
 
 Config changes needed for the feature (new keys, updated defaults):
-follow `x-config-rollout.md` against the dev config service.
+follow `docs/runbooks/config-rollout.md` against the dev config service.
 
 ### 5. Open a PR from `main-dev` to `main`
 
@@ -144,8 +144,8 @@ Required for merge:
 - `CI / Proto lint and breaking check` green (enforced by branch protection)
 - At least 1 reviewer approval (enforced by branch protection)
 - Confirmation that the feature has been validated on dev (paper trading) environment
-- For config key additions: key registered and documented per `x-config-rollout.md`
-- For proto changes: migration note in `x-config-rollout.md` if needed
+- For config key additions: key registered and documented per `docs/runbooks/config-rollout.md`
+- For proto changes: migration note in `docs/runbooks/config-rollout.md` if needed
 
 ### 6. Merge to `main` → deploys to production (live trading)
 
@@ -200,7 +200,7 @@ New config keys introduced by a feature must be:
 3. Rolled out to dev config service before testing on dev
 4. Rolled out to prod config service as part of the production deploy step
 
-Follow `x-config-rollout.md` for the full rollout and rollback procedure.
+Follow `docs/runbooks/config-rollout.md` for the full rollout and rollback procedure.
 
 ---
 
@@ -240,13 +240,13 @@ When a feature requires a new table, column, index, or any other schema change:
 All `.proto` changes must:
 1. Be made in `packages/proto/` in this spine repo
 2. Pass `buf lint` and `buf breaking --against '.git#branch=main'`
-3. Follow the approval matrix in `x-approval-flow.md`
+3. Follow the approval matrix in `docs/runbooks/approval-flow.md`
 4. Regenerate stubs via `./scripts/buf-gen.sh` with generated output committed to
    `packages/proto/gen/`
 
 Breaking changes additionally require:
 - Deprecation comment in `.proto` for one release cycle
-- Migration note in `x-config-rollout.md`
+- Migration note in `docs/runbooks/config-rollout.md`
 
 ---
 

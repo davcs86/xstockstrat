@@ -1,6 +1,6 @@
 # Phase 3 — Implementation Deviations & Decisions
 
-This document captures implementation decisions that deviate from or clarify the Phase 3 specification in `x-implementation-roadmap.md`.
+This document captures implementation decisions that deviate from or clarify the Phase 3 specification in `docs/roadmap/implementation-roadmap.md`.
 
 ---
 
@@ -55,4 +55,4 @@ Added `INGEST_ENDPOINT` to `main.py` and `AnalysisServicer` constructor. Default
 
 ## Proto governance note
 
-The addition of `IngestSignal`, `QuerySignals`, `ExternalSignal`, `IngestSignalRequest`, `IngestSignalResponse`, `QuerySignalsRequest`, `QuerySignalsResponse` to `ingest/v1/ingest.proto` is a **non-breaking addition** (new RPCs + new messages). Per the approval flow in `x-approval-flow.md`, this requires 1 service owner approval before merging to main.
+The addition of `IngestSignal`, `QuerySignals`, `ExternalSignal`, `IngestSignalRequest`, `IngestSignalResponse`, `QuerySignalsRequest`, `QuerySignalsResponse` to `ingest/v1/ingest.proto` is a **non-breaking addition** (new RPCs + new messages). Per the approval flow in `docs/runbooks/approval-flow.md`, this requires 1 service owner approval before merging to main.

@@ -1,4 +1,4 @@
-# x-setup-grafana-cloud — Grafana Cloud & OpenTelemetry Setup
+# Grafana Cloud & OpenTelemetry Setup
 
 This runbook walks through creating a Grafana Cloud account and wiring the xstockstrat platform's OpenTelemetry (OTEL) telemetry pipeline into it. All 13 services emit traces, metrics, and logs via OTLP. In local dev, an `otel-collector` Docker container aggregates and forwards signals. In production (DO App Platform), services push OTLP directly to Grafana Cloud.
 

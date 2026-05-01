@@ -167,7 +167,7 @@ grpcurl -d '{"alert":{"category":"system","severity":"INFO","message":"Phase 1 c
 - Register Alpaca at startup as `sourceRegistry.Register("alpaca", alpacaClient)`; additional providers added alongside it
 - All `BackfillBars` and `Stream*` calls dispatch via `sourceRegistry.Get(req.Source)` (defaults to `"alpaca"`)
 - `source` value propagated from client through DB insert (`source TEXT NOT NULL DEFAULT 'alpaca'`) and proto response
-- See `_tasks/x-add-data-source.md` Part 1 for the full multi-source client interface
+- See `docs/runbooks/add-data-source.md` Part 1 for the full multi-source client interface
 
 **Config Keys**: `marketdata.alpaca_base_url`, `marketdata.feed` (iex/sip), `marketdata.backfill_batch_size`, `marketdata.<source>.enabled` per additional provider
 
@@ -231,7 +231,7 @@ psql $DATABASE_URL -c "SELECT COUNT(*) FROM marketdata.ohlcv WHERE symbol='AAPL'
 - Callers (analysis or external) fetch active signals via `ingest.QuerySignals` before calling `ExecuteFormula`
 - Newsletter signals are passed in `input_data` struct alongside OHLCV bars
 - The sandbox receives `data["newsletter_signals"]` as a list and can weight them in composite scoring
-- See `_tasks/x-add-data-source.md` Part 3 for formula pattern and example composite formula
+- See `docs/runbooks/add-data-source.md` Part 3 for formula pattern and example composite formula
 
 ### 3B. xstockstrat-ingest (Port 50055 / 8055)
 
@@ -243,7 +243,7 @@ psql $DATABASE_URL -c "SELECT COUNT(*) FROM marketdata.ohlcv WHERE symbol='AAPL'
 **DB migration** (run before implementing RPCs):
 - `services/xstockstrat-ingest/migrations/002_newsletter_signals.sql`
 - Creates `ingest.newsletter_signals` hypertable (7-day chunks by `ingested_at`)
-- See `_tasks/x-add-data-source.md` Part 2, Step 1 for the full DDL
+- See `docs/runbooks/add-data-source.md` Part 2, Step 1 for the full DDL
 
 **Implement**:
 - `TriggerBackfill(TriggerBackfillRequest) → TriggerBackfillResponse` — create `BackfillJob`, call `BackfillBars` on marketdata
@@ -258,7 +258,7 @@ psql $DATABASE_URL -c "SELECT COUNT(*) FROM marketdata.ohlcv WHERE symbol='AAPL'
 - Add `IngestSignal`, `QuerySignals` RPCs to `IngestService`
 - Add `ExternalSignal`, `IngestSignalRequest/Response`, `QuerySignalsRequest/Response` messages
 - Run `buf lint && buf breaking --against '.git#branch=main'` then `buf generate`
-- See `_tasks/x-add-data-source.md` Part 2, Step 2 for the full proto diff
+- See `docs/runbooks/add-data-source.md` Part 2, Step 2 for the full proto diff
 
 ### 3C. xstockstrat-analysis (Port 50056 / 8056)
 
@@ -274,7 +274,7 @@ psql $DATABASE_URL -c "SELECT COUNT(*) FROM marketdata.ohlcv WHERE symbol='AAPL'
 **Signal-weighted backtesting** (new dependency on xstockstrat-ingest):
 - `RunBacktestRequest.strategy_params` (Struct) accepts `signal_sources`, `signal_weight`, `technical_weight`, `min_conviction`
 - At each backtest timestep, analysis calls `QuerySignals` for active signals and passes them into `ExecuteFormula`
-- See `_tasks/x-add-data-source.md` Part 3 for the full `RunBacktest` call pattern
+- See `docs/runbooks/add-data-source.md` Part 3 for the full `RunBacktest` call pattern
 
 ### Verification Checkpoint 3
 
@@ -342,7 +342,7 @@ grpcurl -d '{"formula":"import time; time.sleep(999)","inputs":{}}' \
 # Expected: SandboxExitReason = TIMEOUT
 ```
 
-> Implementation notes: see `_tasks/x-phase3-deviations.md`
+> Implementation notes: see `docs/roadmap/phase3-deviations.md`
 
 ---
 
@@ -469,7 +469,7 @@ curl http://localhost:3000/health
 
 > End-to-end wiring of all n8n workflows and cross-service integration tests.
 >
-> Implementation notes: see `_tasks/x-phase6-deviations.md`
+> Implementation notes: see `docs/roadmap/phase6-deviations.md`
 
 ### Tasks
 
@@ -478,7 +478,7 @@ curl http://localhost:3000/health
    - Configure n8n to call `POST http://trading:8051/webhooks/n8n/place-order` on external signal
    - Configure n8n to call `POST http://notify:8059/webhooks/n8n/emit-alert` on risk event
    - Configure n8n to call `POST http://ledger:8057/webhooks/n8n/replay-events` for audit
-   - Configure per-newsletter n8n workflows → `POST http://ingest:8055/webhooks/n8n/ingest-signal` (email/RSS/CSV paths — see `_tasks/x-add-data-source.md` Part 2, Step 6)
+   - Configure per-newsletter n8n workflows → `POST http://ingest:8055/webhooks/n8n/ingest-signal` (email/RSS/CSV paths — see `docs/runbooks/add-data-source.md` Part 2, Step 6)
 
 2. **Cross-service integration tests**
    - Full paper trade lifecycle: signal → order → fill → portfolio update → ledger event → notify alert
@@ -1124,5 +1124,5 @@ Phase 0  (foundation)
 | Bootstrap script | `scripts/bootstrap.sh` |
 | DB migration script | `scripts/db-migrate.sh` |
 | Proto gen script | `scripts/buf-gen.sh` |
-| Config rollout runbook | `_tasks/x-config-rollout.md` |
-| Approval flow | `_tasks/x-approval-flow.md` |
+| Config rollout runbook | `docs/runbooks/config-rollout.md` |
+| Approval flow | `docs/runbooks/approval-flow.md` |

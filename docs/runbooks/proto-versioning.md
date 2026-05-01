@@ -35,7 +35,7 @@ Common triggers for v2:
    - `packages/proto/gen/ts/{domain}/v2/`
 4. Commit **proto source + generated stubs together** in one commit
 5. `buf breaking` passes (creating a new package is not breaking)
-6. Get 2-service-owner approval per the [approval flow](x-approval-flow.md)
+6. Get 2-service-owner approval per the [approval flow](approval-flow.md)
 
 ### PR2–N — Migrate consumers one service per PR
 
