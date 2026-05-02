@@ -77,4 +77,10 @@ Two user follow-ups incorporated into product-spec.md. Status remains `draft`.
 - `ConsumePositionSyncs` in `xstockstrat-portfolio` atomically replaces positions for the account on each event (broker truth wins for IBKR accounts).
 - Alpaca continues fill-event-based tracking. `GetPositions` is on the `Broker` interface (Alpaca implements it) but the poller does not invoke it — trivial follow-up.
 - `portfolio.positions` table gains `account_id TEXT NOT NULL DEFAULT 'alpaca-default'`; unique constraint updated to `(user_id, symbol, trading_mode, account_id)`.
-- New config key: `trading.position_sync.ibkr_interval_ms` (int, default 300000, live-reloaded).
+- New config key: `trading.position_sync.interval_ms` (int, default 300000, live-reloaded).
+
+---
+
+## Session 2026-05-02T00:04:00Z — broker feature parity
+
+User confirmed goal is feature parity between brokers. Position sync poller (FR-28–31) now runs for **all** registered accounts, not IBKR-only. `GetPositions` was already on the `Broker` interface and Alpaca already implements it — only the poller scope changed. Config key renamed `trading.position_sync.ibkr_interval_ms` → `trading.position_sync.interval_ms`. "Alpaca position sync" removed from Out of Scope.

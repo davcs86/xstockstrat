@@ -136,9 +136,9 @@ FR-27. `ListPortfolios` returns one `Portfolio` per active account for the given
 
 ### IBKR Position Sync
 
-FR-28. Add a `StartPositionSyncPoller` goroutine to `xstockstrat-trading`, started alongside `StartFillPoller`. It polls on a configurable interval (`trading.position_sync.ibkr_interval_ms` config key, default: 300000 ms / 5 min).
+FR-28. Add a `StartPositionSyncPoller` goroutine to `xstockstrat-trading`, started alongside `StartFillPoller`. It polls on a configurable interval (`trading.position_sync.interval_ms` config key, default: 300000 ms / 5 min).
 
-FR-29. On each tick, the poller iterates over all IBKR accounts in the client pool and calls `GetPositions(ctx)` on each. Results are used to emit an `account.positions.synced` ledger event with payload:
+FR-29. On each tick, the poller iterates over **all registered accounts** in the client pool and calls `GetPositions(ctx)` on each. Results are used to emit an `account.positions.synced` ledger event with payload:
 ```json
 {
   "account_id": "ibkr-live",
@@ -152,7 +152,7 @@ FR-29. On each tick, the poller iterates over all IBKR accounts in the client po
 
 FR-30. `xstockstrat-portfolio` adds a `ConsumePositionSyncs` goroutine (parallel to `ConsumeOrderFills`) that subscribes to `account.positions.synced` events on the ledger stream. On each event, it atomically replaces all positions for the given `account_id` with the synced snapshot within a single DB transaction. This makes IBKR broker-reported positions the source of truth for IBKR accounts, overriding fill-event-derived state if they drift.
 
-FR-31. Position sync only runs for IBKR accounts. Alpaca accounts continue to use fill-event-based position tracking exclusively in this feature.
+FR-31. Position sync runs for all registered accounts regardless of broker type, ensuring feature parity. Both Alpaca and IBKR accounts use fill-event-based tracking (FR-33) for real-time order fills and position sync (FR-28–30) for periodic reconciliation against broker truth.
 
 ### Ledger Events
 
@@ -167,7 +167,7 @@ FR-33. `StartFillPoller` is extended to run one polling goroutine per account. E
 ## Out of Scope
 
 - **IBKR market data**: `xstockstrat-marketdata` is not modified. Alpaca remains the sole market data provider.
-- **Alpaca position sync**: The `GetPositions` method is implemented on the Alpaca client (FR-12) but the sync poller does not invoke it. Alpaca sync is a trivial follow-up once the sync infrastructure exists.
+- **Per-broker sync interval tuning**: A single `trading.position_sync.interval_ms` key governs all accounts. Per-broker or per-account interval configuration is deferred.
 - **Portfolio aggregation across accounts**: The UI can sum across per-account portfolios from `ListPortfolios`. Server-side aggregation is deferred.
 - **IBKR-specific order types**: New `OrderType` enum values (adaptive, midprice, etc.) are deferred.
 - **xstockstrat-trader UI changes**: `account_id` and `broker_type` are available on `Order` proto; account selector UI and per-account portfolio view are follow-up features.
@@ -231,7 +231,7 @@ One new config service key:
 
 | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|
-| `trading.position_sync.ibkr_interval_ms` | int | `300000` | `all` | IBKR position sync poll interval in ms (5 min default). Live-reloaded via WatchConfig. |
+| `trading.position_sync.interval_ms` | int | `300000` | `all` | Position sync poll interval in ms for all broker accounts (5 min default). Live-reloaded via WatchConfig. |
 
 No per-account env vars. Existing `ALPACA_*` env vars retained for backwards-compatibility fallback only.
 
