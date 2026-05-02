@@ -3,7 +3,7 @@ name: sdd-execute
 description: Phase 3 of SDD — execute implementation steps with mandatory codebase discovery and explicit user confirmation before any writes. Usage: /sdd-execute <feature-slug> [step-number|next|all]. Re-reads context.md at every session start so prior decisions carry forward.
 argument-hint: <feature-slug> [step-number|next|all]
 disable-model-invocation: true
-allowed-tools: Read Write Edit Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(python *) Bash(buf *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
+allowed-tools: Read Write Edit Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(python *) Bash(buf *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
 effort: high
 ---
 
@@ -31,9 +31,31 @@ This reconstructs everything from prior sessions: deviations, decisions, stoppin
 **Step B4.** Read `docs/runbooks/feature-workflow.md`.
 Extract and enforce: branch model, migration file naming, proto change gate, PR requirements.
 
-**Step B5.** Run `git status`.
-Parse `**Development Branch**` from the already-read `feature.md` — this is the integration branch (PR target), e.g. `feature/<slug>`.
+**Step B4.5.** Fetch the feature's integration branch from origin and load authoritative artifacts.
+
+Parse `**Development Branch**` from the already-read `feature.md` — this is `<dev-branch>` (e.g. `feature/<slug>`).
 If the field is absent, fall back to `feature/$ARGUMENTS[0]` and note the fallback.
+
+```bash
+git fetch origin <dev-branch>
+git ls-remote --heads origin <dev-branch>
+```
+
+If the `ls-remote` command returns output (branch exists on origin):
+- Run the following and replace the in-memory content read in B1–B3 with these authoritative versions:
+  ```bash
+  git show origin/<dev-branch>:docs/roadmap/features/$ARGUMENTS[0]/implementation-spec.md
+  git show origin/<dev-branch>:docs/roadmap/features/$ARGUMENTS[0]/feature.md
+  git show origin/<dev-branch>:docs/roadmap/features/$ARGUMENTS[0]/context.md
+  ```
+- Note to user: "Loaded authoritative spec from `origin/<dev-branch>`."
+
+If the `ls-remote` command returns no output (branch not yet created on origin):
+- Use the locally-read files from B1–B3 as-is.
+- Note to user: "`origin/<dev-branch>` not found — using local spec (branch not yet pushed)."
+
+**Step B5.** Run `git status`.
+`<dev-branch>` was already determined in B4.5.
 Evaluate the current branch:
 - On `<dev-branch>` or `main-dev` → OK. BRANCH SYNC will handle checkout before each step.
 - On `feature-steps/<slug>-step-<N>` matching this feature → note that step N was previously started; BRANCH SYNC will handle.

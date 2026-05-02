@@ -3,7 +3,7 @@ name: sdd-status
 description: Show feature implementation status for all or a specific feature. Usage: /sdd-status [feature-slug]. Lists lifecycle status, step completion, last session, and next action. Read-only — makes no changes.
 argument-hint: [feature-slug]
 disable-model-invocation: true
-allowed-tools: Read Bash(ls *) Bash(find *) Bash(grep *)
+allowed-tools: Read Bash(ls *) Bash(find *) Bash(grep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *)
 effort: low
 ---
 
@@ -18,10 +18,18 @@ You are reporting the status of SDD features. This skill is read-only — you ma
 ## If no slug provided — show all features
 
 1. Run: `find docs/roadmap/features -maxdepth 1 -mindepth 1 -type d | sort`
-2. For each directory found:
-   - Read `feature.md` → extract `**Lifecycle Status**` and the last row of the Status History table
-   - Read `implementation-spec.md` (if it exists) → count steps by status: grep for `` **Status**: `done` ``, `` **Status**: `pending` ``, `` **Status**: `blocked` ``, `` **Status**: `in-progress` ``
-   - Read `context.md` (if it exists) → find the most recent `## Session` heading for last-session date
+1.5. Fetch all feature branches at once so the reads below use authoritative remote state:
+   ```bash
+   git fetch origin
+   ```
+2. For each directory found, derive `<slug>` from the directory name:
+   - Check whether `origin/feature/<slug>` exists:
+     ```bash
+     git ls-remote --heads origin feature/<slug>
+     ```
+   - If it exists: read `feature.md`, `implementation-spec.md`, and `context.md` using `git show origin/feature/<slug>:<path>` instead of the local files.
+   - If it does not exist: fall back to local files.
+   - From the chosen source: extract `**Lifecycle Status**` and the last row of the Status History table from `feature.md`; count steps by status from `implementation-spec.md` (grep for `` **Status**: `done` ``, `` **Status**: `pending` ``, `` **Status**: `blocked` ``, `` **Status**: `in-progress` ``); find the most recent `## Session` heading from `context.md`.
 
 3. Print a summary table:
 
@@ -40,6 +48,23 @@ legacy-cleanup        | demoted/canceled     | —         | 2026-04-28 sdd-stor
 ---
 
 ## If slug provided — show detail for one feature
+
+### 0. Fetch the feature's integration branch for authoritative state
+
+```bash
+git fetch origin feature/$ARGUMENTS[0]
+git ls-remote --heads origin feature/$ARGUMENTS[0]
+```
+
+If the branch exists on origin: read `feature.md`, `implementation-spec.md`, and `context.md` using:
+```bash
+git show origin/feature/$ARGUMENTS[0]:docs/roadmap/features/$ARGUMENTS[0]/feature.md
+git show origin/feature/$ARGUMENTS[0]:docs/roadmap/features/$ARGUMENTS[0]/implementation-spec.md
+git show origin/feature/$ARGUMENTS[0]:docs/roadmap/features/$ARGUMENTS[0]/context.md
+```
+Use these as the authoritative source for all steps below. Note: "Reading from `origin/feature/$ARGUMENTS[0]`."
+
+If the branch does not exist on origin: fall back to local files and note: "`origin/feature/$ARGUMENTS[0]` not found — reading local files."
 
 ### 1. Read feature.md
 
