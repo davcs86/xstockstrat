@@ -51,8 +51,15 @@ If the `ls-remote` command returns output (branch exists on origin):
 - Note to user: "Loaded authoritative spec from `origin/<dev-branch>`."
 
 If the `ls-remote` command returns no output (branch not yet created on origin):
-- Use the locally-read files from B1–B3 as-is.
-- Note to user: "`origin/<dev-branch>` not found — using local spec (branch not yet pushed)."
+- Fall back to reading from `origin/main-dev`:
+  ```bash
+  git fetch origin main-dev
+  git show origin/main-dev:docs/roadmap/features/$ARGUMENTS[0]/implementation-spec.md
+  git show origin/main-dev:docs/roadmap/features/$ARGUMENTS[0]/feature.md
+  git show origin/main-dev:docs/roadmap/features/$ARGUMENTS[0]/context.md
+  ```
+- Replace the in-memory content from B1–B3 with these versions.
+- Note to user: "`origin/<dev-branch>` not found — loaded spec from `origin/main-dev` (feature branch not yet pushed)."
 
 **Step B5.** Run `git status`.
 `<dev-branch>` was already determined in B4.5.

@@ -27,8 +27,8 @@ You are reporting the status of SDD features. This skill is read-only — you ma
      ```bash
      git ls-remote --heads origin feature/<slug>
      ```
-   - If it exists: read `feature.md`, `implementation-spec.md`, and `context.md` using `git show origin/feature/<slug>:<path>` instead of the local files.
-   - If it does not exist: fall back to local files.
+   - If it exists: read `feature.md`, `implementation-spec.md`, and `context.md` using `git show origin/feature/<slug>:<path>`.
+   - If it does not exist: fall back to `git show origin/main-dev:<path>` for each file.
    - From the chosen source: extract `**Lifecycle Status**` and the last row of the Status History table from `feature.md`; count steps by status from `implementation-spec.md` (grep for `` **Status**: `done` ``, `` **Status**: `pending` ``, `` **Status**: `blocked` ``, `` **Status**: `in-progress` ``); find the most recent `## Session` heading from `context.md`.
 
 3. Print a summary table:
@@ -64,7 +64,14 @@ git show origin/feature/$ARGUMENTS[0]:docs/roadmap/features/$ARGUMENTS[0]/contex
 ```
 Use these as the authoritative source for all steps below. Note: "Reading from `origin/feature/$ARGUMENTS[0]`."
 
-If the branch does not exist on origin: fall back to local files and note: "`origin/feature/$ARGUMENTS[0]` not found — reading local files."
+If the branch does not exist on origin: fall back to `origin/main-dev`:
+```bash
+git fetch origin main-dev
+git show origin/main-dev:docs/roadmap/features/$ARGUMENTS[0]/feature.md
+git show origin/main-dev:docs/roadmap/features/$ARGUMENTS[0]/implementation-spec.md
+git show origin/main-dev:docs/roadmap/features/$ARGUMENTS[0]/context.md
+```
+Note: "`origin/feature/$ARGUMENTS[0]` not found — reading from `origin/main-dev`."
 
 ### 1. Read feature.md
 
