@@ -28,9 +28,10 @@ echo "==> buf lint"
 buf lint
 
 # ── 2. Check for breaking changes against main branch ─────────────────────
-if git show-ref --verify refs/heads/main &>/dev/null; then
-  echo "==> buf breaking (against local main)"
-  buf breaking --against "$REPO_ROOT/.git#branch=main,subdir=packages/proto"
+AGAINST_BRANCH="${AGAINST_BRANCH:-$(git branch --show-current)}"
+if [ -n "$AGAINST_BRANCH" ] && git show-ref --verify "refs/heads/$AGAINST_BRANCH" &>/dev/null; then
+  echo "==> buf breaking (against $AGAINST_BRANCH)"
+  buf breaking --against "$REPO_ROOT/.git#branch=$AGAINST_BRANCH,subdir=packages/proto"
 fi
 
 # ── 3. Generate all stubs via buf generate ───────────────────────────────��─
