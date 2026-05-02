@@ -20,7 +20,7 @@ As a platform operator, I want to route order execution to either Alpaca or IBKR
 
 FR-1. Extract a `Broker` interface from the current `broker.Client` struct in `services/xstockstrat-trading/internal/broker/`. The interface must expose at minimum: `SubmitOrder`, `CancelOrder`, and `GetOrder` with signatures compatible with the current Alpaca implementation. Both the Alpaca client and the new IBKR client must satisfy this interface.
 
-FR-2. Create `services/xstockstrat-trading/internal/broker/ibkr.go` implementing the `Broker` interface against the IBKR API surface (see OQ-1). The IBKR client must produce an equivalent order-response struct so that `TradingService` logic is broker-agnostic.
+FR-2. Create `services/xstockstrat-trading/internal/broker/ibkr.go` implementing the `Broker` interface against the **IBKR Web API** (`https://api.ibkr.com/v1/api/`). Auth uses OAuth 1.0a-style HMAC-SHA256 signed requests (Consumer Key + Access Token — server-to-server, no browser flow). The IBKR client must produce an equivalent order-response struct so that `TradingService` logic is broker-agnostic.
 
 FR-3. `TradingService` must hold the active broker as the `Broker` interface type, not the concrete `*alpaca.Client` type. All call sites (`PlaceOrder`, `CancelOrder`, `pollFills`) must use the interface.
 
@@ -45,7 +45,17 @@ FR-8. Both proto changes (FR-5, FR-6) are additive and must pass `buf lint` and 
 
 FR-9. New config key `trading.broker.active` (string, default: `"alpaca"`) controls which broker is instantiated at startup. Valid values: `"alpaca"` or `"ibkr"`. The service must log fatal and refuse to start on unrecognised values.
 
-FR-10. New env vars for IBKR credentials (sourced from environment, never config service — consistent with `ALPACA_*` pattern): `IBKR_BASE_URL`, `IBKR_ACCOUNT_ID`, `IBKR_PAPER` (bool, default: `true`).
+FR-10. New env vars for IBKR credentials (sourced from environment, never config service — consistent with `ALPACA_*` pattern): `IBKR_BASE_URL` (default: `https://api.ibkr.com`), `IBKR_CONSUMER_KEY`, `IBKR_ACCESS_TOKEN`, `IBKR_ACCESS_TOKEN_SECRET`, `IBKR_ACCOUNT_ID`, `IBKR_PAPER` (bool, default: `true`). For IBKR, paper vs. live is determined by the account type (the `IBKR_ACCOUNT_ID` value), not the base URL; `IBKR_PAPER=true` causes the service to require a paper account ID and log a fatal error if the resolved account is a live account.
+
+FR-16. The IBKR client maps `OrderType` proto enum values to IBKR `orderType` strings as follows. All five existing order types map cleanly; no new enum values are introduced:
+
+| Proto `OrderType` | IBKR `orderType` | Additional IBKR fields populated |
+|---|---|---|
+| `ORDER_TYPE_MARKET` | `MKT` | — |
+| `ORDER_TYPE_LIMIT` | `LMT` | `lmtPrice` ← `Order.limit_price` |
+| `ORDER_TYPE_STOP` | `STP` | `auxPrice` ← `Order.stop_price` |
+| `ORDER_TYPE_STOP_LIMIT` | `STP LMT` | `lmtPrice` ← `Order.limit_price`; `auxPrice` ← `Order.stop_price` |
+| `ORDER_TYPE_TRAILING_STOP` | `TRAIL` | `auxPrice` ← `Order.stop_price` (fixed trail amount; trailing percentage is out of scope) |
 
 **Environment and deployment invariants**
 
@@ -130,7 +140,10 @@ New env vars for `xstockstrat-trading` (secrets, not in config service):
 
 | Variable | Required when | Default |
 |---|---|---|
-| `IBKR_BASE_URL` | `trading.broker.active=ibkr` | — |
+| `IBKR_BASE_URL` | `trading.broker.active=ibkr` | `https://api.ibkr.com` |
+| `IBKR_CONSUMER_KEY` | `trading.broker.active=ibkr` | — |
+| `IBKR_ACCESS_TOKEN` | `trading.broker.active=ibkr` | — |
+| `IBKR_ACCESS_TOKEN_SECRET` | `trading.broker.active=ibkr` | — |
 | `IBKR_ACCOUNT_ID` | `trading.broker.active=ibkr` | — |
 | `IBKR_PAPER` | always present | `true` |
 
@@ -180,6 +193,6 @@ Deployment sequence:
 
 ## Open Questions
 
-- [ ] **OQ-1**: Which IBKR API surface? Client Portal Gateway (CPG, local HTTP proxy + browser auth) vs. IBKR Web API (newer, OAuth-based)? This determines `ibkr.go` auth model and `IBKR_*` env var design. Must resolve before implementation.
-- [ ] **OQ-2**: IBKR paper account availability confirmed for dev testing?
-- [ ] **OQ-3**: Do existing `OrderType` enum values (`MARKET`, `LIMIT`, `STOP`, `STOP_LIMIT`, `TRAILING_STOP`) map cleanly to IBKR order types, or should unsupported types return an error?
+- [x] **OQ-1 — RESOLVED**: Use **IBKR Web API** (`https://api.ibkr.com/v1/api/`) with OAuth 1.0a-style HMAC-SHA256 signed requests. Client Portal Gateway excluded: requires a running local proxy process and browser-based session auth that expires — not suitable for automated server deployments. IBKR Web API is server-to-server with stable OAuth credentials, matching the existing `ALPACA_API_KEY`/`ALPACA_API_SECRET` pattern.
+- [x] **OQ-2 — RESOLVED**: IBKR paper account confirmed available for dev testing.
+- [x] **OQ-3 — RESOLVED**: All five `OrderType` enum values map cleanly to IBKR order types (see FR-16). No new enum values needed. `TRAILING_STOP` maps via fixed trail amount (`auxPrice`); trailing-percentage variant is out of scope.

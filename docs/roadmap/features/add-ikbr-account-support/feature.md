@@ -1,6 +1,6 @@
 # Feature: add-ikbr-account-support
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Created**: 2026-05-02
 **Last Updated**: 2026-05-02
 
@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-02 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-05-02 | `draft` → `spec-ready` | /sdd-story | All open questions resolved |
 
 ---
 
