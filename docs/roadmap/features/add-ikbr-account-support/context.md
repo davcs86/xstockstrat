@@ -105,3 +105,42 @@ Initially spec'd as full replace (delete + insert). Revised to upsert semantics 
 
 **Gap 5 — Auth for account management RPCs (FR-10a added; FR-1 updated)**
 `broker_accounts` gains `user_id TEXT NOT NULL` column. `RegisterBrokerAccount` derives `user_id` from caller's auth claims. `ListBrokerAccounts` filters to caller's accounts. `DeregisterBrokerAccount` validates ownership; returns `codes.PermissionDenied` on mismatch. No new auth scope required.
+
+---
+
+## Session 2026-05-02T(sdd-spec) — sdd-spec; implementation spec generated
+
+Generated `implementation-spec.md` (18 steps). Key codebase findings:
+
+**Proto layer (Steps 1–3)**
+- `packages/proto/common/v1/common.proto`: last line L62 (`}`). Appended `BrokerType` enum after L62.
+- `packages/proto/trading/v1/trading.proto`: `Order` fields 1–18 (field 18 = `broker_order_id`). `TradingService` has 5 RPCs. `PlaceOrderRequest` field 12 = `stop_price`. All additions are at field 19+/13+ — non-breaking.
+- `packages/proto/portfolio/v1/portfolio.proto`: `Portfolio` fields 1–10, `Position` fields 1–10, `PortfolioSnapshot` fields 1–7. `PortfolioService` has 6 RPCs. All additions are at field 11+/8+ — non-breaking.
+
+**Generated stubs (Step 4)**
+- `packages/proto/gen/go/trading/v1/tradingv1connect/trading.connect.go`: `UnimplementedTradingServiceHandler` at L204 (5 stubs). After regen, gains 3 new stubs; compile-time assertion at L17 will fail until handler methods added (Step 14).
+- `packages/proto/gen/go/portfolio/v1/portfoliov1connect/portfolio.connect.go`: `UnimplementedPortfolioServiceHandler` at L230 (6 stubs). After regen, gains `ListPortfolios` stub; assertion at L17 fails until Step 18.
+
+**DB migrations**
+- Last trading migration: `001_orders_hypertable`. New: `002_broker_accounts`, `003_orders_account_id`.
+- Last portfolio migration: `002_add_trading_mode`. Unique constraint: `positions_user_id_symbol_trading_mode_key (user_id, symbol, trading_mode)`. New: `003_positions_account_id` — drops old constraint, adds `(user_id, symbol, trading_mode, account_id)`.
+
+**xstockstrat-trading service**
+- `config.go`: `Config` struct L16–33; `AppEnv` and `BrokerAccountsEncryptionKey` not yet present (Step 8).
+- `broker/alpaca.go`: `Client` struct at L25; `SubmitOrder` returns `*AlpacaOrder` (L90); `GetOrder` returns `*AlpacaOrder` (L154); no `GetPositions`; no `Broker` interface; imports do NOT include `strconv` (must add in Step 9).
+- `broker/alpaca_test.go`: L55 `order.ID` and L79 `order.ID` — these break when `SubmitOrder`/`GetOrder` return `*BrokerOrder`; must update to `order.BrokerOrderID`.
+- `service/trading.go`: `TradingService.broker` typed as `*broker.Client` at L33; `NewTradingService` at L55; `StartFillPoller` at L333–356 (live-reload pattern to mirror for `StartPositionSyncPoller`); `emitLedgerEvent` at L549.
+- `handler/trading.go`: compile-time assertion at L17; embeds `UnimplementedTradingServiceHandler` at L21; `toGRPCError` at L155 (add `CodePermissionDenied` case).
+- `repository/trading_repo.go`: `UpsertOrder` at L41–68 (19 columns); `scanOrder` at L175 (18 columns); add `account_id`, `broker_type` (Steps 12).
+- `cmd/server/main.go`: broker init at L77–83; `NewTradingService` at L87; `go svc.StartFillPoller(ctx)` at L94.
+
+**xstockstrat-portfolio service**
+- `repository/portfolio_repo.go`: `UpsertPosition` ON CONFLICT at L32–40; `scanPositionRow` at L172 (6 columns); must add `account_id` throughout (Step 16).
+- `service/portfolio_service.go`: `ConsumeOrderFills` at L72; `streamFills` at L84; `processOrderFill` at L113; `GetPortfolio` at L175. `ConsumePositionSyncs` mirrors this pattern (Step 17).
+- `handler/portfolio_handler.go`: compile-time assertion at L17; `grpcPortfolioAdapter` at L122.
+- `cmd/server/main.go`: `go svc.ConsumeOrderFills(ctx)` at L70; add `go svc.ConsumePositionSyncs(ctx)` (Step 18).
+
+**Known deviations documented in spec**
+- `alpaca-default` seed deferred to application startup (`EnsureAlpacaDefault`) rather than migration (PRE_DEPLOY job doesn't have trading-service env vars).
+- `user_id` absent from `account.positions.synced` ledger event payload; placeholder `"default"` used in `processPositionSync`. Follow-up to add `user_id` to event payload.
+- Pre-existing inconsistency in `trading_helpers_test.go`: `TestAlpacaStatusToProto` expects `"unknown_status"` → `ORDER_STATUS_UNSPECIFIED` but `alpacaStatusToProto` returns `ORDER_STATUS_NEW` for unknown inputs. Not introduced by this feature; not changed by this spec.
