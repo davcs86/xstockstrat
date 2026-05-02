@@ -55,5 +55,26 @@ User clarified the user story: not a platform-wide broker switch, but a **multi-
 - **Proto additions (FR-9 through FR-14)**: `BrokerType` enum in `common/v1`; `account_id` (field 19) + `broker_type` (field 20) on `Order`; `account_id` on `PlaceOrderRequest`; `account_id` on `Portfolio`; new `ListPortfolios` RPC on `PortfolioService`. All additive — 1 service owner approval.
 - **DB migrations added**: `broker_accounts` table + `orders.account_id` column. DBA review now required.
 - **`xstockstrat-portfolio` now in scope**: Tracks one `Portfolio` per registered account; fill events carry `account_id` to route updates. `ListPortfolios` returns all per-account portfolios.
-- **Credentials per account (FR-4)**: `ALPACA_KEY_<ID>`, `ALPACA_SECRET_<ID>`, `IBKR_CONSUMER_KEY_<ID>`, etc. `<ID>` = uppercased slug with hyphens→underscores.
-- **Multi-account order routing (FR-15)**: `PlaceOrder` with absent `account_id` returns error when multiple accounts registered; succeeds with default when only one exists.
+- **Credentials per account (FR-4, now superseded)**: per-account env vars approach — superseded by encrypted DB storage in session 2026-05-02T00:03:00Z below.
+- **Multi-account order routing**: `PlaceOrder` with absent `account_id` returns error when multiple accounts registered; succeeds with default when only one exists.
+
+---
+
+## Session 2026-05-02T00:03:00Z — follow-up revisions
+
+Two user follow-ups incorporated into product-spec.md. Status remains `draft`.
+
+**Change 1: Encrypted credential storage (replaces per-account env vars)**
+- Problem: per-account env vars still require env var changes + restart to add accounts.
+- Decision: credentials stored AES-256-GCM encrypted in `broker_accounts.credentials_enc`. Single `BROKER_ACCOUNTS_ENCRYPTION_KEY` env var is the only new env var. New accounts registered via `RegisterBrokerAccount` RPC — no restart, no env var touch.
+- `credentials_enc` stores a broker-type-specific JSON blob (`{"api_key":"...","api_secret":"..."}` or `{"consumer_key":"...","access_token":"...","access_token_secret":"..."}`).
+- `ListBrokerAccounts` never returns credentials. `DeregisterBrokerAccount` sets `is_active=false` + removes from in-memory pool immediately. Credential rotation requires deregister+register (UpdateCredentials deferred).
+- Three new RPCs on `TradingService`: `RegisterBrokerAccount`, `ListBrokerAccounts`, `DeregisterBrokerAccount`.
+
+**Change 2: IBKR position sync added to scope (FR-28 through FR-31)**
+- Problem: portfolio is purely fill-event-driven with no reconciliation; IBKR positions could drift.
+- Decision: `StartPositionSyncPoller` in `xstockstrat-trading` polls IBKR accounts every 5 min (configurable: `trading.position_sync.ibkr_interval_ms`). Emits `account.positions.synced` ledger event with full position snapshot.
+- `ConsumePositionSyncs` in `xstockstrat-portfolio` atomically replaces positions for the account on each event (broker truth wins for IBKR accounts).
+- Alpaca continues fill-event-based tracking. `GetPositions` is on the `Broker` interface (Alpaca implements it) but the poller does not invoke it — trivial follow-up.
+- `portfolio.positions` table gains `account_id TEXT NOT NULL DEFAULT 'alpaca-default'`; unique constraint updated to `(user_id, symbol, trading_mode, account_id)`.
+- New config key: `trading.position_sync.ibkr_interval_ms` (int, default 300000, live-reloaded).

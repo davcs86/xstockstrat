@@ -13,6 +13,7 @@
 | 2026-05-02 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-02 | `draft` → `spec-ready` | /sdd-story | All open questions resolved |
 | 2026-05-02 | `spec-ready` → `draft` | user clarification | Scope revised: multi-account model replaces single-broker-switch |
+| 2026-05-02 | `draft` (revision 2) | user follow-ups | Encrypted credential storage + IBKR position sync added |
 
 ---
 
@@ -26,7 +27,7 @@
 
 ## Summary
 
-Allow a platform user to register multiple broker accounts (Alpaca and/or IBKR) and place orders against a specific account, with the portfolio tracking positions and P&L per account. Introduces a `broker_accounts` DB table, a broker client pool in `xstockstrat-trading`, `account_id` fields on `Order` and `Portfolio`, and a `BrokerType` enum in the proto contract. Dev environments enforce paper-only across all registered accounts.
+Register multiple broker accounts (Alpaca and/or IBKR) via API with credentials stored AES-256-GCM encrypted in the DB — no env var changes needed to add accounts. Orders route to a specific account via `account_id`. Portfolio tracks positions per account. IBKR positions are periodically reconciled against broker truth via a sync poller. Dev enforces paper-only across all registered accounts.
 
 ## Next Action
 

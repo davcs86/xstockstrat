@@ -7,11 +7,11 @@
 
 ## Problem Statement
 
-The platform assumes a single broker account globally. `xstockstrat-trading` is hard-wired to one Alpaca account with no account abstraction, `xstockstrat-portfolio` tracks a single set of positions, and there is no concept of a named broker account in the proto contract. A user who holds both Alpaca and IBKR accounts — or multiple accounts of the same broker type — cannot use the platform to manage and track all of them together. Adding multi-account support requires an account registry, a broker client pool, and account-scoped positions in the portfolio, without relaxing the staging (paper-only) safety invariant.
+The platform assumes a single broker account globally. `xstockstrat-trading` is hard-wired to one Alpaca account with no account abstraction, `xstockstrat-portfolio` tracks a single set of positions with no broker-side reconciliation, and there is no concept of a named broker account in the proto contract. A user who holds both Alpaca and IBKR accounts — or multiple accounts of the same broker type — cannot manage and track all of them together. Adding multi-account support requires an account registry with encrypted credential storage (so new accounts are registered via API, not env var changes), a broker client pool, account-scoped positions, and periodic IBKR position sync to reconcile portfolio state against broker truth — without relaxing the staging (paper-only) safety invariant.
 
 ## User Story
 
-As a platform user, I want to register multiple broker accounts (Alpaca and/or IBKR) and place orders against a specific account, so that my portfolio tracks positions and P&L across all my accounts in one place, with dev always running in paper mode regardless of which accounts are registered.
+As a platform user, I want to register multiple broker accounts (Alpaca and/or IBKR) by calling an API and supplying credentials once, so that I can place orders against a specific account, track positions and P&L per account, have IBKR positions reconciled against the broker periodically, and never need to touch env vars or restart the service to add a new account. Dev always enforces paper mode regardless of which accounts are registered.
 
 ---
 
@@ -19,39 +19,68 @@ As a platform user, I want to register multiple broker accounts (Alpaca and/or I
 
 ### Account Registry
 
-FR-1. Introduce a `broker_accounts` table in the `trading` schema (new migration). Each row represents one registered broker account:
+FR-1. Introduce a `broker_accounts` table in the `trading` schema (new migration):
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | `TEXT PRIMARY KEY` | Stable slug chosen by the operator (e.g. `alpaca-paper`, `ibkr-live`). Used as credential env var suffix. |
+| `id` | `TEXT PRIMARY KEY` | Stable slug (e.g. `alpaca-paper`, `ibkr-live`). |
 | `display_name` | `TEXT NOT NULL` | Human-readable label. |
-| `broker_type` | `TEXT NOT NULL` | `"alpaca"` or `"ibkr"`. |
-| `is_paper` | `BOOLEAN NOT NULL` | Whether this account is a paper/simulated account. |
-| `created_at` | `TIMESTAMPTZ NOT NULL` | Row creation timestamp. |
+| `broker_type` | `TEXT NOT NULL CHECK (broker_type IN ('alpaca', 'ibkr'))` | |
+| `is_paper` | `BOOLEAN NOT NULL DEFAULT true` | |
+| `credentials_enc` | `TEXT NOT NULL` | AES-256-GCM encrypted JSON blob of broker credentials. Encrypted with `BROKER_ACCOUNTS_ENCRYPTION_KEY` env var. Never returned in API responses. |
+| `is_active` | `BOOLEAN NOT NULL DEFAULT true` | Soft-delete flag for deregistered accounts. |
+| `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT now()` | |
 
-FR-2. At startup, `xstockstrat-trading` reads all rows from `broker_accounts` and instantiates one broker client per account. The service refuses to start if the table is empty. Clients are held in an in-memory map keyed by account `id`.
+FR-2. A single new env var `BROKER_ACCOUNTS_ENCRYPTION_KEY` (32-byte key, base64-encoded) is the only credential-related env var added in this feature. It is used to encrypt/decrypt `credentials_enc`. The service refuses to start if this env var is absent. Existing `ALPACA_API_KEY`, `ALPACA_API_SECRET`, etc. are retained for the backwards-compatibility fallback only (FR-5).
 
-FR-3. On the dev environment (`ENVIRONMENT=dev`), the service must verify at startup that every registered account has `is_paper = true`. If any account has `is_paper = false`, the service logs fatal and refuses to start. This enforces the staging paper-only invariant regardless of what accounts are registered.
+FR-3. The credential JSON blobs stored in `credentials_enc` have the following shapes per broker type:
+- Alpaca: `{"api_key": "...", "api_secret": "..."}`
+- IBKR: `{"consumer_key": "...", "access_token": "...", "access_token_secret": "..."}`
 
-FR-4. Credentials for each account are supplied as env vars keyed by account ID slug:
-- Alpaca accounts: `ALPACA_KEY_<ID>`, `ALPACA_SECRET_<ID>`
-- IBKR accounts: `IBKR_CONSUMER_KEY_<ID>`, `IBKR_ACCESS_TOKEN_<ID>`, `IBKR_ACCESS_TOKEN_SECRET_<ID>`
+FR-4. At startup, `xstockstrat-trading` reads all rows from `broker_accounts` where `is_active = true`, decrypts each `credentials_enc`, and instantiates one broker client per account. Clients are held in an in-memory map keyed by account `id`.
 
-Where `<ID>` is the uppercased, hyphen-to-underscore conversion of the account `id` slug (e.g. account id `ibkr-live` → `IBKR_CONSUMER_KEY_IBKR_LIVE`). The service logs fatal at startup if any registered account is missing its required credentials.
+FR-5. On the dev environment (`ENVIRONMENT=dev`), the service must verify at startup that every active account has `is_paper = true`. If any active account has `is_paper = false`, the service logs fatal and refuses to start. This enforces the staging paper-only invariant regardless of registered accounts.
 
-FR-5. The existing single-account Alpaca env vars (`ALPACA_API_KEY`, `ALPACA_API_SECRET`, `ALPACA_PAPER`, `ALPACA_PAPER_URL`, `ALPACA_LIVE_URL`) are **retained** and seed a default account named `alpaca-default` if no `broker_accounts` rows exist. This ensures zero-config backwards compatibility — existing deployments with no `broker_accounts` rows continue to work exactly as before.
+FR-6. The existing single-account Alpaca env vars (`ALPACA_API_KEY`, `ALPACA_API_SECRET`, `ALPACA_PAPER`, `ALPACA_PAPER_URL`, `ALPACA_LIVE_URL`) are **retained** and seed a virtual `alpaca-default` account if `broker_accounts` contains no active rows. This ensures zero-config backwards compatibility — existing deployments continue to work exactly as before.
+
+### Account Management API
+
+FR-7. Add three RPCs to `TradingService` in `trading/v1/trading.proto`:
+
+```protobuf
+rpc RegisterBrokerAccount(RegisterBrokerAccountRequest) returns (BrokerAccount);
+rpc ListBrokerAccounts(ListBrokerAccountsRequest) returns (ListBrokerAccountsResponse);
+rpc DeregisterBrokerAccount(DeregisterBrokerAccountRequest) returns (DeregisterBrokerAccountResponse);
+```
+
+FR-8. `RegisterBrokerAccount` accepts plaintext credentials in the request, encrypts them with `BROKER_ACCOUNTS_ENCRYPTION_KEY`, writes the row to DB, and immediately loads the new broker client into the in-memory pool. No service restart required to begin routing orders to the new account.
+
+FR-9. `DeregisterBrokerAccount` sets `is_active = false` in DB and removes the client from the in-memory pool immediately. In-flight orders on the deregistered account continue to run to completion (the fill poller holds its own reference); new `PlaceOrder` calls targeting the deregistered account return `codes.NotFound`.
+
+FR-10. `ListBrokerAccounts` returns all accounts with `credentials_enc` omitted from the response — callers never see plaintext or ciphertext credentials.
+
+FR-11. The `BrokerAccount` proto message exposes: `id`, `display_name`, `broker_type` (`BrokerType` enum), `is_paper`, `is_active`, `created_at`. No credential fields.
 
 ### Broker Interface and Client Pool
 
-FR-6. Extract a `Broker` interface from `services/xstockstrat-trading/internal/broker/` exposing `SubmitOrder`, `CancelOrder`, and `GetOrder`. The existing Alpaca `Client` struct must implement this interface without behavioural changes.
+FR-12. Extract a `Broker` interface in `services/xstockstrat-trading/internal/broker/`:
+```go
+type Broker interface {
+    SubmitOrder(ctx context.Context, req SubmitOrderRequest) (*BrokerOrder, error)
+    CancelOrder(ctx context.Context, brokerOrderID string) error
+    GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrder, error)
+    GetPositions(ctx context.Context) ([]BrokerPosition, error)
+}
+```
+The Alpaca client implements all four methods. `GetPositions` calls Alpaca's `GET /v2/positions` but position sync polling is only enabled for IBKR accounts in this feature (see FR-22); Alpaca's implementation must exist but is not invoked by the sync poller.
 
-FR-7. Create `services/xstockstrat-trading/internal/broker/ibkr.go` implementing the `Broker` interface against the **IBKR Web API** (`https://api.ibkr.com/v1/api/`) using OAuth 1.0a-style HMAC-SHA256 signed requests (Consumer Key + Access Token, server-to-server).
+FR-13. Create `services/xstockstrat-trading/internal/broker/ibkr.go` implementing `Broker` against the **IBKR Web API** (`https://api.ibkr.com/v1/api/`) using OAuth 1.0a-style HMAC-SHA256 signed requests. `GetPositions` calls `GET /v1/api/portfolio/{accountId}/positions`.
 
-FR-8. `TradingService` holds a `map[string]broker.Broker` (keyed by account id) instead of a single `*broker.Client`. All broker call sites resolve the client from this map using the `account_id` on the incoming request.
+FR-14. `TradingService` holds a `map[string]broker.Broker` (keyed by account id) instead of a single `*broker.Client`. All broker call sites resolve the correct client using `account_id`.
 
 ### Proto Contract Changes
 
-FR-9. Add a `BrokerType` enum to `packages/proto/common/v1/common.proto` (additive — new enum):
+FR-15. Add a `BrokerType` enum to `packages/proto/common/v1/common.proto` (additive):
 ```protobuf
 enum BrokerType {
   BROKER_TYPE_UNSPECIFIED = 0;
@@ -60,25 +89,32 @@ enum BrokerType {
 }
 ```
 
-FR-10. Add two new optional fields to the `Order` message in `packages/proto/trading/v1/trading.proto` (additive — next available field numbers 19 and 20):
+FR-16. Add new fields to the `Order` message in `trading/v1/trading.proto` (additive, fields 19–20):
 ```protobuf
-string account_id = 19;                               // Registered broker account that executed this order
-xstockstrat.common.v1.BrokerType broker_type = 20;   // Derived from the account's broker_type at order creation
+string account_id = 19;
+xstockstrat.common.v1.BrokerType broker_type = 20;
 ```
 
-FR-11. Add `account_id` (string, optional) to `PlaceOrderRequest` in `trading/v1/trading.proto`. If omitted, `TradingService` uses the single registered account (backwards-compatible default when only one account is configured). If multiple accounts are registered and `account_id` is absent, the service returns an error.
+FR-17. Add `account_id` (string, optional) to `PlaceOrderRequest`. If omitted when multiple accounts are registered, returns `codes.InvalidArgument`. Omitting it when only one account is active uses that account (backwards-compatible).
 
-FR-12. Add `account_id` (string) to the `Portfolio` message in `packages/proto/portfolio/v1/portfolio.proto` at the next available field number. One portfolio document exists per registered broker account.
+FR-18. Add `account_id` (string) to both `Portfolio` and `Position` messages in `portfolio/v1/portfolio.proto`.
 
-FR-13. Update the comment on `Order.broker_order_id` (field 18): "Broker-assigned order ID. Interpretation is broker-specific; populated after broker submission."
+FR-19. Add `ListPortfolios` RPC to `PortfolioService`:
+```protobuf
+rpc ListPortfolios(ListPortfoliosRequest) returns (ListPortfoliosResponse);
+```
 
-FR-14. All proto changes are additive (new enum, new optional fields on existing messages). They must pass `buf lint` and `buf breaking --against '.git#branch=main'`.
+FR-20. Add three new RPCs to `TradingService` for account management (FR-7), plus their request/response messages (`RegisterBrokerAccountRequest`, `BrokerAccount`, `ListBrokerAccountsRequest`, `ListBrokerAccountsResponse`, `DeregisterBrokerAccountRequest`, `DeregisterBrokerAccountResponse`).
+
+FR-21. Update comment on `Order.broker_order_id` (field 18): "Broker-assigned order ID. Interpretation is broker-specific; populated after broker submission." — non-breaking.
+
+All proto changes are additive. Must pass `buf lint` and `buf breaking --against '.git#branch=main'`.
 
 ### Order Routing
 
-FR-15. When `PlaceOrder` is called with an `account_id`, `TradingService` looks up the broker client in the pool. If the account ID is not found, it returns `codes.NotFound`. The `account_id` and `broker_type` are written onto the persisted `Order` row and all downstream ledger events.
+FR-22 (was FR-15). When `PlaceOrder` is called with an `account_id`, `TradingService` looks up the broker client. Unknown `account_id` → `codes.NotFound`. `account_id` and `broker_type` are written onto the `Order` row and all downstream ledger events.
 
-FR-16. The IBKR client maps `OrderType` proto enum values to IBKR `orderType` strings. All five existing types map cleanly; no new enum values are introduced:
+FR-23. The IBKR client maps `OrderType` proto enum values to IBKR `orderType` strings:
 
 | Proto `OrderType` | IBKR `orderType` | Additional IBKR fields |
 |---|---|---|
@@ -86,35 +122,57 @@ FR-16. The IBKR client maps `OrderType` proto enum values to IBKR `orderType` st
 | `ORDER_TYPE_LIMIT` | `LMT` | `lmtPrice` ← `Order.limit_price` |
 | `ORDER_TYPE_STOP` | `STP` | `auxPrice` ← `Order.stop_price` |
 | `ORDER_TYPE_STOP_LIMIT` | `STP LMT` | `lmtPrice` + `auxPrice` |
-| `ORDER_TYPE_TRAILING_STOP` | `TRAIL` | `auxPrice` ← `Order.stop_price` (fixed trail amount; trailing % out of scope) |
+| `ORDER_TYPE_TRAILING_STOP` | `TRAIL` | `auxPrice` ← `Order.stop_price` (fixed trail amount only) |
 
-FR-17. The IBKR client maps IBKR native order status strings to the existing `OrderStatus` proto enum. No new `OrderStatus` values are introduced.
+FR-24. The IBKR client maps IBKR native order status strings to the existing `OrderStatus` proto enum. No new enum values.
 
 ### Portfolio — Account-Scoped Positions
 
-FR-18. `xstockstrat-portfolio` tracks one `Portfolio` document per registered broker account. When a fill event arrives from `xstockstrat-trading`, it includes `account_id`; the portfolio service updates the correct account's portfolio.
+FR-25. `xstockstrat-portfolio` tracks positions per `(user_id, symbol, trading_mode, account_id)`. The `portfolio.positions` table gains an `account_id TEXT` column (new migration) and the unique constraint is updated to include it.
 
-FR-19. `xstockstrat-portfolio` exposes a `ListPortfolios` RPC (or equivalent) that returns all account portfolios for a given `user_id`, so the UI can display aggregate and per-account views.
+FR-26. When a fill event arrives from `xstockstrat-trading`, it includes `account_id`; `ConsumeOrderFills` updates the position row for that specific account.
+
+FR-27. `ListPortfolios` returns one `Portfolio` per active account for the given `user_id`, each with `account_id` populated.
+
+### IBKR Position Sync
+
+FR-28. Add a `StartPositionSyncPoller` goroutine to `xstockstrat-trading`, started alongside `StartFillPoller`. It polls on a configurable interval (`trading.position_sync.ibkr_interval_ms` config key, default: 300000 ms / 5 min).
+
+FR-29. On each tick, the poller iterates over all IBKR accounts in the client pool and calls `GetPositions(ctx)` on each. Results are used to emit an `account.positions.synced` ledger event with payload:
+```json
+{
+  "account_id": "ibkr-live",
+  "broker_type": "ibkr",
+  "sync_time": "<ISO timestamp>",
+  "positions": [
+    {"symbol": "AAPL", "qty": 10.0, "avg_cost": 172.50, "market_value": 1850.00, "unrealized_pnl": 125.00}
+  ]
+}
+```
+
+FR-30. `xstockstrat-portfolio` adds a `ConsumePositionSyncs` goroutine (parallel to `ConsumeOrderFills`) that subscribes to `account.positions.synced` events on the ledger stream. On each event, it atomically replaces all positions for the given `account_id` with the synced snapshot within a single DB transaction. This makes IBKR broker-reported positions the source of truth for IBKR accounts, overriding fill-event-derived state if they drift.
+
+FR-31. Position sync only runs for IBKR accounts. Alpaca accounts continue to use fill-event-based position tracking exclusively in this feature.
 
 ### Ledger Events
 
-FR-20. All ledger events that carry broker context (`order.submitted`, `order.broker_submitted`, `order.broker_rejected`, `order.filled`) must include both `account_id` and `broker_type` in their payload.
+FR-32. All ledger events carrying broker context (`order.submitted`, `order.broker_submitted`, `order.broker_rejected`, `order.filled`) include both `account_id` and `broker_type` in their payload.
 
 ### Fill Polling
 
-FR-21. The existing `StartFillPoller`/`pollFills` mechanism is extended to poll each account's broker client independently. Each polling goroutine is bound to an `account_id` and calls `GetOrder` on that account's client.
+FR-33. `StartFillPoller` is extended to run one polling goroutine per account. Each goroutine is bound to an `account_id` and calls `GetOrder` on that account's client. When `RegisterBrokerAccount` is called at runtime, a new fill-polling goroutine is started for the new account.
 
 ---
 
 ## Out of Scope
 
 - **IBKR market data**: `xstockstrat-marketdata` is not modified. Alpaca remains the sole market data provider.
-- **Portfolio aggregation across accounts**: The UI can sum across the per-account portfolios returned by `ListPortfolios`. Server-side aggregation is deferred.
-- **Runtime account addition/removal**: Adding or removing an account requires a DB migration + service restart. Hot-reloading the account registry mid-run is deferred.
-- **IBKR portfolio position sync**: Syncing IBKR broker-side position data back into the portfolio (reconciliation) is out of scope.
+- **Alpaca position sync**: The `GetPositions` method is implemented on the Alpaca client (FR-12) but the sync poller does not invoke it. Alpaca sync is a trivial follow-up once the sync infrastructure exists.
+- **Portfolio aggregation across accounts**: The UI can sum across per-account portfolios from `ListPortfolios`. Server-side aggregation is deferred.
 - **IBKR-specific order types**: New `OrderType` enum values (adaptive, midprice, etc.) are deferred.
-- **xstockstrat-trader UI changes**: `account_id` and `broker_type` are available on the `Order` proto; account selector UI and per-account portfolio view are follow-up features.
-- **Trailing stop by percentage**: IBKR `TRAIL` with `trailingPercent` field is out of scope; only fixed trail amount (`auxPrice`) is implemented.
+- **xstockstrat-trader UI changes**: `account_id` and `broker_type` are available on `Order` proto; account selector UI and per-account portfolio view are follow-up features.
+- **Trailing stop by percentage**: IBKR `TRAIL` with `trailingPercent` is out of scope; only fixed trail amount is implemented.
+- **Credential rotation**: Updating credentials for an existing account requires `DeregisterBrokerAccount` + `RegisterBrokerAccount`. An `UpdateBrokerAccountCredentials` RPC is deferred.
 
 ---
 
@@ -122,14 +180,13 @@ FR-21. The existing `StartFillPoller`/`pollFills` mechanism is extended to poll 
 
 Exact service names from root `CLAUDE.md` Service Registry:
 
-- `xstockstrat-trading` (Go, gRPC 50051 / HTTP 8051) — primary: broker interface, client pool, account registry read, IBKR client, fill poller per account
-- `xstockstrat-portfolio` (Go, gRPC 50052 / HTTP 8052) — add `account_id` to Portfolio, add `ListPortfolios` RPC, per-account position tracking
-- `xstockstrat-ledger` (Node.js, gRPC 50057 / HTTP 8057) — no code changes; event payloads gain `account_id` + `broker_type` fields stored opaquely
-- `xstockstrat-config` (Node.js, gRPC 50060 / HTTP 8060) — no new config keys (account config is now DB-backed, not config-service-backed)
+- `xstockstrat-trading` (Go, gRPC 50051 / HTTP 8051) — primary: broker interface, client pool, account management RPCs, encrypted credential storage, IBKR client, per-account fill poller, position sync poller
+- `xstockstrat-portfolio` (Go, gRPC 50052 / HTTP 8052) — `account_id` on positions, `ListPortfolios` RPC, `ConsumePositionSyncs` goroutine, IBKR position reconciliation
+- `xstockstrat-ledger` (Node.js, gRPC 50057 / HTTP 8057) — no code changes; event payloads gain `account_id` + `broker_type`; new `account.positions.synced` event type stored opaquely
 - `xstockstrat-trader` (Next.js, HTTP 3000) — proto stub regeneration only
 - `xstockstrat-insights` (Next.js, HTTP 3001) — proto stub regeneration only
 
-Services with **no changes**: `xstockstrat-marketdata`, `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config-ui`.
+Services with **no changes**: `xstockstrat-marketdata`, `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config-ui`, `xstockstrat-config`.
 
 ---
 
@@ -146,81 +203,73 @@ enum BrokerType {
 }
 ```
 
-**2. New fields on `Order` — `trading/v1/trading.proto`** (fields 19, 20)
-```protobuf
-string account_id = 19;
-xstockstrat.common.v1.BrokerType broker_type = 20;
-```
+**2. Additions to `trading/v1/trading.proto`**
+- Fields 19–20 on `Order`: `account_id`, `broker_type`
+- New field on `PlaceOrderRequest`: `account_id` (optional)
+- New messages: `BrokerAccount`, `RegisterBrokerAccountRequest`, `ListBrokerAccountsRequest/Response`, `DeregisterBrokerAccountRequest/Response`
+- New RPCs on `TradingService`: `RegisterBrokerAccount`, `ListBrokerAccounts`, `DeregisterBrokerAccount`
+- Comment update on `broker_order_id` field 18
 
-**3. New field on `PlaceOrderRequest` — `trading/v1/trading.proto`** (next available field)
-```protobuf
-string account_id = <N>;  // optional; required when multiple accounts are registered
-```
+**3. Additions to `portfolio/v1/portfolio.proto`**
+- New field `account_id` on `Portfolio` and `Position`
+- New messages: `ListPortfoliosRequest`, `ListPortfoliosResponse`
+- New RPC on `PortfolioService`: `ListPortfolios`
 
-**4. New field on `Portfolio` — `portfolio/v1/portfolio.proto`** (next available field)
-```protobuf
-string account_id = <N>;
-```
-
-**5. New RPC on `PortfolioService` — `portfolio/v1/portfolio.proto`**
-```protobuf
-rpc ListPortfolios(ListPortfoliosRequest) returns (ListPortfoliosResponse);
-```
-
-**6. Comment update on `Order.broker_order_id` (field 18)** — non-breaking.
-
-Approval gate: additive-only changes → **1 service owner approval** required (trading + portfolio owners).
+Approval gate: additive-only → **1 service owner approval** (trading + portfolio owners).
 
 ---
 
 ## Config Key Changes
 
-- [ ] No new config keys required.
+One new env var (not a config service key):
 
-Account configuration moves from config service keys to the `broker_accounts` DB table (FR-1). The existing `trading.broker.*` keys continue to apply only when the backwards-compatibility fallback (FR-5) is in effect.
+| Variable | Where | Default | Description |
+|---|---|---|---|
+| `BROKER_ACCOUNTS_ENCRYPTION_KEY` | `xstockstrat-trading` | — | 32-byte base64-encoded AES-256-GCM master key. Required; service refuses to start if absent. |
 
-New env vars for `xstockstrat-trading` (secrets, never in config service or DB):
+One new config service key:
 
-Per-account, where `<ID>` = uppercased slug with hyphens replaced by underscores:
+| Key | Type | Default | Scope | Description |
+|---|---|---|---|---|
+| `trading.position_sync.ibkr_interval_ms` | int | `300000` | `all` | IBKR position sync poll interval in ms (5 min default). Live-reloaded via WatchConfig. |
 
-| Variable | Broker type | Required when |
-|---|---|---|
-| `ALPACA_KEY_<ID>` | alpaca | account registered with `broker_type=alpaca` |
-| `ALPACA_SECRET_<ID>` | alpaca | account registered with `broker_type=alpaca` |
-| `IBKR_CONSUMER_KEY_<ID>` | ibkr | account registered with `broker_type=ibkr` |
-| `IBKR_ACCESS_TOKEN_<ID>` | ibkr | account registered with `broker_type=ibkr` |
-| `IBKR_ACCESS_TOKEN_SECRET_<ID>` | ibkr | account registered with `broker_type=ibkr` |
-
-Existing global env vars (`ALPACA_API_KEY`, `ALPACA_API_SECRET`, `ALPACA_PAPER`, `ALPACA_PAPER_URL`, `ALPACA_LIVE_URL`) are retained for the backwards-compatibility fallback.
+No per-account env vars. Existing `ALPACA_*` env vars retained for backwards-compatibility fallback only.
 
 ---
 
 ## Database Changes
 
-New migration required in `services/xstockstrat-trading/migrations/`:
+**`services/xstockstrat-trading/migrations/`**
 
-**Up (`NNN_broker_accounts.up.sql`)**:
+Migration A — `NNN_broker_accounts.up.sql`:
 ```sql
 CREATE TABLE IF NOT EXISTS trading.broker_accounts (
-    id          TEXT PRIMARY KEY,
-    display_name TEXT NOT NULL,
-    broker_type TEXT NOT NULL CHECK (broker_type IN ('alpaca', 'ibkr')),
-    is_paper    BOOLEAN NOT NULL DEFAULT true,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id               TEXT PRIMARY KEY,
+    display_name     TEXT        NOT NULL,
+    broker_type      TEXT        NOT NULL CHECK (broker_type IN ('alpaca', 'ibkr')),
+    is_paper         BOOLEAN     NOT NULL DEFAULT true,
+    credentials_enc  TEXT        NOT NULL,
+    is_active        BOOLEAN     NOT NULL DEFAULT true,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
-**Down (`NNN_broker_accounts.down.sql`)**:
-```sql
-DROP TABLE IF EXISTS trading.broker_accounts;
-```
-
-New column on `trading.orders` (separate migration):
+Migration B — `NNN_orders_account_id.up.sql`:
 ```sql
 ALTER TABLE trading.orders ADD COLUMN IF NOT EXISTS account_id TEXT;
 ```
 
-Approval gate: DBA review + service owner required for schema migrations.
+**`services/xstockstrat-portfolio/migrations/`**
+
+Migration C — `NNN_positions_account_id.up.sql`:
+```sql
+ALTER TABLE portfolio.positions ADD COLUMN IF NOT EXISTS account_id TEXT NOT NULL DEFAULT 'alpaca-default';
+ALTER TABLE portfolio.positions DROP CONSTRAINT IF EXISTS positions_user_id_symbol_trading_mode_key;
+ALTER TABLE portfolio.positions ADD CONSTRAINT positions_user_symbol_mode_account_key
+    UNIQUE (user_id, symbol, trading_mode, account_id);
+```
+
+Down migrations provided for all three. Approval gate: DBA review + service owner required.
 
 ---
 
@@ -228,42 +277,46 @@ Approval gate: DBA review + service owner required for schema migrations.
 
 Branch to create: `feature/add-ikbr-account-support` (branch from `main-dev`)
 
-Approval gates required (per `docs/runbooks/feature-workflow.md`):
-- [x] **1 service owner approval** — required (non-breaking proto additions; trading + portfolio owners)
-- [ ] 2 service owners + platform lead — NOT required (no breaking proto changes)
-- [x] **DBA review + service owner** — required (new `broker_accounts` table + `orders.account_id` column)
-- [ ] Config team — NOT required (no new config keys)
+Approval gates:
+- [x] **1 service owner approval** — required (non-breaking proto additions)
+- [ ] 2 service owners + platform lead — NOT required
+- [x] **DBA review + service owner** — required (3 schema migrations)
+- [ ] Config team — NOT required (no new config service keys beyond `trading.position_sync.ibkr_interval_ms`)
 
-CI requirements: `buf lint` + `buf breaking --against '.git#branch=origin/main'` must pass. Regenerate stubs via `./scripts/buf-gen.sh` and commit `packages/proto/gen/`.
+CI requirements: `buf lint` + `buf breaking --against '.git#branch=origin/main'` must pass. Regenerate stubs via `./scripts/buf-gen.sh`.
 
 Deployment sequence:
-1. Merge to `main-dev` → backwards-compatibility fallback (FR-5) keeps existing Alpaca behaviour unchanged
-2. Run `db-migrate.sh` on dev to create `broker_accounts` table (auto-run by `db-migrator` PRE_DEPLOY)
-3. Validate Alpaca paper path still works on dev (regression; zero rows in `broker_accounts`)
-4. Insert a paper Alpaca row and a paper IBKR row into `broker_accounts` on dev; set per-account env vars
-5. Validate multi-account order routing and per-account portfolio on dev
-6. Merge `main-dev` → `main` for production deploy
+1. Merge to `main-dev` → backwards-compat fallback keeps existing Alpaca behaviour
+2. Migrations auto-run via `db-migrator` PRE_DEPLOY job
+3. Set `BROKER_ACCOUNTS_ENCRYPTION_KEY` on dev environment
+4. Validate Alpaca paper path (no `broker_accounts` rows → fallback)
+5. Call `RegisterBrokerAccount` to register paper Alpaca + paper IBKR accounts on dev
+6. Validate multi-account routing, per-account portfolio, and IBKR position sync on dev
+7. Merge `main-dev` → `main` for production; set `BROKER_ACCOUNTS_ENCRYPTION_KEY` on prod
 
 ---
 
 ## Acceptance Criteria
 
-1. With no rows in `broker_accounts`, existing single-account Alpaca paper/live flows continue to work using the `ALPACA_API_KEY`/`ALPACA_API_SECRET` fallback.
-2. With two rows in `broker_accounts` (one Alpaca, one IBKR), `PlaceOrder` routes to the correct broker based on `account_id`. Both accounts can receive orders in the same running instance.
-3. `Order.account_id` and `Order.broker_type` are set correctly in all gRPC responses and persisted to `trading.orders`.
-4. On the dev environment, if any `broker_accounts` row has `is_paper = false`, the service refuses to start with a fatal log.
-5. `ListPortfolios` returns one `Portfolio` per registered account, each with `account_id` populated.
-6. Ledger events `order.submitted`, `order.broker_submitted`, `order.broker_rejected`, `order.filled` include `account_id` and `broker_type`.
-7. `buf lint` and `buf breaking` pass in CI.
-8. Generated stubs in `packages/proto/gen/go/`, `gen/python/`, `gen/ts/` are regenerated and committed.
-9. All existing `xstockstrat-trading` and `xstockstrat-portfolio` tests pass. New unit tests cover IBKR order status mapping and account-id routing.
-10. `PlaceOrder` without `account_id` returns `codes.InvalidArgument` when multiple accounts are registered.
+1. With no rows in `broker_accounts`, existing Alpaca paper/live flows continue unchanged via the fallback.
+2. After calling `RegisterBrokerAccount` (Alpaca + IBKR), orders route to the correct broker immediately — no restart.
+3. `Order.account_id` and `Order.broker_type` are set in all responses and persisted.
+4. On dev, service refuses to start if any active account has `is_paper = false`.
+5. `ListBrokerAccounts` returns accounts without any credential data.
+6. `DeregisterBrokerAccount` removes the client from the pool; subsequent `PlaceOrder` calls return `codes.NotFound`.
+7. `ListPortfolios` returns one `Portfolio` per active account, each with `account_id` populated.
+8. Every 5 minutes (default), `account.positions.synced` events are emitted for each IBKR account and portfolio positions are reconciled.
+9. Ledger events `order.submitted`, `order.broker_submitted`, `order.broker_rejected`, `order.filled` include `account_id` and `broker_type`.
+10. `buf lint` and `buf breaking` pass in CI; stubs regenerated and committed.
+11. Existing `xstockstrat-trading` and `xstockstrat-portfolio` tests pass; new unit tests cover IBKR order/status mapping, credential encrypt/decrypt, and position sync reconciliation.
+12. `PlaceOrder` without `account_id` returns `codes.InvalidArgument` when multiple accounts are registered.
 
 ---
 
 ## Open Questions
 
-- [x] **OQ-1 — RESOLVED**: Use **IBKR Web API** (`https://api.ibkr.com/v1/api/`) with OAuth 1.0a HMAC-SHA256 signed requests. Client Portal Gateway excluded: requires a local proxy and browser session that expires — not suitable for automated servers.
-- [x] **OQ-2 — RESOLVED**: IBKR paper account confirmed available for dev testing.
-- [x] **OQ-3 — RESOLVED**: All five `OrderType` enum values map cleanly to IBKR order types (see FR-16).
-- [x] **OQ-4 — RESOLVED**: Multi-account model adopted (FR-1 through FR-5). Single `trading.broker.active` config key approach superseded by `broker_accounts` DB table with per-account credentials.
+- [x] **OQ-1 — RESOLVED**: IBKR Web API selected over Client Portal Gateway.
+- [x] **OQ-2 — RESOLVED**: IBKR paper account available for dev testing.
+- [x] **OQ-3 — RESOLVED**: All five `OrderType` values map cleanly to IBKR (see FR-23).
+- [x] **OQ-4 — RESOLVED**: Multi-account model with encrypted DB credential storage (FR-1 through FR-11). No per-account env vars.
+- [x] **OQ-5 — RESOLVED**: IBKR position sync in scope via `StartPositionSyncPoller` + `ConsumePositionSyncs` (FR-28 through FR-31).
