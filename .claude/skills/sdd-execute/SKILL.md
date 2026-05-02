@@ -191,8 +191,9 @@ After the last step in the requested range (or on any stop):
 - **Branch**: read from `**Development Branch**` in `feature.md` (default `feature/<slug>` if field absent) — warn at boot if on wrong branch.
 - **Proto edits**: after any `.proto` change, run from `packages/proto/`:
   ```bash
-  buf lint && buf breaking --against '.git#branch=main'
+  buf lint && buf breaking --against ".git#branch=<dev-branch>"
   ```
+  where `<dev-branch>` is the `**Development Branch**` value from `feature.md` (parsed in Boot Step B5).
   If `buf` is not installed: fall back to `grpc_tools.protoc` (precedent: docs/roadmap/phase3-deviations.md) and document as deviation.
 - **Migrations**: naming is `NNN_description.up.sql` + `NNN_description.down.sql`. NNN is the next integer after the last file found by `ls services/<name>/migrations/ | sort | tail -1`.
 - **After proto changes**: run `./scripts/buf-gen.sh` to regenerate stubs; include generated files in the commit.
