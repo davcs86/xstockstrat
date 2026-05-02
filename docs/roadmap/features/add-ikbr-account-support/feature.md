@@ -1,6 +1,6 @@
 # Feature: add-ikbr-account-support
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/add-ikbr-account-support`
 **Created**: 2026-05-02
 **Last Updated**: 2026-05-02T(sdd-spec)
@@ -17,6 +17,7 @@
 | 2026-05-02 | `draft` (revision 2) | user follow-ups | Encrypted credential storage + IBKR position sync added |
 | 2026-05-02 | `draft` → `spec-ready` | spec-ready audit | Five blocking gaps resolved; all open questions closed |
 | 2026-05-02 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 18 steps |
+| 2026-05-02 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — BrokerType enum added to common/v1 |
 
 ---
 

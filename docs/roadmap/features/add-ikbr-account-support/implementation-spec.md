@@ -1,6 +1,6 @@
 # Implementation Spec: add-ikbr-account-support
 
-**Status**: `implementation-ready`
+**Status**: `in-progress`
 **Created**: 2026-05-02
 **Feature**: `docs/roadmap/features/add-ikbr-account-support/feature.md`
 
@@ -43,6 +43,8 @@ Add multi-broker account support: register Alpaca and/or IBKR accounts with AES-
 ---
 
 ## Step 1 — Add `BrokerType` enum to `common/v1`
+
+**Status**: `done`
 
 **File**: `packages/proto/common/v1/common.proto`
 
@@ -1003,5 +1005,14 @@ Register this key in `xstockstrat-config` before deploying. See `docs/runbooks/c
 | Variable | Service | Required | Description |
 |---|---|---|---|
 | `BROKER_ACCOUNTS_ENCRYPTION_KEY` | xstockstrat-trading | Yes | 64-char hex string (32 bytes AES-256) |
+
+---
+
+## Deviation Log
+
+### Deviation: Step 1 — Add `BrokerType` enum to `common/v1`
+**Spec said**: `buf lint packages/proto` passes; `buf breaking --against '.git#branch=main' packages/proto` passes.
+**Actual**: `buf` not installed in the environment. Validated `common.proto` using `grpc_tools.protoc` (installed via `pip3 install grpcio-tools`). The `buf breaking` check could not be run.
+**Reason**: `buf` unavailable. Same fallback as documented in `docs/roadmap/phase3-deviations.md`. The change is a new enum addition — purely additive, no breaking risk.
 
 All other env vars (`ALPACA_API_KEY`, `ALPACA_API_SECRET`, `ALPACA_PAPER_URL`, `ALPACA_LIVE_URL`, `ALPACA_PAPER`) remain unchanged and serve as the seed for the `alpaca-default` fallback account (Step 15d).
