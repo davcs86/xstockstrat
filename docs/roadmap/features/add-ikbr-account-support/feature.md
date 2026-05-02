@@ -1,6 +1,6 @@
 # Feature: add-ikbr-account-support
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `draft`
 **Created**: 2026-05-02
 **Last Updated**: 2026-05-02
 
@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-05-02 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-02 | `draft` → `spec-ready` | /sdd-story | All open questions resolved |
+| 2026-05-02 | `spec-ready` → `draft` | user clarification | Scope revised: multi-account model replaces single-broker-switch |
 
 ---
 
@@ -25,7 +26,7 @@
 
 ## Summary
 
-Introduce a broker abstraction layer in `xstockstrat-trading` so orders can be routed to either Alpaca or Interactive Brokers (IBKR) for execution. Adds a `BrokerType` enum to the proto contract and a `trading.broker.active` config key to select the broker at runtime per environment (dev = IBKR paper account, prod = IBKR live account).
+Allow a platform user to register multiple broker accounts (Alpaca and/or IBKR) and place orders against a specific account, with the portfolio tracking positions and P&L per account. Introduces a `broker_accounts` DB table, a broker client pool in `xstockstrat-trading`, `account_id` fields on `Order` and `Portfolio`, and a `BrokerType` enum in the proto contract. Dev environments enforce paper-only across all registered accounts.
 
 ## Next Action
 
