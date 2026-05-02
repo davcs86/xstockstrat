@@ -189,6 +189,7 @@ After the last step in the requested range (or on any stop):
 ## REPO CONVENTIONS (from docs/runbooks/feature-workflow.md)
 
 - **Branch**: read from `**Development Branch**` in `feature.md` (default `feature/<slug>` if field absent) — warn at boot if on wrong branch.
+- **Step branch naming** (when creating per-step branches): use `step/<slug>-<N>` (e.g. `step/add-ikbr-account-support-1`). **Never** use `feature/<slug>/step-<N>` — git ref path rules prevent `feature/<slug>` and `feature/<slug>/step-N` from coexisting.
 - **Proto edits**: after any `.proto` change, run from `packages/proto/`:
   ```bash
   buf lint && buf breaking --against ".git#branch=<dev-branch>"

@@ -1,6 +1,6 @@
 # Implementation Spec: add-ikbr-account-support
 
-**Status**: `implementation-ready`
+**Status**: `in-progress`
 **Created**: 2026-05-02
 **Feature**: `docs/roadmap/features/add-ikbr-account-support/feature.md`
 
@@ -43,6 +43,8 @@ Add multi-broker account support: register Alpaca and/or IBKR accounts with AES-
 ---
 
 ## Step 1 — Add `BrokerType` enum to `common/v1`
+
+**Status**: `done`
 
 **File**: `packages/proto/common/v1/common.proto`
 
