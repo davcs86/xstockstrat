@@ -32,7 +32,9 @@ This reconstructs everything from prior sessions: deviations, decisions, stoppin
 Extract and enforce: branch model, migration file naming, proto change gate, PR requirements.
 
 **Step B5.** Run `git status`.
-If not on branch `feature/$ARGUMENTS[0]`: warn — "Current branch is `<branch>`, expected `feature/$ARGUMENTS[0]`. Check out the correct branch before proceeding."
+Parse `**Development Branch**` from the already-read `feature.md`.
+If the field is absent, fall back to `feature/$ARGUMENTS[0]` and note the fallback.
+If not on that branch: warn — "Current branch is `<branch>`, expected `<development-branch>`. Check out the correct branch before proceeding."
 
 **Step B6.** Announce context to user:
 ```
@@ -186,7 +188,7 @@ After the last step in the requested range (or on any stop):
 
 ## REPO CONVENTIONS (from docs/runbooks/feature-workflow.md)
 
-- **Branch**: `feature/<slug>` — warn at boot if on wrong branch.
+- **Branch**: read from `**Development Branch**` in `feature.md` (default `feature/<slug>` if field absent) — warn at boot if on wrong branch.
 - **Proto edits**: after any `.proto` change, run from `packages/proto/`:
   ```bash
   buf lint && buf breaking --against '.git#branch=main'

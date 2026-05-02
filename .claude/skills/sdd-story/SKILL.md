@@ -52,6 +52,7 @@ Write `docs/roadmap/features/$ARGUMENTS[0]/feature.md` using this exact template
 # Feature: <slug>
 
 **Lifecycle Status**: `draft`
+**Development Branch**: `feature/<slug>`
 **Created**: <ISO date>
 **Last Updated**: <ISO date>
 
