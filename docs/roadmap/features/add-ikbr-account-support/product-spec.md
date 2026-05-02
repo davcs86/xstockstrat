@@ -157,7 +157,12 @@ FR-29. On each tick, the poller iterates over **all registered accounts** in the
 }
 ```
 
-FR-30. `xstockstrat-portfolio` adds a `ConsumePositionSyncs` goroutine (parallel to `ConsumeOrderFills`) that subscribes to `account.positions.synced` events on the ledger stream. On each event, it executes a single DB transaction that: (1) deletes all existing position rows for the `account_id`, then (2) inserts the positions from the snapshot. Positions absent from the snapshot — indicating they are fully closed on the broker side — are thereby removed. Broker state is the source of truth for all accounts.
+FR-30. `xstockstrat-portfolio` adds a `ConsumePositionSyncs` goroutine (parallel to `ConsumeOrderFills`) that subscribes to `account.positions.synced` events on the ledger stream. On each event, it reconciles positions for the `account_id` in a single DB transaction using upsert semantics:
+- **Symbol in snapshot and in DB** → update `qty`, `avg_entry_price`, `cost_basis` from broker snapshot; **preserve `opened_at`** (entry date is not overwritten).
+- **Symbol in snapshot but not in DB** → insert as a new position with `opened_at = sync_time` (position was opened outside the platform).
+- **Symbol in DB but not in snapshot** → delete the row (position is fully closed on the broker side).
+
+Realized P&L history, equity snapshots, and ledger events are not affected by sync — they are stored in append-only tables (`portfolio.snapshots`, `ledger.events`) that the sync goroutine does not touch.
 
 FR-31. Position sync runs for all registered accounts regardless of broker type, ensuring feature parity. Both Alpaca and IBKR accounts use fill-event-based tracking (FR-33) for real-time order fills and position sync (FR-28–30) for periodic reconciliation against broker truth.
 

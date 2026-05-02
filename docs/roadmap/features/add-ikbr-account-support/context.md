@@ -100,8 +100,8 @@ Optional `account_id` added to request messages of `GetPortfolio`, `GetPosition`
 **Gap 3 — `alpaca-default` fallback (FR-6 updated)**
 Fallback is a real `broker_accounts` row (not a synthetic in-memory construct), inserted by Migration A using `ALPACA_API_KEY`/`ALPACA_API_SECRET` env vars at migration time. Credentials encrypted before storage. If env vars absent, no row inserted — operator registers manually. `user_id = 'default'` for the seed row.
 
-**Gap 4 — Position sync replacement semantics (FR-30 updated)**
-Full replace: single transaction deletes all positions for `account_id`, then inserts snapshot positions. Positions absent from snapshot are removed. Broker state is source of truth for all accounts.
+**Gap 4 — Position sync replacement semantics (FR-30 updated; then revised again)**
+Initially spec'd as full replace (delete + insert). Revised to upsert semantics after user raised concern about losing historical data. Final approach: update existing rows (preserve `opened_at`), insert new rows (opened outside platform), delete rows absent from snapshot (closed on broker). Realized P&L and snapshots are in append-only tables and unaffected by sync.
 
 **Gap 5 — Auth for account management RPCs (FR-10a added; FR-1 updated)**
 `broker_accounts` gains `user_id TEXT NOT NULL` column. `RegisterBrokerAccount` derives `user_id` from caller's auth claims. `ListBrokerAccounts` filters to caller's accounts. `DeregisterBrokerAccount` validates ownership; returns `codes.PermissionDenied` on mismatch. No new auth scope required.
