@@ -36,7 +36,7 @@ Parse `**Development Branch**` from the already-read `feature.md` — this is th
 If the field is absent, fall back to `feature/$ARGUMENTS[0]` and note the fallback.
 Evaluate the current branch:
 - On `<dev-branch>` or `main-dev` → OK. BRANCH SYNC will handle checkout before each step.
-- On `feature/<slug>/step-<N>` matching this feature → note that step N was previously started; BRANCH SYNC will handle.
+- On `feature-steps/<slug>-step-<N>` matching this feature → note that step N was previously started; BRANCH SYNC will handle.
 - On any other branch → stop: "Current branch is `<branch>`, which is unrelated to feature `<slug>`. Check out `<dev-branch>` or `main-dev` before proceeding."
 
 **Step B6.** Announce context to user:
@@ -146,13 +146,13 @@ Substitute all `<placeholders>` before use.
    ```
 3. Push:
    ```bash
-   git push -u origin feature/<slug>/step-<N>
+   git push -u origin feature-steps/<slug>-step-<N>
    ```
 4. Create PR (use the filled-in body from the template):
    ```bash
    gh pr create \
      --base <dev-branch> \
-     --head feature/<slug>/step-<N> \
+     --head feature-steps/<slug>-step-<N> \
      --title "feat(<slug>): Step <N> — <title>" \
      --body "$(cat .claude/skills/sdd-execute/templates/step-pr-body.md)"
    ```
@@ -237,7 +237,7 @@ After the last step in the requested range (or on any stop):
 
 ## REPO CONVENTIONS (from docs/runbooks/feature-workflow.md)
 
-- **Branch model**: `**Development Branch**` in `feature.md` is the integration branch (PR target). Per-step work happens on `feature/<slug>/step-<N>` sub-branches created by BRANCH SYNC. Boot Step B5 validates the current branch context.
+- **Branch model**: `**Development Branch**` in `feature.md` is the integration branch (PR target). Per-step work happens on `feature-steps/<slug>-step-<N>` sub-branches created by BRANCH SYNC. Boot Step B5 validates the current branch context.
 - **Proto edits**: after any `.proto` change, run from `packages/proto/`:
   ```bash
   buf lint && buf breaking --against ".git#branch=<dev-branch>"

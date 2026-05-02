@@ -4,7 +4,7 @@ Run before Phase 1 of every step.
 
 Variables:
 - `<dev-branch>` = `**Development Branch**` value from `feature.md` (integration branch, e.g. `feature/<slug>`)
-- `<step-branch>` = `feature/<slug>/step-<N>` for the current step N
+- `<step-branch>` = `feature-steps/<slug>-step-<N>` for the current step N
 
 1. `git fetch origin`
 2. Check whether `<dev-branch>` exists on origin:
@@ -30,11 +30,11 @@ Variables:
    ```
 6. Create the step sub-branch:
    ```bash
-   git checkout -b feature/<slug>/step-<N>
+   git checkout -b feature-steps/<slug>-step-<N>
    ```
 7. Report to user:
    ```
    Branch sync complete.
    Integration branch: <dev-branch> (up to date with origin/main-dev)
-   Working branch:     feature/<slug>/step-<N>
+   Working branch:     feature-steps/<slug>-step-<N>
    ```
