@@ -144,3 +144,14 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - `alpaca-default` seed deferred to application startup (`EnsureAlpacaDefault`) rather than migration (PRE_DEPLOY job doesn't have trading-service env vars).
 - `user_id` absent from `account.positions.synced` ledger event payload; placeholder `"default"` used in `processPositionSync`. Follow-up to add `user_id` to event payload.
 - Pre-existing inconsistency in `trading_helpers_test.go`: `TestAlpacaStatusToProto` expects `"unknown_status"` → `ORDER_STATUS_UNSPECIFIED` but `alpacaStatusToProto` returns `ORDER_STATUS_NEW` for unknown inputs. Not introduced by this feature; not changed by this spec.
+
+---
+
+## Session 2026-05-02T(sdd-execute-1) — sdd-execute
+
+**Branch naming issue resolved**: `feature/<slug>/step-N` sub-branches cannot coexist with `feature/<slug>` in git (ref path conflict). Updated SKILL.md to use `step/<slug>-N` naming for any future per-step branches. Remote `feature/add-ikbr-account-support/step-1` branch needs manual deletion on GitHub before `feature/add-ikbr-account-support` integration branch can be created. PR #35 (step-1 → claude/add-ikbr-account-support-EtxVF) was closed. Working on `claude/add-ikbr-account-support-EtxVF` (harness-designated branch) in the interim.
+
+### Step 1 — Add `BrokerType` enum to `common/v1` [done]
+- Appended `BrokerType` enum (UNSPECIFIED=0, ALPACA=1, IBKR=2) after the `Environment` enum in `packages/proto/common/v1/common.proto`.
+- Files modified: `packages/proto/common/v1/common.proto`
+- Deviations: `buf` not installed; validated with `grpc_tools.protoc` (same fallback as phase3-deviations.md).

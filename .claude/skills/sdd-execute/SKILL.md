@@ -3,7 +3,7 @@ name: sdd-execute
 description: Phase 3 of SDD — execute implementation steps with mandatory codebase discovery and explicit user confirmation before any writes. Usage: /sdd-execute <feature-slug> [step-number|next|all]. Re-reads context.md at every session start so prior decisions carry forward.
 argument-hint: <feature-slug> [step-number|next|all]
 disable-model-invocation: true
-allowed-tools: Read Write Edit Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(python *) Bash(buf *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
+allowed-tools: Read Write Edit Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(python *) Bash(buf *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *)
 effort: high
 ---
 
@@ -32,7 +32,7 @@ This reconstructs everything from prior sessions: deviations, decisions, stoppin
 Extract and enforce: branch model, migration file naming, proto change gate, PR requirements.
 
 **Step B5.** Run `git status`.
-Parse `**Development Branch**` from the already-read `feature.md` — this is the integration branch (PR target), e.g. `feature/<slug>`.
+Parse `**Development Branch**` from the already-read `feature.md`.
 If the field is absent, fall back to `feature/$ARGUMENTS[0]` and note the fallback.
 Evaluate the current branch:
 - On `<dev-branch>` or `main-dev` → OK. BRANCH SYNC will handle checkout before each step.
@@ -54,13 +54,6 @@ Parse `$ARGUMENTS[1]`:
 - absent or `next` → find the first step where `**Status**: \`pending\``
 - a number N → target only Step N
 - `all` → process all `pending` steps in order, applying confirmation to each
-
----
-
-## BRANCH SYNC — Run before Phase 1 of every step
-
-Read `.claude/skills/sdd-execute/templates/branch-sync.md` and execute the procedure,
-substituting `<dev-branch>` and `<slug>` from `feature.md` and `<N>` from the current step number.
 
 ---
 
@@ -227,9 +220,7 @@ After the last step in the requested range (or on any stop):
 
 - **Never write or edit any file before Phase 2 user confirmation.**
 - **Never guess a file path or symbol name.** If not found in Phase 1 discovery, block the step.
-- **Never commit before Phase 3 verification passes.** All commits happen in STEP COMMIT + PR, after verification.
-- **Never target `main-dev` or `main` in a step PR.** Always target the `**Development Branch**` from `feature.md`.
-- **Never stage files outside the step's `**Files**` section plus `implementation-spec.md`, `feature.md`, and `context.md`.**
+- **Never run `git commit`.** The user decides when to commit.
 - **Never edit a `.up.sql` migration that has been committed to `main-dev`.** Add a new numbered migration instead.
 - **Never make changes outside the current step's scope** — no opportunistic cleanup, no refactoring, no extra files.
 
