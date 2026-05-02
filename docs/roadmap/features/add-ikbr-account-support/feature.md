@@ -1,6 +1,6 @@
 # Feature: add-ikbr-account-support
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Created**: 2026-05-02
 **Last Updated**: 2026-05-02
 
@@ -14,6 +14,7 @@
 | 2026-05-02 | `draft` → `spec-ready` | /sdd-story | All open questions resolved |
 | 2026-05-02 | `spec-ready` → `draft` | user clarification | Scope revised: multi-account model replaces single-broker-switch |
 | 2026-05-02 | `draft` (revision 2) | user follow-ups | Encrypted credential storage + IBKR position sync added |
+| 2026-05-02 | `draft` → `spec-ready` | spec-ready audit | Five blocking gaps resolved; all open questions closed |
 
 ---
 

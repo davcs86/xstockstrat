@@ -84,3 +84,24 @@ Two user follow-ups incorporated into product-spec.md. Status remains `draft`.
 ## Session 2026-05-02T00:04:00Z — broker feature parity
 
 User confirmed goal is feature parity between brokers. Position sync poller (FR-28–31) now runs for **all** registered accounts, not IBKR-only. `GetPositions` was already on the `Broker` interface and Alpaca already implements it — only the poller scope changed. Config key renamed `trading.position_sync.ibkr_interval_ms` → `trading.position_sync.interval_ms`. "Alpaca position sync" removed from Out of Scope.
+
+---
+
+## Session 2026-05-02T00:05:00Z — spec-ready audit; five blocking gaps resolved
+
+Spec audited against proto contracts and codebase. Five design-decision gaps identified and resolved. Status advanced `draft` → `spec-ready`.
+
+**Gap 1 — Read-side portfolio RPCs (FR-27a added)**
+Optional `account_id` added to request messages of `GetPortfolio`, `GetPosition`, `ListPositions`, `GetPnL`, `GetSnapshot`, `StreamPortfolioUpdates`. When absent: aggregate/all-accounts (backwards-compatible). When present: filter to account, return `codes.NotFound` if not found. Also added `account_id` to `PortfolioSnapshot`.
+
+**Gap 2 — IBKR account ID in credentials (FR-3 updated)**
+`ibkr_account_id` (the IBKR-assigned account ID, e.g. `U1234567`) added to the IBKR credentials JSON blob. Required for `GetPositions` (`GET /v1/api/portfolio/{ibkr_account_id}/positions`) and order submission.
+
+**Gap 3 — `alpaca-default` fallback (FR-6 updated)**
+Fallback is a real `broker_accounts` row (not a synthetic in-memory construct), inserted by Migration A using `ALPACA_API_KEY`/`ALPACA_API_SECRET` env vars at migration time. Credentials encrypted before storage. If env vars absent, no row inserted — operator registers manually. `user_id = 'default'` for the seed row.
+
+**Gap 4 — Position sync replacement semantics (FR-30 updated)**
+Full replace: single transaction deletes all positions for `account_id`, then inserts snapshot positions. Positions absent from snapshot are removed. Broker state is source of truth for all accounts.
+
+**Gap 5 — Auth for account management RPCs (FR-10a added; FR-1 updated)**
+`broker_accounts` gains `user_id TEXT NOT NULL` column. `RegisterBrokerAccount` derives `user_id` from caller's auth claims. `ListBrokerAccounts` filters to caller's accounts. `DeregisterBrokerAccount` validates ownership; returns `codes.PermissionDenied` on mismatch. No new auth scope required.
