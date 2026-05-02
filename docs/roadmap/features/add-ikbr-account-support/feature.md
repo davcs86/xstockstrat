@@ -1,8 +1,8 @@
 # Feature: add-ikbr-account-support
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `implementation-ready`
 **Created**: 2026-05-02
-**Last Updated**: 2026-05-02
+**Last Updated**: 2026-05-02T(sdd-spec)
 
 ---
 
@@ -15,13 +15,14 @@
 | 2026-05-02 | `spec-ready` → `draft` | user clarification | Scope revised: multi-account model replaces single-broker-switch |
 | 2026-05-02 | `draft` (revision 2) | user follow-ups | Encrypted credential storage + IBKR position sync added |
 | 2026-05-02 | `draft` → `spec-ready` | spec-ready audit | Five blocking gaps resolved; all open questions closed |
+| 2026-05-02 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 18 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec add-ikbr-account-support`_
+- [Implementation Spec](implementation-spec.md) — 18 steps; generated 2026-05-02
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -32,4 +33,4 @@ Register multiple broker accounts (Alpaca and/or IBKR) via API with credentials 
 
 ## Next Action
 
-`/sdd-spec add-ikbr-account-support` — generate implementation spec from the product spec
+`/sdd-execute add-ikbr-account-support` — begin executing the 18-step implementation spec
