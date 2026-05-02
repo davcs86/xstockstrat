@@ -24,7 +24,10 @@ Dev servers will never execute live trades. Production servers will never paper 
 ```
 main          ← production deployments (live trading)
   └─ main-dev ← dev deployments (paper trading); base for all feature work
-       └─ feature/<short-description>   ← individual feature branches
+       └─ feature/<slug>           ← integration branch (PR target for step PRs)
+            ├─ feature/<slug>/step-1   ← per-step sub-branch (sdd-execute)
+            ├─ feature/<slug>/step-2
+            └─ feature/<slug>/step-N
 ```
 
 Rules:
@@ -34,6 +37,26 @@ Rules:
 - `main` only accepts PRs from `main-dev` (convention; enforced by the required review gate).
 - Hotfixes that cannot wait for the `main-dev` → `main` cycle: branch from `main`,
   fix, PR to `main` with explicit lead approval, then immediately back-merge into `main-dev`.
+
+### Per-step PR workflow (sdd-execute)
+
+When using `/sdd-execute`, each implementation step runs on its own sub-branch and produces a PR targeting the feature integration branch — not `main-dev` directly.
+
+```
+feature/<slug>/step-N  →  PR →  feature/<slug>  →  final PR →  main-dev
+```
+
+**Flow per step:**
+1. `sdd-execute` syncs `feature/<slug>` with `origin/main-dev` (feature branch wins on conflict).
+2. Creates `feature/<slug>/step-N`, executes the step, runs verification.
+3. On verification pass: commits, pushes, opens PR `feature/<slug>/step-N → feature/<slug>`, prints URL, stops.
+4. Merge the PR, then run `/sdd-execute <slug> next` for the next step.
+
+**Final integration:** after all steps are merged into `feature/<slug>`, open the normal PR from `feature/<slug>` to `main-dev` per step 3b below.
+
+Step PRs never target `main-dev` or `main` directly — only the feature integration branch.
+
+---
 
 ### One-time setup (run once after repo creation)
 
@@ -93,13 +116,21 @@ buf generate
 Run this before committing. The pre-commit hooks in `.pre-commit-config.yaml` enforce
 `buf lint` and `buf breaking` automatically on every commit.
 
-### 3. Open a PR to `main-dev`
+### 3a. Per-step PRs → feature integration branch (sdd-execute)
 
-Push your branch and open a PR targeting `main-dev`:
+When developing via `/sdd-execute`, step PRs are created automatically targeting `feature/<slug>`.
+See the **Per-step PR workflow** subsection above. No manual action needed — `sdd-execute` handles
+branch creation, commits, and `gh pr create`.
+
+After merging each step PR, run `/sdd-execute <slug> next` to continue.
+
+### 3b. Final integration PR → `main-dev`
+
+After all steps are merged into `feature/<slug>` and the feature is `code-completed`, open the integration PR:
 
 ```bash
-git push -u origin feature/<short-description>
-# then open PR via GitHub UI or: gh pr create --base main-dev
+git push -u origin feature/<slug>
+gh pr create --base main-dev --head feature/<slug>
 ```
 
 The **CI workflow** (`.github/workflows/ci.yml`) runs automatically. Its

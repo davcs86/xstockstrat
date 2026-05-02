@@ -253,3 +253,9 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 3. Do NOT rely on conversation context from a previous session. Always re-read context.md.
 
 SDD skills: `/sdd-story` → `/sdd-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime)
+
+---
+
+## Harness Default Branch
+
+**The harness must always check out `main-dev` at session start.** Never begin work on a harness-assigned branch (e.g. `claude/*`). SDD skills read authoritative artifacts from `origin/feature/<slug>` or `origin/main-dev` via `git show` — the working-tree checkout must be `main-dev` so that any fallback reads and branch operations start from the correct base.
