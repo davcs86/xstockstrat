@@ -158,3 +158,17 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Appended `BrokerType` enum (UNSPECIFIED=0, ALPACA=1, IBKR=2) to `packages/proto/common/v1/common.proto` after the `Environment` enum.
 - Files modified: `packages/proto/common/v1/common.proto`
 - Deviations: `buf` not pre-installed; installed buf 1.69.0 to `/usr/local/bin/buf` at runtime. `buf lint` and `buf breaking --against feature/add-ikbr-account-support` both passed.
+
+---
+
+## Session 2026-05-03T01:00:00Z — sdd-execute
+
+**Steps this session**: [2]
+**Progress**: 2 done / 18 total
+**Stopped at**: Step 2 (PR created; awaiting merge before Step 3)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 2 — Add broker account messages + RPCs to `trading/v1` [done]
+- Added `account_id = 19` and `broker_type = 20` to `Order`; `account_id = 13` to `PlaceOrderRequest`; `BrokerAccount` + request/response messages for `Register/List/Deregister`; 3 new RPCs to `TradingService`.
+- Files modified: `packages/proto/trading/v1/trading.proto`
+- Deviations: Spec said `PlaceOrderRequest` field 12 = `stop_price` but actual field 12 = `trading_mode`; field 13 added correctly regardless. Spec said last RPC = `GetOrder` but actual last = `StreamOrderUpdates`; new RPCs appended correctly. `buf breaking --against '.git#branch=feature/...,subdir=packages/proto'` syntax required (not in spec). `buf` re-installed at runtime (same as Step 1 deviation).

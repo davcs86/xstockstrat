@@ -1,6 +1,6 @@
 # Implementation Spec: add-ikbr-account-support
 
-**Status**: `implementation-ready`
+**Status**: `in-progress`
 **Created**: 2026-05-02
 **Feature**: `docs/roadmap/features/add-ikbr-account-support/feature.md`
 
@@ -149,6 +149,8 @@ Add after the last RPC:
 ```
 
 **Verification**: `buf lint packages/proto` passes; `buf breaking --against '.git#branch=main' packages/proto` passes (all changes are additive).
+
+**Status**: `done`
 
 ---
 

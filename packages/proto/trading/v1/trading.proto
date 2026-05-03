@@ -13,6 +13,9 @@ service TradingService {
   rpc GetOrder(GetOrderRequest) returns (Order);
   rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
   rpc StreamOrderUpdates(StreamOrderUpdatesRequest) returns (stream Order);
+  rpc RegisterBrokerAccount (RegisterBrokerAccountRequest) returns (RegisterBrokerAccountResponse);
+  rpc ListBrokerAccounts (ListBrokerAccountsRequest) returns (ListBrokerAccountsResponse);
+  rpc DeregisterBrokerAccount (DeregisterBrokerAccountRequest) returns (DeregisterBrokerAccountResponse);
 }
 
 message Order {
@@ -34,6 +37,8 @@ message Order {
   string user_id = 16;
   xstockstrat.common.v1.TradingMode trading_mode = 17;
   string broker_order_id = 18; // Alpaca-assigned order ID, populated after broker submission
+  string account_id = 19;
+  xstockstrat.common.v1.BrokerType broker_type = 20;
 }
 
 enum OrderSide {
@@ -76,6 +81,9 @@ message PlaceOrderRequest {
   bool requires_approval = 11;
   // If UNSPECIFIED, the service uses trading.broker.paper config key to determine mode.
   xstockstrat.common.v1.TradingMode trading_mode = 12;
+  // account_id routes the order to a specific broker account.
+  // Required when multiple accounts are registered; optional when only one exists.
+  string account_id = 13;
 }
 
 message CancelOrderRequest {
@@ -111,3 +119,39 @@ message StreamOrderUpdatesRequest {
   string user_id = 1;
   repeated OrderStatus status_filter = 2;
 }
+
+// BrokerAccount is a registered broker account (credentials never returned).
+message BrokerAccount {
+  string id = 1;
+  string display_name = 2;
+  xstockstrat.common.v1.BrokerType broker_type = 3;
+  bool is_paper = 4;
+  string user_id = 5;
+  bool is_active = 6;
+}
+
+message RegisterBrokerAccountRequest {
+  string display_name = 1;
+  xstockstrat.common.v1.BrokerType broker_type = 2;
+  bool is_paper = 3;
+  // credentials_json: broker-type-specific JSON blob.
+  // Alpaca: {"api_key":"...","api_secret":"..."}
+  // IBKR:   {"consumer_key":"...","access_token":"...","access_token_secret":"...","ibkr_account_id":"..."}
+  string credentials_json = 4;
+}
+
+message RegisterBrokerAccountResponse {
+  BrokerAccount account = 1;
+}
+
+message ListBrokerAccountsRequest {}
+
+message ListBrokerAccountsResponse {
+  repeated BrokerAccount accounts = 1;
+}
+
+message DeregisterBrokerAccountRequest {
+  string account_id = 1;
+}
+
+message DeregisterBrokerAccountResponse {}
