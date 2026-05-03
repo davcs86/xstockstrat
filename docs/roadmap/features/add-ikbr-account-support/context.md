@@ -144,3 +144,17 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - `alpaca-default` seed deferred to application startup (`EnsureAlpacaDefault`) rather than migration (PRE_DEPLOY job doesn't have trading-service env vars).
 - `user_id` absent from `account.positions.synced` ledger event payload; placeholder `"default"` used in `processPositionSync`. Follow-up to add `user_id` to event payload.
 - Pre-existing inconsistency in `trading_helpers_test.go`: `TestAlpacaStatusToProto` expects `"unknown_status"` → `ORDER_STATUS_UNSPECIFIED` but `alpacaStatusToProto` returns `ORDER_STATUS_NEW` for unknown inputs. Not introduced by this feature; not changed by this spec.
+
+---
+
+## Session 2026-05-03T00:00:00Z — sdd-execute
+
+**Steps this session**: [1]
+**Progress**: 1 done / 18 total
+**Stopped at**: Step 1 (PR created; awaiting merge before Step 2)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 1 — Add `BrokerType` enum to `common/v1` [done]
+- Appended `BrokerType` enum (UNSPECIFIED=0, ALPACA=1, IBKR=2) to `packages/proto/common/v1/common.proto` after the `Environment` enum.
+- Files modified: `packages/proto/common/v1/common.proto`
+- Deviations: `buf` not pre-installed; installed buf 1.69.0 to `/usr/local/bin/buf` at runtime. `buf lint` and `buf breaking --against feature/add-ikbr-account-support` both passed.
