@@ -109,7 +109,7 @@ If your change involves `.proto` files:
 ```bash
 cd packages/proto
 buf lint
-buf breaking --against '.git#branch=main'
+buf breaking --against '.git#branch=main-dev'
 buf generate
 ```
 
@@ -270,7 +270,7 @@ When a feature requires a new table, column, index, or any other schema change:
 
 All `.proto` changes must:
 1. Be made in `packages/proto/` in this spine repo
-2. Pass `buf lint` and `buf breaking --against '.git#branch=main'`
+2. Pass `buf lint` and `buf breaking --against '.git#branch=main-dev'`
 3. Follow the approval matrix in `docs/runbooks/approval-flow.md`
 4. Regenerate stubs via `./scripts/buf-gen.sh` with generated output committed to
    `packages/proto/gen/`
