@@ -63,6 +63,8 @@ This is an additive enum addition. `buf breaking` will not flag it. Requires 1 s
 
 **Verification**: `buf lint packages/proto` passes; `buf breaking --against '.git#branch=main' packages/proto` passes.
 
+**Status**: `done`
+
 ---
 
 ## Step 2 — Add broker account messages + RPCs to `trading/v1`

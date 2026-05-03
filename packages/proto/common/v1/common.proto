@@ -59,3 +59,10 @@ enum Environment {
   ENVIRONMENT_DEV = 1;
   ENVIRONMENT_PRODUCTION = 2;
 }
+
+// BrokerType identifies the broker for a registered account.
+enum BrokerType {
+  BROKER_TYPE_UNSPECIFIED = 0;
+  BROKER_TYPE_ALPACA = 1;
+  BROKER_TYPE_IBKR = 2;
+}
