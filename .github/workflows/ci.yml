@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history required for buf breaking --against '.git#branch=origin/main'
+          # Full history required for buf breaking against the target branch
           fetch-depth: 0
 
       - uses: bufbuild/buf-setup-action@v1
@@ -21,9 +21,12 @@ jobs:
       - name: buf lint
         run: buf lint packages/proto/
 
-      - name: buf breaking (against origin/main)
+      - name: buf breaking (against target branch)
         working-directory: packages/proto
-        run: buf breaking . --against '../../.git#branch=origin/main,subdir=packages/proto'
+        run: |
+          BASE="${{ github.base_ref }}"
+          echo "Checking breaking changes against origin/${BASE}"
+          buf breaking . --against "../../.git#branch=origin/${BASE},subdir=packages/proto"
 
   proto-freshness:
     name: Proto stubs are up to date
@@ -84,6 +87,24 @@ jobs:
         with:
           input: packages/proto
           buf_token: ${{ secrets.BUF_TOKEN }}
+
+  buf-push-dev:
+    name: Publish proto definitions to BSR (dev draft)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main-dev' && github.event_name == 'push'
+    needs: [proto-lint, proto-freshness]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: bufbuild/buf-push-action@v1
+        with:
+          input: packages/proto
+          buf_token: ${{ secrets.BUF_TOKEN }}
+          draft: true
 
   go-lint:
     name: Go lint and test (${{ matrix.service }})

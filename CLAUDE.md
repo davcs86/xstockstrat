@@ -83,7 +83,7 @@ Services reference this repo as a git submodule or via the generated package reg
 - `buf lint` and `buf breaking` run on every PR via CI.
 - Generated stubs are committed to `packages/proto/gen/` and versioned.
 - CI enforces freshness: `proto-freshness` job regenerates stubs and fails if the committed stubs differ — run `./scripts/buf-gen.sh` before committing proto changes.
-- Proto definitions are published to the **Buf Schema Registry (BSR)** on every push to `main` (requires `BUF_TOKEN` secret).
+- Proto definitions are published to the **Buf Schema Registry (BSR)** on push to `main` (production) and as a draft on push to `main-dev` (requires `BUF_TOKEN` secret).
 - For v1/v2 breaking-change workflow, see `docs/runbooks/proto-versioning.md`.
 
 ---
@@ -201,7 +201,7 @@ Each service has an `internal/telemetry/` (Go), `app/telemetry.py` (Python), or 
 cd packages/proto
 buf generate          # generates TypeScript, Python, Go stubs
 buf lint              # lint all protos
-buf breaking --against '.git#branch=main'  # check for breaking changes
+buf breaking --against '.git#branch=main-dev'  # check for breaking changes against dev trunk
 ```
 
 Or use the wrapper script (also runs TS compilation):
@@ -243,7 +243,8 @@ CI runs on every PR targeting `main-dev` or `main` (`.github/workflows/ci.yml`).
 |---|---|---|
 | `proto-lint` | `buf lint` on `packages/proto/` | — |
 | `proto-freshness` | Regenerates stubs, fails on diff with committed stubs | — |
-| `buf-push` | Publishes to BSR (push to `main` only) | — |
+| `buf-push` | Publishes to BSR on push to `main` (production) | — |
+| `buf-push-dev` | Publishes to BSR as draft on push to `main-dev` | — |
 | `go-lint` (×3) | `golangci-lint` per Go service | — |
 | `go-test` (×3) | `go test -race` + coverage (excludes cmd/handler/repository/telemetry/service packages) | 40% |
 | `python-lint` (×3) | `ruff check` + `ruff format --check` | — |
