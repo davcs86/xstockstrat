@@ -2,7 +2,6 @@
 name: sdd-story
 description: Phase 1 of SDD — generate a product spec from a user story. Usage: /sdd-story <feature-slug> [story text]. Creates docs/roadmap/features/<slug>/feature.md and product-spec.md. Reads docs/runbooks/feature-workflow.md to populate governance fields.
 argument-hint: <feature-slug> [story text]
-disable-model-invocation: true
 allowed-tools: Read Write Bash(ls *) Bash(mkdir *)
 effort: medium
 ---
