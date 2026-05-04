@@ -59,6 +59,22 @@ Next.js   → xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
 
 **Important Go build note**: CI runs all Go jobs with `GOWORK=off`. When running Go commands locally for a single service (e.g., `go test`, `go mod download`), set `GOWORK=off` or `cd services/<service>` and rely on the local `go.mod`.
 
+### Version Bump Workflow
+
+To change a language or tool version:
+1. **Update this table first** (CLAUDE.md §Language Versions & Tooling) — this is the soft source of truth
+2. **Update `Dockerfile.codegen`** — the proto-gen container
+3. **Propagate** to all other pinned locations:
+
+| Tool | Files to update |
+|---|---|
+| Go | `go.work`, `.github/workflows/ci.yml` (`go-version`), Go service Dockerfiles (`FROM golang:X`) |
+| Python | `.github/workflows/ci.yml` (`python-version`), Python service Dockerfiles (`FROM python:X-slim`) |
+| Node.js | `.github/workflows/ci.yml` (`node-version`), Node/Next service Dockerfiles (`FROM node:X-alpine`) |
+| pnpm | `package.json` (`packageManager`), `.github/workflows/ci.yml` (`pnpm@X`), Node service Dockerfiles |
+
+4. Open a PR — CI will catch any missed files.
+
 ---
 
 ## Spine Pattern
@@ -226,10 +242,16 @@ pnpm --filter @xstockstrat/proto run build
 ## Repository Bootstrap
 
 ```bash
-./scripts/bootstrap.sh   # installs buf, sets up local db, seeds config
-./scripts/buf-gen.sh     # runs buf lint + breaking + generate (all three languages)
-./scripts/db-migrate.sh  # runs all service migrations in dependency order
+./scripts/localenv-setup.sh  # (first time only) build proto-gen container + generate stubs
+./scripts/bootstrap.sh       # install service deps, start TimescaleDB, run migrations
+./scripts/buf-gen.sh         # re-run any time proto files change
+./scripts/db-migrate.sh      # run pending DB migrations
 ```
+
+`localenv-setup.sh` uses Docker to generate proto stubs (`packages/proto/gen/`) without
+installing Go, Python, or Node on the host. Run it once after cloning, or any time the
+generated stubs are missing (e.g. after a fresh clone or a clean). After it completes,
+`docker compose build` will succeed.
 
 ---
 
@@ -400,6 +422,8 @@ SDD skills: `/sdd-story` → `/sdd-spec` → `/sdd-execute` (loop) | `/sdd-statu
 | n8n workflow files | `packages/n8n/workflows/` |
 | DO prod app spec | `.do/app.yaml` |
 | DO dev app spec | `.do/app.dev.yaml` |
+| Local env setup script | `scripts/localenv-setup.sh` |
+| Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
 | DB migration script | `scripts/db-migrate.sh` |
 | Proto gen script | `scripts/buf-gen.sh` |
