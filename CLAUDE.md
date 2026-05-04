@@ -43,6 +43,40 @@ Next.js   → xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
 
 ---
 
+## Language Versions & Tooling
+
+| Language / Tool | Version | Notes |
+|---|---|---|
+| Go | 1.23 | `go.work` workspace file at repo root; use `GOWORK=off` for per-service builds |
+| Python | 3.12 | Dependencies managed by `uv` / `pip install -e ".[dev]"` per service |
+| Node.js | 22 | All Node/Next services |
+| pnpm | 9.15.0 | Workspace manager (`pnpm-workspace.yaml`); `npm install -g pnpm@9.15.0` |
+| buf | latest | Proto toolchain; installed by `scripts/bootstrap.sh` |
+| golang-migrate | latest | DB migrations; installed by `scripts/bootstrap.sh` |
+| golangci-lint | v1.59 | Go lint; run via `golangci-lint-action@v6` |
+| ruff | latest | Python lint + format |
+| Playwright | — | E2E tests for all three Next.js frontends |
+
+**Important Go build note**: CI runs all Go jobs with `GOWORK=off`. When running Go commands locally for a single service (e.g., `go test`, `go mod download`), set `GOWORK=off` or `cd services/<service>` and rely on the local `go.mod`.
+
+### Version Bump Workflow
+
+To change a language or tool version:
+1. **Update this table first** (CLAUDE.md §Language Versions & Tooling) — this is the soft source of truth
+2. **Update `Dockerfile.codegen`** — the proto-gen container
+3. **Propagate** to all other pinned locations:
+
+| Tool | Files to update |
+|---|---|
+| Go | `go.work`, `.github/workflows/ci.yml` (`go-version`), Go service Dockerfiles (`FROM golang:X`) |
+| Python | `.github/workflows/ci.yml` (`python-version`), Python service Dockerfiles (`FROM python:X-slim`) |
+| Node.js | `.github/workflows/ci.yml` (`node-version`), Node/Next service Dockerfiles (`FROM node:X-alpine`) |
+| pnpm | `package.json` (`packageManager`), `.github/workflows/ci.yml` (`pnpm@X`), Node service Dockerfiles |
+
+4. Open a PR — CI will catch any missed files.
+
+---
+
 ## Spine Pattern
 
 The **Spine** is this orchestration repo. It does not contain runtime service code. It owns:
@@ -163,10 +197,16 @@ Generated output:
 ## Repository Bootstrap
 
 ```bash
-./scripts/bootstrap.sh   # installs buf, sets up local db, seeds config
-./scripts/buf-gen.sh     # runs buf generate
-./scripts/db-migrate.sh  # runs all service migrations in dependency order
+./scripts/localenv-setup.sh  # (first time only) build proto-gen container + generate stubs
+./scripts/bootstrap.sh       # install service deps, start TimescaleDB, run migrations
+./scripts/buf-gen.sh         # re-run any time proto files change
+./scripts/db-migrate.sh      # run pending DB migrations
 ```
+
+`localenv-setup.sh` uses Docker to generate proto stubs (`packages/proto/gen/`) without
+installing Go, Python, or Node on the host. Run it once after cloning, or any time the
+generated stubs are missing (e.g. after a fresh clone or a clean). After it completes,
+`docker compose build` will succeed.
 
 ---
 
@@ -253,6 +293,31 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 3. Do NOT rely on conversation context from a previous session. Always re-read context.md.
 
 SDD skills: `/sdd-story` → `/sdd-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime)
+
+---
+
+## Key File Paths Reference
+
+| Area | Path |
+|---|---|
+| Proto contracts | `packages/proto/<service>/v1/<service>.proto` |
+| Proto buf config | `packages/proto/buf.yaml`, `packages/proto/buf.gen.yaml` |
+| Generated Go stubs | `packages/proto/gen/go/` |
+| Generated Python stubs | `packages/proto/gen/python/` |
+| Generated TS stubs | `packages/proto/gen/ts/` |
+| Docker Compose | `docker-compose.yml` |
+| Local env setup script | `scripts/localenv-setup.sh` |
+| Proto-gen container | `Dockerfile.codegen` |
+| Bootstrap script | `scripts/bootstrap.sh` |
+| DB migration script | `scripts/db-migrate.sh` |
+| Proto gen script | `scripts/buf-gen.sh` |
+| Subtree sync script | `scripts/subtree-sync.sh` |
+| CI workflow | `.github/workflows/ci.yml` |
+| Config rollout runbook | `docs/runbooks/config-rollout.md` |
+| Approval flow | `docs/runbooks/approval-flow.md` |
+| Proto versioning | `docs/runbooks/proto-versioning.md` |
+| Feature workflow | `docs/runbooks/feature-workflow.md` |
+| Implementation roadmap | `docs/roadmap/implementation-roadmap.md` |
 
 ---
 
