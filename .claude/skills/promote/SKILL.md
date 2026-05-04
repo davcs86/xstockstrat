@@ -212,4 +212,21 @@ Next steps:
   1. Complete the Promotion Checklist in the PR description.
   2. Get at least 1 reviewer approval (branch protection enforced).
   3. After merging, update each feature.md status from 'launched (pending merge)' to 'launched'.
+  4. The sync-main-to-maindev workflow runs automatically after the PR merges —
+     it merges the resulting main commit back into main-dev so the branches
+     stay in sync. No manual action needed unless the workflow reports a conflict.
 ```
+
+---
+
+## Post-merge sync (automated)
+
+After the promotion PR merges to `main`, the `.github/workflows/sync-main-to-maindev.yml`
+workflow fires automatically. It merges the new `main` tip back into `main-dev`, ensuring
+`main-dev` always contains every commit that is on `main`.
+
+**If the workflow fails** (e.g. merge conflict from a commit pushed directly to `main`):
+1. Fetch both branches locally.
+2. Check out `main-dev`.
+3. Run `git merge origin/main` and resolve conflicts.
+4. Push: `git push origin main-dev`.
