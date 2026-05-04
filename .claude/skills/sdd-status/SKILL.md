@@ -2,7 +2,6 @@
 name: sdd-status
 description: Show feature implementation status for all or a specific feature. Usage: /sdd-status [feature-slug]. Lists lifecycle status, step completion, last session, and next action. Read-only — makes no changes.
 argument-hint: [feature-slug]
-disable-model-invocation: true
 allowed-tools: Read Bash(ls *) Bash(find *) Bash(grep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *)
 effort: low
 ---
