@@ -2,7 +2,6 @@
 name: sdd-spec
 description: Phase 2 of SDD — generate an implementation spec by searching the codebase. Usage: /sdd-spec <feature-slug>. Reads product-spec.md, searches affected services for real file paths and symbol names, writes implementation-spec.md. No invented references — every step cites evidence found by grep.
 argument-hint: <feature-slug>
-disable-model-invocation: true
 allowed-tools: Read Write Bash(ls *) Bash(find *) Bash(grep *) Bash(cat *)
 effort: high
 context: fork
