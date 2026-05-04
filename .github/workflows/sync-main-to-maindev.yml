@@ -1,0 +1,42 @@
+name: Sync main → main-dev
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Use a PAT so the push can trigger downstream workflows (deploy-dev).
+          # Falls back to GITHUB_TOKEN if PAT is not configured.
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge main into main-dev
+        run: |
+          git checkout main-dev
+          git fetch origin main
+
+          # Check whether main-dev already contains everything in main.
+          BEHIND=$(git rev-list --count main-dev..origin/main)
+          if [ "$BEHIND" -eq 0 ]; then
+            echo "main-dev is already up to date with main. Nothing to do."
+            exit 0
+          fi
+
+          git merge origin/main \
+            --no-edit \
+            -m "chore: sync main into main-dev [post-promote]"
+
+          git push origin main-dev
