@@ -357,7 +357,7 @@ This creates each service's GitHub repo, splits the `services/<name>/` history, 
 | `main-dev` | Development trunk — triggers dev deploy on push; all feature branches merge here |
 | `feature/<slug>` | Feature implementation branches (SDD workflow) |
 | `feature-steps/<slug>-step-<N>` | Per-step branches for SDD execute loop; each step gets a PR into `feature/<slug>` |
-| `claude/*` | Harness-assigned branches (e.g., `claude/add-claude-documentation-9Whsq`) — never use as base for features |
+| `claude/*` | Harness-assigned branches (e.g., `claude/add-claude-documentation-9Whsq`) — always branched from and PR'd into `main-dev`; never use as base for features |
 
 ---
 
@@ -444,3 +444,5 @@ SDD skills: `/sdd-story` → `/sdd-spec` → `/sdd-execute` (loop) | `/sdd-statu
 ## Harness Default Branch
 
 **The harness must always check out `main-dev` at session start.** Never begin work on a harness-assigned branch (e.g. `claude/*`). SDD skills read authoritative artifacts from `origin/feature/<slug>` or `origin/main-dev` via `git show` — the working-tree checkout must be `main-dev` so that any fallback reads and branch operations start from the correct base.
+
+**All `claude/*` branches must be based on `main-dev`, not `main`.** When the harness creates or checks out a `claude/*` branch, it must branch from `main-dev` and open PRs targeting `main-dev`. Branching from `main` will pollute the PR with unrelated production commits.

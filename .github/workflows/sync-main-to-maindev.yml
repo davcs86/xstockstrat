@@ -23,10 +23,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Verify GH_PAT is configured
+        run: |
+          if [ -z "${{ secrets.GH_PAT }}" ]; then
+            echo "::warning::GH_PAT secret is not set — falling back to GITHUB_TOKEN, which cannot push to protected branches. Configure a PAT with repo write access."
+          fi
+
       - name: Merge main into main-dev
         run: |
+          git fetch origin main main-dev
           git checkout main-dev
-          git fetch origin main
+          git reset --hard origin/main-dev
 
           # Check whether main-dev already contains everything in main.
           BEHIND=$(git rev-list --count main-dev..origin/main)
@@ -39,4 +46,17 @@ jobs:
             --no-edit \
             -m "chore: sync main into main-dev [post-promote]"
 
-          git push origin main-dev
+          # Push with retry + exponential backoff for transient server errors.
+          for attempt in 1 2 3 4; do
+            if git push origin main-dev; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 4 ]; then
+              backoff=$((2 ** attempt))
+              echo "::warning::Push failed (attempt $attempt/4). Retrying in ${backoff}s..."
+              sleep "$backoff"
+              git fetch origin main-dev
+            fi
+          done
+          echo "::error::Push to main-dev failed after 4 attempts. If the branch is protected, ensure GH_PAT is configured with repo write access."
+          exit 1
