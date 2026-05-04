@@ -1,0 +1,216 @@
+---
+name: promote
+description: Create a production PR from main-dev to main with auto-generated changelog. Runs buf breaking against main to verify production safety. Usage: /promote
+argument-hint: (no arguments)
+disable-model-invocation: true
+allowed-tools: Read Write Edit Bash(git fetch *) Bash(git log *) Bash(git diff *) Bash(git show *) Bash(git ls-remote *) Bash(git status *) Bash(git add *) Bash(git commit *) Bash(git push *) Bash(git checkout *) Bash(buf *) Bash(find *) Bash(grep *)
+effort: medium
+---
+
+You are creating a production promotion PR from `main-dev` to `main` for the xstockstrat platform. This skill uses `main` as the tooling baseline — buf breaking checks against `main`, and the PR targets `main`.
+
+---
+
+## P1. Validate state
+
+Fetch both branches:
+```bash
+git fetch origin main main-dev
+```
+
+Check that `main-dev` is ahead of `main`:
+```bash
+git log origin/main..origin/main-dev --oneline
+```
+
+If the output is empty: stop — "main-dev has no commits ahead of main. Nothing to promote."
+
+Check for an existing open PR from `main-dev` to `main`:
+```bash
+git ls-remote --heads origin main-dev
+```
+
+Also check via gh if an open PR already exists:
+```bash
+gh pr list --base main --head main-dev --state open
+```
+
+If an open PR exists: stop and print — "A promote PR is already open: <URL>. Close or merge it before creating a new one."
+
+---
+
+## P2. Collect changelog inputs
+
+**Merge commits since last promotion:**
+```bash
+git log origin/main..origin/main-dev --merges --oneline
+```
+
+**New migrations since main:**
+```bash
+git diff --name-only origin/main origin/main-dev -- services/*/migrations/
+```
+Filter to only `*.up.sql` files.
+
+**Proto changes since main:**
+```bash
+git diff --name-only origin/main origin/main-dev -- packages/proto/
+```
+Filter to only `*.proto` files (not generated stubs).
+
+**Features at `code-completed`:**
+```bash
+find docs/roadmap/features -name feature.md
+```
+Read each `feature.md` and collect entries where the `**Lifecycle Status**` field is `code-completed`. Extract the feature slug (directory name) and the **Summary** section (first sentence).
+
+**Commit count:**
+```bash
+git log origin/main..origin/main-dev --oneline | wc -l
+```
+
+---
+
+## P3. Run buf breaking against main (tooling points to main)
+
+```bash
+cd packages/proto
+buf breaking . --against '../../.git#branch=origin/main,subdir=packages/proto'
+```
+
+- If no breaking changes: continue.
+- If breaking changes found: print the output, then ask the user:
+  "Breaking proto changes detected. These require sign-off per `docs/runbooks/proto-versioning.md` before this PR can merge. Proceed with creating the PR anyway? (yes / no)"
+  If user says no: stop.
+
+---
+
+## P4. Format the changelog entry
+
+Use today's date in `YYYY-MM-DD` format. Format the entry as:
+
+```markdown
+## YYYY-MM-DD
+
+### Features
+- <slug>: <summary sentence> (`code-completed`)
+
+(omit this section if no features at code-completed)
+
+### Proto Changes
+- <filename.proto>
+
+(omit this section if no proto changes)
+
+### DB Migrations
+- <service>: <migration-filename.up.sql>
+
+(omit this section if no new migrations)
+
+### Summary
+<N> commits, <M> feature merges since last promotion.
+```
+
+If there are no features, proto changes, or migrations — just include the Summary line.
+
+---
+
+## P5. Update CHANGELOG.md
+
+Read `CHANGELOG.md` at the repo root.
+
+If it does not exist, create it with this header:
+```markdown
+# Changelog
+
+All production promotions from `main-dev` to `main` are recorded here.
+Each entry corresponds to one `main-dev → main` PR merge.
+
+---
+
+```
+
+Prepend the new changelog entry (from P4) immediately after the `---` separator line.
+
+Write the file back.
+
+Commit the update to `main-dev`:
+```bash
+git add CHANGELOG.md
+git commit -m "chore: update CHANGELOG for <YYYY-MM-DD> promotion"
+git push origin main-dev
+```
+
+---
+
+## P6. Create PR from main-dev → main
+
+Build the PR body from the changelog entry plus these sections:
+
+```
+## Promotion Checklist
+
+- [ ] All services smoke-tested on dev (paper trading) environment
+- [ ] No open incidents or active maintenance mode on dev
+- [ ] Config keys for new features registered in prod config service (see docs/runbooks/config-rollout.md)
+- [ ] Proto breaking changes signed off (if any — see docs/runbooks/proto-versioning.md)
+
+## Changelog
+
+<changelog entry from P4>
+```
+
+Create the PR:
+```bash
+gh pr create \
+  --base main \
+  --head main-dev \
+  --title "release: promote main-dev to main (YYYY-MM-DD)" \
+  --body "<PR body above>"
+```
+
+Print the PR URL.
+
+---
+
+## P7. Update feature tracking
+
+For each feature found at `code-completed` in P2:
+
+Read its `docs/roadmap/features/<slug>/feature.md`. Add a new row to the **Status History** table:
+
+```markdown
+| YYYY-MM-DD | `code-completed` → `launched (pending merge)` | /promote | Promote PR created: <PR URL> |
+```
+
+Write the file back.
+
+Append to `docs/roadmap/features/<slug>/context.md`:
+
+```markdown
+## Session YYYY-MM-DD (/promote)
+
+- Promote PR created: <PR URL>
+- Lifecycle updated to `launched (pending merge)`
+- After the PR merges to main, update feature.md status to `launched`
+```
+
+---
+
+## P8. Announce result
+
+Print a summary:
+
+```
+Promotion PR created: <PR URL>
+Branch: main-dev → main
+Changelog: CHANGELOG.md updated
+
+Features included (code-completed):
+  - <slug>: <summary>
+
+Next steps:
+  1. Complete the Promotion Checklist in the PR description.
+  2. Get at least 1 reviewer approval (branch protection enforced).
+  3. After merging, update each feature.md status from 'launched (pending merge)' to 'launched'.
+```

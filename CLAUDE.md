@@ -98,6 +98,8 @@ Services reference this repo as a git submodule or via the generated package reg
   3. Approval from 2 service owners (see Approval Flow below)
 - `buf lint` and `buf breaking` run on every PR via CI.
 - Generated stubs are committed to `packages/proto/gen/` and versioned.
+- CI enforces freshness: `proto-freshness` job regenerates stubs and fails if the committed stubs differ — run `./scripts/buf-gen.sh` before committing proto changes.
+- Proto definitions are published to the **Buf Schema Registry (BSR)** on push to `main` (production) and as a draft on push to `main-dev` (requires `BUF_TOKEN` secret).
 - For v1/v2 breaking-change workflow, see `docs/runbooks/proto-versioning.md`.
 
 ---
@@ -138,6 +140,9 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 | `platform.log_level` | string | info | Global log level override |
 | `platform.ledger_endpoint` | string | — | xstockstrat-ledger gRPC address |
 | `platform.config_endpoint` | string | — | xstockstrat-config gRPC address |
+| `platform.otel.enabled` | bool | false | Master OTel export switch |
+| `platform.otel.endpoint` | string | — | OTLP endpoint (set via secret) |
+| `platform.otel.sample_rate` | float | 1.0 | Trace sample rate (0.0–1.0) |
 
 ---
 
@@ -152,8 +157,11 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 | xstockstrat-ledger | ledger | events | time (1 day chunks) |
 | xstockstrat-trading | trading | orders | time (1 day chunks) |
 | xstockstrat-portfolio | portfolio | snapshots | time (1 day chunks) |
+| xstockstrat-ingest | ingest | newsletter_signals | ingested_at (7 day chunks) |
 
 All services run migrations against their own schema, orchestrated centrally by `scripts/db-migrate.sh` using **golang-migrate**. State is tracked in a `schema_migrations` table inside each service's schema so re-runs only apply new files.
+
+**Migration run order** (dependency-respecting): `config → ledger → identity → marketdata → trading → portfolio → notify → ingest`
 
 **Migration file convention**: `NNN_description.up.sql` + `NNN_description.down.sql` in `services/<service>/migrations/`. NNN is a zero-padded sequence number continuing from the last file in that service's directory.
 
@@ -176,6 +184,31 @@ n8n Cloud → POST /webhooks/n8n/<action> → service webhook handler → intern
 
 Connect-RPC is also directly callable from n8n via HTTP POST to the service's Connect-RPC endpoint (port 80XX), using JSON or protobuf encoding.
 
+n8n workflow files are stored in `packages/n8n/workflows/`. See `docs/setup/n8n.md` for import instructions.
+
+---
+
+## Observability
+
+**Stack**: OpenTelemetry SDK (per-language) → OTLP push → Grafana Cloud (Loki + Mimir + Tempo)
+
+- **Local dev**: Services push OTLP to `otel-collector:4317` (Docker Compose). Config: `packages/otel/otel-collector-config.yaml`.
+- **Production**: Services push OTLP directly to Grafana Cloud OTLP gateway (no collector needed on DO App Platform).
+- **Toggle**: Set `OTEL_ENABLED=true` env var on each service. Config key `platform.otel.enabled` provides a live switch without restart.
+- **Non-fatal**: OTel init errors never prevent service startup.
+
+Key env vars (read by OTel SDK automatically):
+
+| Variable | Local Dev | Production |
+|---|---|---|
+| `OTEL_ENABLED` | `true` | `true` |
+| `OTEL_SERVICE_NAME` | `xstockstrat-<name>` | `xstockstrat-<name>` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4317` | Grafana Cloud OTLP URL |
+| `OTEL_EXPORTER_OTLP_HEADERS` | — | `Authorization=Basic <token>` |
+| `OTEL_RESOURCE_ATTRIBUTES` | `environment=dev,trading_mode=paper` | `environment=production,...` |
+
+Each service has an `internal/telemetry/` (Go), `app/telemetry.py` (Python), or `src/telemetry.ts` (Node.js) module. See Phase 7 in `docs/roadmap/implementation-roadmap.md` for per-language implementation patterns.
+
 ---
 
 ## Generating Proto Stubs
@@ -184,13 +217,25 @@ Connect-RPC is also directly callable from n8n via HTTP POST to the service's Co
 cd packages/proto
 buf generate          # generates TypeScript, Python, Go stubs
 buf lint              # lint all protos
-buf breaking --against '.git#branch=main'  # check for breaking changes
+buf breaking --against '.git#branch=main-dev'  # check for breaking changes against dev trunk
+```
+
+Or use the wrapper script (also runs TS compilation):
+
+```bash
+./scripts/buf-gen.sh
 ```
 
 Generated output:
 - `packages/proto/gen/go/` — Go stubs (consumed by Go services as local module)
-- `packages/proto/gen/python/` — Python stubs (installed via pip -e)
-- `packages/proto/gen/ts/` — TypeScript stubs (consumed by Node.js + Next.js)
+- `packages/proto/gen/python/` — Python stubs (installed via `pip -e`)
+- `packages/proto/gen/ts/` — TypeScript stubs + compiled JS in `gen/ts/dist/`
+
+**Node/Next.js services** consume TS stubs via the `@xstockstrat/proto` workspace package. Build it before running Node lint/test:
+
+```bash
+pnpm --filter @xstockstrat/proto run build
+```
 
 ---
 
@@ -212,9 +257,32 @@ generated stubs are missing (e.g. after a fresh clone or a clean). After it comp
 
 ## CI/CD Overview
 
-- **buf lint + breaking check** on every proto PR
-- **Per-service CI** runs in each service repo on push
-- **Integration tests** defined in `docs/runbooks/` and run via scripts
+CI runs on every PR targeting `main-dev` or `main` (`.github/workflows/ci.yml`).
+
+### CI Jobs
+
+| Job | What it checks | Coverage threshold |
+|---|---|---|
+| `proto-lint` | `buf lint` on `packages/proto/` | — |
+| `proto-freshness` | Regenerates stubs, fails on diff with committed stubs | — |
+| `buf-push` | Publishes to BSR on push to `main` (production) | — |
+| `buf-push-dev` | Publishes to BSR as draft on push to `main-dev` | — |
+| `go-lint` (×3) | `golangci-lint` per Go service | — |
+| `go-test` (×3) | `go test -race` + coverage (excludes cmd/handler/repository/telemetry/service packages) | 40% |
+| `python-lint` (×3) | `ruff check` + `ruff format --check` | — |
+| `python-test` (×3) | `pytest --cov` | 40% (indicators: 50%) |
+| `node-lint` (×7) | `pnpm run lint` (all Node + Next.js services) | — |
+| `node-test` (×4) | `pnpm run test:coverage` (Node.js services only) | 40% |
+| `frontend-e2e` (×3) | Playwright on trader, insights, config-ui | — |
+
+### Deployment Pipelines
+
+| Branch | Trigger | Target |
+|---|---|---|
+| `main-dev` | push | DigitalOcean App Platform **dev** (`DO_DEV_APP_ID` / `.do/app.dev.yaml`) |
+| `main` | push | DigitalOcean App Platform **prod** (`DO_APP_ID` / `.do/app.yaml`) |
+
+Deployment waits up to 15 minutes for the DO App Platform phase to reach `ACTIVE`.
 
 ---
 
@@ -238,6 +306,8 @@ All services → xstockstrat-config (WatchConfig stream at startup)
 All services → xstockstrat-ledger (event writes)
 All services → xstockstrat-notify (alert emissions)
 xstockstrat-ingest → xstockstrat-marketdata (raw data push)
+xstockstrat-indicators → xstockstrat-ingest (QuerySignals for signal-aware formulas)
+xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted backtests)
 ```
 
 ---
@@ -279,6 +349,37 @@ This creates each service's GitHub repo, splits the `services/<name>/` history, 
 
 ---
 
+## Branch Strategy
+
+| Branch | Purpose |
+|---|---|
+| `main` | Production — triggers prod deploy on push |
+| `main-dev` | Development trunk — triggers dev deploy on push; all feature branches merge here |
+| `feature/<slug>` | Feature implementation branches (SDD workflow) |
+| `feature-steps/<slug>-step-<N>` | Per-step branches for SDD execute loop; each step gets a PR into `feature/<slug>` |
+| `claude/*` | Harness-assigned branches (e.g., `claude/add-claude-documentation-9Whsq`) — never use as base for features |
+
+---
+
+## Implementation Roadmap Status
+
+Active phases and their current status. See `docs/roadmap/implementation-roadmap.md` for full specs and verification checkpoints.
+
+| Phase | Description | Status |
+|---|---|---|
+| Phase 0 | Foundation: proto gen, bootstrap, DB, Docker Compose | Pending |
+| Phase 1 | Core infrastructure: config, ledger, identity, notify | **DONE** |
+| Phase 2 | Data layer: marketdata, portfolio | Pending |
+| Phase 3 | Processing: indicators, ingest, analysis | **DONE** |
+| Phase 4 | Trading core | **DONE** |
+| Phase 5 | UI layer: trader, insights, config-ui | **DONE** |
+| Phase 6 | Integration & n8n wiring | **DONE** |
+| Phase 7 | Observability: OTel + Grafana Cloud | Pending |
+
+Deviation notes for completed phases: `docs/roadmap/phase[3-6]-deviations.md`.
+
+---
+
 ## Feature Roadmap
 
 Active and completed feature implementations are tracked under `docs/roadmap/features/`. Each feature directory contains:
@@ -286,6 +387,12 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 - `product-spec.md` — requirements, affected services, governance gates
 - `implementation-spec.md` — numbered steps with concrete code references and statuses
 - `context.md` — append-only session log of decisions, deviations, files modified
+
+### Active Features
+
+| Feature | Status | Branch | Next Action |
+|---|---|---|---|
+| `add-ikbr-account-support` | `implementation-ready` | `feature/add-ikbr-account-support` | `/sdd-execute add-ikbr-account-support` |
 
 **When starting any session involving an in-progress feature:**
 1. Run `/sdd-status` to see all features and their lifecycle status.
@@ -301,23 +408,36 @@ SDD skills: `/sdd-story` → `/sdd-spec` → `/sdd-execute` (loop) | `/sdd-statu
 | Area | Path |
 |---|---|
 | Proto contracts | `packages/proto/<service>/v1/<service>.proto` |
+| Common proto types | `packages/proto/common/v1/common.proto` |
 | Proto buf config | `packages/proto/buf.yaml`, `packages/proto/buf.gen.yaml` |
 | Generated Go stubs | `packages/proto/gen/go/` |
 | Generated Python stubs | `packages/proto/gen/python/` |
-| Generated TS stubs | `packages/proto/gen/ts/` |
+| Generated TS stubs | `packages/proto/gen/ts/` (compiled JS in `gen/ts/dist/`) |
+| Go services | `services/xstockstrat-{trading,portfolio,marketdata}/` |
+| Python services | `services/xstockstrat-{indicators,ingest,analysis}/` |
+| Node.js services | `services/xstockstrat-{ledger,identity,notify,config}/` |
+| Next.js UIs | `services/xstockstrat-{trader,insights,config-ui}/` |
 | Docker Compose | `docker-compose.yml` |
+| OTel Collector config | `packages/otel/otel-collector-config.yaml` |
+| n8n workflow files | `packages/n8n/workflows/` |
+| DO prod app spec | `.do/app.yaml` |
+| DO dev app spec | `.do/app.dev.yaml` |
 | Local env setup script | `scripts/localenv-setup.sh` |
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
 | DB migration script | `scripts/db-migrate.sh` |
 | Proto gen script | `scripts/buf-gen.sh` |
 | Subtree sync script | `scripts/subtree-sync.sh` |
+| Integration tests | `scripts/integration-test.sh` |
 | CI workflow | `.github/workflows/ci.yml` |
+| Dev deploy workflow | `.github/workflows/deploy-dev.yml` |
+| Prod deploy workflow | `.github/workflows/deploy-prod.yml` |
 | Config rollout runbook | `docs/runbooks/config-rollout.md` |
 | Approval flow | `docs/runbooks/approval-flow.md` |
 | Proto versioning | `docs/runbooks/proto-versioning.md` |
 | Feature workflow | `docs/runbooks/feature-workflow.md` |
 | Implementation roadmap | `docs/roadmap/implementation-roadmap.md` |
+| Phase deviation notes | `docs/roadmap/phase[3-6]-deviations.md` |
 
 ---
 
