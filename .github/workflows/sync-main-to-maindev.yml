@@ -11,7 +11,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           # Use a PAT so the push can trigger downstream workflows (deploy-dev).
@@ -31,9 +31,11 @@ jobs:
 
       - name: Merge main into main-dev
         run: |
-          git fetch origin main main-dev
-          git checkout main-dev
-          git reset --hard origin/main-dev
+          # Fetch all remote tracking refs so origin/main-dev is always resolvable.
+          git fetch origin
+
+          # Create or reset the local main-dev branch to match the remote exactly.
+          git checkout -B main-dev origin/main-dev
 
           # Check whether main-dev already contains everything in main.
           BEHIND=$(git rev-list --count main-dev..origin/main)
