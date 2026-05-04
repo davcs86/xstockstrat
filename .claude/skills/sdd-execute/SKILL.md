@@ -2,7 +2,6 @@
 name: sdd-execute
 description: Phase 3 of SDD — execute implementation steps with mandatory codebase discovery and explicit user confirmation before any writes. Usage: /sdd-execute <feature-slug> [step-number|next|all]. Re-reads context.md at every session start so prior decisions carry forward.
 argument-hint: <feature-slug> [step-number|next|all]
-disable-model-invocation: true
 allowed-tools: Read Write Edit Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(python *) Bash(buf *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
 effort: high
 ---
