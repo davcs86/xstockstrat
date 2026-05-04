@@ -2,7 +2,6 @@
 name: promote
 description: Create a production PR from main-dev to main with auto-generated changelog. Runs buf breaking against main to verify production safety. Usage: /promote
 argument-hint: (no arguments)
-disable-model-invocation: true
 allowed-tools: Read Write Edit Bash(git fetch *) Bash(git log *) Bash(git diff *) Bash(git show *) Bash(git ls-remote *) Bash(git status *) Bash(git add *) Bash(git commit *) Bash(git push *) Bash(git checkout *) Bash(buf *) Bash(find *) Bash(grep *)
 effort: medium
 ---
