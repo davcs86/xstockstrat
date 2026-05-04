@@ -8,6 +8,13 @@ Each entry corresponds to one `main-dev → main` PR merge.
 ## 2026-05-04
 
 ### Summary
+13 commits, 1 feature merge since last promotion.
+
+---
+
+## 2026-05-04
+
+### Summary
 11 commits, 1 feature merge since last promotion.
 
 ---
