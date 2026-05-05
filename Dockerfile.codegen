@@ -3,12 +3,12 @@
 # Used by scripts/localenv-setup.sh. NOT part of docker-compose.yml.
 #
 # Versions: keep in sync with CLAUDE.md §Language Versions & Tooling
-#   Go     1.23  → also in go.work, .github/workflows/ci.yml, Go service Dockerfiles
+#   Go     1.25  → also in go.work, .github/workflows/ci.yml, Go service Dockerfiles
 #   Python 3.12  → also in .github/workflows/ci.yml, Python service Dockerfiles
 #   Node   22    → also in .github/workflows/ci.yml
 #   pnpm   9.15.0 → also in package.json "packageManager", .github/workflows/ci.yml
 
-FROM golang:1.23-bookworm
+FROM golang:1.25-bookworm
 
 # ── System deps ────────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \

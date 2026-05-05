@@ -47,7 +47,7 @@ Next.js   → xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
 
 | Language / Tool | Version | Notes |
 |---|---|---|
-| Go | 1.23 | `go.work` workspace file at repo root; use `GOWORK=off` for per-service builds |
+| Go | 1.25 | `go.work` workspace file at repo root; use `GOWORK=off` for per-service builds |
 | Python | 3.12 | Dependencies managed by `uv` / `pip install -e ".[dev]"` per service |
 | Node.js | 22 | All Node/Next services |
 | pnpm | 9.15.0 | Workspace manager (`pnpm-workspace.yaml`); `npm install -g pnpm@9.15.0` |
