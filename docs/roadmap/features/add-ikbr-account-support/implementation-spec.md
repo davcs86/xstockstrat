@@ -1,6 +1,6 @@
 # Implementation Spec: add-ikbr-account-support
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-02
 **Feature**: `docs/roadmap/features/add-ikbr-account-support/feature.md`
 **Total Steps**: 18
@@ -64,7 +64,7 @@ One new config key: `trading.position_sync.interval_ms` (int, default 300000, li
 
 ### Step 1 — proto: Add `BrokerType` enum to `common/v1`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/common/v1/common.proto` — modify
@@ -95,7 +95,7 @@ This is an additive enum addition. `buf breaking` will not flag it. Requires 1 s
 
 ### Step 2 — proto: Add broker account messages + RPCs to `trading/v1`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify
@@ -1231,4 +1231,12 @@ go svc.ConsumePositionSyncs(ctx)
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 1 — proto: Add `BrokerType` enum to `common/v1`
+**Spec said**: `buf` available as a tool
+**Actual**: `buf` not pre-installed; installed buf 1.69.0 to `/usr/local/bin/buf` at runtime
+**Reason**: Environment did not have `buf` in PATH; runtime install unblocked verification
+
+### Deviation: Step 2 — proto: Add broker account messages + RPCs to `trading/v1`
+**Spec said**: `PlaceOrderRequest` field 12 = `stop_price`; last RPC = `GetOrder`
+**Actual**: `PlaceOrderRequest` field 12 = `trading_mode` (field 13 used for `account_id`); last RPC = `StreamOrderUpdates` (new RPCs appended correctly regardless). `buf breaking` required `--against '.git#branch=feature/...,subdir=packages/proto'` syntax.
+**Reason**: Codebase had evolved since spec-generation time; field numbers and RPC list differed. New RPCs and field numbers are still additive and non-breaking.
