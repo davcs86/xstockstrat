@@ -4,7 +4,7 @@ Each subdirectory tracks one feature from user story through implementation and 
 
 ---
 
-## Lifecycle Statuses
+## Feature Lifecycle Statuses
 
 | Status | Meaning |
 |---|---|
@@ -18,14 +18,28 @@ Each subdirectory tracks one feature from user story through implementation and 
 | `rolled-back` | Deployed but reverted |
 | `demoted/canceled` | Not going forward |
 
+## Bug Lifecycle Statuses
+
+Bug fixes created by `/sdd-triage` use the same status values as features. The `**Type**: bug`
+field in `feature.md` distinguishes them from features in `/sdd-status` output and the `/promote`
+CHANGELOG.
+
+Additional fields present in bug `feature.md` files:
+
+| Field | Values | Description |
+|---|---|---|
+| `**Type**` | `bug` | Marks this as a bug fix (absent or `feature` = standard feature) |
+| `**Severity**` | `SEV-1`, `SEV-2`, `SEV-3` | Bug severity from triage |
+| `**GitHub Issue**` | URL | Link to the originating GitHub issue |
+
 ---
 
 ## Files in Each Feature Directory
 
 | File | Created by | Purpose |
 |---|---|---|
-| `feature.md` | `/sdd-story` | Lifecycle status, Reviewers snapshot, links to all artifacts — **check this first** |
-| `product-spec.md` | `/sdd-story` | Requirements, affected services, governance gates |
+| `feature.md` | `/sdd-story` or `/sdd-triage` | Lifecycle status, Reviewers snapshot, links to all artifacts — **check this first** |
+| `product-spec.md` | `/sdd-story` or `/sdd-triage` | Requirements or bug description and fix scope; governance gates |
 | `implementation-spec.md` | `/sdd-spec` | Numbered steps with exact file/symbol references, statuses, and per-step Reviewers |
 | `context.md` | All skills | Append-only session log — **ALWAYS read before touching feature files** |
 

@@ -105,7 +105,9 @@ Filter to only `*.proto` files (not generated stubs).
 ```bash
 find docs/roadmap/features -name feature.md
 ```
-Read each `feature.md` and collect entries where the `**Lifecycle Status**` field is `code-completed`. Extract the feature slug (directory name) and the **Summary** section (first sentence).
+Read each `feature.md` and collect:
+- Entries where `**Lifecycle Status**` is `code-completed` AND `**Type**` is `feature` (or `**Type**` is absent — default is `feature`). Extract slug and **Summary** first sentence.
+- Entries where `**Lifecycle Status**` is `code-completed` AND `**Type**` is `bug`. Extract slug, **Summary** first sentence, and `**Severity**`.
 
 **Commit count:**
 ```bash
@@ -140,6 +142,11 @@ Use today's date in `YYYY-MM-DD` format. Format the entry as:
 
 (omit this section if no features at code-completed)
 
+### Bug Fixes
+- <slug> [<SEV-N>]: <summary sentence> (`code-completed`)
+
+(omit this section if no bugs at code-completed)
+
 ### Proto Changes
 - <filename.proto>
 
@@ -154,7 +161,7 @@ Use today's date in `YYYY-MM-DD` format. Format the entry as:
 <N> commits, <M> feature merges since last promotion.
 ```
 
-If there are no features, proto changes, or migrations — just include the Summary line.
+If there are no features, bug fixes, proto changes, or migrations — just include the Summary line.
 
 ---
 
@@ -222,7 +229,7 @@ Print the PR URL.
 
 ## P7. Update feature tracking
 
-For each feature found at `code-completed` in P2:
+For each feature **or bug** found at `code-completed` in P2:
 
 Read its `docs/roadmap/features/<slug>/feature.md`. Add a new row to the **Status History** table:
 
@@ -255,6 +262,9 @@ Changelog: CHANGELOG.md updated
 
 Features included (code-completed):
   - <slug>: <summary>
+
+Bug fixes included (code-completed):
+  - <slug> [<SEV-N>]: <summary>
 
 Next steps:
   1. Complete the Promotion Checklist in the PR description.

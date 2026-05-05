@@ -355,8 +355,9 @@ This creates each service's GitHub repo, splits the `services/<name>/` history, 
 |---|---|
 | `main` | Production — triggers prod deploy on push |
 | `main-dev` | Development trunk — triggers dev deploy on push; all feature branches merge here |
-| `feature/<slug>` | Feature implementation branches (SDD workflow) |
+| `feature/<slug>` | Feature implementation branches (SDD workflow); also used for SDD-path bug fixes (Track C) |
 | `feature-steps/<slug>-step-<N>` | Per-step branches for SDD execute loop; each step gets a PR into `feature/<slug>` |
+| `hotfix/<slug>` | Urgent production bug fixes — branches from `main`, PR targets `main`; back-merged into `main-dev` after merge |
 | `claude/*` | Harness-assigned branches (e.g., `claude/add-claude-documentation-9Whsq`) — always branched from and PR'd into `main-dev`; never use as base for features |
 
 ### Merge Strategy
@@ -364,6 +365,7 @@ This creates each service's GitHub repo, splits the `services/<name>/` history, 
 | PR direction | Required merge type | Reason |
 |---|---|---|
 | `feature/*` or `claude/*` → `main-dev` | Squash and merge | Keeps `main-dev` history clean |
+| `hotfix/*` → `main` | **Create a merge commit** — never squash | Preserves ancestry; back-merge into `main-dev` required immediately after |
 | `main-dev` → `main` (promotion) | **Create a merge commit** — never squash | Squash breaks git ancestry: `main-dev` stays permanently "ahead" of `main` even after content is promoted, polluting future promotion diffs |
 
 To enforce this, disable squash and rebase merging on the `main` branch:
