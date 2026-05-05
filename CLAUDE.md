@@ -359,6 +359,16 @@ This creates each service's GitHub repo, splits the `services/<name>/` history, 
 | `feature-steps/<slug>-step-<N>` | Per-step branches for SDD execute loop; each step gets a PR into `feature/<slug>` |
 | `claude/*` | Harness-assigned branches (e.g., `claude/add-claude-documentation-9Whsq`) — always branched from and PR'd into `main-dev`; never use as base for features |
 
+### Merge Strategy
+
+| PR direction | Required merge type | Reason |
+|---|---|---|
+| `feature/*` or `claude/*` → `main-dev` | Squash and merge | Keeps `main-dev` history clean |
+| `main-dev` → `main` (promotion) | **Create a merge commit** — never squash | Squash breaks git ancestry: `main-dev` stays permanently "ahead" of `main` even after content is promoted, polluting future promotion diffs |
+
+To enforce this, disable squash and rebase merging on the `main` branch:
+**Settings → Branches → Edit `main` branch protection → Allow merge types → uncheck Squash and Rebase**.
+
 ---
 
 ## Implementation Roadmap Status

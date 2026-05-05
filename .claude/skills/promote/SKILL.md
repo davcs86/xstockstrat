@@ -154,6 +154,10 @@ Build the PR body from the changelog entry plus these sections:
 - [ ] Config keys for new features registered in prod config service (see docs/runbooks/config-rollout.md)
 - [ ] Proto breaking changes signed off (if any — see docs/runbooks/proto-versioning.md)
 
+> ⚠️ **Merge strategy: "Create a merge commit" — NEVER squash or rebase.**
+> Squash-merging breaks git ancestry and causes `main-dev` to appear permanently ahead of `main`.
+> On GitHub: click the dropdown arrow next to the merge button → **"Create a merge commit"**.
+
 ## Changelog
 
 <changelog entry from P4>
