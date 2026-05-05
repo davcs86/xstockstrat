@@ -31,8 +31,11 @@ jobs:
 
       - name: Merge main into main-dev
         run: |
-          # Fetch all remote tracking refs so origin/main-dev is always resolvable.
-          git fetch origin
+          # actions/checkout configures a narrow refspec (only the triggered branch).
+          # Use explicit refspec mapping so origin/main-dev is always populated.
+          git fetch origin \
+            '+refs/heads/main:refs/remotes/origin/main' \
+            '+refs/heads/main-dev:refs/remotes/origin/main-dev'
 
           # Create or reset the local main-dev branch to match the remote exactly.
           git checkout -B main-dev origin/main-dev
@@ -57,7 +60,7 @@ jobs:
               backoff=$((2 ** attempt))
               echo "::warning::Push failed (attempt $attempt/4). Retrying in ${backoff}s..."
               sleep "$backoff"
-              git fetch origin main-dev
+              git fetch origin '+refs/heads/main-dev:refs/remotes/origin/main-dev'
             fi
           done
           echo "::error::Push to main-dev failed after 4 attempts. If the branch is protected, ensure GH_PAT is configured with repo write access."
