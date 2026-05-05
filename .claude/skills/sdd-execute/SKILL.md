@@ -176,7 +176,25 @@ Substitute all `<placeholders>` before use.
    ```bash
    git push -u origin feature-steps/<slug>-step-<N>
    ```
-4. Create PR (use the filled-in body from the template):
+4. **Merge-order gate (final integration PR only)**
+
+   If this is the **last step** (all steps are now `done`) and the next PR would target
+   `<dev-branch>` (the feature integration branch → `main-dev`), run this gate first:
+
+   a. Read `docs/roadmap/features/merge-order.md`.
+   b. Check if `<slug>` appears in the **Feature** column of the Blocking Dependencies table.
+   c. If a blocking entry exists and the **Resolved** column is not `Yes`:
+      > "merge-order.md requires `<blocking-feature>` to merge first.
+      > Reason: <reason from merge-order.md>
+      > Create the final integration PR anyway? (yes / no)"
+      - If `no`: stop. Do not create the PR.
+      - If `yes`: proceed.
+   d. If no entry for `<slug>` (or Resolved = Yes): proceed without warning.
+
+   This gate only applies to the integration PR (feature branch → `main-dev`).
+   Per-step PRs (step branch → feature branch) are not subject to this gate.
+
+5. Create PR (use the filled-in body from the template):
    ```bash
    gh pr create \
      --base <dev-branch> \
@@ -185,8 +203,8 @@ Substitute all `<placeholders>` before use.
      --body "$(cat .claude/skills/sdd-execute/templates/step-pr-body.md)"
    ```
    Pass the rendered body with all placeholders substituted.
-5. Print the PR URL returned by `gh pr create`.
-6. **STOP.** Tell the user:
+6. Print the PR URL returned by `gh pr create`.
+7. **STOP.** Tell the user:
    ```
    Step <N> complete. PR created: <url>
    Merge the PR into <dev-branch>, then run: /sdd-execute <slug> next

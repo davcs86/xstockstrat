@@ -409,7 +409,7 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 2. Read `docs/roadmap/features/<slug>/context.md` before touching any related files — it contains critical decisions from prior sessions.
 3. Do NOT rely on conversation context from a previous session. Always re-read context.md.
 
-SDD skills: `/sdd-story` → `/sdd-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime)
+SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime)
 
 ---
 
@@ -446,6 +446,8 @@ SDD skills: `/sdd-story` → `/sdd-spec` → `/sdd-execute` (loop) | `/sdd-statu
 | Approval flow | `docs/runbooks/approval-flow.md` |
 | Proto versioning | `docs/runbooks/proto-versioning.md` |
 | Feature workflow | `docs/runbooks/feature-workflow.md` |
+| Reviewer registry | `docs/runbooks/reviewer-registry.md` |
+| Feature merge order | `docs/roadmap/features/merge-order.md` |
 | Implementation roadmap | `docs/roadmap/implementation-roadmap.md` |
 | Phase deviation notes | `docs/roadmap/phase[3-6]-deviations.md` |
 
