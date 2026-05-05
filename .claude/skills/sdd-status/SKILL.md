@@ -28,21 +28,31 @@ You are reporting the status of SDD features. This skill is read-only — you ma
      ```
    - If it exists: read `feature.md`, `implementation-spec.md`, and `context.md` using `git show origin/feature/<slug>:<path>`.
    - If it does not exist: fall back to `git show origin/main-dev:<path>` for each file.
-   - From the chosen source: extract `**Lifecycle Status**` and the last row of the Status History table from `feature.md`; count steps by status from `implementation-spec.md` (grep for `` **Status**: `done` ``, `` **Status**: `pending` ``, `` **Status**: `blocked` ``, `` **Status**: `in-progress` ``); find the most recent `## Session` heading from `context.md`.
+   - From the chosen source: extract `**Lifecycle Status**`, `**Type**` (if present — `feature` or `bug`; default `feature` if absent), and the last row of the Status History table from `feature.md`; count steps by status from `implementation-spec.md` (grep for `` **Status**: `done` ``, `` **Status**: `pending` ``, `` **Status**: `blocked` ``, `` **Status**: `in-progress` ``); find the most recent `## Session` heading from `context.md`.
 
-3. Print a summary table:
+3. Print two tables — features first, bugs second (omit a table if it has no rows):
 
 ```
+Features
 Slug                  | Status               | Steps     | Last Session
 ----------------------|----------------------|-----------|----------------------------
 polygon-data-source   | in-progress          | 3/7 done  | 2026-05-01 sdd-execute
 rsi-alert             | implementation-ready | 0/5 done  | 2026-04-30 sdd-spec
 legacy-cleanup        | demoted/canceled     | —         | 2026-04-28 sdd-story
+
+Bugs
+Slug                       | Status    | Steps    | Severity | Last Session
+---------------------------|-----------|----------|----------|----------------------------
+fix-42-wrong-pnl-portfolio | draft     | —        | SEV-2    | 2026-05-02 sdd-triage
+fix-51-order-stuck         | in-progress | 2/4 done | SEV-1  | 2026-05-03 sdd-execute
 ```
 
-4. After the table, print:
-   - Features with `blocked` steps: "⚠ Blocked steps in: <slug-list>"
+For bug rows, also extract `**Severity**` from `feature.md` (default `—` if absent).
+
+4. After the tables, print:
+   - Features/bugs with `blocked` steps: "⚠ Blocked steps in: <slug-list>"
    - If no features exist: "No features found. Start with: /sdd-story <slug> <story text>"
+   - If no bugs exist: (omit — no message needed)
 
 ---
 
@@ -77,7 +87,10 @@ Note: "`origin/feature/$ARGUMENTS[0]` not found — reading from `origin/main-de
 Print:
 ```
 Feature: <slug>
+Type: <feature | bug>
 Lifecycle Status: <status>
+Severity: <SEV-N>          (omit if Type is feature)
+GitHub Issue: <url>        (omit if Type is feature or no issue linked)
 
 Status History:
 <full table from feature.md>
