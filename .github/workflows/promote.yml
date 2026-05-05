@@ -1,0 +1,242 @@
+name: Promote main-dev to main
+
+on:
+  workflow_dispatch:
+
+jobs:
+  promote:
+    name: Create promotion PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: main-dev
+          # PAT required to push changelog commit to main-dev and trigger downstream workflows.
+          # Falls back to GITHUB_TOKEN if PAT is not configured.
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Verify GH_PAT is configured
+        run: |
+          if [ -z "${{ secrets.GH_PAT }}" ]; then
+            echo "::warning::GH_PAT secret is not set — falling back to GITHUB_TOKEN, which cannot push to protected branches. Configure a PAT with repo write access."
+          fi
+
+      - name: Fetch both branches
+        run: |
+          git fetch origin \
+            '+refs/heads/main:refs/remotes/origin/main' \
+            '+refs/heads/main-dev:refs/remotes/origin/main-dev'
+
+      - name: Validate — main-dev is ahead of main
+        run: |
+          AHEAD=$(git log origin/main..origin/main-dev --oneline | wc -l | tr -d ' ')
+          if [ "$AHEAD" -eq 0 ]; then
+            echo "::error::main-dev has no commits ahead of main. Nothing to promote."
+            exit 1
+          fi
+          echo "main-dev is $AHEAD commits ahead of main."
+
+      - name: Validate — no existing promotion PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          EXISTING=$(gh pr list --base main --head main-dev --state open --json url --jq '.[0].url')
+          if [ -n "$EXISTING" ]; then
+            echo "::error::A promote PR is already open: $EXISTING. Close or merge it before creating a new one."
+            exit 1
+          fi
+
+      - uses: bufbuild/buf-setup-action@v1
+
+      - name: buf breaking check against main
+        id: buf-breaking
+        working-directory: packages/proto
+        run: |
+          set +e
+          buf breaking . --against '../../.git#branch=origin/main,subdir=packages/proto' 2>&1 | tee /tmp/buf-breaking.txt
+          EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "has_breaking=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Breaking proto changes detected — see output above. A warning will appear in the PR body."
+          else
+            echo "has_breaking=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collect changelog inputs
+        id: collect
+        run: |
+          TODAY=$(date +%Y-%m-%d)
+          echo "today=$TODAY" >> "$GITHUB_OUTPUT"
+
+          COMMIT_COUNT=$(git log origin/main..origin/main-dev --oneline | wc -l | tr -d ' ')
+          echo "commit_count=$COMMIT_COUNT" >> "$GITHUB_OUTPUT"
+
+          MERGE_COUNT=$(git log origin/main..origin/main-dev --merges --oneline | wc -l | tr -d ' ')
+          echo "merge_count=$MERGE_COUNT" >> "$GITHUB_OUTPUT"
+
+          # New .up.sql migration files
+          git diff --name-only origin/main origin/main-dev -- 'services/*/migrations/' \
+            | grep '\.up\.sql$' \
+            | sed 's|services/\([^/]*\)/migrations/\(.*\)|\1: \2|' \
+            > /tmp/migrations.txt || true
+
+          # Changed .proto files (source only, not generated stubs)
+          git diff --name-only origin/main origin/main-dev -- 'packages/proto/' \
+            | grep '\.proto$' \
+            | grep -v '/gen/' \
+            | sed 's|packages/proto/||' \
+            > /tmp/proto_changes.txt || true
+
+          # Features at code-completed
+          > /tmp/code_completed.txt
+          for feature_md in docs/roadmap/features/*/feature.md; do
+            [ -f "$feature_md" ] || continue
+            SLUG=$(echo "$feature_md" | sed 's|docs/roadmap/features/\([^/]*\)/feature.md|\1|')
+            STATUS=$(sed -n 's/.*\*\*Lifecycle Status\*\*[^`]*`\([^`]*\)`.*/\1/p' "$feature_md" | head -1)
+            if [ "$STATUS" = "code-completed" ]; then
+              SUMMARY=$(awk '/^## Summary/{found=1; next} found && NF{print; exit}' "$feature_md")
+              echo "${SLUG}: ${SUMMARY}" >> /tmp/code_completed.txt
+            fi
+          done
+
+      - name: Build changelog entry
+        run: |
+          TODAY="${{ steps.collect.outputs.today }}"
+          COMMIT_COUNT="${{ steps.collect.outputs.commit_count }}"
+          MERGE_COUNT="${{ steps.collect.outputs.merge_count }}"
+
+          {
+            echo "## ${TODAY}"
+            echo ""
+
+            if [ -s /tmp/code_completed.txt ]; then
+              echo "### Features"
+              while IFS= read -r line; do echo "- ${line}"; done < /tmp/code_completed.txt
+              echo ""
+            fi
+
+            if [ -s /tmp/proto_changes.txt ]; then
+              echo "### Proto Changes"
+              while IFS= read -r line; do echo "- ${line}"; done < /tmp/proto_changes.txt
+              echo ""
+            fi
+
+            if [ -s /tmp/migrations.txt ]; then
+              echo "### DB Migrations"
+              while IFS= read -r line; do echo "- ${line}"; done < /tmp/migrations.txt
+              echo ""
+            fi
+
+            echo "### Summary"
+            echo "${COMMIT_COUNT} commits, ${MERGE_COUNT} feature merges since last promotion."
+          } > /tmp/changelog_entry.txt
+
+      - name: Update CHANGELOG.md
+        run: |
+          awk '
+          /^---$/ && !inserted {
+            print
+            print ""
+            while ((getline line < "/tmp/changelog_entry.txt") > 0) { print line }
+            close("/tmp/changelog_entry.txt")
+            print ""
+            print "---"
+            inserted=1
+            next
+          }
+          1' CHANGELOG.md > /tmp/CHANGELOG.new
+          mv /tmp/CHANGELOG.new CHANGELOG.md
+
+      - name: Commit and push changelog
+        run: |
+          TODAY="${{ steps.collect.outputs.today }}"
+          git add CHANGELOG.md
+          git commit -m "chore: update CHANGELOG for ${TODAY} promotion"
+          git push origin HEAD:main-dev
+
+      - name: Build PR body
+        run: |
+          TODAY="${{ steps.collect.outputs.today }}"
+          HAS_BREAKING="${{ steps.buf-breaking.outputs.has_breaking }}"
+
+          > /tmp/pr_body.txt
+
+          if [ "$HAS_BREAKING" = "true" ]; then
+            {
+              echo "## ⚠️ Breaking Proto Changes"
+              echo ""
+              echo "This promotion includes breaking proto changes. Review \`docs/runbooks/proto-versioning.md\` before merging."
+              echo ""
+              echo '```'
+              cat /tmp/buf-breaking.txt
+              echo '```'
+              echo ""
+            } >> /tmp/pr_body.txt
+          fi
+
+          {
+            echo "## Promotion Checklist"
+            echo ""
+            echo "- [ ] All services smoke-tested on dev (paper trading) environment"
+            echo "- [ ] No open incidents or active maintenance mode on dev"
+            echo "- [ ] Config keys for new features registered in prod config service (see docs/runbooks/config-rollout.md)"
+            echo "- [ ] Proto breaking changes signed off (if any — see docs/runbooks/proto-versioning.md)"
+            echo ""
+            echo "> ⚠️ **Merge strategy: \"Create a merge commit\" — NEVER squash or rebase.**"
+            echo "> Squash-merging breaks git ancestry and causes \`main-dev\` to appear permanently ahead of \`main\`."
+            echo "> On GitHub: click the dropdown arrow next to the merge button → **\"Create a merge commit\"**."
+            echo ""
+            echo "## Changelog"
+            echo ""
+            cat /tmp/changelog_entry.txt
+          } >> /tmp/pr_body.txt
+
+      - name: Create PR
+        id: create-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TODAY="${{ steps.collect.outputs.today }}"
+          PR_URL=$(gh pr create \
+            --base main \
+            --head main-dev \
+            --title "release: promote main-dev to main (${TODAY})" \
+            --body-file /tmp/pr_body.txt)
+          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "Promotion PR created: $PR_URL"
+
+      - name: Job summary
+        run: |
+          TODAY="${{ steps.collect.outputs.today }}"
+          PR_URL="${{ steps.create-pr.outputs.url }}"
+
+          {
+            echo "## Promotion PR Created"
+            echo ""
+            echo "**PR:** $PR_URL"
+            echo "**Date:** $TODAY"
+            echo ""
+            echo "### Next Steps"
+            echo "1. Complete the Promotion Checklist in the PR description."
+            echo "2. Get at least 1 reviewer approval."
+            echo "3. Merge using **Create a merge commit** (never squash)."
+
+            if [ -s /tmp/code_completed.txt ]; then
+              echo ""
+              echo "### Features Included (code-completed)"
+              while IFS= read -r line; do echo "- $line"; done < /tmp/code_completed.txt
+              echo ""
+              echo "**Note:** Feature lifecycle tracking (P7) must be completed after the PR merges — run \`/promote\` in a Claude session to update \`feature.md\` status from \`code-completed\` to \`launched\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

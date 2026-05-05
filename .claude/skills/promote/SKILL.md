@@ -2,11 +2,55 @@
 name: promote
 description: Create a production PR from main-dev to main with auto-generated changelog. Runs buf breaking against main to verify production safety. Usage: /promote
 argument-hint: (no arguments)
-allowed-tools: Read Write Edit Bash(git fetch *) Bash(git log *) Bash(git diff *) Bash(git show *) Bash(git ls-remote *) Bash(git status *) Bash(git add *) Bash(git commit *) Bash(git push *) Bash(git checkout *) Bash(buf *) Bash(find *) Bash(grep *)
+allowed-tools: Read Write Edit Bash(git fetch *) Bash(git log *) Bash(git diff *) Bash(git show *) Bash(git ls-remote *) Bash(git status *) Bash(git add *) Bash(git commit *) Bash(git push *) Bash(git checkout *) Bash(buf *) Bash(find *) Bash(grep *) Bash(gh pr list *) Bash(gh run list *) Bash(gh workflow run *)
 effort: medium
 ---
 
 You are creating a production promotion PR from `main-dev` to `main` for the xstockstrat platform. This skill uses `main` as the tooling baseline — buf breaking checks against `main`, and the PR targets `main`.
+
+---
+
+## P0. Detect automation state
+
+Before doing anything else, check whether the GitHub Action already handled P1–P6:
+
+```bash
+# Check for an open promote PR created by the automation
+OPEN_PR=$(gh pr list --base main --head main-dev --state open --json url,title --jq '.[0].url')
+
+# Check for a recent failed workflow run
+FAILED_RUN=$(gh run list --workflow=promote.yml --status=failure --limit=1 --json url,conclusion,createdAt --jq '.[0].url')
+```
+
+**If `OPEN_PR` is non-empty** → The GitHub Action succeeded. Skip P1–P6 entirely.
+Print: "GitHub Action created the PR: `<url>`. Proceeding with feature tracking (P7) only."
+Go directly to P7 using the PR URL from `OPEN_PR`.
+
+**If `OPEN_PR` is empty AND `FAILED_RUN` is non-empty** → The GitHub Action ran but failed.
+Print: "Automation failed. Run logs: `<FAILED_RUN url>`. Falling back to manual P1–P6."
+Proceed with P1–P6 below, then P7. At the end of P6 report: "Completed P1–P6 manually (automation failure fallback)."
+
+**If both are empty** → The automation has not been triggered. Ask the user:
+"No promotion PR found and no recent workflow run detected. Should I:
+  1. Trigger the GitHub Action (`promote.yml`) and wait for it to complete, then do P7
+  2. Handle P1–P6 here directly
+
+Which would you prefer?"
+
+- If the user chooses **trigger**:
+  ```bash
+  gh workflow run promote.yml --ref main-dev
+  ```
+  Then poll every 15 seconds until the run completes:
+  ```bash
+  gh run list --workflow=promote.yml --limit=1 --json status,conclusion,url --jq '.[0]'
+  ```
+  - If the run succeeds → do P7.
+  - If the run fails → print the run URL and offer to fall back to P1–P6.
+
+- If the user chooses **handle here** → proceed with P1–P6 below, then P7.
+
+---
 
 ---
 
