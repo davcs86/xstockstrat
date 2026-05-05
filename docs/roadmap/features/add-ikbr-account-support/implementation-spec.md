@@ -1,23 +1,25 @@
 # Implementation Spec: add-ikbr-account-support
 
-**Status**: `implementation-ready`
+**Status**: `pending`
 **Created**: 2026-05-02
 **Feature**: `docs/roadmap/features/add-ikbr-account-support/feature.md`
+**Total Steps**: 18
+**Feature Branch**: `feature/add-ikbr-account-support`
 
 ---
 
-## Overview
+## Execution Summary
 
 Add multi-broker account support: register Alpaca and/or IBKR accounts with AES-256-GCM encrypted credentials stored in the DB. Orders route to a specific account via `account_id`. Portfolio tracks positions per account. A position sync poller reconciles all broker accounts against broker truth every N ms (configurable, live-reloaded). Dev enforces paper-only. No existing env var changes required for existing single-Alpaca deployments.
 
-**Affected services**: `xstockstrat-trading` (Go), `xstockstrat-portfolio` (Go)  
-**Affected proto packages**: `common/v1`, `trading/v1`, `portfolio/v1`  
-**New DB migrations**: trading `002`, `003`; portfolio `003`  
+**Affected services**: `xstockstrat-trading` (Go), `xstockstrat-portfolio` (Go)
+**Affected proto packages**: `common/v1`, `trading/v1`, `portfolio/v1`
+**New DB migrations**: trading `002`, `003`; portfolio `003`
 **Approval required**: 1 service owner (additive proto changes) + DBA review (schema migrations)
 
----
+One new config key: `trading.position_sync.interval_ms` (int, default 300000, live-reloaded) — register in `xstockstrat-config` before deploying (see `docs/runbooks/config-rollout.md`). One new env var: `BROKER_ACCOUNTS_ENCRYPTION_KEY` on `xstockstrat-trading` (64-char hex string, required).
 
-## Step Index
+### Step Index
 
 | Step | Description | Service/Repo |
 |---|---|---|
@@ -42,11 +44,36 @@ Add multi-broker account support: register Alpaca and/or IBKR accounts with AES-
 
 ---
 
-## Step 1 — Add `BrokerType` enum to `common/v1`
+## Step Dependencies
 
-**File**: `packages/proto/common/v1/common.proto`
+- Step 2 requires Step 1: `trading.proto` imports `common/v1.BrokerType` added in Step 1
+- Step 4 requires Steps 1–3: stubs are generated from the updated proto files
+- Step 10 requires Step 9: IBKR client implements `broker.Broker` interface defined in Step 9
+- Step 11 requires Step 5: account repo reads/writes `trading.broker_accounts` table created in Step 5
+- Step 11 requires Step 8: account repo uses `BrokerAccountsEncryptionKey` from config (Step 8)
+- Step 12 requires Step 6: order repo references `account_id`/`broker_type` columns added in Step 6
+- Step 12 requires Step 4: order repo returns proto `BrokerType` from generated stubs (Step 4)
+- Step 13 requires Steps 9, 10, 11, 12: `TradingService` composes broker pool, account repo, order repo
+- Step 14 requires Steps 4, 13: handler needs new proto stubs and new service methods
+- Step 15 requires Steps 8, 11, 13, 14: `main.go` wires config key, account repo, service, handler
+- Step 16 requires Step 7: portfolio repo uses `account_id` column added in Step 7
+- Step 17 requires Steps 4, 16: `PortfolioService` uses `ListPortfolios` proto stub and updated repo
+- Step 18 requires Steps 4, 17: handler uses new proto stub and new service method
 
-Current last content (L61): `  ENVIRONMENT_PRODUCTION = 2;` followed by `}` at L62.
+---
+
+### Step 1 — proto: Add `BrokerType` enum to `common/v1`
+
+**Status**: `pending`
+**Service**: `packages/proto`
+**Files**:
+- `packages/proto/common/v1/common.proto` — modify
+
+**Codebase Evidence**:
+- Confirmed via: `tail -5 packages/proto/common/v1/common.proto` → last line L62 is `}` closing the `Environment` enum
+- Existing pattern: `  ENVIRONMENT_PRODUCTION = 2;` at L61, followed by `}` at L62
+
+**Instructions**:
 
 Append after L62 (end of file):
 
@@ -61,13 +88,23 @@ enum BrokerType {
 
 This is an additive enum addition. `buf breaking` will not flag it. Requires 1 service owner approval per governance rules.
 
-**Verification**: `buf lint packages/proto` passes; `buf breaking --against '.git#branch=main' packages/proto` passes.
+**Verification**:
+`buf lint packages/proto` passes; `buf breaking --against '.git#branch=main-dev' packages/proto` passes.
 
 ---
 
-## Step 2 — Add broker account messages + RPCs to `trading/v1`
+### Step 2 — proto: Add broker account messages + RPCs to `trading/v1`
 
-**File**: `packages/proto/trading/v1/trading.proto`
+**Status**: `pending`
+**Service**: `packages/proto`
+**Files**:
+- `packages/proto/trading/v1/trading.proto` — modify
+
+**Codebase Evidence**:
+- Confirmed via: `grep -n "broker_order_id\|stop_price\|rpc GetOrder" packages/proto/trading/v1/trading.proto`
+- Existing pattern: `Order` field 18 = `string broker_order_id = 18;`; `PlaceOrderRequest` field 12 = `double stop_price = 12;`; current last RPC is `rpc GetOrder (GetOrderRequest) returns (GetOrderResponse);`
+
+**Instructions**:
 
 **2a — Add `account_id` and `broker_type` to `Order` message.**
 
@@ -146,23 +183,33 @@ Add after the last RPC:
   rpc DeregisterBrokerAccount (DeregisterBrokerAccountRequest) returns (DeregisterBrokerAccountResponse);
 ```
 
-**Verification**: `buf lint packages/proto` passes; `buf breaking --against '.git#branch=main' packages/proto` passes (all changes are additive).
+**Verification**:
+`buf lint packages/proto` passes; `buf breaking --against '.git#branch=main-dev' packages/proto` passes (all changes are additive).
 
 ---
 
-## Step 3 — Add `account_id` fields + `ListPortfolios` to `portfolio/v1`
+### Step 3 — proto: Add `account_id` fields + `ListPortfolios` to `portfolio/v1`
 
-**File**: `packages/proto/portfolio/v1/portfolio.proto`
+**Status**: `pending`
+**Service**: `packages/proto`
+**Files**:
+- `packages/proto/portfolio/v1/portfolio.proto` — modify
+
+**Codebase Evidence**:
+- Confirmed via: `grep -n "realized_pnl\|last_updated\|snapshot_time\|StreamPortfolioUpdates" packages/proto/portfolio/v1/portfolio.proto`
+- Existing pattern: `Portfolio` last field (10) = `double realized_pnl = 10;`; `Position` last field (10) = `google.protobuf.Timestamp last_updated = 10;`; `PortfolioSnapshot` last field (7) = `google.protobuf.Timestamp snapshot_time = 7;`; `PortfolioService` last RPC is `StreamPortfolioUpdates`
+
+**Instructions**:
 
 **3a — Add `account_id` to `Portfolio`, `Position`, `PortfolioSnapshot`.**
 
-`Portfolio` current last field (10): `double realized_pnl = 10;`  
+`Portfolio` current last field (10): `double realized_pnl = 10;`
 Add: `  string account_id = 11;`
 
-`Position` current last field (10): `google.protobuf.Timestamp last_updated = 10;`  
+`Position` current last field (10): `google.protobuf.Timestamp last_updated = 10;`
 Add: `  string account_id = 11;`
 
-`PortfolioSnapshot` current last field (7): `google.protobuf.Timestamp snapshot_time = 7;`  
+`PortfolioSnapshot` current last field (7): `google.protobuf.Timestamp snapshot_time = 7;`
 Add: `  string account_id = 8;`
 
 **3b — Add optional `account_id` to all read request messages.**
@@ -193,11 +240,27 @@ Add to `PortfolioService` after the last existing RPC (`StreamPortfolioUpdates`)
   rpc ListPortfolios (ListPortfoliosRequest) returns (ListPortfoliosResponse);
 ```
 
-**Verification**: `buf lint packages/proto` passes; `buf breaking --against '.git#branch=main' packages/proto` passes.
+**Verification**:
+`buf lint packages/proto` passes; `buf breaking --against '.git#branch=main-dev' packages/proto` passes.
 
 ---
 
-## Step 4 — Regenerate proto stubs
+### Step 4 — proto-gen: Regenerate proto stubs
+
+**Status**: `pending`
+**Service**: `packages/proto`
+**Files**:
+- `packages/proto/gen/go/common/v1/` — regenerate
+- `packages/proto/gen/go/trading/v1/` — regenerate
+- `packages/proto/gen/go/portfolio/v1/` — regenerate
+- `packages/proto/gen/ts/` — regenerate
+- `packages/proto/gen/python/` — regenerate
+
+**Codebase Evidence**:
+- Confirmed via: `grep -n "UnimplementedTradingServiceHandler\|var _" packages/proto/gen/go/trading/v1/tradingv1connect/trading.connect.go` → `UnimplementedTradingServiceHandler` at L204 (5 stubs); compile-time assertion at L17
+- Confirmed via: `grep -n "UnimplementedPortfolioServiceHandler\|var _" packages/proto/gen/go/portfolio/v1/portfoliov1connect/portfolio.connect.go` → `UnimplementedPortfolioServiceHandler` at L230 (6 stubs); compile-time assertion at L17
+
+**Instructions**:
 
 ```bash
 cd packages/proto
@@ -213,7 +276,7 @@ This regenerates:
 - `packages/proto/gen/ts/` — TypeScript stubs updated
 - `packages/proto/gen/python/` — Python stubs updated
 
-**Commit generated stubs** to `packages/proto/gen/` as a separate commit per convention.
+Commit generated stubs to `packages/proto/gen/` as part of this step's commit.
 
 After this step, both `xstockstrat-trading` and `xstockstrat-portfolio` will **not compile** until the new handler methods are implemented (Steps 14 and 18). The compile-time assertions at:
 - `services/xstockstrat-trading/internal/handler/trading.go` L17: `var _ tradingv1connect.TradingServiceHandler = (*TradingHandler)(nil)`
@@ -221,9 +284,23 @@ After this step, both `xstockstrat-trading` and `xstockstrat-portfolio` will **n
 
 ...will fail until the 3 trading handler methods (Step 14) and `ListPortfolios` portfolio handler method (Step 18) are added.
 
+**Verification**:
+`./scripts/buf-gen.sh` exits 0; `git diff packages/proto/gen/` shows new fields and stubs.
+
 ---
 
-## Step 5 — Migration: `trading` — `broker_accounts` table
+### Step 5 — migration: `trading` — `broker_accounts` table
+
+**Status**: `pending`
+**Service**: `xstockstrat-trading`
+**Files**:
+- `services/xstockstrat-trading/migrations/002_broker_accounts.up.sql` — create
+- `services/xstockstrat-trading/migrations/002_broker_accounts.down.sql` — create
+
+**Codebase Evidence**:
+- Confirmed via: `ls services/xstockstrat-trading/migrations/ | sort` → last file is `001_orders_hypertable.up.sql`; next migration number is `002`
+
+**Instructions**:
 
 **New file**: `services/xstockstrat-trading/migrations/002_broker_accounts.up.sql`
 
@@ -250,11 +327,26 @@ CREATE INDEX IF NOT EXISTS broker_accounts_active_idx  ON trading.broker_account
 DROP TABLE IF EXISTS trading.broker_accounts;
 ```
 
-**Note**: The `alpaca-default` seed row is inserted by migration `002` only if `ALPACA_API_KEY` and `ALPACA_API_SECRET` environment variables are set **and** a matching row does not already exist. Because migrations run in the `db-migrator` PRE_DEPLOY job where env vars may not be trading-service env vars, the seed is deferred to application startup (see Step 15 — `ensureAlpacaDefaultAccount`). The migration only creates the schema.
+**Note**: The `alpaca-default` seed row is inserted by application startup (`ensureAlpacaDefaultAccount`) rather than this migration, because the `db-migrator` PRE_DEPLOY job runs without trading-service env vars. The migration only creates the schema.
+
+**Verification**:
+`./scripts/db-migrate.sh` exits 0; `\dt trading.*` in psql shows `broker_accounts` table.
 
 ---
 
-## Step 6 — Migration: `trading` — `orders.account_id` + `orders.broker_type`
+### Step 6 — migration: `trading` — `orders.account_id` + `orders.broker_type`
+
+**Status**: `pending`
+**Service**: `xstockstrat-trading`
+**Files**:
+- `services/xstockstrat-trading/migrations/003_orders_account_id.up.sql` — create
+- `services/xstockstrat-trading/migrations/003_orders_account_id.down.sql` — create
+
+**Codebase Evidence**:
+- Confirmed via: migration `002_broker_accounts` created in Step 5; next number is `003`
+- Existing pattern: `trading.orders` hypertable exists with `broker_order_id TEXT` (broker-agnostic column already present from phase 4)
+
+**Instructions**:
 
 **New file**: `services/xstockstrat-trading/migrations/003_orders_account_id.up.sql`
 
@@ -276,9 +368,24 @@ ALTER TABLE trading.orders
 
 Defaults of `'alpaca-default'` and `1` preserve backward compatibility for all existing rows.
 
+**Verification**:
+`./scripts/db-migrate.sh` exits 0; `\d trading.orders` shows `account_id` and `broker_type` columns.
+
 ---
 
-## Step 7 — Migration: `portfolio` — `positions.account_id`
+### Step 7 — migration: `portfolio` — `positions.account_id`
+
+**Status**: `pending`
+**Service**: `xstockstrat-portfolio`
+**Files**:
+- `services/xstockstrat-portfolio/migrations/003_positions_account_id.up.sql` — create
+- `services/xstockstrat-portfolio/migrations/003_positions_account_id.down.sql` — create
+
+**Codebase Evidence**:
+- Confirmed via: `ls services/xstockstrat-portfolio/migrations/ | sort` → last file is `002_add_trading_mode.up.sql`; next number is `003`
+- Confirmed via: `grep "CONSTRAINT\|UNIQUE" services/xstockstrat-portfolio/migrations/002_add_trading_mode.up.sql` → constraint name `positions_user_id_symbol_trading_mode_key (user_id, symbol, trading_mode)`
+
+**Instructions**:
 
 **File to reference first**: `services/xstockstrat-portfolio/migrations/002_add_trading_mode.up.sql`
 
@@ -315,31 +422,57 @@ ALTER TABLE portfolio.positions
     UNIQUE (user_id, symbol, trading_mode);
 ```
 
+**Verification**:
+`./scripts/db-migrate.sh` exits 0; `\d portfolio.positions` shows `account_id` column and updated unique constraint.
+
 ---
 
-## Step 8 — Add `BrokerAccountsEncryptionKey` + `AppEnv` to trading config
+### Step 8 — config: Add `BrokerAccountsEncryptionKey` + `AppEnv` to trading config
 
-**File**: `services/xstockstrat-trading/internal/config/config.go`
+**Status**: `pending`
+**Service**: `xstockstrat-trading`
+**Files**:
+- `services/xstockstrat-trading/internal/config/config.go` — modify
 
-Current `Config` struct ends at approximately L33. Add two new fields to the struct and two corresponding `os.Getenv` calls in `LoadFromEnv`.
+**Codebase Evidence**:
+- Confirmed via: `grep -n "type Config\|AppEnv\|BrokerAccounts" services/xstockstrat-trading/internal/config/config.go` → `Config` struct at L16–33; `AppEnv` and `BrokerAccountsEncryptionKey` are not present
 
-In the `Config` struct, add:
+**Instructions**:
+
+In the `Config` struct, add two new fields:
 ```go
 BrokerAccountsEncryptionKey string // hex-encoded 32-byte key; required when broker_accounts table is in use
 AppEnv                       string // "dev" | "production"
 ```
 
-In `LoadFromEnv`, add:
+In `LoadFromEnv`, add the corresponding reads:
 ```go
 BrokerAccountsEncryptionKey: os.Getenv("BROKER_ACCOUNTS_ENCRYPTION_KEY"),
 AppEnv:                      os.Getenv("APP_ENV"),
 ```
 
-No default values; `main.go` validates `BrokerAccountsEncryptionKey` is non-empty at startup.
+No default values; `main.go` validates `BrokerAccountsEncryptionKey` is non-empty and is a valid 64-char hex string at startup (Step 15a).
+
+**Verification**:
+`GOWORK=off go build ./...` in `services/xstockstrat-trading/` exits 0.
 
 ---
 
-## Step 9 — Extract `Broker` interface; add `GetPositions` to Alpaca client
+### Step 9 — service: Extract `Broker` interface; add `GetPositions` to Alpaca client
+
+**Status**: `pending`
+**Service**: `xstockstrat-trading`
+**Files**:
+- `services/xstockstrat-trading/internal/broker/broker.go` — create
+- `services/xstockstrat-trading/internal/broker/alpaca.go` — modify
+- `services/xstockstrat-trading/internal/broker/alpaca_test.go` — modify
+
+**Codebase Evidence**:
+- Confirmed via: `grep -n "func.*Client\|type Client\|SubmitOrder\|GetOrder" services/xstockstrat-trading/internal/broker/alpaca.go` → `Client` struct at L25; `SubmitOrder` at L90 returns `*AlpacaOrder`; `GetOrder` at L154 returns `*AlpacaOrder`
+- Confirmed via: `grep -n "Broker\|GetPositions\|strconv" services/xstockstrat-trading/internal/broker/alpaca.go` → no `Broker` interface; no `GetPositions`; imports do NOT include `strconv`
+- Confirmed via: `grep -n "order\.ID" services/xstockstrat-trading/internal/broker/alpaca_test.go` → `order.ID` at L55 and L79 (will break when return type changes to `*BrokerOrder`)
+
+**Instructions**:
 
 **New file**: `services/xstockstrat-trading/internal/broker/broker.go`
 
@@ -372,19 +505,19 @@ type Broker interface {
 
 // OrderRequest is the normalized order placement request.
 type OrderRequest struct {
-    Symbol    string
-    Side      string
-    OrderType string
-    Qty       float64
-    LimitPrice float64
-    StopPrice  float64
+    Symbol      string
+    Side        string
+    OrderType   string
+    Qty         float64
+    LimitPrice  float64
+    StopPrice   float64
     TimeInForce string
 }
 ```
 
 **Modify**: `services/xstockstrat-trading/internal/broker/alpaca.go`
 
-Current `SubmitOrder` at L90 returns `*AlpacaOrder`. Change to return `*BrokerOrder`:
+Change `SubmitOrder` at L90 to return `*BrokerOrder`:
 
 ```go
 func (c *Client) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrder, error) {
@@ -395,7 +528,7 @@ Inside the function body, replace the return statement (currently returns `&Alpa
 return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status}, nil
 ```
 
-Current `GetOrder` at L154 returns `*AlpacaOrder`. Change to return `*BrokerOrder`:
+Change `GetOrder` at L154 to return `*BrokerOrder`:
 ```go
 func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrder, error) {
 ```
@@ -405,9 +538,11 @@ Return:
 return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status}, nil
 ```
 
-Keep `AlpacaOrder` struct exported (tests reference it directly).
+Keep `AlpacaOrder` struct exported (tests reference it for internal HTTP response unmarshaling).
 
-Add `GetPositions` method to `Client` (add `strconv` to imports):
+Add `strconv` to imports.
+
+Add `GetPositions` method to `Client`:
 
 ```go
 func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
@@ -427,9 +562,9 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
         return nil, fmt.Errorf("alpaca GetPositions: status %d: %s", resp.StatusCode, body)
     }
     var raw []struct {
-        Symbol   string `json:"symbol"`
-        Qty      string `json:"qty"`
-        AvgCost  string `json:"avg_entry_price"`
+        Symbol  string `json:"symbol"`
+        Qty     string `json:"qty"`
+        AvgCost string `json:"avg_entry_price"`
     }
     if err := json.Unmarshal(body, &raw); err != nil {
         return nil, fmt.Errorf("alpaca GetPositions: unmarshal: %w", err)
@@ -449,11 +584,25 @@ Add compile-time assertion at bottom of `alpaca.go`:
 var _ Broker = (*Client)(nil)
 ```
 
-**Update `alpaca_test.go`**: At L55, `order.ID` → `order.BrokerOrderID` (the test now receives `*BrokerOrder` not `*AlpacaOrder`). Apply the same fix at L79. The `AlpacaOrder` struct itself remains for internal HTTP response unmarshaling.
+**Update `alpaca_test.go`**: At L55, change `order.ID` → `order.BrokerOrderID`. Apply the same fix at L79. The `AlpacaOrder` struct itself remains for internal HTTP response unmarshaling.
+
+**Verification**:
+`GOWORK=off go build ./internal/broker/...` in `services/xstockstrat-trading/` exits 0; `GOWORK=off go test ./internal/broker/...` passes.
 
 ---
 
-## Step 10 — Create IBKR broker client
+### Step 10 — service: Create IBKR broker client
+
+**Status**: `pending`
+**Service**: `xstockstrat-trading`
+**Files**:
+- `services/xstockstrat-trading/internal/broker/ibkr.go` — create
+
+**Codebase Evidence**:
+- **Not found** — `services/xstockstrat-trading/internal/broker/ibkr.go` does not exist; create from scratch
+- Confirmed via: `broker.Broker` interface defined in `broker.go` (Step 9); `IBKRClient` must satisfy it
+
+**Instructions**:
 
 **New file**: `services/xstockstrat-trading/internal/broker/ibkr.go`
 
@@ -462,13 +611,13 @@ Implement `IBKRClient` satisfying the `Broker` interface using IBKR Web API (bas
 Key struct fields:
 ```go
 type IBKRClient struct {
-    baseURL         string
-    consumerKey     string
-    accessToken     string
+    baseURL           string
+    consumerKey       string
+    accessToken       string
     accessTokenSecret string
-    ibkrAccountID   string // e.g. "U1234567"
-    isPaper         bool
-    httpClient      *http.Client
+    ibkrAccountID     string // e.g. "U1234567"
+    isPaper           bool
+    httpClient        *http.Client
 }
 ```
 
@@ -489,9 +638,9 @@ type IBKRConfig struct {
 }
 ```
 
-`SubmitOrder` → `POST /v1/api/iserver/account/{ibkrAccountID}/orders`  
-`CancelOrder` → `DELETE /v1/api/iserver/account/{ibkrAccountID}/order/{orderId}`  
-`GetOrder`    → `GET /v1/api/iserver/account/orders?orderId={id}`  
+`SubmitOrder` → `POST /v1/api/iserver/account/{ibkrAccountID}/orders`
+`CancelOrder` → `DELETE /v1/api/iserver/account/{ibkrAccountID}/order/{orderId}`
+`GetOrder`    → `GET /v1/api/iserver/account/orders?orderId={id}`
 `GetPositions` → `GET /v1/api/portfolio/{ibkrAccountID}/positions/0`
 
 Each method must:
@@ -512,9 +661,24 @@ Compile-time assertion:
 var _ Broker = (*IBKRClient)(nil)
 ```
 
+**Verification**:
+`GOWORK=off go build ./internal/broker/...` in `services/xstockstrat-trading/` exits 0; compile-time assertion confirms `IBKRClient` satisfies `Broker`.
+
 ---
 
-## Step 11 — Create account repository (`broker_accounts` CRUD)
+### Step 11 — service: Create account repository (`broker_accounts` CRUD)
+
+**Status**: `pending`
+**Service**: `xstockstrat-trading`
+**Files**:
+- `services/xstockstrat-trading/internal/repository/account_repo.go` — create
+
+**Codebase Evidence**:
+- **Not found** — `services/xstockstrat-trading/internal/repository/account_repo.go` does not exist; create from scratch
+- Confirmed via: `trading.broker_accounts` table schema defined in migration `002_broker_accounts.up.sql` (Step 5)
+- Confirmed via: `grep -n "pgxpool\|type.*Repo" services/xstockstrat-trading/internal/repository/trading_repo.go` → existing repo pattern uses `*pgxpool.Pool`
+
+**Instructions**:
 
 **New file**: `services/xstockstrat-trading/internal/repository/account_repo.go`
 
@@ -577,11 +741,23 @@ Both use `aes.NewCipher` + `cipher.NewGCM`. `EncryptCredentials` prepends a 12-b
 
 `ListActiveBrokerAccounts` returns only rows where `is_active = TRUE`. Used at startup to populate the broker pool.
 
+**Verification**:
+`GOWORK=off go build ./internal/repository/...` in `services/xstockstrat-trading/` exits 0.
+
 ---
 
-## Step 12 — Update order repository: `account_id` + `broker_type` columns
+### Step 12 — service: Update order repository: `account_id` + `broker_type` columns
 
-**File**: `services/xstockstrat-trading/internal/repository/trading_repo.go`
+**Status**: `pending`
+**Service**: `xstockstrat-trading`
+**Files**:
+- `services/xstockstrat-trading/internal/repository/trading_repo.go` — modify
+
+**Codebase Evidence**:
+- Confirmed via: `grep -n "UpsertOrder\|scanOrder\|func.*Order" services/xstockstrat-trading/internal/repository/trading_repo.go` → `UpsertOrder` at L41–68 (19 columns); `scanOrder` at L175 (18 columns)
+- Existing pattern: `UpsertOrder` INSERT has 19 columns ending at `broker_order_id`; `scanOrder` scans 18 fields ending at `broker_order_id`
+
+**Instructions**:
 
 The `UpsertOrder` SQL at L41–68 inserts 19 columns. Add `account_id` and `broker_type` to the column list and values, making 21 columns total.
 
@@ -591,11 +767,23 @@ Update `GetOrder` and `ListOrders` SELECT queries to include `account_id, broker
 
 `ListOrders` currently filters by `trading_mode`. Optionally add `AND (account_id = $N OR $N = '')` for future account-scoped listing (can be a follow-up).
 
+**Verification**:
+`GOWORK=off go build ./internal/repository/...` in `services/xstockstrat-trading/` exits 0.
+
 ---
 
-## Step 13 — Update `TradingService`: broker pool, account management, routing
+### Step 13 — service: Update `TradingService`: broker pool, account management, routing
 
-**File**: `services/xstockstrat-trading/internal/service/trading.go`
+**Status**: `pending`
+**Service**: `xstockstrat-trading`
+**Files**:
+- `services/xstockstrat-trading/internal/service/trading.go` — modify
+
+**Codebase Evidence**:
+- Confirmed via: `grep -n "type TradingService\|broker \*broker\|NewTradingService\|StartFillPoller\|emitLedgerEvent" services/xstockstrat-trading/internal/service/trading.go` → `TradingService.broker` typed as `*broker.Client` at L33; `NewTradingService` at L55; `StartFillPoller` at L333–356; `emitLedgerEvent` at L549
+- Existing pattern: `StartFillPoller` uses `cfgWatcher.GetFloat` and ticker loop — mirror for `StartPositionSyncPoller`
+
+**Instructions**:
 
 **13a — Update `TradingService` struct** (currently at L30–46).
 
@@ -722,11 +910,27 @@ func (s *TradingService) DeregisterBrokerAccountSvc(ctx context.Context, account
 3. Calls `s.accountRepo.DeactivateBrokerAccount(ctx, accountID)`
 4. Removes entry from `s.brokers` under write lock
 
+**13j — Add `EnsureAlpacaDefault`** (called from `main.go` Step 15d):
+- Checks `len(s.brokers) == 0`
+- If `cfg.AlpacaAPIKey` and `cfg.AlpacaAPISecret` are non-empty, creates a `broker_accounts` row with `id='alpaca-default'`, `broker_type=ALPACA`, `is_paper=cfg.AlpacaPaper`, `user_id='default'`, then calls `LoadBrokerPool` again
+- If env vars absent and pool empty, logs a warning (not fatal — operator must register manually)
+
+**Verification**:
+`GOWORK=off go build ./internal/service/...` in `services/xstockstrat-trading/` exits 0.
+
 ---
 
-## Step 14 — Add account management + position sync handler methods
+### Step 14 — service: Add account management + position sync handler methods
 
-**File**: `services/xstockstrat-trading/internal/handler/trading.go`
+**Status**: `pending`
+**Service**: `xstockstrat-trading`
+**Files**:
+- `services/xstockstrat-trading/internal/handler/trading.go` — modify
+
+**Codebase Evidence**:
+- Confirmed via: `grep -n "var _\|Unimplemented\|toGRPCError\|grpcTradingAdapter" services/xstockstrat-trading/internal/handler/trading.go` → compile-time assertion at L17; `UnimplementedTradingServiceHandler` embedded at L21; `toGRPCError` at L155; `grpcTradingAdapter` at L99
+
+**Instructions**:
 
 The compile-time assertion at L17 (`var _ tradingv1connect.TradingServiceHandler = (*TradingHandler)(nil)`) will fail until all 3 new handler methods are present.
 
@@ -776,13 +980,24 @@ case connect.CodePermissionDenied:
     return status.Error(codes.PermissionDenied, err.Error())
 ```
 
-Add 3 corresponding gRPC adapter methods to `grpcTradingAdapter` (at L99, follows same pattern as existing adapters — wrap handler, convert Connect request/response to gRPC).
+Add 3 corresponding gRPC adapter methods to `grpcTradingAdapter` (at L99), following the same pattern as existing adapters — wrap handler, convert Connect request/response to gRPC.
+
+**Verification**:
+`GOWORK=off go build ./internal/handler/...` in `services/xstockstrat-trading/` exits 0 (compile-time assertion at L17 passes).
 
 ---
 
-## Step 15 — Update `main.go` (trading): encryption key, pool init, new goroutine
+### Step 15 — service: Update `main.go` (trading): encryption key, pool init, new goroutine
 
-**File**: `services/xstockstrat-trading/cmd/server/main.go`
+**Status**: `pending`
+**Service**: `xstockstrat-trading`
+**Files**:
+- `services/xstockstrat-trading/cmd/server/main.go` — modify
+
+**Codebase Evidence**:
+- Confirmed via: `grep -n "broker\|NewTradingService\|StartFillPoller" services/xstockstrat-trading/cmd/server/main.go` → broker init at L77–83; `NewTradingService` at L87; `go svc.StartFillPoller(ctx)` at L94
+
+**Instructions**:
 
 **15a — Validate encryption key** (add after `cfg` is loaded, before service init):
 
@@ -824,22 +1039,29 @@ if err := svc.EnsureAlpacaDefault(ctx); err != nil {
 }
 ```
 
-`EnsureAlpacaDefault` is a method on `TradingService` (add in Step 13):
-- Checks `len(s.brokers) == 0`
-- If `cfg.AlpacaAPIKey` and `cfg.AlpacaAPISecret` are non-empty, creates a `broker_accounts` row with `id='alpaca-default'`, `broker_type=ALPACA`, `is_paper=cfg.AlpacaPaper`, `user_id='default'`, then calls `LoadBrokerPool` again
-- If env vars absent and pool empty, logs a warning (not fatal — operator must register manually)
-
 **15e — Start position sync poller** (add after L94 `go svc.StartFillPoller(ctx)`):
 
 ```go
 go svc.StartPositionSyncPoller(ctx)
 ```
 
+**Verification**:
+`GOWORK=off go build ./cmd/server/...` in `services/xstockstrat-trading/` exits 0.
+
 ---
 
-## Step 16 — Update portfolio repository: `account_id` on positions
+### Step 16 — service: Update portfolio repository: `account_id` on positions
 
-**File**: `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`
+**Status**: `pending`
+**Service**: `xstockstrat-portfolio`
+**Files**:
+- `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
+
+**Codebase Evidence**:
+- Confirmed via: `grep -n "UpsertPosition\|scanPositionRow\|ON CONFLICT" services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` → `UpsertPosition` ON CONFLICT at L32–40; `scanPositionRow` at L172 (6 columns)
+- Existing pattern: ON CONFLICT `(user_id, symbol, trading_mode)` — must become `(user_id, symbol, trading_mode, account_id)` after migration Step 7
+
+**Instructions**:
 
 **16a — Update `UpsertPosition`** (currently at L32–40).
 
@@ -879,11 +1101,23 @@ func (r *pgPortfolioRepo) ListPositionsByAccount(ctx context.Context, accountID 
 
 Used by `ListPortfolios` to aggregate per-account positions.
 
+**Verification**:
+`GOWORK=off go build ./internal/repository/...` in `services/xstockstrat-portfolio/` exits 0.
+
 ---
 
-## Step 17 — Update `PortfolioService`: `ConsumePositionSyncs`, `ListPortfolios`
+### Step 17 — service: Update `PortfolioService`: `ConsumePositionSyncs`, `ListPortfolios`
 
-**File**: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+**Status**: `pending`
+**Service**: `xstockstrat-portfolio`
+**Files**:
+- `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
+
+**Codebase Evidence**:
+- Confirmed via: `grep -n "ConsumeOrderFills\|streamFills\|processOrderFill\|GetPortfolio" services/xstockstrat-portfolio/internal/service/portfolio_service.go` → `ConsumeOrderFills` at L72; `streamFills` at L84; `processOrderFill` at L113; `GetPortfolio` at L175
+- Existing pattern: `ConsumeOrderFills` → `streamFills` → `processOrderFill` goroutine chain; `ConsumePositionSyncs` mirrors this
+
+**Instructions**:
 
 **17a — Add `ConsumePositionSyncs`** (mirrors `ConsumeOrderFills` at L72):
 
@@ -928,7 +1162,7 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, payload posi
 }
 ```
 
-**Known deviation**: `user_id` is not carried in `account.positions.synced` ledger events per product spec FR-29. The implementation uses `"default"` as a placeholder. This is acceptable for the initial implementation. A follow-up should add `user_id` to the sync event payload (additive ledger event change, no proto impact).
+**Known deviation**: `user_id` is not carried in `account.positions.synced` ledger events per product spec FR-29. The implementation uses `"default"` as a placeholder. A follow-up should add `user_id` to the sync event payload (additive ledger event change, no proto impact).
 
 **17b — Update `GetPortfolio`** (currently at L175):
 
@@ -944,9 +1178,24 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 }
 ```
 
+**Verification**:
+`GOWORK=off go build ./internal/service/...` in `services/xstockstrat-portfolio/` exits 0.
+
 ---
 
-## Step 18 — Add `ListPortfolios` handler; update portfolio `main.go`
+### Step 18 — service: Add `ListPortfolios` handler; update portfolio `main.go`
+
+**Status**: `pending`
+**Service**: `xstockstrat-portfolio`
+**Files**:
+- `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go` — modify
+- `services/xstockstrat-portfolio/cmd/server/main.go` — modify
+
+**Codebase Evidence**:
+- Confirmed via: `grep -n "var _\|grpcPortfolioAdapter" services/xstockstrat-portfolio/internal/handler/portfolio_handler.go` → compile-time assertion at L17; `grpcPortfolioAdapter` at L122
+- Confirmed via: `grep -n "ConsumeOrderFills" services/xstockstrat-portfolio/cmd/server/main.go` → `go svc.ConsumeOrderFills(ctx)` at L70
+
+**Instructions**:
 
 **File**: `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`
 
@@ -975,33 +1224,11 @@ At L70, after `go svc.ConsumeOrderFills(ctx)`, add:
 go svc.ConsumePositionSyncs(ctx)
 ```
 
----
-
-## Governance Gates
-
-| Gate | Requirement | Step |
-|---|---|---|
-| Proto approval | 1 service owner (additive changes only) | Before Step 4 merge |
-| DBA review | trading migrations `002`, `003`; portfolio migration `003` | Before Step 5–7 merge |
-| `buf lint` + `buf breaking` CI | Must pass on proto PR | Step 4 |
-| Dev paper-only invariant | Enforced in `RegisterBrokerAccount` (Step 13i) | Step 15 |
+**Verification**:
+`GOWORK=off go build ./...` in `services/xstockstrat-portfolio/` exits 0 (compile-time assertion at L17 passes).
 
 ---
 
-## Config Keys Added
+## Deviation Log
 
-| Key | Type | Default | Description |
-|---|---|---|---|
-| `trading.position_sync.interval_ms` | int | 300000 | Position sync poll interval (all accounts); live-reloaded |
-
-Register this key in `xstockstrat-config` before deploying. See `docs/runbooks/config-rollout.md`.
-
----
-
-## New Environment Variables
-
-| Variable | Service | Required | Description |
-|---|---|---|---|
-| `BROKER_ACCOUNTS_ENCRYPTION_KEY` | xstockstrat-trading | Yes | 64-char hex string (32 bytes AES-256) |
-
-All other env vars (`ALPACA_API_KEY`, `ALPACA_API_SECRET`, `ALPACA_PAPER_URL`, `ALPACA_LIVE_URL`, `ALPACA_PAPER`) remain unchanged and serve as the seed for the `alpaca-default` fallback account (Step 15d).
+_Populated by /sdd-execute as implementation proceeds._

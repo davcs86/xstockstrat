@@ -3,7 +3,7 @@
 **Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/add-ikbr-account-support`
 **Created**: 2026-05-02
-**Last Updated**: 2026-05-02T(sdd-spec)
+**Last Updated**: 2026-05-02
 
 ---
 
