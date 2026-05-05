@@ -47,7 +47,7 @@ Next.js   → xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
 
 | Language / Tool | Version | Notes |
 |---|---|---|
-| Go | 1.23 | `go.work` workspace file at repo root; use `GOWORK=off` for per-service builds |
+| Go | 1.25 | `go.work` workspace file at repo root; use `GOWORK=off` for per-service builds |
 | Python | 3.12 | Dependencies managed by `uv` / `pip install -e ".[dev]"` per service |
 | Node.js | 22 | All Node/Next services |
 | pnpm | 9.15.0 | Workspace manager (`pnpm-workspace.yaml`); `npm install -g pnpm@9.15.0` |
@@ -411,7 +411,7 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 2. Read `docs/roadmap/features/<slug>/context.md` before touching any related files — it contains critical decisions from prior sessions.
 3. Do NOT rely on conversation context from a previous session. Always re-read context.md.
 
-SDD skills: `/sdd-story` → `/sdd-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime)
+SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime)
 
 ---
 
@@ -448,6 +448,8 @@ SDD skills: `/sdd-story` → `/sdd-spec` → `/sdd-execute` (loop) | `/sdd-statu
 | Approval flow | `docs/runbooks/approval-flow.md` |
 | Proto versioning | `docs/runbooks/proto-versioning.md` |
 | Feature workflow | `docs/runbooks/feature-workflow.md` |
+| Reviewer registry | `docs/runbooks/reviewer-registry.md` |
+| Feature merge order | `docs/roadmap/features/merge-order.md` |
 | Implementation roadmap | `docs/roadmap/implementation-roadmap.md` |
 | Phase deviation notes | `docs/roadmap/phase[3-6]-deviations.md` |
 

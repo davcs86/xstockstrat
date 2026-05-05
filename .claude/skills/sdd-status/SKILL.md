@@ -120,10 +120,34 @@ Session Log:
   2026-05-01T14:00Z — sdd-execute: steps 1–2 done, stopped at step 3
 ```
 
-### 4. Print recommended next action
+### 4. Merge-order status (code-completed features only)
 
-- All steps done → "Feature complete (code-completed). Update feature.md manually when deployed."
+If lifecycle status is `code-completed`:
+
+Read `docs/roadmap/features/merge-order.md`. Check whether `<slug>` appears in the
+**Feature** column of the Blocking Dependencies table.
+
+Print:
+- If a blocking entry exists and Resolved ≠ Yes:
+  ```
+  ⏸ Merge blocked — waiting for `<blocking-feature>` to reach `launched`
+     Reason: <reason from merge-order.md>
+     See: docs/roadmap/features/merge-order.md
+  ```
+- If no entry or Resolved = Yes:
+  ```
+  ✓ No merge-order dependency — ready to open final integration PR
+  ```
+
+### 5. Print recommended next action
+
+- Status `code-completed`, merge blocked → "Resolve merge-order dependency first (see above), then open final PR with /sdd-execute <slug> next"
+- Status `code-completed`, no blocker → "Feature complete (code-completed). Open the final integration PR: /sdd-execute <slug> next"
+- Status `launched` → "Feature is live in production."
 - Any `blocked` steps → "Step N is blocked. Read context.md and resolve the blocker, then re-run /sdd-execute <slug> N"
 - Steps pending → "/sdd-execute <slug> next  (next: Step N — <title>)"
+- Status `implementation-ready`, no execution started → "/sdd-review <slug> impl-spec  (validate spec before executing)"
 - No implementation-spec.md → "/sdd-spec <slug>  (implementation spec not yet generated)"
+- Status `spec-ready` → "/sdd-spec <slug>  (product spec approved — generate implementation spec)"
+- Status `draft` → "/sdd-review <slug> product-spec  (product spec awaiting AI review)"
 - No product-spec.md → "/sdd-story <slug>  (no product spec — provide story text)"
