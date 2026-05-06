@@ -18,16 +18,23 @@ You are an implementation planner for the xstockstrat platform. Your job is to s
 
 ## Steps
 
-### 1. Read the product spec
+### 1. Read the product spec and lifecycle guard
 
 Read `docs/roadmap/features/$ARGUMENTS[0]/product-spec.md`.
 If absent: stop with "No product spec found. Run /sdd-story $ARGUMENTS[0] first."
+
+Read `docs/roadmap/features/$ARGUMENTS[0]/feature.md` and check `**Lifecycle Status**`.
+If status is `draft` (meaning `/sdd-review product-spec` has not yet been run):
+> "Product spec has not been AI-reviewed. Run `/sdd-review $ARGUMENTS[0] product-spec` first
+> to advance to `spec-ready`. Proceed anyway? (yes / no)"
+Only continue on `yes`.
 
 ### 2. Read governance docs (always — no exceptions)
 
 Read all of these before writing anything:
 
 - `CLAUDE.md` — service registry, port map, inter-service dependency graph, config governance
+- `docs/runbooks/reviewer-registry.md` — service review focus, role reviewers, step-category governance matrix
 - `docs/runbooks/feature-workflow.md` — branch model, migration file conventions, proto change gate, PR requirements, deployment stages
 - `docs/runbooks/approval-flow.md` — approver matrix per change type
 - `docs/roadmap/phase3-deviations.md` — implementation gotchas (migration naming, grpc_tools fallback, asyncpg pool, pagination)
@@ -103,6 +110,11 @@ Write `docs/roadmap/features/$ARGUMENTS[0]/implementation-spec.md`:
 **Files**:
 - `exact/path/to/file` — modify | create | delete
 
+**Reviewers**: <role1> — <focus phrase from registry>, <role2> — <focus phrase>
+(Look up step category + **Service** in docs/runbooks/reviewer-registry.md governance matrix.
+For `proto-gen` steps: inherit reviewers from the immediately preceding `proto` step.
+For `docs` steps: write "none".)
+
 **Codebase Evidence**:
 - Confirmed via: `grep -n "SymbolName" services/.../file.ext` → line N
 - Existing pattern: `<direct quote or close paraphrase of actual code found>`
@@ -133,7 +145,10 @@ Edit `docs/roadmap/features/$ARGUMENTS[0]/feature.md`:
 - Append a row to the Status History table:
   `| <ISO date> | <prev> → \`implementation-ready\` | /sdd-spec | Implementation spec generated with N steps |`
 - Update the Artifacts section: replace `_not yet generated_` with `[Implementation Spec](implementation-spec.md)`
-- Update Next Action to: `` `/sdd-execute <slug>` — begin implementation ``
+- Finalize the `## Reviewers` table: collect all distinct `**Reviewers**` values from
+  all steps in implementation-spec.md, deduplicate, and write the canonical snapshot table.
+  This is the stable snapshot — it will not change unless `/sdd-spec` is re-run.
+- Update Next Action to: `` `/sdd-review <slug> impl-spec` — validate implementation spec, then `/sdd-execute <slug>` ``
 
 ### 8. Append to context.md
 
@@ -156,5 +171,5 @@ Implementation spec written to docs/roadmap/features/<slug>/implementation-spec.
 Total steps: N
 Feature status: implementation-ready
 
-Next: /sdd-execute <slug>
+Next: /sdd-review <slug> impl-spec
 ```

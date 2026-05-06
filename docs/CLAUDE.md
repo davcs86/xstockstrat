@@ -18,6 +18,8 @@ Operational runbooks, one-time setup guides, and implementation roadmap for the 
 
 | I need to… | File |
 |---|---|
+| Triage and fix a bug (SEV-1 hotfix, config fix, or SDD path) | `runbooks/bug-triage.md` |
+| View the production hotfix incident history | `runbooks/hotfix-log.md` |
 | Roll out a config change safely | `runbooks/config-rollout.md` |
 | Understand the approval process for proto/config changes | `runbooks/approval-flow.md` |
 | Add Polygon, Tiingo, or a newsletter signal source | `runbooks/add-data-source.md` |
