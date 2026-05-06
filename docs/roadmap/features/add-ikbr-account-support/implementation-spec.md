@@ -251,7 +251,7 @@ Add to `PortfolioService` after the last existing RPC (`StreamPortfolioUpdates`)
 
 ### Step 4 — proto-gen: Regenerate proto stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/common/v1/` — regenerate
@@ -1244,3 +1244,8 @@ go svc.ConsumePositionSyncs(ctx)
 **Spec said**: `PlaceOrderRequest` field 12 = `stop_price`; last RPC = `GetOrder`
 **Actual**: `PlaceOrderRequest` field 12 = `trading_mode` (field 13 used for `account_id`); last RPC = `StreamOrderUpdates` (new RPCs appended correctly regardless). `buf breaking` required `--against '.git#branch=feature/...,subdir=packages/proto'` syntax.
 **Reason**: Codebase had evolved since spec-generation time; field numbers and RPC list differed. New RPCs and field numbers are still additive and non-breaking.
+
+### Deviation: Step 4 — proto-gen: Regenerate proto stubs
+**Spec said**: `./scripts/buf-gen.sh` exits 0 (implies all plugins available)
+**Actual**: `buf`, `protoc-gen-ts_proto`, `protoc-gen-grpc_python`, and `protoc` not pre-installed. Installed at runtime: `buf` 1.69.0, `protoc-gen-ts_proto` (via npm), `protobuf-compiler` (via apt). Python gRPC stubs generated via `python3 -m grpc_tools.protoc` directly (not via buf plugin) due to absence of standalone `protoc-gen-grpc_python` binary. TypeScript stubs compiled (files emitted) but `pnpm --filter @xstockstrat/proto run build` exits 2 due to pre-existing TS6.0 deprecation of `moduleResolution=node` — unrelated to this feature's changes. All Go, TypeScript, and Python stubs correctly regenerated with new fields and RPCs.
+**Reason**: CI environment lacks proto toolchain binaries; runtime installation unblocked generation. TypeScript deprecation is a pre-existing tsconfig compatibility issue with TypeScript 6.0 (upgraded in main-dev). Output stubs are correct.
