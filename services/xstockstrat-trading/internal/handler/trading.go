@@ -10,6 +10,7 @@ import (
 	tradingv1connect "github.com/xstockstrat/contracts/gen/go/trading/v1/tradingv1connect"
 	"github.com/xstockstrat/trading/internal/service"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -160,7 +161,80 @@ func toGRPCError(err error) error {
 			return status.Error(codes.InvalidArgument, connectErr.Message())
 		case connect.CodeNotFound:
 			return status.Error(codes.NotFound, connectErr.Message())
+		case connect.CodePermissionDenied:
+			return status.Error(codes.PermissionDenied, connectErr.Message())
 		}
 	}
 	return status.Error(codes.Internal, err.Error())
+}
+
+func extractUserID(ctx context.Context) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+	vals := md.Get("x-user-id")
+	if len(vals) == 0 {
+		return ""
+	}
+	return vals[0]
+}
+
+func (h *TradingHandler) RegisterBrokerAccount(
+	ctx context.Context,
+	req *connect.Request[tradingv1.RegisterBrokerAccountRequest],
+) (*connect.Response[tradingv1.RegisterBrokerAccountResponse], error) {
+	userID := extractUserID(ctx)
+	account, err := h.svc.RegisterBrokerAccount(ctx, req.Msg, userID)
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return connect.NewResponse(&tradingv1.RegisterBrokerAccountResponse{Account: account}), nil
+}
+
+func (h *TradingHandler) ListBrokerAccounts(
+	ctx context.Context,
+	req *connect.Request[tradingv1.ListBrokerAccountsRequest],
+) (*connect.Response[tradingv1.ListBrokerAccountsResponse], error) {
+	userID := extractUserID(ctx)
+	accounts, err := h.svc.ListBrokerAccountsSvc(ctx, userID)
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return connect.NewResponse(&tradingv1.ListBrokerAccountsResponse{Accounts: accounts}), nil
+}
+
+func (h *TradingHandler) DeregisterBrokerAccount(
+	ctx context.Context,
+	req *connect.Request[tradingv1.DeregisterBrokerAccountRequest],
+) (*connect.Response[tradingv1.DeregisterBrokerAccountResponse], error) {
+	userID := extractUserID(ctx)
+	if err := h.svc.DeregisterBrokerAccountSvc(ctx, req.Msg.AccountId, userID); err != nil {
+		return nil, toGRPCError(err)
+	}
+	return connect.NewResponse(&tradingv1.DeregisterBrokerAccountResponse{}), nil
+}
+
+func (a *grpcTradingAdapter) RegisterBrokerAccount(ctx context.Context, req *tradingv1.RegisterBrokerAccountRequest) (*tradingv1.RegisterBrokerAccountResponse, error) {
+	resp, err := a.h.RegisterBrokerAccount(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcTradingAdapter) ListBrokerAccounts(ctx context.Context, req *tradingv1.ListBrokerAccountsRequest) (*tradingv1.ListBrokerAccountsResponse, error) {
+	resp, err := a.h.ListBrokerAccounts(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcTradingAdapter) DeregisterBrokerAccount(ctx context.Context, req *tradingv1.DeregisterBrokerAccountRequest) (*tradingv1.DeregisterBrokerAccountResponse, error) {
+	resp, err := a.h.DeregisterBrokerAccount(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
 }

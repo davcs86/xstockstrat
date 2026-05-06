@@ -326,3 +326,17 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Created `ibkr.go` with `IBKRConfig`, `IBKRClient` struct, `NewIBKRClient` constructor (defaults baseURL to `https://api.ibkr.com/v1/api`), all 5 `Broker` interface methods (`SubmitOrder`, `CancelOrder`, `GetOrder`, `GetPositions`, `IsPaper`), private `signRequest` implementing OAuth 1.0a HMAC-SHA256, `orderTypeToIBKR` helper, and compile-time assertion `var _ Broker = (*IBKRClient)(nil)`.
 - Files modified: `services/xstockstrat-trading/internal/broker/ibkr.go` (created)
 - Deviations: none. `GOWORK=off go build ./internal/broker/...` exits 0.
+
+---
+
+## Session 2026-05-06T11:00:00Z — sdd-execute
+
+**Steps this session**: [14]
+**Progress**: 14 done / 18 total
+**Stopped at**: Step 14 (PR created; awaiting merge before Step 15)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 14 — Add account management + position sync handler methods [done]
+- Added `RegisterBrokerAccount`, `ListBrokerAccounts`, `DeregisterBrokerAccount` Connect-RPC handler methods and matching gRPC adapter methods to `trading.go`. Added `CodePermissionDenied` case to `toGRPCError`. Added `extractUserID(ctx)` package-level helper reading from gRPC metadata `x-user-id`. Compile-time assertion at L17 now passes.
+- Files modified: `services/xstockstrat-trading/internal/handler/trading.go`
+- Deviations: `extractUserID` did not exist (spec called it "existing auth helper"); implemented as new function reading from `metadata.FromIncomingContext`. Full detail in Deviation Log.

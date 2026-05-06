@@ -926,7 +926,7 @@ func (s *TradingService) DeregisterBrokerAccountSvc(ctx context.Context, account
 
 ### Step 14 — service: Add account management + position sync handler methods
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/handler/trading.go` — modify
@@ -1278,3 +1278,8 @@ go svc.ConsumePositionSyncs(ctx)
 ### Deviation: Step 13 — service: Update `TradingService`: broker pool, account management, routing
 **Spec said**: `brokers map[string]broker.Broker` in the struct. `buildBrokerRequest` should keep existing signature. `pollFills` updates `FilledQty`/`FilledAvgPrice` from broker response. `strconv` remains imported.
 **Actual**: (1) Struct uses `map[string]brokerPoolEntry` where `brokerPoolEntry{client broker.Broker, brokerType int32}` to carry BrokerType for `order.BrokerType` population without a separate DB lookup. (2) `buildBrokerRequest` changed to return `broker.OrderRequest` (float64 qty/prices) and removed `mode` param — the spec required this change but didn't explicitly state it. (3) `pollFills` no longer updates `FilledQty`/`FilledAvgPrice` since `BrokerOrder` only carries `BrokerOrderID` and `Status` — this is an intentional simplification per the normalized interface design. (4) `strconv` import removed (no longer used). (5) `emitLedgerEvent` `StreamKey` is now passed directly (previously always wrapped in `order:%s`). (6) Added private `instantiateBrokerLocked` helper to share logic between `LoadBrokerPool` and `RegisterBrokerAccount`.
+
+### Deviation: Step 14 — service: Add account management + position sync handler methods
+**Spec said**: `extractUserID(ctx)` is an "existing auth helper".
+**Actual**: `extractUserID` did not exist in the codebase. Implemented as a new package-level function reading from gRPC metadata key `x-user-id`, returning `""` if absent.
+**Reason**: No auth middleware or user-ID extraction existed yet in the trading handler. The function was trivial to implement and its contract was clear from the spec.
