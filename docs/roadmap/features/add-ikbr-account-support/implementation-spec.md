@@ -194,7 +194,7 @@ Add after the last RPC:
 
 ### Step 3 — proto: Add `account_id` fields + `ListPortfolios` to `portfolio/v1`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/portfolio/v1/portfolio.proto` — modify
