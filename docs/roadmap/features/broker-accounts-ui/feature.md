@@ -1,9 +1,9 @@
 # Feature: broker-accounts-ui
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/broker-accounts-ui`
 **Created**: 2026-05-06
-**Last Updated**: 2026-05-06
+**Last Updated**: 2026-05-06T00:00:00Z
 
 ---
 
@@ -13,13 +13,14 @@
 |---|---|---|---|
 | 2026-05-06 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 advisory warnings) |
+| 2026-05-06 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec broker-accounts-ui`_
+- [Implementation Spec](implementation-spec.md) — 9 steps; generated 2026-05-06
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -30,15 +31,13 @@ Surfaces registered broker accounts and per-account portfolio data in the `xstoc
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the reviewer registry changes.)_
 
-| Role | Review Focus |
-|---|---|
-| `xstockstrat-trader` service owner | Trading UI correctness, Connect-RPC call safety, no direct DB access from frontend |
-| `xstockstrat-insights` service owner | Analytics display accuracy, SSE polling resilience, read-only access pattern |
+| Step(s) | Role | Review Focus |
+|---|---|---|
+| 1, 2, 3, 4, 5, 6, 8 | `xstockstrat-trader` service owner | Trading UI correctness, Connect-RPC call safety, no direct DB access from frontend |
+| 7, 9 | `xstockstrat-insights` service owner | Analytics display accuracy, SSE polling resilience, read-only access pattern |
 
 ## Next Action
 
-`/sdd-spec broker-accounts-ui` — generate implementation spec from the approved product spec
+`/sdd-review broker-accounts-ui impl-spec` — validate implementation spec, then `/sdd-execute broker-accounts-ui`

@@ -27,3 +27,15 @@
 - Product spec approved. Status: draft → spec-ready.
 - Warnings: xstockstrat-trader and xstockstrat-insights both also modified by add-ikbr-account-support (in-progress). Advisory only — no FAIL-level conflicts (no shared migrations, proto fields, or config keys).
 - Overlap findings: add-ikbr-account-support [in-progress] touches same two services. Ordering dependency already captured in product spec Feature Workflow Notes. merge-order.md manual entry recommended to make /sdd-execute guard enforceable.
+
+## Session 2026-05-06T00:03:00Z — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
+- Key codebase findings:
+  - Broker account RPCs (ListBrokerAccounts, RegisterBrokerAccount, DeregisterBrokerAccount) and ListPortfolios are NOT yet in `packages/proto/gen/ts/trading/v1/trading_connect.ts` or `portfolio_connect.ts` on main-dev — add-ikbr-account-support Steps 3-18 are pending. All new Connect-RPC calls in this feature must use manual service descriptors matching the pattern at `services/xstockstrat-trader/src/lib/connectClients.ts` (MethodKind.Unary with `I: {} as any, O: {} as any`).
+  - `zustand` is already in both `services/xstockstrat-trader/package.json` (L35) and `services/xstockstrat-insights/package.json` (L35) — no new dependency needed for state management.
+  - `services/xstockstrat-trader/src/app/layout.tsx` currently has no React context provider wrapping children (L12-18) — a new `AccountProvider` must be inserted in Step 2.
+  - `services/xstockstrat-insights/src/lib/connectTransport.ts` does not export `TRADING_BASE_URL` or `PORTFOLIO_BASE_URL` (confirmed at L28-44) — the insights portfolio route (Step 7) must declare its own base URL constants and those env vars must be added to the service CLAUDE.md and app specs.
+  - Last migration numbers (not relevant — no migrations required): trading 001, portfolio 002; confirmed from add-ikbr-account-support impl-spec.
+  - `services/xstockstrat-trader/e2e/mock-backend.ts` uses a Node.js HTTP server on port 9091; mock responses are keyed by Connect-RPC path. Steps 8-9 extend these mocks.
+  - `merge-order.md` already has the blocking dependency entry for broker-accounts-ui → add-ikbr-account-support (confirmed at L19).
