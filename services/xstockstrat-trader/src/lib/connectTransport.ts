@@ -1,28 +1,13 @@
-/**
- * Connect-RPC transport factory for xstockstrat-trader.
- *
- * Server-side route handlers use createNodeHttpTransport (Node.js fetch).
- * Browser components use createConnectTransport (web fetch).
- *
- * All service endpoints now point to HTTP ports (8051, 8052, etc.) instead
- * of gRPC ports (50051, 50052). The HTTP ports serve Connect-RPC which supports
- * both HTTP/1.1 and HTTP/2 with protobuf or JSON encoding.
- */
-import { createConnectTransport } from '@connectrpc/connect-web';
-import { createNodeHttpTransport } from '@connectrpc/connect-node';
+import { createConnectTransport as createWebTransport } from '@connectrpc/connect-web';
+import { createConnectTransport as createNodeTransport } from '@connectrpc/connect-node';
 
 const isServer = typeof window === 'undefined';
 
-/**
- * Returns a Connect transport for the given service HTTP base URL.
- * On the server (Next.js Route Handlers), uses Node.js HTTP.
- * In the browser, uses fetch.
- */
 export function createTransport(baseUrl: string) {
   if (isServer) {
-    return createNodeHttpTransport({ baseUrl, httpVersion: '1.1' });
+    return createNodeTransport({ baseUrl, httpVersion: '1.1' });
   }
-  return createConnectTransport({ baseUrl });
+  return createWebTransport({ baseUrl });
 }
 
 // ── Service base URLs ──────────────────────────────────────────────────────

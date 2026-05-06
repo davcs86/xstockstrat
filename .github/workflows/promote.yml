@@ -48,7 +48,7 @@ jobs:
 
       - name: Validate — no existing promotion PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
         run: |
           EXISTING=$(gh pr list --base main --head main-dev --state open --json url --jq '.[0].url')
           if [ -n "$EXISTING" ]; then
@@ -205,7 +205,7 @@ jobs:
       - name: Create PR
         id: create-pr
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
         run: |
           TODAY="${{ steps.collect.outputs.today }}"
           PR_URL=$(gh pr create \

@@ -8,10 +8,10 @@
  */
 import { MethodKind } from '@bufbuild/protobuf';
 import { createClient } from '@connectrpc/connect';
-import { createNodeHttpTransport } from '@connectrpc/connect-node';
+import { createConnectTransport } from '@connectrpc/connect-node';
 
 function makeTransport(baseUrl: string) {
-  return createNodeHttpTransport({ baseUrl, httpVersion: '1.1' });
+  return createConnectTransport({ baseUrl, httpVersion: '1.1' });
 }
 
 // ── Base URLs ──────────────────────────────────────────────────────────────
