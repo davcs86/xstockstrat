@@ -214,3 +214,17 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Created `002_broker_accounts.up.sql` (CREATE TABLE trading.broker_accounts + 2 indexes) and `002_broker_accounts.down.sql` (DROP TABLE). `alpaca-default` seed deferred to application startup per spec note.
 - Files modified: `services/xstockstrat-trading/migrations/002_broker_accounts.up.sql`, `services/xstockstrat-trading/migrations/002_broker_accounts.down.sql`
 - Deviations: `./scripts/db-migrate.sh` could not be verified — no PostgreSQL running (Docker daemon unavailable in harness environment). SQL syntax reviewed manually; migration will be verified on deploy via db-migrator PRE_DEPLOY job.
+
+---
+
+## Session 2026-05-06T03:00:00Z — sdd-execute
+
+**Steps this session**: [6]
+**Progress**: 6 done / 18 total
+**Stopped at**: Step 6 (PR created; awaiting merge before Step 7)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 6 — Migration: `trading` — `orders.account_id` + `orders.broker_type` [done]
+- Created `003_orders_account_id.up.sql` (ADD COLUMN account_id TEXT DEFAULT 'alpaca-default', ADD COLUMN broker_type SMALLINT DEFAULT 1, CREATE INDEX) and `003_orders_account_id.down.sql`. Defaults preserve backward compatibility for existing rows.
+- Files modified: `services/xstockstrat-trading/migrations/003_orders_account_id.up.sql`, `services/xstockstrat-trading/migrations/003_orders_account_id.down.sql`
+- Deviations: `./scripts/db-migrate.sh` could not be verified — no PostgreSQL running (same constraint as Step 5). SQL syntax reviewed manually; will be verified on deploy.
