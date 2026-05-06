@@ -295,7 +295,7 @@ After this step, both `xstockstrat-trading` and `xstockstrat-portfolio` will **n
 
 ### Step 5 — migration: `trading` — `broker_accounts` table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/migrations/002_broker_accounts.up.sql` — create
@@ -1249,3 +1249,8 @@ go svc.ConsumePositionSyncs(ctx)
 **Spec said**: `./scripts/buf-gen.sh` exits 0 (implies all plugins available)
 **Actual**: `buf`, `protoc-gen-ts_proto`, `protoc-gen-grpc_python`, and `protoc` not pre-installed. Installed at runtime: `buf` 1.69.0, `protoc-gen-ts_proto` (via npm), `protobuf-compiler` (via apt). Python gRPC stubs generated via `python3 -m grpc_tools.protoc` directly (not via buf plugin) due to absence of standalone `protoc-gen-grpc_python` binary. TypeScript stubs compiled (files emitted) but `pnpm --filter @xstockstrat/proto run build` exits 2 due to pre-existing TS6.0 deprecation of `moduleResolution=node` — unrelated to this feature's changes. All Go, TypeScript, and Python stubs correctly regenerated with new fields and RPCs.
 **Reason**: CI environment lacks proto toolchain binaries; runtime installation unblocked generation. TypeScript deprecation is a pre-existing tsconfig compatibility issue with TypeScript 6.0 (upgraded in main-dev). Output stubs are correct.
+
+### Deviation: Step 5 — migration: `trading` — `broker_accounts` table
+**Spec said**: `./scripts/db-migrate.sh` exits 0; `\dt trading.*` shows `broker_accounts` table.
+**Actual**: No PostgreSQL running in the environment (Docker daemon not available); migration script exited with connection refused. Migration files created and SQL reviewed manually — syntax is correct.
+**Reason**: Harness environment has no running database; migration verification against a live DB is not possible. Files will be verified on first deploy via the db-migrator PRE_DEPLOY job.
