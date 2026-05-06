@@ -8,26 +8,20 @@
 #   Node   22    → also in .github/workflows/ci.yml
 #   pnpm   9.15.0 → also in package.json "packageManager", .github/workflows/ci.yml
 
-FROM golang:1.25-bookworm
+FROM golang:1.25-trixie
 
-# ── System deps ────────────────────────────────────────────────────────────────
+# ── System deps + Python 3.12 (Trixie ships 3.12 natively) ───────────────────
+# protobuf-compiler provides the `protoc` binary required by buf's built-in
+# language plugins (e.g. `name: python` in buf.gen.yaml).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    gnupg \
-    software-properties-common \
     ca-certificates \
+    python3 \
+    python3-venv \
+    python3-dev \
+    python3-pip \
+    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
-
-# ── Python 3.12 (Bookworm ships 3.11; use deadsnakes PPA) ─────────────────────
-RUN add-apt-repository ppa:deadsnakes/ppa \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-       python3.12 \
-       python3.12-venv \
-       python3.12-dev \
-       python3-pip \
-    && rm -rf /var/lib/apt/lists/* \
-    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
 
 # ── Node.js 22 (NodeSource) ────────────────────────────────────────────────────
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
@@ -53,7 +47,12 @@ RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest \
     && go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
 
 # ── Python grpcio-tools (provides protoc-gen-grpc_python) ─────────────────────
-RUN python3.12 -m pip install --break-system-packages grpcio-tools
+# grpcio-tools bundles grpc_python_plugin inside the package but doesn't
+# install it to PATH — symlink it so buf can find it as protoc-gen-grpc_python.
+RUN python3 -m pip install --break-system-packages grpcio-tools \
+    && ln -s \
+       "$(python3 -c 'import grpc_tools, os; print(os.path.dirname(grpc_tools.__file__))')/grpc_python_plugin" \
+       /usr/local/bin/protoc-gen-grpc_python
 
 # ── ts-proto (provides protoc-gen-ts_proto) ───────────────────────────────────
 RUN npm install -g ts-proto

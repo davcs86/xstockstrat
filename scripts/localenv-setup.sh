@@ -52,7 +52,7 @@ section "Building proto-gen container ($IMAGE_NAME)"
 info "This may take a few minutes on first run."
 
 docker build \
-  "${BUILD_ARGS[@]}" \
+  ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"} \
   --platform linux/amd64 \
   -t "$IMAGE_NAME" \
   -f "$DOCKERFILE" \
