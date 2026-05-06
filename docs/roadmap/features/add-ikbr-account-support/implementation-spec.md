@@ -672,7 +672,7 @@ var _ Broker = (*IBKRClient)(nil)
 
 ### Step 11 — service: Create account repository (`broker_accounts` CRUD)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/account_repo.go` — create
@@ -1269,3 +1269,8 @@ go svc.ConsumePositionSyncs(ctx)
 **Spec said**: Update `alpaca_test.go` at L55 (`order.ID` → `order.BrokerOrderID`) and L79. The `AlpacaOrder` struct itself remains for internal HTTP response unmarshaling.
 **Actual**: `order.ID` references were at L56-57 (not L55) and no L79 reference (TestSubmitOrder_Live discards the return with `_`). Additionally, three test call sites used `broker.SubmitOrderRequest{Qty:"...", Type:"..."}` which also had to be updated to `broker.OrderRequest{Qty:float64, OrderType:"..."}` since the function signature changed. `SubmitOrderRequest` struct kept exported (not removed) for zero breakage elsewhere. A fourth `SubmitOrderRequest` call site in `TestSubmitOrder_BrokerError` was also updated (not mentioned in spec).
 **Reason**: Test file had evolved since spec-generation; all four `SubmitOrderRequest` call sites needed updating to match the new `OrderRequest` parameter type. All broker tests pass.
+
+### Deviation: Step 11 — service: Create account repository (`broker_accounts` CRUD)
+**Spec said**: Import `tradingv1 "github.com/xstockstrat/proto/gen/go/trading/v1"` and `commonv1 "github.com/xstockstrat/proto/gen/go/common/v1"` in `account_repo.go`.
+**Actual**: These imports were omitted. The account repository interface and implementation use only `BrokerAccountRecord` (a plain struct) — no proto types appear in any method signature. Go compilation fails on unused imports. Also, the actual module path is `github.com/xstockstrat/contracts/gen/go/...` (not `proto/gen/go/...`), confirmed from `trading_repo.go`.
+**Reason**: The spec incorrectly anticipated proto type usage in the repository layer; proto types are only needed in the service layer (Step 13). Omitting unused imports is required for compilation.
