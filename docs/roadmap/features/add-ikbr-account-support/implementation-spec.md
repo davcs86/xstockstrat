@@ -778,7 +778,7 @@ Update `GetOrder` and `ListOrders` SELECT queries to include `account_id, broker
 
 ### Step 13 — service: Update `TradingService`: broker pool, account management, routing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -1274,3 +1274,7 @@ go svc.ConsumePositionSyncs(ctx)
 **Spec said**: Import `tradingv1 "github.com/xstockstrat/proto/gen/go/trading/v1"` and `commonv1 "github.com/xstockstrat/proto/gen/go/common/v1"` in `account_repo.go`.
 **Actual**: These imports were omitted. The account repository interface and implementation use only `BrokerAccountRecord` (a plain struct) — no proto types appear in any method signature. Go compilation fails on unused imports. Also, the actual module path is `github.com/xstockstrat/contracts/gen/go/...` (not `proto/gen/go/...`), confirmed from `trading_repo.go`.
 **Reason**: The spec incorrectly anticipated proto type usage in the repository layer; proto types are only needed in the service layer (Step 13). Omitting unused imports is required for compilation.
+
+### Deviation: Step 13 — service: Update `TradingService`: broker pool, account management, routing
+**Spec said**: `brokers map[string]broker.Broker` in the struct. `buildBrokerRequest` should keep existing signature. `pollFills` updates `FilledQty`/`FilledAvgPrice` from broker response. `strconv` remains imported.
+**Actual**: (1) Struct uses `map[string]brokerPoolEntry` where `brokerPoolEntry{client broker.Broker, brokerType int32}` to carry BrokerType for `order.BrokerType` population without a separate DB lookup. (2) `buildBrokerRequest` changed to return `broker.OrderRequest` (float64 qty/prices) and removed `mode` param — the spec required this change but didn't explicitly state it. (3) `pollFills` no longer updates `FilledQty`/`FilledAvgPrice` since `BrokerOrder` only carries `BrokerOrderID` and `Status` — this is an intentional simplification per the normalized interface design. (4) `strconv` import removed (no longer used). (5) `emitLedgerEvent` `StreamKey` is now passed directly (previously always wrapped in `order:%s`). (6) Added private `instantiateBrokerLocked` helper to share logic between `LoadBrokerPool` and `RegisterBrokerAccount`.
