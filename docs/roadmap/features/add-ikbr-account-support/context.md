@@ -172,3 +172,17 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Added `account_id = 19` and `broker_type = 20` to `Order`; `account_id = 13` to `PlaceOrderRequest`; `BrokerAccount` + request/response messages for `Register/List/Deregister`; 3 new RPCs to `TradingService`.
 - Files modified: `packages/proto/trading/v1/trading.proto`
 - Deviations: Spec said `PlaceOrderRequest` field 12 = `stop_price` but actual field 12 = `trading_mode`; field 13 added correctly regardless. Spec said last RPC = `GetOrder` but actual last = `StreamOrderUpdates`; new RPCs appended correctly. `buf breaking --against '.git#branch=feature/...,subdir=packages/proto'` syntax required (not in spec). `buf` re-installed at runtime (same as Step 1 deviation).
+
+---
+
+## Session 2026-05-06T00:00:00Z — sdd-execute
+
+**Steps this session**: [3]
+**Progress**: 3 done / 18 total
+**Stopped at**: Step 3 (PR created; awaiting merge before Step 4)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 3 — Add `account_id` fields + `ListPortfolios` to `portfolio/v1` [done]
+- Added `account_id = 11` to `Portfolio` and `Position`; `account_id = 8` to `PortfolioSnapshot`; `optional string account_id` to all 6 read request messages at next available field numbers; added `ListPortfoliosRequest`, `ListPortfoliosResponse` messages, and `ListPortfolios` RPC to `PortfolioService`.
+- Files modified: `packages/proto/portfolio/v1/portfolio.proto`
+- Deviations: Spec codebase evidence had stale field names for Portfolio/Position/PortfolioSnapshot (field numbers were correct). `buf` not pre-installed; installed buf 1.54.0 at runtime. `buf breaking` run from repo root with `subdir=packages/proto` syntax (same as Step 2). Branch sync performed with `-X theirs` (main-dev wins) per user instruction; merged 3 new main-dev commits (SDD process improvements, promotion commit) into feature branch without conflict.
