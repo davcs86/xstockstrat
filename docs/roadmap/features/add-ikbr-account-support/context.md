@@ -273,6 +273,20 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 
 ---
 
+## Session 2026-05-06T08:00:00Z — sdd-execute
+
+**Steps this session**: [11]
+**Progress**: 11 done / 18 total
+**Stopped at**: Step 11 (PR created; awaiting merge before Step 12)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 11 — Create account repository (`broker_accounts` CRUD) [done]
+- Created `account_repo.go` with `BrokerAccountRecord` struct, `AccountRepository` interface (5 methods), `pgAccountRepo` implementation using `*pgxpool.Pool`, `NewAccountRepo` constructor, scan helpers, and `EncryptCredentials`/`DecryptCredentials` AES-256-GCM helpers with 12-byte nonce prefix.
+- Files modified: `services/xstockstrat-trading/internal/repository/account_repo.go` (created)
+- Deviations: Spec imported `tradingv1`/`commonv1` in account_repo.go but these are unused in the repository layer (no proto types in interface). Go compilation rejects unused imports. Omitted both. Actual module path is `contracts/gen/go/...` not `proto/gen/go/...`. Full detail in Deviation Log.
+
+---
+
 ## Session 2026-05-06T07:00:00Z — sdd-execute
 
 **Steps this session**: [10]
