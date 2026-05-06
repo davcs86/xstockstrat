@@ -56,6 +56,8 @@ feature/<slug>/step-N  →  PR →  feature/<slug>  →  final PR →  main-dev
 
 Step PRs never target `main-dev` or `main` directly — only the feature integration branch.
 
+**Keeping main-dev spec files current:** Run `/sdd-sync [slug]` at any time to open a docs-only PR that copies the latest `feature.md`, `product-spec.md`, `implementation-spec.md`, and `context.md` from the feature branch into `main-dev`. This is optional but useful for visibility — it lets IDEs and GitHub browsing reflect current SDD progress without waiting for the final integration PR.
+
 ---
 
 ### One-time setup (run once after repo creation)
