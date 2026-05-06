@@ -55,9 +55,9 @@ jobs:
         run: |
           sudo apt-get install -y --no-install-recommends protobuf-compiler
           pip install grpcio-tools
-          ln -s \
+          sudo ln -s \
             "$(python3 -c 'import grpc_tools, os; print(os.path.dirname(grpc_tools.__file__))')/grpc_python_plugin" \
-            "$(python3 -c 'import sysconfig; print(sysconfig.get_path("scripts"))')/protoc-gen-grpc_python"
+            /usr/local/bin/protoc-gen-grpc_python
 
       - uses: actions/setup-node@v4
         with:
