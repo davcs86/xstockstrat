@@ -1,6 +1,6 @@
 # Feature: broker-accounts-ui
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/broker-accounts-ui`
 **Created**: 2026-05-06
 **Last Updated**: 2026-05-06
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-06 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-05-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 advisory warnings) |
 
 ---
 
@@ -40,4 +41,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review broker-accounts-ui product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec broker-accounts-ui` — generate implementation spec from the approved product spec
