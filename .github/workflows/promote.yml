@@ -237,6 +237,6 @@ jobs:
               echo "### Features Included (code-completed)"
               while IFS= read -r line; do echo "- $line"; done < /tmp/code_completed.txt
               echo ""
-              echo "**Note:** Feature lifecycle tracking (P7) must be completed after the PR merges — run \`/promote\` in a Claude session to update \`feature.md\` status from \`code-completed\`."
+              echo "**Note:** Feature lifecycle tracking (P7) must be completed after the PR merges — run \`/promote\` in a Claude session to update \`feature.md\` status from \`code-completed\` to \`launched\`."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
