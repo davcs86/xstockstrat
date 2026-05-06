@@ -597,7 +597,7 @@ var _ Broker = (*Client)(nil)
 
 ### Step 10 — service: Create IBKR broker client
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr.go` — create
