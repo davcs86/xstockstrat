@@ -43,18 +43,18 @@ func TestSubmitOrder_Paper(t *testing.T) {
 		Paper:     true,
 	})
 
-	order, err := c.SubmitOrder(context.Background(), broker.SubmitOrderRequest{
+	order, err := c.SubmitOrder(context.Background(), broker.OrderRequest{
 		Symbol:      "AAPL",
-		Qty:         "10",
+		Qty:         10,
 		Side:        "buy",
-		Type:        "market",
+		OrderType:   "market",
 		TimeInForce: "day",
 	})
 	if err != nil {
 		t.Fatalf("SubmitOrder failed: %v", err)
 	}
-	if order.ID != "alpaca-order-123" {
-		t.Errorf("expected broker order ID alpaca-order-123, got %s", order.ID)
+	if order.BrokerOrderID != "alpaca-order-123" {
+		t.Errorf("expected broker order ID alpaca-order-123, got %s", order.BrokerOrderID)
 	}
 	if gotURL != "/v2/orders" {
 		t.Errorf("expected POST /v2/orders, got %s", gotURL)
@@ -81,8 +81,8 @@ func TestSubmitOrder_Live(t *testing.T) {
 		Paper:     false,
 	})
 
-	if _, err := c.SubmitOrder(context.Background(), broker.SubmitOrderRequest{
-		Symbol: "TSLA", Qty: "5", Side: "sell", Type: "market", TimeInForce: "day",
+	if _, err := c.SubmitOrder(context.Background(), broker.OrderRequest{
+		Symbol: "TSLA", Qty: 5, Side: "sell", OrderType: "market", TimeInForce: "day",
 	}); err != nil {
 		t.Fatalf("SubmitOrder failed: %v", err)
 	}
@@ -125,8 +125,8 @@ func TestSubmitOrder_BrokerError(t *testing.T) {
 		APIKey: "k", APISecret: "s", PaperURL: srv.URL, LiveURL: srv.URL, Paper: true,
 	})
 
-	_, err := c.SubmitOrder(context.Background(), broker.SubmitOrderRequest{
-		Symbol: "AAPL", Qty: "1", Side: "buy", Type: "market", TimeInForce: "day",
+	_, err := c.SubmitOrder(context.Background(), broker.OrderRequest{
+		Symbol: "AAPL", Qty: 1, Side: "buy", OrderType: "market", TimeInForce: "day",
 	})
 	if err == nil {
 		t.Fatal("expected error for 403 response, got nil")
