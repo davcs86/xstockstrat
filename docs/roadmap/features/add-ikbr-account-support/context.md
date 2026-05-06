@@ -270,3 +270,17 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Created `broker.go` with `BrokerOrder`, `BrokerPosition`, `Broker` interface, `OrderRequest`. Modified `alpaca.go`: changed `SubmitOrder`/`GetOrder` signatures to use `OrderRequest`/`*BrokerOrder`, added `GetPositions`, added `strconv` import, added compile-time assertion. Updated all 4 `SubmitOrderRequest` call sites in `alpaca_test.go` to `OrderRequest` and `order.ID` → `order.BrokerOrderID`.
 - Files modified: `services/xstockstrat-trading/internal/broker/broker.go` (created), `services/xstockstrat-trading/internal/broker/alpaca.go`, `services/xstockstrat-trading/internal/broker/alpaca_test.go`
 - Deviations: Spec said update L55/L79 order.ID only; actual test had order.ID at L56-57 and 3 additional SubmitOrderRequest call sites requiring update (line numbers shifted, test evolved). All broker tests pass.
+
+---
+
+## Session 2026-05-06T07:00:00Z — sdd-execute
+
+**Steps this session**: [10]
+**Progress**: 10 done / 18 total
+**Stopped at**: Step 10 (PR created; awaiting merge before Step 11)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 10 — Create IBKR broker client [done]
+- Created `ibkr.go` with `IBKRConfig`, `IBKRClient` struct, `NewIBKRClient` constructor (defaults baseURL to `https://api.ibkr.com/v1/api`), all 5 `Broker` interface methods (`SubmitOrder`, `CancelOrder`, `GetOrder`, `GetPositions`, `IsPaper`), private `signRequest` implementing OAuth 1.0a HMAC-SHA256, `orderTypeToIBKR` helper, and compile-time assertion `var _ Broker = (*IBKRClient)(nil)`.
+- Files modified: `services/xstockstrat-trading/internal/broker/ibkr.go` (created)
+- Deviations: none. `GOWORK=off go build ./internal/broker/...` exits 0.
