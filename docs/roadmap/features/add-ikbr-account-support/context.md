@@ -200,3 +200,17 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Regenerated all stubs: Go stubs updated for common/v1 (BrokerType), trading/v1 (new messages + 3 RPCs), portfolio/v1 (new fields + ListPortfolios). Portfolio connect.go now has 7 stubs (was 6). Trading connect.go now has 8 stubs (was 5). Python stubs regenerated via grpc_tools.protoc. TypeScript stubs regenerated and compiled (dist/ files updated).
 - Files modified: `packages/proto/gen/go/`, `packages/proto/gen/python/`, `packages/proto/gen/ts/`, `packages/proto/gen/python/setup.py`
 - Deviations: `buf`, `protoc-gen-ts_proto`, `protoc`, and `protoc-gen-grpc_python` not pre-installed; installed at runtime. Python gRPC stubs generated via `python3 -m grpc_tools.protoc` directly. TypeScript tsc emits exit code 2 (pre-existing TS6.0 deprecation of `moduleResolution=node` in tsconfig) but output files are correct. All expected stub changes confirmed present.
+
+---
+
+## Session 2026-05-06T02:00:00Z — sdd-execute
+
+**Steps this session**: [5]
+**Progress**: 5 done / 18 total
+**Stopped at**: Step 5 (PR created; awaiting merge before Step 6)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 5 — Migration: `trading` — `broker_accounts` table [done]
+- Created `002_broker_accounts.up.sql` (CREATE TABLE trading.broker_accounts + 2 indexes) and `002_broker_accounts.down.sql` (DROP TABLE). `alpaca-default` seed deferred to application startup per spec note.
+- Files modified: `services/xstockstrat-trading/migrations/002_broker_accounts.up.sql`, `services/xstockstrat-trading/migrations/002_broker_accounts.down.sql`
+- Deviations: `./scripts/db-migrate.sh` could not be verified — no PostgreSQL running (Docker daemon unavailable in harness environment). SQL syntax reviewed manually; migration will be verified on deploy via db-migrator PRE_DEPLOY job.
