@@ -1,6 +1,6 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientReadableStream, type ClientUnaryCall, type handleServerStreamingCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
-import { PageRequest, PageResponse, TimeRange, TradingMode } from "../../common/v1/common";
+import { BrokerType, PageRequest, PageResponse, TimeRange, TradingMode } from "../../common/v1/common";
 export declare const protobufPackage = "xstockstrat.trading.v1";
 export declare enum OrderSide {
     ORDER_SIDE_UNSPECIFIED = "ORDER_SIDE_UNSPECIFIED",
@@ -57,6 +57,8 @@ export interface Order {
     tradingMode: TradingMode;
     /** Alpaca-assigned order ID, populated after broker submission */
     brokerOrderId: string;
+    accountId: string;
+    brokerType: BrokerType;
 }
 export interface PlaceOrderRequest {
     symbol: string;
@@ -72,6 +74,11 @@ export interface PlaceOrderRequest {
     requiresApproval: boolean;
     /** If UNSPECIFIED, the service uses trading.broker.paper config key to determine mode. */
     tradingMode: TradingMode;
+    /**
+     * account_id routes the order to a specific broker account.
+     * Required when multiple accounts are registered; optional when only one exists.
+     */
+    accountId: string;
 }
 export interface CancelOrderRequest {
     orderId: string;
@@ -101,6 +108,39 @@ export interface StreamOrderUpdatesRequest {
     userId: string;
     statusFilter: OrderStatus[];
 }
+/** BrokerAccount is a registered broker account (credentials never returned). */
+export interface BrokerAccount {
+    id: string;
+    displayName: string;
+    brokerType: BrokerType;
+    isPaper: boolean;
+    userId: string;
+    isActive: boolean;
+}
+export interface RegisterBrokerAccountRequest {
+    displayName: string;
+    brokerType: BrokerType;
+    isPaper: boolean;
+    /**
+     * credentials_json: broker-type-specific JSON blob.
+     * Alpaca: {"api_key":"...","api_secret":"..."}
+     * IBKR:   {"consumer_key":"...","access_token":"...","access_token_secret":"...","ibkr_account_id":"..."}
+     */
+    credentialsJson: string;
+}
+export interface RegisterBrokerAccountResponse {
+    account?: BrokerAccount | undefined;
+}
+export interface ListBrokerAccountsRequest {
+}
+export interface ListBrokerAccountsResponse {
+    accounts: BrokerAccount[];
+}
+export interface DeregisterBrokerAccountRequest {
+    accountId: string;
+}
+export interface DeregisterBrokerAccountResponse {
+}
 export declare const Order: MessageFns<Order>;
 export declare const PlaceOrderRequest: MessageFns<PlaceOrderRequest>;
 export declare const CancelOrderRequest: MessageFns<CancelOrderRequest>;
@@ -109,6 +149,13 @@ export declare const GetOrderRequest: MessageFns<GetOrderRequest>;
 export declare const ListOrdersRequest: MessageFns<ListOrdersRequest>;
 export declare const ListOrdersResponse: MessageFns<ListOrdersResponse>;
 export declare const StreamOrderUpdatesRequest: MessageFns<StreamOrderUpdatesRequest>;
+export declare const BrokerAccount: MessageFns<BrokerAccount>;
+export declare const RegisterBrokerAccountRequest: MessageFns<RegisterBrokerAccountRequest>;
+export declare const RegisterBrokerAccountResponse: MessageFns<RegisterBrokerAccountResponse>;
+export declare const ListBrokerAccountsRequest: MessageFns<ListBrokerAccountsRequest>;
+export declare const ListBrokerAccountsResponse: MessageFns<ListBrokerAccountsResponse>;
+export declare const DeregisterBrokerAccountRequest: MessageFns<DeregisterBrokerAccountRequest>;
+export declare const DeregisterBrokerAccountResponse: MessageFns<DeregisterBrokerAccountResponse>;
 export type TradingServiceService = typeof TradingServiceService;
 export declare const TradingServiceService: {
     readonly placeOrder: {
@@ -156,6 +203,33 @@ export declare const TradingServiceService: {
         readonly responseSerialize: (value: Order) => Buffer;
         readonly responseDeserialize: (value: Buffer) => Order;
     };
+    readonly registerBrokerAccount: {
+        readonly path: "/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: RegisterBrokerAccountRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => RegisterBrokerAccountRequest;
+        readonly responseSerialize: (value: RegisterBrokerAccountResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => RegisterBrokerAccountResponse;
+    };
+    readonly listBrokerAccounts: {
+        readonly path: "/xstockstrat.trading.v1.TradingService/ListBrokerAccounts";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListBrokerAccountsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListBrokerAccountsRequest;
+        readonly responseSerialize: (value: ListBrokerAccountsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListBrokerAccountsResponse;
+    };
+    readonly deregisterBrokerAccount: {
+        readonly path: "/xstockstrat.trading.v1.TradingService/DeregisterBrokerAccount";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: DeregisterBrokerAccountRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => DeregisterBrokerAccountRequest;
+        readonly responseSerialize: (value: DeregisterBrokerAccountResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => DeregisterBrokerAccountResponse;
+    };
 };
 export interface TradingServiceServer extends UntypedServiceImplementation {
     placeOrder: handleUnaryCall<PlaceOrderRequest, Order>;
@@ -163,6 +237,9 @@ export interface TradingServiceServer extends UntypedServiceImplementation {
     getOrder: handleUnaryCall<GetOrderRequest, Order>;
     listOrders: handleUnaryCall<ListOrdersRequest, ListOrdersResponse>;
     streamOrderUpdates: handleServerStreamingCall<StreamOrderUpdatesRequest, Order>;
+    registerBrokerAccount: handleUnaryCall<RegisterBrokerAccountRequest, RegisterBrokerAccountResponse>;
+    listBrokerAccounts: handleUnaryCall<ListBrokerAccountsRequest, ListBrokerAccountsResponse>;
+    deregisterBrokerAccount: handleUnaryCall<DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse>;
 }
 export interface TradingServiceClient extends Client {
     placeOrder(request: PlaceOrderRequest, callback: (error: ServiceError | null, response: Order) => void): ClientUnaryCall;
@@ -179,6 +256,15 @@ export interface TradingServiceClient extends Client {
     listOrders(request: ListOrdersRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListOrdersResponse) => void): ClientUnaryCall;
     streamOrderUpdates(request: StreamOrderUpdatesRequest, options?: Partial<CallOptions>): ClientReadableStream<Order>;
     streamOrderUpdates(request: StreamOrderUpdatesRequest, metadata?: Metadata, options?: Partial<CallOptions>): ClientReadableStream<Order>;
+    registerBrokerAccount(request: RegisterBrokerAccountRequest, callback: (error: ServiceError | null, response: RegisterBrokerAccountResponse) => void): ClientUnaryCall;
+    registerBrokerAccount(request: RegisterBrokerAccountRequest, metadata: Metadata, callback: (error: ServiceError | null, response: RegisterBrokerAccountResponse) => void): ClientUnaryCall;
+    registerBrokerAccount(request: RegisterBrokerAccountRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: RegisterBrokerAccountResponse) => void): ClientUnaryCall;
+    listBrokerAccounts(request: ListBrokerAccountsRequest, callback: (error: ServiceError | null, response: ListBrokerAccountsResponse) => void): ClientUnaryCall;
+    listBrokerAccounts(request: ListBrokerAccountsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListBrokerAccountsResponse) => void): ClientUnaryCall;
+    listBrokerAccounts(request: ListBrokerAccountsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListBrokerAccountsResponse) => void): ClientUnaryCall;
+    deregisterBrokerAccount(request: DeregisterBrokerAccountRequest, callback: (error: ServiceError | null, response: DeregisterBrokerAccountResponse) => void): ClientUnaryCall;
+    deregisterBrokerAccount(request: DeregisterBrokerAccountRequest, metadata: Metadata, callback: (error: ServiceError | null, response: DeregisterBrokerAccountResponse) => void): ClientUnaryCall;
+    deregisterBrokerAccount(request: DeregisterBrokerAccountRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: DeregisterBrokerAccountResponse) => void): ClientUnaryCall;
 }
 export declare const TradingServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): TradingServiceClient;

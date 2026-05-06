@@ -186,3 +186,17 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Added `account_id = 11` to `Portfolio` and `Position`; `account_id = 8` to `PortfolioSnapshot`; `optional string account_id` to all 6 read request messages at next available field numbers; added `ListPortfoliosRequest`, `ListPortfoliosResponse` messages, and `ListPortfolios` RPC to `PortfolioService`.
 - Files modified: `packages/proto/portfolio/v1/portfolio.proto`
 - Deviations: Spec codebase evidence had stale field names for Portfolio/Position/PortfolioSnapshot (field numbers were correct). `buf` not pre-installed; installed buf 1.54.0 at runtime. `buf breaking` run from repo root with `subdir=packages/proto` syntax (same as Step 2). Branch sync performed with `-X theirs` (main-dev wins) per user instruction; merged 3 new main-dev commits (SDD process improvements, promotion commit) into feature branch without conflict.
+
+---
+
+## Session 2026-05-06T01:00:00Z — sdd-execute
+
+**Steps this session**: [4]
+**Progress**: 4 done / 18 total
+**Stopped at**: Step 4 (PR created; awaiting merge before Step 5)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 4 — Regenerate proto stubs [done]
+- Regenerated all stubs: Go stubs updated for common/v1 (BrokerType), trading/v1 (new messages + 3 RPCs), portfolio/v1 (new fields + ListPortfolios). Portfolio connect.go now has 7 stubs (was 6). Trading connect.go now has 8 stubs (was 5). Python stubs regenerated via grpc_tools.protoc. TypeScript stubs regenerated and compiled (dist/ files updated).
+- Files modified: `packages/proto/gen/go/`, `packages/proto/gen/python/`, `packages/proto/gen/ts/`, `packages/proto/gen/python/setup.py`
+- Deviations: `buf`, `protoc-gen-ts_proto`, `protoc`, and `protoc-gen-grpc_python` not pre-installed; installed at runtime. Python gRPC stubs generated via `python3 -m grpc_tools.protoc` directly. TypeScript tsc emits exit code 2 (pre-existing TS6.0 deprecation of `moduleResolution=node` in tsconfig) but output files are correct. All expected stub changes confirmed present.

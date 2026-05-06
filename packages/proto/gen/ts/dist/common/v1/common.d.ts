@@ -26,6 +26,16 @@ export declare enum Environment {
 export declare function environmentFromJSON(object: any): Environment;
 export declare function environmentToJSON(object: Environment): string;
 export declare function environmentToNumber(object: Environment): number;
+/** BrokerType identifies the broker for a registered account. */
+export declare enum BrokerType {
+    BROKER_TYPE_UNSPECIFIED = "BROKER_TYPE_UNSPECIFIED",
+    BROKER_TYPE_ALPACA = "BROKER_TYPE_ALPACA",
+    BROKER_TYPE_IBKR = "BROKER_TYPE_IBKR",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function brokerTypeFromJSON(object: any): BrokerType;
+export declare function brokerTypeToJSON(object: BrokerType): string;
+export declare function brokerTypeToNumber(object: BrokerType): number;
 /** Pagination */
 export interface PageRequest {
     pageSize: number;
