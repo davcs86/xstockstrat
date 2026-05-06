@@ -752,7 +752,7 @@ Both use `aes.NewCipher` + `cipher.NewGCM`. `EncryptCredentials` prepends a 12-b
 
 ### Step 12 — service: Update order repository: `account_id` + `broker_type` columns
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/trading_repo.go` — modify

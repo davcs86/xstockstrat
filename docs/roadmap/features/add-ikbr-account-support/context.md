@@ -273,6 +273,20 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 
 ---
 
+## Session 2026-05-06T09:00:00Z — sdd-execute
+
+**Steps this session**: [12]
+**Progress**: 12 done / 18 total
+**Stopped at**: Step 12 (PR created; awaiting merge before Step 13)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 12 — Update order repository: `account_id` + `broker_type` columns [done]
+- Updated `UpsertOrder` INSERT to include `account_id` ($20) and `broker_type` ($21) columns, and added both to the `ON CONFLICT DO UPDATE SET` clause. Updated `GetOrder`, `ListOrders`, and `ListSubmittedOrders` SELECT queries to include `account_id, broker_type`. Updated `scanOrder` to declare `accountID string` and `brokerType int32` locals, scan them, and assign to `o.AccountId` and `o.BrokerType = commonv1.BrokerType(brokerType)`.
+- Files modified: `services/xstockstrat-trading/internal/repository/trading_repo.go`
+- Deviations: none. `GOWORK=off go build ./internal/repository/...` exits 0.
+
+---
+
 ## Session 2026-05-06T08:00:00Z — sdd-execute
 
 **Steps this session**: [11]
