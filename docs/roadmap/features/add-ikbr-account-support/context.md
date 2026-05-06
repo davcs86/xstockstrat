@@ -340,3 +340,17 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Added `RegisterBrokerAccount`, `ListBrokerAccounts`, `DeregisterBrokerAccount` Connect-RPC handler methods and matching gRPC adapter methods to `trading.go`. Added `CodePermissionDenied` case to `toGRPCError`. Added `extractUserID(ctx)` package-level helper reading from gRPC metadata `x-user-id`. Compile-time assertion at L17 now passes.
 - Files modified: `services/xstockstrat-trading/internal/handler/trading.go`
 - Deviations: `extractUserID` did not exist (spec called it "existing auth helper"); implemented as new function reading from `metadata.FromIncomingContext`. Full detail in Deviation Log.
+
+---
+
+## Session 2026-05-06T12:00:00Z — sdd-execute
+
+**Steps this session**: [15]
+**Progress**: 15 done / 18 total
+**Stopped at**: Step 15 (PR created; awaiting merge before Step 16)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 15 — Update `main.go` (trading): encryption key, pool init, new goroutine [done]
+- Removed old single-broker init block. Added hex key validation, separate pgxpool for accountRepo, updated NewTradingService call (accountRepo + encKey), added LoadBrokerPool + EnsureAlpacaDefault calls, added go svc.StartPositionSyncPoller(ctx). Build passes.
+- Files modified: `services/xstockstrat-trading/cmd/server/main.go`
+- Deviations: `NewAccountRepo` used (not `NewPgAccountRepo`); `EnsureAlpacaDefault` is void (no error return). Full detail in Deviation Log.
