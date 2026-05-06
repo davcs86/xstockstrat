@@ -1056,7 +1056,7 @@ go svc.StartPositionSyncPoller(ctx)
 
 ### Step 16 — service: Update portfolio repository: `account_id` on positions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -1288,3 +1288,8 @@ go svc.ConsumePositionSyncs(ctx)
 **Spec said**: `repository.NewPgAccountRepo(pool)` and `EnsureAlpacaDefault` returns an error.
 **Actual**: Constructor is `repository.NewAccountRepo(pool)` (as implemented in Step 11). `EnsureAlpacaDefault` has no return value (logs internally); call site uses `svc.EnsureAlpacaDefault(ctx)` without error check.
 **Reason**: Step 11 deviated from the spec's proposed name; actual implementation used `NewAccountRepo`. `EnsureAlpacaDefault` was implemented void in Step 13 (logs warnings internally rather than returning errors, per the spec's "not fatal" note).
+
+### Deviation: Step 16 — service: Update portfolio repository: `account_id` on positions
+**Spec said**: `GetPosition` SELECT query — add `account_id` to SELECT (no new WHERE param mentioned).
+**Actual**: Added `ORDER BY opened_at DESC LIMIT 1` to `GetPosition` to ensure a single row is returned when multiple accounts hold the same symbol (the conflict constraint is now 4-column). No new parameter added to `GetPosition` signature as spec did not require one.
+**Reason**: Without ORDER BY + LIMIT, the query would return an error if multiple rows matched (user_id, symbol, trading_mode) across different account_ids after the migration.
