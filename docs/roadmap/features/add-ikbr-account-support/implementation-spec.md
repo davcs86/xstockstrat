@@ -993,7 +993,7 @@ Add 3 corresponding gRPC adapter methods to `grpcTradingAdapter` (at L99), follo
 
 ### Step 15 — service: Update `main.go` (trading): encryption key, pool init, new goroutine
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/cmd/server/main.go` — modify
@@ -1283,3 +1283,8 @@ go svc.ConsumePositionSyncs(ctx)
 **Spec said**: `extractUserID(ctx)` is an "existing auth helper".
 **Actual**: `extractUserID` did not exist in the codebase. Implemented as a new package-level function reading from gRPC metadata key `x-user-id`, returning `""` if absent.
 **Reason**: No auth middleware or user-ID extraction existed yet in the trading handler. The function was trivial to implement and its contract was clear from the spec.
+
+### Deviation: Step 15 — service: Update `main.go` (trading): encryption key, pool init, new goroutine
+**Spec said**: `repository.NewPgAccountRepo(pool)` and `EnsureAlpacaDefault` returns an error.
+**Actual**: Constructor is `repository.NewAccountRepo(pool)` (as implemented in Step 11). `EnsureAlpacaDefault` has no return value (logs internally); call site uses `svc.EnsureAlpacaDefault(ctx)` without error check.
+**Reason**: Step 11 deviated from the spec's proposed name; actual implementation used `NewAccountRepo`. `EnsureAlpacaDefault` was implemented void in Step 13 (logs warnings internally rather than returning errors, per the spec's "not fatal" note).
