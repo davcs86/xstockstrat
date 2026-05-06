@@ -256,3 +256,17 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Added `BrokerAccountsEncryptionKey string` and `AppEnv string` fields to `Config` struct; added corresponding `os.Getenv` reads in `LoadFromEnv()`. No defaults — `main.go` validates `BrokerAccountsEncryptionKey` at startup (Step 15).
 - Files modified: `services/xstockstrat-trading/internal/config/config.go`
 - Deviations: none. `GOWORK=off go build ./...` in `services/xstockstrat-trading/` exits 0.
+
+---
+
+## Session 2026-05-06T06:00:00Z — sdd-execute
+
+**Steps this session**: [9]
+**Progress**: 9 done / 18 total
+**Stopped at**: Step 9 (PR created; awaiting merge before Step 10)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 9 — Extract `Broker` interface; add `GetPositions` to Alpaca client [done]
+- Created `broker.go` with `BrokerOrder`, `BrokerPosition`, `Broker` interface, `OrderRequest`. Modified `alpaca.go`: changed `SubmitOrder`/`GetOrder` signatures to use `OrderRequest`/`*BrokerOrder`, added `GetPositions`, added `strconv` import, added compile-time assertion. Updated all 4 `SubmitOrderRequest` call sites in `alpaca_test.go` to `OrderRequest` and `order.ID` → `order.BrokerOrderID`.
+- Files modified: `services/xstockstrat-trading/internal/broker/broker.go` (created), `services/xstockstrat-trading/internal/broker/alpaca.go`, `services/xstockstrat-trading/internal/broker/alpaca_test.go`
+- Deviations: Spec said update L55/L79 order.ID only; actual test had order.ID at L56-57 and 3 additional SubmitOrderRequest call sites requiring update (line numbers shifted, test evolved). All broker tests pass.

@@ -464,7 +464,7 @@ No default values; `main.go` validates `BrokerAccountsEncryptionKey` is non-empt
 
 ### Step 9 — service: Extract `Broker` interface; add `GetPositions` to Alpaca client
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/broker.go` — create
@@ -1264,3 +1264,8 @@ go svc.ConsumePositionSyncs(ctx)
 **Spec said**: `./scripts/db-migrate.sh` exits 0; `\d portfolio.positions` shows `account_id` column and updated unique constraint.
 **Actual**: No PostgreSQL running in the environment (Docker daemon not available). Migration files created and SQL reviewed manually — syntax is correct.
 **Reason**: Same environment constraint as Steps 5–6. Files will be verified on deploy via db-migrator PRE_DEPLOY job.
+
+### Deviation: Step 9 — service: Extract `Broker` interface; add `GetPositions` to Alpaca client
+**Spec said**: Update `alpaca_test.go` at L55 (`order.ID` → `order.BrokerOrderID`) and L79. The `AlpacaOrder` struct itself remains for internal HTTP response unmarshaling.
+**Actual**: `order.ID` references were at L56-57 (not L55) and no L79 reference (TestSubmitOrder_Live discards the return with `_`). Additionally, three test call sites used `broker.SubmitOrderRequest{Qty:"...", Type:"..."}` which also had to be updated to `broker.OrderRequest{Qty:float64, OrderType:"..."}` since the function signature changed. `SubmitOrderRequest` struct kept exported (not removed) for zero breakage elsewhere. A fourth `SubmitOrderRequest` call site in `TestSubmitOrder_BrokerError` was also updated (not mentioned in spec).
+**Reason**: Test file had evolved since spec-generation; all four `SubmitOrderRequest` call sites needed updating to match the new `OrderRequest` parameter type. All broker tests pass.
