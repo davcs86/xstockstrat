@@ -64,7 +64,7 @@ jobs:
           echo "$(npm prefix -g)/bin" >> "$GITHUB_PATH"
 
       - name: Regenerate stubs
-        run: ./scripts/buf-gen.sh
+        run: bash ./scripts/buf-gen.sh
 
       - name: Check for stale stubs
         run: |
