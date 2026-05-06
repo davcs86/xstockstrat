@@ -411,7 +411,7 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 2. Read `docs/roadmap/features/<slug>/context.md` before touching any related files — it contains critical decisions from prior sessions.
 3. Do NOT rely on conversation context from a previous session. Always re-read context.md.
 
-SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime)
+SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime) | `/sdd-sync` (sync spec files from feature branches to main-dev)
 
 ---
 
