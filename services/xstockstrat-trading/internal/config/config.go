@@ -30,6 +30,8 @@ type Config struct {
 	AlpacaPaperURL  string // default: https://paper-api.alpaca.markets
 	AlpacaLiveURL   string // default: https://api.alpaca.markets
 	AlpacaPaper     bool   // default: true; set false for live trading
+	BrokerAccountsEncryptionKey string // hex-encoded 32-byte key; required when broker_accounts table is in use
+	AppEnv                       string // "dev" | "production"
 }
 
 func LoadFromEnv() *Config {
@@ -47,7 +49,9 @@ func LoadFromEnv() *Config {
 		AlpacaAPISecret:      getEnv("ALPACA_API_SECRET", ""),
 		AlpacaPaperURL:       getEnv("ALPACA_PAPER_URL", "https://paper-api.alpaca.markets"),
 		AlpacaLiveURL:        getEnv("ALPACA_LIVE_URL", "https://api.alpaca.markets"),
-		AlpacaPaper:          getEnvBool("ALPACA_PAPER", true),
+		AlpacaPaper:                 getEnvBool("ALPACA_PAPER", true),
+		BrokerAccountsEncryptionKey: os.Getenv("BROKER_ACCOUNTS_ENCRYPTION_KEY"),
+		AppEnv:                      os.Getenv("APP_ENV"),
 	}
 }
 

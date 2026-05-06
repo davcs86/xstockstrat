@@ -433,7 +433,7 @@ ALTER TABLE portfolio.positions
 
 ### Step 8 — config: Add `BrokerAccountsEncryptionKey` + `AppEnv` to trading config
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/config/config.go` — modify

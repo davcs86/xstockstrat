@@ -242,3 +242,17 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Created `003_positions_account_id.up.sql` (ADD COLUMN account_id TEXT DEFAULT 'alpaca-default', DROP old 3-column unique constraint, ADD new 4-column unique constraint `positions_user_symbol_mode_account_key`, CREATE INDEX) and `003_positions_account_id.down.sql` (reverses all).
 - Files modified: `services/xstockstrat-portfolio/migrations/003_positions_account_id.up.sql`, `services/xstockstrat-portfolio/migrations/003_positions_account_id.down.sql`
 - Deviations: `./scripts/db-migrate.sh` could not be verified — no PostgreSQL running (same constraint as Steps 5–6). SQL syntax reviewed manually; will be verified on deploy.
+
+---
+
+## Session 2026-05-06T05:00:00Z — sdd-execute
+
+**Steps this session**: [8]
+**Progress**: 8 done / 18 total
+**Stopped at**: Step 8 (PR created; awaiting merge before Step 9)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 8 — Add `BrokerAccountsEncryptionKey` + `AppEnv` to trading config [done]
+- Added `BrokerAccountsEncryptionKey string` and `AppEnv string` fields to `Config` struct; added corresponding `os.Getenv` reads in `LoadFromEnv()`. No defaults — `main.go` validates `BrokerAccountsEncryptionKey` at startup (Step 15).
+- Files modified: `services/xstockstrat-trading/internal/config/config.go`
+- Deviations: none. `GOWORK=off go build ./...` in `services/xstockstrat-trading/` exits 0.
