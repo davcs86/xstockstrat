@@ -1,0 +1,126 @@
+name: Bug Report
+description: Report a bug in the xstockstrat platform
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before opening:** Check `docs/runbooks/bug-triage.md` to determine severity and the
+        right process path. For SEV-1 (live trading impaired), set
+        `platform.maintenance_mode = true` via config-ui **before** filing this issue.
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: Select the highest severity that applies.
+      options:
+        - "SEV-1 — Live trading broken or financial loss occurring"
+        - "SEV-2 — Wrong behavior, potential financial impact in a future cycle"
+        - "SEV-3 — UI/UX, cosmetic, or non-financial logic error"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: impact_type
+    attributes:
+      label: Impact type
+      options:
+        - "trading-halted — Orders not executing"
+        - "wrong-trades-executed — Wrong orders placed"
+        - "wrong-positions-displayed — Portfolio P&L incorrect"
+        - "data-integrity — Ledger or DB corruption"
+        - "config-propagation — Config value not reaching services"
+        - "ux-only — UI display issue with no trading impact"
+        - "other"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment where bug was observed
+      options:
+        - "production (main)"
+        - "dev (main-dev)"
+        - "local"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: maintenance_mode
+    attributes:
+      label: SEV-1 safety check
+      options:
+        - label: >
+            I have set `platform.maintenance_mode = true` via config-ui to halt trading
+            (SEV-1 only — skip for SEV-2/SEV-3)
+
+  - type: checkboxes
+    id: config_only
+    attributes:
+      label: Config-only fix possible?
+      options:
+        - label: >
+            This bug might be fixable by changing a runtime config value — no code deploy needed
+
+  - type: dropdown
+    id: affected_services
+    attributes:
+      label: Affected service(s)
+      description: Select all that apply (hold Ctrl/Cmd to multi-select).
+      multiple: true
+      options:
+        - xstockstrat-trading
+        - xstockstrat-portfolio
+        - xstockstrat-marketdata
+        - xstockstrat-indicators
+        - xstockstrat-ingest
+        - xstockstrat-analysis
+        - xstockstrat-ledger
+        - xstockstrat-identity
+        - xstockstrat-notify
+        - xstockstrat-config
+        - xstockstrat-trader (UI)
+        - xstockstrat-insights (UI)
+        - xstockstrat-config-ui (UI)
+        - unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect to happen?
+      placeholder: |
+        **Observed:** ...
+        **Expected:** ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / ledger events
+      description: >
+        Paste relevant service logs or ledger event output. Run
+        `grpcurl ... xstockstrat.ledger.v1.LedgerService/QueryEvents` to retrieve relevant events.
+      render: text
+
+  - type: textarea
+    id: root_cause
+    attributes:
+      label: Root cause hypothesis (optional)
+      description: If you have a theory about what caused this, document it here.

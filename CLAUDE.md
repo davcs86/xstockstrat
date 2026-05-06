@@ -355,8 +355,9 @@ This creates each service's GitHub repo, splits the `services/<name>/` history, 
 |---|---|
 | `main` | Production — triggers prod deploy on push |
 | `main-dev` | Development trunk — triggers dev deploy on push; all feature branches merge here |
-| `feature/<slug>` | Feature implementation branches (SDD workflow) |
+| `feature/<slug>` | Feature implementation branches (SDD workflow); also used for SDD-path bug fixes (Track C) |
 | `feature-steps/<slug>-step-<N>` | Per-step branches for SDD execute loop; each step gets a PR into `feature/<slug>` |
+| `hotfix/<slug>` | Urgent production bug fixes — branches from `main`, PR targets `main`; back-merged into `main-dev` after merge |
 | `claude/*` | Harness-assigned branches (e.g., `claude/add-claude-documentation-9Whsq`) — always branched from and PR'd into `main-dev`; never use as base for features |
 
 ### Merge Strategy
@@ -364,6 +365,7 @@ This creates each service's GitHub repo, splits the `services/<name>/` history, 
 | PR direction | Required merge type | Reason |
 |---|---|---|
 | `feature/*` or `claude/*` → `main-dev` | Squash and merge | Keeps `main-dev` history clean |
+| `hotfix/*` → `main` | **Create a merge commit** — never squash | Preserves ancestry; back-merge into `main-dev` required immediately after |
 | `main-dev` → `main` (promotion) | **Create a merge commit** — never squash | Squash breaks git ancestry: `main-dev` stays permanently "ahead" of `main` even after content is promoted, polluting future promotion diffs |
 
 To enforce this, disable squash and rebase merging on the `main` branch:
@@ -409,7 +411,7 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 2. Read `docs/roadmap/features/<slug>/context.md` before touching any related files — it contains critical decisions from prior sessions.
 3. Do NOT rely on conversation context from a previous session. Always re-read context.md.
 
-SDD skills: `/sdd-story` → `/sdd-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime)
+SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime)
 
 ---
 
@@ -446,6 +448,8 @@ SDD skills: `/sdd-story` → `/sdd-spec` → `/sdd-execute` (loop) | `/sdd-statu
 | Approval flow | `docs/runbooks/approval-flow.md` |
 | Proto versioning | `docs/runbooks/proto-versioning.md` |
 | Feature workflow | `docs/runbooks/feature-workflow.md` |
+| Reviewer registry | `docs/runbooks/reviewer-registry.md` |
+| Feature merge order | `docs/roadmap/features/merge-order.md` |
 | Implementation roadmap | `docs/roadmap/implementation-roadmap.md` |
 | Phase deviation notes | `docs/roadmap/phase[3-6]-deviations.md` |
 

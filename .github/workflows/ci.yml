@@ -71,41 +71,6 @@ jobs:
           git diff --exit-code packages/proto/gen/ || \
           (echo "Committed stubs are stale — run ./scripts/buf-gen.sh and commit the result" && exit 1)
 
-  buf-push:
-    name: Publish proto definitions to BSR
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: [proto-lint, proto-freshness]
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: bufbuild/buf-setup-action@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: bufbuild/buf-push-action@v1
-        with:
-          input: packages/proto
-          buf_token: ${{ secrets.BUF_TOKEN }}
-
-  buf-push-dev:
-    name: Publish proto definitions to BSR (dev draft)
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main-dev' && github.event_name == 'push'
-    needs: [proto-lint, proto-freshness]
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: bufbuild/buf-setup-action@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: bufbuild/buf-push-action@v1
-        with:
-          input: packages/proto
-          buf_token: ${{ secrets.BUF_TOKEN }}
-          draft: true
-
   go-lint:
     name: Go lint and test (${{ matrix.service }})
     runs-on: ubuntu-latest
@@ -207,6 +172,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: 'pip'
+          cache-dependency-path: services/${{ matrix.service }}/pyproject.toml
 
       - name: install ruff
         run: pip install ruff
@@ -242,6 +209,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: 'pip'
+          cache-dependency-path: services/${{ matrix.service }}/pyproject.toml
 
       - name: install dependencies
         run: pip install -e ".[dev]"
@@ -277,12 +246,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-
-      - name: install pnpm
-        run: npm install -g pnpm@9.15.0
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: install workspace dependencies
         run: pnpm install --no-frozen-lockfile
@@ -310,18 +282,35 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-
-      - name: install pnpm
-        run: npm install -g pnpm@9.15.0
+          cache: 'pnpm'
+          cache-dependency-path: services/${{ matrix.service }}/pnpm-lock.yaml
 
       - name: install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: get playwright version
+        id: pw-version
+        run: echo "version=$(pnpm list @playwright/test --json | jq -r '.[0].devDependencies["@playwright/test"].version')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+
       - name: install playwright browsers
-        run: pnpm exec playwright install --with-deps chromium firefox
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install chromium firefox
+
+      - name: install playwright system dependencies
+        run: pnpm exec playwright install-deps chromium firefox
 
       - name: run e2e tests
         run: pnpm test:e2e
@@ -354,12 +343,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-
-      - name: install pnpm
-        run: npm install -g pnpm@9.15.0
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: install workspace dependencies
         run: pnpm install --no-frozen-lockfile
