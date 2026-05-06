@@ -1,0 +1,61 @@
+# Dockerfile.codegen
+# Proto-generation container — installs buf + all language plugins and runs buf-gen.sh.
+# Used by scripts/localenv-setup.sh. NOT part of docker-compose.yml.
+#
+# Versions: keep in sync with CLAUDE.md §Language Versions & Tooling
+#   Go     1.25  → also in go.work, .github/workflows/ci.yml, Go service Dockerfiles
+#   Python 3.12  → also in .github/workflows/ci.yml, Python service Dockerfiles
+#   Node   22    → also in .github/workflows/ci.yml
+#   pnpm   9.15.0 → also in package.json "packageManager", .github/workflows/ci.yml
+
+FROM golang:1.25-bookworm
+
+# ── System deps ────────────────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gnupg \
+    software-properties-common \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Python 3.12 (Bookworm ships 3.11; use deadsnakes PPA) ─────────────────────
+RUN add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+       python3.12 \
+       python3.12-venv \
+       python3.12-dev \
+       python3-pip \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
+
+# ── Node.js 22 (NodeSource) ────────────────────────────────────────────────────
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── pnpm 9.15.0 ────────────────────────────────────────────────────────────────
+RUN npm install -g pnpm@9.15.0
+
+# ── buf CLI (latest) ───────────────────────────────────────────────────────────
+# Detects TARGETARCH so the image builds on both x86_64 and Apple Silicon (arm64).
+ARG TARGETARCH=amd64
+RUN BUF_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64") \
+    && curl -fsSL \
+       "https://github.com/bufbuild/buf/releases/latest/download/buf-Linux-${BUF_ARCH}" \
+       -o /usr/local/bin/buf \
+    && chmod +x /usr/local/bin/buf
+
+# ── Go proto plugins ───────────────────────────────────────────────────────────
+# These land in /root/go/bin which buf-gen.sh already adds to PATH.
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest \
+    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest \
+    && go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
+
+# ── Python grpcio-tools (provides protoc-gen-grpc_python) ─────────────────────
+RUN python3.12 -m pip install --break-system-packages grpcio-tools
+
+# ── ts-proto (provides protoc-gen-ts_proto) ───────────────────────────────────
+RUN npm install -g ts-proto
+
+WORKDIR /workspace

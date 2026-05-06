@@ -108,7 +108,7 @@ Initially spec'd as full replace (delete + insert). Revised to upsert semantics 
 
 ---
 
-## Session 2026-05-02T(sdd-spec) — sdd-spec; implementation spec generated
+## Session 2026-05-02T00:06:00Z — sdd-spec
 
 Generated `implementation-spec.md` (18 steps). Key codebase findings:
 

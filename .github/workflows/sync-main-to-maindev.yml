@@ -1,0 +1,67 @@
+name: Sync main → main-dev
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          # Use a PAT so the push can trigger downstream workflows (deploy-dev).
+          # Falls back to GITHUB_TOKEN if PAT is not configured.
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Verify GH_PAT is configured
+        run: |
+          if [ -z "${{ secrets.GH_PAT }}" ]; then
+            echo "::warning::GH_PAT secret is not set — falling back to GITHUB_TOKEN, which cannot push to protected branches. Configure a PAT with repo write access."
+          fi
+
+      - name: Merge main into main-dev
+        run: |
+          # actions/checkout configures a narrow refspec (only the triggered branch).
+          # Use explicit refspec mapping so origin/main-dev is always populated.
+          git fetch origin \
+            '+refs/heads/main:refs/remotes/origin/main' \
+            '+refs/heads/main-dev:refs/remotes/origin/main-dev'
+
+          # Create or reset the local main-dev branch to match the remote exactly.
+          git checkout -B main-dev origin/main-dev
+
+          # Check whether main-dev already contains everything in main.
+          BEHIND=$(git rev-list --count main-dev..origin/main)
+          if [ "$BEHIND" -eq 0 ]; then
+            echo "main-dev is already up to date with main. Nothing to do."
+            exit 0
+          fi
+
+          git merge origin/main \
+            --no-edit \
+            -m "chore: sync main into main-dev [post-promote]"
+
+          # Push with retry + exponential backoff for transient server errors.
+          for attempt in 1 2 3 4; do
+            if git push origin main-dev; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 4 ]; then
+              backoff=$((2 ** attempt))
+              echo "::warning::Push failed (attempt $attempt/4). Retrying in ${backoff}s..."
+              sleep "$backoff"
+              git fetch origin '+refs/heads/main-dev:refs/remotes/origin/main-dev'
+            fi
+          done
+          echo "::error::Push to main-dev failed after 4 attempts. If the branch is protected, ensure GH_PAT is configured with repo write access."
+          exit 1

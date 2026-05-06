@@ -3,7 +3,7 @@
 **Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/add-ikbr-account-support`
 **Created**: 2026-05-02
-**Last Updated**: 2026-05-03T(sdd-execute)
+**Last Updated**: 2026-05-03
 
 ---
 
@@ -35,4 +35,4 @@ Register multiple broker accounts (Alpaca and/or IBKR) via API with credentials 
 
 ## Next Action
 
-`/sdd-execute add-ikbr-account-support next` — continue with Step 2 (after merging step-1 PR)
+`/sdd-execute add-ikbr-account-support next` — continue with Step 3 (Steps 1–2 complete)

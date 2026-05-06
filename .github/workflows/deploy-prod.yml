@@ -6,34 +6,26 @@ on:
       - main
 
 jobs:
-  deploy:
+  buf-push:
+    name: Publish proto definitions to BSR
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: digitalocean/action-doctl@v2
+      - uses: bufbuild/buf-setup-action@v1
         with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Deploy to DigitalOcean App Platform
-        run: doctl apps update ${{ secrets.DO_PROD_APP_ID }} --spec .do/app.yaml
+      - uses: bufbuild/buf-push-action@v1
+        with:
+          input: packages/proto
+          buf_token: ${{ secrets.BUF_TOKEN }}
 
-      - name: Wait for deployment
-        run: |
-          APP_ID="${{ secrets.DO_PROD_APP_ID }}"
-          DEPLOY_ID=$(doctl apps list-deployments "$APP_ID" --format ID --no-header | head -1)
-          echo "Waiting for deployment $DEPLOY_ID ..."
-          for i in $(seq 1 60); do
-            PHASE=$(doctl apps get-deployment "$APP_ID" "$DEPLOY_ID" --format Phase --no-header)
-            echo "  [$i/60] Phase: $PHASE"
-            if [ "$PHASE" = "ACTIVE" ]; then
-              echo "Deployment succeeded."
-              exit 0
-            elif [ "$PHASE" = "ERROR" ] || [ "$PHASE" = "CANCELED" ]; then
-              echo "Deployment failed with phase: $PHASE"
-              exit 1
-            fi
-            sleep 15
-          done
-          echo "Timeout: deployment did not complete within 15 minutes."
-          exit 1
+  deploy:
+    name: Deploy to prod
+    uses: ./.github/workflows/deploy.yml
+    secrets:
+      DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      DO_APP_ID: ${{ secrets.DO_PROD_APP_ID }}
+    with:
+      app_spec: .do/app.yaml

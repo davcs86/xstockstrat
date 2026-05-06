@@ -2,7 +2,6 @@
 name: sdd-status
 description: Show feature implementation status for all or a specific feature. Usage: /sdd-status [feature-slug]. Lists lifecycle status, step completion, last session, and next action. Read-only — makes no changes.
 argument-hint: [feature-slug]
-disable-model-invocation: true
 allowed-tools: Read Bash(ls *) Bash(find *) Bash(grep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *)
 effort: low
 ---
@@ -29,21 +28,31 @@ You are reporting the status of SDD features. This skill is read-only — you ma
      ```
    - If it exists: read `feature.md`, `implementation-spec.md`, and `context.md` using `git show origin/feature/<slug>:<path>`.
    - If it does not exist: fall back to `git show origin/main-dev:<path>` for each file.
-   - From the chosen source: extract `**Lifecycle Status**` and the last row of the Status History table from `feature.md`; count steps by status from `implementation-spec.md` (grep for `` **Status**: `done` ``, `` **Status**: `pending` ``, `` **Status**: `blocked` ``, `` **Status**: `in-progress` ``); find the most recent `## Session` heading from `context.md`.
+   - From the chosen source: extract `**Lifecycle Status**`, `**Type**` (if present — `feature` or `bug`; default `feature` if absent), and the last row of the Status History table from `feature.md`; count steps by status from `implementation-spec.md` (grep for `` **Status**: `done` ``, `` **Status**: `pending` ``, `` **Status**: `blocked` ``, `` **Status**: `in-progress` ``); find the most recent `## Session` heading from `context.md`.
 
-3. Print a summary table:
+3. Print two tables — features first, bugs second (omit a table if it has no rows):
 
 ```
+Features
 Slug                  | Status               | Steps     | Last Session
 ----------------------|----------------------|-----------|----------------------------
 polygon-data-source   | in-progress          | 3/7 done  | 2026-05-01 sdd-execute
 rsi-alert             | implementation-ready | 0/5 done  | 2026-04-30 sdd-spec
 legacy-cleanup        | demoted/canceled     | —         | 2026-04-28 sdd-story
+
+Bugs
+Slug                       | Status    | Steps    | Severity | Last Session
+---------------------------|-----------|----------|----------|----------------------------
+fix-42-wrong-pnl-portfolio | draft     | —        | SEV-2    | 2026-05-02 sdd-triage
+fix-51-order-stuck         | in-progress | 2/4 done | SEV-1  | 2026-05-03 sdd-execute
 ```
 
-4. After the table, print:
-   - Features with `blocked` steps: "⚠ Blocked steps in: <slug-list>"
+For bug rows, also extract `**Severity**` from `feature.md` (default `—` if absent).
+
+4. After the tables, print:
+   - Features/bugs with `blocked` steps: "⚠ Blocked steps in: <slug-list>"
    - If no features exist: "No features found. Start with: /sdd-story <slug> <story text>"
+   - If no bugs exist: (omit — no message needed)
 
 ---
 
@@ -78,7 +87,10 @@ Note: "`origin/feature/$ARGUMENTS[0]` not found — reading from `origin/main-de
 Print:
 ```
 Feature: <slug>
+Type: <feature | bug>
 Lifecycle Status: <status>
+Severity: <SEV-N>          (omit if Type is feature)
+GitHub Issue: <url>        (omit if Type is feature or no issue linked)
 
 Status History:
 <full table from feature.md>
@@ -108,10 +120,34 @@ Session Log:
   2026-05-01T14:00Z — sdd-execute: steps 1–2 done, stopped at step 3
 ```
 
-### 4. Print recommended next action
+### 4. Merge-order status (code-completed features only)
 
-- All steps done → "Feature complete (code-completed). Update feature.md manually when deployed."
+If lifecycle status is `code-completed`:
+
+Read `docs/roadmap/features/merge-order.md`. Check whether `<slug>` appears in the
+**Feature** column of the Blocking Dependencies table.
+
+Print:
+- If a blocking entry exists and Resolved ≠ Yes:
+  ```
+  ⏸ Merge blocked — waiting for `<blocking-feature>` to reach `launched`
+     Reason: <reason from merge-order.md>
+     See: docs/roadmap/features/merge-order.md
+  ```
+- If no entry or Resolved = Yes:
+  ```
+  ✓ No merge-order dependency — ready to open final integration PR
+  ```
+
+### 5. Print recommended next action
+
+- Status `code-completed`, merge blocked → "Resolve merge-order dependency first (see above), then open final PR with /sdd-execute <slug> next"
+- Status `code-completed`, no blocker → "Feature complete (code-completed). Open the final integration PR: /sdd-execute <slug> next"
+- Status `launched` → "Feature is live in production."
 - Any `blocked` steps → "Step N is blocked. Read context.md and resolve the blocker, then re-run /sdd-execute <slug> N"
 - Steps pending → "/sdd-execute <slug> next  (next: Step N — <title>)"
+- Status `implementation-ready`, no execution started → "/sdd-review <slug> impl-spec  (validate spec before executing)"
 - No implementation-spec.md → "/sdd-spec <slug>  (implementation spec not yet generated)"
+- Status `spec-ready` → "/sdd-spec <slug>  (product spec approved — generate implementation spec)"
+- Status `draft` → "/sdd-review <slug> product-spec  (product spec awaiting AI review)"
 - No product-spec.md → "/sdd-story <slug>  (no product spec — provide story text)"
