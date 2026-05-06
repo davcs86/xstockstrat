@@ -340,7 +340,7 @@ DROP TABLE IF EXISTS trading.broker_accounts;
 
 ### Step 6 — migration: `trading` — `orders.account_id` + `orders.broker_type`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/migrations/003_orders_account_id.up.sql` — create
@@ -1254,3 +1254,8 @@ go svc.ConsumePositionSyncs(ctx)
 **Spec said**: `./scripts/db-migrate.sh` exits 0; `\dt trading.*` shows `broker_accounts` table.
 **Actual**: No PostgreSQL running in the environment (Docker daemon not available); migration script exited with connection refused. Migration files created and SQL reviewed manually — syntax is correct.
 **Reason**: Harness environment has no running database; migration verification against a live DB is not possible. Files will be verified on first deploy via the db-migrator PRE_DEPLOY job.
+
+### Deviation: Step 6 — migration: `trading` — `orders.account_id` + `orders.broker_type`
+**Spec said**: `./scripts/db-migrate.sh` exits 0; `\d trading.orders` shows `account_id` and `broker_type` columns.
+**Actual**: No PostgreSQL running in the environment (Docker daemon not available). Migration files created and SQL reviewed manually — syntax is correct.
+**Reason**: Same environment constraint as Step 5. Files will be verified on deploy via db-migrator PRE_DEPLOY job.
