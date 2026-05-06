@@ -273,6 +273,20 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 
 ---
 
+## Session 2026-05-06T10:00:00Z — sdd-execute
+
+**Steps this session**: [13]
+**Progress**: 13 done / 18 total
+**Stopped at**: Step 13 (PR created; awaiting merge before Step 14)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 13 — Update `TradingService`: broker pool, account management, routing [done]
+- Full rewrite of `trading.go`: replaced `broker *broker.Client` with `brokerPoolEntry` map + `brokersMu + accountRepo + encKey`. Updated `NewTradingService` (removed brokerClient param, added accountRepo + encKey). Added `LoadBrokerPool`, `resolveAccount`, `instantiateBrokerLocked`. Updated `PlaceOrder` (resolve account, set AccountId/BrokerType, use broker.OrderRequest). Updated `CancelOrder` (resolve account). Updated `pollFills` (iterate pool, match by AccountId, no fill qty/price update). Added `StartPositionSyncPoller` + `syncPositions`. Added `RegisterBrokerAccount`, `ListBrokerAccountsSvc`, `DeregisterBrokerAccountSvc`, `EnsureAlpacaDefault`. Changed `buildBrokerRequest` to return `broker.OrderRequest`.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: Struct uses `brokerPoolEntry{client, brokerType}` map (not `map[string]broker.Broker`) to carry BrokerType for order population. `pollFills` drops fill qty/price update (not in BrokerOrder). `strconv` removed. Added `instantiateBrokerLocked` helper. Full detail in Deviation Log.
+
+---
+
 ## Session 2026-05-06T09:00:00Z — sdd-execute
 
 **Steps this session**: [12]
