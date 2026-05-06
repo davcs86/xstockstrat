@@ -228,3 +228,17 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Created `003_orders_account_id.up.sql` (ADD COLUMN account_id TEXT DEFAULT 'alpaca-default', ADD COLUMN broker_type SMALLINT DEFAULT 1, CREATE INDEX) and `003_orders_account_id.down.sql`. Defaults preserve backward compatibility for existing rows.
 - Files modified: `services/xstockstrat-trading/migrations/003_orders_account_id.up.sql`, `services/xstockstrat-trading/migrations/003_orders_account_id.down.sql`
 - Deviations: `./scripts/db-migrate.sh` could not be verified — no PostgreSQL running (same constraint as Step 5). SQL syntax reviewed manually; will be verified on deploy.
+
+---
+
+## Session 2026-05-06T04:00:00Z — sdd-execute
+
+**Steps this session**: [7]
+**Progress**: 7 done / 18 total
+**Stopped at**: Step 7 (PR created; awaiting merge before Step 8)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 7 — Migration: `portfolio` — `positions.account_id` [done]
+- Created `003_positions_account_id.up.sql` (ADD COLUMN account_id TEXT DEFAULT 'alpaca-default', DROP old 3-column unique constraint, ADD new 4-column unique constraint `positions_user_symbol_mode_account_key`, CREATE INDEX) and `003_positions_account_id.down.sql` (reverses all).
+- Files modified: `services/xstockstrat-portfolio/migrations/003_positions_account_id.up.sql`, `services/xstockstrat-portfolio/migrations/003_positions_account_id.down.sql`
+- Deviations: `./scripts/db-migrate.sh` could not be verified — no PostgreSQL running (same constraint as Steps 5–6). SQL syntax reviewed manually; will be verified on deploy.

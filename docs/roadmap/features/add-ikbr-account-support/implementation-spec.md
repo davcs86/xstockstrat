@@ -379,7 +379,7 @@ Defaults of `'alpaca-default'` and `1` preserve backward compatibility for all e
 
 ### Step 7 — migration: `portfolio` — `positions.account_id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/003_positions_account_id.up.sql` — create
@@ -1259,3 +1259,8 @@ go svc.ConsumePositionSyncs(ctx)
 **Spec said**: `./scripts/db-migrate.sh` exits 0; `\d trading.orders` shows `account_id` and `broker_type` columns.
 **Actual**: No PostgreSQL running in the environment (Docker daemon not available). Migration files created and SQL reviewed manually — syntax is correct.
 **Reason**: Same environment constraint as Step 5. Files will be verified on deploy via db-migrator PRE_DEPLOY job.
+
+### Deviation: Step 7 — migration: `portfolio` — `positions.account_id`
+**Spec said**: `./scripts/db-migrate.sh` exits 0; `\d portfolio.positions` shows `account_id` column and updated unique constraint.
+**Actual**: No PostgreSQL running in the environment (Docker daemon not available). Migration files created and SQL reviewed manually — syntax is correct.
+**Reason**: Same environment constraint as Steps 5–6. Files will be verified on deploy via db-migrator PRE_DEPLOY job.
