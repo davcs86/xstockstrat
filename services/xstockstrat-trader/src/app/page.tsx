@@ -4,6 +4,7 @@ import { AppShell } from '@/components/AppShell';
 import { OrderForm } from '@/components/OrderForm';
 import { OrderBook, PortfolioSummary } from '@/components/OrderBook';
 import { AlertStream } from '@/components/AlertStream';
+import { AccountSelector } from '@/components/AccountSelector';
 import { Button } from '@/components/ui/button';
 
 export type TradingMode = 'paper' | 'live';
@@ -16,6 +17,7 @@ export default function TradingDashboard() {
       title="xstockstrat Trader"
       actions={
         <div className="flex items-center gap-2">
+          <AccountSelector />
           <ModeToggle mode={mode} onChange={setMode} />
           <AlertStream />
         </div>

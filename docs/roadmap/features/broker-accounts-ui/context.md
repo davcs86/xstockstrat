@@ -83,3 +83,14 @@
 **Progress**: 4 done / 9 total
 **Stopped at**: Step 4 (step complete — PR created, awaiting merge)
 **Next**: /sdd-execute broker-accounts-ui next
+
+### Step 5 — Wire `AccountSelector` into header; update `OrderForm`, `OrderBook`, `PortfolioSummary` to consume selected account [done]
+- Imported `AccountSelector` into `page.tsx` and added `<AccountSelector />` before `<ModeToggle>` in the `actions` div. Updated `OrderForm` to read `selectedAccountId` from `AccountContext`, include `account_id` in the POST body, disable the submit button when no account is selected, and show a helper message. Updated both `OrderBook` and `PortfolioSummary` in `OrderBook.tsx` to include `account_id` in their SWR keys. Updated `api/orders/route.ts` GET and `api/portfolio/route.ts` GET to read `account_id` from searchParams and forward it to the backend.
+- Files modified: `services/xstockstrat-trader/src/app/page.tsx`, `services/xstockstrat-trader/src/components/OrderForm.tsx`, `services/xstockstrat-trader/src/components/OrderBook.tsx`, `services/xstockstrat-trader/src/app/api/orders/route.ts`, `services/xstockstrat-trader/src/app/api/portfolio/route.ts`
+- Deviations: `api/portfolio/route.ts` added to the commit — spec's **Files** list omitted it, but PortfolioSummary now passes `account_id` to `/api/portfolio` and the route handler must read it; included to keep the feature coherent.
+
+## Session 2026-05-07T00:04:00Z — sdd-execute
+**Steps this session**: [5]
+**Progress**: 5 done / 9 total
+**Stopped at**: Step 5 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next
