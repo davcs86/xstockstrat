@@ -18,12 +18,21 @@ You are an implementation planner for the xstockstrat platform. Your job is to s
 
 ## Steps
 
+### 0. Resolve feature directory
+
+```bash
+find docs/roadmap/features -maxdepth 1 -type d -name "*-$ARGUMENTS[0]"
+```
+If no directory is found: stop — "No feature directory found for slug `$ARGUMENTS[0]`. Run /sdd-story first."
+Capture the result as `FEATURE_DIR` (e.g. `docs/roadmap/features/001-add-ikbr-account-support`).
+Use `$FEATURE_DIR` for all file reads and writes in this skill.
+
 ### 1. Read the product spec and lifecycle guard
 
-Read `docs/roadmap/features/$ARGUMENTS[0]/product-spec.md`.
+Read `$FEATURE_DIR/product-spec.md`.
 If absent: stop with "No product spec found. Run /sdd-story $ARGUMENTS[0] first."
 
-Read `docs/roadmap/features/$ARGUMENTS[0]/feature.md` and check `**Lifecycle Status**`.
+Read `$FEATURE_DIR/feature.md` and check `**Lifecycle Status**`.
 If status is `draft` (meaning `/sdd-review product-spec` has not yet been run):
 > "Product spec has not been AI-reviewed. Run `/sdd-review $ARGUMENTS[0] product-spec` first
 > to advance to `spec-ready`. Proceed anyway? (yes / no)"
@@ -79,14 +88,14 @@ Before writing any step instruction, verify you have grep or Read evidence for e
 
 ### 6. Write implementation-spec.md
 
-Write `docs/roadmap/features/$ARGUMENTS[0]/implementation-spec.md`:
+Write `$FEATURE_DIR/implementation-spec.md`:
 
 ```markdown
 # Implementation Spec: <slug>
 
 **Status**: `pending`
 **Created**: <ISO date>
-**Feature**: `docs/roadmap/features/<slug>/feature.md`
+**Feature**: `docs/roadmap/features/<NNN-slug>/feature.md`
 **Total Steps**: N
 **Feature Branch**: `feature/<slug>`
 
@@ -140,7 +149,7 @@ Categories to use for step naming: `proto`, `proto-gen`, `migration`, `service`,
 
 ### 7. Update feature.md status
 
-Edit `docs/roadmap/features/$ARGUMENTS[0]/feature.md`:
+Edit `$FEATURE_DIR/feature.md`:
 - Change `**Lifecycle Status**: \`draft\`` (or `spec-ready`) to `**Lifecycle Status**: \`implementation-ready\``
 - Append a row to the Status History table:
   `| <ISO date> | <prev> → \`implementation-ready\` | /sdd-spec | Implementation spec generated with N steps |`
@@ -152,7 +161,7 @@ Edit `docs/roadmap/features/$ARGUMENTS[0]/feature.md`:
 
 ### 8. Append to context.md
 
-Append to `docs/roadmap/features/$ARGUMENTS[0]/context.md`:
+Append to `$FEATURE_DIR/context.md`:
 
 ```markdown
 ## Session <ISO timestamp> — sdd-spec
@@ -167,7 +176,7 @@ Append to `docs/roadmap/features/$ARGUMENTS[0]/context.md`:
 ### 9. Report to user
 
 ```
-Implementation spec written to docs/roadmap/features/<slug>/implementation-spec.md
+Implementation spec written to docs/roadmap/features/<NNN-slug>/implementation-spec.md
 Total steps: N
 Feature status: implementation-ready
 

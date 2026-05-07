@@ -23,11 +23,18 @@ without explicit user confirmation.
    If mode is absent or not one of `product-spec` / `impl-spec`:
    "Please specify mode: `product-spec` or `impl-spec`."
 
-2. Resolve artifact paths:
-   - `FEATURE_MD` = `docs/roadmap/features/$ARGUMENTS[0]/feature.md`
-   - `PRODUCT_SPEC` = `docs/roadmap/features/$ARGUMENTS[0]/product-spec.md`
-   - `IMPL_SPEC` = `docs/roadmap/features/$ARGUMENTS[0]/implementation-spec.md`
-   - `CONTEXT_MD` = `docs/roadmap/features/$ARGUMENTS[0]/context.md`
+2. Resolve the feature directory for this slug:
+   ```bash
+   find docs/roadmap/features -maxdepth 1 -type d -name "*-$ARGUMENTS[0]"
+   ```
+   If the command returns no output: stop — "No feature found for slug `$ARGUMENTS[0]`. Run /sdd-story first."
+   Capture the result as `FEATURE_DIR` (e.g. `docs/roadmap/features/001-add-ikbr-account-support`).
+
+   Set artifact paths:
+   - `FEATURE_MD` = `$FEATURE_DIR/feature.md`
+   - `PRODUCT_SPEC` = `$FEATURE_DIR/product-spec.md`
+   - `IMPL_SPEC` = `$FEATURE_DIR/implementation-spec.md`
+   - `CONTEXT_MD` = `$FEATURE_DIR/context.md`
 
 3. Read `FEATURE_MD`. If absent: stop — "No feature found for this slug. Run /sdd-story first."
 
@@ -79,7 +86,9 @@ Discover all other currently active features:
 find docs/roadmap/features -mindepth 2 -name "feature.md" | sort
 ```
 
-For each `feature.md` found (excluding the current slug):
+For each `feature.md` found (excluding the current feature — match by `$FEATURE_DIR`):
+Derive the other feature's slug by stripping the `NNN-` prefix from its directory name
+(e.g. `001-add-ikbr-account-support` → `add-ikbr-account-support`).
 - Read it and check `**Lifecycle Status**`.
 - If status is `spec-ready`, `implementation-ready`, `in-progress`, or `code-completed`:
   this is an active concurrent feature.

@@ -16,13 +16,14 @@ You are syncing authoritative SDD spec files from feature branches into main-dev
 
 ## SPEC FILES
 
-The four SDD artifacts per feature:
-- `docs/roadmap/features/<slug>/feature.md`
-- `docs/roadmap/features/<slug>/product-spec.md`
-- `docs/roadmap/features/<slug>/implementation-spec.md`
-- `docs/roadmap/features/<slug>/context.md`
+The four SDD artifacts per feature (directory is `NNN-<slug>`, e.g. `001-add-ikbr-account-support`):
+- `docs/roadmap/features/<NNN-slug>/feature.md`
+- `docs/roadmap/features/<NNN-slug>/product-spec.md`
+- `docs/roadmap/features/<NNN-slug>/implementation-spec.md`
+- `docs/roadmap/features/<NNN-slug>/context.md`
 
-`origin/feature/<slug>` is always the authoritative source. Sync is one-way: feature branch → main-dev. Files that do not exist on the feature branch are never touched on main-dev.
+`origin/feature/<slug>` is always the authoritative source (branch name has no NNN prefix).
+Sync is one-way: feature branch → main-dev. Files that do not exist on the feature branch are never touched on main-dev.
 
 ---
 
@@ -49,18 +50,21 @@ git fetch origin
 ```
 
 If `$ARGUMENTS[0]` is provided:
-- Use only that slug.
-- Verify the directory exists:
+- Resolve the directory:
   ```bash
-  find docs/roadmap/features/$ARGUMENTS[0] -maxdepth 0 -type d
+  find docs/roadmap/features -maxdepth 1 -type d -name "*-$ARGUMENTS[0]"
   ```
   If not found: stop — "No feature directory found for slug: `$ARGUMENTS[0]`."
+  Capture as `FEATURE_DIR`. Derive `<slug>` = `$ARGUMENTS[0]` (already known).
 
 If `$ARGUMENTS[0]` is absent:
 ```bash
 find docs/roadmap/features -maxdepth 1 -mindepth 1 -type d | sort
 ```
-Derive slug list from directory names. (`-type d` automatically skips regular files like `merge-order.md`.)
+For each result (e.g. `docs/roadmap/features/001-add-ikbr-account-support`):
+- Use the full directory path as `FEATURE_DIR`.
+- Derive `<slug>` by stripping the `NNN-` prefix: `sed 's/^[0-9][0-9][0-9]-//'` from the basename.
+(`-type d` automatically skips regular files like `merge-order.md`.)
 
 ### Step 3 — Detect changed files
 
@@ -78,14 +82,14 @@ For each file in `{feature.md, product-spec.md, implementation-spec.md, context.
 
 1. Confirm the file exists on the feature branch:
    ```bash
-   git show origin/feature/<slug>:docs/roadmap/features/<slug>/<file> > /dev/null 2>&1
+   git show origin/feature/<slug>:$FEATURE_DIR/<file> > /dev/null 2>&1
    ```
    If the command fails: skip this file — nothing to sync from the feature branch.
 
 2. Compare with main-dev:
    ```bash
-   git diff --quiet origin/main-dev:docs/roadmap/features/<slug>/<file> \
-             origin/feature/<slug>:docs/roadmap/features/<slug>/<file> 2>/dev/null
+   git diff --quiet origin/main-dev:$FEATURE_DIR/<file> \
+             origin/feature/<slug>:$FEATURE_DIR/<file> 2>/dev/null
    echo $?
    ```
    - Exit code `0` → files are identical → skip.
@@ -114,19 +118,19 @@ Use today's date (YYYYMMDD format) as the suffix. If `claude/sync-specs-<YYYYMMD
 
 ### Step 6 — Write synced files
 
-For each `(slug, file)` pair marked for sync:
+For each `(FEATURE_DIR, slug, file)` tuple marked for sync:
 
 1. Ensure the directory exists:
    ```bash
-   mkdir -p docs/roadmap/features/<slug>
+   mkdir -p $FEATURE_DIR
    ```
 
 2. Read the file content from the feature branch:
    ```bash
-   git show origin/feature/<slug>:docs/roadmap/features/<slug>/<file>
+   git show origin/feature/<slug>:$FEATURE_DIR/<file>
    ```
 
-3. Write the captured content to `docs/roadmap/features/<slug>/<file>` using the Write tool.
+3. Write the captured content to `$FEATURE_DIR/<file>` using the Write tool.
 
 ### Step 7 — Commit
 
