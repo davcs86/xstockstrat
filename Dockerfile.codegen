@@ -14,6 +14,8 @@ FROM golang:1.25-trixie
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
+    python3 \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Node.js 22 (NodeSource) ────────────────────────────────────────────────────
@@ -23,6 +25,13 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 
 # ── pnpm 9.15.0 ────────────────────────────────────────────────────────────────
 RUN npm install -g pnpm@9.15.0
+
+# ── TypeScript proto plugins (global install so buf can find them in PATH) ─────
+# These versions must match the devDependencies in packages/proto/gen/ts/package.json
+RUN npm install -g \
+    ts-proto@2.11.8 \
+    @bufbuild/protoc-gen-es@2.12.0 \
+    @connectrpc/protoc-gen-connect-es@1.7.0
 
 # ── buf CLI (latest) ───────────────────────────────────────────────────────────
 # Detects TARGETARCH so the image builds on both x86_64 and Apple Silicon (arm64).
@@ -38,5 +47,10 @@ RUN BUF_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64") \
 RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest \
     && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest \
     && go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
+
+# ── Python gRPC tools ──────────────────────────────────────────────────────────
+# Provides python3 -m grpc_tools.protoc for generating *_pb2.py + *_pb2_grpc.py.
+# The --break-system-packages flag is required on Debian trixie (PEP 668).
+RUN pip install --break-system-packages grpcio-tools
 
 WORKDIR /workspace
