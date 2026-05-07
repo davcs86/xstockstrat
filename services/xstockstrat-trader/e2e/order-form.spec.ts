@@ -22,23 +22,23 @@ test.describe('OrderForm', () => {
   });
 
   test('limit price field appears when order type is Limit', async ({ page }) => {
-    // Open the Select dropdown and pick Limit
-    await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: 'Limit' }).click();
+    // Order type combobox is the second combobox (AccountSelector is first)
+    await page.getByRole('combobox').last().click();
+    await page.getByRole('option', { name: 'Limit', exact: true }).click();
 
     await expect(page.getByPlaceholder('Limit price')).toBeVisible();
   });
 
   test('limit price field appears when order type is Stop Limit', async ({ page }) => {
-    await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: 'Stop Limit' }).click();
+    await page.getByRole('combobox').last().click();
+    await page.getByRole('option', { name: 'Stop Limit', exact: true }).click();
 
     await expect(page.getByPlaceholder('Limit price')).toBeVisible();
   });
 
   test('limit price field is hidden for Stop orders', async ({ page }) => {
-    await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: 'Stop' }).click();
+    await page.getByRole('combobox').last().click();
+    await page.getByRole('option', { name: 'Stop', exact: true }).click();
 
     await expect(page.getByPlaceholder('Limit price')).not.toBeVisible();
   });
@@ -91,8 +91,9 @@ test.describe('OrderForm', () => {
   });
 
   test('BUY and SELL side buttons are present', async ({ page }) => {
-    await expect(page.getByRole('button', { name: 'BUY' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'SELL' })).toBeVisible();
+    // Use exact: true to match side-toggle buttons ("BUY"/"SELL") not the submit button ("BUY —")
+    await expect(page.getByRole('button', { name: 'BUY', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'SELL', exact: true })).toBeVisible();
   });
 
   test('PAPER or LIVE badge is shown in the form header', async ({ page }) => {

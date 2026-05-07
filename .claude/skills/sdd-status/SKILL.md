@@ -21,30 +21,34 @@ You are reporting the status of SDD features. This skill is read-only — you ma
    ```bash
    git fetch origin
    ```
-2. For each directory found, derive `<slug>` from the directory name:
+2. For each directory found (e.g. `docs/roadmap/features/001-add-ikbr-account-support`):
+   - Extract the full directory name (e.g. `001-add-ikbr-account-support`).
+   - Derive `<NNN>` (the numeric prefix) and `<slug>` (the part after the first `-` that follows NNN)
+     by stripping the leading `NNN-` prefix: `slug=$(basename <dir> | sed 's/^[0-9][0-9][0-9]-//')`.
    - Check whether `origin/feature/<slug>` exists:
      ```bash
      git ls-remote --heads origin feature/<slug>
      ```
-   - If it exists: read `feature.md`, `implementation-spec.md`, and `context.md` using `git show origin/feature/<slug>:<path>`.
-   - If it does not exist: fall back to `git show origin/main-dev:<path>` for each file.
+   - If it exists: read `feature.md`, `implementation-spec.md`, and `context.md` using
+     `git show origin/feature/<slug>:<full-dir-path>/<file>`.
+   - If it does not exist: fall back to `git show origin/main-dev:<full-dir-path>/<file>` for each file.
    - From the chosen source: extract `**Lifecycle Status**`, `**Type**` (if present — `feature` or `bug`; default `feature` if absent), and the last row of the Status History table from `feature.md`; count steps by status from `implementation-spec.md` (grep for `` **Status**: `done` ``, `` **Status**: `pending` ``, `` **Status**: `blocked` ``, `` **Status**: `in-progress` ``); find the most recent `## Session` heading from `context.md`.
 
 3. Print two tables — features first, bugs second (omit a table if it has no rows):
 
 ```
 Features
-Slug                  | Status               | Steps     | Last Session
-----------------------|----------------------|-----------|----------------------------
-polygon-data-source   | in-progress          | 3/7 done  | 2026-05-01 sdd-execute
-rsi-alert             | implementation-ready | 0/5 done  | 2026-04-30 sdd-spec
-legacy-cleanup        | demoted/canceled     | —         | 2026-04-28 sdd-story
+#    | Slug                  | Status               | Steps     | Last Session
+-----|---------------------- |----------------------|-----------|----------------------------
+001  | polygon-data-source   | in-progress          | 3/7 done  | 2026-05-01 sdd-execute
+002  | rsi-alert             | implementation-ready | 0/5 done  | 2026-04-30 sdd-spec
+003  | legacy-cleanup        | demoted/canceled     | —         | 2026-04-28 sdd-story
 
 Bugs
-Slug                       | Status    | Steps    | Severity | Last Session
----------------------------|-----------|----------|----------|----------------------------
-fix-42-wrong-pnl-portfolio | draft     | —        | SEV-2    | 2026-05-02 sdd-triage
-fix-51-order-stuck         | in-progress | 2/4 done | SEV-1  | 2026-05-03 sdd-execute
+#    | Slug                       | Status      | Steps    | Severity | Last Session
+-----|----------------------------|-------------|----------|----------|----------------------------
+004  | fix-42-wrong-pnl-portfolio | draft       | —        | SEV-2    | 2026-05-02 sdd-triage
+005  | fix-51-order-stuck         | in-progress | 2/4 done | SEV-1    | 2026-05-03 sdd-execute
 ```
 
 For bug rows, also extract `**Severity**` from `feature.md` (default `—` if absent).
@@ -58,7 +62,14 @@ For bug rows, also extract `**Severity**` from `feature.md` (default `—` if ab
 
 ## If slug provided — show detail for one feature
 
-### 0. Fetch the feature's integration branch for authoritative state
+### 0. Resolve feature directory and fetch authoritative state
+
+Resolve the feature directory for this slug:
+```bash
+find docs/roadmap/features -maxdepth 1 -type d -name "*-$ARGUMENTS[0]"
+```
+If no directory is found: stop — "No feature directory found for slug `$ARGUMENTS[0]`."
+Capture as `FEATURE_DIR` (e.g. `docs/roadmap/features/001-add-ikbr-account-support`).
 
 ```bash
 git fetch origin feature/$ARGUMENTS[0]
@@ -67,18 +78,18 @@ git ls-remote --heads origin feature/$ARGUMENTS[0]
 
 If the branch exists on origin: read `feature.md`, `implementation-spec.md`, and `context.md` using:
 ```bash
-git show origin/feature/$ARGUMENTS[0]:docs/roadmap/features/$ARGUMENTS[0]/feature.md
-git show origin/feature/$ARGUMENTS[0]:docs/roadmap/features/$ARGUMENTS[0]/implementation-spec.md
-git show origin/feature/$ARGUMENTS[0]:docs/roadmap/features/$ARGUMENTS[0]/context.md
+git show origin/feature/$ARGUMENTS[0]:$FEATURE_DIR/feature.md
+git show origin/feature/$ARGUMENTS[0]:$FEATURE_DIR/implementation-spec.md
+git show origin/feature/$ARGUMENTS[0]:$FEATURE_DIR/context.md
 ```
 Use these as the authoritative source for all steps below. Note: "Reading from `origin/feature/$ARGUMENTS[0]`."
 
 If the branch does not exist on origin: fall back to `origin/main-dev`:
 ```bash
 git fetch origin main-dev
-git show origin/main-dev:docs/roadmap/features/$ARGUMENTS[0]/feature.md
-git show origin/main-dev:docs/roadmap/features/$ARGUMENTS[0]/implementation-spec.md
-git show origin/main-dev:docs/roadmap/features/$ARGUMENTS[0]/context.md
+git show origin/main-dev:$FEATURE_DIR/feature.md
+git show origin/main-dev:$FEATURE_DIR/implementation-spec.md
+git show origin/main-dev:$FEATURE_DIR/context.md
 ```
 Note: "`origin/feature/$ARGUMENTS[0]` not found — reading from `origin/main-dev`."
 
