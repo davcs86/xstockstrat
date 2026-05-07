@@ -103,9 +103,9 @@ jobs:
           GOWORK: "off"
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: v1.59
+          version: v2.5.0
           working-directory: services/${{ matrix.service }}
           args: --modules-download-mode=mod
         env:
