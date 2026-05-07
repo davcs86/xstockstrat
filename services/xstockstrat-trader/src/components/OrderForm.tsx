@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import type { TradingMode } from '@/app/page';
+import { useAccountContext } from '@/context/AccountContext';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -15,6 +16,7 @@ interface OrderFormProps {
 }
 
 export function OrderForm({ mode }: OrderFormProps) {
+  const { selectedAccountId } = useAccountContext();
   const [symbol, setSymbol] = useState('');
   const [side, setSide] = useState<OrderSide>('buy');
   const [orderType, setOrderType] = useState<OrderType>('market');
@@ -39,6 +41,7 @@ export function OrderForm({ mode }: OrderFormProps) {
           qty: parseFloat(qty),
           limit_price: limitPrice ? parseFloat(limitPrice) : undefined,
           trading_mode: mode,
+          account_id: selectedAccountId ?? '',
         }),
       });
       const data = await res.json();
@@ -126,7 +129,7 @@ export function OrderForm({ mode }: OrderFormProps) {
           <Button
             type="submit"
             variant={side === 'buy' ? 'buy' : 'sell'}
-            disabled={status === 'submitting'}
+            disabled={status === 'submitting' || !selectedAccountId}
             className="w-full"
           >
             {status === 'submitting' ? 'Placing…' : `${side.toUpperCase()} ${symbol || '—'}`}
@@ -135,6 +138,11 @@ export function OrderForm({ mode }: OrderFormProps) {
           {message && (
             <p className={`text-xs ${status === 'error' ? 'text-destructive' : 'text-buy'}`}>
               {message}
+            </p>
+          )}
+          {!selectedAccountId && (
+            <p className="text-xs text-muted-foreground">
+              Select an account above to place an order.
             </p>
           )}
         </form>

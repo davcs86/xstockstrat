@@ -1,4 +1,6 @@
 'use client';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -6,10 +8,33 @@ import { AppShell } from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { AccountPortfolioSelector } from '@/components/AccountPortfolioSelector';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-export default function InsightsDashboard() {
+export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <InsightsDashboard />
+    </Suspense>
+  );
+}
+
+function InsightsDashboard() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const accountId = searchParams.get('account_id') ?? '';
+
+  const handleAccountChange = (id: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (id) {
+      params.set('account_id', id);
+    } else {
+      params.delete('account_id');
+    }
+    router.replace(`/?${params.toString()}`);
+  };
+
   const { data: strategies } = useSWR('/api/analysis/strategies', fetcher, {
     refreshInterval: 30000,
   });
@@ -19,6 +44,7 @@ export default function InsightsDashboard() {
   return (
     <AppShell>
       <div className="p-4 sm:p-6 space-y-4">
+        <AccountPortfolioSelector accountId={accountId} onAccountChange={handleAccountChange} />
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
           {/* Strategy scores */}
           <div className="md:col-span-4">
