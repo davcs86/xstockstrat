@@ -143,3 +143,14 @@
 - `sdd-execute/SKILL.md`: updated gap-resolution rule to require explicit user A/B/C reply before proceeding — auto-selecting Option B is no longer permitted.
 - Files modified: `services/xstockstrat-trader/playwright.config.ts`, `services/xstockstrat-trader/e2e/account-selector.spec.ts`, `services/xstockstrat-trader/e2e/order-form.spec.ts`, `.claude/skills/sdd-execute/SKILL.md`
 - Deviations: none (follow-up work within Step 8's PR)
+
+## Session 2026-05-07T00:09:00Z — sdd-execute
+**Steps this session**: [9]
+**Progress**: 9 done / 9 total
+**Stopped at**: Step 9 (all steps complete)
+**Next**: merge-order gate → integration PR → /sdd-execute broker-accounts-ui (ALL-DONE PATH)
+
+### Step 9 — test: Add E2E tests for per-account portfolio selector in `xstockstrat-insights` [done]
+- Added `ListBrokerAccounts` and `ListPortfolios` entries to `RESPONSES` in `mock-backend.ts`. Created `account-portfolio.spec.ts` with 4 browser-level tests (selector visible, All Accounts option present, account selection updates URL, deep-link pre-selects account). Fixed Radix UI `<SelectItem value="">` violation in `AccountPortfolioSelector.tsx` (Option A confirmed by user — empty string → `__all__` sentinel). Added `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` escape hatch to insights `playwright.config.ts` for parity with trader. Created `services/xstockstrat-insights/.gitignore`. Fixed test 4 strict-mode: `getByText('IBKR Paper')` → `getByRole('heading', { name: 'IBKR Paper' })`.
+- Files modified: `services/xstockstrat-insights/e2e/mock-backend.ts`, `services/xstockstrat-insights/e2e/account-portfolio.spec.ts` (created), `services/xstockstrat-insights/src/components/AccountPortfolioSelector.tsx`, `services/xstockstrat-insights/playwright.config.ts`, `services/xstockstrat-insights/.gitignore` (created)
+- Deviations: component bug fix + playwright.config escape hatch + .gitignore added to scope (full detail in Deviation Log)

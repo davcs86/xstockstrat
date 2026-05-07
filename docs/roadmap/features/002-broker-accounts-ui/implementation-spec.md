@@ -1,6 +1,6 @@
 # Implementation Spec: broker-accounts-ui
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-05-06
 **Feature**: `docs/roadmap/features/broker-accounts-ui/feature.md`
 **Total Steps**: 9
@@ -749,7 +749,7 @@ test.describe('AccountSelector', () => {
 
 ### Step 9 — test: Add E2E tests for per-account portfolio selector in `xstockstrat-insights`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/e2e/mock-backend.ts` — modify
@@ -904,3 +904,8 @@ test.describe('AccountPortfolioSelector (insights)', () => {
 **Spec said**: Files: `mock-backend.ts`, `account-selector.spec.ts`. Verification: all 5 tests pass.
 **Actual**: Also modified `playwright.config.ts` and `order-form.spec.ts`; verification passes (14/14 chromium tests) after fixes.
 **Reason**: (1) Playwright 1.59.1 could not download browser 1217 (`cdn.playwright.dev` returns 403). Unblocked by symlinking the installed 1194 headless shell to the expected 1217 path; `playwright.config.ts` gained a `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` escape hatch (inert in CI). (2) The AccountSelector combobox added in Step 5 caused strict-mode violations in `order-form.spec.ts` — fixed with `.last()` and `exact: true` selectors. (3) Two selectors in `account-selector.spec.ts` also needed fixing: `getByText('Add Account')` → `getByRole('heading', …)` (strict mode); test 5 now fills all required fields before submit. All 5 `account-selector.spec.ts` tests pass; all 9 `order-form.spec.ts` tests pass.
+
+### Deviation: Step 9 — Add E2E tests for per-account portfolio selector in `xstockstrat-insights`
+**Spec said**: Files: `mock-backend.ts`, `account-portfolio.spec.ts`. Component and tests as specified; `getByText('IBKR Paper')` for deep-link assertion.
+**Actual**: Also modified `AccountPortfolioSelector.tsx`, `playwright.config.ts` (insights), and added `services/xstockstrat-insights/.gitignore`; test 4 selector changed to `getByRole('heading', { name: 'IBKR Paper' })`.
+**Reason**: (1) `AccountPortfolioSelector.tsx` used `<SelectItem value="">` which Radix UI forbids (empty string is reserved for no-selection state) — caused unhandled runtime error blocking component render. Fixed by using `value="__all__"` as sentinel and mapping `""` ↔ `"__all__"` at the Select level. (2) `playwright.config.ts` lacked the `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` escape hatch added to trader in Step 8 — added for parity. (3) `.gitignore` missing in insights — created to exclude `playwright-report/` and `test-results/`. (4) `getByText('IBKR Paper')` strict-mode violation: resolved to both combobox and card heading; changed to `getByRole('heading', { name: 'IBKR Paper' })`. All 4 chromium tests pass.
