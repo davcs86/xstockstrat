@@ -394,7 +394,7 @@ Deviation notes for completed phases: `docs/roadmap/phase[3-6]-deviations.md`.
 
 ## Feature Roadmap
 
-Active and completed feature implementations are tracked under `docs/roadmap/features/`. Each feature directory contains:
+Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number auto-assigned in creation order. Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
 - `feature.md` — lifecycle status (`idea`/`draft`/`spec-ready`/`implementation-ready`/`in-progress`/`code-completed`/`launched`/`rolled-back`/`demoted/canceled`), links to all artifacts
 - `product-spec.md` — requirements, affected services, governance gates
 - `implementation-spec.md` — numbered steps with concrete code references and statuses
@@ -404,11 +404,11 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 
 | Feature | Status | Branch | Next Action |
 |---|---|---|---|
-| `add-ikbr-account-support` | `implementation-ready` | `feature/add-ikbr-account-support` | `/sdd-execute add-ikbr-account-support` |
+| `001-add-ikbr-account-support` | `implementation-ready` | `feature/add-ikbr-account-support` | `/sdd-execute add-ikbr-account-support` |
 
 **When starting any session involving an in-progress feature:**
 1. Run `/sdd-status` to see all features and their lifecycle status.
-2. Read `docs/roadmap/features/<slug>/context.md` before touching any related files — it contains critical decisions from prior sessions.
+2. Read `docs/roadmap/features/<NNN-slug>/context.md` before touching any related files — it contains critical decisions from prior sessions.
 3. Do NOT rely on conversation context from a previous session. Always re-read context.md.
 
 SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime) | `/sdd-sync` (sync spec files from feature branches to main-dev)
