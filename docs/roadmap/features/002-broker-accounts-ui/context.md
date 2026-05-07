@@ -39,3 +39,118 @@
   - Last migration numbers (not relevant — no migrations required): trading 001, portfolio 002; confirmed from add-ikbr-account-support impl-spec.
   - `services/xstockstrat-trader/e2e/mock-backend.ts` uses a Node.js HTTP server on port 9091; mock responses are keyed by Connect-RPC path. Steps 8-9 extend these mocks.
   - `merge-order.md` already has the blocking dependency entry for broker-accounts-ui → add-ikbr-account-support (confirmed at L19).
+
+### Step 1 — Extend `connectClients.ts` with broker-account and portfolio-list service descriptors [done]
+- Added `listBrokerAccounts`, `registerBrokerAccount`, `deregisterBrokerAccount` to `TradingServiceDef.methods` and `listPortfolios` to `PortfolioServiceDef.methods` in `services/xstockstrat-trader/src/lib/connectClients.ts`.
+- Files modified: `services/xstockstrat-trader/src/lib/connectClients.ts`
+- Deviations: none (pnpm install was required before build since node_modules were absent in the session; this is a session setup issue, not a spec deviation)
+
+## Session 2026-05-07T00:00:00Z — sdd-execute
+**Steps this session**: [1]
+**Progress**: 1 done / 9 total
+**Stopped at**: Step 1 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next
+
+### Step 2 — Add `AccountContext` and `AccountProvider` to root layout in `xstockstrat-trader` [done]
+- Created `src/context/AccountContext.tsx` with `BrokerAccount` type, `AccountContextValue` interface, `AccountContext`, `AccountProvider` (fetches `/api/accounts` on mount, auto-selects first active account), and `useAccountContext` hook. Modified `src/app/layout.tsx` to wrap `{children}` with `<AccountProvider>`.
+- Files modified: `services/xstockstrat-trader/src/context/AccountContext.tsx`, `services/xstockstrat-trader/src/app/layout.tsx`
+- Deviations: none
+
+## Session 2026-05-07T00:01:00Z — sdd-execute
+**Steps this session**: [2]
+**Progress**: 2 done / 9 total
+**Stopped at**: Step 2 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next
+
+### Step 3 — Add `/api/accounts` route handler to `xstockstrat-trader` [done]
+- Created `api/accounts/route.ts` (GET→ListBrokerAccounts, POST→RegisterBrokerAccount), `api/accounts/[id]/route.ts` (DELETE→DeregisterBrokerAccount), and `api/portfolio/accounts/route.ts` (GET→ListPortfolios). All three routes appear in the Next.js build output.
+- Files modified: `services/xstockstrat-trader/src/app/api/accounts/route.ts`, `services/xstockstrat-trader/src/app/api/accounts/[id]/route.ts`, `services/xstockstrat-trader/src/app/api/portfolio/accounts/route.ts`
+- Deviations: DELETE handler uses `_: Request` instead of `_req: NextRequest` — ESLint no-unused-vars error with no argsIgnorePattern; full detail in Deviation Log.
+
+## Session 2026-05-07T00:02:00Z — sdd-execute
+**Steps this session**: [3]
+**Progress**: 3 done / 9 total
+**Stopped at**: Step 3 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next
+
+### Step 4 — Build `AccountSelector` and `AccountManagementPanel` components [done]
+- Created `AccountSelector.tsx` (Select + gear Sheet button, reads from AccountContext, active accounts only) and `AccountManagementPanel.tsx` (account list with remove/confirm flow, add-account form with dynamic Alpaca/IBKR credential fields, credential cleanup on unmount).
+- Files modified: `services/xstockstrat-trader/src/components/AccountSelector.tsx`, `services/xstockstrat-trader/src/components/AccountManagementPanel.tsx`
+- Deviations: none
+
+## Session 2026-05-07T00:03:00Z — sdd-execute
+**Steps this session**: [4]
+**Progress**: 4 done / 9 total
+**Stopped at**: Step 4 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next
+
+### Step 5 — Wire `AccountSelector` into header; update `OrderForm`, `OrderBook`, `PortfolioSummary` to consume selected account [done]
+- Imported `AccountSelector` into `page.tsx` and added `<AccountSelector />` before `<ModeToggle>` in the `actions` div. Updated `OrderForm` to read `selectedAccountId` from `AccountContext`, include `account_id` in the POST body, disable the submit button when no account is selected, and show a helper message. Updated both `OrderBook` and `PortfolioSummary` in `OrderBook.tsx` to include `account_id` in their SWR keys. Updated `api/orders/route.ts` GET and `api/portfolio/route.ts` GET to read `account_id` from searchParams and forward it to the backend.
+- Files modified: `services/xstockstrat-trader/src/app/page.tsx`, `services/xstockstrat-trader/src/components/OrderForm.tsx`, `services/xstockstrat-trader/src/components/OrderBook.tsx`, `services/xstockstrat-trader/src/app/api/orders/route.ts`, `services/xstockstrat-trader/src/app/api/portfolio/route.ts`
+- Deviations: `api/portfolio/route.ts` added to the commit — spec's **Files** list omitted it, but PortfolioSummary now passes `account_id` to `/api/portfolio` and the route handler must read it; included to keep the feature coherent.
+
+## Session 2026-05-07T00:04:00Z — sdd-execute
+**Steps this session**: [5]
+**Progress**: 5 done / 9 total
+**Stopped at**: Step 5 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next
+
+### Step 6 — Add per-account `PortfolioPanel` component to `xstockstrat-trader` [done]
+- Created `PortfolioPanel.tsx` — `'use client'` component using SWR to fetch `/api/portfolio/accounts`. Single-card view when an account is selected (full Stat layout matching PortfolioSummary); multi-card compact grid when no account selected. Updated `page.tsx` to import `PortfolioPanel` and replace `<PortfolioSummary>` with `<PortfolioPanel>`.
+- Files modified: `services/xstockstrat-trader/src/components/PortfolioPanel.tsx`, `services/xstockstrat-trader/src/app/page.tsx`
+- Deviations: `PortfolioPanel.tsx` was initially drafted with `&trading_mode=${mode}` in the SWR key. After confirming `ListPortfoliosRequest` proto has no `trading_mode` field (only `account_id`), the param was removed from the SWR key — it was structurally meaningless.
+
+## Session 2026-05-07T00:05:00Z — sdd-execute
+**Steps this session**: [6]
+**Progress**: 6 done / 9 total
+**Stopped at**: Step 6 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next
+
+### Step 7 — Add per-account portfolio selector to `xstockstrat-insights` [done]
+- Created `src/app/api/portfolio/route.ts` (GET handler calling ListBrokerAccounts + ListPortfolios in parallel via direct fetch). Created `src/components/AccountPortfolioSelector.tsx` ('use client'; SWR polling /api/portfolio; Select for account switching; Card showing aggregated or single-account portfolio stats). Modified `src/app/page.tsx` to add URL state via `useSearchParams`/`useRouter` and render `<AccountPortfolioSelector>`. Updated `CLAUDE.md` with new env vars and dependencies.
+- Files modified: `services/xstockstrat-insights/src/app/api/portfolio/route.ts` (created), `services/xstockstrat-insights/src/components/AccountPortfolioSelector.tsx` (created), `services/xstockstrat-insights/src/app/page.tsx`, `services/xstockstrat-insights/CLAUDE.md`, `services/xstockstrat-insights/src/lib/connectTransport.ts`
+- Deviations: Fixed pre-existing `connectTransport.ts` build failure (`createNodeHttpTransport` → `createConnectTransport as createNodeTransport` with `httpVersion: '1.1'`); added `<Suspense>` wrapper around `InsightsDashboard` in page.tsx (Next.js 14 requirement for `useSearchParams`).
+
+## Session 2026-05-07T00:06:00Z — sdd-execute
+**Steps this session**: [7]
+**Progress**: 7 done / 9 total
+**Stopped at**: Step 7 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next
+
+### Step 8 — Add E2E tests for broker-accounts-ui changes in `xstockstrat-trader` [done]
+- Added `ListBrokerAccounts`, `RegisterBrokerAccount`, `DeregisterBrokerAccount`, `ListPortfolios` entries to `RESPONSES` in `mock-backend.ts`. Created `account-selector.spec.ts` with 5 tests covering: selector visible in header, submit button disabled with no accounts, submit button enabled with auto-selected account, gear-icon opens management panel, credential fields clear on success.
+- Files modified: `services/xstockstrat-trader/e2e/mock-backend.ts`, `services/xstockstrat-trader/e2e/account-selector.spec.ts` (created)
+- Deviations: `pnpm run test:e2e` verification skipped — Playwright browsers cannot be downloaded in sandbox (cdn.playwright.dev returns 403); same constraint blocks all existing E2E tests. Accepted as known limitation; CI is the verification environment.
+
+## Session 2026-05-07T00:07:00Z — sdd-execute
+**Steps this session**: [8]
+**Progress**: 8 done / 9 total
+**Stopped at**: Step 8 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next
+
+## Session 2026-05-07T00:08:00Z — playwright unblock + artifact update
+**Steps this session**: [8 follow-up]
+**Progress**: 8 done / 9 total
+**Stopped at**: Step 8 follow-up complete
+**Next**: /sdd-execute broker-accounts-ui next
+
+### Step 8 follow-up — Playwright unblock and test selector fixes [done]
+- Symlinked `/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell` to `/opt/pw-browsers/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell` to unblock Playwright 1.59.1 in sandbox (download blocked). Symlink is local-only; CI downloads real 1217 binary.
+- `playwright.config.ts`: added `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` escape hatch for sandbox use. Inert in CI.
+- `account-selector.spec.ts`: fixed `getByText('Add Account')` → `getByRole('heading', { name: 'Add Account' })` (strict mode); test 5 now fills Display Name + API Secret (required fields) before submitting.
+- `order-form.spec.ts`: fixed 3 combobox tests to use `.last()` (AccountSelector added a second combobox in Step 5) and `exact: true` on option selectors; fixed BUY/SELL button test with `exact: true`.
+- All 14 chromium E2E tests pass (5 account-selector + 9 order-form).
+- `sdd-execute/SKILL.md`: updated gap-resolution rule to require explicit user A/B/C reply before proceeding — auto-selecting Option B is no longer permitted.
+- Files modified: `services/xstockstrat-trader/playwright.config.ts`, `services/xstockstrat-trader/e2e/account-selector.spec.ts`, `services/xstockstrat-trader/e2e/order-form.spec.ts`, `.claude/skills/sdd-execute/SKILL.md`
+- Deviations: none (follow-up work within Step 8's PR)
+
+## Session 2026-05-07T00:09:00Z — sdd-execute
+**Steps this session**: [9]
+**Progress**: 9 done / 9 total
+**Stopped at**: Step 9 (all steps complete)
+**Next**: merge-order gate → integration PR → /sdd-execute broker-accounts-ui (ALL-DONE PATH)
+
+### Step 9 — test: Add E2E tests for per-account portfolio selector in `xstockstrat-insights` [done]
+- Added `ListBrokerAccounts` and `ListPortfolios` entries to `RESPONSES` in `mock-backend.ts`. Created `account-portfolio.spec.ts` with 4 browser-level tests (selector visible, All Accounts option present, account selection updates URL, deep-link pre-selects account). Fixed Radix UI `<SelectItem value="">` violation in `AccountPortfolioSelector.tsx` (Option A confirmed by user — empty string → `__all__` sentinel). Added `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` escape hatch to insights `playwright.config.ts` for parity with trader. Created `services/xstockstrat-insights/.gitignore`. Fixed test 4 strict-mode: `getByText('IBKR Paper')` → `getByRole('heading', { name: 'IBKR Paper' })`.
+- Files modified: `services/xstockstrat-insights/e2e/mock-backend.ts`, `services/xstockstrat-insights/e2e/account-portfolio.spec.ts` (created), `services/xstockstrat-insights/src/components/AccountPortfolioSelector.tsx`, `services/xstockstrat-insights/playwright.config.ts`, `services/xstockstrat-insights/.gitignore` (created)
+- Deviations: component bug fix + playwright.config escape hatch + .gitignore added to scope (full detail in Deviation Log)

@@ -1,6 +1,7 @@
 'use client';
 import useSWR from 'swr';
 import type { TradingMode } from '@/app/page';
+import { useAccountContext } from '@/context/AccountContext';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './ui/table';
@@ -9,8 +10,9 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 // ── OrderBook ──────────────────────────────────────────────────────────────
 export function OrderBook({ mode }: { mode: TradingMode }) {
+  const { selectedAccountId } = useAccountContext();
   const { data, error, isLoading } = useSWR(
-    `/api/orders?trading_mode=${mode}`,
+    `/api/orders?trading_mode=${mode}&account_id=${selectedAccountId ?? ''}`,
     fetcher,
     { refreshInterval: 5000 },
   );
@@ -85,8 +87,9 @@ export function OrderBook({ mode }: { mode: TradingMode }) {
 
 // ── PortfolioSummary ───────────────────────────────────────────────────────
 export function PortfolioSummary({ mode }: { mode: TradingMode }) {
+  const { selectedAccountId } = useAccountContext();
   const { data, isLoading, error } = useSWR(
-    `/api/portfolio?trading_mode=${mode}`,
+    `/api/portfolio?trading_mode=${mode}&account_id=${selectedAccountId ?? ''}`,
     fetcher,
     { refreshInterval: 10000 },
   );

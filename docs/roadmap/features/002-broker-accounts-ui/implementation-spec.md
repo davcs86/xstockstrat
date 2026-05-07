@@ -1,6 +1,6 @@
 # Implementation Spec: broker-accounts-ui
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-05-06
 **Feature**: `docs/roadmap/features/broker-accounts-ui/feature.md`
 **Total Steps**: 9
@@ -33,7 +33,7 @@ Steps 1–3 are prerequisites for Steps 4–6. Step 7 is independent of Steps 1�
 
 ### Step 1 — service: Extend `connectClients.ts` with broker-account and portfolio-list service descriptors
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/lib/connectClients.ts` — modify
@@ -90,7 +90,7 @@ The `tradingClient` and `portfolioClient` exports (at L68 and L73) are created f
 
 ### Step 2 — service: Add `AccountContext` and `AccountProvider` to root layout in `xstockstrat-trader`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/context/AccountContext.tsx` — create (not found — no `src/context/` directory exists; create from scratch)
@@ -167,7 +167,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 ### Step 3 — service: Add `/api/accounts` route handler to `xstockstrat-trader`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/app/api/accounts/route.ts` — create (not found — `src/app/api/accounts/` does not exist)
@@ -302,7 +302,7 @@ export async function GET(req: NextRequest) {
 
 ### Step 4 — service: Build `AccountSelector` and `AccountManagementPanel` components
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/components/AccountSelector.tsx` — create (not found)
@@ -365,7 +365,7 @@ Props: none — reads from `AccountContext`.
 
 ### Step 5 — service: Wire `AccountSelector` into header; update `OrderForm`, `OrderBook`, `PortfolioSummary` to consume selected account
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/app/page.tsx` — modify
@@ -436,7 +436,7 @@ And include `...(accountId && { accountId })` in the `ListOrders` body.
 
 ### Step 6 — service: Add per-account `PortfolioPanel` component to `xstockstrat-trader`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/components/PortfolioPanel.tsx` — create (not found)
@@ -474,7 +474,7 @@ This component replaces the existing `PortfolioSummary` in `page.tsx`. In `page.
 
 ### Step 7 — service: Add per-account portfolio selector to `xstockstrat-insights`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/src/app/api/portfolio/route.ts` — create (not found — `src/app/api/portfolio/` does not exist in insights)
@@ -591,7 +591,7 @@ PORTFOLIO_HTTP_ENDPOINT=http://xstockstrat-portfolio:8052
 
 ### Step 8 — test: Add E2E tests for broker-accounts-ui changes in `xstockstrat-trader`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/e2e/mock-backend.ts` — modify
@@ -749,7 +749,7 @@ test.describe('AccountSelector', () => {
 
 ### Step 9 — test: Add E2E tests for per-account portfolio selector in `xstockstrat-insights`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/e2e/mock-backend.ts` — modify
@@ -880,4 +880,32 @@ test.describe('AccountPortfolioSelector (insights)', () => {
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 5 — Wire `AccountSelector` into header
+**Spec said**: Files list: `page.tsx`, `OrderForm.tsx`, `OrderBook.tsx`, `api/orders/route.ts`
+**Actual**: Also modified `services/xstockstrat-trader/src/app/api/portfolio/route.ts`
+**Reason**: `PortfolioSummary` now passes `account_id` in the SWR query string; without the corresponding change in the portfolio route handler, the param would be silently dropped instead of forwarded to `GetPortfolio`.
+
+### Deviation: Step 6 — Add per-account PortfolioPanel component
+**Spec said**: `PortfolioPanel` passes `mode` as a prop and includes it in the API route query string (implied: `/api/portfolio/accounts?account_id=...&trading_mode=...`)
+**Actual**: `trading_mode` omitted from the SWR key — `/api/portfolio/accounts?account_id=...` only.
+**Reason**: `ListPortfoliosRequest` proto (confirmed at `packages/proto/portfolio/v1/portfolio.proto:109`) has no `trading_mode` field; only `account_id: optional string`. Forwarding the param would have had no effect at any layer.
+
+### Deviation: Step 3 — Add `/api/accounts` route handler
+**Spec said**: `DELETE(_req: NextRequest, { params }: ...)` using `_req` as the unused first param.
+**Actual**: Used `_: Request` (single underscore, untyped) as the first param in DELETE.
+**Reason**: ESLint config has `@typescript-eslint/no-unused-vars: error` with no `argsIgnorePattern`, so `_req` triggered a build error. Single `_` is treated as intentionally unused by ESLint.
+
+### Deviation: Step 7 — Add per-account portfolio selector to `xstockstrat-insights`
+**Spec said**: Step 7 files only; build verification expected to pass on existing codebase.
+**Actual**: Also modified `services/xstockstrat-insights/src/lib/connectTransport.ts` and added `<Suspense>` wrapper in `page.tsx`.
+**Reason**: (1) `connectTransport.ts` had a pre-existing build failure — `createNodeHttpTransport` does not exist in `@connectrpc/connect-node`; the correct export is `createConnectTransport` (with `httpVersion: '1.1'`). Fixed as part of this step to restore build. (2) Next.js 14 requires `useSearchParams()` to be wrapped in a `<Suspense>` boundary; without the wrapper the build fails at static page generation for `/`.
+
+### Deviation: Step 8 — Add E2E tests for broker-accounts-ui changes in `xstockstrat-trader`
+**Spec said**: Files: `mock-backend.ts`, `account-selector.spec.ts`. Verification: all 5 tests pass.
+**Actual**: Also modified `playwright.config.ts` and `order-form.spec.ts`; verification passes (14/14 chromium tests) after fixes.
+**Reason**: (1) Playwright 1.59.1 could not download browser 1217 (`cdn.playwright.dev` returns 403). Unblocked by symlinking the installed 1194 headless shell to the expected 1217 path; `playwright.config.ts` gained a `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` escape hatch (inert in CI). (2) The AccountSelector combobox added in Step 5 caused strict-mode violations in `order-form.spec.ts` — fixed with `.last()` and `exact: true` selectors. (3) Two selectors in `account-selector.spec.ts` also needed fixing: `getByText('Add Account')` → `getByRole('heading', …)` (strict mode); test 5 now fills all required fields before submit. All 5 `account-selector.spec.ts` tests pass; all 9 `order-form.spec.ts` tests pass.
+
+### Deviation: Step 9 — Add E2E tests for per-account portfolio selector in `xstockstrat-insights`
+**Spec said**: Files: `mock-backend.ts`, `account-portfolio.spec.ts`. Component and tests as specified; `getByText('IBKR Paper')` for deep-link assertion.
+**Actual**: Also modified `AccountPortfolioSelector.tsx`, `playwright.config.ts` (insights), and added `services/xstockstrat-insights/.gitignore`; test 4 selector changed to `getByRole('heading', { name: 'IBKR Paper' })`.
+**Reason**: (1) `AccountPortfolioSelector.tsx` used `<SelectItem value="">` which Radix UI forbids (empty string is reserved for no-selection state) — caused unhandled runtime error blocking component render. Fixed by using `value="__all__"` as sentinel and mapping `""` ↔ `"__all__"` at the Select level. (2) `playwright.config.ts` lacked the `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` escape hatch added to trader in Step 8 — added for parity. (3) `.gitignore` missing in insights — created to exclude `playwright-report/` and `test-results/`. (4) `getByText('IBKR Paper')` strict-mode violation: resolved to both combobox and card heading; changed to `getByRole('heading', { name: 'IBKR Paper' })`. All 4 chromium tests pass.

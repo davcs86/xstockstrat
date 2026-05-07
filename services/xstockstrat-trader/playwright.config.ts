@@ -26,7 +26,16 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        // Use pre-installed chromium when the managed headless-shell is unavailable
+        ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+          ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
+          : {}),
+      },
+    },
     { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
   ],
   webServer: {

@@ -1,6 +1,6 @@
 # Feature: add-ikbr-account-support
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
 **Development Branch**: `feature/add-ikbr-account-support`
 **Created**: 2026-05-02
 **Last Updated**: 2026-05-03
@@ -19,6 +19,7 @@
 | 2026-05-02 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 18 steps |
 | 2026-05-03 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete: BrokerType enum added to common/v1 |
 | 2026-05-07 | `in-progress` → `code-completed` | /sdd-execute | Step 18 complete: all 18 steps done |
+| 2026-05-07 | `code-completed` → `launched` | /sdd-execute | Merged to main-dev via PR #97 (commit 95860d0) |
 
 ---
 

@@ -39,6 +39,8 @@ Browser (React Client Components)
 | xstockstrat-marketdata | Connect-RPC HTTP `8053` | Historical OHLCV chart data |
 | xstockstrat-notify | Connect-RPC HTTP `8059` | Live alerts |
 | xstockstrat-identity | Connect-RPC HTTP `8058` | Token validation |
+| xstockstrat-trading | Connect-RPC HTTP `8051` | Broker account list (`ListBrokerAccounts`) |
+| xstockstrat-portfolio | Connect-RPC HTTP `8052` | Per-account portfolio data (`ListPortfolios`) |
 
 ## Key Pages
 
@@ -59,6 +61,8 @@ INDICATORS_HTTP_ENDPOINT=http://xstockstrat-indicators:8054
 MARKETDATA_HTTP_ENDPOINT=http://xstockstrat-marketdata:8053
 NOTIFY_HTTP_ENDPOINT=http://xstockstrat-notify:8059
 IDENTITY_HTTP_ENDPOINT=http://xstockstrat-identity:8058
+TRADING_HTTP_ENDPOINT=http://xstockstrat-trading:8051
+PORTFOLIO_HTTP_ENDPOINT=http://xstockstrat-portfolio:8052
 APP_ENV=dev                            # dev | production
 TRADING_MODE=paper                     # paper | live
 ```

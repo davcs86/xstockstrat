@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get('user_id') ?? 'default';
   const tradingMode = toTradingModeEnum(searchParams.get('trading_mode'));
+  const accountId = searchParams.get('account_id') ?? '';
   try {
     const res = await fetch(
       `${PORTFOLIO_BASE_URL}/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio`,
@@ -22,6 +23,7 @@ export async function GET(req: NextRequest) {
         body: JSON.stringify({
           userId,
           ...(tradingMode !== 0 && { tradingMode }),
+          ...(accountId && { accountId }),
         }),
       },
     );

@@ -2,8 +2,10 @@
 import { useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { OrderForm } from '@/components/OrderForm';
-import { OrderBook, PortfolioSummary } from '@/components/OrderBook';
+import { OrderBook } from '@/components/OrderBook';
+import { PortfolioPanel } from '@/components/PortfolioPanel';
 import { AlertStream } from '@/components/AlertStream';
+import { AccountSelector } from '@/components/AccountSelector';
 import { Button } from '@/components/ui/button';
 
 export type TradingMode = 'paper' | 'live';
@@ -16,6 +18,7 @@ export default function TradingDashboard() {
       title="xstockstrat Trader"
       actions={
         <div className="flex items-center gap-2">
+          <AccountSelector />
           <ModeToggle mode={mode} onChange={setMode} />
           <AlertStream />
         </div>
@@ -25,7 +28,7 @@ export default function TradingDashboard() {
         {/* Mobile: stacked; md: 3-column grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
           <div className="md:col-span-3">
-            <PortfolioSummary mode={mode} />
+            <PortfolioPanel mode={mode} />
           </div>
           <div className="md:col-span-4 order-3 md:order-none">
             <OrderForm mode={mode} />
