@@ -52,11 +52,13 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get('user_id') ?? 'default';
   const tradingMode = toTradingModeEnum(searchParams.get('trading_mode'));
+  const accountId = searchParams.get('account_id') ?? '';
   try {
     const res = await rpc('xstockstrat.trading.v1.TradingService/ListOrders', {
       userId,
       page: { pageSize: 50 },
       ...(tradingMode !== 0 && { tradingMode }),
+      ...(accountId && { accountId }),
     });
     const result = await res.json();
     return NextResponse.json(result);

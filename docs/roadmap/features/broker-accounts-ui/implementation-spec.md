@@ -365,7 +365,7 @@ Props: none — reads from `AccountContext`.
 
 ### Step 5 — service: Wire `AccountSelector` into header; update `OrderForm`, `OrderBook`, `PortfolioSummary` to consume selected account
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/app/page.tsx` — modify
@@ -879,6 +879,11 @@ test.describe('AccountPortfolioSelector (insights)', () => {
 ---
 
 ## Deviation Log
+
+### Deviation: Step 5 — Wire `AccountSelector` into header
+**Spec said**: Files list: `page.tsx`, `OrderForm.tsx`, `OrderBook.tsx`, `api/orders/route.ts`
+**Actual**: Also modified `services/xstockstrat-trader/src/app/api/portfolio/route.ts`
+**Reason**: `PortfolioSummary` now passes `account_id` in the SWR query string; without the corresponding change in the portfolio route handler, the param would be silently dropped instead of forwarded to `GetPortfolio`.
 
 ### Deviation: Step 3 — Add `/api/accounts` route handler
 **Spec said**: `DELETE(_req: NextRequest, { params }: ...)` using `_req` as the unused first param.
