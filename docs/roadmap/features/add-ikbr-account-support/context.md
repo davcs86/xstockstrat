@@ -382,3 +382,17 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Added `AccountId string` to `orderFillPayload`; fixed `processOrderFill` to pass accountID (defaulting to `"alpaca-default"`) to `UpsertPosition`. Fixed all 5 broken `ListPositions` callers (added `""` as accountID, `GetPortfolio` uses `req.GetAccountId()`). Added `positionSyncPayload`, `ConsumePositionSyncs`, `streamPositionSyncs`, `processPositionSync`. Added `ListPortfolios`.
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
 - Deviations: `GetPortfolioRequest.AccountId` and `ListPortfoliosRequest.AccountId` are `*string` (optional proto3 oneof) — used `GetAccountId()` getter. `ListPositionsByAccount` returns flat slice not map — `ListPortfolios` returns one Portfolio for the requested accountID (empty list if no accountID provided). Full detail in Deviation Log.
+
+---
+
+## Session 2026-05-07T01:00:00Z — sdd-execute
+
+**Steps this session**: [18]
+**Progress**: 18 done / 18 total
+**Stopped at**: Step 18 (all complete — final integration PR pending)
+**Next**: Merge step-18 PR, then open final integration PR: `feature/add-ikbr-account-support` → `main-dev`
+
+### Step 18 — Add `ListPortfolios` handler; update portfolio `main.go` [done]
+- Added `ListPortfolios` Connect-RPC handler method on `PortfolioHandler` and matching `ListPortfolios` gRPC adapter method on `grpcPortfolioAdapter`. Added `go svc.ConsumePositionSyncs(ctx)` to `cmd/server/main.go` after `ConsumeOrderFills`. `GOWORK=off go build ./...` exits 0; compile-time assertion at L17 passes.
+- Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`, `services/xstockstrat-portfolio/cmd/server/main.go`
+- Deviations: none
