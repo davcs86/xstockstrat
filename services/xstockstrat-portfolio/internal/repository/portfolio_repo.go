@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
-	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 )
 
 // PortfolioRepo handles reads and writes for positions and snapshots.

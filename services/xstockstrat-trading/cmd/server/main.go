@@ -168,7 +168,7 @@ func main() {
 		<-quit
 		slog.Info("shutting down trading service")
 		grpcServer.GracefulStop()
-		httpServer.Shutdown(ctx)
+		_ = httpServer.Shutdown(ctx)
 		cancel()
 	}()
 

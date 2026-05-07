@@ -6,11 +6,12 @@ import (
 	"fmt"
 
 	"connectrpc.com/connect"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	portfoliov1connect "github.com/xstockstrat/contracts/gen/go/portfolio/v1/portfoliov1connect"
 	"github.com/xstockstrat/portfolio/internal/service"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // Ensure PortfolioHandler implements the Connect interface at compile time.

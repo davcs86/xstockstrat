@@ -22,7 +22,7 @@ func TestGetBars_Success(t *testing.T) {
 			t.Error("expected APCA-API-KEY-ID header")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"bars": []map[string]interface{}{
 				{
 					"t":  "2024-01-02T10:00:00Z",
@@ -77,7 +77,7 @@ func TestGetBars_Success(t *testing.T) {
 func TestGetBars_HTTPError(t *testing.T) {
 	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"message":"Forbidden"}`))
+		_, _ = w.Write([]byte(`{"message":"Forbidden"}`))
 	})
 	defer srv.Close()
 
@@ -100,7 +100,7 @@ func TestGetBars_Pagination(t *testing.T) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 		if callCount == 1 {
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"bars": []map[string]interface{}{
 					{"t": "2024-01-02T09:00:00Z", "o": 100.0, "h": 101.0, "l": 99.0, "c": 100.5, "v": int64(1000), "vw": 100.2, "n": int32(50)},
 				},
@@ -108,7 +108,7 @@ func TestGetBars_Pagination(t *testing.T) {
 				"next_page_token": "page2token",
 			})
 		} else {
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"bars": []map[string]interface{}{
 					{"t": "2024-01-02T10:00:00Z", "o": 100.5, "h": 102.0, "l": 100.0, "c": 101.5, "v": int64(2000), "vw": 101.0, "n": int32(80)},
 				},
@@ -140,7 +140,7 @@ func TestGetBars_Pagination(t *testing.T) {
 func TestGetLatestQuote_Success(t *testing.T) {
 	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"quote": map[string]interface{}{
 				"t":  "2024-01-02T10:00:00Z",
 				"ap": 150.25,
@@ -175,7 +175,7 @@ func TestGetLatestQuote_Success(t *testing.T) {
 func TestGetLatestQuote_HTTPError(t *testing.T) {
 	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"message":"symbol not found"}`))
+		_, _ = w.Write([]byte(`{"message":"symbol not found"}`))
 	})
 	defer srv.Close()
 

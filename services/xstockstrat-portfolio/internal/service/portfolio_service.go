@@ -9,6 +9,11 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
@@ -16,10 +21,6 @@ import (
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	"github.com/xstockstrat/portfolio/internal/config"
 	"github.com/xstockstrat/portfolio/internal/repository"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/structpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // PortfolioService implements business logic for the portfolio service.
@@ -95,7 +96,7 @@ func (s *PortfolioService) streamFills(ctx context.Context) error {
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("Recv: %w", err)
+			return fmt.Errorf("recv: %w", err)
 		}
 		s.processOrderFill(ctx, event)
 	}
@@ -105,7 +106,7 @@ func (s *PortfolioService) streamFills(ctx context.Context) error {
 type orderFillPayload struct {
 	UserID    string  `json:"user_id"`
 	Symbol    string  `json:"symbol"`
-	Qty       float64 `json:"qty"`          // positive = buy, negative = sell
+	Qty       float64 `json:"qty"` // positive = buy, negative = sell
 	FillPrice float64 `json:"fill_price"`
 	Mode      string  `json:"trading_mode"` // "TRADING_MODE_PAPER" | "TRADING_MODE_LIVE"
 	AccountId string  `json:"account_id"`
@@ -452,7 +453,7 @@ func (s *PortfolioService) streamPositionSyncs(ctx context.Context) error {
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("Recv: %w", err)
+			return fmt.Errorf("recv: %w", err)
 		}
 		s.processPositionSync(ctx, event)
 	}

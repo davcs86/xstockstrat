@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 )
 
 // MarketDataRepo handles TimescaleDB reads and writes for OHLCV bars and quotes.
@@ -36,7 +37,7 @@ func (r *MarketDataRepo) InsertBars(ctx context.Context, bars []*marketdatav1.Ba
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck
 
 	const q = `
 		INSERT INTO marketdata.ohlcv (time, symbol, timeframe, open, high, low, close, volume, vwap, trade_count, source)
@@ -93,13 +94,13 @@ func (r *MarketDataRepo) QueryBars(ctx context.Context, symbol, timeframe string
 	var bars []*marketdatav1.Bar
 	for rows.Next() {
 		var (
-			t          time.Time
-			sym, tf    string
+			t                      time.Time
+			sym, tf                string
 			open, high, low, close float64
-			volume     int64
-			vwap       float64
-			tradeCount int32
-			source     string
+			volume                 int64
+			vwap                   float64
+			tradeCount             int32
+			source                 string
 		)
 		if err := rows.Scan(&t, &sym, &tf, &open, &high, &low, &close, &volume, &vwap, &tradeCount, &source); err != nil {
 			return nil, "", fmt.Errorf("scan bar: %w", err)
@@ -157,11 +158,11 @@ func (r *MarketDataRepo) GetLatestQuote(ctx context.Context, symbol string) (*ma
 		LIMIT 1`
 	row := r.pool.QueryRow(ctx, sql, symbol)
 	var (
-		t                          time.Time
-		sym                        string
-		askPrice, bidPrice         float64
-		askSize, bidSize           int32
-		source                     string
+		t                  time.Time
+		sym                string
+		askPrice, bidPrice float64
+		askSize, bidSize   int32
+		source             string
 	)
 	if err := row.Scan(&t, &sym, &askPrice, &askSize, &bidPrice, &bidSize, &source); err != nil {
 		return nil, fmt.Errorf("get latest quote %s: %w", symbol, err)

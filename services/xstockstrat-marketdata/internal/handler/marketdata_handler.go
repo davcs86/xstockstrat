@@ -6,11 +6,12 @@ import (
 	"fmt"
 
 	"connectrpc.com/connect"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	marketdatav1connect "github.com/xstockstrat/contracts/gen/go/marketdata/v1/marketdatav1connect"
 	"github.com/xstockstrat/marketdata/internal/service"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // Ensure MarketDataHandler implements both interfaces at compile time.

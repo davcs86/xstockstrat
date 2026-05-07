@@ -152,7 +152,7 @@ func main() {
 			slog.Info("n8n backfill complete", "bars_written", resp.BarsWritten)
 		}()
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(map[string]string{"status": "backfill_started"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "backfill_started"})
 	})
 	mux.HandleFunc("/webhooks/n8n/subscribe", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -174,7 +174,7 @@ func main() {
 		go svc.StartBarStream(ctx, body.Symbols, body.Timeframe)
 		go svc.StartQuoteStream(ctx, body.Symbols)
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(map[string]string{"status": "subscribed"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "subscribed"})
 	})
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%s", cfg.HTTPPort),
@@ -195,7 +195,7 @@ func main() {
 		<-quit
 		slog.Info("shutting down marketdata service")
 		grpcServer.GracefulStop()
-		httpServer.Shutdown(ctx)
+		_ = httpServer.Shutdown(ctx)
 		cancel()
 	}()
 

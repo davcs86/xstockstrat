@@ -23,13 +23,13 @@ func NewN8nHandler(svc *service.TradingService) *N8nHandler {
 // POST /webhooks/n8n/place-order
 func (h *N8nHandler) PlaceOrderWebhook(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
-		Symbol      string  `json:"symbol"`
-		Side        string  `json:"side"`
-		Qty         float64 `json:"qty"`
-		OrderType   string  `json:"order_type"`
-		LimitPrice  float64 `json:"limit_price"`
-		StrategyID  string  `json:"strategy_id"`
-		UserID      string  `json:"user_id"`
+		Symbol     string  `json:"symbol"`
+		Side       string  `json:"side"`
+		Qty        float64 `json:"qty"`
+		OrderType  string  `json:"order_type"`
+		LimitPrice float64 `json:"limit_price"`
+		StrategyID string  `json:"strategy_id"`
+		UserID     string  `json:"user_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "invalid payload", http.StatusBadRequest)
@@ -65,7 +65,7 @@ func (h *N8nHandler) PlaceOrderWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"order_id": order.OrderId,
 		"status":   order.Status.String(),
 	})
@@ -91,5 +91,5 @@ func (h *N8nHandler) CancelOrderWebhook(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
