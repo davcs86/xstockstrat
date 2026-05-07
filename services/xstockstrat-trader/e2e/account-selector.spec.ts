@@ -43,7 +43,7 @@ test.describe('AccountSelector', () => {
   test('Account Management Panel opens via gear icon', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /manage accounts/i }).click();
-    await expect(page.getByText('Add Account')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByRole('heading', { name: 'Add Account' })).toBeVisible({ timeout: 3000 });
   });
 
   test('Add Account form clears credential fields on success', async ({ page }) => {
@@ -62,9 +62,12 @@ test.describe('AccountSelector', () => {
     });
     await page.goto('/');
     await page.getByRole('button', { name: /manage accounts/i }).click();
-    const apiKeyInput = page.locator('input[type="password"]').first();
-    await apiKeyInput.fill('test-key-123');
+    // Fill all required fields for Alpaca (broker_type 1)
+    await page.getByPlaceholder('Display name').fill('Test Account');
+    await page.getByPlaceholder('API Key').fill('test-key-123');
+    await page.getByPlaceholder('API Secret').fill('test-secret-456');
     await page.getByRole('button', { name: /add account/i }).click();
-    await expect(apiKeyInput).toHaveValue('', { timeout: 3000 });
+    // Credential fields should be cleared after successful registration
+    await expect(page.getByPlaceholder('API Key')).toHaveValue('', { timeout: 5000 });
   });
 });
