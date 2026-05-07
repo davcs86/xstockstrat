@@ -474,7 +474,7 @@ This component replaces the existing `PortfolioSummary` in `page.tsx`. In `page.
 
 ### Step 7 — service: Add per-account portfolio selector to `xstockstrat-insights`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/src/app/api/portfolio/route.ts` — create (not found — `src/app/api/portfolio/` does not exist in insights)
@@ -894,3 +894,8 @@ test.describe('AccountPortfolioSelector (insights)', () => {
 **Spec said**: `DELETE(_req: NextRequest, { params }: ...)` using `_req` as the unused first param.
 **Actual**: Used `_: Request` (single underscore, untyped) as the first param in DELETE.
 **Reason**: ESLint config has `@typescript-eslint/no-unused-vars: error` with no `argsIgnorePattern`, so `_req` triggered a build error. Single `_` is treated as intentionally unused by ESLint.
+
+### Deviation: Step 7 — Add per-account portfolio selector to `xstockstrat-insights`
+**Spec said**: Step 7 files only; build verification expected to pass on existing codebase.
+**Actual**: Also modified `services/xstockstrat-insights/src/lib/connectTransport.ts` and added `<Suspense>` wrapper in `page.tsx`.
+**Reason**: (1) `connectTransport.ts` had a pre-existing build failure — `createNodeHttpTransport` does not exist in `@connectrpc/connect-node`; the correct export is `createConnectTransport` (with `httpVersion: '1.1'`). Fixed as part of this step to restore build. (2) Next.js 14 requires `useSearchParams()` to be wrapped in a `<Suspense>` boundary; without the wrapper the build fails at static page generation for `/`.
