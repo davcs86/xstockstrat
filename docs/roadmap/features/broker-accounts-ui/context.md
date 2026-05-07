@@ -50,3 +50,14 @@
 **Progress**: 1 done / 9 total
 **Stopped at**: Step 1 (step complete — PR created, awaiting merge)
 **Next**: /sdd-execute broker-accounts-ui next
+
+### Step 2 — Add `AccountContext` and `AccountProvider` to root layout in `xstockstrat-trader` [done]
+- Created `src/context/AccountContext.tsx` with `BrokerAccount` type, `AccountContextValue` interface, `AccountContext`, `AccountProvider` (fetches `/api/accounts` on mount, auto-selects first active account), and `useAccountContext` hook. Modified `src/app/layout.tsx` to wrap `{children}` with `<AccountProvider>`.
+- Files modified: `services/xstockstrat-trader/src/context/AccountContext.tsx`, `services/xstockstrat-trader/src/app/layout.tsx`
+- Deviations: none
+
+## Session 2026-05-07T00:01:00Z — sdd-execute
+**Steps this session**: [2]
+**Progress**: 2 done / 9 total
+**Stopped at**: Step 2 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next
