@@ -37,6 +37,9 @@ const TradingServiceDef = {
       O: {} as any,
       kind: MethodKind.ServerStreaming,
     },
+    listBrokerAccounts: { name: 'ListBrokerAccounts', I: {} as any, O: {} as any, kind: MethodKind.Unary },
+    registerBrokerAccount: { name: 'RegisterBrokerAccount', I: {} as any, O: {} as any, kind: MethodKind.Unary },
+    deregisterBrokerAccount: { name: 'DeregisterBrokerAccount', I: {} as any, O: {} as any, kind: MethodKind.Unary },
   },
 } as const;
 
@@ -47,6 +50,7 @@ const PortfolioServiceDef = {
     getPosition: { name: 'GetPosition', I: {} as any, O: {} as any, kind: MethodKind.Unary },
     listPositions: { name: 'ListPositions', I: {} as any, O: {} as any, kind: MethodKind.Unary },
     getPnl: { name: 'GetPnl', I: {} as any, O: {} as any, kind: MethodKind.Unary },
+    listPortfolios: { name: 'ListPortfolios', I: {} as any, O: {} as any, kind: MethodKind.Unary },
   },
 } as const;
 

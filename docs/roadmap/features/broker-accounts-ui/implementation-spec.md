@@ -33,7 +33,7 @@ Steps 1–3 are prerequisites for Steps 4–6. Step 7 is independent of Steps 1�
 
 ### Step 1 — service: Extend `connectClients.ts` with broker-account and portfolio-list service descriptors
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/lib/connectClients.ts` — modify

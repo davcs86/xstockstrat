@@ -39,3 +39,14 @@
   - Last migration numbers (not relevant — no migrations required): trading 001, portfolio 002; confirmed from add-ikbr-account-support impl-spec.
   - `services/xstockstrat-trader/e2e/mock-backend.ts` uses a Node.js HTTP server on port 9091; mock responses are keyed by Connect-RPC path. Steps 8-9 extend these mocks.
   - `merge-order.md` already has the blocking dependency entry for broker-accounts-ui → add-ikbr-account-support (confirmed at L19).
+
+### Step 1 — Extend `connectClients.ts` with broker-account and portfolio-list service descriptors [done]
+- Added `listBrokerAccounts`, `registerBrokerAccount`, `deregisterBrokerAccount` to `TradingServiceDef.methods` and `listPortfolios` to `PortfolioServiceDef.methods` in `services/xstockstrat-trader/src/lib/connectClients.ts`.
+- Files modified: `services/xstockstrat-trader/src/lib/connectClients.ts`
+- Deviations: none (pnpm install was required before build since node_modules were absent in the session; this is a session setup issue, not a spec deviation)
+
+## Session 2026-05-07T00:00:00Z — sdd-execute
+**Steps this session**: [1]
+**Progress**: 1 done / 9 total
+**Stopped at**: Step 1 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next

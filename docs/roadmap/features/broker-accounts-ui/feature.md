@@ -1,6 +1,6 @@
 # Feature: broker-accounts-ui
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/broker-accounts-ui`
 **Created**: 2026-05-06
 **Last Updated**: 2026-05-06T00:00:00Z
@@ -14,6 +14,7 @@
 | 2026-05-06 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 advisory warnings) |
 | 2026-05-06 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
+| 2026-05-07 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — connectClients.ts extended |
 
 ---
 
