@@ -90,7 +90,7 @@ The `tradingClient` and `portfolioClient` exports (at L68 and L73) are created f
 
 ### Step 2 — service: Add `AccountContext` and `AccountProvider` to root layout in `xstockstrat-trader`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/context/AccountContext.tsx` — create (not found — no `src/context/` directory exists; create from scratch)
