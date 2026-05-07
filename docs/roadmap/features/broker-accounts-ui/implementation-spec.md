@@ -436,7 +436,7 @@ And include `...(accountId && { accountId })` in the `ListOrders` body.
 
 ### Step 6 — service: Add per-account `PortfolioPanel` component to `xstockstrat-trader`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/components/PortfolioPanel.tsx` — create (not found)
