@@ -19,17 +19,16 @@ plugins:
     opt:
       - paths=source_relative
 
-  # Python — protobuf messages
-  - name: python
+  # Python — protobuf messages (_pb2.py)
+  - remote: buf.build/protocolbuffers/python
     out: gen/python
 
-  # Python — gRPC service stubs (protoc-gen-grpc_python from grpcio-tools)
-  - name: grpc_python
+  # Python — gRPC service stubs (_pb2_grpc.py)
+  - remote: buf.build/grpc/python
     out: gen/python
 
   # TypeScript — ts-proto (grpc-js compatible)
-  # Install: npm install -g ts-proto
-  - name: ts_proto
+  - remote: buf.build/community/stephenh-ts-proto
     out: gen/ts
     opt:
       - esModuleInterop=true
