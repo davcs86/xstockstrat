@@ -19,17 +19,16 @@ plugins:
     opt:
       - paths=source_relative
 
-  # Python — protobuf messages
-  - name: python
+  # Python — protobuf messages (_pb2.py)
+  - remote: buf.build/protocolbuffers/python
     out: gen/python
 
-  # Python — gRPC service stubs (protoc-gen-grpc_python from grpcio-tools)
-  - name: grpc_python
+  # Python — gRPC service stubs (_pb2_grpc.py)
+  - remote: buf.build/grpc/python
     out: gen/python
 
   # TypeScript — ts-proto (grpc-js compatible)
-  # Install: npm install -g ts-proto
-  - name: ts_proto
+  - remote: buf.build/community/stephenh-ts-proto
     out: gen/ts
     opt:
       - esModuleInterop=true
@@ -38,11 +37,14 @@ plugins:
       - useOptionals=messages
       - stringEnums=true
 
-  # TypeScript — Connect-RPC ES (browser + Node.js fetch-based clients)
-  # Install: npm install -g @connectrpc/protoc-gen-connect-es
-  # NOTE: Requires protoc-gen-es (_pb.ts files) to be generated first.
-  #       Uncomment once protoc-gen-es is added to this config.
-  # - name: connect-es
-  #   out: gen/ts
-  #   opt:
-  #     - target=ts
+  # TypeScript — protoc-gen-es message types (*_pb.ts); required by connect-es
+  - remote: buf.build/bufbuild/es
+    out: gen/ts
+    opt:
+      - target=ts
+
+  # TypeScript — Connect-RPC ES service stubs (*_connect.ts, browser + fetch)
+  - remote: buf.build/connectrpc/es
+    out: gen/ts
+    opt:
+      - target=ts

@@ -47,26 +47,9 @@ jobs:
           go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Python grpcio-tools
-        run: |
-          sudo apt-get install -y --no-install-recommends protobuf-compiler
-          pip install grpcio-tools
-          sudo ln -s \
-            "$(python3 -c 'import grpc_tools, os; print(os.path.dirname(grpc_tools.__file__))')/grpc_python_plugin" \
-            /usr/local/bin/protoc-gen-grpc_python
-
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-
-      - name: Install TypeScript proto plugins
-        run: |
-          npm install -g ts-proto
-          echo "$(npm prefix -g)/bin" >> "$GITHUB_PATH"
 
       - name: Regenerate stubs
         run: bash ./scripts/buf-gen.sh
