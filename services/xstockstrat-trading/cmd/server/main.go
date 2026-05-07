@@ -11,7 +11,10 @@ import (
 	"syscall"
 	"time"
 
+	"encoding/hex"
+
 	"connectrpc.com/connect"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -21,7 +24,6 @@ import (
 
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
 	tradingv1connect "github.com/xstockstrat/contracts/gen/go/trading/v1/tradingv1connect"
-	"github.com/xstockstrat/trading/internal/broker"
 	"github.com/xstockstrat/trading/internal/config"
 	"github.com/xstockstrat/trading/internal/handler"
 	"github.com/xstockstrat/trading/internal/repository"
@@ -49,6 +51,16 @@ func main() {
 
 	cfg := config.LoadFromEnv()
 
+	if cfg.BrokerAccountsEncryptionKey == "" {
+		slog.Error("BROKER_ACCOUNTS_ENCRYPTION_KEY is required")
+		os.Exit(1)
+	}
+	keyBytes, err := hex.DecodeString(cfg.BrokerAccountsEncryptionKey)
+	if err != nil || len(keyBytes) != 32 {
+		slog.Error("BROKER_ACCOUNTS_ENCRYPTION_KEY must be a 64-char hex string (32 bytes)")
+		os.Exit(1)
+	}
+
 	// Block until config snapshot received — required before accepting traffic.
 	slog.Info("connecting to config service", "endpoint", cfg.ConfigEndpoint)
 	cfgWatcher, err := config.NewWatcher(cfg.ConfigEndpoint, "trading")
@@ -71,27 +83,35 @@ func main() {
 	}
 	slog.Info("db repository initialized")
 
-	// Alpaca broker client — xstockstrat-trading is the sole integration point
-	// for Alpaca's broker/order APIs. Mode (paper vs live) is resolved at order
-	// placement time from the trading.broker.paper config key (overrides env).
-	brokerClient := broker.NewClient(broker.ClientConfig{
-		APIKey:    cfg.AlpacaAPIKey,
-		APISecret: cfg.AlpacaAPISecret,
-		PaperURL:  cfg.AlpacaPaperURL,
-		LiveURL:   cfg.AlpacaLiveURL,
-		Paper:     cfg.AlpacaPaper,
-	})
-	slog.Info("broker client initialized", "paper", cfg.AlpacaPaper)
+	// Account repository — backed by its own pool (TradingRepo pool is private).
+	pool, err := pgxpool.New(ctx, cfg.DBConnStr)
+	if err != nil {
+		slog.Error("account repo pool init failed", "error", err)
+		os.Exit(1)
+	}
+	accountRepo := repository.NewAccountRepo(pool)
+	slog.Info("account repository initialized")
 
 	// Wire service layer.
-	svc, err := service.NewTradingService(cfg, cfgWatcher, brokerClient, repo)
+	svc, err := service.NewTradingService(cfg, cfgWatcher, accountRepo, repo, cfg.BrokerAccountsEncryptionKey)
 	if err != nil {
 		slog.Error("service init failed", "error", err)
 		os.Exit(1)
 	}
 
+	// Load registered broker accounts from DB into the in-memory pool.
+	if err := svc.LoadBrokerPool(ctx); err != nil {
+		slog.Error("broker pool load failed", "error", err)
+		os.Exit(1)
+	}
+
+	// Seed alpaca-default row if pool is empty and env vars are present.
+	svc.EnsureAlpacaDefault(ctx)
+
 	// Start fill poller — detects broker fills and emits order.filled events.
 	go svc.StartFillPoller(ctx)
+	// Start position sync poller — reconciles broker positions every N ms.
+	go svc.StartPositionSyncPoller(ctx)
 
 	// gRPC server.
 	grpcHdl := handler.NewTradingHandler(svc)

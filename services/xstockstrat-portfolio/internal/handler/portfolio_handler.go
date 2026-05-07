@@ -114,6 +114,15 @@ func (h *PortfolioHandler) StreamPortfolioUpdates(ctx context.Context, req *conn
 	}
 }
 
+// ListPortfolios returns portfolios grouped by broker account.
+func (h *PortfolioHandler) ListPortfolios(ctx context.Context, req *connect.Request[portfoliov1.ListPortfoliosRequest]) (*connect.Response[portfoliov1.ListPortfoliosResponse], error) {
+	resp, err := h.svc.ListPortfolios(ctx, req.Msg)
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
 // GRPCHandler returns a gRPC-compatible adapter around this handler.
 func (h *PortfolioHandler) GRPCHandler() *grpcPortfolioAdapter {
 	return &grpcPortfolioAdapter{h: h}
@@ -185,6 +194,14 @@ func (a *grpcPortfolioAdapter) StreamPortfolioUpdates(req *portfoliov1.StreamPor
 			return grpcStream.Context().Err()
 		}
 	}
+}
+
+func (a *grpcPortfolioAdapter) ListPortfolios(ctx context.Context, req *portfoliov1.ListPortfoliosRequest) (*portfoliov1.ListPortfoliosResponse, error) {
+	resp, err := a.h.ListPortfolios(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
 }
 
 func errorf(msg string) error {

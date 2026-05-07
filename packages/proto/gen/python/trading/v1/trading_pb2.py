@@ -26,7 +26,7 @@ from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__
 from common.v1 import common_pb2 as common_dot_v1_dot_common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x18trading/v1/trading.proto\x12\x16xstockstrat.trading.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16\x63ommon/v1/common.proto\"\xb3\x04\n\x05Order\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12\x17\n\x0f\x63lient_order_id\x18\x02 \x01(\t\x12\x0e\n\x06symbol\x18\x03 \x01(\t\x12/\n\x04side\x18\x04 \x01(\x0e\x32!.xstockstrat.trading.v1.OrderSide\x12\x35\n\norder_type\x18\x05 \x01(\x0e\x32!.xstockstrat.trading.v1.OrderType\x12\x33\n\x06status\x18\x06 \x01(\x0e\x32#.xstockstrat.trading.v1.OrderStatus\x12\x0b\n\x03qty\x18\x07 \x01(\x01\x12\x12\n\nfilled_qty\x18\x08 \x01(\x01\x12\x13\n\x0blimit_price\x18\t \x01(\x01\x12\x12\n\nstop_price\x18\n \x01(\x01\x12\x18\n\x10\x66illed_avg_price\x18\x0b \x01(\x01\x12\x15\n\rtime_in_force\x18\x0c \x01(\t\x12.\n\ncreated_at\x18\r \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nupdated_at\x18\x0e \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bstrategy_id\x18\x0f \x01(\t\x12\x0f\n\x07user_id\x18\x10 \x01(\t\x12\x38\n\x0ctrading_mode\x18\x11 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\x12\x17\n\x0f\x62roker_order_id\x18\x12 \x01(\t\"\xec\x02\n\x11PlaceOrderRequest\x12\x0e\n\x06symbol\x18\x01 \x01(\t\x12/\n\x04side\x18\x02 \x01(\x0e\x32!.xstockstrat.trading.v1.OrderSide\x12\x35\n\norder_type\x18\x03 \x01(\x0e\x32!.xstockstrat.trading.v1.OrderType\x12\x0b\n\x03qty\x18\x04 \x01(\x01\x12\x13\n\x0blimit_price\x18\x05 \x01(\x01\x12\x12\n\nstop_price\x18\x06 \x01(\x01\x12\x15\n\rtime_in_force\x18\x07 \x01(\t\x12\x13\n\x0bstrategy_id\x18\x08 \x01(\t\x12\x0f\n\x07user_id\x18\t \x01(\t\x12\x17\n\x0f\x63lient_order_id\x18\n \x01(\t\x12\x19\n\x11requires_approval\x18\x0b \x01(\x08\x12\x38\n\x0ctrading_mode\x18\x0c \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\"7\n\x12\x43\x61ncelOrderRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\"T\n\x13\x43\x61ncelOrderResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12,\n\x05order\x18\x02 \x01(\x0b\x32\x1d.xstockstrat.trading.v1.Order\"#\n\x0fGetOrderRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\"\x8b\x02\n\x11ListOrdersRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x13\n\x0bstrategy_id\x18\x02 \x01(\t\x12\x33\n\x06status\x18\x03 \x01(\x0e\x32#.xstockstrat.trading.v1.OrderStatus\x12/\n\x05range\x18\x04 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x30\n\x04page\x18\x05 \x01(\x0b\x32\".xstockstrat.common.v1.PageRequest\x12\x38\n\x0ctrading_mode\x18\x06 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\"v\n\x12ListOrdersResponse\x12-\n\x06orders\x18\x01 \x03(\x0b\x32\x1d.xstockstrat.trading.v1.Order\x12\x31\n\x04page\x18\x02 \x01(\x0b\x32#.xstockstrat.common.v1.PageResponse\"h\n\x19StreamOrderUpdatesRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12:\n\rstatus_filter\x18\x02 \x03(\x0e\x32#.xstockstrat.trading.v1.OrderStatus*P\n\tOrderSide\x12\x1a\n\x16ORDER_SIDE_UNSPECIFIED\x10\x00\x12\x12\n\x0eORDER_SIDE_BUY\x10\x01\x12\x13\n\x0fORDER_SIDE_SELL\x10\x02*\xa2\x01\n\tOrderType\x12\x1a\n\x16ORDER_TYPE_UNSPECIFIED\x10\x00\x12\x15\n\x11ORDER_TYPE_MARKET\x10\x01\x12\x14\n\x10ORDER_TYPE_LIMIT\x10\x02\x12\x13\n\x0fORDER_TYPE_STOP\x10\x03\x12\x19\n\x15ORDER_TYPE_STOP_LIMIT\x10\x04\x12\x1c\n\x18ORDER_TYPE_TRAILING_STOP\x10\x05*\xf0\x01\n\x0bOrderStatus\x12\x1c\n\x18ORDER_STATUS_UNSPECIFIED\x10\x00\x12\x14\n\x10ORDER_STATUS_NEW\x10\x01\x12!\n\x1dORDER_STATUS_PARTIALLY_FILLED\x10\x02\x12\x17\n\x13ORDER_STATUS_FILLED\x10\x03\x12\x19\n\x15ORDER_STATUS_CANCELED\x10\x04\x12\x18\n\x14ORDER_STATUS_EXPIRED\x10\x05\x12\x19\n\x15ORDER_STATUS_REJECTED\x10\x06\x12!\n\x1dORDER_STATUS_PENDING_APPROVAL\x10\x07\x32\xf3\x03\n\x0eTradingService\x12V\n\nPlaceOrder\x12).xstockstrat.trading.v1.PlaceOrderRequest\x1a\x1d.xstockstrat.trading.v1.Order\x12\x66\n\x0b\x43\x61ncelOrder\x12*.xstockstrat.trading.v1.CancelOrderRequest\x1a+.xstockstrat.trading.v1.CancelOrderResponse\x12R\n\x08GetOrder\x12\'.xstockstrat.trading.v1.GetOrderRequest\x1a\x1d.xstockstrat.trading.v1.Order\x12\x63\n\nListOrders\x12).xstockstrat.trading.v1.ListOrdersRequest\x1a*.xstockstrat.trading.v1.ListOrdersResponse\x12h\n\x12StreamOrderUpdates\x12\x31.xstockstrat.trading.v1.StreamOrderUpdatesRequest\x1a\x1d.xstockstrat.trading.v1.Order0\x01\x42>Z<github.com/xstockstrat/contracts/gen/go/trading/v1;tradingv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x18trading/v1/trading.proto\x12\x16xstockstrat.trading.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16\x63ommon/v1/common.proto\"\xff\x04\n\x05Order\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12\x17\n\x0f\x63lient_order_id\x18\x02 \x01(\t\x12\x0e\n\x06symbol\x18\x03 \x01(\t\x12/\n\x04side\x18\x04 \x01(\x0e\x32!.xstockstrat.trading.v1.OrderSide\x12\x35\n\norder_type\x18\x05 \x01(\x0e\x32!.xstockstrat.trading.v1.OrderType\x12\x33\n\x06status\x18\x06 \x01(\x0e\x32#.xstockstrat.trading.v1.OrderStatus\x12\x0b\n\x03qty\x18\x07 \x01(\x01\x12\x12\n\nfilled_qty\x18\x08 \x01(\x01\x12\x13\n\x0blimit_price\x18\t \x01(\x01\x12\x12\n\nstop_price\x18\n \x01(\x01\x12\x18\n\x10\x66illed_avg_price\x18\x0b \x01(\x01\x12\x15\n\rtime_in_force\x18\x0c \x01(\t\x12.\n\ncreated_at\x18\r \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nupdated_at\x18\x0e \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bstrategy_id\x18\x0f \x01(\t\x12\x0f\n\x07user_id\x18\x10 \x01(\t\x12\x38\n\x0ctrading_mode\x18\x11 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\x12\x17\n\x0f\x62roker_order_id\x18\x12 \x01(\t\x12\x12\n\naccount_id\x18\x13 \x01(\t\x12\x36\n\x0b\x62roker_type\x18\x14 \x01(\x0e\x32!.xstockstrat.common.v1.BrokerType\"\x80\x03\n\x11PlaceOrderRequest\x12\x0e\n\x06symbol\x18\x01 \x01(\t\x12/\n\x04side\x18\x02 \x01(\x0e\x32!.xstockstrat.trading.v1.OrderSide\x12\x35\n\norder_type\x18\x03 \x01(\x0e\x32!.xstockstrat.trading.v1.OrderType\x12\x0b\n\x03qty\x18\x04 \x01(\x01\x12\x13\n\x0blimit_price\x18\x05 \x01(\x01\x12\x12\n\nstop_price\x18\x06 \x01(\x01\x12\x15\n\rtime_in_force\x18\x07 \x01(\t\x12\x13\n\x0bstrategy_id\x18\x08 \x01(\t\x12\x0f\n\x07user_id\x18\t \x01(\t\x12\x17\n\x0f\x63lient_order_id\x18\n \x01(\t\x12\x19\n\x11requires_approval\x18\x0b \x01(\x08\x12\x38\n\x0ctrading_mode\x18\x0c \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\x12\x12\n\naccount_id\x18\r \x01(\t\"7\n\x12\x43\x61ncelOrderRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\"T\n\x13\x43\x61ncelOrderResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12,\n\x05order\x18\x02 \x01(\x0b\x32\x1d.xstockstrat.trading.v1.Order\"#\n\x0fGetOrderRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\"\x8b\x02\n\x11ListOrdersRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x13\n\x0bstrategy_id\x18\x02 \x01(\t\x12\x33\n\x06status\x18\x03 \x01(\x0e\x32#.xstockstrat.trading.v1.OrderStatus\x12/\n\x05range\x18\x04 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x30\n\x04page\x18\x05 \x01(\x0b\x32\".xstockstrat.common.v1.PageRequest\x12\x38\n\x0ctrading_mode\x18\x06 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\"v\n\x12ListOrdersResponse\x12-\n\x06orders\x18\x01 \x03(\x0b\x32\x1d.xstockstrat.trading.v1.Order\x12\x31\n\x04page\x18\x02 \x01(\x0b\x32#.xstockstrat.common.v1.PageResponse\"h\n\x19StreamOrderUpdatesRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12:\n\rstatus_filter\x18\x02 \x03(\x0e\x32#.xstockstrat.trading.v1.OrderStatus\"\x9f\x01\n\rBrokerAccount\x12\n\n\x02id\x18\x01 \x01(\t\x12\x14\n\x0c\x64isplay_name\x18\x02 \x01(\t\x12\x36\n\x0b\x62roker_type\x18\x03 \x01(\x0e\x32!.xstockstrat.common.v1.BrokerType\x12\x10\n\x08is_paper\x18\x04 \x01(\x08\x12\x0f\n\x07user_id\x18\x05 \x01(\t\x12\x11\n\tis_active\x18\x06 \x01(\x08\"\x98\x01\n\x1cRegisterBrokerAccountRequest\x12\x14\n\x0c\x64isplay_name\x18\x01 \x01(\t\x12\x36\n\x0b\x62roker_type\x18\x02 \x01(\x0e\x32!.xstockstrat.common.v1.BrokerType\x12\x10\n\x08is_paper\x18\x03 \x01(\x08\x12\x18\n\x10\x63redentials_json\x18\x04 \x01(\t\"W\n\x1dRegisterBrokerAccountResponse\x12\x36\n\x07\x61\x63\x63ount\x18\x01 \x01(\x0b\x32%.xstockstrat.trading.v1.BrokerAccount\"\x1b\n\x19ListBrokerAccountsRequest\"U\n\x1aListBrokerAccountsResponse\x12\x37\n\x08\x61\x63\x63ounts\x18\x01 \x03(\x0b\x32%.xstockstrat.trading.v1.BrokerAccount\"4\n\x1e\x44\x65registerBrokerAccountRequest\x12\x12\n\naccount_id\x18\x01 \x01(\t\"!\n\x1f\x44\x65registerBrokerAccountResponse*P\n\tOrderSide\x12\x1a\n\x16ORDER_SIDE_UNSPECIFIED\x10\x00\x12\x12\n\x0eORDER_SIDE_BUY\x10\x01\x12\x13\n\x0fORDER_SIDE_SELL\x10\x02*\xa2\x01\n\tOrderType\x12\x1a\n\x16ORDER_TYPE_UNSPECIFIED\x10\x00\x12\x15\n\x11ORDER_TYPE_MARKET\x10\x01\x12\x14\n\x10ORDER_TYPE_LIMIT\x10\x02\x12\x13\n\x0fORDER_TYPE_STOP\x10\x03\x12\x19\n\x15ORDER_TYPE_STOP_LIMIT\x10\x04\x12\x1c\n\x18ORDER_TYPE_TRAILING_STOP\x10\x05*\xf0\x01\n\x0bOrderStatus\x12\x1c\n\x18ORDER_STATUS_UNSPECIFIED\x10\x00\x12\x14\n\x10ORDER_STATUS_NEW\x10\x01\x12!\n\x1dORDER_STATUS_PARTIALLY_FILLED\x10\x02\x12\x17\n\x13ORDER_STATUS_FILLED\x10\x03\x12\x19\n\x15ORDER_STATUS_CANCELED\x10\x04\x12\x18\n\x14ORDER_STATUS_EXPIRED\x10\x05\x12\x19\n\x15ORDER_STATUS_REJECTED\x10\x06\x12!\n\x1dORDER_STATUS_PENDING_APPROVAL\x10\x07\x32\x84\x07\n\x0eTradingService\x12V\n\nPlaceOrder\x12).xstockstrat.trading.v1.PlaceOrderRequest\x1a\x1d.xstockstrat.trading.v1.Order\x12\x66\n\x0b\x43\x61ncelOrder\x12*.xstockstrat.trading.v1.CancelOrderRequest\x1a+.xstockstrat.trading.v1.CancelOrderResponse\x12R\n\x08GetOrder\x12\'.xstockstrat.trading.v1.GetOrderRequest\x1a\x1d.xstockstrat.trading.v1.Order\x12\x63\n\nListOrders\x12).xstockstrat.trading.v1.ListOrdersRequest\x1a*.xstockstrat.trading.v1.ListOrdersResponse\x12h\n\x12StreamOrderUpdates\x12\x31.xstockstrat.trading.v1.StreamOrderUpdatesRequest\x1a\x1d.xstockstrat.trading.v1.Order0\x01\x12\x84\x01\n\x15RegisterBrokerAccount\x12\x34.xstockstrat.trading.v1.RegisterBrokerAccountRequest\x1a\x35.xstockstrat.trading.v1.RegisterBrokerAccountResponse\x12{\n\x12ListBrokerAccounts\x12\x31.xstockstrat.trading.v1.ListBrokerAccountsRequest\x1a\x32.xstockstrat.trading.v1.ListBrokerAccountsResponse\x12\x8a\x01\n\x17\x44\x65registerBrokerAccount\x12\x36.xstockstrat.trading.v1.DeregisterBrokerAccountRequest\x1a\x37.xstockstrat.trading.v1.DeregisterBrokerAccountResponseB>Z<github.com/xstockstrat/contracts/gen/go/trading/v1;tradingv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,28 +34,42 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'trading.v1.trading_pb2', _g
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z<github.com/xstockstrat/contracts/gen/go/trading/v1;tradingv1'
-  _globals['_ORDERSIDE']._serialized_start=1718
-  _globals['_ORDERSIDE']._serialized_end=1798
-  _globals['_ORDERTYPE']._serialized_start=1801
-  _globals['_ORDERTYPE']._serialized_end=1963
-  _globals['_ORDERSTATUS']._serialized_start=1966
-  _globals['_ORDERSTATUS']._serialized_end=2206
+  _globals['_ORDERSIDE']._serialized_start=2425
+  _globals['_ORDERSIDE']._serialized_end=2505
+  _globals['_ORDERTYPE']._serialized_start=2508
+  _globals['_ORDERTYPE']._serialized_end=2670
+  _globals['_ORDERSTATUS']._serialized_start=2673
+  _globals['_ORDERSTATUS']._serialized_end=2913
   _globals['_ORDER']._serialized_start=110
-  _globals['_ORDER']._serialized_end=673
-  _globals['_PLACEORDERREQUEST']._serialized_start=676
-  _globals['_PLACEORDERREQUEST']._serialized_end=1040
-  _globals['_CANCELORDERREQUEST']._serialized_start=1042
-  _globals['_CANCELORDERREQUEST']._serialized_end=1097
-  _globals['_CANCELORDERRESPONSE']._serialized_start=1099
-  _globals['_CANCELORDERRESPONSE']._serialized_end=1183
-  _globals['_GETORDERREQUEST']._serialized_start=1185
-  _globals['_GETORDERREQUEST']._serialized_end=1220
-  _globals['_LISTORDERSREQUEST']._serialized_start=1223
-  _globals['_LISTORDERSREQUEST']._serialized_end=1490
-  _globals['_LISTORDERSRESPONSE']._serialized_start=1492
-  _globals['_LISTORDERSRESPONSE']._serialized_end=1610
-  _globals['_STREAMORDERUPDATESREQUEST']._serialized_start=1612
-  _globals['_STREAMORDERUPDATESREQUEST']._serialized_end=1716
-  _globals['_TRADINGSERVICE']._serialized_start=2209
-  _globals['_TRADINGSERVICE']._serialized_end=2708
+  _globals['_ORDER']._serialized_end=749
+  _globals['_PLACEORDERREQUEST']._serialized_start=752
+  _globals['_PLACEORDERREQUEST']._serialized_end=1136
+  _globals['_CANCELORDERREQUEST']._serialized_start=1138
+  _globals['_CANCELORDERREQUEST']._serialized_end=1193
+  _globals['_CANCELORDERRESPONSE']._serialized_start=1195
+  _globals['_CANCELORDERRESPONSE']._serialized_end=1279
+  _globals['_GETORDERREQUEST']._serialized_start=1281
+  _globals['_GETORDERREQUEST']._serialized_end=1316
+  _globals['_LISTORDERSREQUEST']._serialized_start=1319
+  _globals['_LISTORDERSREQUEST']._serialized_end=1586
+  _globals['_LISTORDERSRESPONSE']._serialized_start=1588
+  _globals['_LISTORDERSRESPONSE']._serialized_end=1706
+  _globals['_STREAMORDERUPDATESREQUEST']._serialized_start=1708
+  _globals['_STREAMORDERUPDATESREQUEST']._serialized_end=1812
+  _globals['_BROKERACCOUNT']._serialized_start=1815
+  _globals['_BROKERACCOUNT']._serialized_end=1974
+  _globals['_REGISTERBROKERACCOUNTREQUEST']._serialized_start=1977
+  _globals['_REGISTERBROKERACCOUNTREQUEST']._serialized_end=2129
+  _globals['_REGISTERBROKERACCOUNTRESPONSE']._serialized_start=2131
+  _globals['_REGISTERBROKERACCOUNTRESPONSE']._serialized_end=2218
+  _globals['_LISTBROKERACCOUNTSREQUEST']._serialized_start=2220
+  _globals['_LISTBROKERACCOUNTSREQUEST']._serialized_end=2247
+  _globals['_LISTBROKERACCOUNTSRESPONSE']._serialized_start=2249
+  _globals['_LISTBROKERACCOUNTSRESPONSE']._serialized_end=2334
+  _globals['_DEREGISTERBROKERACCOUNTREQUEST']._serialized_start=2336
+  _globals['_DEREGISTERBROKERACCOUNTREQUEST']._serialized_end=2388
+  _globals['_DEREGISTERBROKERACCOUNTRESPONSE']._serialized_start=2390
+  _globals['_DEREGISTERBROKERACCOUNTRESPONSE']._serialized_end=2423
+  _globals['_TRADINGSERVICE']._serialized_start=2916
+  _globals['_TRADINGSERVICE']._serialized_end=3816
 # @@protoc_insertion_point(module_scope)
