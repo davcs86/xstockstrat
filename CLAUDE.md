@@ -53,7 +53,7 @@ Next.js   → xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
 | pnpm | 9.15.0 | Workspace manager (`pnpm-workspace.yaml`); `npm install -g pnpm@9.15.0` |
 | buf | latest | Proto toolchain; installed by `scripts/bootstrap.sh` |
 | golang-migrate | latest | DB migrations; installed by `scripts/bootstrap.sh` |
-| golangci-lint | v1.59 | Go lint; run via `golangci-lint-action@v6` |
+| golangci-lint | v2.5.0 | Go lint; run via `golangci-lint-action@v6` |
 | ruff | latest | Python lint + format |
 | Playwright | — | E2E tests for all three Next.js frontends |
 

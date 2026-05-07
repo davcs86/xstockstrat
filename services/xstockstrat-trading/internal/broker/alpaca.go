@@ -58,32 +58,32 @@ func (c *Client) IsPaper() bool {
 
 // SubmitOrderRequest is the input to SubmitOrder.
 type SubmitOrderRequest struct {
-	Symbol        string  `json:"symbol"`
-	Qty           string  `json:"qty"`            // Alpaca expects string
-	Side          string  `json:"side"`           // "buy" or "sell"
-	Type          string  `json:"type"`           // "market", "limit", "stop", "stop_limit", "trailing_stop"
-	TimeInForce   string  `json:"time_in_force"`  // "day", "gtc", "ioc", "fok"
-	LimitPrice    string  `json:"limit_price,omitempty"`
-	StopPrice     string  `json:"stop_price,omitempty"`
-	ClientOrderID string  `json:"client_order_id,omitempty"`
+	Symbol        string `json:"symbol"`
+	Qty           string `json:"qty"`           // Alpaca expects string
+	Side          string `json:"side"`          // "buy" or "sell"
+	Type          string `json:"type"`          // "market", "limit", "stop", "stop_limit", "trailing_stop"
+	TimeInForce   string `json:"time_in_force"` // "day", "gtc", "ioc", "fok"
+	LimitPrice    string `json:"limit_price,omitempty"`
+	StopPrice     string `json:"stop_price,omitempty"`
+	ClientOrderID string `json:"client_order_id,omitempty"`
 }
 
 // AlpacaOrder mirrors the Alpaca v2 order response object.
 type AlpacaOrder struct {
-	ID            string  `json:"id"`
-	ClientOrderID string  `json:"client_order_id"`
-	Status        string  `json:"status"`
-	Symbol        string  `json:"symbol"`
-	Qty           string  `json:"qty"`
-	FilledQty     string  `json:"filled_qty"`
+	ID             string `json:"id"`
+	ClientOrderID  string `json:"client_order_id"`
+	Status         string `json:"status"`
+	Symbol         string `json:"symbol"`
+	Qty            string `json:"qty"`
+	FilledQty      string `json:"filled_qty"`
 	FilledAvgPrice string `json:"filled_avg_price"`
-	Side          string  `json:"side"`
-	Type          string  `json:"type"`
-	TimeInForce   string  `json:"time_in_force"`
-	LimitPrice    string  `json:"limit_price"`
-	StopPrice     string  `json:"stop_price"`
-	CreatedAt     string  `json:"created_at"`
-	UpdatedAt     string  `json:"updated_at"`
+	Side           string `json:"side"`
+	Type           string `json:"type"`
+	TimeInForce    string `json:"time_in_force"`
+	LimitPrice     string `json:"limit_price"`
+	StopPrice      string `json:"stop_price"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
 }
 
 // SubmitOrder places an order via POST /v2/orders.
@@ -130,7 +130,7 @@ func (c *Client) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrde
 	if err != nil {
 		return nil, fmt.Errorf("submit order: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -163,7 +163,7 @@ func (c *Client) CancelOrder(ctx context.Context, brokerOrderID string) error {
 	if err != nil {
 		return fmt.Errorf("cancel order: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	// 204 No Content is success; 422 means already filled/canceled
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusUnprocessableEntity {
@@ -188,7 +188,7 @@ func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrd
 	if err != nil {
 		return nil, fmt.Errorf("get order: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -217,7 +217,7 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 	if err != nil {
 		return nil, fmt.Errorf("alpaca GetPositions: http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("alpaca GetPositions: status %d: %s", resp.StatusCode, body)

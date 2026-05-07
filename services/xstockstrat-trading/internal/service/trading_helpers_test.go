@@ -34,52 +34,52 @@ func TestAlpacaStatusToProto(t *testing.T) {
 
 func TestApprovalThresholdLogic(t *testing.T) {
 	tests := []struct {
-		name                     string
-		qty                      float64
-		limitPrice               float64
-		approvalQtyThreshold     float64
+		name                      string
+		qty                       float64
+		limitPrice                float64
+		approvalQtyThreshold      float64
 		approvalNotionalThreshold float64
-		expectApproval           bool
+		expectApproval            bool
 	}{
 		{
-			name:                     "below both thresholds",
-			qty:                      100,
-			limitPrice:               10,
-			approvalQtyThreshold:     500,
+			name:                      "below both thresholds",
+			qty:                       100,
+			limitPrice:                10,
+			approvalQtyThreshold:      500,
 			approvalNotionalThreshold: 50000,
-			expectApproval:           false,
+			expectApproval:            false,
 		},
 		{
-			name:                     "qty above threshold",
-			qty:                      600,
-			limitPrice:               10,
-			approvalQtyThreshold:     500,
+			name:                      "qty above threshold",
+			qty:                       600,
+			limitPrice:                10,
+			approvalQtyThreshold:      500,
 			approvalNotionalThreshold: 50000,
-			expectApproval:           true,
+			expectApproval:            true,
 		},
 		{
-			name:                     "notional above threshold",
-			qty:                      100,
-			limitPrice:               600,
-			approvalQtyThreshold:     500,
+			name:                      "notional above threshold",
+			qty:                       100,
+			limitPrice:                600,
+			approvalQtyThreshold:      500,
 			approvalNotionalThreshold: 50000,
-			expectApproval:           true,
+			expectApproval:            true,
 		},
 		{
-			name:                     "no limit price — notional not checked",
-			qty:                      100,
-			limitPrice:               0,
-			approvalQtyThreshold:     500,
+			name:                      "no limit price — notional not checked",
+			qty:                       100,
+			limitPrice:                0,
+			approvalQtyThreshold:      500,
 			approvalNotionalThreshold: 50000,
-			expectApproval:           false,
+			expectApproval:            false,
 		},
 		{
-			name:                     "exact qty threshold — not triggered",
-			qty:                      500,
-			limitPrice:               0,
-			approvalQtyThreshold:     500,
+			name:                      "exact qty threshold — not triggered",
+			qty:                       500,
+			limitPrice:                0,
+			approvalQtyThreshold:      500,
 			approvalNotionalThreshold: 50000,
-			expectApproval:           false,
+			expectApproval:            false,
 		},
 	}
 

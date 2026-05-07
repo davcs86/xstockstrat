@@ -10,9 +10,10 @@ import (
 	"net/http"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // ClientConfig holds Alpaca API credentials.
@@ -80,7 +81,7 @@ func (c *Client) GetBars(ctx context.Context, symbol, timeframe string, start, e
 			return nil, fmt.Errorf("get bars: %w", err)
 		}
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			return nil, fmt.Errorf("read response: %w", err)
 		}
@@ -137,7 +138,7 @@ func (c *Client) GetLatestQuote(ctx context.Context, symbol string) (*marketdata
 		return nil, fmt.Errorf("get latest quote: %w", err)
 	}
 	body, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -223,10 +224,10 @@ func (c *Client) StreamQuotes(ctx context.Context, symbols []string) (<-chan *ma
 }
 
 type alpacaAssetJSON struct {
-	Symbol       string `json:"symbol"`
-	Exchange     string `json:"exchange"`
-	Class        string `json:"class"`
-	Tradable     bool   `json:"tradable"`
+	Symbol   string `json:"symbol"`
+	Exchange string `json:"exchange"`
+	Class    string `json:"class"`
+	Tradable bool   `json:"tradable"`
 }
 
 // ListAssets returns all tradable assets from Alpaca.
@@ -247,7 +248,7 @@ func (c *Client) ListAssets(ctx context.Context, assetClass string) ([]*commonv1
 		return nil, fmt.Errorf("list assets: %w", err)
 	}
 	body, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if err != nil {
 		return nil, err
 	}

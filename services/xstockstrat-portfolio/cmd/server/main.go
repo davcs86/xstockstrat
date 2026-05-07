@@ -122,11 +122,11 @@ func main() {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"user_id":        portfolio.UserId,
-			"equity":         portfolio.Equity,
-			"positions":      len(portfolio.Positions),
-			"day_pnl":        portfolio.DayPnl,
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"user_id":   portfolio.UserId,
+			"equity":    portfolio.Equity,
+			"positions": len(portfolio.Positions),
+			"day_pnl":   portfolio.DayPnl,
 		})
 	})
 	httpServer := &http.Server{
@@ -148,7 +148,7 @@ func main() {
 		<-quit
 		slog.Info("shutting down portfolio service")
 		grpcServer.GracefulStop()
-		httpServer.Shutdown(ctx)
+		_ = httpServer.Shutdown(ctx)
 		cancel()
 	}()
 

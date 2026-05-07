@@ -25,30 +25,30 @@ type Config struct {
 	RequireApprovalAbove float64 // order qty threshold requiring manual approval
 	// Alpaca broker credentials — used only by xstockstrat-trading for order submission.
 	// Secrets: sourced from env vars, never from the config service.
-	AlpacaAPIKey    string
-	AlpacaAPISecret string
-	AlpacaPaperURL  string // default: https://paper-api.alpaca.markets
-	AlpacaLiveURL   string // default: https://api.alpaca.markets
-	AlpacaPaper     bool   // default: true; set false for live trading
+	AlpacaAPIKey                string
+	AlpacaAPISecret             string
+	AlpacaPaperURL              string // default: https://paper-api.alpaca.markets
+	AlpacaLiveURL               string // default: https://api.alpaca.markets
+	AlpacaPaper                 bool   // default: true; set false for live trading
 	BrokerAccountsEncryptionKey string // hex-encoded 32-byte key; required when broker_accounts table is in use
-	AppEnv                       string // "dev" | "production"
+	AppEnv                      string // "dev" | "production"
 }
 
 func LoadFromEnv() *Config {
 	return &Config{
-		GRPCPort:             getEnv("GRPC_PORT", "50051"),
-		HTTPPort:             getEnv("HTTP_PORT", "8051"),
-		ConfigEndpoint:       getEnv("CONFIG_ENDPOINT", "xstockstrat-config:50060"),
-		LedgerEndpoint:       getEnv("LEDGER_ENDPOINT", "xstockstrat-ledger:50057"),
-		PortfolioEndpoint:    getEnv("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052"),
-		IndicatorsEndpoint:   getEnv("INDICATORS_ENDPOINT", "xstockstrat-indicators:50054"),
-		NotifyEndpoint:       getEnv("NOTIFY_ENDPOINT", "xstockstrat-notify:50059"),
-		DBConnStr:            getEnv("DATABASE_URL", ""),
-		RequireApprovalAbove: 0, // loaded from config service at runtime
-		AlpacaAPIKey:         getEnv("ALPACA_API_KEY", ""),
-		AlpacaAPISecret:      getEnv("ALPACA_API_SECRET", ""),
-		AlpacaPaperURL:       getEnv("ALPACA_PAPER_URL", "https://paper-api.alpaca.markets"),
-		AlpacaLiveURL:        getEnv("ALPACA_LIVE_URL", "https://api.alpaca.markets"),
+		GRPCPort:                    getEnv("GRPC_PORT", "50051"),
+		HTTPPort:                    getEnv("HTTP_PORT", "8051"),
+		ConfigEndpoint:              getEnv("CONFIG_ENDPOINT", "xstockstrat-config:50060"),
+		LedgerEndpoint:              getEnv("LEDGER_ENDPOINT", "xstockstrat-ledger:50057"),
+		PortfolioEndpoint:           getEnv("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052"),
+		IndicatorsEndpoint:          getEnv("INDICATORS_ENDPOINT", "xstockstrat-indicators:50054"),
+		NotifyEndpoint:              getEnv("NOTIFY_ENDPOINT", "xstockstrat-notify:50059"),
+		DBConnStr:                   getEnv("DATABASE_URL", ""),
+		RequireApprovalAbove:        0, // loaded from config service at runtime
+		AlpacaAPIKey:                getEnv("ALPACA_API_KEY", ""),
+		AlpacaAPISecret:             getEnv("ALPACA_API_SECRET", ""),
+		AlpacaPaperURL:              getEnv("ALPACA_PAPER_URL", "https://paper-api.alpaca.markets"),
+		AlpacaLiveURL:               getEnv("ALPACA_LIVE_URL", "https://api.alpaca.markets"),
 		AlpacaPaper:                 getEnvBool("ALPACA_PAPER", true),
 		BrokerAccountsEncryptionKey: os.Getenv("BROKER_ACCOUNTS_ENCRYPTION_KEY"),
 		AppEnv:                      os.Getenv("APP_ENV"),

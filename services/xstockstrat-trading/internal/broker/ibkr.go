@@ -80,12 +80,12 @@ func orderTypeToIBKR(t string) string {
 // SubmitOrder places an order via POST /v1/api/iserver/account/{accountID}/orders.
 func (c *IBKRClient) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrder, error) {
 	body := map[string]interface{}{
-		"conid":       0, // conid must be resolved by caller; placeholder for now
-		"orderType":   orderTypeToIBKR(req.OrderType),
-		"side":        strings.ToUpper(req.Side),
-		"quantity":    req.Qty,
-		"tif":         strings.ToUpper(req.TimeInForce),
-		"ticker":      req.Symbol,
+		"conid":     0, // conid must be resolved by caller; placeholder for now
+		"orderType": orderTypeToIBKR(req.OrderType),
+		"side":      strings.ToUpper(req.Side),
+		"quantity":  req.Qty,
+		"tif":       strings.ToUpper(req.TimeInForce),
+		"ticker":    req.Symbol,
 	}
 	if req.LimitPrice != 0 {
 		body["price"] = req.LimitPrice
@@ -111,7 +111,7 @@ func (c *IBKRClient) SubmitOrder(ctx context.Context, req OrderRequest) (*Broker
 	if err != nil {
 		return nil, fmt.Errorf("ibkr SubmitOrder: http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
@@ -120,7 +120,7 @@ func (c *IBKRClient) SubmitOrder(ctx context.Context, req OrderRequest) (*Broker
 
 	// IBKR returns an array of order replies.
 	var replies []struct {
-		OrderID string `json:"order_id"`
+		OrderID     string `json:"order_id"`
 		OrderStatus string `json:"order_status"`
 	}
 	if err := json.Unmarshal(respBody, &replies); err != nil || len(replies) == 0 {
@@ -142,7 +142,7 @@ func (c *IBKRClient) CancelOrder(ctx context.Context, brokerOrderID string) erro
 	if err != nil {
 		return fmt.Errorf("ibkr CancelOrder: http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
@@ -167,7 +167,7 @@ func (c *IBKRClient) GetOrder(ctx context.Context, brokerOrderID string) (*Broke
 	if err != nil {
 		return nil, fmt.Errorf("ibkr GetOrder: http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
@@ -200,7 +200,7 @@ func (c *IBKRClient) GetPositions(ctx context.Context) ([]BrokerPosition, error)
 	if err != nil {
 		return nil, fmt.Errorf("ibkr GetPositions: http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {

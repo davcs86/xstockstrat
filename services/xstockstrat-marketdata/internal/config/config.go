@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
-	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
-	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 )
 
 // Config holds all environment-sourced configuration for xstockstrat-marketdata.
@@ -207,9 +207,5 @@ func getEnvBool(key string, def bool) bool {
 	if v == "" {
 		return def
 	}
-	b, err := strconv.ParseBool(v)
-	if err != nil {
-		return def
-	}
-	return b
+	return v == "true" || v == "1" || v == "yes"
 }

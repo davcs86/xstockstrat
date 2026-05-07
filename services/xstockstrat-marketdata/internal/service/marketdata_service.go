@@ -7,6 +7,11 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
@@ -14,24 +19,20 @@ import (
 	"github.com/xstockstrat/marketdata/internal/alpaca"
 	"github.com/xstockstrat/marketdata/internal/config"
 	"github.com/xstockstrat/marketdata/internal/repository"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/structpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // MarketDataService implements business logic for the marketdata service.
 type MarketDataService struct {
-	alpaca       *alpaca.Client
-	repo         *repository.MarketDataRepo
-	cfg          *config.Watcher
-	ledger       ledgerv1.LedgerServiceClient
-	notify       notifyv1.NotifyServiceClient
+	alpaca *alpaca.Client
+	repo   *repository.MarketDataRepo
+	cfg    *config.Watcher
+	ledger ledgerv1.LedgerServiceClient
+	notify notifyv1.NotifyServiceClient
 
 	// subscribers maps subscriber ID → channel for streaming bars
-	mu          sync.RWMutex
-	barSubs     map[string]chan *marketdatav1.Bar
-	quoteSubs   map[string]chan *marketdatav1.Quote
+	mu        sync.RWMutex
+	barSubs   map[string]chan *marketdatav1.Bar
+	quoteSubs map[string]chan *marketdatav1.Quote
 }
 
 // NewMarketDataService creates the service and dials ledger + notify.

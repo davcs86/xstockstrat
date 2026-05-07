@@ -17,6 +17,8 @@ jobs:
           fetch-depth: 0
 
       - uses: bufbuild/buf-setup-action@v1
+        with:
+          version: '1.69.0'
 
       - name: buf lint
         run: buf lint packages/proto/
@@ -35,6 +37,8 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: bufbuild/buf-setup-action@v1
+        with:
+          version: '1.69.0'
 
       - uses: actions/setup-go@v5
         with:

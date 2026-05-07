@@ -26,9 +26,9 @@ func TestSubmitOrder_Paper(t *testing.T) {
 
 	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		gotURL = r.URL.Path
-		json.NewDecoder(r.Body).Decode(&gotBody)
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(broker.AlpacaOrder{
+		_ = json.NewEncoder(w).Encode(broker.AlpacaOrder{
 			ID:     "alpaca-order-123",
 			Status: "new",
 		})
@@ -69,7 +69,7 @@ func TestSubmitOrder_Live(t *testing.T) {
 
 	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		calledLive = true
-		json.NewEncoder(w).Encode(broker.AlpacaOrder{ID: "live-order-456", Status: "new"})
+		_ = json.NewEncoder(w).Encode(broker.AlpacaOrder{ID: "live-order-456", Status: "new"})
 	})
 	defer srv.Close()
 
@@ -117,7 +117,7 @@ func TestCancelOrder(t *testing.T) {
 func TestSubmitOrder_BrokerError(t *testing.T) {
 	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte(`{"message":"forbidden"}`))
+		_, _ = w.Write([]byte(`{"message":"forbidden"}`))
 	})
 	defer srv.Close()
 

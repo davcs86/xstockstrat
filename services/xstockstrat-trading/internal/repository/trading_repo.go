@@ -182,14 +182,14 @@ type scanner interface {
 
 func scanOrder(row scanner) (*tradingv1.Order, error) {
 	var (
-		orderID, clientOrderID, brokerOrderID   string
-		symbol, side, orderType, status         string
-		qty, filledQty                          float64
-		limitPrice, stopPrice, filledAvgPrice   *float64
-		timeInForce, strategyID, userID, mode   string
-		createdAt, updatedAt                    time.Time
-		accountID                               string
-		brokerType                              int32
+		orderID, clientOrderID, brokerOrderID string
+		symbol, side, orderType, status       string
+		qty, filledQty                        float64
+		limitPrice, stopPrice, filledAvgPrice *float64
+		timeInForce, strategyID, userID, mode string
+		createdAt, updatedAt                  time.Time
+		accountID                             string
+		brokerType                            int32
 	)
 	err := row.Scan(
 		&orderID, &clientOrderID, &brokerOrderID,

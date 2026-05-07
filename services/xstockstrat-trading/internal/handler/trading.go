@@ -6,12 +6,13 @@ import (
 	"fmt"
 
 	"connectrpc.com/connect"
-	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
-	tradingv1connect "github.com/xstockstrat/contracts/gen/go/trading/v1/tradingv1connect"
-	"github.com/xstockstrat/trading/internal/service"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
+	tradingv1connect "github.com/xstockstrat/contracts/gen/go/trading/v1/tradingv1connect"
+	"github.com/xstockstrat/trading/internal/service"
 )
 
 // Ensure TradingHandler implements the Connect interface at compile time.
