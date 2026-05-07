@@ -105,3 +105,14 @@
 **Progress**: 6 done / 9 total
 **Stopped at**: Step 6 (step complete — PR created, awaiting merge)
 **Next**: /sdd-execute broker-accounts-ui next
+
+### Step 7 — Add per-account portfolio selector to `xstockstrat-insights` [done]
+- Created `src/app/api/portfolio/route.ts` (GET handler calling ListBrokerAccounts + ListPortfolios in parallel via direct fetch). Created `src/components/AccountPortfolioSelector.tsx` ('use client'; SWR polling /api/portfolio; Select for account switching; Card showing aggregated or single-account portfolio stats). Modified `src/app/page.tsx` to add URL state via `useSearchParams`/`useRouter` and render `<AccountPortfolioSelector>`. Updated `CLAUDE.md` with new env vars and dependencies.
+- Files modified: `services/xstockstrat-insights/src/app/api/portfolio/route.ts` (created), `services/xstockstrat-insights/src/components/AccountPortfolioSelector.tsx` (created), `services/xstockstrat-insights/src/app/page.tsx`, `services/xstockstrat-insights/CLAUDE.md`, `services/xstockstrat-insights/src/lib/connectTransport.ts`
+- Deviations: Fixed pre-existing `connectTransport.ts` build failure (`createNodeHttpTransport` → `createConnectTransport as createNodeTransport` with `httpVersion: '1.1'`); added `<Suspense>` wrapper around `InsightsDashboard` in page.tsx (Next.js 14 requirement for `useSearchParams`).
+
+## Session 2026-05-07T00:06:00Z — sdd-execute
+**Steps this session**: [7]
+**Progress**: 7 done / 9 total
+**Stopped at**: Step 7 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next

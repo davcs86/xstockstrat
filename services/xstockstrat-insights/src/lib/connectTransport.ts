@@ -9,7 +9,7 @@
  * both HTTP/1.1 and HTTP/2 with protobuf or JSON encoding.
  */
 import { createConnectTransport } from '@connectrpc/connect-web';
-import { createNodeHttpTransport } from '@connectrpc/connect-node';
+import { createConnectTransport as createNodeTransport } from '@connectrpc/connect-node';
 
 const isServer = typeof window === 'undefined';
 
@@ -20,7 +20,7 @@ const isServer = typeof window === 'undefined';
  */
 export function createTransport(baseUrl: string) {
   if (isServer) {
-    return createNodeHttpTransport({ baseUrl, httpVersion: '1.1' });
+    return createNodeTransport({ baseUrl, httpVersion: '1.1' });
   }
   return createConnectTransport({ baseUrl });
 }
