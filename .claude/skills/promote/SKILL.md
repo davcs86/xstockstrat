@@ -109,6 +109,12 @@ Read each `feature.md` and collect:
 - Entries where `**Lifecycle Status**` is `code-completed` AND `**Type**` is `feature` (or `**Type**` is absent — default is `feature`). Extract slug and **Summary** first sentence.
 - Entries where `**Lifecycle Status**` is `code-completed` AND `**Type**` is `bug`. Extract slug, **Summary** first sentence, and `**Severity**`.
 
+For each result, capture the full feature directory path as `FEATURE_DIR` (e.g.
+`docs/roadmap/features/001-add-ikbr-account-support`). Derive the display slug by stripping the
+leading `NNN-` prefix from the directory basename
+(e.g. `001-add-ikbr-account-support` → `add-ikbr-account-support`).
+Use `FEATURE_DIR` for all file read/write operations; use the stripped slug for CHANGELOG display.
+
 **Commit count:**
 ```bash
 git log origin/main..origin/main-dev --oneline | wc -l
@@ -231,7 +237,7 @@ Print the PR URL.
 
 For each feature **or bug** found at `code-completed` in P2:
 
-Read its `docs/roadmap/features/<slug>/feature.md`. Add a new row to the **Status History** table:
+Read its `$FEATURE_DIR/feature.md` (using the `FEATURE_DIR` captured in P2). Add a new row to the **Status History** table:
 
 ```markdown
 | YYYY-MM-DD | `code-completed` → `launched (pending merge)` | /promote | Promote PR created: <PR URL> |
@@ -239,7 +245,7 @@ Read its `docs/roadmap/features/<slug>/feature.md`. Add a new row to the **Statu
 
 Write the file back.
 
-Append to `docs/roadmap/features/<slug>/context.md`:
+Append to `$FEATURE_DIR/context.md`:
 
 ```markdown
 ## Session YYYY-MM-DD (/promote)

@@ -102,7 +102,7 @@ jobs:
           > /tmp/code_completed.txt
           for feature_md in docs/roadmap/features/*/feature.md; do
             [ -f "$feature_md" ] || continue
-            SLUG=$(echo "$feature_md" | sed 's|docs/roadmap/features/\([^/]*\)/feature.md|\1|')
+            SLUG=$(echo "$feature_md" | sed 's|docs/roadmap/features/[0-9][0-9][0-9]-\([^/]*\)/feature.md|\1|')
             STATUS=$(sed -n 's/.*\*\*Lifecycle Status\*\*[^`]*`\([^`]*\)`.*/\1/p' "$feature_md" | head -1)
             if [ "$STATUS" = "code-completed" ]; then
               SUMMARY=$(awk '/^## Summary/{found=1; next} found && NF{print; exit}' "$feature_md")

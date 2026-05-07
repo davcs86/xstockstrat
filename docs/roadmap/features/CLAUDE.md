@@ -1,6 +1,9 @@
 # docs/roadmap/features/ — Feature Implementations
 
 Each subdirectory tracks one feature from user story through implementation and deployment.
+Directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a
+zero-padded sequence number auto-assigned by `/sdd-story` or `/sdd-triage` in creation order.
+Git branch names use only the slug without the prefix: `feature/<slug>`.
 
 ---
 
