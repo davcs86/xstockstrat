@@ -591,7 +591,7 @@ PORTFOLIO_HTTP_ENDPOINT=http://xstockstrat-portfolio:8052
 
 ### Step 8 — test: Add E2E tests for broker-accounts-ui changes in `xstockstrat-trader`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/e2e/mock-backend.ts` — modify
@@ -899,3 +899,9 @@ test.describe('AccountPortfolioSelector (insights)', () => {
 **Spec said**: Step 7 files only; build verification expected to pass on existing codebase.
 **Actual**: Also modified `services/xstockstrat-insights/src/lib/connectTransport.ts` and added `<Suspense>` wrapper in `page.tsx`.
 **Reason**: (1) `connectTransport.ts` had a pre-existing build failure — `createNodeHttpTransport` does not exist in `@connectrpc/connect-node`; the correct export is `createConnectTransport` (with `httpVersion: '1.1'`). Fixed as part of this step to restore build. (2) Next.js 14 requires `useSearchParams()` to be wrapped in a `<Suspense>` boundary; without the wrapper the build fails at static page generation for `/`.
+
+### Deviation: Step 8 — Add E2E tests for broker-accounts-ui changes in `xstockstrat-trader`
+**Spec said**: Verification: `pnpm run test:e2e` passes all tests in `account-selector.spec.ts`.
+**Actual**: E2E verification not executed in this environment.
+**Reason**: Playwright browser binaries cannot be downloaded — `cdn.playwright.dev` returns 403 (Host not in allowlist). This is a pre-existing sandbox network constraint that also blocks all existing `order-form.spec.ts` and other E2E tests. The test files are syntactically correct and match the spec. CI (with browser binaries available) is the designated verification environment for E2E tests.
+**Disposition**: accepted limitation

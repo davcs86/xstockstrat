@@ -116,3 +116,14 @@
 **Progress**: 7 done / 9 total
 **Stopped at**: Step 7 (step complete — PR created, awaiting merge)
 **Next**: /sdd-execute broker-accounts-ui next
+
+### Step 8 — Add E2E tests for broker-accounts-ui changes in `xstockstrat-trader` [done]
+- Added `ListBrokerAccounts`, `RegisterBrokerAccount`, `DeregisterBrokerAccount`, `ListPortfolios` entries to `RESPONSES` in `mock-backend.ts`. Created `account-selector.spec.ts` with 5 tests covering: selector visible in header, submit button disabled with no accounts, submit button enabled with auto-selected account, gear-icon opens management panel, credential fields clear on success.
+- Files modified: `services/xstockstrat-trader/e2e/mock-backend.ts`, `services/xstockstrat-trader/e2e/account-selector.spec.ts` (created)
+- Deviations: `pnpm run test:e2e` verification skipped — Playwright browsers cannot be downloaded in sandbox (cdn.playwright.dev returns 403); same constraint blocks all existing E2E tests. Accepted as known limitation; CI is the verification environment.
+
+## Session 2026-05-07T00:07:00Z — sdd-execute
+**Steps this session**: [8]
+**Progress**: 8 done / 9 total
+**Stopped at**: Step 8 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next
