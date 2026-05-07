@@ -436,7 +436,7 @@ And include `...(accountId && { accountId })` in the `ListOrders` body.
 
 ### Step 6 — service: Add per-account `PortfolioPanel` component to `xstockstrat-trader`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/components/PortfolioPanel.tsx` — create (not found)
@@ -884,6 +884,11 @@ test.describe('AccountPortfolioSelector (insights)', () => {
 **Spec said**: Files list: `page.tsx`, `OrderForm.tsx`, `OrderBook.tsx`, `api/orders/route.ts`
 **Actual**: Also modified `services/xstockstrat-trader/src/app/api/portfolio/route.ts`
 **Reason**: `PortfolioSummary` now passes `account_id` in the SWR query string; without the corresponding change in the portfolio route handler, the param would be silently dropped instead of forwarded to `GetPortfolio`.
+
+### Deviation: Step 6 — Add per-account PortfolioPanel component
+**Spec said**: `PortfolioPanel` passes `mode` as a prop and includes it in the API route query string (implied: `/api/portfolio/accounts?account_id=...&trading_mode=...`)
+**Actual**: `trading_mode` omitted from the SWR key — `/api/portfolio/accounts?account_id=...` only.
+**Reason**: `ListPortfoliosRequest` proto (confirmed at `packages/proto/portfolio/v1/portfolio.proto:109`) has no `trading_mode` field; only `account_id: optional string`. Forwarding the param would have had no effect at any layer.
 
 ### Deviation: Step 3 — Add `/api/accounts` route handler
 **Spec said**: `DELETE(_req: NextRequest, { params }: ...)` using `_req` as the unused first param.

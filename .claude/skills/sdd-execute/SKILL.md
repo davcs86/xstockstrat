@@ -273,6 +273,28 @@ Also record under `Deviations:` in the context.md step entry.
 
 This mirrors the `docs/roadmap/phase*-deviations.md` pattern used throughout this project.
 
+### No vague deferrals — always resolve with the user
+
+**Never write "deferred" without a specific target step or explicit user decision.**
+
+If, during Phase 2 or Phase 3, you identify a gap that cannot be addressed within the current step's scope (e.g. a param the route doesn't handle, a missing field in a proto, a side-effect from an earlier step's scope limit), you must explicitly surface it and ask the user before proceeding:
+
+```
+Gap found: <one-sentence description of the issue>.
+Options:
+  A) Fix it now — expand scope of this step to include <specific change>.
+  B) Accept as known limitation — <explain why it's safe/harmless>.
+  C) Track as follow-up — I'll note it in context.md for the next relevant step.
+
+Which do you prefer? (A / B / C)
+```
+
+- **Option A**: add the fix to the Phase 2 plan and re-present the plan for confirmation before writing.
+- **Option B**: record it in the Deviation Log with `**Disposition**: accepted limitation` and a clear rationale.
+- **Option C**: record it in context.md under a `## Open Items` section with a description and the earliest step where it could be addressed; do NOT write "deferred" in the PR body or deviation log without this entry.
+
+Do not proceed with a vague "deferred" note unless you have a specific step number or explicit user sign-off.
+
 ---
 
 ## CONTEXT.MD — Per-step entry format

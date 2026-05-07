@@ -94,3 +94,14 @@
 **Progress**: 5 done / 9 total
 **Stopped at**: Step 5 (step complete — PR created, awaiting merge)
 **Next**: /sdd-execute broker-accounts-ui next
+
+### Step 6 — Add per-account `PortfolioPanel` component to `xstockstrat-trader` [done]
+- Created `PortfolioPanel.tsx` — `'use client'` component using SWR to fetch `/api/portfolio/accounts`. Single-card view when an account is selected (full Stat layout matching PortfolioSummary); multi-card compact grid when no account selected. Updated `page.tsx` to import `PortfolioPanel` and replace `<PortfolioSummary>` with `<PortfolioPanel>`.
+- Files modified: `services/xstockstrat-trader/src/components/PortfolioPanel.tsx`, `services/xstockstrat-trader/src/app/page.tsx`
+- Deviations: `PortfolioPanel.tsx` was initially drafted with `&trading_mode=${mode}` in the SWR key. After confirming `ListPortfoliosRequest` proto has no `trading_mode` field (only `account_id`), the param was removed from the SWR key — it was structurally meaningless.
+
+## Session 2026-05-07T00:05:00Z — sdd-execute
+**Steps this session**: [6]
+**Progress**: 6 done / 9 total
+**Stopped at**: Step 6 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next
