@@ -83,6 +83,50 @@ Parse `$ARGUMENTS[1]`:
 - a number N → target only Step N
 - `all` → process all `pending` steps in order, applying confirmation to each
 
+If no `pending` steps are found (all steps are `done`, `skipped`, or `blocked`):
+→ go to **ALL-DONE PATH** below instead of stopping.
+
+---
+
+## ALL-DONE PATH — runs when no pending steps remain
+
+When invoked and all steps are already complete (lifecycle `code-completed`):
+
+1. **Merge-order gate** — same check as STEP COMMIT + PR step 4:
+   a. Read `docs/roadmap/features/merge-order.md`.
+   b. If `<slug>` appears in the **Feature** column and **Resolved** ≠ `Yes`:
+      > "merge-order.md requires `<blocking-feature>` to merge first.
+      > Reason: <reason>
+      > Create the integration PR anyway? (yes / no)"
+      - `no` → stop without creating PR.
+      - `yes` → proceed.
+   c. No entry (or Resolved = Yes) → proceed without warning.
+
+2. **Ensure the feature branch is current:**
+   ```bash
+   git checkout <dev-branch>
+   git pull origin <dev-branch>
+   ```
+
+3. **Build the integration PR body:**
+   - Title: `feat(<slug>): <one-line feature summary from feature.md>`
+   - List all steps with a one-line description each (from implementation-spec.md step titles)
+   - List all new migrations (from implementation-spec.md migration steps)
+   - List any new required environment variables
+   - Summarize key deviations (from Deviation Log)
+   - Include a test plan checklist
+
+4. **Create the integration PR** using `mcp__github__create_pull_request` (not `gh pr create`):
+   - `base`: `main-dev`
+   - `head`: `<dev-branch>`
+   - title and body as built above
+
+5. **Print and stop:**
+   ```
+   Integration PR created: <url>
+   Merge when CI passes and reviewers approve.
+   ```
+
 ---
 
 ## BRANCH SYNC — Run before Phase 1 of every step

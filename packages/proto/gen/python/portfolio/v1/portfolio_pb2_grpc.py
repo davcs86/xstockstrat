@@ -5,7 +5,7 @@ import warnings
 
 from portfolio.v1 import portfolio_pb2 as portfolio_dot_v1_dot_portfolio__pb2
 
-GRPC_GENERATED_VERSION = '1.78.0'
+GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -64,6 +64,11 @@ class PortfolioServiceStub(object):
                 request_serializer=portfolio_dot_v1_dot_portfolio__pb2.StreamPortfolioUpdatesRequest.SerializeToString,
                 response_deserializer=portfolio_dot_v1_dot_portfolio__pb2.PortfolioSnapshot.FromString,
                 _registered_method=True)
+        self.ListPortfolios = channel.unary_unary(
+                '/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios',
+                request_serializer=portfolio_dot_v1_dot_portfolio__pb2.ListPortfoliosRequest.SerializeToString,
+                response_deserializer=portfolio_dot_v1_dot_portfolio__pb2.ListPortfoliosResponse.FromString,
+                _registered_method=True)
 
 
 class PortfolioServiceServicer(object):
@@ -105,6 +110,12 @@ class PortfolioServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListPortfolios(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_PortfolioServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -137,6 +148,11 @@ def add_PortfolioServiceServicer_to_server(servicer, server):
                     servicer.StreamPortfolioUpdates,
                     request_deserializer=portfolio_dot_v1_dot_portfolio__pb2.StreamPortfolioUpdatesRequest.FromString,
                     response_serializer=portfolio_dot_v1_dot_portfolio__pb2.PortfolioSnapshot.SerializeToString,
+            ),
+            'ListPortfolios': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListPortfolios,
+                    request_deserializer=portfolio_dot_v1_dot_portfolio__pb2.ListPortfoliosRequest.FromString,
+                    response_serializer=portfolio_dot_v1_dot_portfolio__pb2.ListPortfoliosResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -301,6 +317,33 @@ class PortfolioService(object):
             '/xstockstrat.portfolio.v1.PortfolioService/StreamPortfolioUpdates',
             portfolio_dot_v1_dot_portfolio__pb2.StreamPortfolioUpdatesRequest.SerializeToString,
             portfolio_dot_v1_dot_portfolio__pb2.PortfolioSnapshot.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListPortfolios(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios',
+            portfolio_dot_v1_dot_portfolio__pb2.ListPortfoliosRequest.SerializeToString,
+            portfolio_dot_v1_dot_portfolio__pb2.ListPortfoliosResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -29,13 +29,13 @@ func NewPortfolioRepo(connStr string) (*PortfolioRepo, error) {
 }
 
 // UpsertPosition inserts or updates a position row.
-func (r *PortfolioRepo) UpsertPosition(ctx context.Context, userID, symbol string, qty, avgEntry, costBasis float64, mode commonv1.TradingMode) error {
+func (r *PortfolioRepo) UpsertPosition(ctx context.Context, userID, symbol string, qty, avgEntry, costBasis float64, mode commonv1.TradingMode, accountID string) error {
 	const q = `
-		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, opened_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-		ON CONFLICT (user_id, symbol, trading_mode) DO UPDATE
+		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, opened_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+		ON CONFLICT (user_id, symbol, trading_mode, account_id) DO UPDATE
 		SET qty=$3, avg_entry_price=$4, cost_basis=$5, updated_at=NOW()`
-	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgEntry, costBasis, mode.String())
+	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgEntry, costBasis, mode.String(), accountID)
 	return err
 }
 
@@ -49,15 +49,16 @@ func (r *PortfolioRepo) ClosePosition(ctx context.Context, userID, symbol string
 // GetPosition returns a single position for a user/symbol/mode.
 func (r *PortfolioRepo) GetPosition(ctx context.Context, userID, symbol string, mode commonv1.TradingMode) (*portfoliov1.Position, error) {
 	const q = `
-		SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode
+		SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
 		FROM portfolio.positions
-		WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3`
+		WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3
+		ORDER BY opened_at DESC LIMIT 1`
 	row := r.pool.QueryRow(ctx, q, userID, symbol, mode.String())
 	return scanPositionRow(row)
 }
 
-// ListPositions returns paginated positions for a user, optionally filtered by mode.
-func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode commonv1.TradingMode, pageSize int, pageToken string) ([]*portfoliov1.Position, string, error) {
+// ListPositions returns paginated positions for a user, optionally filtered by mode and accountID.
+func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode commonv1.TradingMode, pageSize int, pageToken string, accountID string) ([]*portfoliov1.Position, string, error) {
 	if pageSize <= 0 || pageSize > 500 {
 		pageSize = 100
 	}
@@ -71,19 +72,37 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 	var err error
 
 	if mode == commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
-		const q = `
-			SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode
-			FROM portfolio.positions
-			WHERE user_id=$1 AND ($2='' OR symbol > $2)
-			ORDER BY symbol ASC LIMIT $3`
-		rows, err = r.pool.Query(ctx, q, userID, pageToken, pageSize+1)
+		if accountID == "" {
+			const q = `
+				SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
+				FROM portfolio.positions
+				WHERE user_id=$1 AND ($2='' OR symbol > $2)
+				ORDER BY symbol ASC LIMIT $3`
+			rows, err = r.pool.Query(ctx, q, userID, pageToken, pageSize+1)
+		} else {
+			const q = `
+				SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
+				FROM portfolio.positions
+				WHERE user_id=$1 AND account_id=$2 AND ($3='' OR symbol > $3)
+				ORDER BY symbol ASC LIMIT $4`
+			rows, err = r.pool.Query(ctx, q, userID, accountID, pageToken, pageSize+1)
+		}
 	} else {
-		const q = `
-			SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode
-			FROM portfolio.positions
-			WHERE user_id=$1 AND trading_mode=$2 AND ($3='' OR symbol > $3)
-			ORDER BY symbol ASC LIMIT $4`
-		rows, err = r.pool.Query(ctx, q, userID, mode.String(), pageToken, pageSize+1)
+		if accountID == "" {
+			const q = `
+				SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
+				FROM portfolio.positions
+				WHERE user_id=$1 AND trading_mode=$2 AND ($3='' OR symbol > $3)
+				ORDER BY symbol ASC LIMIT $4`
+			rows, err = r.pool.Query(ctx, q, userID, mode.String(), pageToken, pageSize+1)
+		} else {
+			const q = `
+				SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
+				FROM portfolio.positions
+				WHERE user_id=$1 AND trading_mode=$2 AND account_id=$3 AND ($4='' OR symbol > $4)
+				ORDER BY symbol ASC LIMIT $5`
+			rows, err = r.pool.Query(ctx, q, userID, mode.String(), accountID, pageToken, pageSize+1)
+		}
 	}
 	if err != nil {
 		return nil, "", fmt.Errorf("list positions: %w", err)
@@ -93,11 +112,11 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 	var positions []*portfoliov1.Position
 	for rows.Next() {
 		var (
-			symbol, modeStr        string
+			symbol, modeStr, acctID  string
 			qty, avgEntry, costBasis float64
-			openedAt               time.Time
+			openedAt                 time.Time
 		)
-		if err := rows.Scan(&symbol, &qty, &avgEntry, &costBasis, &openedAt, &modeStr); err != nil {
+		if err := rows.Scan(&symbol, &qty, &avgEntry, &costBasis, &openedAt, &modeStr, &acctID); err != nil {
 			return nil, "", fmt.Errorf("scan position: %w", err)
 		}
 		positions = append(positions, &portfoliov1.Position{
@@ -106,6 +125,7 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 			AvgEntryPrice: avgEntry,
 			CostBasis:     costBasis,
 			OpenedAt:      timestamppb.New(openedAt),
+			AccountId:     acctID,
 		})
 	}
 	if rows.Err() != nil {
@@ -171,11 +191,11 @@ type pgxRow interface {
 
 func scanPositionRow(row pgxRow) (*portfoliov1.Position, error) {
 	var (
-		symbol, modeStr        string
-		qty, avgEntry, costBasis float64
-		openedAt               time.Time
+		symbol, modeStr, accountID string
+		qty, avgEntry, costBasis   float64
+		openedAt                   time.Time
 	)
-	if err := row.Scan(&symbol, &qty, &avgEntry, &costBasis, &openedAt, &modeStr); err != nil {
+	if err := row.Scan(&symbol, &qty, &avgEntry, &costBasis, &openedAt, &modeStr, &accountID); err != nil {
 		return nil, fmt.Errorf("scan position: %w", err)
 	}
 	return &portfoliov1.Position{
@@ -184,5 +204,93 @@ func scanPositionRow(row pgxRow) (*portfoliov1.Position, error) {
 		AvgEntryPrice: avgEntry,
 		CostBasis:     costBasis,
 		OpenedAt:      timestamppb.New(openedAt),
+		AccountId:     accountID,
 	}, nil
+}
+
+// UpsertPositionFromSync inserts or updates a position from a broker position sync.
+// Unlike UpsertPosition, opened_at is never overwritten on conflict.
+func (r *PortfolioRepo) UpsertPositionFromSync(ctx context.Context, userID, symbol, tradingMode, accountID string, qty, avgCost float64) error {
+	const q = `
+		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, opened_at, updated_at)
+		VALUES ($1, $2, $3, $4, $4, $5, $6, NOW(), NOW())
+		ON CONFLICT (user_id, symbol, trading_mode, account_id) DO UPDATE
+		SET qty=$3, avg_entry_price=$4, cost_basis=$4, updated_at=NOW()`
+	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgCost, tradingMode, accountID)
+	return err
+}
+
+// DeletePositionsNotInSync deletes positions for an account whose symbols are not in presentSymbols.
+// When presentSymbols is empty, all positions for the account are deleted.
+func (r *PortfolioRepo) DeletePositionsNotInSync(ctx context.Context, accountID string, presentSymbols []string) error {
+	if len(presentSymbols) == 0 {
+		const q = `DELETE FROM portfolio.positions WHERE account_id=$1`
+		_, err := r.pool.Exec(ctx, q, accountID)
+		return err
+	}
+	// Build $2, $3, ... placeholders for the IN clause.
+	args := make([]interface{}, 0, len(presentSymbols)+1)
+	args = append(args, accountID)
+	placeholders := make([]string, len(presentSymbols))
+	for i, s := range presentSymbols {
+		args = append(args, s)
+		placeholders[i] = fmt.Sprintf("$%d", i+2)
+	}
+	q := fmt.Sprintf(`DELETE FROM portfolio.positions WHERE account_id=$1 AND symbol NOT IN (%s)`,
+		joinStrings(placeholders, ","))
+	_, err := r.pool.Exec(ctx, q, args...)
+	return err
+}
+
+func joinStrings(ss []string, sep string) string {
+	result := ""
+	for i, s := range ss {
+		if i > 0 {
+			result += sep
+		}
+		result += s
+	}
+	return result
+}
+
+// ListPositionsByAccount returns all positions for a given account, optionally filtered by tradingMode.
+func (r *PortfolioRepo) ListPositionsByAccount(ctx context.Context, accountID string, tradingMode string) ([]*portfoliov1.Position, error) {
+	var (
+		rows interface {
+			Next() bool
+			Scan(dest ...any) error
+			Close()
+			Err() error
+		}
+		err error
+	)
+	if tradingMode == "" {
+		const q = `
+			SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
+			FROM portfolio.positions
+			WHERE account_id=$1
+			ORDER BY symbol ASC`
+		rows, err = r.pool.Query(ctx, q, accountID)
+	} else {
+		const q = `
+			SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
+			FROM portfolio.positions
+			WHERE account_id=$1 AND trading_mode=$2
+			ORDER BY symbol ASC`
+		rows, err = r.pool.Query(ctx, q, accountID, tradingMode)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list positions by account: %w", err)
+	}
+	defer rows.Close()
+
+	var positions []*portfoliov1.Position
+	for rows.Next() {
+		p, err := scanPositionRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		positions = append(positions, p)
+	}
+	return positions, rows.Err()
 }

@@ -13,6 +13,7 @@ export interface Portfolio {
     totalPnl: number;
     updatedAt?: Date | undefined;
     positions: Position[];
+    accountId: string;
 }
 export interface Position {
     symbol: string;
@@ -25,6 +26,7 @@ export interface Position {
     costBasis: number;
     openedAt?: Date | undefined;
     tradingMode: TradingMode;
+    accountId: string;
 }
 export interface PortfolioSnapshot {
     portfolioId: string;
@@ -34,6 +36,7 @@ export interface PortfolioSnapshot {
     dayPnl: number;
     openPositions: number;
     tradingMode: TradingMode;
+    accountId: string;
 }
 export interface PnLResponse {
     realizedPnl: number;
@@ -46,17 +49,20 @@ export interface PnLResponse {
 export interface GetPortfolioRequest {
     userId: string;
     tradingMode: TradingMode;
+    accountId?: string | undefined;
 }
 export interface GetPositionRequest {
     userId: string;
     symbol: string;
     tradingMode: TradingMode;
+    accountId?: string | undefined;
 }
 export interface ListPositionsRequest {
     userId: string;
     page?: PageRequest | undefined;
     /** Filter by trading mode; UNSPECIFIED returns all positions. */
     tradingMode: TradingMode;
+    accountId?: string | undefined;
 }
 export interface ListPositionsResponse {
     positions: Position[];
@@ -67,15 +73,24 @@ export interface GetPnLRequest {
     range?: TimeRange | undefined;
     /** Filter by trading mode; UNSPECIFIED returns combined P&L. */
     tradingMode: TradingMode;
+    accountId?: string | undefined;
 }
 export interface GetSnapshotRequest {
     portfolioId: string;
     atTime?: Date | undefined;
+    accountId?: string | undefined;
 }
 export interface StreamPortfolioUpdatesRequest {
     userId: string;
     /** Filter by trading mode; UNSPECIFIED streams all modes. */
     tradingMode: TradingMode;
+    accountId?: string | undefined;
+}
+export interface ListPortfoliosRequest {
+    accountId?: string | undefined;
+}
+export interface ListPortfoliosResponse {
+    portfolios: Portfolio[];
 }
 export declare const Portfolio: MessageFns<Portfolio>;
 export declare const Position: MessageFns<Position>;
@@ -88,6 +103,8 @@ export declare const ListPositionsResponse: MessageFns<ListPositionsResponse>;
 export declare const GetPnLRequest: MessageFns<GetPnLRequest>;
 export declare const GetSnapshotRequest: MessageFns<GetSnapshotRequest>;
 export declare const StreamPortfolioUpdatesRequest: MessageFns<StreamPortfolioUpdatesRequest>;
+export declare const ListPortfoliosRequest: MessageFns<ListPortfoliosRequest>;
+export declare const ListPortfoliosResponse: MessageFns<ListPortfoliosResponse>;
 export type PortfolioServiceService = typeof PortfolioServiceService;
 export declare const PortfolioServiceService: {
     readonly getPortfolio: {
@@ -144,6 +161,15 @@ export declare const PortfolioServiceService: {
         readonly responseSerialize: (value: PortfolioSnapshot) => Buffer;
         readonly responseDeserialize: (value: Buffer) => PortfolioSnapshot;
     };
+    readonly listPortfolios: {
+        readonly path: "/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListPortfoliosRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListPortfoliosRequest;
+        readonly responseSerialize: (value: ListPortfoliosResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListPortfoliosResponse;
+    };
 };
 export interface PortfolioServiceServer extends UntypedServiceImplementation {
     getPortfolio: handleUnaryCall<GetPortfolioRequest, Portfolio>;
@@ -152,6 +178,7 @@ export interface PortfolioServiceServer extends UntypedServiceImplementation {
     getPnL: handleUnaryCall<GetPnLRequest, PnLResponse>;
     getSnapshot: handleUnaryCall<GetSnapshotRequest, PortfolioSnapshot>;
     streamPortfolioUpdates: handleServerStreamingCall<StreamPortfolioUpdatesRequest, PortfolioSnapshot>;
+    listPortfolios: handleUnaryCall<ListPortfoliosRequest, ListPortfoliosResponse>;
 }
 export interface PortfolioServiceClient extends Client {
     getPortfolio(request: GetPortfolioRequest, callback: (error: ServiceError | null, response: Portfolio) => void): ClientUnaryCall;
@@ -171,6 +198,9 @@ export interface PortfolioServiceClient extends Client {
     getSnapshot(request: GetSnapshotRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: PortfolioSnapshot) => void): ClientUnaryCall;
     streamPortfolioUpdates(request: StreamPortfolioUpdatesRequest, options?: Partial<CallOptions>): ClientReadableStream<PortfolioSnapshot>;
     streamPortfolioUpdates(request: StreamPortfolioUpdatesRequest, metadata?: Metadata, options?: Partial<CallOptions>): ClientReadableStream<PortfolioSnapshot>;
+    listPortfolios(request: ListPortfoliosRequest, callback: (error: ServiceError | null, response: ListPortfoliosResponse) => void): ClientUnaryCall;
+    listPortfolios(request: ListPortfoliosRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListPortfoliosResponse) => void): ClientUnaryCall;
+    listPortfolios(request: ListPortfoliosRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListPortfoliosResponse) => void): ClientUnaryCall;
 }
 export declare const PortfolioServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): PortfolioServiceClient;

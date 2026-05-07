@@ -2,16 +2,18 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -25,14 +27,38 @@ import (
 	"github.com/xstockstrat/trading/internal/repository"
 )
 
+// brokerPoolEntry holds a broker client and its type tag for a registered account.
+type brokerPoolEntry struct {
+	client     broker.Broker
+	brokerType int32
+}
+
+// alpacaCreds is the JSON shape for Alpaca broker account credentials.
+type alpacaCreds struct {
+	APIKey    string `json:"api_key"`
+	APISecret string `json:"api_secret"`
+}
+
+// ibkrCreds is the JSON shape for IBKR broker account credentials.
+type ibkrCreds struct {
+	ConsumerKey       string `json:"consumer_key"`
+	AccessToken       string `json:"access_token"`
+	AccessTokenSecret string `json:"access_token_secret"`
+	IBKRAccountID     string `json:"ibkr_account_id"`
+}
+
 // TradingService implements business logic for order placement, cancellation,
 // and lifecycle management. Writes all events to xstockstrat-ledger.
 type TradingService struct {
-	cfg    *config.Config
-	cfgW   *config.Watcher
-	broker *broker.Client
-	ledger ledgerv1.LedgerServiceClient
-	notify notifyv1.NotifyServiceClient
+	cfg  *config.Config
+	cfgW *config.Watcher
+	// Multi-broker pool: key is account_id.
+	brokers     map[string]brokerPoolEntry
+	brokersMu   sync.RWMutex
+	accountRepo repository.AccountRepository
+	encKey      string // hex-encoded AES-256-GCM key
+	ledger      ledgerv1.LedgerServiceClient
+	notify      notifyv1.NotifyServiceClient
 	// portfolio is used for pre-trade risk checks (non-blocking on failure).
 	portfolio portfoliov1.PortfolioServiceClient
 	// repo persists orders to trading.orders hypertable.
@@ -55,8 +81,9 @@ var clientKeepAlive = grpc.WithKeepaliveParams(keepalive.ClientParameters{
 func NewTradingService(
 	cfg *config.Config,
 	cfgW *config.Watcher,
-	brokerClient *broker.Client,
+	accountRepo repository.AccountRepository,
 	repo *repository.TradingRepo,
+	encKey string,
 ) (*TradingService, error) {
 	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive)
 	if err != nil {
@@ -71,16 +98,71 @@ func NewTradingService(
 		return nil, fmt.Errorf("dial portfolio: %w", err)
 	}
 	return &TradingService{
-		cfg:       cfg,
-		cfgW:      cfgW,
-		broker:    brokerClient,
-		ledger:    ledgerv1.NewLedgerServiceClient(ledgerConn),
-		notify:    notifyv1.NewNotifyServiceClient(notifyConn),
-		portfolio: portfoliov1.NewPortfolioServiceClient(portfolioConn),
-		repo:      repo,
-		orders:    make(map[string]*tradingv1.Order),
-		subs:      make(map[string]chan *tradingv1.Order),
+		cfg:         cfg,
+		cfgW:        cfgW,
+		brokers:     make(map[string]brokerPoolEntry),
+		accountRepo: accountRepo,
+		encKey:      encKey,
+		ledger:      ledgerv1.NewLedgerServiceClient(ledgerConn),
+		notify:      notifyv1.NewNotifyServiceClient(notifyConn),
+		portfolio:   portfoliov1.NewPortfolioServiceClient(portfolioConn),
+		repo:        repo,
+		orders:      make(map[string]*tradingv1.Order),
+		subs:        make(map[string]chan *tradingv1.Order),
 	}, nil
+}
+
+// LoadBrokerPool reads all active broker accounts from DB, decrypts credentials,
+// instantiates the appropriate broker client, and populates s.brokers.
+func (s *TradingService) LoadBrokerPool(ctx context.Context) error {
+	accounts, err := s.accountRepo.ListActiveBrokerAccounts(ctx)
+	if err != nil {
+		return fmt.Errorf("LoadBrokerPool: list accounts: %w", err)
+	}
+
+	s.brokersMu.Lock()
+	defer s.brokersMu.Unlock()
+
+	for _, rec := range accounts {
+		plaintext, err := repository.DecryptCredentials(s.encKey, rec.CredentialsEnc)
+		if err != nil {
+			slog.Warn("LoadBrokerPool: decrypt failed, skipping account", "account_id", rec.ID, "error", err)
+			continue
+		}
+		b, err := s.instantiateBrokerLocked(rec, plaintext)
+		if err != nil {
+			slog.Warn("LoadBrokerPool: instantiate broker failed, skipping account", "account_id", rec.ID, "error", err)
+			continue
+		}
+		s.brokers[rec.ID] = brokerPoolEntry{client: b, brokerType: rec.BrokerType}
+		slog.Info("LoadBrokerPool: loaded account", "account_id", rec.ID, "broker_type", rec.BrokerType, "is_paper", rec.IsPaper)
+	}
+	return nil
+}
+
+// resolveAccount returns the broker pool entry for the given accountID.
+// If accountID is empty and exactly one broker is registered, that one is returned.
+func (s *TradingService) resolveAccount(accountID string) (brokerPoolEntry, error) {
+	s.brokersMu.RLock()
+	defer s.brokersMu.RUnlock()
+
+	if accountID != "" {
+		entry, ok := s.brokers[accountID]
+		if !ok {
+			return brokerPoolEntry{}, grpcstatus.Errorf(codes.NotFound, "broker account %q not found in pool", accountID)
+		}
+		return entry, nil
+	}
+
+	if len(s.brokers) == 1 {
+		for _, entry := range s.brokers {
+			return entry, nil
+		}
+	}
+	if len(s.brokers) == 0 {
+		return brokerPoolEntry{}, grpcstatus.Errorf(codes.FailedPrecondition, "no broker accounts registered; call RegisterBrokerAccount first")
+	}
+	return brokerPoolEntry{}, grpcstatus.Errorf(codes.InvalidArgument, "multiple broker accounts registered; account_id is required")
 }
 
 // SubscribeOrderUpdates registers a subscriber channel for order update broadcasts.
@@ -120,6 +202,12 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		return nil, fmt.Errorf("platform is in maintenance mode — trading halted")
 	}
 
+	// Resolve broker account.
+	accountEntry, err := s.resolveAccount(req.AccountId)
+	if err != nil {
+		return nil, err
+	}
+
 	// Non-blocking portfolio risk check: log warnings but never block order placement.
 	s.checkPortfolioRisk(ctx, req)
 
@@ -133,9 +221,9 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		(req.LimitPrice > 0 && req.Qty*req.LimitPrice > approvalNotionalThreshold)
 
 	orderID := uuid.New().String()
-	status := tradingv1.OrderStatus_ORDER_STATUS_NEW
+	orderStatus := tradingv1.OrderStatus_ORDER_STATUS_NEW
 	if requiresApproval {
-		status = tradingv1.OrderStatus_ORDER_STATUS_PENDING_APPROVAL
+		orderStatus = tradingv1.OrderStatus_ORDER_STATUS_PENDING_APPROVAL
 	}
 
 	order := &tradingv1.Order{
@@ -144,7 +232,7 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		Symbol:        req.Symbol,
 		Side:          req.Side,
 		OrderType:     req.OrderType,
-		Status:        status,
+		Status:        orderStatus,
 		Qty:           req.Qty,
 		FilledQty:     0,
 		LimitPrice:    req.LimitPrice,
@@ -153,6 +241,8 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		StrategyId:    req.StrategyId,
 		UserId:        req.UserId,
 		TradingMode:   mode,
+		AccountId:     req.AccountId,
+		BrokerType:    commonv1.BrokerType(accountEntry.brokerType),
 		CreatedAt:     timestamppb.New(time.Now()),
 		UpdatedAt:     timestamppb.New(time.Now()),
 	}
@@ -168,7 +258,7 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 
 	go s.emitLedgerEvent(context.Background(), "order.created", orderID, map[string]interface{}{
 		"symbol": order.Symbol, "side": order.Side.String(), "qty": order.Qty,
-		"status": status.String(), "trading_mode": mode.String(),
+		"status": orderStatus.String(), "trading_mode": mode.String(),
 	})
 
 	if requiresApproval {
@@ -187,9 +277,9 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		"qty": order.Qty, "trading_mode": mode.String(),
 	})
 
-	// Submit to Alpaca broker (paper or live based on resolved mode).
-	brokerReq := s.buildBrokerRequest(req, mode)
-	alpacaOrder, err := s.broker.SubmitOrder(ctx, brokerReq)
+	// Submit to broker.
+	brokerReq := s.buildBrokerRequest(req)
+	brokerOrder, err := accountEntry.client.SubmitOrder(ctx, brokerReq)
 	if err != nil {
 		order.Status = tradingv1.OrderStatus_ORDER_STATUS_REJECTED
 		order.UpdatedAt = timestamppb.New(time.Now())
@@ -202,15 +292,10 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	}
 
 	// Update order with broker-assigned fields.
-	order.BrokerOrderId = alpacaOrder.ID
-	order.Status = alpacaStatusToProto(alpacaOrder.Status)
+	order.BrokerOrderId = brokerOrder.BrokerOrderID
+	order.Status = alpacaStatusToProto(brokerOrder.Status)
 	order.UpdatedAt = timestamppb.New(time.Now())
-	if fq, err := strconv.ParseFloat(alpacaOrder.FilledQty, 64); err == nil {
-		order.FilledQty = fq
-	}
-	if fp, err := strconv.ParseFloat(alpacaOrder.FilledAvgPrice, 64); err == nil {
-		order.FilledAvgPrice = fp
-	}
+	// BrokerOrder does not carry fill qty/price; those are updated by the fill poller.
 
 	// Persist updated order with broker fields.
 	if err := s.repo.UpsertOrder(context.Background(), order); err != nil {
@@ -218,12 +303,12 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	}
 
 	go s.emitLedgerEvent(context.Background(), "order.broker_submitted", orderID, map[string]interface{}{
-		"order_id": orderID, "broker_order_id": alpacaOrder.ID,
-		"broker_status": alpacaOrder.Status, "trading_mode": mode.String(),
+		"order_id": orderID, "broker_order_id": brokerOrder.BrokerOrderID,
+		"broker_status": brokerOrder.Status, "trading_mode": mode.String(),
 	})
 
-	slog.Info("order submitted to broker", "order_id", orderID, "broker_order_id", alpacaOrder.ID,
-		"trading_mode", mode.String(), "broker_status", alpacaOrder.Status)
+	slog.Info("order submitted to broker", "order_id", orderID, "broker_order_id", brokerOrder.BrokerOrderID,
+		"trading_mode", mode.String(), "broker_status", brokerOrder.Status)
 	return order, nil
 }
 
@@ -245,9 +330,14 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 
 	// Cancel at broker if we have a broker order ID.
 	if order.BrokerOrderId != "" {
-		if err := s.broker.CancelOrder(ctx, order.BrokerOrderId); err != nil {
-			slog.Warn("broker cancel failed", "order_id", req.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
-			// Continue with internal cancellation — broker may have already filled/canceled.
+		entry, resolveErr := s.resolveAccount(order.AccountId)
+		if resolveErr != nil {
+			slog.Warn("cancel: could not resolve broker account", "order_id", req.OrderId, "account_id", order.AccountId, "error", resolveErr)
+		} else {
+			if err := entry.client.CancelOrder(ctx, order.BrokerOrderId); err != nil {
+				slog.Warn("broker cancel failed", "order_id", req.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
+				// Continue with internal cancellation — broker may have already filled/canceled.
+			}
 		}
 	}
 
@@ -283,7 +373,6 @@ func (s *TradingService) ListOrders(ctx context.Context, req *tradingv1.ListOrde
 	orders, err := s.repo.ListOrders(ctx, req.UserId, req.Status, req.TradingMode, req.StrategyId)
 	if err != nil {
 		slog.Warn("db list orders failed, falling back to in-memory", "error", err)
-		// Fall back to in-memory.
 		var mem []*tradingv1.Order
 		s.mu.Lock()
 		for _, o := range s.orders {
@@ -322,7 +411,6 @@ func (s *TradingService) StreamOrderUpdates(req *tradingv1.StreamOrderUpdatesReq
 		}
 	}
 
-	// Wait for context cancellation (caller disconnects).
 	<-stream.Context().Done()
 	return nil
 }
@@ -341,8 +429,6 @@ func (s *TradingService) StartFillPoller(ctx context.Context) {
 			return
 		case <-ticker.C:
 			s.pollFills(ctx)
-			// Re-read interval from live config on every tick so changes take
-			// effect at the next cycle without a service restart.
 			intervalMs := s.cfgW.GetFloat("trading.fill_poller.interval_ms", defaultIntervalMs)
 			if intervalMs > 0 {
 				newInterval := time.Duration(intervalMs) * time.Millisecond
@@ -356,6 +442,14 @@ func (s *TradingService) StartFillPoller(ctx context.Context) {
 }
 
 func (s *TradingService) pollFills(ctx context.Context) {
+	// Snapshot the broker pool under read lock.
+	s.brokersMu.RLock()
+	brokerMap := make(map[string]brokerPoolEntry, len(s.brokers))
+	for id, e := range s.brokers {
+		brokerMap[id] = e
+	}
+	s.brokersMu.RUnlock()
+
 	// Collect in-flight orders from in-memory map.
 	s.mu.Lock()
 	candidates := make([]*tradingv1.Order, 0)
@@ -374,26 +468,37 @@ func (s *TradingService) pollFills(ctx context.Context) {
 	s.mu.Unlock()
 
 	for _, order := range candidates {
-		alpacaOrder, err := s.broker.GetOrder(ctx, order.BrokerOrderId)
+		// Resolve the broker for this order's account.
+		entry, ok := brokerMap[order.AccountId]
+		if !ok {
+			// Fallback: use sole account if pool has exactly one.
+			if len(brokerMap) == 1 {
+				for _, e := range brokerMap {
+					entry = e
+					ok = true
+					break
+				}
+			}
+		}
+		if !ok {
+			slog.Warn("fill poll: no broker for account", "order_id", order.OrderId, "account_id", order.AccountId)
+			continue
+		}
+
+		brokerOrder, err := entry.client.GetOrder(ctx, order.BrokerOrderId)
 		if err != nil {
 			slog.Warn("fill poll: broker GetOrder failed", "order_id", order.OrderId, "error", err)
 			continue
 		}
 
-		newStatus := alpacaStatusToProto(alpacaOrder.Status)
+		newStatus := alpacaStatusToProto(brokerOrder.Status)
 		if newStatus == order.Status {
 			continue
 		}
 
-		// Update order with latest broker state.
 		order.Status = newStatus
 		order.UpdatedAt = timestamppb.New(time.Now())
-		if fq, err := strconv.ParseFloat(alpacaOrder.FilledQty, 64); err == nil {
-			order.FilledQty = fq
-		}
-		if fp, err := strconv.ParseFloat(alpacaOrder.FilledAvgPrice, 64); err == nil {
-			order.FilledAvgPrice = fp
-		}
+		// BrokerOrder.Status is the only normalized field; fill qty/price are broker-specific.
 
 		if err := s.repo.UpsertOrder(ctx, order); err != nil {
 			slog.Warn("fill poll: db upsert failed", "order_id", order.OrderId, "error", err)
@@ -432,6 +537,215 @@ func (s *TradingService) pollFills(ctx context.Context) {
 	}
 }
 
+// StartPositionSyncPoller polls all registered broker accounts for open positions
+// and emits ledger events. Interval is live-reloaded from config key
+// `trading.position_sync.interval_ms` (default 300000 ms).
+func (s *TradingService) StartPositionSyncPoller(ctx context.Context) {
+	const defaultIntervalMs = 300000.0
+	currentInterval := time.Duration(defaultIntervalMs) * time.Millisecond
+	ticker := time.NewTicker(currentInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.syncPositions(ctx)
+			intervalMs := s.cfgW.GetFloat("trading.position_sync.interval_ms", defaultIntervalMs)
+			if intervalMs > 0 {
+				newInterval := time.Duration(intervalMs) * time.Millisecond
+				if newInterval != currentInterval {
+					currentInterval = newInterval
+					ticker.Reset(currentInterval)
+				}
+			}
+		}
+	}
+}
+
+func (s *TradingService) syncPositions(ctx context.Context) {
+	s.brokersMu.RLock()
+	accounts := make(map[string]broker.Broker, len(s.brokers))
+	for id, e := range s.brokers {
+		accounts[id] = e.client
+	}
+	s.brokersMu.RUnlock()
+
+	for accountID, b := range accounts {
+		positions, err := b.GetPositions(ctx)
+		if err != nil {
+			slog.Warn("syncPositions: GetPositions failed", "account_id", accountID, "error", err)
+			continue
+		}
+		payload := map[string]interface{}{
+			"account_id": accountID,
+			"count":      len(positions),
+		}
+		s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), payload)
+	}
+}
+
+// RegisterBrokerAccount registers a new broker account, encrypts credentials, and adds it to the pool.
+func (s *TradingService) RegisterBrokerAccount(ctx context.Context, req *tradingv1.RegisterBrokerAccountRequest, userID string) (*tradingv1.BrokerAccount, error) {
+	if !json.Valid([]byte(req.CredentialsJson)) {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "credentials_json is not valid JSON")
+	}
+	if s.cfg.AppEnv == "dev" && !req.IsPaper {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "only paper accounts are permitted in the dev environment")
+	}
+
+	encCreds, err := repository.EncryptCredentials(s.encKey, []byte(req.CredentialsJson))
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "encrypt credentials: %v", err)
+	}
+
+	accountID := uuid.NewString()
+	rec := &repository.BrokerAccountRecord{
+		ID:             accountID,
+		DisplayName:    req.DisplayName,
+		BrokerType:     int32(req.BrokerType),
+		IsPaper:        req.IsPaper,
+		IsActive:       true,
+		UserID:         userID,
+		CredentialsEnc: encCreds,
+	}
+	if err := s.accountRepo.CreateBrokerAccount(ctx, rec); err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "create broker account: %v", err)
+	}
+
+	b, err := s.instantiateBrokerLocked(rec, []byte(req.CredentialsJson))
+	if err != nil {
+		slog.Warn("RegisterBrokerAccount: broker instantiation failed", "account_id", accountID, "error", err)
+	} else {
+		s.brokersMu.Lock()
+		s.brokers[accountID] = brokerPoolEntry{client: b, brokerType: int32(req.BrokerType)}
+		s.brokersMu.Unlock()
+	}
+
+	return &tradingv1.BrokerAccount{
+		Id:          accountID,
+		DisplayName: req.DisplayName,
+		BrokerType:  req.BrokerType,
+		IsPaper:     req.IsPaper,
+		UserId:      userID,
+		IsActive:    true,
+	}, nil
+}
+
+// ListBrokerAccountsSvc returns all broker accounts for the given user.
+func (s *TradingService) ListBrokerAccountsSvc(ctx context.Context, userID string) ([]*tradingv1.BrokerAccount, error) {
+	recs, err := s.accountRepo.ListBrokerAccounts(ctx, userID)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "list broker accounts: %v", err)
+	}
+	accounts := make([]*tradingv1.BrokerAccount, 0, len(recs))
+	for _, r := range recs {
+		accounts = append(accounts, &tradingv1.BrokerAccount{
+			Id:          r.ID,
+			DisplayName: r.DisplayName,
+			BrokerType:  commonv1.BrokerType(r.BrokerType),
+			IsPaper:     r.IsPaper,
+			UserId:      r.UserID,
+			IsActive:    r.IsActive,
+		})
+	}
+	return accounts, nil
+}
+
+// DeregisterBrokerAccountSvc deactivates a broker account and removes it from the pool.
+func (s *TradingService) DeregisterBrokerAccountSvc(ctx context.Context, accountID, callerUserID string) error {
+	rec, err := s.accountRepo.GetBrokerAccount(ctx, accountID)
+	if err != nil {
+		return grpcstatus.Errorf(codes.NotFound, "account %s not found: %v", accountID, err)
+	}
+	if rec.UserID != callerUserID {
+		return grpcstatus.Errorf(codes.PermissionDenied, "account %s does not belong to caller", accountID)
+	}
+	if err := s.accountRepo.DeactivateBrokerAccount(ctx, accountID); err != nil {
+		return grpcstatus.Errorf(codes.Internal, "deactivate account: %v", err)
+	}
+	s.brokersMu.Lock()
+	delete(s.brokers, accountID)
+	s.brokersMu.Unlock()
+	return nil
+}
+
+// EnsureAlpacaDefault creates an `alpaca-default` account from env vars if the broker pool is empty.
+// Called at startup for zero-config backward compatibility with single-Alpaca deployments.
+func (s *TradingService) EnsureAlpacaDefault(ctx context.Context) {
+	s.brokersMu.RLock()
+	poolLen := len(s.brokers)
+	s.brokersMu.RUnlock()
+
+	if poolLen > 0 {
+		return
+	}
+	if s.cfg.AlpacaAPIKey == "" || s.cfg.AlpacaAPISecret == "" {
+		slog.Warn("EnsureAlpacaDefault: ALPACA_API_KEY/SECRET not set and broker pool is empty; register an account manually")
+		return
+	}
+	if s.encKey == "" {
+		slog.Warn("EnsureAlpacaDefault: BROKER_ACCOUNTS_ENCRYPTION_KEY not set; cannot create alpaca-default account")
+		return
+	}
+
+	creds := alpacaCreds{APIKey: s.cfg.AlpacaAPIKey, APISecret: s.cfg.AlpacaAPISecret}
+	credsJSON, _ := json.Marshal(creds)
+	encCreds, err := repository.EncryptCredentials(s.encKey, credsJSON)
+	if err != nil {
+		slog.Error("EnsureAlpacaDefault: encrypt credentials failed", "error", err)
+		return
+	}
+
+	rec := &repository.BrokerAccountRecord{
+		ID:             "alpaca-default",
+		DisplayName:    "Alpaca Default",
+		BrokerType:     int32(commonv1.BrokerType_BROKER_TYPE_ALPACA),
+		IsPaper:        s.cfg.AlpacaPaper,
+		IsActive:       true,
+		UserID:         "default",
+		CredentialsEnc: encCreds,
+	}
+	if err := s.accountRepo.CreateBrokerAccount(ctx, rec); err != nil {
+		slog.Warn("EnsureAlpacaDefault: CreateBrokerAccount failed (may already exist)", "error", err)
+	}
+
+	if err := s.LoadBrokerPool(ctx); err != nil {
+		slog.Error("EnsureAlpacaDefault: LoadBrokerPool failed", "error", err)
+	}
+}
+
+// instantiateBrokerLocked creates a broker.Broker from plaintext credentials JSON.
+// Caller must not hold brokersMu (it acquires no lock itself).
+func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRecord, plaintext []byte) (broker.Broker, error) {
+	switch rec.BrokerType {
+	case int32(commonv1.BrokerType_BROKER_TYPE_IBKR):
+		var creds ibkrCreds
+		if err := json.Unmarshal(plaintext, &creds); err != nil {
+			return nil, fmt.Errorf("unmarshal IBKR creds: %w", err)
+		}
+		return broker.NewIBKRClient(broker.IBKRConfig{
+			ConsumerKey:       creds.ConsumerKey,
+			AccessToken:       creds.AccessToken,
+			AccessTokenSecret: creds.AccessTokenSecret,
+			IBKRAccountID:     creds.IBKRAccountID,
+			IsPaper:           rec.IsPaper,
+		}), nil
+	default:
+		var creds alpacaCreds
+		if err := json.Unmarshal(plaintext, &creds); err != nil {
+			return nil, fmt.Errorf("unmarshal Alpaca creds: %w", err)
+		}
+		return broker.NewClient(broker.ClientConfig{
+			APIKey:    creds.APIKey,
+			APISecret: creds.APISecret,
+			PaperURL:  s.cfg.AlpacaPaperURL,
+			LiveURL:   s.cfg.AlpacaLiveURL,
+			Paper:     rec.IsPaper,
+		}), nil
+	}
+}
+
 // checkPortfolioRisk makes a non-blocking GetPortfolio call to validate position
 // concentration limits before placing an order. Warnings are logged but never
 // block order placement — portfolio unavailability must not halt trading.
@@ -460,7 +774,6 @@ func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.
 		return
 	}
 
-	// Estimate order notional value using limit price or a rough check.
 	orderNotional := req.Qty * req.LimitPrice
 	if orderNotional > 0 {
 		pct := orderNotional / portfolio.Equity
@@ -482,7 +795,6 @@ func (s *TradingService) resolveTradingMode(requested commonv1.TradingMode) comm
 	if requested != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
 		return requested
 	}
-	// Live config takes precedence over env default.
 	paper := s.cfgW.GetBool("trading.broker.paper", s.cfg.AlpacaPaper)
 	if paper {
 		return commonv1.TradingMode_TRADING_MODE_PAPER
@@ -490,8 +802,8 @@ func (s *TradingService) resolveTradingMode(requested commonv1.TradingMode) comm
 	return commonv1.TradingMode_TRADING_MODE_LIVE
 }
 
-// buildBrokerRequest translates a PlaceOrderRequest to an Alpaca SubmitOrderRequest.
-func (s *TradingService) buildBrokerRequest(req *tradingv1.PlaceOrderRequest, mode commonv1.TradingMode) broker.SubmitOrderRequest {
+// buildBrokerRequest translates a PlaceOrderRequest into the normalized broker.OrderRequest.
+func (s *TradingService) buildBrokerRequest(req *tradingv1.PlaceOrderRequest) broker.OrderRequest {
 	sideMap := map[tradingv1.OrderSide]string{
 		tradingv1.OrderSide_ORDER_SIDE_BUY:  "buy",
 		tradingv1.OrderSide_ORDER_SIDE_SELL: "sell",
@@ -509,24 +821,18 @@ func (s *TradingService) buildBrokerRequest(req *tradingv1.PlaceOrderRequest, mo
 		tif = "day"
 	}
 
-	brokerReq := broker.SubmitOrderRequest{
-		Symbol:        req.Symbol,
-		Qty:           strconv.FormatFloat(req.Qty, 'f', -1, 64),
-		Side:          sideMap[req.Side],
-		Type:          typeMap[req.OrderType],
-		TimeInForce:   tif,
-		ClientOrderID: req.ClientOrderId,
+	return broker.OrderRequest{
+		Symbol:      req.Symbol,
+		Qty:         req.Qty,
+		Side:        sideMap[req.Side],
+		OrderType:   typeMap[req.OrderType],
+		TimeInForce: tif,
+		LimitPrice:  req.LimitPrice,
+		StopPrice:   req.StopPrice,
 	}
-	if req.LimitPrice > 0 {
-		brokerReq.LimitPrice = strconv.FormatFloat(req.LimitPrice, 'f', -1, 64)
-	}
-	if req.StopPrice > 0 {
-		brokerReq.StopPrice = strconv.FormatFloat(req.StopPrice, 'f', -1, 64)
-	}
-	return brokerReq
 }
 
-// alpacaStatusToProto maps Alpaca order status strings to proto OrderStatus values.
+// alpacaStatusToProto maps broker order status strings to proto OrderStatus values.
 func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 	switch s {
 	case "new", "accepted", "pending_new":
@@ -551,7 +857,7 @@ func (s *TradingService) emitLedgerEvent(ctx context.Context, eventType, streamK
 	_, err := s.ledger.AppendEvent(ctx, &ledgerv1.AppendEventRequest{
 		EventType:     eventType,
 		SourceService: "xstockstrat-trading",
-		StreamKey:     fmt.Sprintf("order:%s", streamKey),
+		StreamKey:     streamKey,
 		Payload:       p,
 	})
 	if err != nil {

@@ -45,6 +45,12 @@ const (
 	// IngestServiceNormalizeRawDataProcedure is the fully-qualified name of the IngestService's
 	// NormalizeRawData RPC.
 	IngestServiceNormalizeRawDataProcedure = "/xstockstrat.ingest.v1.IngestService/NormalizeRawData"
+	// IngestServiceIngestSignalProcedure is the fully-qualified name of the IngestService's
+	// IngestSignal RPC.
+	IngestServiceIngestSignalProcedure = "/xstockstrat.ingest.v1.IngestService/IngestSignal"
+	// IngestServiceQuerySignalsProcedure is the fully-qualified name of the IngestService's
+	// QuerySignals RPC.
+	IngestServiceQuerySignalsProcedure = "/xstockstrat.ingest.v1.IngestService/QuerySignals"
 )
 
 // IngestServiceClient is a client for the xstockstrat.ingest.v1.IngestService service.
@@ -53,6 +59,10 @@ type IngestServiceClient interface {
 	GetBackfillStatus(context.Context, *connect.Request[v1.GetBackfillStatusRequest]) (*connect.Response[v1.BackfillJob], error)
 	ListBackfillJobs(context.Context, *connect.Request[v1.ListBackfillJobsRequest]) (*connect.Response[v1.ListBackfillJobsResponse], error)
 	NormalizeRawData(context.Context, *connect.Request[v1.NormalizeRawDataRequest]) (*connect.Response[v1.NormalizeRawDataResponse], error)
+	// Signal ingestion — persists newsletter/external signals to ingest.newsletter_signals hypertable
+	IngestSignal(context.Context, *connect.Request[v1.IngestSignalRequest]) (*connect.Response[v1.IngestSignalResponse], error)
+	// Signal query — returns active signals filtered by source/symbol/direction and time window
+	QuerySignals(context.Context, *connect.Request[v1.QuerySignalsRequest]) (*connect.Response[v1.QuerySignalsResponse], error)
 }
 
 // NewIngestServiceClient constructs a client for the xstockstrat.ingest.v1.IngestService service.
@@ -90,6 +100,18 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(ingestServiceMethods.ByName("NormalizeRawData")),
 			connect.WithClientOptions(opts...),
 		),
+		ingestSignal: connect.NewClient[v1.IngestSignalRequest, v1.IngestSignalResponse](
+			httpClient,
+			baseURL+IngestServiceIngestSignalProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("IngestSignal")),
+			connect.WithClientOptions(opts...),
+		),
+		querySignals: connect.NewClient[v1.QuerySignalsRequest, v1.QuerySignalsResponse](
+			httpClient,
+			baseURL+IngestServiceQuerySignalsProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("QuerySignals")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -99,6 +121,8 @@ type ingestServiceClient struct {
 	getBackfillStatus *connect.Client[v1.GetBackfillStatusRequest, v1.BackfillJob]
 	listBackfillJobs  *connect.Client[v1.ListBackfillJobsRequest, v1.ListBackfillJobsResponse]
 	normalizeRawData  *connect.Client[v1.NormalizeRawDataRequest, v1.NormalizeRawDataResponse]
+	ingestSignal      *connect.Client[v1.IngestSignalRequest, v1.IngestSignalResponse]
+	querySignals      *connect.Client[v1.QuerySignalsRequest, v1.QuerySignalsResponse]
 }
 
 // TriggerBackfill calls xstockstrat.ingest.v1.IngestService.TriggerBackfill.
@@ -121,12 +145,26 @@ func (c *ingestServiceClient) NormalizeRawData(ctx context.Context, req *connect
 	return c.normalizeRawData.CallUnary(ctx, req)
 }
 
+// IngestSignal calls xstockstrat.ingest.v1.IngestService.IngestSignal.
+func (c *ingestServiceClient) IngestSignal(ctx context.Context, req *connect.Request[v1.IngestSignalRequest]) (*connect.Response[v1.IngestSignalResponse], error) {
+	return c.ingestSignal.CallUnary(ctx, req)
+}
+
+// QuerySignals calls xstockstrat.ingest.v1.IngestService.QuerySignals.
+func (c *ingestServiceClient) QuerySignals(ctx context.Context, req *connect.Request[v1.QuerySignalsRequest]) (*connect.Response[v1.QuerySignalsResponse], error) {
+	return c.querySignals.CallUnary(ctx, req)
+}
+
 // IngestServiceHandler is an implementation of the xstockstrat.ingest.v1.IngestService service.
 type IngestServiceHandler interface {
 	TriggerBackfill(context.Context, *connect.Request[v1.TriggerBackfillRequest]) (*connect.Response[v1.TriggerBackfillResponse], error)
 	GetBackfillStatus(context.Context, *connect.Request[v1.GetBackfillStatusRequest]) (*connect.Response[v1.BackfillJob], error)
 	ListBackfillJobs(context.Context, *connect.Request[v1.ListBackfillJobsRequest]) (*connect.Response[v1.ListBackfillJobsResponse], error)
 	NormalizeRawData(context.Context, *connect.Request[v1.NormalizeRawDataRequest]) (*connect.Response[v1.NormalizeRawDataResponse], error)
+	// Signal ingestion — persists newsletter/external signals to ingest.newsletter_signals hypertable
+	IngestSignal(context.Context, *connect.Request[v1.IngestSignalRequest]) (*connect.Response[v1.IngestSignalResponse], error)
+	// Signal query — returns active signals filtered by source/symbol/direction and time window
+	QuerySignals(context.Context, *connect.Request[v1.QuerySignalsRequest]) (*connect.Response[v1.QuerySignalsResponse], error)
 }
 
 // NewIngestServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -160,6 +198,18 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(ingestServiceMethods.ByName("NormalizeRawData")),
 		connect.WithHandlerOptions(opts...),
 	)
+	ingestServiceIngestSignalHandler := connect.NewUnaryHandler(
+		IngestServiceIngestSignalProcedure,
+		svc.IngestSignal,
+		connect.WithSchema(ingestServiceMethods.ByName("IngestSignal")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServiceQuerySignalsHandler := connect.NewUnaryHandler(
+		IngestServiceQuerySignalsProcedure,
+		svc.QuerySignals,
+		connect.WithSchema(ingestServiceMethods.ByName("QuerySignals")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.ingest.v1.IngestService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IngestServiceTriggerBackfillProcedure:
@@ -170,6 +220,10 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceListBackfillJobsHandler.ServeHTTP(w, r)
 		case IngestServiceNormalizeRawDataProcedure:
 			ingestServiceNormalizeRawDataHandler.ServeHTTP(w, r)
+		case IngestServiceIngestSignalProcedure:
+			ingestServiceIngestSignalHandler.ServeHTTP(w, r)
+		case IngestServiceQuerySignalsProcedure:
+			ingestServiceQuerySignalsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -193,4 +247,12 @@ func (UnimplementedIngestServiceHandler) ListBackfillJobs(context.Context, *conn
 
 func (UnimplementedIngestServiceHandler) NormalizeRawData(context.Context, *connect.Request[v1.NormalizeRawDataRequest]) (*connect.Response[v1.NormalizeRawDataResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.ingest.v1.IngestService.NormalizeRawData is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) IngestSignal(context.Context, *connect.Request[v1.IngestSignalRequest]) (*connect.Response[v1.IngestSignalResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.ingest.v1.IngestService.IngestSignal is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) QuerySignals(context.Context, *connect.Request[v1.QuerySignalsRequest]) (*connect.Response[v1.QuerySignalsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.ingest.v1.IngestService.QuerySignals is not implemented"))
 }
