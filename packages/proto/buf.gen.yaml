@@ -37,11 +37,14 @@ plugins:
       - useOptionals=messages
       - stringEnums=true
 
-  # TypeScript — Connect-RPC ES (browser + Node.js fetch-based clients)
-  # Install: npm install -g @connectrpc/protoc-gen-connect-es
-  # NOTE: Requires protoc-gen-es (_pb.ts files) to be generated first.
-  #       Uncomment once protoc-gen-es is added to this config.
-  # - name: connect-es
-  #   out: gen/ts
-  #   opt:
-  #     - target=ts
+  # TypeScript — protoc-gen-es message types (*_pb.ts); required by connect-es
+  - remote: buf.build/bufbuild/es
+    out: gen/ts
+    opt:
+      - target=ts
+
+  # TypeScript — Connect-RPC ES service stubs (*_connect.ts, browser + fetch)
+  - remote: buf.build/connectrpc/es
+    out: gen/ts
+    opt:
+      - target=ts
