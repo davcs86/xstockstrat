@@ -297,8 +297,13 @@ Options:
 Which do you prefer? (A / B / C)
 ```
 
+**STOP HERE. Wait for the user's explicit reply (A / B / C) before taking any action.**
+
+- Do NOT auto-select an option based on your own judgment — not even Option B ("accepted limitation"). The user must choose.
+- If the session is compacted or resumed before a reply arrives, re-surface the same gap question at the top of the next response and wait again.
+
 - **Option A**: add the fix to the Phase 2 plan and re-present the plan for confirmation before writing.
-- **Option B**: record it in the Deviation Log with `**Disposition**: accepted limitation` and a clear rationale.
+- **Option B**: record it in the Deviation Log with `**Disposition**: accepted limitation` and a clear rationale. Only apply after the user explicitly selects B.
 - **Option C**: record it in context.md under a `## Open Items` section with a description and the earliest step where it could be addressed; do NOT write "deferred" in the PR body or deviation log without this entry.
 
 Do not proceed with a vague "deferred" note unless you have a specific step number or explicit user sign-off.
