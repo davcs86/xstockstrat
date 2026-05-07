@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CancelOrderRequest, CancelOrderResponse, GetOrderRequest, ListOrdersRequest, ListOrdersResponse, Order, PlaceOrderRequest, StreamOrderUpdatesRequest } from "./trading_pb.js";
+import { CancelOrderRequest, CancelOrderResponse, DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse, GetOrderRequest, ListBrokerAccountsRequest, ListBrokerAccountsResponse, ListOrdersRequest, ListOrdersResponse, Order, PlaceOrderRequest, RegisterBrokerAccountRequest, RegisterBrokerAccountResponse, StreamOrderUpdatesRequest } from "./trading_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -56,6 +56,33 @@ export const TradingService = {
       I: StreamOrderUpdatesRequest,
       O: Order,
       kind: MethodKind.ServerStreaming,
+    },
+    /**
+     * @generated from rpc xstockstrat.trading.v1.TradingService.RegisterBrokerAccount
+     */
+    registerBrokerAccount: {
+      name: "RegisterBrokerAccount",
+      I: RegisterBrokerAccountRequest,
+      O: RegisterBrokerAccountResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.trading.v1.TradingService.ListBrokerAccounts
+     */
+    listBrokerAccounts: {
+      name: "ListBrokerAccounts",
+      I: ListBrokerAccountsRequest,
+      O: ListBrokerAccountsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.trading.v1.TradingService.DeregisterBrokerAccount
+     */
+    deregisterBrokerAccount: {
+      name: "DeregisterBrokerAccount",
+      I: DeregisterBrokerAccountRequest,
+      O: DeregisterBrokerAccountResponse,
+      kind: MethodKind.Unary,
     },
   }
 } as const;

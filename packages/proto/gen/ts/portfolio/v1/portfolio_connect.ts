@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { GetPnLRequest, GetPortfolioRequest, GetPositionRequest, GetSnapshotRequest, ListPositionsRequest, ListPositionsResponse, PnLResponse, Portfolio, PortfolioSnapshot, Position, StreamPortfolioUpdatesRequest } from "./portfolio_pb.js";
+import { GetPnLRequest, GetPortfolioRequest, GetPositionRequest, GetSnapshotRequest, ListPortfoliosRequest, ListPortfoliosResponse, ListPositionsRequest, ListPositionsResponse, PnLResponse, Portfolio, PortfolioSnapshot, Position, StreamPortfolioUpdatesRequest } from "./portfolio_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -65,6 +65,15 @@ export const PortfolioService = {
       I: StreamPortfolioUpdatesRequest,
       O: PortfolioSnapshot,
       kind: MethodKind.ServerStreaming,
+    },
+    /**
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.ListPortfolios
+     */
+    listPortfolios: {
+      name: "ListPortfolios",
+      I: ListPortfoliosRequest,
+      O: ListPortfoliosResponse,
+      kind: MethodKind.Unary,
     },
   }
 } as const;
