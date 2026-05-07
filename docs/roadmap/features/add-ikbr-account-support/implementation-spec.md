@@ -1,6 +1,6 @@
 # Implementation Spec: add-ikbr-account-support
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-05-02
 **Feature**: `docs/roadmap/features/add-ikbr-account-support/feature.md`
 **Total Steps**: 18
@@ -1189,7 +1189,7 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 
 ### Step 18 — service: Add `ListPortfolios` handler; update portfolio `main.go`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go` — modify
