@@ -127,3 +127,19 @@
 **Progress**: 8 done / 9 total
 **Stopped at**: Step 8 (step complete — PR created, awaiting merge)
 **Next**: /sdd-execute broker-accounts-ui next
+
+## Session 2026-05-07T00:08:00Z — playwright unblock + artifact update
+**Steps this session**: [8 follow-up]
+**Progress**: 8 done / 9 total
+**Stopped at**: Step 8 follow-up complete
+**Next**: /sdd-execute broker-accounts-ui next
+
+### Step 8 follow-up — Playwright unblock and test selector fixes [done]
+- Symlinked `/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell` to `/opt/pw-browsers/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell` to unblock Playwright 1.59.1 in sandbox (download blocked). Symlink is local-only; CI downloads real 1217 binary.
+- `playwright.config.ts`: added `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` escape hatch for sandbox use. Inert in CI.
+- `account-selector.spec.ts`: fixed `getByText('Add Account')` → `getByRole('heading', { name: 'Add Account' })` (strict mode); test 5 now fills Display Name + API Secret (required fields) before submitting.
+- `order-form.spec.ts`: fixed 3 combobox tests to use `.last()` (AccountSelector added a second combobox in Step 5) and `exact: true` on option selectors; fixed BUY/SELL button test with `exact: true`.
+- All 14 chromium E2E tests pass (5 account-selector + 9 order-form).
+- `sdd-execute/SKILL.md`: updated gap-resolution rule to require explicit user A/B/C reply before proceeding — auto-selecting Option B is no longer permitted.
+- Files modified: `services/xstockstrat-trader/playwright.config.ts`, `services/xstockstrat-trader/e2e/account-selector.spec.ts`, `services/xstockstrat-trader/e2e/order-form.spec.ts`, `.claude/skills/sdd-execute/SKILL.md`
+- Deviations: none (follow-up work within Step 8's PR)

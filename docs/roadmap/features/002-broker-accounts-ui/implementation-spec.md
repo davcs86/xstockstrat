@@ -901,7 +901,6 @@ test.describe('AccountPortfolioSelector (insights)', () => {
 **Reason**: (1) `connectTransport.ts` had a pre-existing build failure — `createNodeHttpTransport` does not exist in `@connectrpc/connect-node`; the correct export is `createConnectTransport` (with `httpVersion: '1.1'`). Fixed as part of this step to restore build. (2) Next.js 14 requires `useSearchParams()` to be wrapped in a `<Suspense>` boundary; without the wrapper the build fails at static page generation for `/`.
 
 ### Deviation: Step 8 — Add E2E tests for broker-accounts-ui changes in `xstockstrat-trader`
-**Spec said**: Verification: `pnpm run test:e2e` passes all tests in `account-selector.spec.ts`.
-**Actual**: E2E verification not executed in this environment.
-**Reason**: Playwright browser binaries cannot be downloaded — `cdn.playwright.dev` returns 403 (Host not in allowlist). This is a pre-existing sandbox network constraint that also blocks all existing `order-form.spec.ts` and other E2E tests. The test files are syntactically correct and match the spec. CI (with browser binaries available) is the designated verification environment for E2E tests.
-**Disposition**: accepted limitation
+**Spec said**: Files: `mock-backend.ts`, `account-selector.spec.ts`. Verification: all 5 tests pass.
+**Actual**: Also modified `playwright.config.ts` and `order-form.spec.ts`; verification passes (14/14 chromium tests) after fixes.
+**Reason**: (1) Playwright 1.59.1 could not download browser 1217 (`cdn.playwright.dev` returns 403). Unblocked by symlinking the installed 1194 headless shell to the expected 1217 path; `playwright.config.ts` gained a `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` escape hatch (inert in CI). (2) The AccountSelector combobox added in Step 5 caused strict-mode violations in `order-form.spec.ts` — fixed with `.last()` and `exact: true` selectors. (3) Two selectors in `account-selector.spec.ts` also needed fixing: `getByText('Add Account')` → `getByRole('heading', …)` (strict mode); test 5 now fills all required fields before submit. All 5 `account-selector.spec.ts` tests pass; all 9 `order-form.spec.ts` tests pass.
