@@ -591,7 +591,7 @@ PORTFOLIO_HTTP_ENDPOINT=http://xstockstrat-portfolio:8052
 
 ### Step 8 — test: Add E2E tests for broker-accounts-ui changes in `xstockstrat-trader`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/e2e/mock-backend.ts` — modify
@@ -899,3 +899,8 @@ test.describe('AccountPortfolioSelector (insights)', () => {
 **Spec said**: Step 7 files only; build verification expected to pass on existing codebase.
 **Actual**: Also modified `services/xstockstrat-insights/src/lib/connectTransport.ts` and added `<Suspense>` wrapper in `page.tsx`.
 **Reason**: (1) `connectTransport.ts` had a pre-existing build failure — `createNodeHttpTransport` does not exist in `@connectrpc/connect-node`; the correct export is `createConnectTransport` (with `httpVersion: '1.1'`). Fixed as part of this step to restore build. (2) Next.js 14 requires `useSearchParams()` to be wrapped in a `<Suspense>` boundary; without the wrapper the build fails at static page generation for `/`.
+
+### Deviation: Step 8 — Add E2E tests for broker-accounts-ui changes in `xstockstrat-trader`
+**Spec said**: Files: `mock-backend.ts`, `account-selector.spec.ts`. Verification: all 5 tests pass.
+**Actual**: Also modified `playwright.config.ts` and `order-form.spec.ts`; verification passes (14/14 chromium tests) after fixes.
+**Reason**: (1) Playwright 1.59.1 could not download browser 1217 (`cdn.playwright.dev` returns 403). Unblocked by symlinking the installed 1194 headless shell to the expected 1217 path; `playwright.config.ts` gained a `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` escape hatch (inert in CI). (2) The AccountSelector combobox added in Step 5 caused strict-mode violations in `order-form.spec.ts` — fixed with `.last()` and `exact: true` selectors. (3) Two selectors in `account-selector.spec.ts` also needed fixing: `getByText('Add Account')` → `getByRole('heading', …)` (strict mode); test 5 now fills all required fields before submit. All 5 `account-selector.spec.ts` tests pass; all 9 `order-form.spec.ts` tests pass.
