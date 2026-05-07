@@ -302,7 +302,7 @@ export async function GET(req: NextRequest) {
 
 ### Step 4 — service: Build `AccountSelector` and `AccountManagementPanel` components
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/components/AccountSelector.tsx` — create (not found)
