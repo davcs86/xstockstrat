@@ -44,13 +44,13 @@ RUN BUF_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64") \
 
 # ── Go proto plugins ───────────────────────────────────────────────────────────
 # These land in /root/go/bin which buf-gen.sh already adds to PATH.
-RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest \
-    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest \
-    && go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11 \
+    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1 \
+    && go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.19.2
 
 # ── Python gRPC tools ──────────────────────────────────────────────────────────
 # Provides python3 -m grpc_tools.protoc for generating *_pb2.py + *_pb2_grpc.py.
 # The --break-system-packages flag is required on Debian trixie (PEP 668).
-RUN pip install --break-system-packages grpcio-tools
+RUN pip install --break-system-packages grpcio-tools==1.80.0
 
 WORKDIR /workspace
