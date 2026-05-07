@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -86,9 +87,31 @@ type AlpacaOrder struct {
 }
 
 // SubmitOrder places an order via POST /v2/orders.
-// Returns the Alpaca-assigned order details including the broker order ID.
-func (c *Client) SubmitOrder(ctx context.Context, req SubmitOrderRequest) (*AlpacaOrder, error) {
-	body, err := json.Marshal(req)
+// Returns the normalized broker order including the broker-assigned order ID.
+func (c *Client) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrder, error) {
+	alpacaReq := struct {
+		Symbol      string `json:"symbol"`
+		Qty         string `json:"qty"`
+		Side        string `json:"side"`
+		Type        string `json:"type"`
+		TimeInForce string `json:"time_in_force"`
+		LimitPrice  string `json:"limit_price,omitempty"`
+		StopPrice   string `json:"stop_price,omitempty"`
+	}{
+		Symbol:      req.Symbol,
+		Qty:         strconv.FormatFloat(req.Qty, 'f', -1, 64),
+		Side:        req.Side,
+		Type:        req.OrderType,
+		TimeInForce: req.TimeInForce,
+	}
+	if req.LimitPrice != 0 {
+		alpacaReq.LimitPrice = strconv.FormatFloat(req.LimitPrice, 'f', -1, 64)
+	}
+	if req.StopPrice != 0 {
+		alpacaReq.StopPrice = strconv.FormatFloat(req.StopPrice, 'f', -1, 64)
+	}
+
+	body, err := json.Marshal(alpacaReq)
 	if err != nil {
 		return nil, fmt.Errorf("marshal order request: %w", err)
 	}
@@ -118,11 +141,11 @@ func (c *Client) SubmitOrder(ctx context.Context, req SubmitOrderRequest) (*Alpa
 		return nil, fmt.Errorf("alpaca broker error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
-	var order AlpacaOrder
-	if err := json.Unmarshal(respBody, &order); err != nil {
+	var alpacaResp AlpacaOrder
+	if err := json.Unmarshal(respBody, &alpacaResp); err != nil {
 		return nil, fmt.Errorf("decode order response: %w", err)
 	}
-	return &order, nil
+	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status}, nil
 }
 
 // CancelOrder cancels a broker order via DELETE /v2/orders/{order_id}.
@@ -151,7 +174,7 @@ func (c *Client) CancelOrder(ctx context.Context, brokerOrderID string) error {
 }
 
 // GetOrder fetches a broker order's current state via GET /v2/orders/{order_id}.
-func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*AlpacaOrder, error) {
+func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrder, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		fmt.Sprintf("%s/v2/orders/%s", c.baseURL(), brokerOrderID),
 		nil,
@@ -176,14 +199,49 @@ func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*AlpacaOrd
 		return nil, fmt.Errorf("alpaca get order error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
-	var order AlpacaOrder
-	if err := json.Unmarshal(respBody, &order); err != nil {
+	var alpacaResp AlpacaOrder
+	if err := json.Unmarshal(respBody, &alpacaResp); err != nil {
 		return nil, fmt.Errorf("decode order response: %w", err)
 	}
-	return &order, nil
+	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status}, nil
+}
+
+// GetPositions fetches all open positions via GET /v2/positions.
+func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL()+"/v2/positions", nil)
+	if err != nil {
+		return nil, fmt.Errorf("alpaca GetPositions: build request: %w", err)
+	}
+	c.setAuthHeaders(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("alpaca GetPositions: http: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("alpaca GetPositions: status %d: %s", resp.StatusCode, body)
+	}
+	var raw []struct {
+		Symbol  string `json:"symbol"`
+		Qty     string `json:"qty"`
+		AvgCost string `json:"avg_entry_price"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("alpaca GetPositions: unmarshal: %w", err)
+	}
+	positions := make([]BrokerPosition, 0, len(raw))
+	for _, r := range raw {
+		qty, _ := strconv.ParseFloat(r.Qty, 64)
+		avg, _ := strconv.ParseFloat(r.AvgCost, 64)
+		positions = append(positions, BrokerPosition{Symbol: r.Symbol, Quantity: qty, AvgCost: avg})
+	}
+	return positions, nil
 }
 
 func (c *Client) setAuthHeaders(req *http.Request) {
 	req.Header.Set("APCA-API-KEY-ID", c.cfg.APIKey)
 	req.Header.Set("APCA-API-SECRET-KEY", c.cfg.APISecret)
 }
+
+var _ Broker = (*Client)(nil)

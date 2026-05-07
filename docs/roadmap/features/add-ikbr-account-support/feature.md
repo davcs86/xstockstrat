@@ -1,6 +1,6 @@
 # Feature: add-ikbr-account-support
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/add-ikbr-account-support`
 **Created**: 2026-05-02
 **Last Updated**: 2026-05-03
@@ -18,6 +18,7 @@
 | 2026-05-02 | `draft` → `spec-ready` | spec-ready audit | Five blocking gaps resolved; all open questions closed |
 | 2026-05-02 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 18 steps |
 | 2026-05-03 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete: BrokerType enum added to common/v1 |
+| 2026-05-07 | `in-progress` → `code-completed` | /sdd-execute | Step 18 complete: all 18 steps done |
 
 ---
 
@@ -35,4 +36,4 @@ Register multiple broker accounts (Alpaca and/or IBKR) via API with credentials 
 
 ## Next Action
 
-`/sdd-execute add-ikbr-account-support next` — continue with Step 3 (Steps 1–2 complete)
+All 18 steps complete. Merge the step-18 PR into `feature/add-ikbr-account-support`, then open the final integration PR from `feature/add-ikbr-account-support` → `main-dev`.

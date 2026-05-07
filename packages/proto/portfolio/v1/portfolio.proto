@@ -14,6 +14,7 @@ service PortfolioService {
   rpc GetPnL(GetPnLRequest) returns (PnLResponse);
   rpc GetSnapshot(GetSnapshotRequest) returns (PortfolioSnapshot);
   rpc StreamPortfolioUpdates(StreamPortfolioUpdatesRequest) returns (stream PortfolioSnapshot);
+  rpc ListPortfolios (ListPortfoliosRequest) returns (ListPortfoliosResponse);
 }
 
 message Portfolio {
@@ -27,6 +28,7 @@ message Portfolio {
   double total_pnl = 8;
   google.protobuf.Timestamp updated_at = 9;
   repeated Position positions = 10;
+  string account_id = 11;
 }
 
 message Position {
@@ -40,6 +42,7 @@ message Position {
   double cost_basis = 8;
   google.protobuf.Timestamp opened_at = 9;
   xstockstrat.common.v1.TradingMode trading_mode = 10;
+  string account_id = 11;
 }
 
 message PortfolioSnapshot {
@@ -50,6 +53,7 @@ message PortfolioSnapshot {
   double day_pnl = 5;
   int32 open_positions = 6;
   xstockstrat.common.v1.TradingMode trading_mode = 7;
+  string account_id = 8;
 }
 
 message PnLResponse {
@@ -64,17 +68,20 @@ message PnLResponse {
 message GetPortfolioRequest {
   string user_id = 1;
   xstockstrat.common.v1.TradingMode trading_mode = 2;
+  optional string account_id = 3;
 }
 message GetPositionRequest {
   string user_id = 1;
   string symbol = 2;
   xstockstrat.common.v1.TradingMode trading_mode = 3;
+  optional string account_id = 4;
 }
 message ListPositionsRequest {
   string user_id = 1;
   xstockstrat.common.v1.PageRequest page = 2;
   // Filter by trading mode; UNSPECIFIED returns all positions.
   xstockstrat.common.v1.TradingMode trading_mode = 3;
+  optional string account_id = 4;
 }
 message ListPositionsResponse {
   repeated Position positions = 1;
@@ -85,13 +92,24 @@ message GetPnLRequest {
   xstockstrat.common.v1.TimeRange range = 2;
   // Filter by trading mode; UNSPECIFIED returns combined P&L.
   xstockstrat.common.v1.TradingMode trading_mode = 3;
+  optional string account_id = 4;
 }
 message GetSnapshotRequest {
   string portfolio_id = 1;
   google.protobuf.Timestamp at_time = 2;
+  optional string account_id = 3;
 }
 message StreamPortfolioUpdatesRequest {
   string user_id = 1;
   // Filter by trading mode; UNSPECIFIED streams all modes.
   xstockstrat.common.v1.TradingMode trading_mode = 2;
+  optional string account_id = 3;
+}
+
+message ListPortfoliosRequest {
+  optional string account_id = 1;
+}
+
+message ListPortfoliosResponse {
+  repeated Portfolio portfolios = 1;
 }

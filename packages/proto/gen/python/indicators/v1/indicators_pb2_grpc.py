@@ -5,7 +5,7 @@ import warnings
 
 from indicators.v1 import indicators_pb2 as indicators_dot_v1_dot_indicators__pb2
 
-GRPC_GENERATED_VERSION = '1.78.0'
+GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 

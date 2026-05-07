@@ -5,7 +5,7 @@ import warnings
 
 from ledger.v1 import ledger_pb2 as ledger_dot_v1_dot_ledger__pb2
 
-GRPC_GENERATED_VERSION = '1.78.0'
+GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 

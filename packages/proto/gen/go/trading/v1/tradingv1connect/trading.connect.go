@@ -47,6 +47,15 @@ const (
 	// TradingServiceStreamOrderUpdatesProcedure is the fully-qualified name of the TradingService's
 	// StreamOrderUpdates RPC.
 	TradingServiceStreamOrderUpdatesProcedure = "/xstockstrat.trading.v1.TradingService/StreamOrderUpdates"
+	// TradingServiceRegisterBrokerAccountProcedure is the fully-qualified name of the TradingService's
+	// RegisterBrokerAccount RPC.
+	TradingServiceRegisterBrokerAccountProcedure = "/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount"
+	// TradingServiceListBrokerAccountsProcedure is the fully-qualified name of the TradingService's
+	// ListBrokerAccounts RPC.
+	TradingServiceListBrokerAccountsProcedure = "/xstockstrat.trading.v1.TradingService/ListBrokerAccounts"
+	// TradingServiceDeregisterBrokerAccountProcedure is the fully-qualified name of the
+	// TradingService's DeregisterBrokerAccount RPC.
+	TradingServiceDeregisterBrokerAccountProcedure = "/xstockstrat.trading.v1.TradingService/DeregisterBrokerAccount"
 )
 
 // TradingServiceClient is a client for the xstockstrat.trading.v1.TradingService service.
@@ -56,6 +65,9 @@ type TradingServiceClient interface {
 	GetOrder(context.Context, *connect.Request[v1.GetOrderRequest]) (*connect.Response[v1.Order], error)
 	ListOrders(context.Context, *connect.Request[v1.ListOrdersRequest]) (*connect.Response[v1.ListOrdersResponse], error)
 	StreamOrderUpdates(context.Context, *connect.Request[v1.StreamOrderUpdatesRequest]) (*connect.ServerStreamForClient[v1.Order], error)
+	RegisterBrokerAccount(context.Context, *connect.Request[v1.RegisterBrokerAccountRequest]) (*connect.Response[v1.RegisterBrokerAccountResponse], error)
+	ListBrokerAccounts(context.Context, *connect.Request[v1.ListBrokerAccountsRequest]) (*connect.Response[v1.ListBrokerAccountsResponse], error)
+	DeregisterBrokerAccount(context.Context, *connect.Request[v1.DeregisterBrokerAccountRequest]) (*connect.Response[v1.DeregisterBrokerAccountResponse], error)
 }
 
 // NewTradingServiceClient constructs a client for the xstockstrat.trading.v1.TradingService
@@ -99,16 +111,37 @@ func NewTradingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(tradingServiceMethods.ByName("StreamOrderUpdates")),
 			connect.WithClientOptions(opts...),
 		),
+		registerBrokerAccount: connect.NewClient[v1.RegisterBrokerAccountRequest, v1.RegisterBrokerAccountResponse](
+			httpClient,
+			baseURL+TradingServiceRegisterBrokerAccountProcedure,
+			connect.WithSchema(tradingServiceMethods.ByName("RegisterBrokerAccount")),
+			connect.WithClientOptions(opts...),
+		),
+		listBrokerAccounts: connect.NewClient[v1.ListBrokerAccountsRequest, v1.ListBrokerAccountsResponse](
+			httpClient,
+			baseURL+TradingServiceListBrokerAccountsProcedure,
+			connect.WithSchema(tradingServiceMethods.ByName("ListBrokerAccounts")),
+			connect.WithClientOptions(opts...),
+		),
+		deregisterBrokerAccount: connect.NewClient[v1.DeregisterBrokerAccountRequest, v1.DeregisterBrokerAccountResponse](
+			httpClient,
+			baseURL+TradingServiceDeregisterBrokerAccountProcedure,
+			connect.WithSchema(tradingServiceMethods.ByName("DeregisterBrokerAccount")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // tradingServiceClient implements TradingServiceClient.
 type tradingServiceClient struct {
-	placeOrder         *connect.Client[v1.PlaceOrderRequest, v1.Order]
-	cancelOrder        *connect.Client[v1.CancelOrderRequest, v1.CancelOrderResponse]
-	getOrder           *connect.Client[v1.GetOrderRequest, v1.Order]
-	listOrders         *connect.Client[v1.ListOrdersRequest, v1.ListOrdersResponse]
-	streamOrderUpdates *connect.Client[v1.StreamOrderUpdatesRequest, v1.Order]
+	placeOrder              *connect.Client[v1.PlaceOrderRequest, v1.Order]
+	cancelOrder             *connect.Client[v1.CancelOrderRequest, v1.CancelOrderResponse]
+	getOrder                *connect.Client[v1.GetOrderRequest, v1.Order]
+	listOrders              *connect.Client[v1.ListOrdersRequest, v1.ListOrdersResponse]
+	streamOrderUpdates      *connect.Client[v1.StreamOrderUpdatesRequest, v1.Order]
+	registerBrokerAccount   *connect.Client[v1.RegisterBrokerAccountRequest, v1.RegisterBrokerAccountResponse]
+	listBrokerAccounts      *connect.Client[v1.ListBrokerAccountsRequest, v1.ListBrokerAccountsResponse]
+	deregisterBrokerAccount *connect.Client[v1.DeregisterBrokerAccountRequest, v1.DeregisterBrokerAccountResponse]
 }
 
 // PlaceOrder calls xstockstrat.trading.v1.TradingService.PlaceOrder.
@@ -136,6 +169,21 @@ func (c *tradingServiceClient) StreamOrderUpdates(ctx context.Context, req *conn
 	return c.streamOrderUpdates.CallServerStream(ctx, req)
 }
 
+// RegisterBrokerAccount calls xstockstrat.trading.v1.TradingService.RegisterBrokerAccount.
+func (c *tradingServiceClient) RegisterBrokerAccount(ctx context.Context, req *connect.Request[v1.RegisterBrokerAccountRequest]) (*connect.Response[v1.RegisterBrokerAccountResponse], error) {
+	return c.registerBrokerAccount.CallUnary(ctx, req)
+}
+
+// ListBrokerAccounts calls xstockstrat.trading.v1.TradingService.ListBrokerAccounts.
+func (c *tradingServiceClient) ListBrokerAccounts(ctx context.Context, req *connect.Request[v1.ListBrokerAccountsRequest]) (*connect.Response[v1.ListBrokerAccountsResponse], error) {
+	return c.listBrokerAccounts.CallUnary(ctx, req)
+}
+
+// DeregisterBrokerAccount calls xstockstrat.trading.v1.TradingService.DeregisterBrokerAccount.
+func (c *tradingServiceClient) DeregisterBrokerAccount(ctx context.Context, req *connect.Request[v1.DeregisterBrokerAccountRequest]) (*connect.Response[v1.DeregisterBrokerAccountResponse], error) {
+	return c.deregisterBrokerAccount.CallUnary(ctx, req)
+}
+
 // TradingServiceHandler is an implementation of the xstockstrat.trading.v1.TradingService service.
 type TradingServiceHandler interface {
 	PlaceOrder(context.Context, *connect.Request[v1.PlaceOrderRequest]) (*connect.Response[v1.Order], error)
@@ -143,6 +191,9 @@ type TradingServiceHandler interface {
 	GetOrder(context.Context, *connect.Request[v1.GetOrderRequest]) (*connect.Response[v1.Order], error)
 	ListOrders(context.Context, *connect.Request[v1.ListOrdersRequest]) (*connect.Response[v1.ListOrdersResponse], error)
 	StreamOrderUpdates(context.Context, *connect.Request[v1.StreamOrderUpdatesRequest], *connect.ServerStream[v1.Order]) error
+	RegisterBrokerAccount(context.Context, *connect.Request[v1.RegisterBrokerAccountRequest]) (*connect.Response[v1.RegisterBrokerAccountResponse], error)
+	ListBrokerAccounts(context.Context, *connect.Request[v1.ListBrokerAccountsRequest]) (*connect.Response[v1.ListBrokerAccountsResponse], error)
+	DeregisterBrokerAccount(context.Context, *connect.Request[v1.DeregisterBrokerAccountRequest]) (*connect.Response[v1.DeregisterBrokerAccountResponse], error)
 }
 
 // NewTradingServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -182,6 +233,24 @@ func NewTradingServiceHandler(svc TradingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(tradingServiceMethods.ByName("StreamOrderUpdates")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tradingServiceRegisterBrokerAccountHandler := connect.NewUnaryHandler(
+		TradingServiceRegisterBrokerAccountProcedure,
+		svc.RegisterBrokerAccount,
+		connect.WithSchema(tradingServiceMethods.ByName("RegisterBrokerAccount")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tradingServiceListBrokerAccountsHandler := connect.NewUnaryHandler(
+		TradingServiceListBrokerAccountsProcedure,
+		svc.ListBrokerAccounts,
+		connect.WithSchema(tradingServiceMethods.ByName("ListBrokerAccounts")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tradingServiceDeregisterBrokerAccountHandler := connect.NewUnaryHandler(
+		TradingServiceDeregisterBrokerAccountProcedure,
+		svc.DeregisterBrokerAccount,
+		connect.WithSchema(tradingServiceMethods.ByName("DeregisterBrokerAccount")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.trading.v1.TradingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TradingServicePlaceOrderProcedure:
@@ -194,6 +263,12 @@ func NewTradingServiceHandler(svc TradingServiceHandler, opts ...connect.Handler
 			tradingServiceListOrdersHandler.ServeHTTP(w, r)
 		case TradingServiceStreamOrderUpdatesProcedure:
 			tradingServiceStreamOrderUpdatesHandler.ServeHTTP(w, r)
+		case TradingServiceRegisterBrokerAccountProcedure:
+			tradingServiceRegisterBrokerAccountHandler.ServeHTTP(w, r)
+		case TradingServiceListBrokerAccountsProcedure:
+			tradingServiceListBrokerAccountsHandler.ServeHTTP(w, r)
+		case TradingServiceDeregisterBrokerAccountProcedure:
+			tradingServiceDeregisterBrokerAccountHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -221,4 +296,16 @@ func (UnimplementedTradingServiceHandler) ListOrders(context.Context, *connect.R
 
 func (UnimplementedTradingServiceHandler) StreamOrderUpdates(context.Context, *connect.Request[v1.StreamOrderUpdatesRequest], *connect.ServerStream[v1.Order]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.trading.v1.TradingService.StreamOrderUpdates is not implemented"))
+}
+
+func (UnimplementedTradingServiceHandler) RegisterBrokerAccount(context.Context, *connect.Request[v1.RegisterBrokerAccountRequest]) (*connect.Response[v1.RegisterBrokerAccountResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.trading.v1.TradingService.RegisterBrokerAccount is not implemented"))
+}
+
+func (UnimplementedTradingServiceHandler) ListBrokerAccounts(context.Context, *connect.Request[v1.ListBrokerAccountsRequest]) (*connect.Response[v1.ListBrokerAccountsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.trading.v1.TradingService.ListBrokerAccounts is not implemented"))
+}
+
+func (UnimplementedTradingServiceHandler) DeregisterBrokerAccount(context.Context, *connect.Request[v1.DeregisterBrokerAccountRequest]) (*connect.Response[v1.DeregisterBrokerAccountResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.trading.v1.TradingService.DeregisterBrokerAccount is not implemented"))
 }

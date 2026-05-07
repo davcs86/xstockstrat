@@ -172,3 +172,227 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Added `account_id = 19` and `broker_type = 20` to `Order`; `account_id = 13` to `PlaceOrderRequest`; `BrokerAccount` + request/response messages for `Register/List/Deregister`; 3 new RPCs to `TradingService`.
 - Files modified: `packages/proto/trading/v1/trading.proto`
 - Deviations: Spec said `PlaceOrderRequest` field 12 = `stop_price` but actual field 12 = `trading_mode`; field 13 added correctly regardless. Spec said last RPC = `GetOrder` but actual last = `StreamOrderUpdates`; new RPCs appended correctly. `buf breaking --against '.git#branch=feature/...,subdir=packages/proto'` syntax required (not in spec). `buf` re-installed at runtime (same as Step 1 deviation).
+
+---
+
+## Session 2026-05-06T00:00:00Z — sdd-execute
+
+**Steps this session**: [3]
+**Progress**: 3 done / 18 total
+**Stopped at**: Step 3 (PR created; awaiting merge before Step 4)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 3 — Add `account_id` fields + `ListPortfolios` to `portfolio/v1` [done]
+- Added `account_id = 11` to `Portfolio` and `Position`; `account_id = 8` to `PortfolioSnapshot`; `optional string account_id` to all 6 read request messages at next available field numbers; added `ListPortfoliosRequest`, `ListPortfoliosResponse` messages, and `ListPortfolios` RPC to `PortfolioService`.
+- Files modified: `packages/proto/portfolio/v1/portfolio.proto`
+- Deviations: Spec codebase evidence had stale field names for Portfolio/Position/PortfolioSnapshot (field numbers were correct). `buf` not pre-installed; installed buf 1.54.0 at runtime. `buf breaking` run from repo root with `subdir=packages/proto` syntax (same as Step 2). Branch sync performed with `-X theirs` (main-dev wins) per user instruction; merged 3 new main-dev commits (SDD process improvements, promotion commit) into feature branch without conflict.
+
+---
+
+## Session 2026-05-06T01:00:00Z — sdd-execute
+
+**Steps this session**: [4]
+**Progress**: 4 done / 18 total
+**Stopped at**: Step 4 (PR created; awaiting merge before Step 5)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 4 — Regenerate proto stubs [done]
+- Regenerated all stubs: Go stubs updated for common/v1 (BrokerType), trading/v1 (new messages + 3 RPCs), portfolio/v1 (new fields + ListPortfolios). Portfolio connect.go now has 7 stubs (was 6). Trading connect.go now has 8 stubs (was 5). Python stubs regenerated via grpc_tools.protoc. TypeScript stubs regenerated and compiled (dist/ files updated).
+- Files modified: `packages/proto/gen/go/`, `packages/proto/gen/python/`, `packages/proto/gen/ts/`, `packages/proto/gen/python/setup.py`
+- Deviations: `buf`, `protoc-gen-ts_proto`, `protoc`, and `protoc-gen-grpc_python` not pre-installed; installed at runtime. Python gRPC stubs generated via `python3 -m grpc_tools.protoc` directly. TypeScript tsc emits exit code 2 (pre-existing TS6.0 deprecation of `moduleResolution=node` in tsconfig) but output files are correct. All expected stub changes confirmed present.
+
+---
+
+## Session 2026-05-06T02:00:00Z — sdd-execute
+
+**Steps this session**: [5]
+**Progress**: 5 done / 18 total
+**Stopped at**: Step 5 (PR created; awaiting merge before Step 6)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 5 — Migration: `trading` — `broker_accounts` table [done]
+- Created `002_broker_accounts.up.sql` (CREATE TABLE trading.broker_accounts + 2 indexes) and `002_broker_accounts.down.sql` (DROP TABLE). `alpaca-default` seed deferred to application startup per spec note.
+- Files modified: `services/xstockstrat-trading/migrations/002_broker_accounts.up.sql`, `services/xstockstrat-trading/migrations/002_broker_accounts.down.sql`
+- Deviations: `./scripts/db-migrate.sh` could not be verified — no PostgreSQL running (Docker daemon unavailable in harness environment). SQL syntax reviewed manually; migration will be verified on deploy via db-migrator PRE_DEPLOY job.
+
+---
+
+## Session 2026-05-06T03:00:00Z — sdd-execute
+
+**Steps this session**: [6]
+**Progress**: 6 done / 18 total
+**Stopped at**: Step 6 (PR created; awaiting merge before Step 7)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 6 — Migration: `trading` — `orders.account_id` + `orders.broker_type` [done]
+- Created `003_orders_account_id.up.sql` (ADD COLUMN account_id TEXT DEFAULT 'alpaca-default', ADD COLUMN broker_type SMALLINT DEFAULT 1, CREATE INDEX) and `003_orders_account_id.down.sql`. Defaults preserve backward compatibility for existing rows.
+- Files modified: `services/xstockstrat-trading/migrations/003_orders_account_id.up.sql`, `services/xstockstrat-trading/migrations/003_orders_account_id.down.sql`
+- Deviations: `./scripts/db-migrate.sh` could not be verified — no PostgreSQL running (same constraint as Step 5). SQL syntax reviewed manually; will be verified on deploy.
+
+---
+
+## Session 2026-05-06T04:00:00Z — sdd-execute
+
+**Steps this session**: [7]
+**Progress**: 7 done / 18 total
+**Stopped at**: Step 7 (PR created; awaiting merge before Step 8)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 7 — Migration: `portfolio` — `positions.account_id` [done]
+- Created `003_positions_account_id.up.sql` (ADD COLUMN account_id TEXT DEFAULT 'alpaca-default', DROP old 3-column unique constraint, ADD new 4-column unique constraint `positions_user_symbol_mode_account_key`, CREATE INDEX) and `003_positions_account_id.down.sql` (reverses all).
+- Files modified: `services/xstockstrat-portfolio/migrations/003_positions_account_id.up.sql`, `services/xstockstrat-portfolio/migrations/003_positions_account_id.down.sql`
+- Deviations: `./scripts/db-migrate.sh` could not be verified — no PostgreSQL running (same constraint as Steps 5–6). SQL syntax reviewed manually; will be verified on deploy.
+
+---
+
+## Session 2026-05-06T05:00:00Z — sdd-execute
+
+**Steps this session**: [8]
+**Progress**: 8 done / 18 total
+**Stopped at**: Step 8 (PR created; awaiting merge before Step 9)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 8 — Add `BrokerAccountsEncryptionKey` + `AppEnv` to trading config [done]
+- Added `BrokerAccountsEncryptionKey string` and `AppEnv string` fields to `Config` struct; added corresponding `os.Getenv` reads in `LoadFromEnv()`. No defaults — `main.go` validates `BrokerAccountsEncryptionKey` at startup (Step 15).
+- Files modified: `services/xstockstrat-trading/internal/config/config.go`
+- Deviations: none. `GOWORK=off go build ./...` in `services/xstockstrat-trading/` exits 0.
+
+---
+
+## Session 2026-05-06T06:00:00Z — sdd-execute
+
+**Steps this session**: [9]
+**Progress**: 9 done / 18 total
+**Stopped at**: Step 9 (PR created; awaiting merge before Step 10)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 9 — Extract `Broker` interface; add `GetPositions` to Alpaca client [done]
+- Created `broker.go` with `BrokerOrder`, `BrokerPosition`, `Broker` interface, `OrderRequest`. Modified `alpaca.go`: changed `SubmitOrder`/`GetOrder` signatures to use `OrderRequest`/`*BrokerOrder`, added `GetPositions`, added `strconv` import, added compile-time assertion. Updated all 4 `SubmitOrderRequest` call sites in `alpaca_test.go` to `OrderRequest` and `order.ID` → `order.BrokerOrderID`.
+- Files modified: `services/xstockstrat-trading/internal/broker/broker.go` (created), `services/xstockstrat-trading/internal/broker/alpaca.go`, `services/xstockstrat-trading/internal/broker/alpaca_test.go`
+- Deviations: Spec said update L55/L79 order.ID only; actual test had order.ID at L56-57 and 3 additional SubmitOrderRequest call sites requiring update (line numbers shifted, test evolved). All broker tests pass.
+
+---
+
+## Session 2026-05-06T10:00:00Z — sdd-execute
+
+**Steps this session**: [13]
+**Progress**: 13 done / 18 total
+**Stopped at**: Step 13 (PR created; awaiting merge before Step 14)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 13 — Update `TradingService`: broker pool, account management, routing [done]
+- Full rewrite of `trading.go`: replaced `broker *broker.Client` with `brokerPoolEntry` map + `brokersMu + accountRepo + encKey`. Updated `NewTradingService` (removed brokerClient param, added accountRepo + encKey). Added `LoadBrokerPool`, `resolveAccount`, `instantiateBrokerLocked`. Updated `PlaceOrder` (resolve account, set AccountId/BrokerType, use broker.OrderRequest). Updated `CancelOrder` (resolve account). Updated `pollFills` (iterate pool, match by AccountId, no fill qty/price update). Added `StartPositionSyncPoller` + `syncPositions`. Added `RegisterBrokerAccount`, `ListBrokerAccountsSvc`, `DeregisterBrokerAccountSvc`, `EnsureAlpacaDefault`. Changed `buildBrokerRequest` to return `broker.OrderRequest`.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: Struct uses `brokerPoolEntry{client, brokerType}` map (not `map[string]broker.Broker`) to carry BrokerType for order population. `pollFills` drops fill qty/price update (not in BrokerOrder). `strconv` removed. Added `instantiateBrokerLocked` helper. Full detail in Deviation Log.
+
+---
+
+## Session 2026-05-06T09:00:00Z — sdd-execute
+
+**Steps this session**: [12]
+**Progress**: 12 done / 18 total
+**Stopped at**: Step 12 (PR created; awaiting merge before Step 13)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 12 — Update order repository: `account_id` + `broker_type` columns [done]
+- Updated `UpsertOrder` INSERT to include `account_id` ($20) and `broker_type` ($21) columns, and added both to the `ON CONFLICT DO UPDATE SET` clause. Updated `GetOrder`, `ListOrders`, and `ListSubmittedOrders` SELECT queries to include `account_id, broker_type`. Updated `scanOrder` to declare `accountID string` and `brokerType int32` locals, scan them, and assign to `o.AccountId` and `o.BrokerType = commonv1.BrokerType(brokerType)`.
+- Files modified: `services/xstockstrat-trading/internal/repository/trading_repo.go`
+- Deviations: none. `GOWORK=off go build ./internal/repository/...` exits 0.
+
+---
+
+## Session 2026-05-06T08:00:00Z — sdd-execute
+
+**Steps this session**: [11]
+**Progress**: 11 done / 18 total
+**Stopped at**: Step 11 (PR created; awaiting merge before Step 12)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 11 — Create account repository (`broker_accounts` CRUD) [done]
+- Created `account_repo.go` with `BrokerAccountRecord` struct, `AccountRepository` interface (5 methods), `pgAccountRepo` implementation using `*pgxpool.Pool`, `NewAccountRepo` constructor, scan helpers, and `EncryptCredentials`/`DecryptCredentials` AES-256-GCM helpers with 12-byte nonce prefix.
+- Files modified: `services/xstockstrat-trading/internal/repository/account_repo.go` (created)
+- Deviations: Spec imported `tradingv1`/`commonv1` in account_repo.go but these are unused in the repository layer (no proto types in interface). Go compilation rejects unused imports. Omitted both. Actual module path is `contracts/gen/go/...` not `proto/gen/go/...`. Full detail in Deviation Log.
+
+---
+
+## Session 2026-05-06T07:00:00Z — sdd-execute
+
+**Steps this session**: [10]
+**Progress**: 10 done / 18 total
+**Stopped at**: Step 10 (PR created; awaiting merge before Step 11)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 10 — Create IBKR broker client [done]
+- Created `ibkr.go` with `IBKRConfig`, `IBKRClient` struct, `NewIBKRClient` constructor (defaults baseURL to `https://api.ibkr.com/v1/api`), all 5 `Broker` interface methods (`SubmitOrder`, `CancelOrder`, `GetOrder`, `GetPositions`, `IsPaper`), private `signRequest` implementing OAuth 1.0a HMAC-SHA256, `orderTypeToIBKR` helper, and compile-time assertion `var _ Broker = (*IBKRClient)(nil)`.
+- Files modified: `services/xstockstrat-trading/internal/broker/ibkr.go` (created)
+- Deviations: none. `GOWORK=off go build ./internal/broker/...` exits 0.
+
+---
+
+## Session 2026-05-06T11:00:00Z — sdd-execute
+
+**Steps this session**: [14]
+**Progress**: 14 done / 18 total
+**Stopped at**: Step 14 (PR created; awaiting merge before Step 15)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 14 — Add account management + position sync handler methods [done]
+- Added `RegisterBrokerAccount`, `ListBrokerAccounts`, `DeregisterBrokerAccount` Connect-RPC handler methods and matching gRPC adapter methods to `trading.go`. Added `CodePermissionDenied` case to `toGRPCError`. Added `extractUserID(ctx)` package-level helper reading from gRPC metadata `x-user-id`. Compile-time assertion at L17 now passes.
+- Files modified: `services/xstockstrat-trading/internal/handler/trading.go`
+- Deviations: `extractUserID` did not exist (spec called it "existing auth helper"); implemented as new function reading from `metadata.FromIncomingContext`. Full detail in Deviation Log.
+
+---
+
+## Session 2026-05-06T12:00:00Z — sdd-execute
+
+**Steps this session**: [15]
+**Progress**: 15 done / 18 total
+**Stopped at**: Step 15 (PR created; awaiting merge before Step 16)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 15 — Update `main.go` (trading): encryption key, pool init, new goroutine [done]
+- Removed old single-broker init block. Added hex key validation, separate pgxpool for accountRepo, updated NewTradingService call (accountRepo + encKey), added LoadBrokerPool + EnsureAlpacaDefault calls, added go svc.StartPositionSyncPoller(ctx). Build passes.
+- Files modified: `services/xstockstrat-trading/cmd/server/main.go`
+- Deviations: `NewAccountRepo` used (not `NewPgAccountRepo`); `EnsureAlpacaDefault` is void (no error return). Full detail in Deviation Log.
+
+---
+
+## Session 2026-05-06T13:00:00Z — sdd-execute
+
+**Steps this session**: [16]
+**Progress**: 16 done / 18 total
+**Stopped at**: Step 16 (PR created; awaiting merge before Step 17)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 16 — Update portfolio repository: `account_id` on positions [done]
+- Updated `UpsertPosition` (added `accountID` param, updated INSERT + ON CONFLICT). Updated `scanPositionRow` (added `account_id` 7th column + `AccountId` field on Position). Updated `GetPosition` SELECT + added ORDER BY/LIMIT. Updated `ListPositions` (added `accountID` param, 4 query variants). Added `UpsertPositionFromSync`, `DeletePositionsNotInSync`, `ListPositionsByAccount`, `joinStrings` helper.
+- Files modified: `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`
+- Deviations: Added `ORDER BY opened_at DESC LIMIT 1` to `GetPosition` to handle multi-account rows. Full detail in Deviation Log.
+
+---
+
+## Session 2026-05-07T00:00:00Z — sdd-execute
+
+**Steps this session**: [17]
+**Progress**: 17 done / 18 total
+**Stopped at**: Step 17 (PR created; awaiting merge before Step 18)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 17 — service: Update `PortfolioService`: `ConsumePositionSyncs`, `ListPortfolios` [done]
+- Added `AccountId string` to `orderFillPayload`; fixed `processOrderFill` to pass accountID (defaulting to `"alpaca-default"`) to `UpsertPosition`. Fixed all 5 broken `ListPositions` callers (added `""` as accountID, `GetPortfolio` uses `req.GetAccountId()`). Added `positionSyncPayload`, `ConsumePositionSyncs`, `streamPositionSyncs`, `processPositionSync`. Added `ListPortfolios`.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: `GetPortfolioRequest.AccountId` and `ListPortfoliosRequest.AccountId` are `*string` (optional proto3 oneof) — used `GetAccountId()` getter. `ListPositionsByAccount` returns flat slice not map — `ListPortfolios` returns one Portfolio for the requested accountID (empty list if no accountID provided). Full detail in Deviation Log.
+
+---
+
+## Session 2026-05-07T01:00:00Z — sdd-execute
+
+**Steps this session**: [18]
+**Progress**: 18 done / 18 total
+**Stopped at**: Step 18 (all complete — final integration PR pending)
+**Next**: Merge step-18 PR, then open final integration PR: `feature/add-ikbr-account-support` → `main-dev`
+
+### Step 18 — Add `ListPortfolios` handler; update portfolio `main.go` [done]
+- Added `ListPortfolios` Connect-RPC handler method on `PortfolioHandler` and matching `ListPortfolios` gRPC adapter method on `grpcPortfolioAdapter`. Added `go svc.ConsumePositionSyncs(ctx)` to `cmd/server/main.go` after `ConsumeOrderFills`. `GOWORK=off go build ./...` exits 0; compile-time assertion at L17 passes.
+- Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`, `services/xstockstrat-portfolio/cmd/server/main.go`
+- Deviations: none

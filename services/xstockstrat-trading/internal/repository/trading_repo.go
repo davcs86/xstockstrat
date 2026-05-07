@@ -43,19 +43,23 @@ func (r *TradingRepo) UpsertOrder(ctx context.Context, o *tradingv1.Order) error
 			order_id, client_order_id, broker_order_id, symbol, side, order_type,
 			status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
 			time_in_force, strategy_id, user_id, trading_mode,
-			requires_approval, created_at, updated_at
+			requires_approval, created_at, updated_at,
+			account_id, broker_type
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
 			$7, $8, $9, $10, $11, $12,
 			$13, $14, $15, $16,
-			$17, $18, $19
+			$17, $18, $19,
+			$20, $21
 		)
 		ON CONFLICT (order_id, created_at) DO UPDATE SET
 			broker_order_id   = EXCLUDED.broker_order_id,
 			status            = EXCLUDED.status,
 			filled_qty        = EXCLUDED.filled_qty,
 			filled_avg_price  = EXCLUDED.filled_avg_price,
-			updated_at        = EXCLUDED.updated_at
+			updated_at        = EXCLUDED.updated_at,
+			account_id        = EXCLUDED.account_id,
+			broker_type       = EXCLUDED.broker_type
 	`,
 		o.OrderId, o.ClientOrderId, o.BrokerOrderId,
 		o.Symbol, sideStr(o.Side), typeStr(o.OrderType),
@@ -63,6 +67,7 @@ func (r *TradingRepo) UpsertOrder(ctx context.Context, o *tradingv1.Order) error
 		nullableFloat(o.LimitPrice), nullableFloat(o.StopPrice), nullableFloat(o.FilledAvgPrice),
 		o.TimeInForce, o.StrategyId, o.UserId, modeStr(o.TradingMode),
 		false, createdAt, updatedAt,
+		o.AccountId, int32(o.BrokerType),
 	)
 	return err
 }
@@ -72,7 +77,8 @@ func (r *TradingRepo) GetOrder(ctx context.Context, orderID string) (*tradingv1.
 	row := r.pool.QueryRow(ctx, `
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
 		       status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
-		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at
+		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at,
+		       account_id, broker_type
 		FROM trading.orders
 		WHERE order_id = $1
 		ORDER BY created_at DESC
@@ -93,7 +99,8 @@ func (r *TradingRepo) ListOrders(
 	query := `
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
 		       status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
-		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at
+		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at,
+		       account_id, broker_type
 		FROM trading.orders
 		WHERE 1=1
 	`
@@ -144,7 +151,8 @@ func (r *TradingRepo) ListSubmittedOrders(ctx context.Context) ([]*tradingv1.Ord
 	rows, err := r.pool.Query(ctx, `
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
 		       status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
-		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at
+		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at,
+		       account_id, broker_type
 		FROM trading.orders
 		WHERE status IN ('new', 'partially_filled')
 		  AND broker_order_id IS NOT NULL
@@ -180,6 +188,8 @@ func scanOrder(row scanner) (*tradingv1.Order, error) {
 		limitPrice, stopPrice, filledAvgPrice   *float64
 		timeInForce, strategyID, userID, mode   string
 		createdAt, updatedAt                    time.Time
+		accountID                               string
+		brokerType                              int32
 	)
 	err := row.Scan(
 		&orderID, &clientOrderID, &brokerOrderID,
@@ -187,6 +197,7 @@ func scanOrder(row scanner) (*tradingv1.Order, error) {
 		&qty, &filledQty, &limitPrice, &stopPrice, &filledAvgPrice,
 		&timeInForce, &strategyID, &userID, &mode,
 		&createdAt, &updatedAt,
+		&accountID, &brokerType,
 	)
 	if err != nil {
 		return nil, err
@@ -208,6 +219,8 @@ func scanOrder(row scanner) (*tradingv1.Order, error) {
 		TradingMode:   parseMode(mode),
 		CreatedAt:     timestamppb.New(createdAt),
 		UpdatedAt:     timestamppb.New(updatedAt),
+		AccountId:     accountID,
+		BrokerType:    commonv1.BrokerType(brokerType),
 	}
 	if limitPrice != nil {
 		o.LimitPrice = *limitPrice
