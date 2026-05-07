@@ -368,3 +368,17 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Updated `UpsertPosition` (added `accountID` param, updated INSERT + ON CONFLICT). Updated `scanPositionRow` (added `account_id` 7th column + `AccountId` field on Position). Updated `GetPosition` SELECT + added ORDER BY/LIMIT. Updated `ListPositions` (added `accountID` param, 4 query variants). Added `UpsertPositionFromSync`, `DeletePositionsNotInSync`, `ListPositionsByAccount`, `joinStrings` helper.
 - Files modified: `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go`
 - Deviations: Added `ORDER BY opened_at DESC LIMIT 1` to `GetPosition` to handle multi-account rows. Full detail in Deviation Log.
+
+---
+
+## Session 2026-05-07T00:00:00Z — sdd-execute
+
+**Steps this session**: [17]
+**Progress**: 17 done / 18 total
+**Stopped at**: Step 17 (PR created; awaiting merge before Step 18)
+**Next**: /sdd-execute add-ikbr-account-support next
+
+### Step 17 — service: Update `PortfolioService`: `ConsumePositionSyncs`, `ListPortfolios` [done]
+- Added `AccountId string` to `orderFillPayload`; fixed `processOrderFill` to pass accountID (defaulting to `"alpaca-default"`) to `UpsertPosition`. Fixed all 5 broken `ListPositions` callers (added `""` as accountID, `GetPortfolio` uses `req.GetAccountId()`). Added `positionSyncPayload`, `ConsumePositionSyncs`, `streamPositionSyncs`, `processPositionSync`. Added `ListPortfolios`.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: `GetPortfolioRequest.AccountId` and `ListPortfoliosRequest.AccountId` are `*string` (optional proto3 oneof) — used `GetAccountId()` getter. `ListPositionsByAccount` returns flat slice not map — `ListPortfolios` returns one Portfolio for the requested accountID (empty list if no accountID provided). Full detail in Deviation Log.

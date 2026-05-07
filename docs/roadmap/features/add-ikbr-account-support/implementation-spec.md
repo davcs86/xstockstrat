@@ -1112,7 +1112,7 @@ Used by `ListPortfolios` to aggregate per-account positions.
 
 ### Step 17 — service: Update `PortfolioService`: `ConsumePositionSyncs`, `ListPortfolios`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -1293,3 +1293,8 @@ go svc.ConsumePositionSyncs(ctx)
 **Spec said**: `GetPosition` SELECT query — add `account_id` to SELECT (no new WHERE param mentioned).
 **Actual**: Added `ORDER BY opened_at DESC LIMIT 1` to `GetPosition` to ensure a single row is returned when multiple accounts hold the same symbol (the conflict constraint is now 4-column). No new parameter added to `GetPosition` signature as spec did not require one.
 **Reason**: Without ORDER BY + LIMIT, the query would return an error if multiple rows matched (user_id, symbol, trading_mode) across different account_ids after the migration.
+
+### Deviation: Step 17 — service: Update `PortfolioService`: `ConsumePositionSyncs`, `ListPortfolios`
+**Spec said**: `GetPortfolioRequest.AccountId` and `ListPortfoliosRequest.AccountId` are plain `string` fields; `ListPortfolios` groups all accounts into multiple Portfolio objects via a map.
+**Actual**: Both `AccountId` fields are `*string` (proto3 optional/oneof) — used `GetAccountId()` getter which returns `""` on nil. `ListPositionsByAccount` returns a flat `[]*portfoliov1.Position` (not a map), so `ListPortfolios` returns a single Portfolio for the requested accountID; returns empty list if no accountID provided.
+**Reason**: Proto generated structs used `oneof` for optional fields, making them `*string`. `ListPositionsByAccount` was designed to return a flat slice per account, not a grouped map — cross-account aggregation would require a separate repository query outside Step 17 scope.
