@@ -371,6 +371,7 @@ Props: none — reads from `AccountContext`.
 - `services/xstockstrat-trader/src/app/page.tsx` — modify
 - `services/xstockstrat-trader/src/components/OrderForm.tsx` — modify
 - `services/xstockstrat-trader/src/components/OrderBook.tsx` — modify
+- `services/xstockstrat-trader/src/app/api/orders/route.ts` — modify
 
 **Reviewers**: `xstockstrat-trader` service owner — Trading UI correctness, Connect-RPC call safety, no direct DB access from frontend
 
@@ -479,6 +480,7 @@ This component replaces the existing `PortfolioSummary` in `page.tsx`. In `page.
 - `services/xstockstrat-insights/src/app/api/portfolio/route.ts` — create (not found — `src/app/api/portfolio/` does not exist in insights)
 - `services/xstockstrat-insights/src/components/AccountPortfolioSelector.tsx` — create (not found)
 - `services/xstockstrat-insights/src/app/page.tsx` — modify
+- `services/xstockstrat-insights/CLAUDE.md` — modify (add TRADING_HTTP_ENDPOINT and PORTFOLIO_HTTP_ENDPOINT to env vars table)
 
 **Reviewers**: `xstockstrat-insights` service owner — Analytics display accuracy, SSE polling resilience, read-only access pattern
 
