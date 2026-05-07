@@ -7,10 +7,12 @@
 #   Go plugins:   go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 #                 go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 #                 go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
-#   Python:       pip install grpcio-tools
-#   TypeScript:   npm install -g ts-proto
 #
-# Plugin binaries are looked up on PATH. The PATH export below covers the
+# Python (buf.build/protocolbuffers/python, buf.build/grpc/python) and
+# TypeScript (buf.build/community/stephenh-ts-proto) plugins are remote —
+# buf downloads them from BSR automatically; no local install required.
+#
+# Go plugin binaries are looked up on PATH. The PATH export below covers the
 # default local dev install locations.
 
 set -euo pipefail
