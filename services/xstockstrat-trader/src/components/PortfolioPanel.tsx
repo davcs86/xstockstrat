@@ -24,7 +24,7 @@ function Stat({ label, value, valueClass = 'text-foreground' }: { label: string;
 export function PortfolioPanel({ mode }: { mode: TradingMode }) {
   const { accounts, selectedAccountId } = useAccountContext();
   const { data, isLoading, error } = useSWR(
-    `/api/portfolio/accounts?account_id=${selectedAccountId ?? ''}&trading_mode=${mode}`,
+    `/api/portfolio/accounts?account_id=${selectedAccountId ?? ''}`,
     fetcher,
     { refreshInterval: 10000 },
   );
