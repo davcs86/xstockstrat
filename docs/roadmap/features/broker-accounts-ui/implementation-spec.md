@@ -167,7 +167,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 ### Step 3 — service: Add `/api/accounts` route handler to `xstockstrat-trader`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/app/api/accounts/route.ts` — create (not found — `src/app/api/accounts/` does not exist)
@@ -880,4 +880,7 @@ test.describe('AccountPortfolioSelector (insights)', () => {
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 3 — Add `/api/accounts` route handler
+**Spec said**: `DELETE(_req: NextRequest, { params }: ...)` using `_req` as the unused first param.
+**Actual**: Used `_: Request` (single underscore, untyped) as the first param in DELETE.
+**Reason**: ESLint config has `@typescript-eslint/no-unused-vars: error` with no `argsIgnorePattern`, so `_req` triggered a build error. Single `_` is treated as intentionally unused by ESLint.

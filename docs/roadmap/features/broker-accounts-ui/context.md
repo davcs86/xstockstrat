@@ -61,3 +61,14 @@
 **Progress**: 2 done / 9 total
 **Stopped at**: Step 2 (step complete — PR created, awaiting merge)
 **Next**: /sdd-execute broker-accounts-ui next
+
+### Step 3 — Add `/api/accounts` route handler to `xstockstrat-trader` [done]
+- Created `api/accounts/route.ts` (GET→ListBrokerAccounts, POST→RegisterBrokerAccount), `api/accounts/[id]/route.ts` (DELETE→DeregisterBrokerAccount), and `api/portfolio/accounts/route.ts` (GET→ListPortfolios). All three routes appear in the Next.js build output.
+- Files modified: `services/xstockstrat-trader/src/app/api/accounts/route.ts`, `services/xstockstrat-trader/src/app/api/accounts/[id]/route.ts`, `services/xstockstrat-trader/src/app/api/portfolio/accounts/route.ts`
+- Deviations: DELETE handler uses `_: Request` instead of `_req: NextRequest` — ESLint no-unused-vars error with no argsIgnorePattern; full detail in Deviation Log.
+
+## Session 2026-05-07T00:02:00Z — sdd-execute
+**Steps this session**: [3]
+**Progress**: 3 done / 9 total
+**Stopped at**: Step 3 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next
