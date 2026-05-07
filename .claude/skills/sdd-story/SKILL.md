@@ -1,8 +1,8 @@
 ---
 name: sdd-story
-description: Phase 1 of SDD — generate a product spec from a user story. Usage: /sdd-story <feature-slug> [story text]. Creates docs/roadmap/features/<slug>/feature.md and product-spec.md. Reads docs/runbooks/feature-workflow.md to populate governance fields.
+description: Phase 1 of SDD — generate a product spec from a user story. Usage: /sdd-story <feature-slug> [story text]. Creates docs/roadmap/features/NNN-<slug>/feature.md and product-spec.md. Reads docs/runbooks/feature-workflow.md to populate governance fields.
 argument-hint: <feature-slug> [story text]
-allowed-tools: Read Write Bash(ls *) Bash(mkdir *)
+allowed-tools: Read Write Bash(ls *) Bash(mkdir *) Bash(find *) Bash(printf *)
 effort: medium
 ---
 
@@ -21,15 +21,22 @@ If `$ARGUMENTS[0]` is empty, stop and ask: "Please provide a feature slug (kebab
 
 ### 2. Check for existing feature
 
-Read `docs/roadmap/features/$ARGUMENTS[0]/feature.md`.
-- If it exists: ask the user "A feature already exists for this slug. Overwrite or abort?"
+Run:
+```bash
+find docs/roadmap/features -maxdepth 1 -type d -name "*-$ARGUMENTS[0]"
+```
+- If a directory is found: ask the user "A feature already exists for this slug (`<found-dir>`). Overwrite or abort?"
 - If absent: proceed.
 
-### 3. Create directory
+### 3. Compute NNN and create directory
 
 ```bash
-mkdir -p docs/roadmap/features/$ARGUMENTS[0]
+NEXT_NNN=$(printf "%03d" $(( $(find docs/roadmap/features -maxdepth 1 -type d -name '[0-9][0-9][0-9]-*' | wc -l) + 1 )))
+FEATURE_DIRNAME="${NEXT_NNN}-$ARGUMENTS[0]"
+mkdir -p docs/roadmap/features/${FEATURE_DIRNAME}
 ```
+
+Use `${FEATURE_DIRNAME}` (e.g. `003-polygon-data-source`) as the directory name for all subsequent file paths.
 
 ### 4. Get story text
 
@@ -54,7 +61,7 @@ affected service from the **Service Owners** table. Store these for use in Step 
 
 ### 6. Write feature.md
 
-Write `docs/roadmap/features/$ARGUMENTS[0]/feature.md` using this exact template:
+Write `docs/roadmap/features/${FEATURE_DIRNAME}/feature.md` using this exact template:
 
 ```markdown
 # Feature: <slug>
@@ -103,7 +110,7 @@ re-run /sdd-spec if the registry changes.)_
 
 ### 7. Write product-spec.md
 
-Write `docs/roadmap/features/$ARGUMENTS[0]/product-spec.md` using this exact template:
+Write `docs/roadmap/features/${FEATURE_DIRNAME}/product-spec.md` using this exact template:
 
 ```markdown
 # Product Spec: <slug>
@@ -169,14 +176,14 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ### 8. Write context.md
 
-Write `docs/roadmap/features/$ARGUMENTS[0]/context.md`:
+Write `docs/roadmap/features/${FEATURE_DIRNAME}/context.md`:
 
 ```markdown
 # Context: <slug>
 
-**Feature**: `docs/roadmap/features/<slug>/feature.md`
-**Product Spec**: `docs/roadmap/features/<slug>/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/<slug>/implementation-spec.md`
+**Feature**: `docs/roadmap/features/<NNN-slug>/feature.md`
+**Product Spec**: `docs/roadmap/features/<NNN-slug>/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/<NNN-slug>/implementation-spec.md`
 
 ---
 
@@ -189,7 +196,7 @@ Write `docs/roadmap/features/$ARGUMENTS[0]/context.md`:
 
 Print:
 ```
-Feature created at docs/roadmap/features/<slug>/
+Feature created at docs/roadmap/features/<NNN-slug>/
 Status: draft
 
 Files written:

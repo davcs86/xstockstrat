@@ -252,18 +252,25 @@ Stop — do not continue.
 
 ### C-1. Check for existing feature directory
 
-Check if `docs/roadmap/features/<slug>/` exists. If it does: ask the user to confirm
-overwrite or stop.
+Run:
+```bash
+find docs/roadmap/features -maxdepth 1 -type d -name "*-<slug>"
+```
+If a directory is found: ask the user to confirm overwrite or stop.
 
-### C-2. Create feature directory
+### C-2. Compute NNN and create feature directory
 
 ```bash
-mkdir -p docs/roadmap/features/<slug>
+NEXT_NNN=$(printf "%03d" $(( $(find docs/roadmap/features -maxdepth 1 -type d -name '[0-9][0-9][0-9]-*' | wc -l) + 1 )))
+FEATURE_DIRNAME="${NEXT_NNN}-<slug>"
+mkdir -p docs/roadmap/features/${FEATURE_DIRNAME}
 ```
+
+Use `${FEATURE_DIRNAME}` (e.g. `003-fix-42-wrong-pnl-portfolio`) for all subsequent file paths.
 
 ### C-3. Write feature.md
 
-Write `docs/roadmap/features/<slug>/feature.md`:
+Write `docs/roadmap/features/${FEATURE_DIRNAME}/feature.md`:
 
 ```markdown
 # Feature: <slug>
@@ -305,7 +312,7 @@ Write `docs/roadmap/features/<slug>/feature.md`:
 
 ### C-4. Write product-spec.md
 
-Write `docs/roadmap/features/<slug>/product-spec.md` pre-populated from the issue body:
+Write `docs/roadmap/features/${FEATURE_DIRNAME}/product-spec.md` pre-populated from the issue body:
 
 ```markdown
 # Product Spec: <slug>
@@ -355,7 +362,7 @@ Write `docs/roadmap/features/<slug>/product-spec.md` pre-populated from the issu
 
 ### C-5. Write context.md
 
-Write `docs/roadmap/features/<slug>/context.md`:
+Write `docs/roadmap/features/${FEATURE_DIRNAME}/context.md`:
 
 ```markdown
 # Context Log: <slug>
@@ -379,7 +386,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ```
 SDD path setup complete.
-  Feature directory: docs/roadmap/features/<slug>/
+  Feature directory: docs/roadmap/features/<NNN-slug>/
   feature.md: Type=bug, Status=draft
   GitHub issue: <url>
 
