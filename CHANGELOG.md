@@ -28,6 +28,16 @@ Each entry corresponds to one `main-dev → main` PR merge.
 ## 2026-05-07
 
 ### Features
+- broker-accounts-ui: Surfaces registered broker accounts and per-account portfolio data in the `xstockstrat-trader` UI, completing the UI half of the `add-ikbr-account-support` feature which added backend RPCs but explicitly deferred all frontend changes.
+
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-05-07
+
+### Features
 - add-ikbr-account-support: Register multiple broker accounts (Alpaca and/or IBKR) via API with credentials stored AES-256-GCM encrypted in the DB — no env var changes needed to add accounts. Orders route to a specific account via `account_id`. Portfolio tracks positions per account. IBKR positions are periodically reconciled against broker truth via a sync poller. Dev enforces paper-only across all registered accounts.
 
 ### Summary
