@@ -61,12 +61,15 @@ export function AccountPortfolioSelector({ accountId, onAccountChange }: Account
 
   return (
     <div className="space-y-3">
-      <Select value={accountId} onValueChange={onAccountChange}>
+      <Select
+        value={accountId || '__all__'}
+        onValueChange={(v) => onAccountChange(v === '__all__' ? '' : v)}
+      >
         <SelectTrigger className="w-[220px] h-8 text-xs">
           <SelectValue placeholder="All Accounts" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">All Accounts</SelectItem>
+          <SelectItem value="__all__">All Accounts</SelectItem>
           {activeAccounts.map((account) => (
             <SelectItem key={account.account_id} value={account.account_id}>
               <span className="flex items-center gap-1">

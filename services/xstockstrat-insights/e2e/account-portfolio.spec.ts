@@ -60,6 +60,6 @@ test.describe('AccountPortfolioSelector (insights)', () => {
       });
     });
     await page.goto('/?account_id=ibkr-001');
-    await expect(page.getByText('IBKR Paper')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('heading', { name: 'IBKR Paper' })).toBeVisible({ timeout: 5000 });
   });
 });
