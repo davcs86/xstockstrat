@@ -55,6 +55,9 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Regenerate stubs
         run: bash ./scripts/buf-gen.sh
 
