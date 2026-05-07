@@ -16,7 +16,7 @@ cannot open its final integration PR to `main-dev` until the feature in the
 
 | Feature | Must wait for | Reason | Resolved |
 |---|---|---|---|
-| `broker-accounts-ui` | `add-ikbr-account-support` | Consumes proto stubs and backend RPCs (`ListBrokerAccounts`, `ListPortfolios`, `RegisterBrokerAccount`, `DeregisterBrokerAccount`) defined by that feature | No |
+| `broker-accounts-ui` | `add-ikbr-account-support` | Consumes proto stubs and backend RPCs (`ListBrokerAccounts`, `ListPortfolios`, `RegisterBrokerAccount`, `DeregisterBrokerAccount`) defined by that feature | Yes |
 
 _No blocking dependencies registered. If `/sdd-review` detects a hard conflict between
 two active features, it will propose adding a row here._
