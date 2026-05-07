@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BackfillJob, GetBackfillStatusRequest, ListBackfillJobsRequest, ListBackfillJobsResponse, NormalizeRawDataRequest, NormalizeRawDataResponse, TriggerBackfillRequest, TriggerBackfillResponse } from "./ingest_pb.js";
+import { BackfillJob, GetBackfillStatusRequest, IngestSignalRequest, IngestSignalResponse, ListBackfillJobsRequest, ListBackfillJobsResponse, NormalizeRawDataRequest, NormalizeRawDataResponse, QuerySignalsRequest, QuerySignalsResponse, TriggerBackfillRequest, TriggerBackfillResponse } from "./ingest_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -46,6 +46,28 @@ export const IngestService = {
       name: "NormalizeRawData",
       I: NormalizeRawDataRequest,
       O: NormalizeRawDataResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Signal ingestion — persists newsletter/external signals to ingest.newsletter_signals hypertable
+     *
+     * @generated from rpc xstockstrat.ingest.v1.IngestService.IngestSignal
+     */
+    ingestSignal: {
+      name: "IngestSignal",
+      I: IngestSignalRequest,
+      O: IngestSignalResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Signal query — returns active signals filtered by source/symbol/direction and time window
+     *
+     * @generated from rpc xstockstrat.ingest.v1.IngestService.QuerySignals
+     */
+    querySignals: {
+      name: "QuerySignals",
+      I: QuerySignalsRequest,
+      O: QuerySignalsResponse,
       kind: MethodKind.Unary,
     },
   }
