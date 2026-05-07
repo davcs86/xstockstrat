@@ -848,7 +848,7 @@ func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 	case "rejected", "stopped", "suspended", "calculated":
 		return tradingv1.OrderStatus_ORDER_STATUS_REJECTED
 	default:
-		return tradingv1.OrderStatus_ORDER_STATUS_NEW
+		return tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED
 	}
 }
 

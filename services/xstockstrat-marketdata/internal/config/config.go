@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -207,9 +206,5 @@ func getEnvBool(key string, def bool) bool {
 	if v == "" {
 		return def
 	}
-	b, err := strconv.ParseBool(v)
-	if err != nil {
-		return def
-	}
-	return b
+	return v == "true" || v == "1" || v == "yes"
 }
