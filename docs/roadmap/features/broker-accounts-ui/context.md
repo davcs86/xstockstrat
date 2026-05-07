@@ -72,3 +72,14 @@
 **Progress**: 3 done / 9 total
 **Stopped at**: Step 3 (step complete — PR created, awaiting merge)
 **Next**: /sdd-execute broker-accounts-ui next
+
+### Step 4 — Build `AccountSelector` and `AccountManagementPanel` components [done]
+- Created `AccountSelector.tsx` (Select + gear Sheet button, reads from AccountContext, active accounts only) and `AccountManagementPanel.tsx` (account list with remove/confirm flow, add-account form with dynamic Alpaca/IBKR credential fields, credential cleanup on unmount).
+- Files modified: `services/xstockstrat-trader/src/components/AccountSelector.tsx`, `services/xstockstrat-trader/src/components/AccountManagementPanel.tsx`
+- Deviations: none
+
+## Session 2026-05-07T00:03:00Z — sdd-execute
+**Steps this session**: [4]
+**Progress**: 4 done / 9 total
+**Stopped at**: Step 4 (step complete — PR created, awaiting merge)
+**Next**: /sdd-execute broker-accounts-ui next
