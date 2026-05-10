@@ -3,14 +3,14 @@
 **Status**: `pending`
 **Created**: 2026-05-10
 **Feature**: `docs/roadmap/features/003-formula-management-ui/feature.md`
-**Total Steps**: 11
+**Total Steps**: 12
 **Feature Branch**: `feature/formula-management-ui`
 
 ---
 
 ## Execution Summary
 
-Work begins in `packages/proto` (Step 1 — proto changes) followed immediately by stub regeneration (Step 2). Once new proto messages and RPCs are available, the indicators service receives its DB migration (Step 3), then a new repository layer (Step 4), then servicer changes that wire DB persistence into `RegisterFormula` and add `ListFormulas`, `UpdateFormula`, and `DeleteFormula` (Step 5), followed by the matching HTTP server routes (Step 6). Steps 7–9 add the insights API routes and pages. Step 10 adds tests to both services. Step 11 updates `CLAUDE.md` for the indicators service to document the new environment variable and dependency. All steps in the indicators service must come after Step 3 (migration) since the servicer depends on the schema existing. Steps 7–9 (insights) depend only on Step 2 (stubs available for TS import) and may proceed in parallel with Steps 4–6 in a multi-developer context, but the canonical sequential order keeps proto changes first.
+Work begins in `packages/proto` (Step 1 — proto changes) followed immediately by stub regeneration (Step 2). Once new proto messages and RPCs are available, the indicators service receives its DB migration (Step 3), then a new repository layer (Step 4), then servicer changes that wire DB persistence into `RegisterFormula` and add `ListFormulas`, `UpdateFormula`, and `DeleteFormula` (Step 5), followed by the matching HTTP server routes (Step 6). Steps 7–10 add the insights API routes and pages: Step 7 adds the collection and per-record API routes, Step 8 adds the execute route (before the pages that call it), Step 9 adds the FormulaEditor component and list/detail pages, and Step 10 adds the new-formula creation page. Step 11 adds tests to both services. Step 12 updates `CLAUDE.md` for the indicators service to document the new environment variable and dependency. All steps in the indicators service must come after Step 3 (migration) since the servicer depends on the schema existing. Steps 7–10 (insights) depend only on Step 2 (stubs available for TS import) and may proceed in parallel with Steps 4–6 in a multi-developer context, but the canonical sequential order keeps proto changes first.
 
 ## Step Dependencies
 
@@ -19,10 +19,11 @@ Work begins in `packages/proto` (Step 1 — proto changes) followed immediately 
 - Steps 4, 5, 6 require Step 3: service code depends on the DB schema existing.
 - Step 5 requires Step 4: the servicer imports `FormulasRepository` from Step 4.
 - Step 6 requires Step 5: HTTP routes call servicer methods that include the new RPCs.
-- Steps 7, 8, 9 require Step 2: TypeScript imports use generated types from `indicators_pb.ts`.
-- Step 9 requires Steps 7 and 8: the formula detail page imports the `FormulaEditor` component from Step 8.
-- Step 10 requires Steps 5 and 9: tests cover the servicer and the UI pages.
-- Step 11 requires Step 4: documents the `DATABASE_URL` env var added to `main.py` in Step 4.
+- Steps 7, 8, 9, 10 require Step 2: TypeScript routes use the Connect-RPC endpoint generated from proto.
+- Step 9 requires Steps 7 and 8: formula list and detail pages depend on the collection API route (Step 7) and the execute route (Step 8), which must be deployed before the detail page's test-execute section is functional.
+- Step 10 requires Steps 7 and 9: the new-formula page POSTs to `/api/formulas` (Step 7) and redirects to the detail page (Step 9).
+- Step 11 requires Steps 5 and 9: tests cover the servicer and the UI pages.
+- Step 12 requires Step 4: documents the `DATABASE_URL` env var added to `main.py` in Step 4.
 
 ---
 
@@ -633,80 +634,7 @@ Expected: JSON with `formulas` array (may be empty: `{"formulas":[],"totalCount"
 
 ---
 
-### Step 8 — service: Add FormulaEditor component and /formulas pages to xstockstrat-insights
-
-**Status**: `pending`
-**Service**: `xstockstrat-insights`
-**Files**:
-- `services/xstockstrat-insights/src/components/FormulaEditor.tsx` — create
-- `services/xstockstrat-insights/src/app/formulas/page.tsx` — create
-- `services/xstockstrat-insights/src/app/formulas/[id]/page.tsx` — create
-- `services/xstockstrat-insights/src/components/AppShell.tsx` — modify
-- `services/xstockstrat-insights/package.json` — modify
-
-**Reviewers**: `xstockstrat-insights` owner — analytics display accuracy, SSE polling resilience, read-only access pattern
-
-**Codebase Evidence**:
-- Confirmed via read of `services/xstockstrat-insights/package.json`: `@monaco-editor/react` is NOT listed in dependencies — must be added. No `monaco` dependency anywhere in the file.
-- Confirmed via read of `services/xstockstrat-insights/src/components/AppShell.tsx` L70–81: in-app nav section has `Link href="/"` (Dashboard) and `Link href="/strategies"` (Strategies). A new "Formulas" link must be added following the same pattern: `<Link href="/formulas" className={cn('px-3 py-1.5 rounded-md text-sm transition-colors', ...)}>Formulas</Link>`.
-- Same mobile nav section at L117–122 needs the matching mobile nav item.
-- Confirmed `src/components/` directory exists with `AppShell.tsx`, `AccountPortfolioSelector.tsx`, and `ui/` subdirectory. `FormulaEditor.tsx` is a new file here.
-- Confirmed via read of `src/app/strategies/page.tsx`: SWR + `'use client'` + `useSWR` fetcher pattern for list pages. `AppShell` wrapper, `Card`/`CardContent` components from `src/components/ui/card.tsx`.
-- Confirmed via read of `src/app/strategies/[id]/page.tsx`: detail page pattern with `useState`, form state, action buttons, result display. Used as structural reference for formula detail/edit page.
-- Product spec OQ-3 (resolved): Monaco Editor (`@monaco-editor/react`) chosen for formula source.
-- Confirmed `lucide-react` is in `package.json` (L28) — `Code2`, `FlaskConical`, `Plus`, `Pencil`, `Trash2` icons can be used from it.
-
-**Instructions**:
-1. Add `"@monaco-editor/react": "^4.6.0"` to the `dependencies` section of `services/xstockstrat-insights/package.json` (after the existing `@radix-ui/...` entries).
-
-2. Create `services/xstockstrat-insights/src/components/FormulaEditor.tsx` — a `'use client'` component wrapping `@monaco-editor/react`'s `Editor` component. It accepts props `value: string`, `onChange: (v: string) => void`, `readOnly?: boolean`. Set `language="python"`, `theme="vs-dark"`, `height="300px"`, `options={{ minimap: { enabled: false }, readOnly: readOnly ?? false }}`. Export as named export `FormulaEditor`.
-
-3. Create `services/xstockstrat-insights/src/app/formulas/page.tsx` — the formula list page (`'use client'`):
-   - Uses `useSWR('/api/formulas?include_public=true&page_size=50', fetcher)` with `refreshInterval: 0` (formulas don't change on a timer).
-   - Displays formulas in a card grid: formula name, author (truncated), `is_public` badge ("Public"/"Private"), created_at date.
-   - "New Formula" button (top right in header) navigates to `/formulas/new`.
-   - Clicking a formula card navigates to `/formulas/[formulaId]`.
-   - Wrap in `AppShell`. Empty state: "No formulas yet. Click New Formula to create one."
-
-4. Create `services/xstockstrat-insights/src/app/formulas/new/page.tsx` is NOT a separate file — the create form lives inline on `src/app/formulas/page.tsx` as a modal or within the same route. **Simpler approach**: create a standalone create page at `services/xstockstrat-insights/src/app/formulas/new/page.tsx` — a `'use client'` form page with fields for name, description, `FormulaEditor` for source, is_public toggle; on submit POSTs to `/api/formulas` and navigates to the new formula's detail page. Include this file in the **Files** list:
-   - `services/xstockstrat-insights/src/app/formulas/new/page.tsx` — create
-
-5. Create `services/xstockstrat-insights/src/app/formulas/[id]/page.tsx` — the formula detail/edit/test page (`'use client'`):
-   - Fetches formula data with `useSWR('/api/formulas/' + id, fetcher)`.
-   - **View/Edit section**: shows name, description, author, is_public. If `author === userId` (from `'dev-user'` fallback), shows "Edit" button that expands an inline edit form with `FormulaEditor` for source. On save: `PUT /api/formulas/[id]`. On cancel: reverts.
-   - **Delete section**: "Delete" button with confirmation dialog. On confirm: `DELETE /api/formulas/[id]`, then navigates back to `/formulas`.
-   - **Test Execute section** (FR-12): JSON textarea for input data, "Run" button that POSTs to `/api/formulas/[id]/execute` (see Step 7 note: add a test-execute route). Add route `services/xstockstrat-insights/src/app/api/formulas/[id]/execute/route.ts` — `POST` handler that reads input JSON from body and calls `ExecuteFormula` on indicators. Add this file to **Files**.
-   - Wrap in `AppShell`.
-
-6. Modify `services/xstockstrat-insights/src/components/AppShell.tsx`:
-   - In the desktop nav section (currently L59–80 where Dashboard and Strategies links are), add after the Strategies link:
-     ```tsx
-     <Link
-       href="/formulas"
-       className={cn(
-         'px-3 py-1.5 rounded-md text-sm transition-colors',
-         pathname?.startsWith('/formulas')
-           ? 'text-foreground font-medium'
-           : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-       )}
-     >
-       Formulas
-     </Link>
-     ```
-   - In the mobile nav section (currently L117–122), add a matching mobile nav `Link` for `/formulas` after the Strategies link.
-
-**Note**: The test-execute API route (`/api/formulas/[id]/execute/route.ts`) calls `ExecuteFormula` with `formulaId` and `inputData`. Add this file explicitly:
-- `services/xstockstrat-insights/src/app/api/formulas/[id]/execute/route.ts` — create
-
-**Verification**:
-```bash
-pnpm --filter xstockstrat-insights run lint
-```
-Expected: no lint errors. Then navigate to `http://localhost:3001/formulas` and verify the page loads.
-
----
-
-### Step 9 — service: Add execute API route for test-execute from formula detail page
+### Step 8 — service: Add execute API route for test-execute from formula detail page
 
 **Status**: `pending`
 **Service**: `xstockstrat-insights`
@@ -718,7 +646,7 @@ Expected: no lint errors. Then navigate to `http://localhost:3001/formulas` and 
 **Codebase Evidence**:
 - Confirmed via read of `services/xstockstrat-insights/src/app/api/analysis/backtest/route.ts`: `POST` handler pattern — reads body with `await req.json()`, calls downstream service via `fetch` to Connect-RPC endpoint, returns `NextResponse.json(result)`.
 - Confirmed via read of `services/xstockstrat-indicators/app/http_server.py` L43–45: `ExecuteFormula` route is at `/xstockstrat.indicators.v1.IndicatorsService/ExecuteFormula`, accepts `formulaId` (or `formulaSource`) and `inputData`.
-- This route is referenced by the formula detail page created in Step 8 — both steps must be deployed together.
+- This route is referenced by the formula detail page created in Step 9 — both steps must be deployed before the test-execute section of the detail page is functional.
 
 **Instructions**:
 1. Create `services/xstockstrat-insights/src/app/api/formulas/[id]/execute/route.ts`:
@@ -767,12 +695,114 @@ Expected: JSON error response (formula not found from indicators), HTTP 200 with
 
 ---
 
-### Step 10 — test: Add unit tests for FormulasRepository and indicators servicer CRUD methods
+### Step 9 — service: Add FormulaEditor component and /formulas pages to xstockstrat-insights
+
+**Status**: `pending`
+**Service**: `xstockstrat-insights`
+**Files**:
+- `services/xstockstrat-insights/src/components/FormulaEditor.tsx` — create
+- `services/xstockstrat-insights/src/app/formulas/page.tsx` — create
+- `services/xstockstrat-insights/src/app/formulas/[id]/page.tsx` — create
+- `services/xstockstrat-insights/src/components/AppShell.tsx` — modify
+- `services/xstockstrat-insights/package.json` — modify
+
+**Reviewers**: `xstockstrat-insights` owner — analytics display accuracy, SSE polling resilience, read-only access pattern
+
+**Codebase Evidence**:
+- Confirmed via read of `services/xstockstrat-insights/package.json`: `@monaco-editor/react` is NOT listed in dependencies — must be added. No `monaco` dependency anywhere in the file.
+- Confirmed via read of `services/xstockstrat-insights/src/components/AppShell.tsx` L70–81: in-app nav section has `Link href="/"` (Dashboard) and `Link href="/strategies"` (Strategies). A new "Formulas" link must be added following the same pattern: `<Link href="/formulas" className={cn('px-3 py-1.5 rounded-md text-sm transition-colors', ...)}>Formulas</Link>`.
+- Same mobile nav section at L117–122 needs the matching mobile nav item.
+- Confirmed `src/components/` directory exists with `AppShell.tsx`, `AccountPortfolioSelector.tsx`, and `ui/` subdirectory. `FormulaEditor.tsx` is a new file here.
+- Confirmed via read of `src/app/strategies/page.tsx`: SWR + `'use client'` + `useSWR` fetcher pattern for list pages. `AppShell` wrapper, `Card`/`CardContent` components from `src/components/ui/card.tsx`.
+- Confirmed via read of `src/app/strategies/[id]/page.tsx`: detail page pattern with `useState`, form state, action buttons, result display. Used as structural reference for formula detail/edit page.
+- Product spec OQ-3 (resolved): Monaco Editor (`@monaco-editor/react`) chosen for formula source.
+- Confirmed `lucide-react` is in `package.json` (L28) — `Code2`, `FlaskConical`, `Plus`, `Pencil`, `Trash2` icons can be used from it.
+
+**Instructions**:
+1. Add `"@monaco-editor/react": "^4.6.0"` to the `dependencies` section of `services/xstockstrat-insights/package.json` (after the existing `@radix-ui/...` entries).
+
+2. Create `services/xstockstrat-insights/src/components/FormulaEditor.tsx` — a `'use client'` component wrapping `@monaco-editor/react`'s `Editor` component. It accepts props `value: string`, `onChange: (v: string) => void`, `readOnly?: boolean`. Set `language="python"`, `theme="vs-dark"`, `height="300px"`, `options={{ minimap: { enabled: false }, readOnly: readOnly ?? false }}`. Export as named export `FormulaEditor`.
+
+3. Create `services/xstockstrat-insights/src/app/formulas/page.tsx` — the formula list page (`'use client'`):
+   - Uses `useSWR('/api/formulas?include_public=true&page_size=50', fetcher)` with `refreshInterval: 0` (formulas don't change on a timer).
+   - Displays formulas in a card grid: formula name, author (truncated), `is_public` badge ("Public"/"Private"), created_at date.
+   - "New Formula" button (top right in header) navigates to `/formulas/new`.
+   - Clicking a formula card navigates to `/formulas/[formulaId]`.
+   - Wrap in `AppShell`. Empty state: "No formulas yet. Click New Formula to create one."
+
+4. _(The new-formula creation page is implemented in Step 10.)_
+
+5. Create `services/xstockstrat-insights/src/app/formulas/[id]/page.tsx` — the formula detail/edit/test page (`'use client'`):
+   - Fetches formula data with `useSWR('/api/formulas/' + id, fetcher)`.
+   - **View/Edit section**: shows name, description, author, is_public. If `author === userId` (from `'dev-user'` fallback), shows "Edit" button that expands an inline edit form with `FormulaEditor` for source. On save: `PUT /api/formulas/[id]`. On cancel: reverts.
+   - **Delete section**: "Delete" button with confirmation dialog. On confirm: `DELETE /api/formulas/[id]`, then navigates back to `/formulas`.
+   - **Test Execute section** (FR-12): JSON textarea for input data, "Run" button that POSTs to `/api/formulas/[id]/execute` (execute route created in Step 8). Returns and displays the `ExecuteFormulaResponse` fields: `success`, `output`, `stdout`, `stderr`, `executionMs`.
+   - Wrap in `AppShell`.
+
+6. Modify `services/xstockstrat-insights/src/components/AppShell.tsx`:
+   - In the desktop nav section (currently L59–80 where Dashboard and Strategies links are), add after the Strategies link:
+     ```tsx
+     <Link
+       href="/formulas"
+       className={cn(
+         'px-3 py-1.5 rounded-md text-sm transition-colors',
+         pathname?.startsWith('/formulas')
+           ? 'text-foreground font-medium'
+           : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
+       )}
+     >
+       Formulas
+     </Link>
+     ```
+   - In the mobile nav section (currently L117–122), add a matching mobile nav `Link` for `/formulas` after the Strategies link.
+
+**Verification**:
+```bash
+pnpm --filter xstockstrat-insights run lint
+```
+Expected: no lint errors. Then navigate to `http://localhost:3001/formulas` and verify the page loads.
+
+---
+
+### Step 10 — service: Add new-formula creation page to xstockstrat-insights
+
+**Status**: `pending`
+**Service**: `xstockstrat-insights`
+**Files**:
+- `services/xstockstrat-insights/src/app/formulas/new/page.tsx` — create
+
+**Reviewers**: `xstockstrat-insights` owner — analytics display accuracy, SSE polling resilience, read-only access pattern
+
+**Codebase Evidence**:
+- Confirmed via Step 9: `src/app/formulas/page.tsx` navigates to `/formulas/new` via a "New Formula" button — the route must resolve to a page at this path.
+- `FormulaEditor` component created in Step 9, importable from `@/components/FormulaEditor`.
+- API route `POST /api/formulas` created in Step 7 — this page POSTs to it.
+- Confirmed via read of `src/app/strategies/page.tsx`: `useRouter().push(...)` pattern for post-submit navigation.
+
+**Instructions**:
+1. Create `services/xstockstrat-insights/src/app/formulas/new/page.tsx` — a `'use client'` form page:
+   - Fields: `name` (text input, required), `description` (`<textarea>`), `source` (`FormulaEditor` component, required), `isPublic` (checkbox/toggle, default false).
+   - On submit: `POST /api/formulas` with `{ name, description, source, is_public }`. Set `X-User-Id` header to `'dev-user'` (matches the fallback in the API route).
+   - On success: navigate to `/formulas/[formulaId]` using `useRouter().push(...)` with the `formulaId` from the response.
+   - On error: show an inline error message below the form.
+   - "Cancel" button navigates back to `/formulas`.
+   - Wrap in `AppShell`.
+
+**Verification**:
+```bash
+pnpm --filter xstockstrat-insights run lint
+```
+Expected: no lint errors. Then navigate to `http://localhost:3001/formulas/new` and verify the form renders with the Monaco editor.
+
+---
+
+### Step 11 — test: Add unit tests for FormulasRepository and indicators servicer CRUD methods
 
 **Status**: `pending`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_formulas.py` — create
+- `services/xstockstrat-indicators/pyproject.toml` — modify (add `pytest-asyncio>=0.23.0` to dev deps)
 
 **Reviewers**: `xstockstrat-indicators` owner — formula sandboxing, numeric precision, timeout enforcement (`indicators.sandbox.timeout_ms`), no side-effects from formula execution
 
@@ -816,7 +846,7 @@ Expected: coverage passes 50% threshold.
 
 ---
 
-### Step 11 — docs: Update xstockstrat-indicators CLAUDE.md
+### Step 12 — docs: Update xstockstrat-indicators CLAUDE.md
 
 **Status**: `pending`
 **Service**: `xstockstrat-indicators`
