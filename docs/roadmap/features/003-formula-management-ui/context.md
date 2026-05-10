@@ -24,3 +24,14 @@
   - OQ-1: `user_id` via `X-User-Id` header; fallback `'dev-user'` when absent in dev.
   - OQ-2: offset+limit pagination added to `ListFormulas` (`page_size`, `page_offset`, `total_count`).
   - OQ-3: Monaco Editor (`@monaco-editor/react`) chosen for formula source — richer custom `CompletionItemProvider` support over CodeMirror.
+
+## Session 2026-05-10T00:02:00Z — sdd-spec
+
+- Generated implementation-spec.md with 11 steps. Status → implementation-ready.
+- Key codebase findings:
+  - `services/xstockstrat-indicators/migrations/` does not exist — first migration NNN is `001`. `scripts/db-migrate.sh` line 122 already calls `migrate_service "xstockstrat-indicators" "indicators"` (with a comment noting "no migrations dir yet") — no change to the script is required.
+  - `services/xstockstrat-indicators/app/handlers/servicer.py`: `IndicatorsServicer.__init__` takes only `config_watcher`; in-memory `self._formulas` dict is the current formula store (L20). `RegisterFormula` at L126 and `GetFormula` at L148 must be extended to use DB when pool is available.
+  - `asyncpg` is NOT in `services/xstockstrat-indicators/pyproject.toml` — must be added as `>=0.29.0` (matches ingest service). DB pool wiring follows exact pattern from `services/xstockstrat-ingest/app/main.py` L17, L37–38, L61.
+  - `services/xstockstrat-insights/src/app/api/` has `analysis/`, `health/`, `portfolio/` — no `formulas/` directory. New routes follow the `fetch` + `application/connect+json` pattern from `strategies/route.ts`. `INDICATORS_BASE_URL` is already defined in `src/lib/connectTransport.ts` L34 but routes use local env var reads (same as `analysis/` routes).
+  - `@monaco-editor/react` not in `services/xstockstrat-insights/package.json` — must be added as `^4.6.0`.
+  - `pytest-asyncio` not in indicators `pyproject.toml` dev deps — must be added for async test support.
