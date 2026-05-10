@@ -18,8 +18,12 @@ echo "==> Checking required tools..."
 
 # ── 2. Generate proto stubs ────────────────────────────────────────────────
 echo ""
-echo "==> Generating proto stubs..."
-"$REPO_ROOT/scripts/buf-gen.sh"
+if [ -d "$REPO_ROOT/packages/proto/gen" ] && [ -n "$(ls -A "$REPO_ROOT/packages/proto/gen" 2>/dev/null)" ]; then
+  echo "==> Proto stubs already present — skipping generation."
+else
+  echo "==> Proto stubs missing — running localenv-setup.sh (Docker required)..."
+  "$REPO_ROOT/scripts/localenv-setup.sh"
+fi
 
 # ── 3. Install Node dependencies for Node.js services ─────────────────────
 echo ""
@@ -51,38 +55,19 @@ if [ -f "$REPO_ROOT/packages/proto/gen/python/setup.py" ]; then
   (cd "$REPO_ROOT/packages/proto/gen/python" && pip install -q -e .)
 fi
 
-# ── 5. Start local TimescaleDB ─────────────────────────────────────────────
-echo ""
-echo "==> Starting TimescaleDB via Docker..."
-if ! docker ps --format '{{.Names}}' | grep -q "xstockstrat-db"; then
-  docker run -d \
-    --name xstockstrat-db \
-    -e POSTGRES_USER=xstockstrat \
-    -e POSTGRES_PASSWORD=devpassword \
-    -e POSTGRES_DB=xstockstrat \
-    -p 5432:5432 \
-    timescale/timescaledb:latest-pg16
-  echo "  Waiting for TimescaleDB to be ready..."
-  sleep 5
-  until docker exec xstockstrat-db pg_isready -U xstockstrat -q; do sleep 1; done
-  echo "  ✓ TimescaleDB ready"
-else
-  echo "  ✓ xstockstrat-db already running"
-fi
-
-export DATABASE_URL="postgres://xstockstrat:devpassword@localhost:5432/xstockstrat?sslmode=disable"
-
-# ── 6. Run all migrations ──────────────────────────────────────────────────
-echo ""
-echo "==> Running database migrations..."
-"$REPO_ROOT/scripts/db-migrate.sh"
-
 echo ""
 echo "======================================================"
 echo " Bootstrap complete!"
 echo ""
-echo " DATABASE_URL=$DATABASE_URL"
+echo " Host dependencies installed. Next steps:"
 echo ""
-echo " Start services individually or use docker-compose."
-echo " See each service's CLAUDE.md for run instructions."
+echo "   docker compose up -d"
+echo ""
+echo " docker-compose will:"
+echo "   1. Start TimescaleDB (with health check)"
+echo "   2. Run db-migrator (applies all pending migrations)"
+echo "   3. Start all application services"
+echo ""
+echo " Logs:  docker compose logs -f"
+echo " DB migration logs:  docker compose logs db-migrator --tail=50"
 echo "======================================================"

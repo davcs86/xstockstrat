@@ -30,11 +30,17 @@ Run the prereq check script and show its output verbatim:
 cd "$REPO_ROOT" && ./scripts/check-prereqs.sh
 ```
 
-The script exits 0 if all required tools are present (version mismatches are warnings, not errors) and exits 1 if any tool is missing.
+The script exits 0 if all required tools are present (version mismatches are warnings, not errors) and exits 1 if any hard requirement is missing.
 
-**If the script exits 1 (missing tools):** tell the user to install the listed tools and re-run `/onboard`. Do NOT proceed to Phase 2.
+**Hard requirements** (script exits 1 if absent): `docker` with daemon running. Git is always present if the user cloned the repo.
 
-**If the script exits 0 with warnings:** inform the user that version mismatches may cause subtle failures compared to CI, but they can continue.
+**Soft requirements** (version mismatch = warning, not failure): `go`, `python3`, `node`, `pnpm`. These are only needed for running services directly on the host, not for Docker-first development.
+
+`buf`, `migrate`, and `psql` are **not** checked — they run inside Docker containers and are never required on the host.
+
+**If the script exits 1:** the most likely cause is Docker not running. Tell the user to start Docker Desktop (or `sudo systemctl start docker` on Linux) and re-run `/onboard`. Do NOT proceed to Phase 2.
+
+**If the script exits 0 with warnings:** inform the user that version mismatches only matter if they plan to run services directly on the host. For Docker-based development, they can safely continue.
 
 ---
 
@@ -88,12 +94,13 @@ ls "$REPO_ROOT/packages/proto/gen/" 2>/dev/null | head -3
 
 Summarise what `bootstrap.sh` will do:
 - Re-run `check-prereqs.sh` as a final gate
+- Check for proto stubs; run `localenv-setup.sh` automatically if they are absent
 - Install pnpm dependencies for 7 Node/Next.js services
 - Install Python deps for 3 Python services
-- Start a local TimescaleDB Docker container on port 5432
-- Run all DB migrations in dependency order
 
-Ask the user to confirm before running (this installs packages and starts a container).
+**Note:** TimescaleDB and DB migrations are **not** handled by `bootstrap.sh`. They run automatically in Phase 5 when `docker compose up -d` starts: TimescaleDB starts first, the `db-migrator` one-shot container applies all pending migrations, then all 13 services start.
+
+Ask the user to confirm before running (this installs packages).
 
 On confirmation:
 
@@ -103,8 +110,7 @@ cd "$REPO_ROOT" && ./scripts/bootstrap.sh
 
 If bootstrap exits non-zero, display the last 20 lines of output and suggest:
 - Missing tool → install it, re-run `/onboard`
-- TimescaleDB port 5432 in use → `docker ps` to find what's using it
-- Migration failure → `docker compose logs timescaledb --tail=30`
+- Proto gen failure → ensure Docker is running, then re-run `./scripts/localenv-setup.sh`
 
 ---
 

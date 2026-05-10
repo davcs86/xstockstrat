@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
 # scripts/check-prereqs.sh
-# Checks all tools required to build and run xstockstrat-orchestration locally.
+# Checks tools required to build and run xstockstrat-orchestration locally.
 # Exits 0 if all required tools are present; exits 1 if any are missing.
 # Version mismatches (wrong major version) produce a warning but do not block.
+#
+# Hard requirements (always needed):
+#   git, docker (with daemon running)
+#
+# Soft requirements (only for running services directly on the host, outside Docker):
+#   go, python3, node, pnpm
+#
+# NOT required on the host (provided by containers):
+#   buf        — proto codegen runs inside Dockerfile.codegen via localenv-setup.sh
+#   migrate    — migrations run inside scripts/Dockerfile.migrate via docker-compose
+#   psql       — available inside the migrate container
 #
 # Usage:
 #   ./scripts/check-prereqs.sh          # check all tools
@@ -97,14 +108,14 @@ check_docker() {
 log "Checking required tools..."
 log ""
 
+check_docker
+
+# go/python3/node/pnpm are needed only for running services directly on the host.
+# If you only use Docker, version mismatches here are non-fatal warnings.
 check "go"      "$REQUIRED_GO"    "https://go.dev/dl/"                                   "go version"
 check "python3" "$REQUIRED_PYTHON" "https://www.python.org/downloads/"                   "python3 --version"
 check "node"    "$REQUIRED_NODE"  "https://nodejs.org/"                                  "node --version"
 check "pnpm"    "$REQUIRED_PNPM"  "npm install -g pnpm@${REQUIRED_PNPM}"                 "pnpm --version"
-check "buf"     ""                "https://buf.build/docs/installation"
-check "migrate" ""                "go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest"
-check "psql"    ""                "https://www.postgresql.org/download/"                 "psql --version"
-check_docker
 
 log ""
 

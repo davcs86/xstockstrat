@@ -21,11 +21,8 @@ Install all of these before running any scripts. The versions in the table are p
 | Python | 3.12 | https://www.python.org/downloads/ |
 | Node.js | 22 | https://nodejs.org/ |
 | pnpm | 9.15.0 | `npm install -g pnpm@9.15.0` |
-| buf | latest | https://buf.build/docs/installation |
-| golang-migrate | latest | `go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest` |
-| psql client | any | bundled with PostgreSQL, or install `libpq-dev` |
 
-> **Docker-only shortcut**: if you don't want to install Go, Python, or Node locally, `localenv-setup.sh` generates proto stubs inside a container. You still need the host tools for `bootstrap.sh` (dep installs). See Step 3 below.
+> **Docker is the only hard requirement** for proto stub generation (via `localenv-setup.sh`) and database migrations (via `docker compose`). Go, Python, Node, and pnpm are only needed if you run services directly on the host — they are optional for Docker-first development. `buf`, `migrate`, and `psql` are never required on the host; they run inside containers.
 
 ---
 
@@ -84,10 +81,11 @@ Expected output ends with:
 
 This script:
 1. Verifies all required tools are installed and prints any that are missing
-2. Installs Node.js dependencies for all 7 Node/Next.js services
-3. Installs Python dependencies for all 3 Python services
-4. Starts a local TimescaleDB container (`xstockstrat-db`) on port 5432
-5. Runs all database migrations in dependency order
+2. Checks for proto stubs and runs `localenv-setup.sh` automatically if they are absent
+3. Installs Node.js dependencies for all 7 Node/Next.js services
+4. Installs Python dependencies for all 3 Python services
+
+TimescaleDB and database migrations are **not** handled by `bootstrap.sh` — they run automatically when you start Docker Compose in Step 5.
 
 If any tools are missing, the script exits with a clear error listing what to install. Fix them and re-run.
 
@@ -97,7 +95,7 @@ If any tools are missing, the script exits with a clear error listing what to in
 docker compose up -d
 ```
 
-On first run this builds all 13 service images, which takes a few minutes.
+On first run this builds all 13 service images plus the `db-migrator` image, which takes a few minutes. Docker Compose starts TimescaleDB first, then runs `db-migrator` to apply all pending migrations, then starts all 13 application services.
 
 ### Step 6 — Verify
 
@@ -267,12 +265,12 @@ Install the listed tools. Re-run `bootstrap.sh` — it re-checks all tools on ev
 
 ### Database migration fails
 ```bash
+docker compose logs db-migrator --tail=50   # check migration output
 docker compose logs timescaledb --tail=30   # check DB is healthy
 docker exec xstockstrat-db pg_isready -U xstockstrat   # manual health check
-./scripts/db-migrate.sh                     # re-run migrations manually
 ```
 
-If TimescaleDB container doesn't exist (bootstrap.sh was not run), run `./scripts/bootstrap.sh` first.
+To re-run migrations without restarting everything: `docker compose up db-migrator --wait`
 
 ### Service crashes on startup with "config stream unavailable"
 The config service must be healthy before other services start. Check it first:
