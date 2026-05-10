@@ -18,6 +18,15 @@
 ## Session 2026-05-10T00:01:00Z — sdd-review product-spec
 
 - Product spec approved. Status: draft → spec-ready.
+- Warnings: `packages/proto` listed under Affected Services (advisory — removed and noted inline).
+- Overlap findings: `broker-accounts-ui` (code-completed) also modifies `xstockstrat-insights`. No migration/proto/config conflicts; merge order informational (broker-accounts-ui merges first).
+- OQ-1 RESOLVED: `user_id` via `X-User-Id` header; `'dev-user'` fallback when absent.
+- OQ-2 RESOLVED: offset+limit pagination added to ListFormulas (page_size / page_offset / total_count).
+- OQ-3 RESOLVED: Monaco Editor (`@monaco-editor/react`) for formula source — chosen for CompletionItemProvider support to suggest numpy/pandas/indicators API calls.
+
+## Session 2026-05-10T00:01:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
 - Warnings: `packages/proto` removed from Affected Services (advisory only — proto changes documented in Proto Contract Changes section).
 - Overlap findings: `broker-accounts-ui` also modifies `xstockstrat-insights` — confirmed already merged/done, no merge-order action required.
 - Open questions resolved:
