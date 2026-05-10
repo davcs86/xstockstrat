@@ -30,13 +30,13 @@ Use `$FEATURE_DIR` for all file reads and writes in this skill.
 ls $FEATURE_DIR/implementation-spec.md 2>/dev/null
 ```
 If the file is not found: stop — "No implementation spec found. Run /sdd-spec $ARGUMENTS[0] first."
-Do not read the file contents yet — authoritative content will be loaded in B4.5.
+Do not read the file contents yet — authoritative content will be loaded in B3.
 
 **Step B2.** Read `$FEATURE_DIR/feature.md`.
 Check lifecycle status. If status is `launched`, `rolled-back`, or `demoted/canceled`:
 warn the user — "Feature is marked `<status>`. Proceed anyway? (yes / no)"
 
-**Step B4.5.** Fetch the feature's integration branch from origin and load authoritative artifacts.
+**Step B3.** Fetch the feature's integration branch from origin and load authoritative artifacts.
 
 Parse `**Development Branch**` from the already-read `feature.md` — this is `<dev-branch>` (e.g. `feature/<slug>`).
 If the field is absent, fall back to `feature/$ARGUMENTS[0]` and note the fallback.
@@ -68,14 +68,14 @@ If the `ls-remote` command returns no output (branch not yet created on origin):
 - These are now the authoritative spec files for the session.
 - Note to user: "`origin/<dev-branch>` not found — loaded spec from `origin/main-dev` (feature branch not yet pushed)."
 
-**Step B5.** Run `git status`.
-`<dev-branch>` was already determined in B4.5.
+**Step B4.** Run `git status`.
+`<dev-branch>` was already determined in B3.
 Evaluate the current branch:
 - On `<dev-branch>` or `main-dev` → OK. BRANCH SYNC will handle checkout before each step.
 - On `feature-steps/<slug>-step-<N>` matching this feature → note that step N was previously started; BRANCH SYNC will handle.
 - On any other branch → stop: "Current branch is `<branch>`, which is unrelated to feature `<slug>`. Check out `<dev-branch>` or `main-dev` before proceeding."
 
-**Step B6.** Announce context to user:
+**Step B5.** Announce context to user:
 ```
 Resuming: <slug> (lifecycle: <status>)
 Prior sessions: <list ## Session headings from context.md>
@@ -362,12 +362,12 @@ After the last step in the requested range (or on any stop):
 
 ## REPO CONVENTIONS (from docs/runbooks/feature-workflow.md)
 
-- **Branch model**: `**Development Branch**` in `feature.md` is the integration branch (PR target). Per-step work happens on `feature-steps/<slug>-step-<N>` sub-branches created by BRANCH SYNC. Boot Step B5 validates the current branch context.
+- **Branch model**: `**Development Branch**` in `feature.md` is the integration branch (PR target). Per-step work happens on `feature-steps/<slug>-step-<N>` sub-branches created by BRANCH SYNC. Boot Step B4 validates the current branch context.
 - **Proto edits**: after any `.proto` change, run from `packages/proto/`:
   ```bash
   buf lint && buf breaking --against ".git#branch=<dev-branch>"
   ```
-  where `<dev-branch>` is the `**Development Branch**` value from `feature.md` (parsed in Boot Step B5).
+  where `<dev-branch>` is the `**Development Branch**` value from `feature.md` (parsed in Boot Step B4).
   If `buf` is not installed: fall back to `grpc_tools.protoc` (precedent: docs/roadmap/phase3-deviations.md) and document as deviation.
 - **Migrations**: naming is `NNN_description.up.sql` + `NNN_description.down.sql`. NNN is the next integer after the last file found by `ls services/<name>/migrations/ | sort | tail -1`.
 - **After proto changes**: run `./scripts/buf-gen.sh` to regenerate stubs; include generated files in the commit.
