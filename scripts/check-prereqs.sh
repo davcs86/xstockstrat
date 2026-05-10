@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # scripts/check-prereqs.sh
-# Checks tools required to run xstockstrat-orchestration locally.
-# Development is fully Docker-based — only git and docker are required on the host.
+# Checks tools required to work with xstockstrat-orchestration locally.
 #
-# NOT required on the host (all provided by Docker containers):
-#   go, python3, node, pnpm  — services build and run inside Docker
-#   buf                       — proto codegen runs inside Dockerfile.codegen via localenv-setup.sh
-#   migrate                   — migrations run inside scripts/Dockerfile.migrate via docker-compose
-#   psql                      — available inside the migrate container
+# Hard requirement (exits 1 if missing):
+#   docker — services, proto codegen, and migrations all run in containers
 #
-# Language toolchains (go/python3/node/pnpm) are only needed if you want to run
-# unit tests or use IDE language-server features outside Docker.
+# Soft requirements for local tests and linters (warns if missing, never blocks):
+#   go + golangci-lint — Go services (trading, portfolio, marketdata)
+#   python3            — Python services (indicators, ingest, analysis)
+#   node + pnpm        — Node.js + Next.js services (ledger, identity, notify, config, trader, insights, config-ui)
+#
+# NOT required on the host (provided by Docker containers):
+#   buf        — proto codegen runs inside Dockerfile.codegen via localenv-setup.sh
+#   migrate    — migrations run inside scripts/Dockerfile.migrate via docker-compose
+#   psql       — available inside the migrate container
 #
 # Usage:
 #   ./scripts/check-prereqs.sh          # check all tools
@@ -28,10 +31,22 @@ done
 
 log()  { [ "$QUIET" -eq 0 ] && echo "$*" || true; }
 ok()   { log "  ✓ $*"; }
+warn() { log "  ⚠ $*"; }
 fail() { log "  ✗ $*"; }
 
-MISSING=0
+# Keep in sync with CLAUDE.md §Language Versions & Tooling
+REQUIRED_GO="1.25"
+REQUIRED_GOLANGCI="2.5.0"
+REQUIRED_PYTHON="3.12"
+REQUIRED_NODE="22"
+REQUIRED_PNPM="9.15.0"
 
+major() { echo "$1" | grep -oE '^[0-9]+' | head -1; }
+
+MISSING=0       # hard — exits 1
+MISSING_SOFT=0  # soft — warns only
+
+# ── Hard: docker ──────────────────────────────────────────────────────────────
 check_docker() {
   if ! command -v docker &>/dev/null; then
     fail "docker not found  →  https://docs.docker.com/get-docker/"
@@ -48,11 +63,48 @@ check_docker() {
   fi
 }
 
+# ── Soft: language toolchains ─────────────────────────────────────────────────
+# Warns if missing or wrong major version, never sets MISSING.
+check_soft() {
+  local cmd="$1"
+  local required="$2"
+  local install="$3"
+  local ver_cmd="${4:-$cmd --version}"
+
+  if ! command -v "$cmd" &>/dev/null; then
+    warn "$cmd not found  →  $install"
+    MISSING_SOFT=1
+    return
+  fi
+
+  local ver
+  ver=$(eval "$ver_cmd" 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+
+  local req_major inst_major
+  req_major=$(major "$required")
+  inst_major=$(major "$ver")
+
+  if [ "$inst_major" = "$req_major" ]; then
+    ok "$cmd  $ver  (required: $required)"
+  else
+    warn "$cmd  $ver  (required: $required)  — version mismatch"
+    MISSING_SOFT=1
+  fi
+}
+
 # ── Run checks ─────────────────────────────────────────────────────────────────
 log "Checking required tools..."
 log ""
-
 check_docker
+
+log ""
+log "Checking language toolchains (needed for local tests and linters)..."
+log ""
+check_soft "go"           "$REQUIRED_GO"       "https://go.dev/dl/"                                                             "go version"
+check_soft "golangci-lint" "$REQUIRED_GOLANGCI" "go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0"          "golangci-lint --version"
+check_soft "python3"      "$REQUIRED_PYTHON"    "https://www.python.org/downloads/"                                              "python3 --version"
+check_soft "node"         "$REQUIRED_NODE"      "https://nodejs.org/"                                                            "node --version"
+check_soft "pnpm"         "$REQUIRED_PNPM"      "npm install -g pnpm@${REQUIRED_PNPM}"                                           "pnpm --version"
 
 log ""
 
@@ -60,6 +112,12 @@ log ""
 if [ "$MISSING" -eq 1 ]; then
   log "ERROR: docker is required. Install it, start the daemon, then re-run."
   exit 1
+fi
+
+if [ "$MISSING_SOFT" -eq 1 ]; then
+  log "WARNING: some language toolchains are missing or mismatched."
+  log "         Local test and lint runs for those languages will not work."
+  log "         Services run in Docker and are unaffected."
 fi
 
 log "All required tools present."

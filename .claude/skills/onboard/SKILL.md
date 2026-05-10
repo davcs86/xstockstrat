@@ -2,7 +2,7 @@
 name: onboard
 description: Interactive new-dev setup — prereqs, env file, proto gen, bootstrap, health checks.
 argument-hint: (no arguments)
-allowed-tools: Read Bash(ls *) Bash(find *) Bash(cat *) Bash(docker *) Bash(openssl *) Bash(./scripts/check-prereqs.sh) Bash(./scripts/localenv-setup.sh) Bash(./scripts/bootstrap.sh) Bash(docker compose *)
+allowed-tools: Read Bash(ls *) Bash(find *) Bash(cat *) Bash(docker *) Bash(openssl *) Bash(command -v *) Bash(./scripts/check-prereqs.sh) Bash(./scripts/localenv-setup.sh) Bash(./scripts/bootstrap.sh) Bash(docker compose *)
 effort: medium
 ---
 
@@ -30,11 +30,15 @@ Run the prereq check script and show its output verbatim:
 cd "$REPO_ROOT" && ./scripts/check-prereqs.sh
 ```
 
-The only requirement is `docker` with its daemon running. All services, proto codegen, and database migrations run inside containers — no host language toolchains are needed.
+The script checks two tiers:
 
-**If the script exits 1:** Docker is missing or the daemon is not running. Tell the user to install Docker / start Docker Desktop (Linux: `sudo systemctl start docker`) and re-run `/onboard`. Do NOT proceed to Phase 2.
+**Hard (exits 1 if missing):** `docker` with daemon running. All services, proto codegen, and migrations run in containers.
 
-**If the script exits 0:** proceed immediately.
+**Soft (warns, never blocks):** `go`, `golangci-lint`, `python3`, `node`, `pnpm`. These are only needed for local test and lint runs; their absence does not affect the running stack.
+
+**If the script exits 1:** Docker is missing or not running. Tell the user to install Docker / start Docker Desktop (Linux: `sudo systemctl start docker`) and re-run `/onboard`. Do NOT proceed to Phase 2.
+
+**If the script exits 0 with soft warnings:** note which language toolchains are missing and that local tests/linters for those languages won't work. Proceed to Phase 2.
 
 ---
 
@@ -89,8 +93,10 @@ ls "$REPO_ROOT/packages/proto/gen/" 2>/dev/null | head -3
 Summarise what `bootstrap.sh` will do:
 - Re-run `check-prereqs.sh` (confirms Docker is running)
 - Check for proto stubs; run `localenv-setup.sh` automatically if they are absent
+- If `pnpm` is installed: install Node.js deps for all 7 Node/Next.js services (enables local test/lint)
+- If `python3` is installed: install Python deps for all 3 Python services (enables local test/lint)
 
-No host package installs. TimescaleDB and DB migrations run automatically in Phase 5 via `docker compose`.
+Language dep installs are conditional — bootstrap succeeds without them. TimescaleDB and DB migrations run automatically in Phase 5 via `docker compose`.
 
 Ask the user to confirm before running (localenv-setup.sh triggers a Docker build on first run).
 
@@ -140,7 +146,55 @@ Report each as ✓ (200 response) or ✗ (error/timeout). If config is ✗, high
 
 ---
 
-## Phase 6: Next Steps Routing
+## Phase 6: Local Tests & Linters
+
+Check which language toolchains are available:
+
+```bash
+command -v go && command -v golangci-lint && command -v python3 && command -v node && command -v pnpm
+```
+
+For each toolchain that is **present**, show the user the exact commands to run for that language group. Do not execute them (tests can be slow); just display and explain.
+
+**Go** (if `go` and `golangci-lint` are present):
+```bash
+# Run from each service directory. GOWORK=off is required — matches CI.
+cd services/xstockstrat-trading    && GOWORK=off go test -race ./...
+cd services/xstockstrat-portfolio  && GOWORK=off go test -race ./...
+cd services/xstockstrat-marketdata && GOWORK=off go test -race ./...
+
+cd services/xstockstrat-trading    && golangci-lint run
+cd services/xstockstrat-portfolio  && golangci-lint run
+cd services/xstockstrat-marketdata && golangci-lint run
+```
+
+**Python** (if `python3` is present):
+```bash
+cd services/xstockstrat-indicators && pytest --cov && ruff check . && ruff format --check .
+cd services/xstockstrat-ingest     && pytest --cov && ruff check . && ruff format --check .
+cd services/xstockstrat-analysis   && pytest --cov && ruff check . && ruff format --check .
+```
+
+**Node.js** (if `pnpm` is present):
+```bash
+cd services/xstockstrat-ledger   && pnpm run lint && pnpm run test:coverage
+cd services/xstockstrat-identity && pnpm run lint && pnpm run test:coverage
+cd services/xstockstrat-notify   && pnpm run lint && pnpm run test:coverage
+cd services/xstockstrat-config   && pnpm run lint && pnpm run test:coverage
+```
+
+**Next.js E2E** (if `pnpm` is present; requires services running first):
+```bash
+cd services/xstockstrat-trader     && pnpm run lint && pnpm exec playwright test
+cd services/xstockstrat-insights   && pnpm run lint && pnpm exec playwright test
+cd services/xstockstrat-config-ui  && pnpm run lint && pnpm exec playwright test
+```
+
+For any toolchain that is **absent**, note which services' tests/linters cannot run locally and remind the user to install that toolchain and re-run `./scripts/bootstrap.sh` to get the deps installed.
+
+---
+
+## Phase 7: Next Steps Routing
 
 All services are running. Ask the user what they want to do next (present numbered options):
 

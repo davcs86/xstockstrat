@@ -11,14 +11,24 @@ Both tracks end in the same place: all 13 services running locally via Docker Co
 
 ## Prerequisites
 
-| Tool | Required version | Install |
+**Required to run the stack** (install these first):
+
+| Tool | Install |
+|---|---|
+| Git | https://git-scm.com |
+| Docker with Compose v2 | https://docs.docker.com/get-docker/ |
+
+**Required to run tests and linters locally** (install alongside Docker — skip if you only need services):
+
+| Tool | Version | Install |
 |---|---|---|
-| Git | any recent | https://git-scm.com |
-| Docker | any recent with Compose v2 | https://docs.docker.com/get-docker/ |
+| Go | 1.25 | https://go.dev/dl/ |
+| golangci-lint | v2.5.0 | `go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0` |
+| Python | 3.12 | https://www.python.org/downloads/ |
+| Node.js | 22 | https://nodejs.org/ |
+| pnpm | 9.15.0 | `npm install -g pnpm@9.15.0` |
 
-That's it. All services, proto codegen, and database migrations run inside Docker containers. Go, Python, Node, pnpm, buf, migrate, and psql are **not** required on the host.
-
-> **Need to run tests or use IDE language features locally?** Install the relevant language toolchain (see CLAUDE.md §Language Versions & Tooling for pinned versions) — but this is not part of the standard onboarding flow.
+`buf`, `migrate`, and `psql` are never required on the host — they run inside Docker containers.
 
 ---
 
@@ -76,12 +86,14 @@ Expected output ends with:
 ```
 
 This script:
-1. Verifies Docker is installed and the daemon is running
+1. Verifies Docker is installed and the daemon is running (required — exits on failure)
 2. Checks for proto stubs and runs `localenv-setup.sh` automatically if they are absent
+3. **If pnpm is installed:** installs Node.js dependencies for all 7 Node/Next.js services
+4. **If python3 is installed:** installs Python dependencies for all 3 Python services
 
-That's all. No host language toolchain installs. TimescaleDB and database migrations run automatically in Step 5 via Docker Compose.
+Steps 3 and 4 are skipped automatically if the language toolchains are absent — services still run fine via Docker. Install the toolchains and re-run `bootstrap.sh` any time you want to enable local test and lint runs.
 
-If Docker is missing or not running, the script exits with a clear error. Fix it and re-run.
+TimescaleDB and database migrations run automatically in Step 5 via Docker Compose.
 
 ### Step 5 — Start all services
 
@@ -118,7 +130,52 @@ If a service is not healthy, check its logs:
 docker compose logs xstockstrat-config --tail=50
 ```
 
-### Step 7 — Next steps
+### Step 7 — Run tests and linters
+
+Requires the language toolchains from the Prerequisites table. If `bootstrap.sh` skipped the dep installs because the tools were absent at that time, install them and re-run `bootstrap.sh` before proceeding.
+
+#### Go (trading, portfolio, marketdata)
+
+CI always uses `GOWORK=off` — match this locally:
+
+```bash
+cd services/xstockstrat-trading    && GOWORK=off go test -race ./...
+cd services/xstockstrat-portfolio  && GOWORK=off go test -race ./...
+cd services/xstockstrat-marketdata && GOWORK=off go test -race ./...
+
+cd services/xstockstrat-trading    && golangci-lint run
+cd services/xstockstrat-portfolio  && golangci-lint run
+cd services/xstockstrat-marketdata && golangci-lint run
+```
+
+#### Python (indicators, ingest, analysis)
+
+```bash
+cd services/xstockstrat-indicators && pytest --cov && ruff check . && ruff format --check .
+cd services/xstockstrat-ingest     && pytest --cov && ruff check . && ruff format --check .
+cd services/xstockstrat-analysis   && pytest --cov && ruff check . && ruff format --check .
+```
+
+#### Node.js (ledger, identity, notify, config)
+
+```bash
+cd services/xstockstrat-ledger   && pnpm run lint && pnpm run test:coverage
+cd services/xstockstrat-identity && pnpm run lint && pnpm run test:coverage
+cd services/xstockstrat-notify   && pnpm run lint && pnpm run test:coverage
+cd services/xstockstrat-config   && pnpm run lint && pnpm run test:coverage
+```
+
+#### Next.js frontends — lint + E2E (trader, insights, config-ui)
+
+E2E tests require all services running (`docker compose up -d` first):
+
+```bash
+cd services/xstockstrat-trader     && pnpm run lint && pnpm exec playwright test
+cd services/xstockstrat-insights   && pnpm run lint && pnpm exec playwright test
+cd services/xstockstrat-config-ui  && pnpm run lint && pnpm exec playwright test
+```
+
+### Step 8 — Next steps
 
 - Read [CLAUDE.md](../../CLAUDE.md) for the full architecture reference (service registry, proto governance, CI/CD, branch strategy).
 - To start feature work: run `/sdd-story <slug>` in Claude Code, or read [`docs/runbooks/feature-workflow.md`](../runbooks/feature-workflow.md) for the manual path.
