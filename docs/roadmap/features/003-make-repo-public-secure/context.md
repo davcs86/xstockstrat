@@ -17,3 +17,20 @@
 - Overlap findings: broker-accounts-ui (code-completed) and formula-management-ui (implementation-ready) share service dirs — low conflict risk (no shared config keys, proto fields, or DB migrations). No merge-order entry required.
 - Administrative: NNN collision with 003-formula-management-ui — recommend renaming this directory to 004-make-repo-public-secure.
 - OQ resolutions recorded: trufflehog + gitleaks for CI; audit-first history purge; PR merge is the visibility gate.
+
+## Session 2026-05-10T00:02:00Z — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
+- Key codebase findings:
+  - **Hardcoded dev credentials in docker-compose.yml**: 12 occurrences of `devpassword` (bare literal, not behind `${:-}` interpolation) and 1 occurrence of `JWT_SECRET: dev-jwt-secret-change-in-production` — both need wrapping in `${VAR:-default}` syntax (same pattern as `ALPACA_API_KEY` already uses).
+  - **Identity service JWT fallback**: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:19` has `return process.env.JWT_SECRET ?? 'dev-jwt-secret-change-in-production'` — fallback string is literal source code; replaced with a throw to force explicit configuration.
+  - **Ingest service DATABASE_URL fallback**: `services/xstockstrat-ingest/app/main.py:37–39` has `"postgres://xstockstrat:devpassword@localhost:5432/xstockstrat"` as hardcoded fallback — replaced with `RuntimeError` on missing env var.
+  - **db-migrate.sh fallback**: `scripts/db-migrate.sh:19` has bare `devpassword` in default DATABASE_URL — replaced with explicit error.
+  - **davcs86 GitHub username**: hardcoded in `.do/app.yaml` (14 occurrences), `.do/app.dev.yaml` (14 occurrences), `docs/setup/getting-started.md:40`, `docs/setup/digitalocean.md:24,141`, `scripts/setup-branch-protection.sh:11`, `scripts/subtree-setup.sh:12` — replaced with generic placeholders.
+  - **.gitignore missing patterns**: `*.pem`, `*.key`, `secrets.*`, `credentials.*` not present — added in Step 5.
+  - **SECURITY.md and CONTRIBUTING.md**: neither exists at repo root — created from scratch in Step 6.
+  - **No existing secret-scan CI job**: no `trufflehog` or `gitleaks` reference anywhere in `.github/workflows/` — added as `secret-scan` job in Step 8.
+  - **CI/CD workflows clean**: all secrets in `.github/workflows/` already use `${{ secrets.* }}` — no hardcoded tokens found.
+  - **DO app specs clean**: `.do/app.yaml` and `.do/app.dev.yaml` use `${<service>.PRIVATE_URL}` and `${db.DATABASE_URL}` injection — no inline credentials other than the GitHub repo path (`davcs86/...`).
+  - **Admin seed migration**: `services/xstockstrat-identity/migrations/002_seed_admin.up.sql` exposes default password "admin" in comment — comment updated to clarify dev-only scope; bcrypt hash is not a secret.
+  - **No AKIA/ghp_/sk_live_ tokens found**: grep over full repo found zero real secret token patterns.
