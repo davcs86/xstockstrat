@@ -44,8 +44,12 @@ Read the following base docs before writing anything:
 
 - `CLAUDE.md` — service registry, port map, inter-service dependency graph, config governance
 - `docs/runbooks/reviewer-registry.md` — service review focus, role reviewers, step-category governance matrix
-- `docs/runbooks/feature-workflow.md` — branch model, migration file conventions, proto change gate, PR requirements, deployment stages
-- `docs/runbooks/approval-flow.md` — approver matrix per change type
+
+Apply these static conventions from feature-workflow.md without reading it:
+- **Migration naming**: `NNN_description.up.sql` + `NNN_description.down.sql`; NNN continues from the last file found in `services/<name>/migrations/`
+- **Proto verification**: all `proto` steps must include `buf lint && buf breaking --against ".git#branch=feature/<slug>"` in `**Verification**`
+
+Read `docs/runbooks/approval-flow.md` only if the product spec lists breaking proto changes or database schema changes — those trigger multi-owner approval flows that affect step reviewers.
 
 Then read only the phase deviation files whose services appear in the product spec's "Affected Services" section:
 

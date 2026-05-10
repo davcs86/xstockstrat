@@ -91,10 +91,20 @@ Derive the other feature's slug by stripping the `NNN-` prefix from its director
 (e.g. `001-add-ikbr-account-support` → `add-ikbr-account-support`).
 - Read it and check `**Lifecycle Status**`.
 - If status is `spec-ready`, `implementation-ready`, `in-progress`, or `code-completed`:
-  this is an active concurrent feature.
-  - Read its `product-spec.md`.
-  - Compare with the current spec's **Affected Services**, **Proto Contract Changes**,
-    **Config Key Changes**, and **Database Changes** sections.
+  this is an active concurrent feature. Extract only the overlap-relevant fields from its
+  `product-spec.md` using targeted grep — do not load the full file:
+  ```bash
+  # Affected services:
+  grep -E '^- `xstockstrat-[^`]+`' <other-feature-dir>/product-spec.md
+  # Config keys (format `service.category.key`):
+  grep -E '`[a-z][a-z-]+\.[a-z]+\.[a-z_]+`' <other-feature-dir>/product-spec.md
+  # Proto file or RPC references:
+  grep -iE '\.proto|proto.*change|new RPC|new message' <other-feature-dir>/product-spec.md
+  # Database table references:
+  grep -iE 'table|migration|schema' <other-feature-dir>/product-spec.md
+  ```
+  Use this output to compare with the current spec's **Affected Services**, **Proto Contract Changes**,
+  **Config Key Changes**, and **Database Changes** sections.
 
 Apply this overlap table:
 
@@ -211,7 +221,19 @@ WARN (advisory):
 ### B4. Parallel feature overlap check (impl-spec level)
 
 Discover features in `implementation-ready` or `in-progress` status (same bash command as A4).
-For each, read its `implementation-spec.md`. Compare step-by-step:
+For each, extract only the overlap-relevant fields from its `implementation-spec.md` using
+targeted grep — do not load the full file:
+```bash
+# File paths listed in **Files** sections:
+grep -E '^\- `[^`]+\.(go|py|ts|sql|proto|md)`' <other-feature-dir>/implementation-spec.md
+# Migration file names (detect NNN prefix collisions):
+grep -E '[0-9]{3}_[a-z_]+\.up\.sql' <other-feature-dir>/implementation-spec.md
+# Config keys added in steps:
+grep -E '`[a-z][a-z-]+\.[a-z]+\.[a-z_]+`' <other-feature-dir>/implementation-spec.md
+# Proto field numbers (detect assignment collisions):
+grep -E 'field [0-9]+| = [0-9]+;' <other-feature-dir>/implementation-spec.md
+```
+Use this output to compare step-by-step:
 
 | Overlap type | Severity | Message |
 |---|---|---|
