@@ -11,18 +11,14 @@ Both tracks end in the same place: all 13 services running locally via Docker Co
 
 ## Prerequisites
 
-Install all of these before running any scripts. The versions in the table are pinned in CI — mismatches cause subtle failures.
-
 | Tool | Required version | Install |
 |---|---|---|
 | Git | any recent | https://git-scm.com |
 | Docker | any recent with Compose v2 | https://docs.docker.com/get-docker/ |
-| Go | 1.25 | https://go.dev/dl/ |
-| Python | 3.12 | https://www.python.org/downloads/ |
-| Node.js | 22 | https://nodejs.org/ |
-| pnpm | 9.15.0 | `npm install -g pnpm@9.15.0` |
 
-> **Docker is the only hard requirement** for proto stub generation (via `localenv-setup.sh`) and database migrations (via `docker compose`). Go, Python, Node, and pnpm are only needed if you run services directly on the host — they are optional for Docker-first development. `buf`, `migrate`, and `psql` are never required on the host; they run inside containers.
+That's it. All services, proto codegen, and database migrations run inside Docker containers. Go, Python, Node, pnpm, buf, migrate, and psql are **not** required on the host.
+
+> **Need to run tests or use IDE language features locally?** Install the relevant language toolchain (see CLAUDE.md §Language Versions & Tooling for pinned versions) — but this is not part of the standard onboarding flow.
 
 ---
 
@@ -80,14 +76,12 @@ Expected output ends with:
 ```
 
 This script:
-1. Verifies all required tools are installed and prints any that are missing
+1. Verifies Docker is installed and the daemon is running
 2. Checks for proto stubs and runs `localenv-setup.sh` automatically if they are absent
-3. Installs Node.js dependencies for all 7 Node/Next.js services
-4. Installs Python dependencies for all 3 Python services
 
-TimescaleDB and database migrations are **not** handled by `bootstrap.sh` — they run automatically when you start Docker Compose in Step 5.
+That's all. No host language toolchain installs. TimescaleDB and database migrations run automatically in Step 5 via Docker Compose.
 
-If any tools are missing, the script exits with a clear error listing what to install. Fix them and re-run.
+If Docker is missing or not running, the script exits with a clear error. Fix it and re-run.
 
 ### Step 5 — Start all services
 

@@ -30,17 +30,11 @@ Run the prereq check script and show its output verbatim:
 cd "$REPO_ROOT" && ./scripts/check-prereqs.sh
 ```
 
-The script exits 0 if all required tools are present (version mismatches are warnings, not errors) and exits 1 if any hard requirement is missing.
+The only requirement is `docker` with its daemon running. All services, proto codegen, and database migrations run inside containers — no host language toolchains are needed.
 
-**Hard requirements** (script exits 1 if absent): `docker` with daemon running. Git is always present if the user cloned the repo.
+**If the script exits 1:** Docker is missing or the daemon is not running. Tell the user to install Docker / start Docker Desktop (Linux: `sudo systemctl start docker`) and re-run `/onboard`. Do NOT proceed to Phase 2.
 
-**Soft requirements** (version mismatch = warning, not failure): `go`, `python3`, `node`, `pnpm`. These are only needed for running services directly on the host, not for Docker-first development.
-
-`buf`, `migrate`, and `psql` are **not** checked — they run inside Docker containers and are never required on the host.
-
-**If the script exits 1:** the most likely cause is Docker not running. Tell the user to start Docker Desktop (or `sudo systemctl start docker` on Linux) and re-run `/onboard`. Do NOT proceed to Phase 2.
-
-**If the script exits 0 with warnings:** inform the user that version mismatches only matter if they plan to run services directly on the host. For Docker-based development, they can safely continue.
+**If the script exits 0:** proceed immediately.
 
 ---
 
@@ -61,7 +55,7 @@ ls "$REPO_ROOT/.env" 2>/dev/null
    - `ALPACA_API_KEY` — paper trading key from alpaca.markets (see `docs/setup/alpaca.md`)
    - `ALPACA_API_SECRET` — matching secret
    - `JWT_SECRET` — generate with: `openssl rand -hex 32`
-   - `DATABASE_URL` — leave the default for local dev; `bootstrap.sh` exports it automatically
+   - `DATABASE_URL` — leave the default for local dev (docker-compose sets this for all containers)
 5. Ask the user to confirm when `.env` is filled before continuing.
 
 **If present:** Report "`.env` exists — skipping." Do not read or display its contents.
@@ -93,14 +87,12 @@ ls "$REPO_ROOT/packages/proto/gen/" 2>/dev/null | head -3
 ## Phase 4: Bootstrap
 
 Summarise what `bootstrap.sh` will do:
-- Re-run `check-prereqs.sh` as a final gate
+- Re-run `check-prereqs.sh` (confirms Docker is running)
 - Check for proto stubs; run `localenv-setup.sh` automatically if they are absent
-- Install pnpm dependencies for 7 Node/Next.js services
-- Install Python deps for 3 Python services
 
-**Note:** TimescaleDB and DB migrations are **not** handled by `bootstrap.sh`. They run automatically in Phase 5 when `docker compose up -d` starts: TimescaleDB starts first, the `db-migrator` one-shot container applies all pending migrations, then all 13 services start.
+No host package installs. TimescaleDB and DB migrations run automatically in Phase 5 via `docker compose`.
 
-Ask the user to confirm before running (this installs packages).
+Ask the user to confirm before running (localenv-setup.sh triggers a Docker build on first run).
 
 On confirmation:
 
@@ -109,8 +101,8 @@ cd "$REPO_ROOT" && ./scripts/bootstrap.sh
 ```
 
 If bootstrap exits non-zero, display the last 20 lines of output and suggest:
-- Missing tool → install it, re-run `/onboard`
-- Proto gen failure → ensure Docker is running, then re-run `./scripts/localenv-setup.sh`
+- Docker not running → start Docker Desktop, re-run `/onboard`
+- Proto gen failure → re-run `./scripts/localenv-setup.sh` manually to see full error output
 
 ---
 

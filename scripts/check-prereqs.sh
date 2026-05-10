@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
 # scripts/check-prereqs.sh
-# Checks tools required to build and run xstockstrat-orchestration locally.
-# Exits 0 if all required tools are present; exits 1 if any are missing.
-# Version mismatches (wrong major version) produce a warning but do not block.
+# Checks tools required to run xstockstrat-orchestration locally.
+# Development is fully Docker-based — only git and docker are required on the host.
 #
-# Hard requirements (always needed):
-#   git, docker (with daemon running)
+# NOT required on the host (all provided by Docker containers):
+#   go, python3, node, pnpm  — services build and run inside Docker
+#   buf                       — proto codegen runs inside Dockerfile.codegen via localenv-setup.sh
+#   migrate                   — migrations run inside scripts/Dockerfile.migrate via docker-compose
+#   psql                      — available inside the migrate container
 #
-# Soft requirements (only for running services directly on the host, outside Docker):
-#   go, python3, node, pnpm
-#
-# NOT required on the host (provided by containers):
-#   buf        — proto codegen runs inside Dockerfile.codegen via localenv-setup.sh
-#   migrate    — migrations run inside scripts/Dockerfile.migrate via docker-compose
-#   psql       — available inside the migrate container
+# Language toolchains (go/python3/node/pnpm) are only needed if you want to run
+# unit tests or use IDE language-server features outside Docker.
 #
 # Usage:
 #   ./scripts/check-prereqs.sh          # check all tools
@@ -31,63 +28,10 @@ done
 
 log()  { [ "$QUIET" -eq 0 ] && echo "$*" || true; }
 ok()   { log "  ✓ $*"; }
-warn() { log "  ⚠ $*"; }
 fail() { log "  ✗ $*"; }
 
-# ── Required versions (major.minor) ───────────────────────────────────────────
-# Keep in sync with CLAUDE.md §Language Versions & Tooling
-REQUIRED_GO="1.25"
-REQUIRED_PYTHON="3.12"
-REQUIRED_NODE="22"
-REQUIRED_PNPM="9.15.0"
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
-
-# Returns the first two version components (major.minor) from a version string.
-major_minor() { echo "$1" | grep -oE '[0-9]+\.[0-9]+' | head -1; }
-
-# Returns the major version component only.
-major() { echo "$1" | grep -oE '^[0-9]+' | head -1; }
-
 MISSING=0
-MISMATCH=0
 
-check() {
-  local cmd="$1"
-  local required="$2"   # empty string = any version accepted
-  local install="$3"
-  local ver_cmd="${4:-$cmd --version}"  # optional override for version command
-
-  if ! command -v "$cmd" &>/dev/null; then
-    fail "$cmd not found  →  $install"
-    MISSING=1
-    return
-  fi
-
-  local raw_ver
-  raw_ver=$(eval "$ver_cmd" 2>&1 | head -1)
-  local ver
-  ver=$(echo "$raw_ver" | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
-
-  if [ -z "$required" ]; then
-    ok "$cmd  $ver"
-    return
-  fi
-
-  local req_major
-  req_major=$(major "$required")
-  local inst_major
-  inst_major=$(major "$ver")
-
-  if [ "$inst_major" = "$req_major" ]; then
-    ok "$cmd  $ver  (required: $required)"
-  else
-    warn "$cmd  $ver  (required: $required)  — version mismatch, may cause subtle failures"
-    MISMATCH=1
-  fi
-}
-
-# ── Check Docker daemon separately (presence ≠ daemon running) ────────────────
 check_docker() {
   if ! command -v docker &>/dev/null; then
     fail "docker not found  →  https://docs.docker.com/get-docker/"
@@ -110,23 +54,12 @@ log ""
 
 check_docker
 
-# go/python3/node/pnpm are needed only for running services directly on the host.
-# If you only use Docker, version mismatches here are non-fatal warnings.
-check "go"      "$REQUIRED_GO"    "https://go.dev/dl/"                                   "go version"
-check "python3" "$REQUIRED_PYTHON" "https://www.python.org/downloads/"                   "python3 --version"
-check "node"    "$REQUIRED_NODE"  "https://nodejs.org/"                                  "node --version"
-check "pnpm"    "$REQUIRED_PNPM"  "npm install -g pnpm@${REQUIRED_PNPM}"                 "pnpm --version"
-
 log ""
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 if [ "$MISSING" -eq 1 ]; then
-  log "ERROR: one or more required tools are missing. Install them and re-run."
+  log "ERROR: docker is required. Install it, start the daemon, then re-run."
   exit 1
-fi
-
-if [ "$MISMATCH" -eq 1 ]; then
-  log "WARNING: version mismatches detected. Builds may behave differently than CI."
 fi
 
 log "All required tools present."

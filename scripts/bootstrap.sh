@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # scripts/bootstrap.sh
 # Sets up local development environment for xstockstrat-orchestration.
+# Requires: docker (with daemon running). All services run in Docker — no host language toolchains needed.
 # Run once after cloning: ./scripts/bootstrap.sh
 
 set -euo pipefail
@@ -25,41 +26,11 @@ else
   "$REPO_ROOT/scripts/localenv-setup.sh"
 fi
 
-# ── 3. Install Node dependencies for Node.js services ─────────────────────
-echo ""
-echo "==> Installing Node.js dependencies..."
-for svc in xstockstrat-ledger xstockstrat-identity xstockstrat-notify xstockstrat-config; do
-  echo "  → $svc"
-  (cd "$REPO_ROOT/services/$svc" && pnpm install --frozen-lockfile)
-done
-
-echo "==> Installing Next.js frontend dependencies..."
-for svc in xstockstrat-trader xstockstrat-insights xstockstrat-config-ui; do
-  echo "  → $svc"
-  (cd "$REPO_ROOT/services/$svc" && pnpm install --frozen-lockfile)
-done
-
-# ── 4. Install Python dependencies ────────────────────────────────────────
-echo ""
-echo "==> Installing Python dependencies..."
-for svc in xstockstrat-indicators xstockstrat-ingest xstockstrat-analysis; do
-  echo "  → $svc"
-  if [ -f "$REPO_ROOT/services/$svc/requirements.txt" ]; then
-    (cd "$REPO_ROOT/services/$svc" && python3 -m pip install -q -r requirements.txt)
-  fi
-done
-
-# Install generated Python stubs as editable
-echo "  → packages/proto/gen/python (editable install)"
-if [ -f "$REPO_ROOT/packages/proto/gen/python/setup.py" ]; then
-  (cd "$REPO_ROOT/packages/proto/gen/python" && pip install -q -e .)
-fi
-
 echo ""
 echo "======================================================"
 echo " Bootstrap complete!"
 echo ""
-echo " Host dependencies installed. Next steps:"
+echo " Next steps:"
 echo ""
 echo "   docker compose up -d"
 echo ""
