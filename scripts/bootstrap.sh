@@ -38,7 +38,7 @@ if command -v pnpm &>/dev/null; then
   done
 else
   echo "==> pnpm not found — skipping Node.js dep install."
-  echo "    Install pnpm@${REQUIRED_PNPM:-9.15.0} to run Node.js tests and linters locally."
+  echo "    Install pnpm: brew install pnpm"
 fi
 
 # ── 4. Install Python deps (if python3 is available) ──────────────────────
@@ -53,11 +53,11 @@ if command -v python3 &>/dev/null; then
   done
   if [ -f "$REPO_ROOT/packages/proto/gen/python/setup.py" ]; then
     echo "  → packages/proto/gen/python (editable install)"
-    (cd "$REPO_ROOT/packages/proto/gen/python" && pip install -q -e .)
+    (cd "$REPO_ROOT/packages/proto/gen/python" && python3 -m pip install -q -e .)
   fi
 else
   echo "==> python3 not found — skipping Python dep install."
-  echo "    Install Python 3.12 to run Python tests and linters locally."
+  echo "    Install Python: brew install python@3.12"
 fi
 
 echo ""

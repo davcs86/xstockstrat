@@ -11,22 +11,22 @@ Both tracks end in the same place: all 13 services running locally via Docker Co
 
 ## Prerequisites
 
-**Required to run the stack** (install these first):
+**Required to run the stack:**
 
-| Tool | Install |
-|---|---|
-| Git | https://git-scm.com |
-| Docker with Compose v2 | https://docs.docker.com/get-docker/ |
-
-**Required to run tests and linters locally** (install alongside Docker — skip if you only need services):
-
-| Tool | Version | Install |
+| Tool | macOS (Homebrew) | Other |
 |---|---|---|
-| Go | 1.25 | https://go.dev/dl/ |
-| golangci-lint | v2.5.0 | `go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0` |
-| Python | 3.12 | https://www.python.org/downloads/ |
-| Node.js | 22 | https://nodejs.org/ |
-| pnpm | 9.15.0 | `npm install -g pnpm@9.15.0` |
+| Git | pre-installed | https://git-scm.com |
+| Docker with Compose v2 | `brew install --cask docker` | https://docs.docker.com/get-docker/ |
+
+**Required to run tests and linters locally** (skip if you only need services running):
+
+| Tool | Version | macOS (Homebrew) | Other |
+|---|---|---|---|
+| Go | 1.25 | `brew install go` | https://go.dev/dl/ |
+| golangci-lint | v2.5.0 | `brew install golangci-lint` | `go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0` |
+| Python | 3.12 | `brew install python@3.12` | https://www.python.org/downloads/ |
+| Node.js | 22 | `brew install node@22` | https://nodejs.org/ |
+| pnpm | 9.15.0 | `brew install pnpm` | `npm install -g pnpm@9.15.0` |
 
 `buf`, `migrate`, and `psql` are never required on the host — they run inside Docker containers.
 

@@ -49,7 +49,7 @@ MISSING_SOFT=0  # soft — warns only
 # ── Hard: docker ──────────────────────────────────────────────────────────────
 check_docker() {
   if ! command -v docker &>/dev/null; then
-    fail "docker not found  →  https://docs.docker.com/get-docker/"
+    fail "docker not found  →  brew install --cask docker"
     MISSING=1
     return
   fi
@@ -100,11 +100,11 @@ check_docker
 log ""
 log "Checking language toolchains (needed for local tests and linters)..."
 log ""
-check_soft "go"           "$REQUIRED_GO"       "https://go.dev/dl/"                                                             "go version"
-check_soft "golangci-lint" "$REQUIRED_GOLANGCI" "go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0"          "golangci-lint --version"
-check_soft "python3"      "$REQUIRED_PYTHON"    "https://www.python.org/downloads/"                                              "python3 --version"
-check_soft "node"         "$REQUIRED_NODE"      "https://nodejs.org/"                                                            "node --version"
-check_soft "pnpm"         "$REQUIRED_PNPM"      "npm install -g pnpm@${REQUIRED_PNPM}"                                           "pnpm --version"
+check_soft "go"            "$REQUIRED_GO"       "brew install go"                 "go version"
+check_soft "golangci-lint" "$REQUIRED_GOLANGCI" "brew install golangci-lint"       "golangci-lint --version"
+check_soft "python3"       "$REQUIRED_PYTHON"   "brew install python@3.12"         "python3 --version"
+check_soft "node"          "$REQUIRED_NODE"     "brew install node@22"             "node --version"
+check_soft "pnpm"          "$REQUIRED_PNPM"     "brew install pnpm"                "pnpm --version"
 
 log ""
 
