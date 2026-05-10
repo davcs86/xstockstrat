@@ -55,6 +55,23 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── DB Migrator (one-shot: applies all pending migrations then exits) ────
+  db-migrator:
+    build:
+      context: .
+      dockerfile: scripts/Dockerfile.migrate
+    container_name: xstockstrat-db-migrator
+    environment:
+      DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+    volumes:
+      - .:/repo
+    networks:
+      - xstockstrat
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    restart: "no"
+
   # ── Config Service (must start before all others) ───────────────────────
   xstockstrat-config:
     build:
@@ -79,6 +96,8 @@ services:
     depends_on:
       timescaledb:
         condition: service_healthy
+      db-migrator:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   # ── Ledger Service ──────────────────────────────────────────────────────
@@ -106,6 +125,8 @@ services:
     depends_on:
       timescaledb:
         condition: service_healthy
+      db-migrator:
+        condition: service_completed_successfully
       xstockstrat-config:
         condition: service_started
     restart: unless-stopped
@@ -135,8 +156,14 @@ services:
     networks:
       - xstockstrat
     depends_on:
-      - xstockstrat-config
-      - xstockstrat-ledger
+      timescaledb:
+        condition: service_healthy
+      db-migrator:
+        condition: service_completed_successfully
+      xstockstrat-config:
+        condition: service_started
+      xstockstrat-ledger:
+        condition: service_started
     restart: unless-stopped
 
   # ── Notify Service ──────────────────────────────────────────────────────
@@ -163,8 +190,14 @@ services:
     networks:
       - xstockstrat
     depends_on:
-      - xstockstrat-config
-      - xstockstrat-ledger
+      timescaledb:
+        condition: service_healthy
+      db-migrator:
+        condition: service_completed_successfully
+      xstockstrat-config:
+        condition: service_started
+      xstockstrat-ledger:
+        condition: service_started
     restart: unless-stopped
 
   # ── MarketData Service (sole Alpaca integration point) ──────────────────
@@ -197,9 +230,14 @@ services:
     networks:
       - xstockstrat
     depends_on:
-      - xstockstrat-config
-      - xstockstrat-ledger
-      - xstockstrat-notify
+      db-migrator:
+        condition: service_completed_successfully
+      xstockstrat-config:
+        condition: service_started
+      xstockstrat-ledger:
+        condition: service_started
+      xstockstrat-notify:
+        condition: service_started
     restart: unless-stopped
 
   # ── Indicators Service ──────────────────────────────────────────────────
@@ -287,10 +325,16 @@ services:
     networks:
       - xstockstrat
     depends_on:
-      - xstockstrat-config
-      - xstockstrat-marketdata
-      - xstockstrat-indicators
-      - xstockstrat-ledger
+      db-migrator:
+        condition: service_completed_successfully
+      xstockstrat-config:
+        condition: service_started
+      xstockstrat-marketdata:
+        condition: service_started
+      xstockstrat-indicators:
+        condition: service_started
+      xstockstrat-ledger:
+        condition: service_started
     restart: unless-stopped
 
   # ── Portfolio Service ───────────────────────────────────────────────────
@@ -319,9 +363,14 @@ services:
     networks:
       - xstockstrat
     depends_on:
-      - xstockstrat-config
-      - xstockstrat-ledger
-      - xstockstrat-marketdata
+      db-migrator:
+        condition: service_completed_successfully
+      xstockstrat-config:
+        condition: service_started
+      xstockstrat-ledger:
+        condition: service_started
+      xstockstrat-marketdata:
+        condition: service_started
     restart: unless-stopped
 
   # ── Trading Service ─────────────────────────────────────────────────────
@@ -351,11 +400,18 @@ services:
     networks:
       - xstockstrat
     depends_on:
-      - xstockstrat-config
-      - xstockstrat-ledger
-      - xstockstrat-portfolio
-      - xstockstrat-notify
-      - xstockstrat-indicators
+      db-migrator:
+        condition: service_completed_successfully
+      xstockstrat-config:
+        condition: service_started
+      xstockstrat-ledger:
+        condition: service_started
+      xstockstrat-portfolio:
+        condition: service_started
+      xstockstrat-notify:
+        condition: service_started
+      xstockstrat-indicators:
+        condition: service_started
     restart: unless-stopped
 
   # ── Trader Frontend ─────────────────────────────────────────────────────
@@ -437,6 +493,10 @@ services:
     networks:
       - xstockstrat
     depends_on:
-      - xstockstrat-config
-      - timescaledb
+      timescaledb:
+        condition: service_healthy
+      db-migrator:
+        condition: service_completed_successfully
+      xstockstrat-config:
+        condition: service_started
     restart: unless-stopped

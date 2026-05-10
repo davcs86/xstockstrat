@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /workspace
 
@@ -20,7 +20,7 @@ RUN pnpm --filter xstockstrat-notify run build
 # Create self-contained deployment bundle (resolves workspace symlinks)
 RUN pnpm deploy --filter xstockstrat-notify --prod /deploy
 
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /deploy ./
