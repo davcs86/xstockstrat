@@ -53,6 +53,7 @@ If the `ls-remote` command returns output (branch exists on origin):
   git show origin/<dev-branch>:$FEATURE_DIR/feature.md
   git show origin/<dev-branch>:$FEATURE_DIR/context.md
   ```
+- If the `git show` for `context.md` returns an error (file not yet on this branch), fall back to the local working tree: Read `$FEATURE_DIR/context.md`. If the local file also does not exist, treat context.md as empty and note: "No prior session history found (context.md not yet on remote)."
 - Note to user: "Loaded authoritative spec from `origin/<dev-branch>`."
 
 If the `ls-remote` command returns no output (branch not yet created on origin):
@@ -63,6 +64,7 @@ If the `ls-remote` command returns no output (branch not yet created on origin):
   git show origin/main-dev:$FEATURE_DIR/feature.md
   git show origin/main-dev:$FEATURE_DIR/context.md
   ```
+- If the `git show` for `context.md` returns an error (file not yet on main-dev), fall back to the local working tree: Read `$FEATURE_DIR/context.md`. If the local file also does not exist, treat context.md as empty and note: "No prior session history found (context.md not yet pushed)."
 - These are now the authoritative spec files for the session.
 - Note to user: "`origin/<dev-branch>` not found — loaded spec from `origin/main-dev` (feature branch not yet pushed)."
 

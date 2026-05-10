@@ -38,9 +38,9 @@ If status is `draft` (meaning `/sdd-review product-spec` has not yet been run):
 > to advance to `spec-ready`. Proceed anyway? (yes / no)"
 Only continue on `yes`.
 
-### 2. Read governance docs
+### 2. Read governance docs (always — no exceptions for base docs)
 
-Read the following base docs before writing anything:
+Always read the following before writing anything, no exceptions:
 
 - `CLAUDE.md` — service registry, port map, inter-service dependency graph, config governance
 - `docs/runbooks/reviewer-registry.md` — service review focus, role reviewers, step-category governance matrix
