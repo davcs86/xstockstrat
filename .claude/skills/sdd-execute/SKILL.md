@@ -25,18 +25,16 @@ If no directory is found: stop — "No feature directory found for slug `$ARGUME
 Capture the result as `FEATURE_DIR` (e.g. `docs/roadmap/features/001-add-ikbr-account-support`).
 Use `$FEATURE_DIR` for all file reads and writes in this skill.
 
-**Step B1.** Read `$FEATURE_DIR/implementation-spec.md`.
-If absent: stop — "No implementation spec found. Run /sdd-spec $ARGUMENTS[0] first."
+**Step B1.** Check that `$FEATURE_DIR/implementation-spec.md` exists:
+```bash
+ls $FEATURE_DIR/implementation-spec.md 2>/dev/null
+```
+If the file is not found: stop — "No implementation spec found. Run /sdd-spec $ARGUMENTS[0] first."
+Do not read the file contents yet — authoritative content will be loaded in B4.5.
 
 **Step B2.** Read `$FEATURE_DIR/feature.md`.
 Check lifecycle status. If status is `launched`, `rolled-back`, or `demoted/canceled`:
 warn the user — "Feature is marked `<status>`. Proceed anyway? (yes / no)"
-
-**Step B3.** Read `$FEATURE_DIR/context.md`.
-This reconstructs everything from prior sessions: deviations, decisions, stopping point, file paths changed. Do not proceed without reading this.
-
-**Step B4.** Read `docs/runbooks/feature-workflow.md`.
-Extract and enforce: branch model, migration file naming, proto change gate, PR requirements.
 
 **Step B4.5.** Fetch the feature's integration branch from origin and load authoritative artifacts.
 
@@ -49,7 +47,7 @@ git ls-remote --heads origin <dev-branch>
 ```
 
 If the `ls-remote` command returns output (branch exists on origin):
-- Run the following and replace the in-memory content read in B1–B3 with these authoritative versions:
+- Run the following to load the authoritative versions of the three spec files:
   ```bash
   git show origin/<dev-branch>:$FEATURE_DIR/implementation-spec.md
   git show origin/<dev-branch>:$FEATURE_DIR/feature.md
@@ -65,7 +63,7 @@ If the `ls-remote` command returns no output (branch not yet created on origin):
   git show origin/main-dev:$FEATURE_DIR/feature.md
   git show origin/main-dev:$FEATURE_DIR/context.md
   ```
-- Replace the in-memory content from B1–B3 with these versions.
+- These are now the authoritative spec files for the session.
 - Note to user: "`origin/<dev-branch>` not found — loaded spec from `origin/main-dev` (feature branch not yet pushed)."
 
 **Step B5.** Run `git status`.

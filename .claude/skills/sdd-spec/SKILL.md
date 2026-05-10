@@ -38,18 +38,21 @@ If status is `draft` (meaning `/sdd-review product-spec` has not yet been run):
 > to advance to `spec-ready`. Proceed anyway? (yes / no)"
 Only continue on `yes`.
 
-### 2. Read governance docs (always — no exceptions)
+### 2. Read governance docs
 
-Read all of these before writing anything:
+Read the following base docs before writing anything:
 
 - `CLAUDE.md` — service registry, port map, inter-service dependency graph, config governance
 - `docs/runbooks/reviewer-registry.md` — service review focus, role reviewers, step-category governance matrix
 - `docs/runbooks/feature-workflow.md` — branch model, migration file conventions, proto change gate, PR requirements, deployment stages
 - `docs/runbooks/approval-flow.md` — approver matrix per change type
-- `docs/roadmap/phase3-deviations.md` — implementation gotchas (migration naming, grpc_tools fallback, asyncpg pool, pagination)
-- `docs/roadmap/phase4-deviations.md` — dual in-memory+DB storage, fill detection, ledger event patterns
-- `docs/roadmap/phase5-deviations.md` — Connect-RPC refactor, SSE polling, missing infrastructure patterns
-- `docs/roadmap/phase6-deviations.md` — webhook naming discrepancies, n8n workflow storage, auth scope
+
+Then read only the phase deviation files whose services appear in the product spec's "Affected Services" section:
+
+- `docs/roadmap/phase3-deviations.md` — read if Affected Services contains: `xstockstrat-indicators`, `xstockstrat-ingest`, or `xstockstrat-analysis`
+- `docs/roadmap/phase4-deviations.md` — read if Affected Services contains: `xstockstrat-trading` or `xstockstrat-portfolio`
+- `docs/roadmap/phase5-deviations.md` — read if Affected Services contains: `xstockstrat-trader`, `xstockstrat-insights`, or `xstockstrat-config-ui`
+- `docs/roadmap/phase6-deviations.md` — read if Affected Services contains: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, or `xstockstrat-config`; OR if the product spec mentions "n8n" or "webhook"
 
 If the product spec mentions **config key changes**, also read `docs/runbooks/config-rollout.md`.
 If the product spec mentions **proto changes**, also read `docs/runbooks/proto-versioning.md`.
