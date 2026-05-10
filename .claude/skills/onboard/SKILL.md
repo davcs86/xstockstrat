@@ -2,7 +2,7 @@
 name: onboard
 description: Interactive new-dev setup — prereqs, env file, proto gen, bootstrap, health checks.
 argument-hint: (no arguments)
-allowed-tools: Read Bash(which *) Bash(ls *) Bash(find *) Bash(cat *) Bash(docker *) Bash(openssl *) Bash(./scripts/localenv-setup.sh) Bash(./scripts/bootstrap.sh) Bash(docker compose *)
+allowed-tools: Read Bash(ls *) Bash(find *) Bash(cat *) Bash(docker *) Bash(openssl *) Bash(./scripts/check-prereqs.sh) Bash(./scripts/localenv-setup.sh) Bash(./scripts/bootstrap.sh) Bash(docker compose *)
 effort: medium
 ---
 
@@ -24,43 +24,17 @@ Store as `REPO_ROOT`. All file checks and script invocations use this absolute p
 
 ## Phase 1: Prerequisite Check
 
-Run `which <tool>` for each required tool, then its version command. Present a single summary table:
+Run the prereq check script and show its output verbatim:
 
-| Tool | Required | Installed version | Status |
-|---|---|---|---|
-| git | any | ... | ✓ / ✗ |
-| docker | any | ... | ✓ / ✗ |
-| go | 1.25 | ... | ✓ / ⚠ wrong ver / ✗ |
-| python3 | 3.12 | ... | ✓ / ⚠ / ✗ |
-| node | 22 | ... | ✓ / ⚠ / ✗ |
-| pnpm | 9.15.0 | ... | ✓ / ⚠ / ✗ |
-| buf | latest | ... | ✓ / ✗ |
-| migrate | latest | ... | ✓ / ✗ |
-| psql | any | ... | ✓ / ✗ |
+```bash
+cd "$REPO_ROOT" && ./scripts/check-prereqs.sh
+```
 
-Version commands:
-- go: `go version`
-- python3: `python3 --version`
-- node: `node --version`
-- pnpm: `pnpm --version`
-- buf: `buf --version`
-- migrate: `migrate --version`
-- psql: `psql --version`
+The script exits 0 if all required tools are present (version mismatches are warnings, not errors) and exits 1 if any tool is missing.
 
-Also check that the Docker daemon is running: `docker info >/dev/null 2>&1`. If it fails, report: "Docker daemon is not running — start Docker Desktop and re-run /onboard."
+**If the script exits 1 (missing tools):** tell the user to install the listed tools and re-run `/onboard`. Do NOT proceed to Phase 2.
 
-**If any tool is ✗ (missing):**
-- Show the install link from the table in `docs/setup/getting-started.md`
-- Go: https://go.dev/dl/
-- Python: https://www.python.org/downloads/
-- Node: https://nodejs.org/
-- pnpm: `npm install -g pnpm@9.15.0`
-- buf: https://buf.build/docs/installation
-- migrate: `go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest`
-- psql: install postgresql-client (Linux) or postgresql (Homebrew)
-- Tell the user to fix missing tools and re-run `/onboard`. Do NOT proceed if any tool is ✗.
-
-**If any tool is ⚠ (wrong version):** warn but do not block — let the user decide.
+**If the script exits 0 with warnings:** inform the user that version mismatches may cause subtle failures compared to CI, but they can continue.
 
 ---
 
@@ -113,7 +87,7 @@ ls "$REPO_ROOT/packages/proto/gen/" 2>/dev/null | head -3
 ## Phase 4: Bootstrap
 
 Summarise what `bootstrap.sh` will do:
-- Check all required tools (again, as a final gate)
+- Re-run `check-prereqs.sh` as a final gate
 - Install pnpm dependencies for 7 Node/Next.js services
 - Install Python deps for 3 Python services
 - Start a local TimescaleDB Docker container on port 5432

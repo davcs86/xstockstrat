@@ -14,31 +14,7 @@ echo "======================================================"
 # ── 1. Check required tools ────────────────────────────────────────────────
 echo ""
 echo "==> Checking required tools..."
-
-check_tool() {
-  if ! command -v "$1" &>/dev/null; then
-    echo "  ✗ $1 not found. Install: $2"
-    MISSING=1
-  else
-    echo "  ✓ $1 ($(${1} --version 2>&1 | head -1))"
-  fi
-}
-
-MISSING=0
-check_tool "buf"     "https://buf.build/docs/installation"
-check_tool "go"      "https://go.dev/dl/"
-check_tool "python3" "https://www.python.org/downloads/"
-check_tool "node"    "https://nodejs.org/"
-check_tool "pnpm"    "corepack enable or https://pnpm.io/installation"
-check_tool "docker"  "https://docs.docker.com/get-docker/"
-check_tool "psql"    "https://www.postgresql.org/download/"
-check_tool "migrate" "go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest"
-
-if [ "$MISSING" -eq 1 ]; then
-  echo ""
-  echo "ERROR: Please install missing tools above, then re-run."
-  exit 1
-fi
+"$REPO_ROOT/scripts/check-prereqs.sh"
 
 # ── 2. Generate proto stubs ────────────────────────────────────────────────
 echo ""
