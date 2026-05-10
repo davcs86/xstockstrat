@@ -66,39 +66,17 @@ ls "$REPO_ROOT/.env" 2>/dev/null
 
 ---
 
-## Phase 3: Proto Stubs Check
-
-Check whether stubs exist:
-
-```bash
-ls "$REPO_ROOT/packages/proto/gen/" 2>/dev/null | head -3
-```
-
-**If directory is missing or empty:**
-
-1. Explain: "Proto stubs not found. Running `localenv-setup.sh` to generate them inside a Docker container. This takes a few minutes on first run."
-2. Ask user confirmation before proceeding (this runs Docker build).
-3. On confirmation, run:
-   ```bash
-   cd "$REPO_ROOT" && ./scripts/localenv-setup.sh
-   ```
-4. Report success or surface the error output clearly.
-
-**If stubs already exist:** Report "Proto stubs found in `packages/proto/gen/` — skipping."
-
----
-
-## Phase 4: Bootstrap
+## Phase 3: Bootstrap
 
 Summarise what `bootstrap.sh` will do:
 - Re-run `check-prereqs.sh` (confirms Docker is running)
-- Check for proto stubs; run `localenv-setup.sh` automatically if they are absent
+- If proto stubs are absent in `packages/proto/gen/`, run `localenv-setup.sh` automatically to generate them inside a Docker container (takes a few minutes on first run)
 - If `pnpm` is installed: install Node.js deps for all 7 Node/Next.js services (enables local test/lint)
 - If `python3` is installed: install Python deps for all 3 Python services (enables local test/lint)
 
-Language dep installs are conditional — bootstrap succeeds without them. TimescaleDB and DB migrations run automatically in Phase 5 via `docker compose`.
+Language dep installs are conditional — bootstrap succeeds without them. TimescaleDB and DB migrations run automatically in Phase 4 via `docker compose`.
 
-Ask the user to confirm before running (localenv-setup.sh triggers a Docker build on first run).
+Ask the user to confirm before running (proto gen triggers a Docker build if stubs are absent).
 
 On confirmation:
 
@@ -112,7 +90,7 @@ If bootstrap exits non-zero, display the last 20 lines of output and suggest:
 
 ---
 
-## Phase 5: Services Up + Health Checks
+## Phase 4: Services Up + Health Checks
 
 Tell the user you'll now start all 13 services with Docker Compose.
 
@@ -146,7 +124,7 @@ Report each as ✓ (200 response) or ✗ (error/timeout). If config is ✗, high
 
 ---
 
-## Phase 6: Local Tests & Linters
+## Phase 5: Local Tests & Linters
 
 Check which language toolchains are available:
 
@@ -194,7 +172,7 @@ For any toolchain that is **absent**, note which services' tests/linters cannot 
 
 ---
 
-## Phase 7: Next Steps Routing
+## Phase 6: Next Steps Routing
 
 All services are running. Ask the user what they want to do next (present numbered options):
 
