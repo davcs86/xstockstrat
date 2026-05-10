@@ -29,7 +29,7 @@ FR-5. Add a `CONTRIBUTING.md` file at the repo root covering: fork-and-PR workfl
 
 FR-6. Audit all documentation under `docs/` for references to internal infrastructure details (internal hostnames, account IDs, internal URLs, team-internal tool names) and replace them with generic descriptions or environment variable references.
 
-FR-7. Verify CI/CD workflow files (`.github/workflows/`) do not contain hardcoded secrets — all sensitive values must be GitHub Actions secrets (`${{ secrets.* }}`).
+FR-7. Verify CI/CD workflow files (`.github/workflows/`) do not contain hardcoded secrets — all sensitive values must be GitHub Actions secrets (`${{ secrets.* }}`). Add a `secret-scan` CI job running both `trufflehog` (full git history depth) and `gitleaks` (working-tree pattern ruleset) on every PR targeting `main-dev` or `main`.
 
 FR-8. Add a `.env.example` file at the repo root listing all required environment variables with placeholder values and short descriptions, so contributors know what to configure without seeing real values.
 
@@ -82,6 +82,6 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] Which secret scanning tool should be used for CI enforcement going forward (e.g., `trufflehog`, `gitleaks`, `git-secrets`)? Should a secret-scanning CI job be added to `.github/workflows/ci.yml`?
-- [ ] Are there any historical commits that contain secrets that need to be purged from git history (BFG / `git filter-repo`), or is the scope limited to the current working tree?
-- [ ] Should the repo be made public immediately after this PR merges, or is there a separate approval step?
+- [x] OQ-1 — RESOLVED: Both `trufflehog` and `gitleaks` will be added to `.github/workflows/ci.yml` as a `secret-scan` CI job. `trufflehog` covers git history depth; `gitleaks` covers the working tree with its 150+ pattern ruleset. Both run on every PR.
+- [x] OQ-2 — RESOLVED: Audit first using `git log -S <pattern> --all` (and `trufflehog` over full history). If secrets are found in historical commits, use `git filter-repo` to scrub before the repo goes public. Scope expands to history purge only if the audit finds hits.
+- [x] OQ-3 — RESOLVED: Merging this PR into `main-dev` is the approval gate. Any maintainer may flip the repo to public on GitHub immediately after merge — no separate sign-off required.
