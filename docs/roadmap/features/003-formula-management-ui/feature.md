@@ -1,9 +1,9 @@
 # Feature: formula-management-ui
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/formula-management-ui`
 **Created**: 2026-05-10
-**Last Updated**: 2026-05-10
+**Last Updated**: 2026-05-10T00:00:00Z
 
 ---
 
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-10 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-05-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 advisory warning) |
 
 ---
 
@@ -42,4 +43,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review formula-management-ui product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec formula-management-ui` — generate implementation spec from the approved product spec

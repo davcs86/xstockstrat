@@ -20,12 +20,13 @@ FR-3. A formula is private by default (`is_public = false`); the owner may toggl
 FR-4. The indicators service must expose `ListFormulas`, `UpdateFormula`, and `DeleteFormula` RPCs (in addition to the existing `RegisterFormula` and `GetFormula`).
 FR-5. `UpdateFormula` must be rejected if the requesting `user_id` does not match the formula's `author`.
 FR-6. `DeleteFormula` must be rejected if the requesting `user_id` does not match the formula's `author`.
-FR-7. The `xstockstrat-insights` UI must provide a `/formulas` page listing the current user's formulas and all public formulas.
-FR-8. The UI must support creating a new formula (name, description, source code, is_public toggle).
-FR-9. The UI must support editing an owned formula's name, description, source, and is_public flag.
-FR-10. The UI must support deleting an owned formula with a confirmation step.
-FR-11. The UI must support test-executing a formula inline (send JSON input, display output/stderr) on the formula detail page.
-FR-12. All UI→backend calls must go through Next.js API routes that proxy to the indicators Connect-RPC HTTP endpoint (port 8054).
+FR-7. `ListFormulas` must support offset+limit pagination (`page_size` / `page_offset` in the request, `total_count` in the response).
+FR-8. The `xstockstrat-insights` UI must provide a `/formulas` page listing the current user's formulas and all public formulas.
+FR-9. The UI must support creating a new formula (name, description, source code with Monaco editor, is_public toggle).
+FR-10. The UI must support editing an owned formula's name, description, source, and is_public flag.
+FR-11. The UI must support deleting an owned formula with a confirmation step.
+FR-12. The UI must support test-executing a formula inline (send JSON input, display output/stderr) on the formula detail page.
+FR-13. All UI→backend calls must go through Next.js API routes that proxy to the indicators Connect-RPC HTTP endpoint (port 8054). The API routes read `user_id` from the `X-User-Id` request header; when absent, a `'dev-user'` fallback is used in non-production environments.
 
 ## Out of Scope
 
@@ -40,13 +41,14 @@ FR-12. All UI→backend calls must go through Next.js API routes that proxy to t
 Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-indicators` — adds DB persistence, new CRUD RPCs, authorization checks
 - `xstockstrat-insights` — adds formula management UI pages and API routes
-- `packages/proto` — new RPCs and request/response messages in `indicators/v1/indicators.proto`
+
+_(Proto contract changes are tracked in the "Proto Contract Changes" section below — `packages/proto` is not a service and is not listed here.)_
 
 ## Proto Contract Changes
 
 - New RPC `ListFormulas(ListFormulasRequest) returns (ListFormulasResponse)`
-  - `ListFormulasRequest`: `string author_filter`, `bool include_public`
-  - `ListFormulasResponse`: `repeated FormulaDefinition formulas`
+  - `ListFormulasRequest`: `string author_filter`, `bool include_public`, `int32 page_size`, `int32 page_offset`
+  - `ListFormulasResponse`: `repeated FormulaDefinition formulas`, `int32 total_count`
 - New RPC `UpdateFormula(UpdateFormulaRequest) returns (UpdateFormulaResponse)`
   - `UpdateFormulaRequest`: `string formula_id`, `string user_id`, `string name`, `string description`, `string source`, `bool is_public`
   - `UpdateFormulaResponse`: `FormulaDefinition formula`
@@ -111,6 +113,6 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] How should `user_id` be supplied from the insights frontend in the absence of JWT — query param, header, or hardcoded dev value?
-- [ ] Should `ListFormulas` support pagination (cursor or offset) in this phase, or is a full list acceptable given expected formula counts?
-- [ ] Is a code editor widget (e.g., CodeMirror) desired for the source textarea, or is a plain `<textarea>` sufficient for the initial version?
+- [x] **OQ-1 — RESOLVED**: `user_id` is supplied via an `X-User-Id` HTTP request header. The insights Next.js API routes read this header and forward the value as `user_id` in the gRPC/Connect-RPC call. When the header is absent (local dev without auth middleware), a hardcoded fallback `'dev-user'` is used. Full JWT enforcement is deferred to the identity integration feature.
+- [x] **OQ-2 — RESOLVED**: `ListFormulas` includes offset+limit pagination in this phase (`page_size` + `page_offset` in the request, `total_count` in the response). This avoids a proto breaking-change later when formula counts grow.
+- [x] **OQ-3 — RESOLVED**: Use **Monaco Editor** (`@monaco-editor/react`) for the formula source textarea. Monaco is chosen over CodeMirror because it supports registering a custom `CompletionItemProvider` to suggest numpy/pandas/indicators API calls inline, which meaningfully reduces formula authoring errors. Bundle cost (~2 MB gzip) is acceptable for an analytics tool used by developers.
