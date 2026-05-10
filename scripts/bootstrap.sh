@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # scripts/bootstrap.sh
 # Sets up local development environment for xstockstrat-orchestration.
+# Hard requirement: docker (with daemon running). Services run in Docker.
+# Optional: go/python3/node/pnpm — if present, host deps are installed for local test/lint runs.
 # Run once after cloning: ./scripts/bootstrap.sh
 
 set -euo pipefail
@@ -14,99 +16,63 @@ echo "======================================================"
 # ── 1. Check required tools ────────────────────────────────────────────────
 echo ""
 echo "==> Checking required tools..."
-
-check_tool() {
-  if ! command -v "$1" &>/dev/null; then
-    echo "  ✗ $1 not found. Install: $2"
-    MISSING=1
-  else
-    echo "  ✓ $1 ($(${1} --version 2>&1 | head -1))"
-  fi
-}
-
-MISSING=0
-check_tool "buf"     "https://buf.build/docs/installation"
-check_tool "go"      "https://go.dev/dl/"
-check_tool "python3" "https://www.python.org/downloads/"
-check_tool "node"    "https://nodejs.org/"
-check_tool "pnpm"    "corepack enable or https://pnpm.io/installation"
-check_tool "docker"  "https://docs.docker.com/get-docker/"
-check_tool "psql"    "https://www.postgresql.org/download/"
-check_tool "migrate" "go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest"
-
-if [ "$MISSING" -eq 1 ]; then
-  echo ""
-  echo "ERROR: Please install missing tools above, then re-run."
-  exit 1
-fi
+"$REPO_ROOT/scripts/check-prereqs.sh"
 
 # ── 2. Generate proto stubs ────────────────────────────────────────────────
 echo ""
-echo "==> Generating proto stubs..."
-"$REPO_ROOT/scripts/buf-gen.sh"
-
-# ── 3. Install Node dependencies for Node.js services ─────────────────────
-echo ""
-echo "==> Installing Node.js dependencies..."
-for svc in xstockstrat-ledger xstockstrat-identity xstockstrat-notify xstockstrat-config; do
-  echo "  → $svc"
-  (cd "$REPO_ROOT/services/$svc" && pnpm install --frozen-lockfile)
-done
-
-echo "==> Installing Next.js frontend dependencies..."
-for svc in xstockstrat-trader xstockstrat-insights xstockstrat-config-ui; do
-  echo "  → $svc"
-  (cd "$REPO_ROOT/services/$svc" && pnpm install --frozen-lockfile)
-done
-
-# ── 4. Install Python dependencies ────────────────────────────────────────
-echo ""
-echo "==> Installing Python dependencies..."
-for svc in xstockstrat-indicators xstockstrat-ingest xstockstrat-analysis; do
-  echo "  → $svc"
-  if [ -f "$REPO_ROOT/services/$svc/requirements.txt" ]; then
-    (cd "$REPO_ROOT/services/$svc" && python3 -m pip install -q -r requirements.txt)
-  fi
-done
-
-# Install generated Python stubs as editable
-echo "  → packages/proto/gen/python (editable install)"
-if [ -f "$REPO_ROOT/packages/proto/gen/python/setup.py" ]; then
-  (cd "$REPO_ROOT/packages/proto/gen/python" && pip install -q -e .)
-fi
-
-# ── 5. Start local TimescaleDB ─────────────────────────────────────────────
-echo ""
-echo "==> Starting TimescaleDB via Docker..."
-if ! docker ps --format '{{.Names}}' | grep -q "xstockstrat-db"; then
-  docker run -d \
-    --name xstockstrat-db \
-    -e POSTGRES_USER=xstockstrat \
-    -e POSTGRES_PASSWORD=devpassword \
-    -e POSTGRES_DB=xstockstrat \
-    -p 5432:5432 \
-    timescale/timescaledb:latest-pg16
-  echo "  Waiting for TimescaleDB to be ready..."
-  sleep 5
-  until docker exec xstockstrat-db pg_isready -U xstockstrat -q; do sleep 1; done
-  echo "  ✓ TimescaleDB ready"
+if [ -d "$REPO_ROOT/packages/proto/gen" ] && [ -n "$(ls -A "$REPO_ROOT/packages/proto/gen" 2>/dev/null)" ]; then
+  echo "==> Proto stubs already present — skipping generation."
 else
-  echo "  ✓ xstockstrat-db already running"
+  echo "==> Proto stubs missing — running localenv-setup.sh (Docker required)..."
+  "$REPO_ROOT/scripts/localenv-setup.sh"
 fi
 
-export DATABASE_URL="postgres://xstockstrat:devpassword@localhost:5432/xstockstrat?sslmode=disable"
-
-# ── 6. Run all migrations ──────────────────────────────────────────────────
+# ── 3. Install Node.js deps (if pnpm is available) ────────────────────────
 echo ""
-echo "==> Running database migrations..."
-"$REPO_ROOT/scripts/db-migrate.sh"
+if command -v pnpm &>/dev/null; then
+  echo "==> Installing Node.js dependencies (for local test/lint)..."
+  for svc in xstockstrat-ledger xstockstrat-identity xstockstrat-notify xstockstrat-config \
+              xstockstrat-trader xstockstrat-insights xstockstrat-config-ui; do
+    echo "  → $svc"
+    (cd "$REPO_ROOT/services/$svc" && pnpm install --frozen-lockfile)
+  done
+else
+  echo "==> pnpm not found — skipping Node.js dep install."
+  echo "    Install pnpm: brew install pnpm"
+fi
+
+# ── 4. Install Python deps (if python3 is available) ──────────────────────
+echo ""
+if command -v python3 &>/dev/null; then
+  echo "==> Installing Python dependencies (for local test/lint)..."
+  for svc in xstockstrat-indicators xstockstrat-ingest xstockstrat-analysis; do
+    echo "  → $svc"
+    if [ -f "$REPO_ROOT/services/$svc/requirements.txt" ]; then
+      (cd "$REPO_ROOT/services/$svc" && python3 -m pip install -q -r requirements.txt)
+    fi
+  done
+  if [ -f "$REPO_ROOT/packages/proto/gen/python/setup.py" ]; then
+    echo "  → packages/proto/gen/python (editable install)"
+    (cd "$REPO_ROOT/packages/proto/gen/python" && python3 -m pip install -q -e .)
+  fi
+else
+  echo "==> python3 not found — skipping Python dep install."
+  echo "    Install Python: brew install python@3.12"
+fi
 
 echo ""
 echo "======================================================"
 echo " Bootstrap complete!"
 echo ""
-echo " DATABASE_URL=$DATABASE_URL"
+echo " Next steps:"
 echo ""
-echo " Start services individually or use docker-compose."
-echo " See each service's CLAUDE.md for run instructions."
+echo "   docker compose up -d"
+echo ""
+echo " docker-compose will:"
+echo "   1. Start TimescaleDB (with health check)"
+echo "   2. Run db-migrator (applies all pending migrations)"
+echo "   3. Start all application services"
+echo ""
+echo " Logs:  docker compose logs -f"
+echo " DB migration logs:  docker compose logs db-migrator --tail=50"
 echo "======================================================"
