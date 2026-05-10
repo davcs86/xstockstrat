@@ -26,6 +26,8 @@ Run:
 find docs/roadmap/features -maxdepth 1 -type d -name "*-$ARGUMENTS[0]"
 ```
 - If a directory is found: ask the user "A feature already exists for this slug (`<found-dir>`). Overwrite or abort?"
+  - On `abort`: stop immediately — do not read any further files or proceed to subsequent steps.
+  - On `overwrite`: continue.
 - If absent: proceed.
 
 ### 3. Compute NNN and create directory
