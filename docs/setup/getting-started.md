@@ -55,55 +55,35 @@ Edit `.env` and fill in the required values:
 | `ALPACA_API_SECRET` | **Yes** | Matching secret |
 | `ALPACA_PAPER` | **Yes** | Keep `true` for local dev |
 | `JWT_SECRET` | **Yes** | Generate: `openssl rand -hex 32` |
-| `DATABASE_URL` | Auto-set | `bootstrap.sh` exports the local TimescaleDB URL; leave default for local dev |
+| `DATABASE_URL` | Leave default | docker-compose injects this into all service containers; the default in `.env.example` works for local dev |
 | `N8N_WEBHOOK_SECRET` | Optional | Only needed if testing n8n integrations locally |
 | `OTEL_ENABLED` | Optional | Set `true` only if you have a Grafana Cloud account; see `setup/grafana-cloud.md` |
 
 For Alpaca key setup, see [`setup/alpaca.md`](alpaca.md).
 
-### Step 3 — Generate proto stubs
-
-Run this **once after cloning** (and again any time `.proto` files change):
-
-```bash
-./scripts/localenv-setup.sh
-```
-
-This builds a Docker container and generates all Go, Python, and TypeScript stubs into `packages/proto/gen/`. No host Go/Python/Node is required for this step.
-
-Expected output ends with:
-```
-[OK]    Stubs written to:
-[OK]      packages/proto/gen/go/
-[OK]      packages/proto/gen/python/
-[OK]      packages/proto/gen/ts/
-```
-
-### Step 4 — Bootstrap
+### Step 3 — Bootstrap
 
 ```bash
 ./scripts/bootstrap.sh
 ```
 
 This script:
-1. Verifies Docker is installed and the daemon is running (required — exits on failure)
-2. Checks for proto stubs and runs `localenv-setup.sh` automatically if they are absent
+1. Verifies Docker is installed and the daemon is running (exits on failure)
+2. Generates proto stubs inside Docker via `localenv-setup.sh` — skipped if stubs already exist
 3. **If pnpm is installed:** installs Node.js dependencies for all 7 Node/Next.js services
 4. **If python3 is installed:** installs Python dependencies for all 3 Python services
 
-Steps 3 and 4 are skipped automatically if the language toolchains are absent — services still run fine via Docker. Install the toolchains and re-run `bootstrap.sh` any time you want to enable local test and lint runs.
+Steps 3 and 4 are optional — services run fine via Docker without them. Install the language toolchains and re-run `bootstrap.sh` any time you want to enable local test and lint runs.
 
-TimescaleDB and database migrations run automatically in Step 5 via Docker Compose.
-
-### Step 5 — Start all services
+### Step 4 — Start all services
 
 ```bash
 docker compose up -d
 ```
 
-On first run this builds all 13 service images plus the `db-migrator` image, which takes a few minutes. Docker Compose starts TimescaleDB first, then runs `db-migrator` to apply all pending migrations, then starts all 13 application services.
+On first run this builds all 13 service images plus the `db-migrator` image, which takes a few minutes. Docker Compose starts TimescaleDB first, runs `db-migrator` to apply all pending migrations, then starts all 13 application services.
 
-### Step 6 — Verify
+### Step 5 — Verify
 
 Check that the core services are up:
 
@@ -130,7 +110,7 @@ If a service is not healthy, check its logs:
 docker compose logs xstockstrat-config --tail=50
 ```
 
-### Step 7 — Run tests and linters
+### Step 6 — Run tests and linters
 
 Requires the language toolchains from the Prerequisites table. If `bootstrap.sh` skipped the dep installs because the tools were absent at that time, install them and re-run `bootstrap.sh` before proceeding.
 
@@ -175,7 +155,7 @@ cd services/xstockstrat-insights   && pnpm run lint && pnpm exec playwright test
 cd services/xstockstrat-config-ui  && pnpm run lint && pnpm exec playwright test
 ```
 
-### Step 8 — Next steps
+### Step 7 — Next steps
 
 - Read [CLAUDE.md](../../CLAUDE.md) for the full architecture reference (service registry, proto governance, CI/CD, branch strategy).
 - To start feature work: run `/sdd-story <slug>` in Claude Code, or read [`docs/runbooks/feature-workflow.md`](../runbooks/feature-workflow.md) for the manual path.
@@ -255,7 +235,7 @@ Start order in migrations: `config → ledger → identity → marketdata → tr
 | Go 1.25 | trading, portfolio, marketdata | High-throughput order execution and data ingestion |
 | Python 3.12 | indicators, ingest, analysis | Formula sandboxing, numeric libraries (pandas, numpy) |
 | Node.js 22 | ledger, identity, notify, config | Event-driven I/O, streaming, JWT handling |
-| Next.js 22 | trader, insights, config-ui | React frontends with SSR |
+| Next.js 14 | trader, insights, config-ui | React frontends with SSR (Node.js 22 runtime) |
 
 ### SDD Development Workflow
 
@@ -311,8 +291,8 @@ docker image ls | grep codegen      # check if image exists
 
 If the container exits immediately, check `Dockerfile.codegen` — the buf version pin may need updating.
 
-### `bootstrap.sh` exits with "missing tools"
-Install the listed tools. Re-run `bootstrap.sh` — it re-checks all tools on every run.
+### `bootstrap.sh` exits with an error
+The only hard requirement is Docker with its daemon running. Start Docker Desktop and re-run `bootstrap.sh`. If Docker is running and it still fails, the error is from `localenv-setup.sh` (proto gen) — check the output and see the Proto gen section above.
 
 ### Database migration fails
 ```bash

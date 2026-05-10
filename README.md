@@ -38,9 +38,9 @@ Full details (roles, dependencies, config keys) → [`CLAUDE.md`](CLAUDE.md).
 ## Bootstrap
 
 ```bash
-./scripts/localenv-setup.sh   # build proto-gen container + generate stubs (run once after clone)
-./scripts/bootstrap.sh        # install deps, start TimescaleDB, run migrations
-docker compose up -d          # start all 13 services
+cp .env.example .env          # fill in ALPACA_API_KEY, ALPACA_API_SECRET, JWT_SECRET
+./scripts/bootstrap.sh        # verify Docker, generate proto stubs
+docker compose up -d          # start TimescaleDB, run migrations, start all 13 services
 ```
 
 See [`docs/setup/getting-started.md`](docs/setup/getting-started.md) for prerequisites, environment file setup, and verification steps.
