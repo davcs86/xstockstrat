@@ -59,6 +59,12 @@ Next.js   → xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
 
 **Important Go build note**: CI runs all Go jobs with `GOWORK=off`. When running Go commands locally for a single service (e.g., `go test`, `go mod download`), set `GOWORK=off` or `cd services/<service>` and rely on the local `go.mod`.
 
+**macOS is the primary developer platform; Linux is optional.** All bash commands in `.md` files (docs, runbooks, setup guides) must be macOS/Homebrew-compatible:
+- Use `brew install <tool>` as the primary install instruction; add Linux alternatives in an "Other" column or parenthetical — not the other way around
+- Avoid GNU-only flags; prefer options that work on both BSD (macOS) and GNU tools (e.g. `grep -oE` works on both; `grep -P` does not)
+- Never use bare `pip` — use `python3 -m pip` (bare `pip` resolves to pip2 on stock macOS)
+- Scripts (`.sh` files) follow the same rule; use `#!/usr/bin/env bash` and bash 3.2-compatible syntax (macOS ships bash 3.2 by default)
+
 ### Version Bump Workflow
 
 To change a language or tool version:

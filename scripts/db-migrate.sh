@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # scripts/db-migrate.sh
 # Runs all service migrations in dependency order against TimescaleDB.
-# Requires: migrate (golang-migrate) and psql in PATH, DATABASE_URL set or default used.
-#
-# Install golang-migrate:
-#   go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+# Intended to run inside the db-migrator Docker container (postgres:16-alpine base),
+# which provides both migrate (golang-migrate v4.17.1) and psql.
+# DATABASE_URL is set via docker-compose environment or defaults to localhost.
 #
 # Usage:
 #   ./scripts/db-migrate.sh              # apply all pending migrations
@@ -19,14 +18,6 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DB_URL="${DATABASE_URL:-postgres://xstockstrat:devpassword@localhost:5432/xstockstrat?sslmode=disable}"
 COMMAND="${1:-up}"
-
-ensure_migrate_installed() {
-  if ! command -v migrate &>/dev/null; then
-    echo "  golang-migrate not found. Installing..."
-    go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
-    echo "  ✓ migrate installed"
-  fi
-}
 
 # Build a DATABASE_URL with schema-scoped migration tracking.
 # Each service's schema_migrations table lives inside its own schema.
@@ -84,8 +75,6 @@ migrate_service() {
       ;;
   esac
 }
-
-ensure_migrate_installed
 
 echo "==> Enabling TimescaleDB extension..."
 psql "$DB_URL" -c "CREATE EXTENSION IF NOT EXISTS timescaledb;" --quiet
