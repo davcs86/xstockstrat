@@ -104,6 +104,14 @@
 - Files modified: `scripts/db-migrate.sh`
 - Deviations: none
 
+## Session 2026-05-11T00:08:00Z — sdd-execute Step 6
+
+### Step 6 — Add SECURITY.md and CONTRIBUTING.md at repo root [done]
+- Created `SECURITY.md` with responsible disclosure policy (emailing contact, scope, coordinated disclosure).
+- Created `CONTRIBUTING.md` based on `docs/setup/getting-started.md` content: prerequisites table, 5-step local setup (clone → env → bootstrap → docker compose → verify), branch naming, fork-and-PR workflow, code style, test commands by language, proto change process.
+- Files modified: `SECURITY.md`, `CONTRIBUTING.md`
+- Deviations: CONTRIBUTING.md sourced from getting-started.md (user instruction) rather than the spec's inline template; content is equivalent but more accurate to the actual repo setup flow.
+
 ## Session 2026-05-11T00:07:00Z — sdd-execute Step 5
 
 ### Step 5 — Add .gitignore entries for secret file patterns and .env file carve-outs [done]

@@ -284,7 +284,7 @@ git check-ignore -v .env.development 2>/dev/null || echo "not ignored"
 
 ### Step 6 — docs: Add SECURITY.md and CONTRIBUTING.md at repo root
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: Root repo
 **Files**:
 - `SECURITY.md` — create (confirmed absent: not present in root-level `ls` output)
@@ -933,6 +933,11 @@ grep -c "APP_URL" .do/app.dev.yaml
 ---
 
 ## Deviation Log
+
+### Deviation: Step 6 — Add SECURITY.md and CONTRIBUTING.md at repo root
+**Spec said**: Use the inline CONTRIBUTING.md template from the spec Instructions section.
+**Actual**: Based CONTRIBUTING.md on `docs/setup/getting-started.md` content (user instruction). Uses the actual variable table, bootstrap steps, and test commands from that file rather than the abbreviated spec template.
+**Reason**: getting-started.md is the canonical local setup reference — mirroring it in CONTRIBUTING.md keeps the two in sync and ensures accuracy (e.g., correct tool versions, actual env var requirements after Steps 1–4).
 
 ### Deviation: Step 5 — Add .gitignore entries for secret file patterns and .env file carve-outs
 **Spec said**: Add `!.env.development` and `!.env.production` carve-outs immediately after `!.env.example` in the root-level env block.
