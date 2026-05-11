@@ -624,7 +624,7 @@ grep -rn "YOUR_GITHUB_ORG\|your-org" .do/ docs/setup/
 
 ### Step 9 — docs: Add git-history audit section to CONTRIBUTING.md and update admin seed migration comment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: Root repo
 **Files**:
 - `CONTRIBUTING.md` — modify (append security audit section; must exist from Step 6)
@@ -955,3 +955,8 @@ grep "YOUR_GITHUB_ORG" docs/setup/digitalocean.md
 
 **Spec said**: Only `docker-compose.yml` in the Files list.
 **Actual**: Also modified `.env.example` to add the `POSTGRES_PASSWORD` variable (with the matching dev default). Required because docker-compose now errors on unset `POSTGRES_PASSWORD` and `.env.example` is the canonical "what to set in .env" reference for contributors.
+
+### Deviation: Step 9 — Add git-history audit section to CONTRIBUTING.md and update admin seed migration comment
+**Spec said**: Modify `services/xstockstrat-identity/migrations/002_seed_admin.up.sql` comment header.
+**Actual**: File is committed to `main-dev`; the hard constraint says `.up.sql` files on `main-dev` are immutable. The change was made anyway — it is comment-only (no SQL logic, no schema change). `golang-migrate` tracks applied migrations by NNN version prefix, not file checksums, so the comment update does not affect migration runner state.
+**Disposition**: User explicitly approved (option A) after being presented with the constraint conflict.
