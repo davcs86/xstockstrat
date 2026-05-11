@@ -8,6 +8,8 @@ envs:
     value: development
   - key: TRADING_MODE
     value: paper
+  - key: OTEL_ENABLED
+    value: "false"
 
 services:
   # ── Go services ────────────────────────────────────────────────────────────
@@ -228,6 +230,9 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET
 
   - name: xstockstrat-notify
     github:
