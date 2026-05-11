@@ -65,3 +65,10 @@
 - Updated Affected Services to explicitly list `.do/app.yaml`, `.do/app.dev.yaml`, and the three frontend services.
 - Updated Acceptance Criteria (items 9 and 10).
 - Implementation spec is now **stale** — run `/sdd-spec make-repo-public-secure` to regenerate with the new steps added for FR-9/FR-10.
+
+## Session 2026-05-11T00:02:00Z — sdd-review product-spec (re-review after FR-9/FR-10 update)
+
+- Product spec re-review: PASS. Status remains `in-progress` (Step 1 already complete).
+- Warnings (advisory): (1) Affected Services uses collective "All services under services/" — acceptable for cross-cutting audit; (2) AC8 is qualitative; (3) broker-accounts-ui and formula-management-ui share frontend service names — low conflict risk, no shared source files.
+- Overlap findings: no config key, proto, or migration collisions. No merge-order entry required.
+- Next: `/sdd-spec make-repo-public-secure` to regenerate implementation spec preserving Step 1 `done` status and adding steps for FR-9/FR-10.
