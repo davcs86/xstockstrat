@@ -87,7 +87,7 @@ docker compose config | grep -E "POSTGRES_PASSWORD|JWT_SECRET" | head -5
 
 ### Step 2 — service: Remove hardcoded JWT fallback from identity service
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity` (Node.js)
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify

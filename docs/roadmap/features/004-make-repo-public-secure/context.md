@@ -82,3 +82,10 @@
   - **FR-10 (Step 11)**: `.env.production` does not exist. `.do/app.yaml` frontend `envs:` blocks for `xstockstrat-trader` (L286), `xstockstrat-insights` (L302), and `xstockstrat-config-ui` (L318) contain only `TRADING_MODE` and service-specific endpoint vars — no `APP_URL` entry. Same for `.do/app.dev.yaml` (L310, L328, L346). The `${APP_URL}` DO built-in requires no external setup. `.env.production` carve-out also added to Step 5 gitignore block.
   - **Step 5 expanded**: original spec only added `*.pem`, `*.key`, etc. — now also adds `!.env.development` and `!.env.production` carve-outs required by FR-9/FR-10.
   - **Step 7 renumbered**: was Step 8 (secret-scan CI) — renumbered to Step 7 in re-spec; docs steps renumbered accordingly (davcs86 replacement now Step 8, git-history audit now Step 9).
+
+## Session 2026-05-11T00:04:00Z — sdd-execute Step 2
+
+### Step 2 — Remove hardcoded JWT fallback from identity service [done]
+- Replaced `return process.env.JWT_SECRET ?? 'dev-jwt-secret-change-in-production'` with explicit env check + `throw new Error(...)` at `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:17–23`.
+- Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`
+- Deviations: none
