@@ -634,24 +634,38 @@ ls -la .gitleaks.toml
    ```markdown
    ## Security Audit (Maintainers Only)
 
-   Before making this repository public, run the following to check for secrets in git history:
+   Before making this repository public, audit the full history of **all persistent
+   branches** (`main`, `main-dev`, and the current working branch). The `--all` flag
+   in the commands below covers every ref including `main` and `main-dev`.
 
    ```bash
-   # Check for common secret patterns in git history
+   # Fetch all remote branches so --all covers main and main-dev
+   git fetch --all
+
+   # Check for common secret patterns across entire history (all branches)
    git log -S 'AKIA' --all --oneline         # AWS key prefixes
    git log -S 'ghp_' --all --oneline         # GitHub PATs
    git log -S 'glpat-' --all --oneline       # GitLab tokens
    git log -S 'sk_live_' --all --oneline     # Stripe live keys
    git log -S '-----BEGIN' --all --oneline   # PEM private keys
+   git log -S 'devpassword' --all --oneline  # internal dev DB password
    ```
 
-   If any commits are found, use `git filter-repo` to scrub before making the repo public:
+   If any commits are found (on **any** branch — including main or main-dev), use
+   `git filter-repo` to scrub the pattern from the entire history before going public.
+   This rewrites all commit SHAs, so all collaborators must re-clone after the purge:
+
    ```bash
    pip install git-filter-repo
-   git filter-repo --replace-text <(echo '==>REDACTED<==')
+   # Replace the matched literal string across all history
+   git filter-repo --replace-text <(printf 'AKIA==>REDACTED<==\nghp_==>REDACTED<==')
+   # Force-push all rewritten refs (main, main-dev, feature branches)
+   git push origin --force --all
+   git push origin --force --tags
    ```
 
-   The CI `secret-scan` job (trufflehog + gitleaks) runs on every PR automatically.
+   The CI `secret-scan` job (trufflehog + gitleaks) runs on every PR automatically
+   going forward and scans the full commit history on each run.
    ```
 
 **Verification**:

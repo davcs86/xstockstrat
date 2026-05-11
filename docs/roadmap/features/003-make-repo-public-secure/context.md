@@ -18,6 +18,12 @@
 - Administrative: NNN collision with 003-formula-management-ui — recommend renaming this directory to 004-make-repo-public-secure.
 - OQ resolutions recorded: trufflehog + gitleaks for CI; audit-first history purge; PR merge is the visibility gate.
 
+## Session 2026-05-11T00:00:00Z — manual edits (pre-execute)
+
+- Cleaned up `.env.example`: added local-dev-only comment on DATABASE_URL; added "GitHub Repository Secrets" comment block listing all 4 required secrets (DIGITALOCEAN_ACCESS_TOKEN, DO_DEV_APP_ID, DO_PROD_APP_ID, BUF_TOKEN) with pointer to digitalocean.md Step 9.
+- Fixed `docs/setup/digitalocean.md` Step 9: added missing BUF_TOKEN to the secrets table; added "Obtaining a BUF_TOKEN" subsection.
+- Updated implementation-spec.md Step 9 instructions: git history audit now explicitly covers `main` and `main-dev` via `git fetch --all` before `git log --all`; added `devpassword` to the pattern list; force-push step after filter-repo covers all branches.
+
 ## Session 2026-05-10T00:02:00Z — sdd-spec
 
 - Generated implementation-spec.md with 9 steps. Status → implementation-ready.
