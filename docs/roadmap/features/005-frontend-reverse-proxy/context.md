@@ -32,3 +32,33 @@
 - context.md (this file)
 
 **Next action**: `/sdd-review frontend-reverse-proxy product-spec` (AI review gate)
+
+---
+
+## Session 2026-05-11 — sdd-spec
+
+**Implementation spec generated**: 6 concrete steps with exact file paths and codebase evidence.
+
+**Step summary**:
+1. Create `nginx.conf` with path-based routing upstream blocks and location rules
+2. Create `Dockerfile.nginx` with nginx:1.27-alpine base and healthcheck
+3. Update `services/xstockstrat-trader/next.config.js` to add `basePath: '/trader'`
+4. Update `services/xstockstrat-insights/next.config.js` to add `basePath: '/insights'`
+5. Update `services/xstockstrat-config-ui/next.config.js` to add `basePath: '/config-ui'`
+6. Add nginx service to `docker-compose.yml` with port 80 exposure, depends_on all three frontends, healthcheck
+
+**Key findings**:
+- No existing nginx.conf or reverse proxy infrastructure in repo
+- All three frontends already have `output: 'standalone'` in next.config.js (Phase 5 already added this)
+- Frontend services currently expose ports directly: 3000, 3001, 3002; will remain accessible for backwards-compatible debugging
+- All service ports confirmed: trader → 3000 (L435), insights → 3001 (L465), config-ui → 3002 (L491) per docker-compose.yml
+- Phase 5 deviations already document Next.js build config requirements; basePath is minimal addition
+- Connect-RPC calls to backends happen on internal ports (8051, 8052, etc.) and route through service network, not nginx
+
+**Reviewers snapshot** (from registry.md):
+- Platform Lead (architecture)
+- xstockstrat-trader owner (routing + Connect-RPC safety)
+- xstockstrat-insights owner (routing + SSE polling)
+- xstockstrat-config-ui owner (routing + config mutations)
+
+**Feature status**: `implementation-ready` (draft product-spec still; `/sdd-review product-spec` recommended before execution)
