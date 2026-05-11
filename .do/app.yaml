@@ -8,8 +8,6 @@ envs:
     value: production
   - key: TRADING_MODE
     value: live
-  - key: APP_URL
-    value: ${APP_URL}
 
 services:
   # ── Go services ────────────────────────────────────────────────────────────
@@ -285,6 +283,8 @@ services:
         value: ${xstockstrat-notify.PRIVATE_URL}
       - key: IDENTITY_HTTP_ENDPOINT
         value: ${xstockstrat-identity.PRIVATE_URL}
+      - key: APP_URL
+        value: ${APP_URL}
 
   - name: xstockstrat-insights
     github:
@@ -311,6 +311,8 @@ services:
         value: ${xstockstrat-notify.PRIVATE_URL}
       - key: IDENTITY_HTTP_ENDPOINT
         value: ${xstockstrat-identity.PRIVATE_URL}
+      - key: APP_URL
+        value: ${APP_URL}
 
   - name: xstockstrat-config-ui
     github:
@@ -325,6 +327,8 @@ services:
     envs:
       - key: CONFIG_HTTP_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
+      - key: APP_URL
+        value: ${APP_URL}
 
 jobs:
   # Runs golang-migrate against all service schemas before services start.
