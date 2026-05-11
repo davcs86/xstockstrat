@@ -3,7 +3,7 @@
 **Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/make-repo-public-secure`
 **Created**: 2026-05-10
-**Last Updated**: 2026-05-11T00:01:00Z
+**Last Updated**: 2026-05-11T00:03:00Z
 
 ---
 
@@ -16,6 +16,7 @@
 | 2026-05-10 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-05-11 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete (docker-compose.yml hardened) |
 | 2026-05-11 | product-spec updated | /sdd-story | Added FR-9/FR-10 (.env.development, .env.production, APP_URL wiring) — impl-spec is stale, re-run /sdd-spec |
+| 2026-05-11 | `in-progress` (re-spec) | /sdd-spec | Implementation spec regenerated with 11 steps (preserved Step 1 done; added Steps 10–11 for FR-9/FR-10) |
 
 ---
 
@@ -33,7 +34,7 @@ Audit the xstockstrat-orchestration repository for all hardcoded secrets, creden
 
 ## Reviewers
 
-_(Snapshot finalized by /sdd-spec 2026-05-10. Re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized by /sdd-spec 2026-05-11. Re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
@@ -43,4 +44,4 @@ _(Snapshot finalized by /sdd-spec 2026-05-10. Re-run /sdd-spec if the registry c
 
 ## Next Action
 
-`/sdd-spec make-repo-public-secure` — regenerate implementation spec with new FR-9/FR-10 steps (Step 1 is already done; spec must preserve its `done` status)
+`/sdd-review make-repo-public-secure impl-spec` — validate implementation spec, then `/sdd-execute make-repo-public-secure`

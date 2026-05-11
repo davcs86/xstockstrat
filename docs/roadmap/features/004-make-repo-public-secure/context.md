@@ -72,3 +72,13 @@
 - Warnings (advisory): (1) Affected Services uses collective "All services under services/" — acceptable for cross-cutting audit; (2) AC8 is qualitative; (3) broker-accounts-ui and formula-management-ui share frontend service names — low conflict risk, no shared source files.
 - Overlap findings: no config key, proto, or migration collisions. No merge-order entry required.
 - Next: `/sdd-spec make-repo-public-secure` to regenerate implementation spec preserving Step 1 `done` status and adding steps for FR-9/FR-10.
+
+## Session 2026-05-11T00:03:00Z — sdd-spec (re-spec for FR-9/FR-10)
+
+- Regenerated implementation-spec.md with 11 steps (up from 9). Status remains `in-progress`.
+- Key codebase findings:
+  - **Steps 2–9 all confirmed still pending**: grep confirmed `devpassword` in `services/xstockstrat-ingest/app/main.py:38`, `scripts/db-migrate.sh:19`, and `dev-jwt-secret` in `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:19`; `davcs86` still present in docs/scripts/.do; no `SECURITY.md`/`CONTRIBUTING.md`/`.gitleaks.toml` at root; no `secret-scan` job in ci.yml.
+  - **FR-9 (Step 10)**: `.env.development` does not exist. The current `.gitignore` has `.env.*` pattern that would block it — Step 5 must add `!.env.development` carve-out (updated in this re-spec). Step 10 depends on Step 5.
+  - **FR-10 (Step 11)**: `.env.production` does not exist. `.do/app.yaml` frontend `envs:` blocks for `xstockstrat-trader` (L286), `xstockstrat-insights` (L302), and `xstockstrat-config-ui` (L318) contain only `TRADING_MODE` and service-specific endpoint vars — no `APP_URL` entry. Same for `.do/app.dev.yaml` (L310, L328, L346). The `${APP_URL}` DO built-in requires no external setup. `.env.production` carve-out also added to Step 5 gitignore block.
+  - **Step 5 expanded**: original spec only added `*.pem`, `*.key`, etc. — now also adds `!.env.development` and `!.env.production` carve-outs required by FR-9/FR-10.
+  - **Step 7 renumbered**: was Step 8 (secret-scan CI) — renumbered to Step 7 in re-spec; docs steps renumbered accordingly (davcs86 replacement now Step 8, git-history audit now Step 9).
