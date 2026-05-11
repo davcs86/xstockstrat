@@ -301,39 +301,14 @@ git check-ignore -v .env.development 2>/dev/null || echo "not ignored"
 
 **Instructions**:
 
-**Create `SECURITY.md`** at repo root with the following content:
+See implementation-spec.md for full file contents of SECURITY.md and CONTRIBUTING.md.
 
-```markdown
-# Security Policy
-
-## Reporting Vulnerabilities
-
-**Do not open a public GitHub issue for security vulnerabilities.**
-
-Please report security issues by emailing **security@<your-domain>** (replace with the
-maintainer contact before making the repo public). Include:
-- A description of the vulnerability
-- Steps to reproduce
-- Potential impact
-
-We aim to respond within 72 hours and to issue a patch within 14 days for confirmed
-critical or high-severity issues.
-
-## Scope
-
-This policy covers the xstockstrat-orchestration repository and all services under
-`services/`. Individual service repos (`services/*`) are mirrors; report issues here.
-
-## Out of Scope
-
-- Issues in third-party libraries (report upstream)
-- Issues requiring physical access to infrastructure
-- Social engineering attacks
-
-## Disclosure Policy
-
-We follow coordinated disclosure. Please give us reasonable time to patch before any
-public disclosure.
+**Verification**:
+```bash
+ls -la SECURITY.md CONTRIBUTING.md
+# Expected: both files exist
+grep "Do not open a public GitHub issue" SECURITY.md
+grep "openssl rand -hex 32" CONTRIBUTING.md
 ```
 
 **Create `CONTRIBUTING.md`** at repo root covering all items in FR-5:
@@ -424,31 +399,33 @@ Always branch from and open PRs into `main-dev`. **Never target `main` directly.
 # Go service
 cd services/xstockstrat-trading && GOWORK=off go test ./...
 
-# Python service
-cd services/xstockstrat-indicators && pip install -e ".[dev]" && pytest
+### Step 7 — service: Add secret-scan CI job to `.github/workflows/ci.yml`
 
-# Node.js service
-cd services/xstockstrat-ledger && pnpm run test:coverage
-```
+**Status**: `pending`
+**Service**: `.github/workflows/`
+**Files**:
+- `.github/workflows/ci.yml` — modify
+- `.gitleaks.toml` — create (confirmed absent: no `.gitleaks*` file at repo root)
 
-## Proto Changes
+**Reviewers**: Security — No secrets in config service state, secret keys use `secret.*` prefix, JWT claims minimal, API key scoping correct
 
-All `.proto` changes require a PR to this repository first. See
-`docs/runbooks/approval-flow.md` for the approval gate requirements and
-`docs/runbooks/proto-versioning.md` for breaking-change procedures.
+**Codebase Evidence**:
+- Confirmed via grep: no `trufflehog` or `gitleaks` reference anywhere in `.github/workflows/ci.yml`.
+- Confirmed via read: `.github/workflows/ci.yml` is 377 lines; last job (`node-test`) ends at L377.
+- Existing workflow trigger covers `pull_request` on `main-dev` or `main` — the new job inherits this trigger.
+- Product spec OQ-1 resolution: "Both `trufflehog` and `gitleaks` will be added to `.github/workflows/ci.yml` as a `secret-scan` CI job."
 
-## License
+**Instructions**:
 
-By contributing, you agree that your contributions will be licensed under the same
-license as this repository.
-```
+Append `secret-scan` job to `.github/workflows/ci.yml` and create `.gitleaks.toml`.
+See implementation-spec.md for full YAML and TOML content.
 
 **Verification**:
 ```bash
-ls -la SECURITY.md CONTRIBUTING.md
-# Expected: both files exist
-grep "Do not open a public GitHub issue" SECURITY.md
-grep "openssl rand -hex 32" CONTRIBUTING.md
+grep -n "secret-scan\|trufflehog\|gitleaks" .github/workflows/ci.yml
+# Expected: the new job name and both tool references appear
+ls -la .gitleaks.toml
+# Expected: file exists
 ```
 
 ---
@@ -540,12 +517,12 @@ ls -la .gitleaks.toml
 **Status**: `done`
 **Service**: `docs/`, `scripts/`, `.do/`
 **Files**:
-- `docs/setup/getting-started.md` — modify (L40: `git clone https://github.com/davcs86/xstockstrat-orchestration.git`)
-- `docs/setup/digitalocean.md` — modify (L24: `davcs86/xstockstrat-orchestration`, L141: `Select repo: davcs86/xstockstrat-orchestration`)
-- `scripts/setup-branch-protection.sh` — modify (L11: `GITHUB_USER="${GITHUB_USER:-davcs86}"`)
-- `scripts/subtree-setup.sh` — modify (L12: `GITHUB_USER="${GITHUB_USER:-davcs86}"`)
-- `.do/app.yaml` — modify (14 occurrences of `repo: davcs86/xstockstrat-orchestration`)
-- `.do/app.dev.yaml` — modify (14 occurrences of `repo: davcs86/xstockstrat-orchestration`)
+- `docs/setup/getting-started.md` — modify (L40)
+- `docs/setup/digitalocean.md` — modify (L24, L141)
+- `scripts/setup-branch-protection.sh` — modify (L11)
+- `scripts/subtree-setup.sh` — modify (L12)
+- `.do/app.yaml` — modify (14 occurrences)
+- `.do/app.dev.yaml` — modify (14 occurrences)
 
 **Reviewers**: none
 
@@ -560,64 +537,13 @@ ls -la .gitleaks.toml
 
 **Instructions**:
 
-1. **`docs/setup/getting-started.md` L40**: Replace:
-   ```
-   git clone https://github.com/davcs86/xstockstrat-orchestration.git
-   ```
-   With:
-   ```
-   git clone https://github.com/<your-org>/xstockstrat-orchestration.git
-   ```
-
-2. **`docs/setup/digitalocean.md` L24**: Replace:
-   ```
-   GitHub repo `davcs86/xstockstrat-orchestration` is your source of truth
-   ```
-   With:
-   ```
-   GitHub repo `<your-org>/xstockstrat-orchestration` is your source of truth
-   ```
-
-3. **`docs/setup/digitalocean.md` L141**: Replace:
-   ```
-   3. Select repo: `davcs86/xstockstrat-orchestration`
-   ```
-   With:
-   ```
-   3. Select repo: `<your-org>/xstockstrat-orchestration`
-   ```
-
-4. **`scripts/setup-branch-protection.sh` L11**: Replace:
-   ```bash
-   GITHUB_USER="${GITHUB_USER:-davcs86}"
-   ```
-   With:
-   ```bash
-   GITHUB_USER="${GITHUB_USER:?GITHUB_USER env var is required (your GitHub username or org)}"
-   ```
-   This forces callers to set `GITHUB_USER` explicitly — no silent default to the maintainer's personal account.
-
-5. **`scripts/subtree-setup.sh` L12**: Same replacement as above (same pattern):
-   ```bash
-   GITHUB_USER="${GITHUB_USER:?GITHUB_USER env var is required (your GitHub username or org)}"
-   ```
-
-6. **`.do/app.yaml` and `.do/app.dev.yaml`**: Replace all 14 occurrences in each file of:
-   ```yaml
-         repo: davcs86/xstockstrat-orchestration
-   ```
-   With:
-   ```yaml
-         repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
-   ```
-   Use a placeholder that is clearly not a real value so maintainers know to substitute it.
+Replace all `davcs86` occurrences with `<your-org>` (docs/scripts) or `YOUR_GITHUB_ORG` (.do/ files).
+Use `${GITHUB_USER:?GITHUB_USER env var is required}` in scripts to force explicit configuration.
 
 **Verification**:
 ```bash
 grep -rn "davcs86" docs/ scripts/ .do/
-# Expected: no output (all occurrences replaced)
-grep -rn "YOUR_GITHUB_ORG\|your-org" .do/ docs/setup/
-# Expected: replacement strings present
+# Expected: no output
 ```
 
 ---
@@ -641,63 +567,34 @@ grep -rn "YOUR_GITHUB_ORG\|your-org" .do/ docs/setup/
 
 1. **Update the comment header in `services/xstockstrat-identity/migrations/002_seed_admin.up.sql`**:
 
-   Change:
-   ```sql
-   -- Migration: 002_seed_admin.sql
-   -- Service: xstockstrat-identity
-   -- Seeds the default admin user for development and testing.
-   -- Email: admin@localhost  Password: admin
-   -- bcrypt hash generated with 10 rounds.
-   ```
-   To:
-   ```sql
-   -- Migration: 002_seed_admin.sql
-   -- Service: xstockstrat-identity
-   -- Seeds the default admin user for LOCAL DEVELOPMENT AND TESTING ONLY.
-   -- Default credentials: Email: admin@localhost  Password: admin
-   -- These credentials are ONLY safe for local Docker Compose dev environments.
-   -- In production, rotate this user's password immediately after first deployment.
-   -- The bcrypt hash below is a one-way hash of the string "admin" (10 rounds) — not a secret.
-   ```
+**Verification**:
+```bash
+git check-ignore -v .env.development 2>/dev/null || echo "not ignored"
+grep "APP_URL=http://localhost" .env.development
+```
 
-2. **Append a "Security Audit" section to `CONTRIBUTING.md`** (created in Step 6):
+---
 
-   ```markdown
-   ## Security Audit (Maintainers Only)
+### Step 11 — docs: Create `.env.production` and wire `APP_URL` into DO app specs (FR-10)
 
-   Before making this repository public, audit the full history of **all persistent
-   branches** (`main`, `main-dev`, and the current working branch). The `--all` flag
-   in the commands below covers every ref including `main` and `main-dev`.
+**Status**: `pending`
+**Service**: Root repo, `.do/`
+**Files**:
+- `.env.production` — create (confirmed absent)
+- `.do/app.yaml` — modify (add `APP_URL` to trader L286, insights L302, config-ui L318)
+- `.do/app.dev.yaml` — modify (add `APP_URL` to trader L310, insights L328, config-ui L346)
 
-   ```bash
-   # Fetch all remote branches so --all covers main and main-dev
-   git fetch --all
+**Reviewers**: none
 
-   # Check for common secret patterns across entire history (all branches)
-   git log -S 'AKIA' --all --oneline         # AWS key prefixes
-   git log -S 'ghp_' --all --oneline         # GitHub PATs
-   git log -S 'glpat-' --all --oneline       # GitLab tokens
-   git log -S 'sk_live_' --all --oneline     # Stripe live keys
-   git log -S '-----BEGIN' --all --oneline   # PEM private keys
-   git log -S 'devpassword' --all --oneline  # internal dev DB password
-   ```
+**Codebase Evidence**:
+- Confirmed absent: `.env.production` does not exist.
+- `.do/app.yaml` frontend `envs:` blocks lack `APP_URL` entry — confirmed for all three frontend services.
+- `.do/app.dev.yaml` same — all three frontend `envs:` blocks lack `APP_URL`.
+- `${APP_URL}` is a standard DO App Platform built-in; no setup required.
 
-   If any commits are found (on **any** branch — including main or main-dev), use
-   `git filter-repo` to scrub the pattern from the entire history before going public.
-   This rewrites all commit SHAs, so all collaborators must re-clone after the purge:
+**Instructions**:
 
-   ```bash
-   pip install git-filter-repo
-   # Replace the matched literal string across all history
-   git filter-repo --replace-text <(printf 'AKIA==>REDACTED<==\nghp_==>REDACTED<==')
-   # Force-push all rewritten refs (main, main-dev, feature branches)
-   git push origin --force --all
-   git push origin --force --tags
-   ```
-
-   The CI `secret-scan` job (trufflehog + gitleaks) runs on every PR automatically
-   going forward and scans the full commit history on each run.
-   ```
+Create `.env.production` with placeholder-only values documenting DO injection pattern. Wire `- key: APP_URL / value: ${APP_URL}` into all three frontend service `envs:` blocks in both `.do/app.yaml` and `.do/app.dev.yaml`.
 
 **Verification**:
 ```bash
