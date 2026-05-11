@@ -98,14 +98,8 @@ PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
 INDICATORS_ENDPOINT=xstockstrat-indicators:50054
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable
-APP_ENV=dev                            # dev | production
+APPLICATION_ENV=development            # development | production
 TRADING_MODE=paper                     # paper | live
-# Alpaca broker credentials (secrets — never stored in config service)
-ALPACA_API_KEY=<secret>
-ALPACA_API_SECRET=<secret>
-ALPACA_PAPER_URL=https://paper-api.alpaca.markets
-ALPACA_LIVE_URL=https://api.alpaca.markets
-ALPACA_PAPER=true
 ```
 
 ## Running Locally

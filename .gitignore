@@ -36,12 +36,28 @@
 .env
 .env.*
 !.env.example
+!.env.development
+!.env.production
+!.env.local
 **/.env
 **/.env.*
 !**/.env.example
+!**/.env.development
+!**/.env.production
+!**/.env.local
 
 # Docker
 **/docker-compose.override.yml
+
+# Secret file types — NEVER commit private keys or credential files
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.*
+credentials.*
+service-account*.json
+*-service-account.json
 
 # OS
 .DS_Store

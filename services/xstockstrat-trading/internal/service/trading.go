@@ -590,7 +590,7 @@ func (s *TradingService) RegisterBrokerAccount(ctx context.Context, req *trading
 	if !json.Valid([]byte(req.CredentialsJson)) {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "credentials_json is not valid JSON")
 	}
-	if s.cfg.AppEnv == "dev" && !req.IsPaper {
+	if s.cfg.ApplicationEnv == "development" && !req.IsPaper {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "only paper accounts are permitted in the dev environment")
 	}
 
@@ -670,51 +670,6 @@ func (s *TradingService) DeregisterBrokerAccountSvc(ctx context.Context, account
 	return nil
 }
 
-// EnsureAlpacaDefault creates an `alpaca-default` account from env vars if the broker pool is empty.
-// Called at startup for zero-config backward compatibility with single-Alpaca deployments.
-func (s *TradingService) EnsureAlpacaDefault(ctx context.Context) {
-	s.brokersMu.RLock()
-	poolLen := len(s.brokers)
-	s.brokersMu.RUnlock()
-
-	if poolLen > 0 {
-		return
-	}
-	if s.cfg.AlpacaAPIKey == "" || s.cfg.AlpacaAPISecret == "" {
-		slog.Warn("EnsureAlpacaDefault: ALPACA_API_KEY/SECRET not set and broker pool is empty; register an account manually")
-		return
-	}
-	if s.encKey == "" {
-		slog.Warn("EnsureAlpacaDefault: BROKER_ACCOUNTS_ENCRYPTION_KEY not set; cannot create alpaca-default account")
-		return
-	}
-
-	creds := alpacaCreds{APIKey: s.cfg.AlpacaAPIKey, APISecret: s.cfg.AlpacaAPISecret}
-	credsJSON, _ := json.Marshal(creds)
-	encCreds, err := repository.EncryptCredentials(s.encKey, credsJSON)
-	if err != nil {
-		slog.Error("EnsureAlpacaDefault: encrypt credentials failed", "error", err)
-		return
-	}
-
-	rec := &repository.BrokerAccountRecord{
-		ID:             "alpaca-default",
-		DisplayName:    "Alpaca Default",
-		BrokerType:     int32(commonv1.BrokerType_BROKER_TYPE_ALPACA),
-		IsPaper:        s.cfg.AlpacaPaper,
-		IsActive:       true,
-		UserID:         "default",
-		CredentialsEnc: encCreds,
-	}
-	if err := s.accountRepo.CreateBrokerAccount(ctx, rec); err != nil {
-		slog.Warn("EnsureAlpacaDefault: CreateBrokerAccount failed (may already exist)", "error", err)
-	}
-
-	if err := s.LoadBrokerPool(ctx); err != nil {
-		slog.Error("EnsureAlpacaDefault: LoadBrokerPool failed", "error", err)
-	}
-}
-
 // instantiateBrokerLocked creates a broker.Broker from plaintext credentials JSON.
 // Caller must not hold brokersMu (it acquires no lock itself).
 func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRecord, plaintext []byte) (broker.Broker, error) {
@@ -739,8 +694,8 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 		return broker.NewClient(broker.ClientConfig{
 			APIKey:    creds.APIKey,
 			APISecret: creds.APISecret,
-			PaperURL:  s.cfg.AlpacaPaperURL,
-			LiveURL:   s.cfg.AlpacaLiveURL,
+			PaperURL:  "https://paper-api.alpaca.markets",
+			LiveURL:   "https://api.alpaca.markets",
 			Paper:     rec.IsPaper,
 		}), nil
 	}
@@ -795,7 +750,7 @@ func (s *TradingService) resolveTradingMode(requested commonv1.TradingMode) comm
 	if requested != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
 		return requested
 	}
-	paper := s.cfgW.GetBool("trading.broker.paper", s.cfg.AlpacaPaper)
+	paper := s.cfgW.GetBool("trading.broker.paper", s.cfg.TradingMode == "paper")
 	if paper {
 		return commonv1.TradingMode_TRADING_MODE_PAPER
 	}
