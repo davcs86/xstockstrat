@@ -121,8 +121,33 @@
 
 ## Session 2026-05-11T00:09:00Z — sdd-execute Step 7
 
-### Step 7 — Add secret-scan CI job [done]
-- Created `.gitleaks.toml` (minimal — extends default ruleset only, no allowlist); appended `secret-scan` job to `.github/workflows/ci.yml`.
-- No allowlist entries for placeholder credentials: Steps 1–4 removed all hardcoded dev credentials from the codebase, so no exceptions are needed.
-- Files modified: `.gitleaks.toml` (created), `.github/workflows/ci.yml`
-- Deviations: none
+**Boot**: Loaded authoritative spec from `origin/feature/make-repo-public-secure` (HEAD = 366a20f, Step 6 PR #143 merged).
+
+**Branch sync deviation**: The standard `git merge -X ours origin/main-dev` ran locally and produced merge commit `ec2b753` (brought in CHANGELOG + frontend-reverse-proxy SDD artifacts). `git push origin feature/make-repo-public-secure` failed with HTTP 403 (same harness git-proxy issue seen at the end of the prior sdd-execute session for frontend-reverse-proxy). All 4 retries (2s/4s/8s/16s backoff) failed. Local merge reset to `origin/feature/make-repo-public-secure` HEAD; step branch created from that point. Main-dev merge into the integration branch remains TODO.
+
+### Step 7 — Add secret-scan CI job to .github/workflows/ci.yml [done]
+- Appended `secret-scan` job to `.github/workflows/ci.yml` after L377 — uses `actions/checkout@v6` with `fetch-depth: 0`, `trufflesecurity/trufflehog@main` with `--only-verified` on `base=default_branch / head=HEAD`, and `gitleaks/gitleaks-action@v2` with `GITHUB_TOKEN`. Inherits existing `pull_request` trigger on main-dev/main.
+- Created `.gitleaks.toml` at repo root with `[extend] useDefault = true` plus an `[[allowlists]]` block covering 6 known-safe placeholder patterns scoped to `.env.example`, `docker-compose.yml`, `docs/.*`.
+- Files modified: `.github/workflows/ci.yml`, `.gitleaks.toml`
+- Deviations: none in step content. Branch-sync deviation (main-dev merge unpushed) tracked under Open Items.
+
+## Open Items
+
+| Item | Earliest step | Notes |
+|---|---|---|
+| Push main-dev merge into `feature/make-repo-public-secure` | next branch sync | Local `git push` returns HTTP 403; either resolve harness git proxy permissions or perform the merge via the GitHub web UI / MCP API once content stabilises. Per-step PRs continue to land off `366a20f` until then. |
+
+### Session summary
+**Steps this session**: [7]
+**Progress**: 7 done / 11 total
+**Stopped at**: Step 7 (per-step PR opened; SDD rule = one step per session)
+**Next**: `/sdd-execute make-repo-public-secure next` (Step 8)
+
+## Session 2026-05-11T00:10:00Z — sdd-execute Step 7 correction
+
+### Step 7 — .gitleaks.toml allowlist removed [correction]
+- PR #147 (previous session) created `.gitleaks.toml` with `[[allowlists]]` covering 6 placeholder patterns (`devpassword`, `dev-jwt-secret-change-in-production`, etc.).
+- User instruction this session: "do not add placeholder credentials to the allowlist — there should not be any placeholder/fallback in use." Steps 1–4 removed all hardcoded dev credentials from the codebase, so no allowlist exceptions are needed.
+- Correction: `.gitleaks.toml` updated to `[extend] useDefault = true` only — no allowlist section.
+- Files modified: `.gitleaks.toml`
+- Deviations: allowlist removed; see Deviation Log.
