@@ -44,4 +44,4 @@ _(Snapshot finalized by /sdd-spec 2026-05-11. Re-run /sdd-spec if the registry c
 
 ## Next Action
 
-`/sdd-review make-repo-public-secure impl-spec` — validate implementation spec, then `/sdd-execute make-repo-public-secure`
+`/sdd-execute make-repo-public-secure next` — execute Step 2 (remove JWT fallback from identity service)
