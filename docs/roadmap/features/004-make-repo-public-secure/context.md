@@ -151,3 +151,23 @@
 - Correction: `.gitleaks.toml` updated to `[extend] useDefault = true` only — no allowlist section.
 - Files modified: `.gitleaks.toml`
 - Deviations: allowlist removed; see Deviation Log.
+
+## Session 2026-05-11T01:00:00Z — sdd-execute Step 8
+
+### Step 8 — docs: Replace `davcs86` GitHub username with generic references [done]
+- Replaced all 31 `davcs86` occurrences across docs, scripts, and DO app specs with generic placeholders.
+- `docs/setup/getting-started.md` L40: `davcs86/xstockstrat-orchestration` → `<your-org>/xstockstrat-orchestration`
+- `docs/setup/digitalocean.md` L24, L141: same replacement
+- `scripts/setup-branch-protection.sh` L11: `GITHUB_USER="${GITHUB_USER:-davcs86}"` → fail-fast `${GITHUB_USER:?...}` (no default)
+- `scripts/subtree-setup.sh` L12: same fail-fast replacement
+- `.do/app.yaml`: 14 occurrences `repo: davcs86/xstockstrat-orchestration` → `repo: YOUR_GITHUB_ORG/xstockstrat-orchestration`
+- `.do/app.dev.yaml`: 14 occurrences, same replacement
+- Verification: `grep -r davcs86 docs/ scripts/ .do/` returned zero matches.
+- Files modified: `docs/setup/getting-started.md`, `docs/setup/digitalocean.md`, `scripts/setup-branch-protection.sh`, `scripts/subtree-setup.sh`, `.do/app.yaml`, `.do/app.dev.yaml`
+- Deviations: none
+
+### Session summary
+**Steps this session**: [8]
+**Progress**: 8 done / 11 total
+**Stopped at**: Step 8 (per-step PR opened; SDD rule = one step per session)
+**Next**: `/sdd-execute make-repo-public-secure next` (Step 9)
