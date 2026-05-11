@@ -40,3 +40,20 @@
   - **DO app specs clean**: `.do/app.yaml` and `.do/app.dev.yaml` use `${<service>.PRIVATE_URL}` and `${db.DATABASE_URL}` injection — no inline credentials other than the GitHub repo path (`davcs86/...`).
   - **Admin seed migration**: `services/xstockstrat-identity/migrations/002_seed_admin.up.sql` exposes default password "admin" in comment — comment updated to clarify dev-only scope; bcrypt hash is not a secret.
   - **No AKIA/ghp_/sk_live_ tokens found**: grep over full repo found zero real secret token patterns.
+
+### Step 1 — Harden `docker-compose.yml` hardcoded dev credentials [done]
+- Used `${VAR:?error}` (no fallback) instead of spec's `${VAR:-default}` — user explicitly requested no fallbacks; fail-fast is safer for a public repo.
+- Files modified: `docker-compose.yml`, `.env.example`
+- Deviations: (1) `${VAR:?}` instead of `${VAR:-default}`; (2) `.env.example` added to file list to document the now-required `POSTGRES_PASSWORD` variable.
+
+## GitHub Secrets Reference (set in GitHub → Settings → Secrets and variables → Actions)
+
+| Secret | Workflow | How to obtain |
+|---|---|---|
+| `DIGITALOCEAN_ACCESS_TOKEN` | deploy-dev, deploy-prod | DigitalOcean → API → Personal Access Tokens |
+| `DO_DEV_APP_ID` | deploy-dev | `doctl apps list` after creating dev app |
+| `DO_PROD_APP_ID` | deploy-prod | `doctl apps list` after creating prod app |
+| `BUF_TOKEN` | deploy-dev, deploy-prod | buf.build → Settings → API Tokens |
+| `GITHUB_TOKEN` | secret-scan (gitleaks) | Auto-provided by GitHub Actions — no setup needed |
+
+**Note**: `POSTGRES_PASSWORD`, `DATABASE_URL`, and `JWT_SECRET` are local dev vars set in `.env` (not GitHub secrets). In production they are injected by DigitalOcean App Platform from the managed database component and app environment config — never stored in GitHub secrets.

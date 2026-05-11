@@ -36,12 +36,14 @@ services:
       - xstockstrat
     restart: unless-stopped
 
+  # Required .env vars for this service: POSTGRES_PASSWORD, DATABASE_URL
+  # Set these in .env (copy .env.example to .env). Never commit .env.
   timescaledb:
     image: timescale/timescaledb:latest-pg16
     container_name: xstockstrat-db
     environment:
       POSTGRES_USER: xstockstrat
-      POSTGRES_PASSWORD: devpassword
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}
       POSTGRES_DB: xstockstrat
     ports:
       - "5432:5432"
@@ -62,7 +64,7 @@ services:
       dockerfile: scripts/Dockerfile.migrate
     container_name: xstockstrat-db-migrator
     environment:
-      DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
     volumes:
       - .:/repo
     networks:
@@ -81,7 +83,7 @@ services:
     environment:
       GRPC_PORT: "50060"
       HTTP_PORT: "8060"
-      DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
       APP_ENV: dev
       TRADING_MODE: paper
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -110,7 +112,7 @@ services:
       GRPC_PORT: "50057"
       HTTP_PORT: "8057"
       CONFIG_ENDPOINT: xstockstrat-config:50060
-      DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
       APP_ENV: dev
       TRADING_MODE: paper
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -142,8 +144,8 @@ services:
       HTTP_PORT: "8058"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
-      DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
-      JWT_SECRET: dev-jwt-secret-change-in-production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - copy .env.example to .env (run: openssl rand -hex 32)}
       APP_ENV: dev
       TRADING_MODE: paper
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -177,7 +179,7 @@ services:
       HTTP_PORT: "8059"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
-      DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
       APP_ENV: dev
       TRADING_MODE: paper
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -212,7 +214,7 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
       ALPACA_API_KEY: ${ALPACA_API_KEY:-your-api-key}
       ALPACA_API_SECRET: ${ALPACA_API_SECRET:-your-api-secret}
       ALPACA_BASE_URL: https://paper-api.alpaca.markets
@@ -312,7 +314,7 @@ services:
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
       APP_ENV: dev
       TRADING_MODE: paper
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -350,7 +352,7 @@ services:
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
       APP_ENV: dev
       TRADING_MODE: paper
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -387,7 +389,7 @@ services:
       PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
       APP_ENV: dev
       TRADING_MODE: paper
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -481,7 +483,7 @@ services:
     environment:
       # Connect-RPC HTTP endpoint for xstockstrat-config
       CONFIG_ENDPOINT: http://xstockstrat-config:8060
-      DATABASE_URL: postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
       APP_ENV: dev
       TRADING_MODE: paper
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
