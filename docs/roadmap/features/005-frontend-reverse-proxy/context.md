@@ -1,8 +1,8 @@
 # Context: frontend-reverse-proxy
 
-**Feature**: `docs/roadmap/features/002-frontend-reverse-proxy/feature.md`
-**Product Spec**: `docs/roadmap/features/002-frontend-reverse-proxy/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/002-frontend-reverse-proxy/implementation-spec.md`
+**Feature**: `docs/roadmap/features/005-frontend-reverse-proxy/feature.md`
+**Product Spec**: `docs/roadmap/features/005-frontend-reverse-proxy/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/005-frontend-reverse-proxy/implementation-spec.md`
 
 ---
 
@@ -62,3 +62,30 @@
 - xstockstrat-config-ui owner (routing + config mutations)
 
 **Feature status**: `implementation-ready` (draft product-spec still; `/sdd-review product-spec` recommended before execution)
+
+---
+
+## Session 2026-05-11 — sdd-review impl-spec
+
+**Review result**: ✓ PASS — All 6 steps pass quality checks; valid DAG ordering; no blocking failures.
+
+**Per-step quality**: All steps have populated Codebase Evidence, exact file paths, runnable verification commands, and reference real symbols.
+
+**Step ordering**: Valid DAG. Step 1 → Step 2 (depends on nginx.conf); Steps 3–5 independent; Step 6 depends on Steps 2–5. No circular or forward dependencies.
+
+**Overlap findings** (3 WARN, 0 FAIL):
+1. ⚠ `002-broker-accounts-ui` (code-completed) — modifies all 3 frontends; merge-conflict risk on component files. Mitigation: merge frontend-reverse-proxy first (only touches `next.config.js`, not components).
+2. ⚠ `003-formula-management-ui` (implementation-ready) — modifies `xstockstrat-insights`. Mitigation: routing baseline merges first.
+3. ⚠ `004-make-repo-public-secure` (in-progress) — modifies all 3 frontends and `.do/app.yaml/.dev.yaml`. Mitigation: frontend-reverse-proxy should merge before this so DO app specs can be updated with routing awareness.
+
+**Recommended merge sequence**:
+1. `005-frontend-reverse-proxy` (this feature — baseline routing)
+2. `002-broker-accounts-ui` (UI features on top)
+3. `003-formula-management-ui` (insights additions)
+4. `004-make-repo-public-secure` (DO app specs with routing awareness)
+
+**Decision**: No `merge-order.md` entries added (all overlaps are WARN, not FAIL). Merge sequencing is advisory; reviewers should coordinate.
+
+**Feature status**: `implementation-ready` (unchanged — impl-spec review is advisory).
+
+**Next action**: `/sdd-execute frontend-reverse-proxy` — begin step-by-step execution.

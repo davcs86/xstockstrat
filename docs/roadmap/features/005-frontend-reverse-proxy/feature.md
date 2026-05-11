@@ -13,6 +13,7 @@
 |---|---|---|---|
 | 2026-05-11 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-11 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
+| 2026-05-11 | `implementation-ready` (unchanged) | /sdd-review | Impl-spec review PASS — all 6 steps PASS quality checks, valid DAG, 3 WARN overlaps (advisory) |
 
 ---
 
@@ -41,4 +42,4 @@ Snapshot from docs/runbooks/reviewer-registry.md, fixed at implementation-ready.
 
 ## Next Action
 
-`/sdd-review frontend-reverse-proxy impl-spec` — validate implementation spec, then `/sdd-execute frontend-reverse-proxy` to begin execution
+`/sdd-execute frontend-reverse-proxy` — begin step-by-step execution (impl-spec review passed)
