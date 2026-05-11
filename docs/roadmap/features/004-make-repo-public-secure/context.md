@@ -107,10 +107,9 @@
 ## Session 2026-05-11T00:08:00Z — sdd-execute Step 6
 
 ### Step 6 — Add SECURITY.md and CONTRIBUTING.md at repo root [done]
-- Created `SECURITY.md` with responsible disclosure policy (emailing contact, scope, coordinated disclosure).
-- Created `CONTRIBUTING.md` based on `docs/setup/getting-started.md` content: prerequisites table, 5-step local setup (clone → env → bootstrap → docker compose → verify), branch naming, fork-and-PR workflow, code style, test commands by language, proto change process.
-- Files modified: `SECURITY.md`, `CONTRIBUTING.md`
-- Deviations: CONTRIBUTING.md sourced from getting-started.md (user instruction) rather than the spec's inline template; content is equivalent but more accurate to the actual repo setup flow.
+- Created `CONTRIBUTING.md` as a slim reference: short-form setup snippet + link to getting-started.md, branch naming, PR workflow, code style table, test commands pointer, proto change process. SECURITY.md was not created (user: too generic; can be added later with real contact details).
+- Files modified: `CONTRIBUTING.md`
+- Deviations: (1) `SECURITY.md` omitted per user instruction; (2) CONTRIBUTING.md references getting-started.md for setup details rather than duplicating them.
 
 ## Session 2026-05-11T00:07:00Z — sdd-execute Step 5
 

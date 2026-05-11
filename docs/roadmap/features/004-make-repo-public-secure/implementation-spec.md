@@ -301,153 +301,12 @@ git check-ignore -v .env.development 2>/dev/null || echo "not ignored"
 
 **Instructions**:
 
-**Create `SECURITY.md`** at repo root with the following content:
-
-```markdown
-# Security Policy
-
-## Reporting Vulnerabilities
-
-**Do not open a public GitHub issue for security vulnerabilities.**
-
-Please report security issues by emailing **security@<your-domain>** (replace with the
-maintainer contact before making the repo public). Include:
-- A description of the vulnerability
-- Steps to reproduce
-- Potential impact
-
-We aim to respond within 72 hours and to issue a patch within 14 days for confirmed
-critical or high-severity issues.
-
-## Scope
-
-This policy covers the xstockstrat-orchestration repository and all services under
-`services/`. Individual service repos (`services/*`) are mirrors; report issues here.
-
-## Out of Scope
-
-- Issues in third-party libraries (report upstream)
-- Issues requiring physical access to infrastructure
-- Social engineering attacks
-
-## Disclosure Policy
-
-We follow coordinated disclosure. Please give us reasonable time to patch before any
-public disclosure.
-```
-
-**Create `CONTRIBUTING.md`** at repo root covering all items in FR-5:
-
-```markdown
-# Contributing to xstockstrat-orchestration
-
-Thank you for your interest in contributing. This guide covers how to set up the local
-development environment, how to submit changes, and what style requirements apply.
-
-## Prerequisites
-
-| Tool | Version | macOS (Homebrew) |
-|---|---|---|
-| Git | any | pre-installed |
-| Docker with Compose v2 | any | `brew install --cask docker` |
-| Go | 1.25 | `brew install go` |
-| Python | 3.12 | `brew install python@3.12` |
-| Node.js | 22 | `brew install node@22` |
-| pnpm | 9.15.0 | `npm install -g pnpm@9.15.0` |
-
-## Local Setup (paper trading — no real credentials required)
-
-1. **Clone**:
-   ```bash
-   git clone https://github.com/<your-fork>/xstockstrat-orchestration.git
-   cd xstockstrat-orchestration
-   ```
-
-2. **Environment file**:
-   ```bash
-   cp .env.example .env
-   ```
-   Edit `.env` and at minimum set:
-   - `ALPACA_API_KEY` and `ALPACA_API_SECRET` — create a free Alpaca paper trading
-     account at [alpaca.markets](https://alpaca.markets). Paper trading is free and
-     requires no real money. See `docs/setup/alpaca.md`.
-   - `JWT_SECRET` — run `openssl rand -hex 32` to generate a random value.
-   - `POSTGRES_PASSWORD` — choose any password for the local TimescaleDB container.
-     Set `DATABASE_URL` to match (replace `devpassword` with your chosen password).
-   - Leave `ALPACA_PAPER=true` and all other values at their defaults.
-
-3. **Bootstrap and start**:
-   ```bash
-   ./scripts/bootstrap.sh
-   docker compose up -d
-   ```
-
-4. **Verify**:
-   ```bash
-   docker compose ps        # all services should show Up or healthy
-   curl http://localhost:8060/health   # config service health check
-   ```
-
-   Full verification steps are in `docs/setup/getting-started.md`.
-
-## Branch Naming
-
-| Branch type | Convention | Example |
-|---|---|---|
-| Feature | `feature/<slug>` | `feature/add-new-indicator` |
-| Bug fix | `hotfix/<slug>` | `hotfix/fix-fill-detection` |
-| Harness | `claude/<description>` | `claude/add-claude-docs` |
-
-Always branch from and open PRs into `main-dev`. **Never target `main` directly.**
-
-## Fork and PR Workflow
-
-1. Fork the repo on GitHub.
-2. Create a branch from `main-dev` using the naming convention above.
-3. Make your changes, following the code style requirements below.
-4. Open a pull request targeting `main-dev`.
-5. Wait for CI to pass (all jobs must be green).
-6. Request review from a maintainer.
-
-## Code Style Requirements
-
-| Language | Tool | How to run |
-|---|---|---|
-| Go | `golangci-lint v2.5.0` | `cd services/<name> && GOWORK=off golangci-lint run` |
-| Python | `ruff` | `cd services/<name> && ruff check . && ruff format --check .` |
-| Node.js / TypeScript | `eslint` | `cd services/<name> && pnpm run lint` |
-| Proto | `buf lint` | `cd packages/proto && buf lint` |
-
-## Running Tests
-
-```bash
-# Go service
-cd services/xstockstrat-trading && GOWORK=off go test ./...
-
-# Python service
-cd services/xstockstrat-indicators && pip install -e ".[dev]" && pytest
-
-# Node.js service
-cd services/xstockstrat-ledger && pnpm run test:coverage
-```
-
-## Proto Changes
-
-All `.proto` changes require a PR to this repository first. See
-`docs/runbooks/approval-flow.md` for the approval gate requirements and
-`docs/runbooks/proto-versioning.md` for breaking-change procedures.
-
-## License
-
-By contributing, you agree that your contributions will be licensed under the same
-license as this repository.
-```
+See Deviation Log — SECURITY.md was omitted per user instruction. CONTRIBUTING.md was created as a slim reference document.
 
 **Verification**:
 ```bash
-ls -la SECURITY.md CONTRIBUTING.md
-# Expected: both files exist
-grep "Do not open a public GitHub issue" SECURITY.md
+ls -la CONTRIBUTING.md
+# Expected: file exists
 grep "openssl rand -hex 32" CONTRIBUTING.md
 ```
 
@@ -712,62 +571,6 @@ grep "Security Audit" CONTRIBUTING.md
 **Status**: `pending`
 **Service**: Root repo
 **Files**:
-- `.env.development` — create (confirmed absent)
-
-**Reviewers**: none
-
-**Codebase Evidence**:
-- Confirmed absent: `.env.development` does not exist at repo root.
-- Current `.gitignore` blocks this file — Step 5 must add `!.env.development` carve-out first.
-- `APP_URL=http://localhost` is safe for local dev; Next.js auto-loads `.env.development` in `next dev`.
-
-**Instructions**:
-
-Create `.env.development` with non-secret local-dev defaults: `APP_URL=http://localhost`, `NODE_ENV=development`, `TRADING_MODE=paper`, `ALPACA_PAPER=true`, `LOG_LEVEL=info`, `OTEL_ENABLED=false`.
-
-**Verification**:
-```bash
-git check-ignore -v .env.development 2>/dev/null || echo "not ignored"
-grep "APP_URL=http://localhost" .env.development
-```
-
----
-
-### Step 11 — docs: Create `.env.production` and wire `APP_URL` into DO app specs (FR-10)
-
-**Status**: `pending`
-**Service**: Root repo, `.do/`
-**Files**:
-- `.env.production` — create (confirmed absent)
-- `.do/app.yaml` — modify (add `APP_URL` to trader L286, insights L302, config-ui L318)
-- `.do/app.dev.yaml` — modify (add `APP_URL` to trader L310, insights L328, config-ui L346)
-
-**Reviewers**: none
-
-**Codebase Evidence**:
-- Confirmed absent: `.env.production` does not exist.
-- `.do/app.yaml` frontend `envs:` blocks lack `APP_URL` entry — confirmed for all three frontend services.
-- `.do/app.dev.yaml` same — all three frontend `envs:` blocks lack `APP_URL`.
-- `${APP_URL}` is a standard DO App Platform built-in; no setup required.
-
-**Instructions**:
-
-Create `.env.production` with placeholder-only values documenting DO injection pattern. Wire `- key: APP_URL / value: ${APP_URL}` into all three frontend service `envs:` blocks in both `.do/app.yaml` and `.do/app.dev.yaml`.
-
-**Verification**:
-```bash
-git check-ignore -v .env.production 2>/dev/null || echo "not ignored"
-grep -c "APP_URL" .do/app.yaml    # Expected: at least 3
-grep -c "APP_URL" .do/app.dev.yaml  # Expected: at least 3
-```
-
----
-
-### Step 10 — docs: Create `.env.development` with local-dev defaults (FR-9)
-
-**Status**: `pending`
-**Service**: Root repo
-**Files**:
 - `.env.development` — create (confirmed absent: not present in root `ls` or `.env*` glob output)
 
 **Reviewers**: none
@@ -935,9 +738,9 @@ grep -c "APP_URL" .do/app.dev.yaml
 ## Deviation Log
 
 ### Deviation: Step 6 — Add SECURITY.md and CONTRIBUTING.md at repo root
-**Spec said**: Use the inline CONTRIBUTING.md template from the spec Instructions section.
-**Actual**: Based CONTRIBUTING.md on `docs/setup/getting-started.md` content (user instruction). Uses the actual variable table, bootstrap steps, and test commands from that file rather than the abbreviated spec template.
-**Reason**: getting-started.md is the canonical local setup reference — mirroring it in CONTRIBUTING.md keeps the two in sync and ensures accuracy (e.g., correct tool versions, actual env var requirements after Steps 1–4).
+**Spec said**: Create both `SECURITY.md` and `CONTRIBUTING.md` using the inline templates; CONTRIBUTING.md should fully reproduce setup steps.
+**Actual**: (1) `SECURITY.md` was not created — user found the spec template too generic; (2) `CONTRIBUTING.md` was written as a slim reference document that points to `docs/setup/getting-started.md` for setup steps rather than duplicating them. Only unique content (branch naming, PR workflow, code style, proto changes) is included directly.
+**Reason**: User instruction. SECURITY.md can be added later with project-specific contact details. A slim CONTRIBUTING.md that leverages the existing getting-started.md is more maintainable and avoids content drift.
 
 ### Deviation: Step 5 — Add .gitignore entries for secret file patterns and .env file carve-outs
 **Spec said**: Add `!.env.development` and `!.env.production` carve-outs immediately after `!.env.example` in the root-level env block.
