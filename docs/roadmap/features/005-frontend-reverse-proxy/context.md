@@ -104,9 +104,9 @@
 - Deviations: 1 — verification (`nginx -t`) not runnable in sandbox (no Docker daemon, no local nginx, apt mirrors 404). Tracked as follow-up to Step 6, which builds + starts the full stack and would fail fast if the config is invalid. Full detail in Deviation Log.
 
 ### Step 2 — Create Dockerfile for nginx reverse proxy [done]
-- Wrote `Dockerfile.nginx` at repo root with nginx:1.27-alpine base, COPY nginx.conf, HEALTHCHECK (10s/3s/5s/3r), EXPOSE 80, CMD with daemon off
-- Files modified: `Dockerfile.nginx`
-- Deviations: 1 — verification (`docker build`) not runnable in sandbox (no Docker daemon). Same as Step 1; deferred to Step 6 full-stack integration test.
+- Wrote `services/xstockstrat-nginx/Dockerfile` (moved from repo root to treat nginx as a service) with nginx:1.27-alpine base, COPY nginx.conf, HEALTHCHECK (10s/3s/5s/3r), EXPOSE 80, CMD with daemon off
+- Files modified: `services/xstockstrat-nginx/Dockerfile`
+- Deviations: 2 — (1) location moved to services/ per user feedback; (2) verification (`docker build`) not runnable in sandbox (no Docker daemon). Same as Step 1; deferred to Step 6 full-stack integration test.
 
 ## Open Items
 
