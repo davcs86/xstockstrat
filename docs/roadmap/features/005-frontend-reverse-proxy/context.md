@@ -108,3 +108,9 @@
 | Item | Earliest step | Notes |
 |---|---|---|
 | Confirm `nginx -t` passes against `nginx.conf` | Step 6 | Step 6 verification runs `docker-compose build` + `docker-compose up -d`; nginx will refuse to start if the config is invalid. If Step 6 verification runs in an env with Docker, this gap closes automatically.
+
+### Session summary
+**Steps this session**: [1]
+**Progress**: 1 done / 6 total
+**Stopped at**: Step 1 (per-step PR opened; SDD rule = one step per session)
+**Next**: `/sdd-execute frontend-reverse-proxy next`

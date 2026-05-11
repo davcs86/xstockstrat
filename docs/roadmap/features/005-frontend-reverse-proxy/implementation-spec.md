@@ -1,6 +1,6 @@
 # Implementation Spec: frontend-reverse-proxy
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-11
 **Feature**: `docs/roadmap/features/005-frontend-reverse-proxy/feature.md`
 **Total Steps**: 6
