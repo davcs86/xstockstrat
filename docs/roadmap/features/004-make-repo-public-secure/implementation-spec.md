@@ -284,7 +284,7 @@ git check-ignore -v .env.development 2>/dev/null || echo "not ignored"
 
 ### Step 6 — docs: Add SECURITY.md and CONTRIBUTING.md at repo root
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: Root repo
 **Files**:
 - `SECURITY.md` — create (confirmed absent: not present in root-level `ls` output)
@@ -712,62 +712,6 @@ grep "Security Audit" CONTRIBUTING.md
 **Status**: `pending`
 **Service**: Root repo
 **Files**:
-- `.env.development` — create (confirmed absent)
-
-**Reviewers**: none
-
-**Codebase Evidence**:
-- Confirmed absent: `.env.development` does not exist at repo root.
-- Current `.gitignore` blocks this file — Step 5 must add `!.env.development` carve-out first.
-- `APP_URL=http://localhost` is safe for local dev; Next.js auto-loads `.env.development` in `next dev`.
-
-**Instructions**:
-
-Create `.env.development` with non-secret local-dev defaults: `APP_URL=http://localhost`, `NODE_ENV=development`, `TRADING_MODE=paper`, `ALPACA_PAPER=true`, `LOG_LEVEL=info`, `OTEL_ENABLED=false`.
-
-**Verification**:
-```bash
-git check-ignore -v .env.development 2>/dev/null || echo "not ignored"
-grep "APP_URL=http://localhost" .env.development
-```
-
----
-
-### Step 11 — docs: Create `.env.production` and wire `APP_URL` into DO app specs (FR-10)
-
-**Status**: `pending`
-**Service**: Root repo, `.do/`
-**Files**:
-- `.env.production` — create (confirmed absent)
-- `.do/app.yaml` — modify (add `APP_URL` to trader L286, insights L302, config-ui L318)
-- `.do/app.dev.yaml` — modify (add `APP_URL` to trader L310, insights L328, config-ui L346)
-
-**Reviewers**: none
-
-**Codebase Evidence**:
-- Confirmed absent: `.env.production` does not exist.
-- `.do/app.yaml` frontend `envs:` blocks lack `APP_URL` entry — confirmed for all three frontend services.
-- `.do/app.dev.yaml` same — all three frontend `envs:` blocks lack `APP_URL`.
-- `${APP_URL}` is a standard DO App Platform built-in; no setup required.
-
-**Instructions**:
-
-Create `.env.production` with placeholder-only values documenting DO injection pattern. Wire `- key: APP_URL / value: ${APP_URL}` into all three frontend service `envs:` blocks in both `.do/app.yaml` and `.do/app.dev.yaml`.
-
-**Verification**:
-```bash
-git check-ignore -v .env.production 2>/dev/null || echo "not ignored"
-grep -c "APP_URL" .do/app.yaml    # Expected: at least 3
-grep -c "APP_URL" .do/app.dev.yaml  # Expected: at least 3
-```
-
----
-
-### Step 10 — docs: Create `.env.development` with local-dev defaults (FR-9)
-
-**Status**: `pending`
-**Service**: Root repo
-**Files**:
 - `.env.development` — create (confirmed absent: not present in root `ls` or `.env*` glob output)
 
 **Reviewers**: none
@@ -933,6 +877,11 @@ grep -c "APP_URL" .do/app.dev.yaml
 ---
 
 ## Deviation Log
+
+### Deviation: Step 6 — Add SECURITY.md and CONTRIBUTING.md at repo root
+**Spec said**: Create both `SECURITY.md` and `CONTRIBUTING.md` using the inline templates; CONTRIBUTING.md should fully reproduce setup steps.
+**Actual**: (1) `SECURITY.md` was not created — user found the spec template too generic; (2) `CONTRIBUTING.md` was written as a slim reference document that points to `docs/setup/getting-started.md` for setup steps rather than duplicating them. Only unique content (branch naming, PR workflow, code style, proto changes) is included directly.
+**Reason**: User instruction. SECURITY.md can be added later with project-specific contact details. A slim CONTRIBUTING.md that leverages the existing getting-started.md is more maintainable and avoids content drift.
 
 ### Deviation: Step 5 — Add .gitignore entries for secret file patterns and .env file carve-outs
 **Spec said**: Add `!.env.development` and `!.env.production` carve-outs immediately after `!.env.example` in the root-level env block.

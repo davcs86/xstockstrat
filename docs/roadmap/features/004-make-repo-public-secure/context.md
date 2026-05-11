@@ -104,6 +104,13 @@
 - Files modified: `scripts/db-migrate.sh`
 - Deviations: none
 
+## Session 2026-05-11T00:08:00Z — sdd-execute Step 6
+
+### Step 6 — Add SECURITY.md and CONTRIBUTING.md at repo root [done]
+- Created `CONTRIBUTING.md` as a slim reference: short-form setup snippet + link to getting-started.md, branch naming, PR workflow, code style table, test commands pointer, proto change process. SECURITY.md was not created (user: too generic; can be added later with real contact details).
+- Files modified: `CONTRIBUTING.md`
+- Deviations: (1) `SECURITY.md` omitted per user instruction; (2) CONTRIBUTING.md references getting-started.md for setup details rather than duplicating them.
+
 ## Session 2026-05-11T00:07:00Z — sdd-execute Step 5
 
 ### Step 5 — Add .gitignore entries for secret file patterns and .env file carve-outs [done]
