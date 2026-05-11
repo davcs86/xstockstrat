@@ -33,6 +33,15 @@ FR-7. Verify CI/CD workflow files (`.github/workflows/`) do not contain hardcode
 
 FR-8. Add a `.env.example` file at the repo root listing all required environment variables with placeholder values and short descriptions, so contributors know what to configure without seeing real values.
 
+FR-9. Create a `.env.development` file at the repo root containing non-secret, local-development-only variable defaults that are safe to commit (e.g. `APP_URL=http://localhost`, `NODE_ENV=development`). This file must not contain real credentials; it overrides `.env.example` defaults for local dev workflows and is auto-loaded by Next.js in `next dev` mode.
+
+FR-10. Create a `.env.production` file at the repo root documenting the production variable structure — placeholder values only, no real secrets. Wire `APP_URL` from DigitalOcean App Platform's built-in variable into all three frontend services (`xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`) and any backend service that needs the public URL, in both `.do/app.yaml` and `.do/app.dev.yaml`:
+```yaml
+- key: APP_URL
+  value: ${APP_URL}
+```
+`${APP_URL}` is a DO App Platform built-in that resolves to the app's ingress domain at deploy time. The `.env.production` file must document this variable with an explanatory comment so contributors understand it is injected by DO and not set manually.
+
 ## Out of Scope
 
 - Rotating or invalidating any leaked credentials (handled by the security team out-of-band).
@@ -47,7 +56,8 @@ Exact service names from CLAUDE.md Service Registry — this is a cross-cutting 
 - `packages/proto/` — proto files and generated stubs (check for internal endpoints)
 - `scripts/` — bootstrap, migration, codegen scripts (check for embedded credentials)
 - `.github/workflows/` — CI/CD workflows (check for hardcoded secrets vs. `${{ secrets.* }}`)
-- Root-level config files — `docker-compose.yml`, `Dockerfile.codegen`, `.do/app*.yaml`
+- Root-level config files — `docker-compose.yml`, `Dockerfile.codegen`, `.do/app.yaml`, `.do/app.dev.yaml`
+- `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui` — frontend services that receive `APP_URL` from DO App Platform (FR-10)
 
 ## Proto Contract Changes
 
@@ -79,6 +89,8 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 6. `CONTRIBUTING.md` exists at the repo root with local setup instructions that do not require real credentials (paper trading / mock mode).
 7. `docs/` contains no hardcoded internal hostnames, account IDs, or internal URLs — all replaced with generic or environment-variable-based references.
 8. A maintainer can follow `CONTRIBUTING.md` and `.env.example` to run the full local dev stack in paper-trading mode with no access to internal systems.
+9. A `.env.development` file exists at the repo root with local-dev defaults (including `APP_URL=http://localhost`) — safe to commit, no secrets.
+10. A `.env.production` file exists at the repo root documenting the production variable structure with placeholder values; `APP_URL` is documented as a DO App Platform built-in and is wired via `${APP_URL}` in both `.do/app.yaml` and `.do/app.dev.yaml` for all three frontend services.
 
 ## Open Questions
 
