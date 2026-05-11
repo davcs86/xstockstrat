@@ -375,3 +375,25 @@ jobs:
           name: node-coverage-${{ matrix.service }}
           path: services/${{ matrix.service }}/coverage/lcov.info
           if-no-files-found: ignore
+
+  secret-scan:
+    name: Secret scan (trufflehog + gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history required for trufflehog git-history scan
+          fetch-depth: 0
+
+      - name: TruffleHog — scan full git history
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
+
+      - name: Gitleaks — scan working tree
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

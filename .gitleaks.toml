@@ -1,0 +1,22 @@
+title = "xstockstrat gitleaks config"
+
+[extend]
+# Extend the default gitleaks ruleset
+useDefault = true
+
+[[allowlists]]
+description = "Dev placeholder credentials behind env-var interpolation"
+regexes = [
+  # docker-compose uses ${VAR:-placeholder} syntax; these are not real secrets
+  '''devpassword''',
+  '''dev-jwt-secret-change-in-production''',
+  '''your-api-key''',
+  '''your-api-secret''',
+  '''change-me-in-production''',
+  '''change-me-n8n-webhook-secret''',
+]
+paths = [
+  '''.env\.example''',
+  '''docker-compose\.yml''',
+  '''docs/.*''',
+]

@@ -455,7 +455,7 @@ grep "openssl rand -hex 32" CONTRIBUTING.md
 
 ### Step 7 — service: Add secret-scan CI job to `.github/workflows/ci.yml`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows/`
 **Files**:
 - `.github/workflows/ci.yml` — modify
