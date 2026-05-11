@@ -25,11 +25,8 @@ func TestLoadFromEnv_Defaults(t *testing.T) {
 	if cfg.AlpacaDataURL != "https://data.alpaca.markets" {
 		t.Errorf("AlpacaDataURL default: got %q", cfg.AlpacaDataURL)
 	}
-	if !cfg.AlpacaPaper {
-		t.Error("AlpacaPaper default: want true")
-	}
-	if cfg.AppEnv != "dev" {
-		t.Errorf("AppEnv default: got %q, want dev", cfg.AppEnv)
+	if cfg.ApplicationEnv != "development" {
+		t.Errorf("ApplicationEnv default: got %q, want development", cfg.ApplicationEnv)
 	}
 	if cfg.TradingMode != "paper" {
 		t.Errorf("TradingMode default: got %q, want paper", cfg.TradingMode)
@@ -39,10 +36,8 @@ func TestLoadFromEnv_Defaults(t *testing.T) {
 func TestLoadFromEnv_Overrides(t *testing.T) {
 	t.Setenv("GRPC_PORT", "50099")
 	t.Setenv("HTTP_PORT", "8099")
-	t.Setenv("ALPACA_PAPER", "false")
-	t.Setenv("APP_ENV", "production")
+	t.Setenv("APPLICATION_ENV", "production")
 	t.Setenv("TRADING_MODE", "live")
-	t.Setenv("ALPACA_API_KEY", "test-api-key")
 
 	cfg := LoadFromEnv()
 
@@ -52,17 +47,11 @@ func TestLoadFromEnv_Overrides(t *testing.T) {
 	if cfg.HTTPPort != "8099" {
 		t.Errorf("HTTPPort override: got %q", cfg.HTTPPort)
 	}
-	if cfg.AlpacaPaper {
-		t.Error("AlpacaPaper override: want false")
-	}
-	if cfg.AppEnv != "production" {
-		t.Errorf("AppEnv override: got %q", cfg.AppEnv)
+	if cfg.ApplicationEnv != "production" {
+		t.Errorf("ApplicationEnv override: got %q", cfg.ApplicationEnv)
 	}
 	if cfg.TradingMode != "live" {
 		t.Errorf("TradingMode override: got %q", cfg.TradingMode)
-	}
-	if cfg.AlpacaAPIKey != "test-api-key" {
-		t.Errorf("AlpacaAPIKey override: got %q", cfg.AlpacaAPIKey)
 	}
 }
 

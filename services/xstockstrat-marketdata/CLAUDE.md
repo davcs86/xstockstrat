@@ -82,13 +82,12 @@ CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable
-APP_ENV=dev                            # dev | production
+APPLICATION_ENV=development            # development | production
 TRADING_MODE=paper                     # paper | live
 ALPACA_API_KEY=<secret>
 ALPACA_API_SECRET=<secret>
 ALPACA_BASE_URL=https://paper-api.alpaca.markets
 ALPACA_DATA_URL=https://data.alpaca.markets
-ALPACA_PAPER=true
 ```
 
 ## Ledger Events Emitted
