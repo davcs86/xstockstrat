@@ -103,3 +103,11 @@
 - Replaced `DB_URL="${DATABASE_URL:-postgres://xstockstrat:devpassword@...}"` with explicit bash error check + `exit 1` at `scripts/db-migrate.sh:19–24`.
 - Files modified: `scripts/db-migrate.sh`
 - Deviations: none
+
+## Session 2026-05-11T00:07:00Z — sdd-execute Step 5
+
+### Step 5 — Add .gitignore entries for secret file patterns and .env file carve-outs [done]
+- Added `!.env.development` and `!.env.production` carve-outs to the env-secrets block; also added `!**/.env.development` and `!**/.env.production` after `**/.env.*` (deviation: spec only specified root-level carve-outs but the `**/.env.*` wildcard would override them without the second pair).
+- Appended secret file type block: `*.pem`, `*.key`, `*.p12`, `*.pfx`, `secrets.*`, `credentials.*`, `service-account*.json`, `*-service-account.json`.
+- Files modified: `.gitignore`
+- Deviations: added `!**/.env.development` and `!**/.env.production` after `**/.env.*` — required for carve-outs to take effect; full detail in Deviation Log.
