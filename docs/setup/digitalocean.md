@@ -21,7 +21,7 @@ Architecture spec files:
 
 ## Prerequisites
 
-- GitHub repo `davcs86/xstockstrat-orchestration` is your source of truth
+- GitHub repo `<your-org>/xstockstrat-orchestration` is your source of truth
 - You have already cloned the repo locally and have `.env.example` ready to copy
 - `doctl` CLI installed (see Step 2)
 - `gh` CLI installed and authenticated (`gh auth login`)
@@ -138,7 +138,7 @@ App Platform pulls code from GitHub. Authorize once:
 
 1. DigitalOcean console → **Apps → Create App**
 2. Source: **GitHub** → **Authorize DigitalOcean** (grants read access to repos)
-3. Select repo: `davcs86/xstockstrat-orchestration`
+3. Select repo: `<your-org>/xstockstrat-orchestration`
 
 You do not need to complete the app creation wizard — cancel after authorization. The actual app creation is done via `doctl` in Step 5.
 

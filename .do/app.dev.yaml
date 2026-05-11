@@ -6,7 +6,7 @@ services:
 
   - name: xstockstrat-trading
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-trading
@@ -45,7 +45,7 @@ services:
 
   - name: xstockstrat-portfolio
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-portfolio
@@ -74,7 +74,7 @@ services:
 
   - name: xstockstrat-marketdata
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-marketdata
@@ -109,7 +109,7 @@ services:
 
   - name: xstockstrat-indicators
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-indicators
@@ -135,7 +135,7 @@ services:
 
   - name: xstockstrat-ingest
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-ingest
@@ -167,7 +167,7 @@ services:
 
   - name: xstockstrat-analysis
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-analysis
@@ -199,7 +199,7 @@ services:
 
   - name: xstockstrat-ledger
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-ledger
@@ -226,7 +226,7 @@ services:
 
   - name: xstockstrat-identity
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-identity
@@ -252,7 +252,7 @@ services:
 
   - name: xstockstrat-notify
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-notify
@@ -276,7 +276,7 @@ services:
 
   - name: xstockstrat-config
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-config
@@ -299,7 +299,7 @@ services:
 
   - name: xstockstrat-trader
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-trader
@@ -317,7 +317,7 @@ services:
 
   - name: xstockstrat-insights
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-insights
@@ -335,7 +335,7 @@ services:
 
   - name: xstockstrat-config-ui
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-config-ui
@@ -357,7 +357,7 @@ jobs:
   - name: db-migrator
     kind: PRE_DEPLOY
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     dockerfile_path: scripts/Dockerfile.migrate

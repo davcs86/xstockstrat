@@ -6,10 +6,10 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/..") && pwd)"
 cd "$REPO_ROOT"
 
-GITHUB_USER="${GITHUB_USER:-davcs86}"
+GITHUB_USER="${GITHUB_USER:?GITHUB_USER env var is required (your GitHub username or org)}"
 
 declare -A SERVICE_DESCRIPTIONS=(
   [xstockstrat-trading]="Order execution and trade lifecycle service (Go, gRPC port 50051)"

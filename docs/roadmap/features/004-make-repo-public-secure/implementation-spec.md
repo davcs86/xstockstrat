@@ -537,7 +537,7 @@ ls -la .gitleaks.toml
 
 ### Step 8 — docs: Replace `davcs86` GitHub username with generic references in docs and scripts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `scripts/`, `.do/`
 **Files**:
 - `docs/setup/getting-started.md` — modify (L40: `git clone https://github.com/davcs86/xstockstrat-orchestration.git`)
@@ -769,14 +769,17 @@ grep "NODE_ENV=development" .env.development
 
 ---
 
-### Step 11 — docs: Create `.env.production` and wire `APP_URL` into DO app specs (FR-10)
+### Step 11 — docs: Create `.env.production`, wire `APP_URL` into DO app specs, and substitute `YOUR_GITHUB_ORG` at deploy time (FR-10)
 
 **Status**: `pending`
-**Service**: Root repo, `.do/`
+**Service**: Root repo, `.do/`, `.github/workflows/`
 **Files**:
 - `.env.production` — create (confirmed absent: not present in root `ls` or `.env*` glob output)
 - `.do/app.yaml` — modify (add `APP_URL` env var to three frontend services: `xstockstrat-trader` at L286 envs block, `xstockstrat-insights` at L302 envs block, `xstockstrat-config-ui` at L318 envs block)
 - `.do/app.dev.yaml` — modify (add `APP_URL` env var to three frontend services: `xstockstrat-trader` at L310 envs block, `xstockstrat-insights` at L328 envs block, `xstockstrat-config-ui` at L346 envs block)
+- `.github/workflows/deploy-dev.yml` — modify (add sed substitution of `YOUR_GITHUB_ORG` before `doctl apps update`)
+- `.github/workflows/deploy-prod.yml` — modify (same sed substitution)
+- `docs/setup/digitalocean.md` — modify (Steps 5 and 6: add sed substitution before `doctl apps create` commands so the setup guide is self-contained)
 
 **Reviewers**: none
 
@@ -786,6 +789,8 @@ grep "NODE_ENV=development" .env.development
 - Confirmed via read of `.do/app.dev.yaml` L300–352: same pattern — `xstockstrat-trader` envs at L310, `xstockstrat-insights` at L328, `xstockstrat-config-ui` at L346 — no `APP_URL` entry in any.
 - DO App Platform built-in `${APP_URL}` resolves to the app's ingress domain at deploy time — this is a standard DO feature, no setup required.
 - Confirmed `!.env.production` carve-out must be in `.gitignore` (added in Step 5) for this file to be committable.
+- `.github/workflows/deploy-dev.yml` and `deploy-prod.yml` exist and run `doctl apps update` with the app spec — exact lines to be verified in Phase 1.
+- `docs/setup/digitalocean.md` Steps 5 and 6 run `doctl apps create --spec .do/app.dev.yaml` and `doctl apps create --spec .do/app.yaml` respectively — these will fail with `YOUR_GITHUB_ORG` in the spec; a substitution step must be added before each command.
 
 **Instructions**:
 
@@ -856,6 +861,52 @@ grep "NODE_ENV=development" .env.development
                value: ${APP_URL}
      ```
 
+4. **Update `.github/workflows/deploy-dev.yml`**: replace the `doctl apps update` line (find the exact line in Phase 1) with a sed substitution step followed by the update using the rendered spec:
+
+   ```yaml
+   - name: Deploy dev
+     run: |
+       sed "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" .do/app.dev.yaml > /tmp/app.dev.yaml
+       doctl apps update ${{ secrets.DO_DEV_APP_ID }} --spec /tmp/app.dev.yaml
+   ```
+
+   `github.repository_owner` is a built-in GitHub Actions context — always matches the repo owner, no secrets or variables required.
+
+5. **Update `.github/workflows/deploy-prod.yml`**: same pattern for the prod spec:
+
+   ```yaml
+   - name: Deploy prod
+     run: |
+       sed "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" .do/app.yaml > /tmp/app.yaml
+       doctl apps update ${{ secrets.DO_PROD_APP_ID }} --spec /tmp/app.yaml
+   ```
+
+6. **Update `docs/setup/digitalocean.md` Step 5** (dev app creation): replace the bare `doctl apps create` command with a substitution + create pattern:
+
+   Replace:
+   ```bash
+   doctl apps create --spec .do/app.dev.yaml
+   ```
+   With:
+   ```bash
+   YOUR_GITHUB_ORG=<your-github-username-or-org>
+   sed "s|YOUR_GITHUB_ORG|$YOUR_GITHUB_ORG|g" .do/app.dev.yaml > /tmp/app.dev.yaml
+   doctl apps create --spec /tmp/app.dev.yaml
+   ```
+
+7. **Update `docs/setup/digitalocean.md` Step 6** (prod app creation): same pattern:
+
+   Replace:
+   ```bash
+   doctl apps create --spec .do/app.yaml
+   ```
+   With:
+   ```bash
+   YOUR_GITHUB_ORG=<your-github-username-or-org>
+   sed "s|YOUR_GITHUB_ORG|$YOUR_GITHUB_ORG|g" .do/app.yaml > /tmp/app.yaml
+   doctl apps create --spec /tmp/app.yaml
+   ```
+
 **Verification**:
 ```bash
 ls -la .env.production
@@ -872,6 +923,15 @@ grep -c "APP_URL" .do/app.yaml
 
 grep -c "APP_URL" .do/app.dev.yaml
 # Expected: at least 3 (one per frontend service)
+
+grep "repository_owner" .github/workflows/deploy-dev.yml .github/workflows/deploy-prod.yml
+# Expected: sed substitution line present in both workflows
+
+grep "YOUR_GITHUB_ORG" .github/workflows/deploy-dev.yml .github/workflows/deploy-prod.yml
+# Expected: YOUR_GITHUB_ORG appears in the sed command of each workflow (as the pattern being replaced)
+
+grep "YOUR_GITHUB_ORG" docs/setup/digitalocean.md
+# Expected: appears in the sed substitution commands for Steps 5 and 6
 ```
 
 ---
