@@ -413,6 +413,7 @@ services:
     env_file: [".env.local"]
     environment:
       <<: *common-env
+      APP_URL: http://localhost
       # Connect-RPC HTTP endpoints (replaces raw gRPC endpoints)
       TRADING_HTTP_ENDPOINT: http://xstockstrat-trading:8051
       PORTFOLIO_HTTP_ENDPOINT: http://xstockstrat-portfolio:8052
@@ -440,6 +441,7 @@ services:
     env_file: [".env.local"]
     environment:
       <<: *common-env
+      APP_URL: http://localhost
       # Connect-RPC HTTP endpoints (replaces raw gRPC endpoints)
       ANALYSIS_HTTP_ENDPOINT: http://xstockstrat-analysis:8056
       INDICATORS_HTTP_ENDPOINT: http://xstockstrat-indicators:8054
@@ -469,6 +471,7 @@ services:
     env_file: [".env.local"]
     environment:
       <<: *common-env
+      APP_URL: http://localhost
       # Connect-RPC HTTP endpoint for xstockstrat-config
       CONFIG_HTTP_ENDPOINT: http://xstockstrat-config:8060
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
