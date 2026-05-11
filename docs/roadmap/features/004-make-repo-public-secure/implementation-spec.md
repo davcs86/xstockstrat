@@ -301,12 +301,153 @@ git check-ignore -v .env.development 2>/dev/null || echo "not ignored"
 
 **Instructions**:
 
-See Deviation Log — SECURITY.md was omitted per user instruction. CONTRIBUTING.md was created as a slim reference document.
+**Create `SECURITY.md`** at repo root with the following content:
+
+```markdown
+# Security Policy
+
+## Reporting Vulnerabilities
+
+**Do not open a public GitHub issue for security vulnerabilities.**
+
+Please report security issues by emailing **security@<your-domain>** (replace with the
+maintainer contact before making the repo public). Include:
+- A description of the vulnerability
+- Steps to reproduce
+- Potential impact
+
+We aim to respond within 72 hours and to issue a patch within 14 days for confirmed
+critical or high-severity issues.
+
+## Scope
+
+This policy covers the xstockstrat-orchestration repository and all services under
+`services/`. Individual service repos (`services/*`) are mirrors; report issues here.
+
+## Out of Scope
+
+- Issues in third-party libraries (report upstream)
+- Issues requiring physical access to infrastructure
+- Social engineering attacks
+
+## Disclosure Policy
+
+We follow coordinated disclosure. Please give us reasonable time to patch before any
+public disclosure.
+```
+
+**Create `CONTRIBUTING.md`** at repo root covering all items in FR-5:
+
+```markdown
+# Contributing to xstockstrat-orchestration
+
+Thank you for your interest in contributing. This guide covers how to set up the local
+development environment, how to submit changes, and what style requirements apply.
+
+## Prerequisites
+
+| Tool | Version | macOS (Homebrew) |
+|---|---|---|
+| Git | any | pre-installed |
+| Docker with Compose v2 | any | `brew install --cask docker` |
+| Go | 1.25 | `brew install go` |
+| Python | 3.12 | `brew install python@3.12` |
+| Node.js | 22 | `brew install node@22` |
+| pnpm | 9.15.0 | `npm install -g pnpm@9.15.0` |
+
+## Local Setup (paper trading — no real credentials required)
+
+1. **Clone**:
+   ```bash
+   git clone https://github.com/<your-fork>/xstockstrat-orchestration.git
+   cd xstockstrat-orchestration
+   ```
+
+2. **Environment file**:
+   ```bash
+   cp .env.example .env
+   ```
+   Edit `.env` and at minimum set:
+   - `ALPACA_API_KEY` and `ALPACA_API_SECRET` — create a free Alpaca paper trading
+     account at [alpaca.markets](https://alpaca.markets). Paper trading is free and
+     requires no real money. See `docs/setup/alpaca.md`.
+   - `JWT_SECRET` — run `openssl rand -hex 32` to generate a random value.
+   - `POSTGRES_PASSWORD` — choose any password for the local TimescaleDB container.
+     Set `DATABASE_URL` to match (replace `devpassword` with your chosen password).
+   - Leave `ALPACA_PAPER=true` and all other values at their defaults.
+
+3. **Bootstrap and start**:
+   ```bash
+   ./scripts/bootstrap.sh
+   docker compose up -d
+   ```
+
+4. **Verify**:
+   ```bash
+   docker compose ps        # all services should show Up or healthy
+   curl http://localhost:8060/health   # config service health check
+   ```
+
+   Full verification steps are in `docs/setup/getting-started.md`.
+
+## Branch Naming
+
+| Branch type | Convention | Example |
+|---|---|---|
+| Feature | `feature/<slug>` | `feature/add-new-indicator` |
+| Bug fix | `hotfix/<slug>` | `hotfix/fix-fill-detection` |
+| Harness | `claude/<description>` | `claude/add-claude-docs` |
+
+Always branch from and open PRs into `main-dev`. **Never target `main` directly.**
+
+## Fork and PR Workflow
+
+1. Fork the repo on GitHub.
+2. Create a branch from `main-dev` using the naming convention above.
+3. Make your changes, following the code style requirements below.
+4. Open a pull request targeting `main-dev`.
+5. Wait for CI to pass (all jobs must be green).
+6. Request review from a maintainer.
+
+## Code Style Requirements
+
+| Language | Tool | How to run |
+|---|---|---|
+| Go | `golangci-lint v2.5.0` | `cd services/<name> && GOWORK=off golangci-lint run` |
+| Python | `ruff` | `cd services/<name> && ruff check . && ruff format --check .` |
+| Node.js / TypeScript | `eslint` | `cd services/<name> && pnpm run lint` |
+| Proto | `buf lint` | `cd packages/proto && buf lint` |
+
+## Running Tests
+
+```bash
+# Go service
+cd services/xstockstrat-trading && GOWORK=off go test ./...
+
+# Python service
+cd services/xstockstrat-indicators && pip install -e ".[dev]" && pytest
+
+# Node.js service
+cd services/xstockstrat-ledger && pnpm run test:coverage
+```
+
+## Proto Changes
+
+All `.proto` changes require a PR to this repository first. See
+`docs/runbooks/approval-flow.md` for the approval gate requirements and
+`docs/runbooks/proto-versioning.md` for breaking-change procedures.
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the same
+license as this repository.
+```
 
 **Verification**:
 ```bash
-ls -la CONTRIBUTING.md
-# Expected: file exists
+ls -la SECURITY.md CONTRIBUTING.md
+# Expected: both files exist
+grep "Do not open a public GitHub issue" SECURITY.md
 grep "openssl rand -hex 32" CONTRIBUTING.md
 ```
 
