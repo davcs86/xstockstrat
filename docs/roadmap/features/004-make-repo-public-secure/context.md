@@ -136,3 +136,9 @@
 | Item | Earliest step | Notes |
 |---|---|---|
 | Push main-dev merge into `feature/make-repo-public-secure` | next branch sync | Local `git push` returns HTTP 403; either resolve harness git proxy permissions or perform the merge via the GitHub web UI / MCP API once content stabilises. Per-step PRs continue to land off `366a20f` until then. |
+
+### Session summary
+**Steps this session**: [7]
+**Progress**: 7 done / 11 total
+**Stopped at**: Step 7 (per-step PR opened; SDD rule = one step per session)
+**Next**: `/sdd-execute make-repo-public-secure next` (Step 8)
