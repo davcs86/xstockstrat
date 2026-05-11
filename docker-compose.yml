@@ -444,6 +444,8 @@ services:
       ANALYSIS_HTTP_ENDPOINT: http://xstockstrat-analysis:8056
       INDICATORS_HTTP_ENDPOINT: http://xstockstrat-indicators:8054
       MARKETDATA_HTTP_ENDPOINT: http://xstockstrat-marketdata:8053
+      PORTFOLIO_HTTP_ENDPOINT: http://xstockstrat-portfolio:8052
+      TRADING_HTTP_ENDPOINT: http://xstockstrat-trading:8051
       NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
       IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
       OTEL_SERVICE_NAME: xstockstrat-insights
@@ -468,7 +470,7 @@ services:
     environment:
       <<: *common-env
       # Connect-RPC HTTP endpoint for xstockstrat-config
-      CONFIG_ENDPOINT: http://xstockstrat-config:8060
+      CONFIG_HTTP_ENDPOINT: http://xstockstrat-config:8060
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
       OTEL_SERVICE_NAME: xstockstrat-config-ui
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318

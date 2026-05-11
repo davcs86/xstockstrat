@@ -277,8 +277,14 @@ services:
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
-      - key: TRADING_ENDPOINT
+      - key: TRADING_HTTP_ENDPOINT
         value: ${xstockstrat-trading.PRIVATE_URL}
+      - key: PORTFOLIO_HTTP_ENDPOINT
+        value: ${xstockstrat-portfolio.PRIVATE_URL}
+      - key: NOTIFY_HTTP_ENDPOINT
+        value: ${xstockstrat-notify.PRIVATE_URL}
+      - key: IDENTITY_HTTP_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_URL}
 
   - name: xstockstrat-insights
     github:
@@ -291,8 +297,20 @@ services:
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
-      - key: ANALYSIS_ENDPOINT
+      - key: ANALYSIS_HTTP_ENDPOINT
         value: ${xstockstrat-analysis.PRIVATE_URL}
+      - key: INDICATORS_HTTP_ENDPOINT
+        value: ${xstockstrat-indicators.PRIVATE_URL}
+      - key: MARKETDATA_HTTP_ENDPOINT
+        value: ${xstockstrat-marketdata.PRIVATE_URL}
+      - key: PORTFOLIO_HTTP_ENDPOINT
+        value: ${xstockstrat-portfolio.PRIVATE_URL}
+      - key: TRADING_HTTP_ENDPOINT
+        value: ${xstockstrat-trading.PRIVATE_URL}
+      - key: NOTIFY_HTTP_ENDPOINT
+        value: ${xstockstrat-notify.PRIVATE_URL}
+      - key: IDENTITY_HTTP_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_URL}
 
   - name: xstockstrat-config-ui
     github:
@@ -305,7 +323,7 @@ services:
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
-      - key: CONFIG_ENDPOINT
+      - key: CONFIG_HTTP_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
 
 jobs:

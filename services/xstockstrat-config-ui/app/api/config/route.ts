@@ -6,11 +6,11 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 
-const CONFIG_ENDPOINT =
-  process.env.CONFIG_ENDPOINT ?? 'http://xstockstrat-config:8060';
+const CONFIG_HTTP_ENDPOINT =
+  process.env.CONFIG_HTTP_ENDPOINT ?? 'http://xstockstrat-config:8060';
 
 async function rpc(method: string, body: object): Promise<Response> {
-  return fetch(`${CONFIG_ENDPOINT}/${method}`, {
+  return fetch(`${CONFIG_HTTP_ENDPOINT}/${method}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/connect+json' },
     body: JSON.stringify(body),
