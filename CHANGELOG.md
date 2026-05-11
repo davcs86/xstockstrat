@@ -5,6 +5,16 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-05-11
+
+### Features
+- broker-accounts-ui: Surfaces registered broker accounts and per-account portfolio data in the `xstockstrat-trader` UI, completing the UI half of the `add-ikbr-account-support` feature which added backend RPCs but explicitly deferred all frontend changes.
+
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-05-10
 
 ### Features
