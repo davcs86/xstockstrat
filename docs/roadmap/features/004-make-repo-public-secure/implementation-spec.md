@@ -129,7 +129,7 @@ grep -n "JWT_SECRET" services/xstockstrat-identity/src/grpc/identityServiceImpl.
 
 ### Step 3 — service: Remove hardcoded database URL fallback from ingest service
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest` (Python)
 **Files**:
 - `services/xstockstrat-ingest/app/main.py` — modify

@@ -89,3 +89,10 @@
 - Replaced `return process.env.JWT_SECRET ?? 'dev-jwt-secret-change-in-production'` with explicit env check + `throw new Error(...)` at `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:17–23`.
 - Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`
 - Deviations: none
+
+## Session 2026-05-11T00:05:00Z — sdd-execute Step 3
+
+### Step 3 — Remove hardcoded database URL fallback from ingest service [done]
+- Replaced `os.environ.get("DATABASE_URL", "postgres://xstockstrat:devpassword@...")` with explicit env check + `raise RuntimeError(...)` at `services/xstockstrat-ingest/app/main.py:37–40`.
+- Files modified: `services/xstockstrat-ingest/app/main.py`
+- Deviations: none
