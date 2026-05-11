@@ -23,10 +23,6 @@ services:
         value: development
       - key: TRADING_MODE
         value: paper
-      - key: ALPACA_PAPER
-        value: "true"
-      - key: ALPACA_BASE_URL
-        value: https://paper-api.alpaca.markets
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -95,10 +91,6 @@ services:
         value: development
       - key: TRADING_MODE
         value: paper
-      - key: ALPACA_PAPER
-        value: "true"
-      - key: ALPACA_BASE_URL
-        value: https://paper-api.alpaca.markets
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -160,10 +152,6 @@ services:
         value: development
       - key: TRADING_MODE
         value: paper
-      - key: ALPACA_PAPER
-        value: "true"
-      - key: ALPACA_BASE_URL
-        value: https://paper-api.alpaca.markets
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT

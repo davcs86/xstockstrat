@@ -21,10 +21,6 @@ services:
         value: "8051"
       - key: TRADING_MODE
         value: live
-      - key: ALPACA_PAPER
-        value: "false"
-      - key: ALPACA_BASE_URL
-        value: https://api.alpaca.markets
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -89,10 +85,6 @@ services:
         value: "8053"
       - key: TRADING_MODE
         value: live
-      - key: ALPACA_PAPER
-        value: "false"
-      - key: ALPACA_BASE_URL
-        value: https://api.alpaca.markets
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -150,10 +142,6 @@ services:
         value: "8055"
       - key: TRADING_MODE
         value: live
-      - key: ALPACA_PAPER
-        value: "false"
-      - key: ALPACA_BASE_URL
-        value: https://api.alpaca.markets
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
