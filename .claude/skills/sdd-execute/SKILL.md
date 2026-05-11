@@ -200,7 +200,8 @@ Proceed? (yes / no / adjust: <instruction>)
 2. Apply **only** the changes described in the confirmed plan — no cleanup, no refactoring, no extra improvements.
 3. Run the step's `**Verification**` command. Report the exact output.
 4. If verification **passes**:
-   - Update the step in implementation-spec.md: `**Status**: \`pending\`` → `**Status**: \`done\``
+   - Update **only** the step's `**Status**` field in implementation-spec.md: `**Status**: \`pending\`` → `**Status**: \`done\``
+   - **Do NOT modify any other part of the step** — `**Instructions**`, `**Codebase Evidence**`, `**Verification**`, `**Files**`, and `**Reviewers**` are immutable records of the original plan. Deviations go in the `## Deviation Log` only.
    - If this is the **first step completed** in the feature: update `feature.md` status to `in-progress`, append status history row.
    - If **all steps are now done**: update `feature.md` status to `code-completed`, append status history row.
 5. If verification **fails**:
@@ -357,6 +358,7 @@ After the last step in the requested range (or on any stop):
 - **Never stage files outside the step's `**Files**` section plus `implementation-spec.md`, `feature.md`, and `context.md`.**
 - **Never edit a `.up.sql` migration that has been committed to `main-dev`.** Add a new numbered migration instead.
 - **Never make changes outside the current step's scope** — no opportunistic cleanup, no refactoring, no extra files.
+- **`implementation-spec.md` step bodies are immutable during execution.** The only permitted change to a step entry is flipping `**Status**` from `pending` to `done` (or `blocked`/`skipped`). The `**Instructions**`, `**Codebase Evidence**`, `**Verification**`, `**Files**`, and `**Reviewers**` fields must never be edited — they are the permanent record of the original plan. All divergence from that plan belongs exclusively in the `## Deviation Log` section.
 
 ---
 
