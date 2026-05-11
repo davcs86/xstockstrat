@@ -45,4 +45,4 @@ _(Snapshot finalized by /sdd-spec 2026-05-11. Re-run /sdd-spec if the registry c
 
 ## Next Action
 
-`/sdd-execute make-repo-public-secure next` — execute Step 9 (git-history audit section in CONTRIBUTING.md + migration comment cleanup)
+`/sdd-execute make-repo-public-secure next` — execute Step 10 (create `.env.development` with local-dev defaults)

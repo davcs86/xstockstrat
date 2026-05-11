@@ -171,3 +171,17 @@
 **Progress**: 8 done / 11 total
 **Stopped at**: Step 8 (per-step PR opened; SDD rule = one step per session)
 **Next**: `/sdd-execute make-repo-public-secure next` (Step 9)
+
+## Session 2026-05-11T02:00:00Z — sdd-execute Step 9
+
+### Step 9 — docs: Add git-history audit section to CONTRIBUTING.md and update admin seed migration comment [done]
+- Appended "## Security Audit (Maintainers Only)" section to `CONTRIBUTING.md` with `git fetch --all`, six `git log -S` pattern checks, and `git filter-repo` scrub + force-push instructions.
+- Updated comment header in `services/xstockstrat-identity/migrations/002_seed_admin.up.sql` to clarify dev-only scope (comment-only; no SQL changes).
+- Files modified: `CONTRIBUTING.md`, `services/xstockstrat-identity/migrations/002_seed_admin.up.sql`
+- Deviations: `002_seed_admin.up.sql` is committed to `main-dev` (hard constraint: immutable). User approved editing anyway (option A) — change is comment-only, `golang-migrate` tracks by NNN prefix not checksum. Full detail in Deviation Log.
+
+### Session summary
+**Steps this session**: [9]
+**Progress**: 9 done / 11 total
+**Stopped at**: Step 9 (per-step PR opened; SDD rule = one step per session)
+**Next**: `/sdd-execute make-repo-public-secure next` (Step 10)
