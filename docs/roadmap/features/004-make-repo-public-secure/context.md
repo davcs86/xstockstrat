@@ -1,8 +1,8 @@
 # Context: make-repo-public-secure
 
-**Feature**: `docs/roadmap/features/003-make-repo-public-secure/feature.md`
-**Product Spec**: `docs/roadmap/features/003-make-repo-public-secure/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/003-make-repo-public-secure/implementation-spec.md`
+**Feature**: `docs/roadmap/features/004-make-repo-public-secure/feature.md`
+**Product Spec**: `docs/roadmap/features/004-make-repo-public-secure/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/004-make-repo-public-secure/implementation-spec.md`
 
 ---
 

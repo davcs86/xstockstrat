@@ -2,7 +2,7 @@
 
 **Status**: `pending`
 **Created**: 2026-05-10
-**Feature**: `docs/roadmap/features/003-make-repo-public-secure/feature.md`
+**Feature**: `docs/roadmap/features/004-make-repo-public-secure/feature.md`
 **Total Steps**: 9
 **Feature Branch**: `feature/make-repo-public-secure`
 
