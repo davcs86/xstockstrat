@@ -1,6 +1,6 @@
 # Feature: make-repo-public-secure
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/make-repo-public-secure`
 **Created**: 2026-05-10
 **Last Updated**: 2026-05-11T00:09:00Z
@@ -18,6 +18,7 @@
 | 2026-05-11 | product-spec updated | /sdd-story | Added FR-9/FR-10 (.env.development, .env.production, APP_URL wiring) — impl-spec is stale, re-run /sdd-spec |
 | 2026-05-11 | `in-progress` (re-spec) | /sdd-spec | Implementation spec regenerated with 11 steps (preserved Step 1 done; added Steps 10–11 for FR-9/FR-10) |
 | 2026-05-11 | `in-progress` (unchanged) | /sdd-execute | Step 7 complete (secret-scan CI job + .gitleaks.toml) |
+| 2026-05-11 | `in-progress` → `code-completed` | /sdd-execute | Step 10 complete (.env.local, APPLICATION_ENV all services, APP_URL frontends, deploy sed, Step 11 skipped) |
 
 ---
 
@@ -45,4 +46,4 @@ _(Snapshot finalized by /sdd-spec 2026-05-11. Re-run /sdd-spec if the registry c
 
 ## Next Action
 
-`/sdd-execute make-repo-public-secure next` — execute Step 10 (create `.env.development` with local-dev defaults)
+All steps complete (Step 11 skipped — absorbed into Step 10). Run `/sdd-execute make-repo-public-secure next` to create the final integration PR (`feature/make-repo-public-secure` → `main-dev`).

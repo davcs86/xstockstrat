@@ -185,3 +185,24 @@
 **Progress**: 9 done / 11 total
 **Stopped at**: Step 9 (per-step PR opened; SDD rule = one step per session)
 **Next**: `/sdd-execute make-repo-public-secure next` (Step 10)
+
+## Session 2026-05-11T03:00:00Z — sdd-execute Step 10
+
+### Step 10 — Create `.env.local`, wire APPLICATION_ENV + APP_URL, deploy sed substitution [done]
+- Created `.env.local` (renamed from spec's `.env.development`) with APPLICATION_ENV=development, APP_URL=http://localhost, NODE_ENV=development.
+- Added `.gitignore` carve-outs `!.env.local` and `!**/.env.local` (after existing blocking `**/.env.local` and `**/.env.*` patterns).
+- Added `env_file: [".env.local"]` to all 13 xstockstrat docker-compose services.
+- Added `APPLICATION_ENV: development` to all 13 services in `.do/app.dev.yaml`; `APPLICATION_ENV: production` to all 13 in `.do/app.yaml`.
+- Added `APP_URL: ${APP_URL}` to trader, insights, config-ui in both DO app specs.
+- Added sed substitution step (`YOUR_GITHUB_ORG → github.repository_owner`) to `.github/workflows/deploy.yml` (the reusable workflow where `doctl apps update` actually runs — not deploy-dev.yml/deploy-prod.yml which only call it).
+- Updated `docs/setup/digitalocean.md` Steps 5 and 6 with `YOUR_GITHUB_ORG` sed instructions.
+- Updated `.env.example` header to document two-file convention and DO secrets approach.
+- Step 11 absorbed and marked `skipped` — `.env.production` cancelled; all Step 11 deliverables (APP_URL wiring, sed substitution, DO docs) folded into Step 10.
+- Files modified: `.env.local` (create), `.gitignore`, `.env.example`, `.do/app.dev.yaml`, `.do/app.yaml`, `docker-compose.yml`, `.github/workflows/deploy.yml`, `docs/setup/digitalocean.md`
+- Deviations: full detail in Deviation Log (Step 10 entry).
+
+### Session summary
+**Steps this session**: [10]
+**Progress**: 10 done, 1 skipped / 11 total
+**Stopped at**: Step 10 (all non-skipped steps complete; feature status → code-completed)
+**Next**: `/sdd-execute make-repo-public-secure next` — ALL-DONE PATH (create final integration PR)
