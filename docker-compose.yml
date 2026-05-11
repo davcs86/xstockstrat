@@ -10,9 +10,17 @@ networks:
 volumes:
   timescaledb_data:
 
+# Shared environment variables injected into every application service via <<: *common-env.
+# Override per-service as needed — service-level environment keys take precedence.
+x-common-env: &common-env
+  APPLICATION_ENV: development
+  TRADING_MODE: paper
+  OTEL_ENABLED: ${OTEL_ENABLED:-false}
+  OTEL_RESOURCE_ATTRIBUTES: environment=development,trading_mode=paper
+
 services:
 
-  # ── Infrastructure ──────────────────────────────────────────────────
+  # ── Infrastructure ──────────────────────────────────────────────────────
 
   # OpenTelemetry Collector — central fan-out gateway for logs, metrics, traces.
   # All services push OTLP to this container; it forwards to Grafana Cloud.
@@ -74,7 +82,7 @@ services:
         condition: service_healthy
     restart: "no"
 
-  # ── Config Service (must start before all others) ─────────────────────
+  # ── Config Service (must start before all others) ───────────────────────
   xstockstrat-config:
     build:
       context: .
@@ -82,14 +90,12 @@ services:
     container_name: xstockstrat-config
     env_file: [".env.local"]
     environment:
+      <<: *common-env
       GRPC_PORT: "50060"
       HTTP_PORT: "8060"
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
-      TRADING_MODE: paper
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: xstockstrat-config
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50060:50060"
       - "8060:8060"
@@ -102,7 +108,7 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
-  # ── Ledger Service ─────────────────────────────────────────────────────
+  # ── Ledger Service ──────────────────────────────────────────────────────
   xstockstrat-ledger:
     build:
       context: .
@@ -110,15 +116,13 @@ services:
     container_name: xstockstrat-ledger
     env_file: [".env.local"]
     environment:
+      <<: *common-env
       GRPC_PORT: "50057"
       HTTP_PORT: "8057"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
-      TRADING_MODE: paper
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: xstockstrat-ledger
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50057:50057"
       - "8057:8057"
@@ -141,17 +145,15 @@ services:
     container_name: xstockstrat-identity
     env_file: [".env.local"]
     environment:
+      <<: *common-env
       GRPC_PORT: "50058"
       HTTP_PORT: "8058"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - copy .env.example to .env (run: openssl rand -hex 32)}
-      TRADING_MODE: paper
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: xstockstrat-identity
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50058:50058"
       - "8058:8058"
@@ -168,7 +170,7 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  # ── Notify Service ─────────────────────────────────────────────────────
+  # ── Notify Service ──────────────────────────────────────────────────────
   xstockstrat-notify:
     build:
       context: .
@@ -176,16 +178,14 @@ services:
     container_name: xstockstrat-notify
     env_file: [".env.local"]
     environment:
+      <<: *common-env
       GRPC_PORT: "50059"
       HTTP_PORT: "8059"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
-      TRADING_MODE: paper
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: xstockstrat-notify
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50059:50059"
       - "8059:8059"
@@ -210,6 +210,7 @@ services:
     container_name: xstockstrat-marketdata
     env_file: [".env.local"]
     environment:
+      <<: *common-env
       GRPC_PORT: "50053"
       HTTP_PORT: "8053"
       CONFIG_ENDPOINT: xstockstrat-config:50060
@@ -220,11 +221,8 @@ services:
       ALPACA_API_SECRET: ${ALPACA_API_SECRET:-your-api-secret}
       ALPACA_BASE_URL: https://paper-api.alpaca.markets
       ALPACA_DATA_URL: https://data.alpaca.markets
-      TRADING_MODE: paper
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: xstockstrat-marketdata
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50053:50053"
       - "8053:8053"
@@ -249,16 +247,14 @@ services:
     container_name: xstockstrat-indicators
     env_file: [".env.local"]
     environment:
+      <<: *common-env
       GRPC_PORT: "50054"
       HTTP_PORT: "8054"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      TRADING_MODE: paper
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: xstockstrat-indicators
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50054:50054"
       - "8054:8054"
@@ -269,7 +265,7 @@ services:
       - xstockstrat-ledger
     restart: unless-stopped
 
-  # ── Ingest Service ─────────────────────────────────────────────────────
+  # ── Ingest Service ──────────────────────────────────────────────────────
   xstockstrat-ingest:
     build:
       context: ./services/xstockstrat-ingest
@@ -277,17 +273,16 @@ services:
     container_name: xstockstrat-ingest
     env_file: [".env.local"]
     environment:
+      <<: *common-env
       GRPC_PORT: "50055"
       HTTP_PORT: "8055"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      TRADING_MODE: paper
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
       OTEL_SERVICE_NAME: xstockstrat-ingest
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50055:50055"
       - "8055:8055"
@@ -307,6 +302,7 @@ services:
     container_name: xstockstrat-analysis
     env_file: [".env.local"]
     environment:
+      <<: *common-env
       GRPC_PORT: "50056"
       HTTP_PORT: "8056"
       CONFIG_ENDPOINT: xstockstrat-config:50060
@@ -315,11 +311,8 @@ services:
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
-      TRADING_MODE: paper
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: xstockstrat-analysis
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50056:50056"
       - "8056:8056"
@@ -346,6 +339,7 @@ services:
     container_name: xstockstrat-portfolio
     env_file: [".env.local"]
     environment:
+      <<: *common-env
       GRPC_PORT: "50052"
       HTTP_PORT: "8052"
       CONFIG_ENDPOINT: xstockstrat-config:50060
@@ -353,11 +347,8 @@ services:
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
-      TRADING_MODE: paper
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: xstockstrat-portfolio
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50052:50052"
       - "8052:8052"
@@ -382,6 +373,7 @@ services:
     container_name: xstockstrat-trading
     env_file: [".env.local"]
     environment:
+      <<: *common-env
       GRPC_PORT: "50051"
       HTTP_PORT: "8051"
       CONFIG_ENDPOINT: xstockstrat-config:50060
@@ -390,11 +382,8 @@ services:
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
-      TRADING_MODE: paper
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: xstockstrat-trading
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "50051:50051"
       - "8051:8051"
@@ -423,16 +412,14 @@ services:
     container_name: xstockstrat-trader
     env_file: [".env.local"]
     environment:
+      <<: *common-env
       # Connect-RPC HTTP endpoints (replaces raw gRPC endpoints)
       TRADING_HTTP_ENDPOINT: http://xstockstrat-trading:8051
       PORTFOLIO_HTTP_ENDPOINT: http://xstockstrat-portfolio:8052
       NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
       IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
-      TRADING_MODE: paper
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: xstockstrat-trader
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "3000:3000"
     networks:
@@ -444,7 +431,7 @@ services:
       - xstockstrat-identity
     restart: unless-stopped
 
-  # ── Insights Frontend ─────────────────────────────────────────────────────
+  # ── Insights Frontend ───────────────────────────────────────────────────
   xstockstrat-insights:
     build:
       context: ./services/xstockstrat-insights
@@ -452,17 +439,15 @@ services:
     container_name: xstockstrat-insights
     env_file: [".env.local"]
     environment:
+      <<: *common-env
       # Connect-RPC HTTP endpoints (replaces raw gRPC endpoints)
       ANALYSIS_HTTP_ENDPOINT: http://xstockstrat-analysis:8056
       INDICATORS_HTTP_ENDPOINT: http://xstockstrat-indicators:8054
       MARKETDATA_HTTP_ENDPOINT: http://xstockstrat-marketdata:8053
       NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
       IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
-      TRADING_MODE: paper
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: xstockstrat-insights
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "3001:3001"
     networks:
@@ -481,14 +466,12 @@ services:
     container_name: xstockstrat-config-ui
     env_file: [".env.local"]
     environment:
+      <<: *common-env
       # Connect-RPC HTTP endpoint for xstockstrat-config
       CONFIG_ENDPOINT: http://xstockstrat-config:8060
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
-      TRADING_MODE: paper
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: xstockstrat-config-ui
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_RESOURCE_ATTRIBUTES: environment=dev,trading_mode=paper
     ports:
       - "3002:3002"
     networks:

@@ -1,6 +1,16 @@
 name: xstockstrat-dev
 region: nyc
 
+# Global environment variables — inherited by all services, workers, and jobs.
+# Component-level envs override these when the same key is set.
+envs:
+  - key: APPLICATION_ENV
+    value: development
+  - key: TRADING_MODE
+    value: paper
+  - key: APP_URL
+    value: ${APP_URL}
+
 services:
   # ── Go services ────────────────────────────────────────────────────────────
 
@@ -19,10 +29,6 @@ services:
         value: "50051"
       - key: CONNECT_PORT
         value: "8051"
-      - key: GO_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -35,11 +41,9 @@ services:
         value: ${xstockstrat-portfolio.PRIVATE_URL}
       - key: INDICATORS_ENDPOINT
         value: ${xstockstrat-indicators.PRIVATE_URL}
-      - key: DB_URL
+      - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
-      - key: APPLICATION_ENV
-        value: development
 
   - name: xstockstrat-portfolio
     github:
@@ -56,21 +60,15 @@ services:
         value: "50052"
       - key: CONNECT_PORT
         value: "8052"
-      - key: GO_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
         value: ${xstockstrat-ledger.PRIVATE_URL}
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: DB_URL
+      - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
-      - key: APPLICATION_ENV
-        value: development
 
   - name: xstockstrat-marketdata
     github:
@@ -87,21 +85,15 @@ services:
         value: "50053"
       - key: CONNECT_PORT
         value: "8053"
-      - key: GO_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
         value: ${xstockstrat-ledger.PRIVATE_URL}
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: DB_URL
+      - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
-      - key: APPLICATION_ENV
-        value: development
 
   # ── Python services ────────────────────────────────────────────────────────
 
@@ -120,18 +112,12 @@ services:
         value: "50054"
       - key: CONNECT_PORT
         value: "8054"
-      - key: PYTHON_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
         value: ${xstockstrat-ledger.PRIVATE_URL}
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: APPLICATION_ENV
-        value: development
 
   - name: xstockstrat-ingest
     github:
@@ -148,10 +134,6 @@ services:
         value: "50055"
       - key: CONNECT_PORT
         value: "8055"
-      - key: PYTHON_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -160,8 +142,9 @@ services:
         value: ${xstockstrat-notify.PRIVATE_URL}
       - key: MARKETDATA_ENDPOINT
         value: ${xstockstrat-marketdata.PRIVATE_URL}
-      - key: APPLICATION_ENV
-        value: development
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
 
   - name: xstockstrat-analysis
     github:
@@ -178,10 +161,6 @@ services:
         value: "50056"
       - key: CONNECT_PORT
         value: "8056"
-      - key: PYTHON_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -192,8 +171,9 @@ services:
         value: ${xstockstrat-marketdata.PRIVATE_URL}
       - key: INDICATORS_ENDPOINT
         value: ${xstockstrat-indicators.PRIVATE_URL}
-      - key: APPLICATION_ENV
-        value: development
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
 
   # ── Node.js services ───────────────────────────────────────────────────────
 
@@ -212,19 +192,13 @@ services:
         value: "50057"
       - key: CONNECT_PORT
         value: "8057"
-      - key: NODE_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: DB_URL
+      - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
-      - key: APPLICATION_ENV
-        value: development
 
   - name: xstockstrat-identity
     github:
@@ -241,18 +215,15 @@ services:
         value: "50058"
       - key: CONNECT_PORT
         value: "8058"
-      - key: NODE_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
         value: ${xstockstrat-ledger.PRIVATE_URL}
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: APPLICATION_ENV
-        value: development
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
 
   - name: xstockstrat-notify
     github:
@@ -269,16 +240,13 @@ services:
         value: "50059"
       - key: CONNECT_PORT
         value: "8059"
-      - key: NODE_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
         value: ${xstockstrat-ledger.PRIVATE_URL}
-      - key: APPLICATION_ENV
-        value: development
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
 
   - name: xstockstrat-config
     github:
@@ -296,12 +264,9 @@ services:
         value: "50060"
       - key: CONNECT_PORT
         value: "8060"
-      - key: NODE_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
-      - key: APPLICATION_ENV
-        value: development
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
 
   # ── Next.js frontends ──────────────────────────────────────────────────────
 
@@ -316,16 +281,8 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: NODE_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: TRADING_ENDPOINT
         value: ${xstockstrat-trading.PRIVATE_URL}
-      - key: APPLICATION_ENV
-        value: development
-      - key: APP_URL
-        value: ${APP_URL}
 
   - name: xstockstrat-insights
     github:
@@ -338,16 +295,8 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: NODE_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: ANALYSIS_ENDPOINT
         value: ${xstockstrat-analysis.PRIVATE_URL}
-      - key: APPLICATION_ENV
-        value: development
-      - key: APP_URL
-        value: ${APP_URL}
 
   - name: xstockstrat-config-ui
     github:
@@ -360,16 +309,8 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: NODE_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
-      - key: APPLICATION_ENV
-        value: development
-      - key: APP_URL
-        value: ${APP_URL}
 
 jobs:
   # Runs golang-migrate against all service schemas before services start.
