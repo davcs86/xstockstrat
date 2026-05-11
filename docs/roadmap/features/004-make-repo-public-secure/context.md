@@ -82,3 +82,47 @@
   - **FR-10 (Step 11)**: `.env.production` does not exist. `.do/app.yaml` frontend `envs:` blocks for `xstockstrat-trader` (L286), `xstockstrat-insights` (L302), and `xstockstrat-config-ui` (L318) contain only `TRADING_MODE` and service-specific endpoint vars — no `APP_URL` entry. Same for `.do/app.dev.yaml` (L310, L328, L346). The `${APP_URL}` DO built-in requires no external setup. `.env.production` carve-out also added to Step 5 gitignore block.
   - **Step 5 expanded**: original spec only added `*.pem`, `*.key`, etc. — now also adds `!.env.development` and `!.env.production` carve-outs required by FR-9/FR-10.
   - **Step 7 renumbered**: was Step 8 (secret-scan CI) — renumbered to Step 7 in re-spec; docs steps renumbered accordingly (davcs86 replacement now Step 8, git-history audit now Step 9).
+
+## Session 2026-05-11T00:04:00Z — sdd-execute Step 2
+
+### Step 2 — Remove hardcoded JWT fallback from identity service [done]
+- Replaced `return process.env.JWT_SECRET ?? 'dev-jwt-secret-change-in-production'` with explicit env check + `throw new Error(...)` at `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:17–23`.
+- Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`
+- Deviations: none
+
+## Session 2026-05-11T00:05:00Z — sdd-execute Step 3
+
+### Step 3 — Remove hardcoded database URL fallback from ingest service [done]
+- Replaced `os.environ.get("DATABASE_URL", "postgres://xstockstrat:devpassword@...")` with explicit env check + `raise RuntimeError(...)` at `services/xstockstrat-ingest/app/main.py:37–40`.
+- Files modified: `services/xstockstrat-ingest/app/main.py`
+- Deviations: none
+
+## Session 2026-05-11T00:06:00Z — sdd-execute Step 4
+
+### Step 4 — Remove hardcoded database URL fallback from db-migrate.sh [done]
+- Replaced `DB_URL="${DATABASE_URL:-postgres://xstockstrat:devpassword@...}"` with explicit bash error check + `exit 1` at `scripts/db-migrate.sh:19–24`.
+- Files modified: `scripts/db-migrate.sh`
+- Deviations: none
+
+## Session 2026-05-11T00:08:00Z — sdd-execute Step 6
+
+### Step 6 — Add SECURITY.md and CONTRIBUTING.md at repo root [done]
+- Created `CONTRIBUTING.md` as a slim reference: short-form setup snippet + link to getting-started.md, branch naming, PR workflow, code style table, test commands pointer, proto change process. SECURITY.md was not created (user: too generic; can be added later with real contact details).
+- Files modified: `CONTRIBUTING.md`
+- Deviations: (1) `SECURITY.md` omitted per user instruction; (2) CONTRIBUTING.md references getting-started.md for setup details rather than duplicating them.
+
+## Session 2026-05-11T00:07:00Z — sdd-execute Step 5
+
+### Step 5 — Add .gitignore entries for secret file patterns and .env file carve-outs [done]
+- Added `!.env.development` and `!.env.production` carve-outs to the env-secrets block; also added `!**/.env.development` and `!**/.env.production` after `**/.env.*` (deviation: spec only specified root-level carve-outs but the `**/.env.*` wildcard would override them without the second pair).
+- Appended secret file type block: `*.pem`, `*.key`, `*.p12`, `*.pfx`, `secrets.*`, `credentials.*`, `service-account*.json`, `*-service-account.json`.
+- Files modified: `.gitignore`
+- Deviations: added `!**/.env.development` and `!**/.env.production` after `**/.env.*` — required for carve-outs to take effect; full detail in Deviation Log.
+
+## Session 2026-05-11T00:09:00Z — sdd-execute Step 7
+
+### Step 7 — Add secret-scan CI job [done]
+- Created `.gitleaks.toml` (minimal — extends default ruleset only, no allowlist); appended `secret-scan` job to `.github/workflows/ci.yml`.
+- No allowlist entries for placeholder credentials: Steps 1–4 removed all hardcoded dev credentials from the codebase, so no exceptions are needed.
+- Files modified: `.gitleaks.toml` (created), `.github/workflows/ci.yml`
+- Deviations: none
