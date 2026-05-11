@@ -1,0 +1,44 @@
+# Feature: make-repo-public-secure
+
+**Lifecycle Status**: `implementation-ready`
+**Development Branch**: `feature/make-repo-public-secure`
+**Created**: 2026-05-10
+**Last Updated**: 2026-05-10T00:00:00Z
+
+---
+
+## Status History
+
+| Date | Status | Updated by | Note |
+|---|---|---|---|
+| 2026-05-10 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-05-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 advisory warning) |
+| 2026-05-10 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
+
+---
+
+## Artifacts
+
+- [Product Spec](product-spec.md) — requirements and governance
+- [Implementation Spec](implementation-spec.md)
+- [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Summary
+
+Audit the xstockstrat-orchestration repository for all hardcoded secrets, credentials, API keys, and sensitive configuration values, remove or replace them with environment variable references or safe placeholders, and update documentation to reflect public-repo best practices before making the repository public on GitHub.
+
+## Reviewers
+
+_(Snapshot finalized by /sdd-spec 2026-05-10. Re-run /sdd-spec if the registry changes.)_
+
+| Role | Review Focus |
+|---|---|
+| Security | No secrets in config service state, secret keys use `secret.*` prefix, JWT claims minimal, API key scoping correct |
+| `xstockstrat-identity` owner | JWT expiry and rotation, API key scoping, secret store integration (never plaintext secrets in config) |
+| `xstockstrat-ingest` owner | Signal normalization correctness, idempotent ingestion, newsletter source schema stability |
+
+## Next Action
+
+`/sdd-review make-repo-public-secure impl-spec` — validate implementation spec, then `/sdd-execute make-repo-public-secure`

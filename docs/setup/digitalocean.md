@@ -283,19 +283,30 @@ doctl apps update $DO_PROD_APP_ID --spec .do/app.yaml
 
 ## Step 9 — Configure GitHub Actions Secrets
 
-The CI/CD workflows in `.github/workflows/deploy-dev.yml` and `.github/workflows/deploy-prod.yml` need three secrets:
+The CI/CD workflows need four repository secrets. Go to:
+**GitHub → repository → Settings → Secrets and variables → Actions → New repository secret**
 
-1. Go to **GitHub → repository → Settings → Secrets and variables → Actions → New repository secret**
+| Secret Name | Value | Used by |
+|---|---|---|
+| `DIGITALOCEAN_ACCESS_TOKEN` | The PAT created in Step 2 | deploy-dev, deploy-prod |
+| `DO_DEV_APP_ID` | App ID of the dev app (from Step 5) | deploy-dev |
+| `DO_PROD_APP_ID` | App ID of the prod app (from Step 6) | deploy-prod |
+| `BUF_TOKEN` | Buf Schema Registry token (see below) | deploy-dev, deploy-prod |
 
-2. Add:
+`GITHUB_TOKEN` is automatically provided by GitHub Actions — no setup needed.
 
-| Secret Name | Value |
-|---|---|
-| `DIGITALOCEAN_ACCESS_TOKEN` | The PAT created in Step 2 |
-| `DO_DEV_APP_ID` | App ID of the dev app (from Step 5) |
-| `DO_PROD_APP_ID` | App ID of the prod app (from Step 6) |
+### Obtaining a BUF_TOKEN
 
-**How the workflows use these:**
+1. Sign in at [buf.build](https://buf.build).
+2. Go to **Settings → Tokens → Create token**.
+3. Give it a name (e.g., `xstockstrat-ci`) and set expiry as appropriate.
+4. Copy the token and add it as the `BUF_TOKEN` GitHub secret above.
+
+The deploy workflows push proto definitions to the Buf Schema Registry on every deploy:
+- `deploy-dev.yml` — publishes as a **draft** on push to `main-dev`
+- `deploy-prod.yml` — publishes as **production** on push to `main`
+
+**How the deployment secrets are used:**
 
 - `.github/workflows/deploy-dev.yml` — triggers on push to `main-dev`:
   ```bash
