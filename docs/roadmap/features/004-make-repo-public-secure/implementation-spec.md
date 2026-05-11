@@ -1,6 +1,6 @@
 # Implementation Spec: make-repo-public-secure
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-10
 **Feature**: `docs/roadmap/features/004-make-repo-public-secure/feature.md`
 **Total Steps**: 9
@@ -37,10 +37,11 @@ be sanitised before docs are updated to reference it as a public URL).
 
 ### Step 1 — service: Harden `docker-compose.yml` hardcoded dev credentials
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docker-compose.yml` (root)
 **Files**:
 - `docker-compose.yml` — modify
+- `.env.example` — modify (deviation: POSTGRES_PASSWORD added, see Deviation Log)
 
 **Reviewers**: Security — No secrets in config service state, secret keys use `secret.*` prefix, JWT claims minimal, API key scoping correct
 
@@ -680,4 +681,10 @@ grep "Security Audit" CONTRIBUTING.md
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 1 — Harden `docker-compose.yml` hardcoded dev credentials
+**Spec said**: Wrap credentials in `${VAR:-default}` syntax to preserve local-dev defaults.
+**Actual**: Used `${VAR:?error message}` syntax (no fallback) — `docker compose` fails fast if the var is unset, matching the same fail-fast pattern used in Steps 2 and 3 for service code.
+**Reason**: User explicitly requested no fallbacks. Repo is not yet rolled out, so no backwards-compatibility concern. Fail-fast is strictly safer for a public repo.
+
+**Spec said**: Only `docker-compose.yml` in the Files list.
+**Actual**: Also modified `.env.example` to add the `POSTGRES_PASSWORD` variable (with the matching dev default). Required because docker-compose now errors on unset `POSTGRES_PASSWORD` and `.env.example` is the canonical "what to set in .env" reference for contributors.
