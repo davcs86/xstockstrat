@@ -103,14 +103,19 @@
 - Files modified: `nginx.conf`
 - Deviations: 1 — verification (`nginx -t`) not runnable in sandbox (no Docker daemon, no local nginx, apt mirrors 404). Tracked as follow-up to Step 6, which builds + starts the full stack and would fail fast if the config is invalid. Full detail in Deviation Log.
 
+### Step 2 — Create Dockerfile for nginx reverse proxy [done]
+- Wrote `Dockerfile.nginx` at repo root with nginx:1.27-alpine base, COPY nginx.conf, HEALTHCHECK (10s/3s/5s/3r), EXPOSE 80, CMD with daemon off
+- Files modified: `Dockerfile.nginx`
+- Deviations: 1 — verification (`docker build`) not runnable in sandbox (no Docker daemon). Same as Step 1; deferred to Step 6 full-stack integration test.
+
 ## Open Items
 
 | Item | Earliest step | Notes |
 |---|---|---|
-| Confirm `nginx -t` passes against `nginx.conf` | Step 6 | Step 6 verification runs `docker-compose build` + `docker-compose up -d`; nginx will refuse to start if the config is invalid. If Step 6 verification runs in an env with Docker, this gap closes automatically.
+| Confirm `docker build` passes against `Dockerfile.nginx` | Step 6 | Step 6 verification runs `docker-compose build` + `docker-compose up -d`; Docker will fail if Dockerfile is invalid. If Step 6 verification runs in an env with Docker, this gap closes automatically.
 
 ### Session summary
-**Steps this session**: [1]
-**Progress**: 1 done / 6 total
-**Stopped at**: Step 1 (per-step PR opened; SDD rule = one step per session)
+**Steps this session**: [2]
+**Progress**: 2 done / 6 total
+**Stopped at**: Step 2 (per-step PR opened; SDD rule = one step per session)
 **Next**: `/sdd-execute frontend-reverse-proxy next`

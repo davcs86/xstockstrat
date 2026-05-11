@@ -145,7 +145,7 @@ Expected: `nginx: configuration file /home/user/xstockstrat-orchestration/nginx.
 
 ### Step 2 — docs: Create Dockerfile for nginx reverse proxy
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/` (infrastructure)
 **Files**:
 - `Dockerfile.nginx` — create
