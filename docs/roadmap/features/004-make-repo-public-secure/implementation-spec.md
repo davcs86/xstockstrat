@@ -171,7 +171,7 @@ grep -n "DATABASE_URL" services/xstockstrat-ingest/app/main.py
 
 ### Step 4 — service: Remove hardcoded database URL fallback from db-migrate.sh
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (bootstrap tooling)
 **Files**:
 - `scripts/db-migrate.sh` — modify

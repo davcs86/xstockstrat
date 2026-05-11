@@ -96,3 +96,10 @@
 - Replaced `os.environ.get("DATABASE_URL", "postgres://xstockstrat:devpassword@...")` with explicit env check + `raise RuntimeError(...)` at `services/xstockstrat-ingest/app/main.py:37–40`.
 - Files modified: `services/xstockstrat-ingest/app/main.py`
 - Deviations: none
+
+## Session 2026-05-11T00:06:00Z — sdd-execute Step 4
+
+### Step 4 — Remove hardcoded database URL fallback from db-migrate.sh [done]
+- Replaced `DB_URL="${DATABASE_URL:-postgres://xstockstrat:devpassword@...}"` with explicit bash error check + `exit 1` at `scripts/db-migrate.sh:19–24`.
+- Files modified: `scripts/db-migrate.sh`
+- Deviations: none
