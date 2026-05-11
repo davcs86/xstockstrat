@@ -1,12 +1,22 @@
 name: xstockstrat-dev
 region: nyc
 
+# Global environment variables — inherited by all services, workers, and jobs.
+# Component-level envs override these when the same key is set.
+envs:
+  - key: APPLICATION_ENV
+    value: development
+  - key: TRADING_MODE
+    value: paper
+  - key: APP_URL
+    value: ${APP_URL}
+
 services:
   # ── Go services ────────────────────────────────────────────────────────────
 
   - name: xstockstrat-trading
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-trading
@@ -19,14 +29,6 @@ services:
         value: "50051"
       - key: CONNECT_PORT
         value: "8051"
-      - key: GO_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
-      - key: ALPACA_PAPER
-        value: "true"
-      - key: ALPACA_BASE_URL
-        value: https://paper-api.alpaca.markets
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -39,13 +41,13 @@ services:
         value: ${xstockstrat-portfolio.PRIVATE_URL}
       - key: INDICATORS_ENDPOINT
         value: ${xstockstrat-indicators.PRIVATE_URL}
-      - key: DB_URL
+      - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
 
   - name: xstockstrat-portfolio
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-portfolio
@@ -58,23 +60,19 @@ services:
         value: "50052"
       - key: CONNECT_PORT
         value: "8052"
-      - key: GO_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
         value: ${xstockstrat-ledger.PRIVATE_URL}
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: DB_URL
+      - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
 
   - name: xstockstrat-marketdata
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-marketdata
@@ -87,21 +85,13 @@ services:
         value: "50053"
       - key: CONNECT_PORT
         value: "8053"
-      - key: GO_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
-      - key: ALPACA_PAPER
-        value: "true"
-      - key: ALPACA_BASE_URL
-        value: https://paper-api.alpaca.markets
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
         value: ${xstockstrat-ledger.PRIVATE_URL}
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: DB_URL
+      - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
 
@@ -109,7 +99,7 @@ services:
 
   - name: xstockstrat-indicators
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-indicators
@@ -122,10 +112,6 @@ services:
         value: "50054"
       - key: CONNECT_PORT
         value: "8054"
-      - key: PYTHON_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -135,7 +121,7 @@ services:
 
   - name: xstockstrat-ingest
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-ingest
@@ -148,14 +134,6 @@ services:
         value: "50055"
       - key: CONNECT_PORT
         value: "8055"
-      - key: PYTHON_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
-      - key: ALPACA_PAPER
-        value: "true"
-      - key: ALPACA_BASE_URL
-        value: https://paper-api.alpaca.markets
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -164,10 +142,13 @@ services:
         value: ${xstockstrat-notify.PRIVATE_URL}
       - key: MARKETDATA_ENDPOINT
         value: ${xstockstrat-marketdata.PRIVATE_URL}
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
 
   - name: xstockstrat-analysis
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-analysis
@@ -180,10 +161,6 @@ services:
         value: "50056"
       - key: CONNECT_PORT
         value: "8056"
-      - key: PYTHON_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
@@ -194,12 +171,15 @@ services:
         value: ${xstockstrat-marketdata.PRIVATE_URL}
       - key: INDICATORS_ENDPOINT
         value: ${xstockstrat-indicators.PRIVATE_URL}
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
 
   # ── Node.js services ───────────────────────────────────────────────────────
 
   - name: xstockstrat-ledger
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-ledger
@@ -212,21 +192,17 @@ services:
         value: "50057"
       - key: CONNECT_PORT
         value: "8057"
-      - key: NODE_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: DB_URL
+      - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
 
   - name: xstockstrat-identity
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-identity
@@ -239,20 +215,19 @@ services:
         value: "50058"
       - key: CONNECT_PORT
         value: "8058"
-      - key: NODE_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
         value: ${xstockstrat-ledger.PRIVATE_URL}
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_URL}
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
 
   - name: xstockstrat-notify
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-notify
@@ -265,18 +240,17 @@ services:
         value: "50059"
       - key: CONNECT_PORT
         value: "8059"
-      - key: NODE_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: LEDGER_ENDPOINT
         value: ${xstockstrat-ledger.PRIVATE_URL}
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
 
   - name: xstockstrat-config
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-config
@@ -290,16 +264,15 @@ services:
         value: "50060"
       - key: CONNECT_PORT
         value: "8060"
-      - key: NODE_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
 
   # ── Next.js frontends ──────────────────────────────────────────────────────
 
   - name: xstockstrat-trader
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-trader
@@ -308,16 +281,12 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: NODE_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: TRADING_ENDPOINT
         value: ${xstockstrat-trading.PRIVATE_URL}
 
   - name: xstockstrat-insights
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-insights
@@ -326,16 +295,12 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: NODE_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: ANALYSIS_ENDPOINT
         value: ${xstockstrat-analysis.PRIVATE_URL}
 
   - name: xstockstrat-config-ui
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-config-ui
@@ -344,10 +309,6 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: NODE_ENV
-        value: development
-      - key: TRADING_MODE
-        value: paper
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
 
@@ -357,7 +318,7 @@ jobs:
   - name: db-migrator
     kind: PRE_DEPLOY
     github:
-      repo: davcs86/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
     dockerfile_path: scripts/Dockerfile.migrate

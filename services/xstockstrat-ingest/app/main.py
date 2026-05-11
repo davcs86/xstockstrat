@@ -34,9 +34,11 @@ HTTP_PORT = int(os.environ.get("HTTP_PORT", "8055"))
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
 MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053")
 LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgres://xstockstrat:devpassword@localhost:5432/xstockstrat"
-)
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL environment variable is required but not set. See .env.example."
+    )
 
 
 async def start_http_server(servicer: IngestServicer) -> None:

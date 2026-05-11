@@ -27,8 +27,7 @@ type Config struct {
 	AlpacaAPISecret string
 	AlpacaBaseURL   string
 	AlpacaDataURL   string
-	AlpacaPaper     bool
-	AppEnv          string
+	ApplicationEnv  string
 	TradingMode     string
 }
 
@@ -45,8 +44,7 @@ func LoadFromEnv() *Config {
 		AlpacaAPISecret: getEnv("ALPACA_API_SECRET", ""),
 		AlpacaBaseURL:   getEnv("ALPACA_BASE_URL", "https://paper-api.alpaca.markets"),
 		AlpacaDataURL:   getEnv("ALPACA_DATA_URL", "https://data.alpaca.markets"),
-		AlpacaPaper:     getEnvBool("ALPACA_PAPER", true),
-		AppEnv:          getEnv("APP_ENV", "dev"),
+		ApplicationEnv:  getEnv("APPLICATION_ENV", "development"),
 		TradingMode:     getEnv("TRADING_MODE", "paper"),
 	}
 }

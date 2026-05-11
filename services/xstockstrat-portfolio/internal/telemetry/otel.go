@@ -41,7 +41,7 @@ func Init(ctx context.Context) (func(context.Context) error, error) {
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceName(svcName),
-			semconv.DeploymentEnvironment(os.Getenv("APP_ENV")),
+			semconv.DeploymentEnvironment(os.Getenv("APPLICATION_ENV")),
 		),
 	)
 	if err != nil {

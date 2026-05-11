@@ -37,7 +37,7 @@ Both tracks end in the same place: all 13 services running locally via Docker Co
 ### Step 1 — Clone
 
 ```bash
-git clone https://github.com/davcs86/xstockstrat-orchestration.git
+git clone https://github.com/<your-org>/xstockstrat-orchestration.git
 cd xstockstrat-orchestration
 ```
 

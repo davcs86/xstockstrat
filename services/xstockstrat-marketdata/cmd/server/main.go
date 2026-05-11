@@ -69,7 +69,7 @@ func main() {
 		APISecret: cfg.AlpacaAPISecret,
 		BaseURL:   cfg.AlpacaBaseURL,
 		DataURL:   cfg.AlpacaDataURL,
-		Paper:     cfg.AlpacaPaper,
+		Paper:     cfg.TradingMode == "paper",
 	})
 
 	// TimescaleDB repository

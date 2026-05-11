@@ -410,7 +410,8 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 
 | Feature | Status | Branch | Next Action |
 |---|---|---|---|
-| `001-add-ikbr-account-support` | `implementation-ready` | `feature/add-ikbr-account-support` | `/sdd-execute add-ikbr-account-support` |
+| `001-add-ikbr-account-support` | `launched` | `feature/add-ikbr-account-support` | — merged to main-dev via PR #97 |
+| `004-make-repo-public-secure` | `in-progress` | `feature/make-repo-public-secure` | `/sdd-execute make-repo-public-secure next` (Step 3 next) |
 
 **When starting any session involving an in-progress feature:**
 1. Run `/sdd-status` to see all features and their lifecycle status.

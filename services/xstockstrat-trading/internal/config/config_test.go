@@ -19,23 +19,19 @@ func TestLoadFromEnv_Defaults(t *testing.T) {
 	if cfg.LedgerEndpoint != "xstockstrat-ledger:50057" {
 		t.Errorf("LedgerEndpoint default: got %q", cfg.LedgerEndpoint)
 	}
-	if cfg.AlpacaPaperURL != "https://paper-api.alpaca.markets" {
-		t.Errorf("AlpacaPaperURL default: got %q", cfg.AlpacaPaperURL)
+	if cfg.TradingMode != "paper" {
+		t.Errorf("TradingMode default: got %q, want paper", cfg.TradingMode)
 	}
-	if cfg.AlpacaLiveURL != "https://api.alpaca.markets" {
-		t.Errorf("AlpacaLiveURL default: got %q", cfg.AlpacaLiveURL)
-	}
-	if !cfg.AlpacaPaper {
-		t.Error("AlpacaPaper default: want true")
+	if cfg.ApplicationEnv != "development" {
+		t.Errorf("ApplicationEnv default: got %q, want development", cfg.ApplicationEnv)
 	}
 }
 
 func TestLoadFromEnv_Overrides(t *testing.T) {
 	t.Setenv("GRPC_PORT", "50099")
 	t.Setenv("HTTP_PORT", "8099")
-	t.Setenv("ALPACA_PAPER", "false")
-	t.Setenv("ALPACA_API_KEY", "test-key")
-	t.Setenv("ALPACA_API_SECRET", "test-secret")
+	t.Setenv("TRADING_MODE", "live")
+	t.Setenv("APPLICATION_ENV", "production")
 
 	cfg := LoadFromEnv()
 
@@ -45,14 +41,11 @@ func TestLoadFromEnv_Overrides(t *testing.T) {
 	if cfg.HTTPPort != "8099" {
 		t.Errorf("HTTPPort override: got %q, want %q", cfg.HTTPPort, "8099")
 	}
-	if cfg.AlpacaPaper {
-		t.Error("AlpacaPaper override: want false")
+	if cfg.TradingMode != "live" {
+		t.Errorf("TradingMode override: got %q", cfg.TradingMode)
 	}
-	if cfg.AlpacaAPIKey != "test-key" {
-		t.Errorf("AlpacaAPIKey override: got %q", cfg.AlpacaAPIKey)
-	}
-	if cfg.AlpacaAPISecret != "test-secret" {
-		t.Errorf("AlpacaAPISecret override: got %q", cfg.AlpacaAPISecret)
+	if cfg.ApplicationEnv != "production" {
+		t.Errorf("ApplicationEnv override: got %q", cfg.ApplicationEnv)
 	}
 }
 
