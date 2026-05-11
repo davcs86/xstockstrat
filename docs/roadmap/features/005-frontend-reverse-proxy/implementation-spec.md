@@ -1,6 +1,6 @@
 # Implementation Spec: frontend-reverse-proxy
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-11
 **Feature**: `docs/roadmap/features/005-frontend-reverse-proxy/feature.md`
 **Total Steps**: 6
@@ -23,7 +23,7 @@ Build an nginx reverse proxy that unifies three independent Next.js frontends (t
 
 ### Step 1 — docs: Create nginx reverse proxy configuration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/` (infrastructure)
 **Files**:
 - `nginx.conf` — create
@@ -435,4 +435,8 @@ curl http://xstockstrat-trading:8051/xstockstrat.trading.v1.TradingService/ListO
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 1 — Create nginx reverse proxy configuration
+**Spec said**: `docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf nginx:alpine nginx -t` should report `nginx: configuration file ... test is successful`.
+**Actual**: Verifier not runnable in this sandbox — no Docker daemon socket, no local `nginx` binary, and apt mirrors return 404 for `nginx-common`. File content was written byte-for-byte from the spec and passed a structural sanity check (14 open / 14 close braces, 3 `upstream` blocks, 7 `location` blocks).
+**Reason**: Environment constraint, not a spec issue.
+**Disposition**: tracked as follow-up — Step 6 verification (`docker-compose build && docker-compose up -d && curl http://localhost/trader`) builds the `Dockerfile.nginx` image with this config baked in; nginx will refuse to start if the config is invalid, providing the missing `nginx -t` gate.

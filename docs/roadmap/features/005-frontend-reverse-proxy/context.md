@@ -89,3 +89,28 @@
 **Feature status**: `implementation-ready` (unchanged — impl-spec review is advisory).
 
 **Next action**: `/sdd-execute frontend-reverse-proxy` — begin step-by-step execution.
+
+---
+
+## Session 2026-05-11 — sdd-execute
+
+**Boot**: Loaded authoritative spec from `origin/main-dev` (feature branch `feature/frontend-reverse-proxy` not yet pushed; created during BRANCH SYNC for Step 1).
+
+**Branch model decision**: User selected the SDD branch model (integration branch `feature/frontend-reverse-proxy` + per-step `feature-steps/<slug>-step-N` sub-branches), not the harness-assigned `claude/frontend-reverse-proxy-next-MXsoC` branch.
+
+### Step 1 — Create nginx reverse proxy configuration [done]
+- Wrote `nginx.conf` at repo root with three upstream blocks (trader/insights/config_ui), six location blocks (`/trader`, `/trader/`, `/insights`, `/insights/`, `/config-ui`, `/config-ui/`), `/health` endpoint returning JSON, and proxy directives for streaming (`proxy_buffering off`, `Connection: upgrade`).
+- Files modified: `nginx.conf`
+- Deviations: 1 — verification (`nginx -t`) not runnable in sandbox (no Docker daemon, no local nginx, apt mirrors 404). Tracked as follow-up to Step 6, which builds + starts the full stack and would fail fast if the config is invalid. Full detail in Deviation Log.
+
+## Open Items
+
+| Item | Earliest step | Notes |
+|---|---|---|
+| Confirm `nginx -t` passes against `nginx.conf` | Step 6 | Step 6 verification runs `docker-compose build` + `docker-compose up -d`; nginx will refuse to start if the config is invalid. If Step 6 verification runs in an env with Docker, this gap closes automatically.
+
+### Session summary
+**Steps this session**: [1]
+**Progress**: 1 done / 6 total
+**Stopped at**: Step 1 (per-step PR opened; SDD rule = one step per session)
+**Next**: `/sdd-execute frontend-reverse-proxy next`

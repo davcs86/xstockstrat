@@ -1,6 +1,6 @@
 # Feature: frontend-reverse-proxy
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/frontend-reverse-proxy`
 **Created**: 2026-05-11
 **Last Updated**: 2026-05-11
@@ -14,6 +14,7 @@
 | 2026-05-11 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-11 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-05-11 | `implementation-ready` (unchanged) | /sdd-review | Impl-spec review PASS — all 6 steps PASS quality checks, valid DAG, 3 WARN overlaps (advisory) |
+| 2026-05-11 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (nginx.conf) complete — verification deferred to Step 6 (env limitation) |
 
 ---
 
