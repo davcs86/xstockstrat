@@ -355,92 +355,7 @@ development environment, how to submit changes, and what style requirements appl
 | Node.js | 22 | `brew install node@22` |
 | pnpm | 9.15.0 | `npm install -g pnpm@9.15.0` |
 
-## Local Setup (paper trading — no real credentials required)
-
-1. **Clone**:
-   ```bash
-   git clone https://github.com/<your-fork>/xstockstrat-orchestration.git
-   cd xstockstrat-orchestration
-   ```
-
-2. **Environment file**:
-   ```bash
-   cp .env.example .env
-   ```
-   Edit `.env` and at minimum set:
-   - `ALPACA_API_KEY` and `ALPACA_API_SECRET` — create a free Alpaca paper trading
-     account at [alpaca.markets](https://alpaca.markets). Paper trading is free and
-     requires no real money. See `docs/setup/alpaca.md`.
-   - `JWT_SECRET` — run `openssl rand -hex 32` to generate a random value.
-   - `POSTGRES_PASSWORD` — choose any password for the local TimescaleDB container.
-     Set `DATABASE_URL` to match (replace `devpassword` with your chosen password).
-   - Leave `ALPACA_PAPER=true` and all other values at their defaults.
-
-3. **Bootstrap and start**:
-   ```bash
-   ./scripts/bootstrap.sh
-   docker compose up -d
-   ```
-
-4. **Verify**:
-   ```bash
-   docker compose ps        # all services should show Up or healthy
-   curl http://localhost:8060/health   # config service health check
-   ```
-
-   Full verification steps are in `docs/setup/getting-started.md`.
-
-## Branch Naming
-
-| Branch type | Convention | Example |
-|---|---|---|
-| Feature | `feature/<slug>` | `feature/add-new-indicator` |
-| Bug fix | `hotfix/<slug>` | `hotfix/fix-fill-detection` |
-| Harness | `claude/<description>` | `claude/add-claude-docs` |
-
-Always branch from and open PRs into `main-dev`. **Never target `main` directly.**
-
-## Fork and PR Workflow
-
-1. Fork the repo on GitHub.
-2. Create a branch from `main-dev` using the naming convention above.
-3. Make your changes, following the code style requirements below.
-4. Open a pull request targeting `main-dev`.
-5. Wait for CI to pass (all jobs must be green).
-6. Request review from a maintainer.
-
-## Code Style Requirements
-
-| Language | Tool | How to run |
-|---|---|---|
-| Go | `golangci-lint v2.5.0` | `cd services/<name> && GOWORK=off golangci-lint run` |
-| Python | `ruff` | `cd services/<name> && ruff check . && ruff format --check .` |
-| Node.js / TypeScript | `eslint` | `cd services/<name> && pnpm run lint` |
-| Proto | `buf lint` | `cd packages/proto && buf lint` |
-
-## Running Tests
-
-```bash
-# Go service
-cd services/xstockstrat-trading && GOWORK=off go test ./...
-
-# Python service
-cd services/xstockstrat-indicators && pip install -e ".[dev]" && pytest
-
-# Node.js service
-cd services/xstockstrat-ledger && pnpm run test:coverage
-```
-
-## Proto Changes
-
-All `.proto` changes require a PR to this repository first. See
-`docs/runbooks/approval-flow.md` for the approval gate requirements and
-`docs/runbooks/proto-versioning.md` for breaking-change procedures.
-
-## License
-
-By contributing, you agree that your contributions will be licensed under the same
-license as this repository.
+...
 ```
 
 **Verification**:
@@ -498,32 +413,7 @@ grep "openssl rand -hex 32" CONTRIBUTING.md
              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
    ```
 
-2. Create `.gitleaks.toml` at repo root to suppress false positives for known safe dev-placeholder patterns:
-
-   ```toml
-   title = "xstockstrat gitleaks config"
-
-   [extend]
-   # Extend the default gitleaks ruleset
-   useDefault = true
-
-   [[allowlists]]
-   description = "Dev placeholder credentials behind env-var interpolation"
-   regexes = [
-     # docker-compose uses ${VAR:-placeholder} syntax; these are not real secrets
-     '''devpassword''',
-     '''dev-jwt-secret-change-in-production''',
-     '''your-api-key''',
-     '''your-api-secret''',
-     '''change-me-in-production''',
-     '''change-me-n8n-webhook-secret''',
-   ]
-   paths = [
-     '''.env\.example''',
-     '''docker-compose\.yml''',
-     '''docs/.*''',
-   ]
-   ```
+2. Create `.gitleaks.toml` at repo root.
 
 **Verification**:
 ```bash
@@ -537,7 +427,7 @@ ls -la .gitleaks.toml
 
 ### Step 8 — docs: Replace `davcs86` GitHub username with generic references in docs and scripts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `scripts/`, `.do/`
 **Files**:
 - `docs/setup/getting-started.md` — modify (L40: `git clone https://github.com/davcs86/xstockstrat-orchestration.git`)
@@ -560,57 +450,11 @@ ls -la .gitleaks.toml
 
 **Instructions**:
 
-1. **`docs/setup/getting-started.md` L40**: Replace:
-   ```
-   git clone https://github.com/davcs86/xstockstrat-orchestration.git
-   ```
-   With:
-   ```
-   git clone https://github.com/<your-org>/xstockstrat-orchestration.git
-   ```
-
-2. **`docs/setup/digitalocean.md` L24**: Replace:
-   ```
-   GitHub repo `davcs86/xstockstrat-orchestration` is your source of truth
-   ```
-   With:
-   ```
-   GitHub repo `<your-org>/xstockstrat-orchestration` is your source of truth
-   ```
-
-3. **`docs/setup/digitalocean.md` L141**: Replace:
-   ```
-   3. Select repo: `davcs86/xstockstrat-orchestration`
-   ```
-   With:
-   ```
-   3. Select repo: `<your-org>/xstockstrat-orchestration`
-   ```
-
-4. **`scripts/setup-branch-protection.sh` L11**: Replace:
-   ```bash
-   GITHUB_USER="${GITHUB_USER:-davcs86}"
-   ```
-   With:
-   ```bash
-   GITHUB_USER="${GITHUB_USER:?GITHUB_USER env var is required (your GitHub username or org)}"
-   ```
-   This forces callers to set `GITHUB_USER` explicitly — no silent default to the maintainer's personal account.
-
-5. **`scripts/subtree-setup.sh` L12**: Same replacement as above (same pattern):
-   ```bash
-   GITHUB_USER="${GITHUB_USER:?GITHUB_USER env var is required (your GitHub username or org)}"
-   ```
-
-6. **`.do/app.yaml` and `.do/app.dev.yaml`**: Replace all 14 occurrences in each file of:
-   ```yaml
-         repo: davcs86/xstockstrat-orchestration
-   ```
-   With:
-   ```yaml
-         repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
-   ```
-   Use a placeholder that is clearly not a real value so maintainers know to substitute it.
+1. **`docs/setup/getting-started.md` L40**: Replace `davcs86` with `<your-org>`.
+2. **`docs/setup/digitalocean.md` L24, L141**: Replace `davcs86` with `<your-org>`.
+3. **`scripts/setup-branch-protection.sh` L11**: Replace `${GITHUB_USER:-davcs86}` with `${GITHUB_USER:?GITHUB_USER env var is required (your GitHub username or org)}`.
+4. **`scripts/subtree-setup.sh` L12**: Same replacement.
+5. **`.do/app.yaml` and `.do/app.dev.yaml`**: Replace all 14 occurrences of `repo: davcs86/xstockstrat-orchestration` with `repo: YOUR_GITHUB_ORG/xstockstrat-orchestration`.
 
 **Verification**:
 ```bash
@@ -660,44 +504,7 @@ grep -rn "YOUR_GITHUB_ORG\|your-org" .do/ docs/setup/
    -- The bcrypt hash below is a one-way hash of the string "admin" (10 rounds) — not a secret.
    ```
 
-2. **Append a "Security Audit" section to `CONTRIBUTING.md`** (created in Step 6):
-
-   ```markdown
-   ## Security Audit (Maintainers Only)
-
-   Before making this repository public, audit the full history of **all persistent
-   branches** (`main`, `main-dev`, and the current working branch). The `--all` flag
-   in the commands below covers every ref including `main` and `main-dev`.
-
-   ```bash
-   # Fetch all remote branches so --all covers main and main-dev
-   git fetch --all
-
-   # Check for common secret patterns across entire history (all branches)
-   git log -S 'AKIA' --all --oneline         # AWS key prefixes
-   git log -S 'ghp_' --all --oneline         # GitHub PATs
-   git log -S 'glpat-' --all --oneline       # GitLab tokens
-   git log -S 'sk_live_' --all --oneline     # Stripe live keys
-   git log -S '-----BEGIN' --all --oneline   # PEM private keys
-   git log -S 'devpassword' --all --oneline  # internal dev DB password
-   ```
-
-   If any commits are found (on **any** branch — including main or main-dev), use
-   `git filter-repo` to scrub the pattern from the entire history before going public.
-   This rewrites all commit SHAs, so all collaborators must re-clone after the purge:
-
-   ```bash
-   pip install git-filter-repo
-   # Replace the matched literal string across all history
-   git filter-repo --replace-text <(printf 'AKIA==>REDACTED<==\nghp_==>REDACTED<==')
-   # Force-push all rewritten refs (main, main-dev, feature branches)
-   git push origin --force --all
-   git push origin --force --tags
-   ```
-
-   The CI `secret-scan` job (trufflehog + gitleaks) runs on every PR automatically
-   going forward and scans the full commit history on each run.
-   ```
+2. **Append a "Security Audit" section to `CONTRIBUTING.md`** (created in Step 6).
 
 **Verification**:
 ```bash
@@ -725,46 +532,14 @@ grep "Security Audit" CONTRIBUTING.md
 
 **Instructions**:
 
-Create `.env.development` at repo root with the following content. This file contains **only non-secret, local-development-safe defaults** — no credentials, no API keys:
-
-```dotenv
-# .env.development — Local development defaults. Safe to commit.
-# This file is auto-loaded by Next.js in `next dev` mode.
-# It is NOT loaded in production; use .env.production for production documentation.
-# Add real secrets (ALPACA_API_KEY, JWT_SECRET, POSTGRES_PASSWORD) to .env (not committed).
-
-# Application URL — local dev base URL
-APP_URL=http://localhost
-
-# Node environment
-NODE_ENV=development
-
-# Trading mode — always paper for local dev
-TRADING_MODE=paper
-
-# Alpaca environment — always paper for local dev
-ALPACA_PAPER=true
-
-# Logging
-LOG_LEVEL=info
-
-# OpenTelemetry — disabled by default for local dev
-OTEL_ENABLED=false
-```
+Create `.env.development` at repo root with non-secret local-development-safe defaults only.
 
 **Verification**:
 ```bash
 ls -la .env.development
-# Expected: file exists
-
 git check-ignore -v .env.development 2>/dev/null || echo "not ignored"
-# Expected: "not ignored" — file is committable (carve-out from Step 5 in effect)
-
 grep "APP_URL=http://localhost" .env.development
-# Expected: line present
-
 grep "NODE_ENV=development" .env.development
-# Expected: line present
 ```
 
 ---
@@ -775,103 +550,29 @@ grep "NODE_ENV=development" .env.development
 **Service**: Root repo, `.do/`
 **Files**:
 - `.env.production` — create (confirmed absent: not present in root `ls` or `.env*` glob output)
-- `.do/app.yaml` — modify (add `APP_URL` env var to three frontend services: `xstockstrat-trader` at L286 envs block, `xstockstrat-insights` at L302 envs block, `xstockstrat-config-ui` at L318 envs block)
-- `.do/app.dev.yaml` — modify (add `APP_URL` env var to three frontend services: `xstockstrat-trader` at L310 envs block, `xstockstrat-insights` at L328 envs block, `xstockstrat-config-ui` at L346 envs block)
+- `.do/app.yaml` — modify (add `APP_URL` env var to three frontend services)
+- `.do/app.dev.yaml` — modify (add `APP_URL` env var to three frontend services)
 
 **Reviewers**: none
 
 **Codebase Evidence**:
 - Confirmed absent: `.env.production` does not exist at repo root.
-- Confirmed via read of `.do/app.yaml` L276–322: `xstockstrat-trader` envs block at L286 contains `TRADING_MODE` and `TRADING_ENDPOINT` — no `APP_URL` entry. Same pattern for `xstockstrat-insights` (L302) and `xstockstrat-config-ui` (L318).
-- Confirmed via read of `.do/app.dev.yaml` L300–352: same pattern — `xstockstrat-trader` envs at L310, `xstockstrat-insights` at L328, `xstockstrat-config-ui` at L346 — no `APP_URL` entry in any.
-- DO App Platform built-in `${APP_URL}` resolves to the app's ingress domain at deploy time — this is a standard DO feature, no setup required.
+- Confirmed via read of `.do/app.yaml`: `xstockstrat-trader`, `xstockstrat-insights`, and `xstockstrat-config-ui` envs blocks have no `APP_URL` entry.
+- DO App Platform built-in `${APP_URL}` resolves to the app's ingress domain at deploy time.
 - Confirmed `!.env.production` carve-out must be in `.gitignore` (added in Step 5) for this file to be committable.
 
 **Instructions**:
 
-1. **Create `.env.production`** at repo root (placeholder values only — no real secrets):
-
-   ```dotenv
-   # .env.production — Production variable structure documentation. Safe to commit.
-   # Contains ONLY placeholder values — never real credentials.
-   # Real values are injected by DigitalOcean App Platform at deploy time.
-   # See .do/app.yaml and .do/app.dev.yaml for the authoritative production config.
-
-   # Application URL — injected by DigitalOcean App Platform as a built-in variable.
-   # ${APP_URL} in .do/app.yaml resolves to the app's ingress domain at deploy time.
-   # Contributors: do NOT set this manually — it is provided by DO automatically.
-   APP_URL=${APP_URL}
-
-   # Node environment
-   NODE_ENV=production
-
-   # Trading mode
-   TRADING_MODE=live
-
-   # Alpaca environment — live trading in production
-   ALPACA_PAPER=false
-
-   # Database — injected by DigitalOcean managed database component
-   # DATABASE_URL=${db.DATABASE_URL}  (set via .do/app.yaml, not here)
-
-   # API credentials — injected from secret store, NOT stored here
-   # ALPACA_API_KEY=<set via DO App Platform environment config>
-   # ALPACA_API_SECRET=<set via DO App Platform environment config>
-   # JWT_SECRET=<set via DO App Platform environment config>
-   ```
-
-2. **Wire `APP_URL` into `.do/app.yaml`** for all three frontend services. Add the following entry to each service's `envs:` block:
-
-   - `xstockstrat-trader` (envs block starting at L286): append after the last existing env entry:
-     ```yaml
-           - key: APP_URL
-               value: ${APP_URL}
-     ```
-   - `xstockstrat-insights` (envs block starting at L302): append after the last existing env entry:
-     ```yaml
-           - key: APP_URL
-               value: ${APP_URL}
-     ```
-   - `xstockstrat-config-ui` (envs block starting at L318): append after the last existing env entry:
-     ```yaml
-           - key: APP_URL
-               value: ${APP_URL}
-     ```
-
-3. **Wire `APP_URL` into `.do/app.dev.yaml`** for all three frontend services. Add the following entry to each service's `envs:` block:
-
-   - `xstockstrat-trader` (envs block starting at L310): append after the last existing env entry:
-     ```yaml
-           - key: APP_URL
-               value: ${APP_URL}
-     ```
-   - `xstockstrat-insights` (envs block starting at L328): append after the last existing env entry:
-     ```yaml
-           - key: APP_URL
-               value: ${APP_URL}
-     ```
-   - `xstockstrat-config-ui` (envs block starting at L346): append after the last existing env entry:
-     ```yaml
-           - key: APP_URL
-               value: ${APP_URL}
-     ```
+1. Create `.env.production` at repo root with placeholder values only.
+2. Wire `APP_URL: ${APP_URL}` into envs blocks for the three frontend services in both `.do/app.yaml` and `.do/app.dev.yaml`.
 
 **Verification**:
 ```bash
 ls -la .env.production
-# Expected: file exists
-
 git check-ignore -v .env.production 2>/dev/null || echo "not ignored"
-# Expected: "not ignored" — file is committable (carve-out from Step 5 in effect)
-
 grep "APP_URL=\${APP_URL}" .env.production
-# Expected: line present (placeholder value)
-
 grep -c "APP_URL" .do/app.yaml
-# Expected: at least 3 (one per frontend service)
-
 grep -c "APP_URL" .do/app.dev.yaml
-# Expected: at least 3 (one per frontend service)
 ```
 
 ---

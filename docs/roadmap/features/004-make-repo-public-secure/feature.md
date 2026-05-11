@@ -45,4 +45,4 @@ _(Snapshot finalized by /sdd-spec 2026-05-11. Re-run /sdd-spec if the registry c
 
 ## Next Action
 
-`/sdd-execute make-repo-public-secure next` — execute Step 8 (replace `davcs86` username with generic references)
+`/sdd-execute make-repo-public-secure next` — execute Step 9 (git-history audit section in CONTRIBUTING.md + migration comment cleanup)

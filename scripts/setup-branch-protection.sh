@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-GITHUB_USER="${GITHUB_USER:-davcs86}"
+GITHUB_USER="${GITHUB_USER:?GITHUB_USER env var is required (your GitHub username or org)}"
 REPO="xstockstrat-orchestration"
 
 # The check context must match: workflow name / job name from ci.yml
