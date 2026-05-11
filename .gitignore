@@ -39,12 +39,14 @@
 !.env.development
 !.env.production
 !.env.local
+!.env.fe.local
 **/.env
 **/.env.*
 !**/.env.example
 !**/.env.development
 !**/.env.production
 !**/.env.local
+!**/.env.fe.local
 
 # Docker
 **/docker-compose.override.yml
