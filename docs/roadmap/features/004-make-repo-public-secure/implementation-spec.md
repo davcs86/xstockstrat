@@ -212,7 +212,7 @@ DATABASE_URL="" bash scripts/db-migrate.sh 2>&1 | grep "ERROR"
 
 ### Step 5 — docs: Add .gitignore entries for secret file patterns and .env file carve-outs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: Root repo
 **Files**:
 - `.gitignore` — modify
@@ -933,6 +933,11 @@ grep -c "APP_URL" .do/app.dev.yaml
 ---
 
 ## Deviation Log
+
+### Deviation: Step 5 — Add .gitignore entries for secret file patterns and .env file carve-outs
+**Spec said**: Add `!.env.development` and `!.env.production` carve-outs immediately after `!.env.example` in the root-level env block.
+**Actual**: Also added `!**/.env.development` and `!**/.env.production` after the `**/.env.*` wildcard line. Without these, the `**/.env.*` pattern (line 43) overrides the root-level carve-outs, causing git to still ignore `.env.development`.
+**Reason**: gitignore rules are applied in order; a later matching pattern overrides earlier ones. The `**/.env.*` wildcard matches `.env.development` and supersedes the `!.env.development` carve-out. Adding symmetric wildcard carve-outs (mirroring the existing `!**/.env.example`) ensures the negation sticks. Verified with `git check-ignore` exit code 1 (not ignored).
 
 ### Deviation: Step 1 — Harden `docker-compose.yml` hardcoded dev credentials
 **Spec said**: Wrap credentials in `${VAR:-default}` syntax to preserve local-dev defaults.
