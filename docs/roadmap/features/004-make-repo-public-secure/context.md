@@ -142,3 +142,12 @@
 **Progress**: 7 done / 11 total
 **Stopped at**: Step 7 (per-step PR opened; SDD rule = one step per session)
 **Next**: `/sdd-execute make-repo-public-secure next` (Step 8)
+
+## Session 2026-05-11T00:10:00Z — sdd-execute Step 7 correction
+
+### Step 7 — .gitleaks.toml allowlist removed [correction]
+- PR #147 (previous session) created `.gitleaks.toml` with `[[allowlists]]` covering 6 placeholder patterns (`devpassword`, `dev-jwt-secret-change-in-production`, etc.).
+- User instruction this session: "do not add placeholder credentials to the allowlist — there should not be any placeholder/fallback in use." Steps 1–4 removed all hardcoded dev credentials from the codebase, so no allowlist exceptions are needed.
+- Correction: `.gitleaks.toml` updated to `[extend] useDefault = true` only — no allowlist section.
+- Files modified: `.gitleaks.toml`
+- Deviations: allowlist removed; see Deviation Log.
