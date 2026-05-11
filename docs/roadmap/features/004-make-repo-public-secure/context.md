@@ -57,3 +57,11 @@
 | `GITHUB_TOKEN` | secret-scan (gitleaks) | Auto-provided by GitHub Actions — no setup needed |
 
 **Note**: `POSTGRES_PASSWORD`, `DATABASE_URL`, and `JWT_SECRET` are local dev vars set in `.env` (not GitHub secrets). In production they are injected by DigitalOcean App Platform from the managed database component and app environment config — never stored in GitHub secrets.
+
+## Session 2026-05-11T00:01:00Z — sdd-story (product-spec update)
+
+- Added FR-9: create `.env.development` with local-dev defaults (including `APP_URL=http://localhost`), safe to commit.
+- Added FR-10: create `.env.production` documenting production variable structure; wire `APP_URL` from DO App Platform built-in (`${APP_URL}`) into frontend services in `.do/app.yaml` and `.do/app.dev.yaml`.
+- Updated Affected Services to explicitly list `.do/app.yaml`, `.do/app.dev.yaml`, and the three frontend services.
+- Updated Acceptance Criteria (items 9 and 10).
+- Implementation spec is now **stale** — run `/sdd-spec make-repo-public-secure` to regenerate with the new steps added for FR-9/FR-10.
