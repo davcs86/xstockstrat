@@ -92,6 +92,12 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: ALPACA_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: ALPACA_API_SECRET
+        scope: RUN_TIME
+        type: SECRET
 
   # ── Python services ────────────────────────────────────────────────────────
 
