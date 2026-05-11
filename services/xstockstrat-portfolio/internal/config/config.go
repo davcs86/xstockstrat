@@ -25,7 +25,7 @@ type Config struct {
 	MarketDataEndpoint string
 	NotifyEndpoint     string
 	DBConnStr          string
-	AppEnv             string
+	ApplicationEnv     string
 	TradingMode        string
 }
 
@@ -39,7 +39,7 @@ func LoadFromEnv() *Config {
 		MarketDataEndpoint: getEnv("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053"),
 		NotifyEndpoint:     getEnv("NOTIFY_ENDPOINT", "xstockstrat-notify:50059"),
 		DBConnStr:          getEnv("DATABASE_URL", ""),
-		AppEnv:             getEnv("APP_ENV", "dev"),
+		ApplicationEnv:     getEnv("APPLICATION_ENV", "development"),
 		TradingMode:        getEnv("TRADING_MODE", "paper"),
 	}
 }

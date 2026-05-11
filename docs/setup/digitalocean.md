@@ -148,8 +148,11 @@ You do not need to complete the app creation wizard — cancel after authorizati
 
 The dev app deploys from `main-dev`, runs all services in `TRADING_MODE=paper`, and uses cheaper `basic-xs` instances.
 
+The app spec contains `YOUR_GITHUB_ORG` as a placeholder. Substitute it with your GitHub username or organization name before creating:
+
 ```bash
-doctl apps create --spec .do/app.dev.yaml
+sed "s|YOUR_GITHUB_ORG|<your-github-org>|g" .do/app.dev.yaml > /tmp/app.dev.yaml
+doctl apps create --spec /tmp/app.dev.yaml
 ```
 
 Note the **App ID** printed in the output — you will need it for GitHub Actions.
@@ -183,8 +186,11 @@ Inter-service routing uses DigitalOcean private networking: `${xstockstrat-confi
 
 The prod app deploys from `main`, runs all services in `TRADING_MODE=live`, and uses `professional-xs` instances (higher throughput, above 60s idle timeout).
 
+Substitute `YOUR_GITHUB_ORG` before creating:
+
 ```bash
-doctl apps create --spec .do/app.yaml
+sed "s|YOUR_GITHUB_ORG|<your-github-org>|g" .do/app.yaml > /tmp/app.yaml
+doctl apps create --spec /tmp/app.yaml
 ```
 
 ```bash

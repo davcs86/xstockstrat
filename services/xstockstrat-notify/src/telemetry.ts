@@ -24,7 +24,7 @@ export function initTelemetry(): void {
     const sdk = new NodeSDK({
       resource: new Resource({
         [SEMRESATTRS_SERVICE_NAME]: serviceName,
-        [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.APP_ENV ?? 'dev',
+        [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.APPLICATION_ENV ?? 'development',
       }),
       traceExporter: new OTLPTraceExporter({ url: endpoint }),
       instrumentations: [new GrpcInstrumentation()],

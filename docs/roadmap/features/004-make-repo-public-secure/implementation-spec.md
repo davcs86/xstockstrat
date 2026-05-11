@@ -1,6 +1,6 @@
 # Implementation Spec: make-repo-public-secure
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-05-10
 **Regenerated**: 2026-05-11
 **Feature**: `docs/roadmap/features/004-make-repo-public-secure/feature.md`
@@ -709,7 +709,7 @@ grep "Security Audit" CONTRIBUTING.md
 
 ### Step 10 — docs: Create `.env.development` with local-dev defaults (FR-9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: Root repo
 **Files**:
 - `.env.development` — create (confirmed absent: not present in root `ls` or `.env*` glob output)
@@ -771,7 +771,7 @@ grep "NODE_ENV=development" .env.development
 
 ### Step 11 — docs: Create `.env.production`, wire `APP_URL` into DO app specs, and substitute `YOUR_GITHUB_ORG` at deploy time (FR-10)
 
-**Status**: `pending`
+**Status**: `skipped`
 **Service**: Root repo, `.do/`, `.github/workflows/`
 **Files**:
 - `.env.production` — create (confirmed absent: not present in root `ls` or `.env*` glob output)
@@ -955,6 +955,20 @@ grep "YOUR_GITHUB_ORG" docs/setup/digitalocean.md
 
 **Spec said**: Only `docker-compose.yml` in the Files list.
 **Actual**: Also modified `.env.example` to add the `POSTGRES_PASSWORD` variable (with the matching dev default). Required because docker-compose now errors on unset `POSTGRES_PASSWORD` and `.env.example` is the canonical "what to set in .env" reference for contributors.
+
+### Deviation: Step 10 — Create `.env.development` with local-dev defaults (FR-9)
+**Spec said**: Create `.env.development` with 7 vars (APP_URL, NODE_ENV, TRADING_MODE, ALPACA_PAPER, LOG_LEVEL, OTEL_ENABLED, comment header). Add `!.env.development` carve-out already handled by Step 5.
+**Actual**: Created `.env.local` (not `.env.development`) with 3 vars: APPLICATION_ENV, APP_URL, NODE_ENV. Scope expanded significantly per user direction across multiple `adjust:` rounds:
+  1. File renamed to `.env.local` — loaded by Next.js in ALL modes (not just dev) and usable as docker-compose `env_file` directly; `.env.development` would not be loaded by Next.js in Docker container builds (NODE_ENV=production).
+  2. Added `env_file: [".env.local"]` to ALL 13 xstockstrat docker-compose services.
+  3. Added `APPLICATION_ENV: development` to ALL 13 services in `.do/app.dev.yaml`; `APPLICATION_ENV: production` to ALL 13 in `.do/app.yaml` — providing a unified cross-language env discriminator.
+  4. Added `APP_URL: ${APP_URL}` to 3 frontend services in both DO app specs (absorbed from Step 11).
+  5. Added sed substitution step (`YOUR_GITHUB_ORG → github.repository_owner`) to `.github/workflows/deploy.yml` (absorbed from Step 11). Deviation from plan: sed goes in the reusable `deploy.yml` (where `doctl apps update` actually runs), not in `deploy-dev.yml`/`deploy-prod.yml` which only call the reusable workflow.
+  6. Updated `docs/setup/digitalocean.md` Steps 5 and 6 with `YOUR_GITHUB_ORG` sed instructions (absorbed from Step 11).
+  7. Added `.gitignore` carve-outs `!.env.local` and `!**/.env.local` (beyond Step 5's existing carve-outs).
+  8. Updated `.env.example` header to document the `.env.local` vs `.env` two-file convention and DO secrets approach.
+  9. Step 11 absorbed entirely and marked `skipped` — `.env.production` cancelled (DO app specs handle production config; no committed production defaults file is needed).
+**Reason**: Per-session user `adjust:` refinements converging on a simpler, more correct architecture. `.env.local` is the Next.js top-priority local override file and aligns better with Docker Compose `env_file`. APPLICATION_ENV across all services (not just frontends) ensures consistent env discrimination. Absorbing Step 11 eliminated redundancy.
 
 ### Deviation: Step 9 — Add git-history audit section to CONTRIBUTING.md and update admin seed migration comment
 **Spec said**: Modify `services/xstockstrat-identity/migrations/002_seed_admin.up.sql` comment header.

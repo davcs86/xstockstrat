@@ -34,7 +34,7 @@ export class ConfigWatcher extends EventEmitter {
   }
 
   private startWatch() {
-    const appEnv = process.env.APP_ENV ?? 'dev';
+    const appEnv = process.env.APPLICATION_ENV ?? 'development';
     const tradingModeEnv = process.env.TRADING_MODE ?? 'paper';
     const environment = appEnv === 'production' ? Environment.ENVIRONMENT_PRODUCTION : Environment.ENVIRONMENT_DEV;
     const tradingMode = tradingModeEnv === 'live' ? TradingMode.TRADING_MODE_LIVE : TradingMode.TRADING_MODE_PAPER;
