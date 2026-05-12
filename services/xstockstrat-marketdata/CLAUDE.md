@@ -75,7 +75,7 @@ Namespace: `marketdata`
 
 ## Environment Variables
 
-Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_ENV` and `NODE_ENV` come from `.env.local` (committed). `DATABASE_URL`, `ALPACA_API_KEY`, and `ALPACA_API_SECRET` come from `.env` (see `.env.example`).
+Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_ENV` and `NODE_ENV` come from `.env.local` (committed). `DATABASE_URL` is constructed by docker-compose from `POSTGRES_PASSWORD` in `.env`. `ALPACA_API_KEY` and `ALPACA_API_SECRET` come from `.env` (see `.env.example`).
 
 ```
 GRPC_PORT=50053
@@ -83,7 +83,7 @@ HTTP_PORT=8053
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
-DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable  # .env
+DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 APPLICATION_ENV=development            # .env.local
 TRADING_MODE=paper                     # paper | live
 ALPACA_API_KEY=<secret>                # .env — alpaca.markets paper trading key

@@ -90,7 +90,7 @@ INDICATORS_ENDPOINT=xstockstrat-indicators:50054
 INGEST_ENDPOINT=xstockstrat-ingest:50055
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
-DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable  # .env
+DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
 ```

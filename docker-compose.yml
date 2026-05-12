@@ -44,8 +44,8 @@ services:
       - xstockstrat
     restart: unless-stopped
 
-  # Required .env vars for this service: POSTGRES_PASSWORD, DATABASE_URL
-  # Set these in .env (copy .env.example to .env). Never commit .env.
+  # Required .env var: POSTGRES_PASSWORD (copy .env.example to .env). Never commit .env.
+  # DATABASE_URL is constructed from POSTGRES_PASSWORD by docker-compose — no need to set it separately.
   timescaledb:
     image: timescale/timescaledb:latest-pg16
     container_name: xstockstrat-db
@@ -72,7 +72,7 @@ services:
       dockerfile: scripts/Dockerfile.migrate
     container_name: xstockstrat-db-migrator
     environment:
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
+      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
     volumes:
       - .:/repo
     networks:
@@ -93,7 +93,7 @@ services:
       <<: *common-env
       GRPC_PORT: "50060"
       HTTP_PORT: "8060"
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
+      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-config
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
@@ -120,7 +120,7 @@ services:
       GRPC_PORT: "50057"
       HTTP_PORT: "8057"
       CONFIG_ENDPOINT: xstockstrat-config:50060
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
+      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-ledger
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
@@ -150,7 +150,7 @@ services:
       HTTP_PORT: "8058"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
+      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - copy .env.example to .env (run: openssl rand -hex 32)}
       OTEL_SERVICE_NAME: xstockstrat-identity
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
@@ -183,7 +183,7 @@ services:
       HTTP_PORT: "8059"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
+      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-notify
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
@@ -216,7 +216,7 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
+      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       ALPACA_API_KEY: ${ALPACA_API_KEY:?ALPACA_API_KEY is required - set it in .env (see .env.example)}
       ALPACA_API_SECRET: ${ALPACA_API_SECRET:?ALPACA_API_SECRET is required - set it in .env (see .env.example)}
       ALPACA_BASE_URL: https://paper-api.alpaca.markets
@@ -280,7 +280,7 @@ services:
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
+      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-ingest
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
@@ -310,7 +310,7 @@ services:
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
+      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-analysis
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
@@ -346,7 +346,7 @@ services:
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
+      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-portfolio
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
@@ -381,7 +381,7 @@ services:
       PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
+      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-trading
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
@@ -471,7 +471,7 @@ services:
       <<: *common-env
       # Connect-RPC HTTP endpoint for xstockstrat-config
       CONFIG_HTTP_ENDPOINT: http://xstockstrat-config:8060
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required - copy .env.example to .env}
+      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-config-ui
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:

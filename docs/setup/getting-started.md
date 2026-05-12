@@ -51,7 +51,7 @@ cp .env.example .env
 
 | File | Committed? | Scope | Purpose |
 |---|---|---|---|
-| `.env` | **No** (secrets) | compose interpolation | Secrets: `POSTGRES_PASSWORD`, `DATABASE_URL`, `ALPACA_*`, `JWT_SECRET`, `GRAFANA_OTLP_TOKEN` |
+| `.env` | **No** (secrets) | compose interpolation | Secrets: `POSTGRES_PASSWORD`, `ALPACA_*`, `JWT_SECRET`, `GRAFANA_OTLP_TOKEN` |
 | `.env.local` | Yes | all 13 containers | Structural non-secrets: `APPLICATION_ENV`, `NODE_ENV`, `GRAFANA_OTLP_ENDPOINT` |
 | `.env.fe.local` | Yes | 3 Next.js containers only | Frontend-only non-secrets: `APP_URL` |
 
@@ -61,8 +61,7 @@ Edit `.env` and fill in the required values:
 
 | Variable | Required? | Notes |
 |---|---|---|
-| `POSTGRES_PASSWORD` | Leave default | Must match the password in `DATABASE_URL`; default `devpassword` works for local dev |
-| `DATABASE_URL` | Leave default | Default in `.env.example` connects to the Docker Compose TimescaleDB container |
+| `POSTGRES_PASSWORD` | Leave default | `devpassword` works for local dev; docker-compose constructs `DATABASE_URL` automatically from this |
 | `ALPACA_API_KEY` | **Yes** | Paper trading key from alpaca.markets; used only by `xstockstrat-marketdata` |
 | `ALPACA_API_SECRET` | **Yes** | Matching secret |
 | `JWT_SECRET` | **Yes** | Generate: `openssl rand -hex 32` |
