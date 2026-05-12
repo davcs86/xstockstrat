@@ -255,7 +255,7 @@ Expected: Build succeeds and the Next.js build summary shows routes prefixed wit
 
 ### Step 4 — service: Update xstockstrat-insights next.config.js with basePath
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/next.config.js` — modify
