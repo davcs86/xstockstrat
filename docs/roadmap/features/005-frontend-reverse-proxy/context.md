@@ -137,3 +137,21 @@
 **Progress**: 3 done / 6 total
 **Stopped at**: Step 3 (per-step PR will be opened; SDD rule = one step per session)
 **Next**: `/sdd-execute frontend-reverse-proxy next`
+
+---
+
+## Session 2026-05-12 — sdd-execute
+
+**Boot**: Loaded authoritative spec from `origin/feature/frontend-reverse-proxy`. Current harness branch was `claude/frontend-reverse-proxy-next-U1TAC`; following SDD branch model per prior session reaffirmations. Ran BRANCH SYNC: checked out `feature/frontend-reverse-proxy` (already up to date with `origin/main-dev`), created `feature-steps/frontend-reverse-proxy-step-4`.
+
+### Step 4 — Update xstockstrat-insights next.config.js with basePath [done]
+- Added `basePath: '/insights'` to `services/xstockstrat-insights/next.config.js`. Preserved existing `output: 'standalone'` and `experimental.serverComponentsExternalPackages: ['@connectrpc/connect-node']`.
+- Verification: `pnpm install && pnpm run build` succeeded; `.next/required-server-files.json` confirms `"basePath": "/insights"` and `"assetPrefix": "/insights"`. 10 routes generated (all served under `/insights` prefix at runtime).
+- Files modified: `services/xstockstrat-insights/next.config.js`
+- Deviations: none
+
+### Session summary
+**Steps this session**: [4]
+**Progress**: 4 done / 6 total
+**Stopped at**: Step 4 (per-step PR will be opened; SDD rule = one step per session)
+**Next**: `/sdd-execute frontend-reverse-proxy next`
