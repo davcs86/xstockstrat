@@ -150,11 +150,11 @@ jobs:
           if grep -q "^## ${TODAY}$" CHANGELOG.md; then
             # Replace existing entry: find the section from "## TODAY" to the next "---"
             # and replace it with the new entry
-            python3 << 'PYTHON_EOF'
+            python3 << PYTHON_EOF
           import sys
           import re
 
-          today = "$TODAY"
+          today = "${TODAY}"
           with open('CHANGELOG.md', 'r') as f:
               content = f.read()
 
@@ -175,8 +175,6 @@ jobs:
               )
               with open('CHANGELOG.md', 'w') as f:
                   f.write(new_content)
-          else:
-              print(f"Warning: Could not find entry for {today}", file=sys.stderr)
           PYTHON_EOF
           else
             # Insert new entry after the initial ---
