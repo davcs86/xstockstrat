@@ -1,0 +1,4 @@
+failure-threshold: warning
+ignore:
+  - DL3008  # apt-get without version pins — acceptable in build/codegen containers
+  - DL3059  # multiple RUN commands — too noisy in multi-stage builds
