@@ -78,8 +78,8 @@ Namespace: `ledger`
 GRPC_PORT=50057
 HTTP_PORT=8057
 CONFIG_ENDPOINT=xstockstrat-config:50060
-DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable
-APP_ENV=dev                            # dev | production
+DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
+APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
 ```
 

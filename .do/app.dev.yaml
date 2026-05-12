@@ -8,8 +8,8 @@ envs:
     value: development
   - key: TRADING_MODE
     value: paper
-  - key: APP_URL
-    value: ${APP_URL}
+  - key: OTEL_ENABLED
+    value: "false"
 
 services:
   # ── Go services ────────────────────────────────────────────────────────────
@@ -94,6 +94,12 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: ALPACA_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: ALPACA_API_SECRET
+        scope: RUN_TIME
+        type: SECRET
 
   # ── Python services ────────────────────────────────────────────────────────
 
@@ -224,6 +230,9 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET
 
   - name: xstockstrat-notify
     github:
@@ -281,8 +290,16 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: TRADING_ENDPOINT
+      - key: TRADING_HTTP_ENDPOINT
         value: ${xstockstrat-trading.PRIVATE_URL}
+      - key: PORTFOLIO_HTTP_ENDPOINT
+        value: ${xstockstrat-portfolio.PRIVATE_URL}
+      - key: NOTIFY_HTTP_ENDPOINT
+        value: ${xstockstrat-notify.PRIVATE_URL}
+      - key: IDENTITY_HTTP_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_URL}
+      - key: APP_URL
+        value: ${APP_URL}
 
   - name: xstockstrat-insights
     github:
@@ -295,8 +312,22 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: ANALYSIS_ENDPOINT
+      - key: ANALYSIS_HTTP_ENDPOINT
         value: ${xstockstrat-analysis.PRIVATE_URL}
+      - key: INDICATORS_HTTP_ENDPOINT
+        value: ${xstockstrat-indicators.PRIVATE_URL}
+      - key: MARKETDATA_HTTP_ENDPOINT
+        value: ${xstockstrat-marketdata.PRIVATE_URL}
+      - key: PORTFOLIO_HTTP_ENDPOINT
+        value: ${xstockstrat-portfolio.PRIVATE_URL}
+      - key: TRADING_HTTP_ENDPOINT
+        value: ${xstockstrat-trading.PRIVATE_URL}
+      - key: NOTIFY_HTTP_ENDPOINT
+        value: ${xstockstrat-notify.PRIVATE_URL}
+      - key: IDENTITY_HTTP_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_URL}
+      - key: APP_URL
+        value: ${APP_URL}
 
   - name: xstockstrat-config-ui
     github:
@@ -309,8 +340,10 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: CONFIG_ENDPOINT
+      - key: CONFIG_HTTP_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
+      - key: APP_URL
+        value: ${APP_URL}
 
 jobs:
   # Runs golang-migrate against all service schemas before services start.

@@ -10,7 +10,9 @@ Short version:
 git clone https://github.com/<your-fork>/xstockstrat-orchestration.git
 cd xstockstrat-orchestration
 cp .env.example .env
-# Edit .env: set ALPACA_API_KEY, ALPACA_API_SECRET, JWT_SECRET (openssl rand -hex 32), POSTGRES_PASSWORD
+# Edit .env — required: ALPACA_API_KEY, ALPACA_API_SECRET, JWT_SECRET (openssl rand -hex 32)
+# Leave POSTGRES_PASSWORD at its default — DATABASE_URL is auto-constructed by docker-compose
+# .env.local and .env.fe.local are committed — no changes needed there
 ./scripts/bootstrap.sh
 docker compose up -d
 docker compose ps   # all services should be Up or healthy
