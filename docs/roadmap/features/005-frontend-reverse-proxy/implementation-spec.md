@@ -201,7 +201,7 @@ Expected curl output: `{"status":"ok","service":"nginx-reverse-proxy"}`
 
 ### Step 3 — service: Update xstockstrat-trader next.config.js with basePath
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/next.config.js` — modify
