@@ -1,9 +1,11 @@
 # Feature: frontend-reverse-proxy
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
 **Development Branch**: `feature/frontend-reverse-proxy`
 **Created**: 2026-05-11
 **Last Updated**: 2026-05-12
+**Committed to main**: 08e1418
+**Launched date**: 2026-05-12
 
 ---
 
@@ -15,7 +17,7 @@
 | 2026-05-11 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-05-11 | `implementation-ready` (unchanged) | /sdd-review | Impl-spec review PASS — all 6 steps PASS quality checks, valid DAG, 3 WARN overlaps (advisory) |
 | 2026-05-11 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (nginx.conf) complete — verification deferred to Step 6 (env limitation) |
-| 2026-05-12 | `in-progress` → `code-completed` | /sdd-execute | All 6 steps complete (Steps 2–6 finished across sessions); ready for integration PR and merge review |
+| 2026-05-12 | `code-completed` → `launched` | CI workflow | Promoted to main; committed 08e1418 |
 
 ---
 
@@ -44,4 +46,4 @@ Snapshot from docs/runbooks/reviewer-registry.md, fixed at implementation-ready.
 
 ## Next Action
 
-All 6 implementation steps complete. Ready for integration PR (`feature/frontend-reverse-proxy` → `main-dev`). Check `docs/roadmap/features/merge-order.md` for blocking dependencies before merging. After merge, update `.do/app.yaml` / `.do/app.dev.yaml` to wire nginx into the Do App Platform deployment (future work, out of scope for Phase 1 baseline implementation).
+— launched in production. All 6 implementation steps complete; feature merged to main via PR #180 (commit 08e1418).
