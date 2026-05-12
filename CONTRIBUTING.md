@@ -63,8 +63,17 @@ By contributing, you agree that your contributions will be licensed under the sa
 ## Security Audit (Maintainers Only)
 
 Before making this repository public, audit the full history of **all persistent
-branches** (`main`, `main-dev`, and the current working branch). The `--all` flag
-in the commands below covers every ref including `main` and `main-dev`.
+branches** (`main`, `main-dev`, and the current working branch). Run the wrapper
+script — it fetches every remote ref and scans for the documented secret
+patterns across `--all` branches, exiting non-zero on any match:
+
+```bash
+./scripts/security-audit.sh             # fetch all refs, then scan
+./scripts/security-audit.sh --no-fetch  # skip git fetch (use local refs only)
+```
+
+The script wraps the manual checks below. Run them directly if you want to scan
+for one pattern at a time:
 
 ```bash
 # Fetch all remote branches so --all covers main and main-dev
