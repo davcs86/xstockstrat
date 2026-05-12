@@ -1,0 +1,117 @@
+name: ci-validate-feature-status
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  validate-and-update-feature-status:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for promotion PR merge and update feature statuses
+        run: |
+          set -e
+
+          # Get the current commit and the previous one
+          CURRENT_SHA=$(git rev-parse HEAD)
+          PREVIOUS_SHA=$(git rev-parse HEAD~1)
+
+          # Check if this is a promotion PR merge by looking at the commit message
+          COMMIT_MSG=$(git log -1 --pretty=%B $CURRENT_SHA)
+
+          if [[ $COMMIT_MSG =~ release:\ promote\ main-dev\ to\ main ]]; then
+            echo "✓ Detected promotion PR merge: $CURRENT_SHA"
+            echo "Previous commit: $PREVIOUS_SHA"
+
+            # Find all features at code-completed and check if they're in the promotion commits
+            PROMOTED_FEATURES=()
+
+            while IFS= read -r feature_file; do
+              if [ -z "$feature_file" ]; then continue; fi
+
+              feature_dir=$(dirname "$feature_file")
+              feature_name=$(basename "$feature_dir")
+
+              # Check if status is code-completed
+              status=$(grep "^**Lifecycle Status**:" "$feature_file" | head -1 | cut -d'`' -f2)
+
+              if [ "$status" = "code-completed" ]; then
+                # Check if any commits between PREVIOUS_SHA and CURRENT_SHA match this feature
+                # by looking for the feature branch or feature name in the commit log
+                feature_slug=$(echo "$feature_name" | sed 's/^[0-9]\+-//')
+
+                if git log $PREVIOUS_SHA..$CURRENT_SHA --oneline --all-match --grep="$feature_slug" | grep -q .; then
+                  PROMOTED_FEATURES+=("$feature_dir")
+                  echo "  → Detected promoted feature: $feature_name"
+                fi
+              fi
+            done < <(find docs/roadmap/features -name "feature.md" -type f)
+
+            # Update each promoted feature's status
+            if [ ${#PROMOTED_FEATURES[@]} -gt 0 ]; then
+              echo ""
+              echo "Updating feature statuses for ${#PROMOTED_FEATURES[@]} promoted feature(s)..."
+
+              TODAY=$(date +%Y-%m-%d)
+              PROMOTION_PR=$(grep "PR #" <<< "$COMMIT_MSG" | sed -E 's/.*\(#([0-9]+)\).*/\1/' | head -1)
+
+              for feature_dir in "${PROMOTED_FEATURES[@]}"; do
+                feature_md="$feature_dir/feature.md"
+                context_md="$feature_dir/context.md"
+
+                echo "  Updating: $feature_md"
+
+                # Update lifecycle status in feature.md
+                sed -i "s/\*\*Lifecycle Status\*\*: \`code-completed\`/\*\*Lifecycle Status\*\*: \`launched\`/" "$feature_md"
+
+                # Add Committed to main field (after Lifecycle Status)
+                if ! grep -q "^**Committed to main**:" "$feature_md"; then
+                  sed -i "/^**Lifecycle Status**/a **Committed to main**: $CURRENT_SHA" "$feature_md"
+                fi
+
+                # Add Launched date field
+                if ! grep -q "^**Launched date**:" "$feature_md"; then
+                  sed -i "/^**Committed to main**/a **Launched date**: $TODAY" "$feature_md"
+                fi
+
+                # Add to status history
+                history_line="| $TODAY | \`code-completed\` → \`launched\` | CI workflow | Promoted via PR #$PROMOTION_PR; committed $CURRENT_SHA |"
+                # Insert before the closing --- of status history
+                sed -i "/^---$/i $history_line" "$feature_md"
+
+                # Update context.md with session log
+                {
+                  echo ""
+                  echo "## Session $TODAY (CI: feature status automation)"
+                  echo ""
+                  echo "- Promotion PR #$PROMOTION_PR merged to main"
+                  echo "- Feature promoted and committed: $CURRENT_SHA"
+                  echo "- Status updated: \`code-completed\` → \`launched\`"
+                  echo "- Launched date: $TODAY"
+                } >> "$context_md"
+              done
+
+              # Commit and push changes
+              git config user.name "GitHub Actions"
+              git config user.email "actions@github.com"
+              git add docs/roadmap/features/*/feature.md docs/roadmap/features/*/context.md
+              git commit -m "chore: auto-update feature statuses for promotion PR #$PROMOTION_PR" || true
+              git push
+
+              echo ""
+              echo "✓ Feature statuses updated successfully"
+            else
+              echo "ℹ No code-completed features detected in this promotion PR"
+            fi
+          else
+            echo "ℹ Skipping: Not a promotion PR merge (no 'release: promote' in commit message)"
+          fi
