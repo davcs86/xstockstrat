@@ -29,6 +29,7 @@ All service repos are siblings under `services/`. They consume generated code fr
 | xstockstrat-trader | Next.js | Trading UI frontend | — | 3000 |
 | xstockstrat-insights | Next.js | Analytics/insights dashboard | — | 3001 |
 | xstockstrat-config-ui | Next.js | Config management UI | — | 3002 |
+| xstockstrat-nginx | Nginx | HTTP reverse proxy, unified frontend ingress | — | 80 |
 
 ---
 

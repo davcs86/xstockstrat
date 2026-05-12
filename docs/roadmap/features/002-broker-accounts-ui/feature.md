@@ -1,9 +1,11 @@
 # Feature: broker-accounts-ui
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
 **Development Branch**: `feature/broker-accounts-ui`
 **Created**: 2026-05-06
-**Last Updated**: 2026-05-07T00:00:00Z
+**Last Updated**: 2026-05-12
+**Committed to main**: 5619f53
+**Launched date**: 2026-05-12
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-05-06 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-05-07 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — connectClients.ts extended |
 | 2026-05-07 | `in-progress` → `code-completed` | /sdd-execute | Step 9 complete — all 9 steps done |
+| 2026-05-12 | `code-completed` → `launched` | production promotion | Promoted to main via multiple release PRs; now live in production |
 
 ---
 
@@ -42,4 +45,4 @@ _(Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the reviewer regi
 
 ## Next Action
 
-`/sdd-review broker-accounts-ui impl-spec` — validate implementation spec, then `/sdd-execute broker-accounts-ui`
+— launched in production. All 9 steps complete; feature merged to main-dev via PR #117 and promoted to main via production release PRs.

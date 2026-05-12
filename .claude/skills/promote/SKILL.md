@@ -240,26 +240,45 @@ Print the PR URL.
 
 ---
 
-## P7. Update feature tracking
+## P7. Update feature tracking (automatic on promotion PR merge)
+
+**This phase is now automated by CI.** After the promotion PR merges to `main`:
+
+1. A GitHub Actions workflow (`ci-validate-feature-status.yml`) runs automatically on the `main` branch
+2. It detects features that were promoted (commits on main between the base and head of the promotion PR)
+3. For each promoted feature, it:
+   - Updates status from `code-completed` → `launched`
+   - Adds a status history entry with promotion PR link and commit SHA
+   - Records `**Committed to main**` with the commit SHA
+   - Records `**Launched date**` with today's date
+   - Updates `context.md` with promotion session log
+   - Commits and pushes the changes back to main
+
+**Manual fallback** (if CI workflow fails): Run this skill on the `main` branch manually to update feature statuses.
 
 For each feature **or bug** found at `code-completed` in P2:
 
 Read its `$FEATURE_DIR/feature.md` (using the `FEATURE_DIR` captured in P2). Add a new row to the **Status History** table:
 
 ```markdown
-| YYYY-MM-DD | `code-completed` → `launched (pending merge)` | /promote | Promote PR created: <PR URL> |
+| YYYY-MM-DD | `code-completed` → `launched` | /promote + CI | Promoted via PR #NNN; committed SHA-HASH to main |
 ```
 
-Write the file back.
+Update these fields:
+```markdown
+**Committed to main**: <commit-sha>
+**Launched date**: YYYY-MM-DD
+```
 
-Append to `$FEATURE_DIR/context.md`:
+Write the file back. Update `$FEATURE_DIR/context.md`:
 
 ```markdown
-## Session YYYY-MM-DD (/promote)
+## Session YYYY-MM-DD (CI: feature status automation)
 
-- Promote PR created: <PR URL>
-- Lifecycle updated to `launched (pending merge)`
-- After the PR merges to main, update feature.md status to `launched`
+- Promotion PR #NNN merged to main
+- Feature promoted and committed: <commit-sha>
+- Status updated: `code-completed` → `launched`
+- Launched date: YYYY-MM-DD
 ```
 
 ---
