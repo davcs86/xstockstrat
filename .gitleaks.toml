@@ -1,0 +1,4 @@
+title = "xstockstrat gitleaks config"
+
+[extend]
+useDefault = true

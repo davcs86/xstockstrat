@@ -22,16 +22,10 @@ type Config struct {
 	IndicatorsEndpoint   string
 	NotifyEndpoint       string
 	DBConnStr            string
-	RequireApprovalAbove float64 // order qty threshold requiring manual approval
-	// Alpaca broker credentials — used only by xstockstrat-trading for order submission.
-	// Secrets: sourced from env vars, never from the config service.
-	AlpacaAPIKey                string
-	AlpacaAPISecret             string
-	AlpacaPaperURL              string // default: https://paper-api.alpaca.markets
-	AlpacaLiveURL               string // default: https://api.alpaca.markets
-	AlpacaPaper                 bool   // default: true; set false for live trading
-	BrokerAccountsEncryptionKey string // hex-encoded 32-byte key; required when broker_accounts table is in use
-	AppEnv                      string // "dev" | "production"
+	RequireApprovalAbove        float64 // order qty threshold requiring manual approval
+	BrokerAccountsEncryptionKey string  // hex-encoded 32-byte key; required when broker_accounts table is in use
+	TradingMode                 string  // "paper" | "live"
+	ApplicationEnv              string  // "development" | "production"
 }
 
 func LoadFromEnv() *Config {
@@ -45,13 +39,9 @@ func LoadFromEnv() *Config {
 		NotifyEndpoint:              getEnv("NOTIFY_ENDPOINT", "xstockstrat-notify:50059"),
 		DBConnStr:                   getEnv("DATABASE_URL", ""),
 		RequireApprovalAbove:        0, // loaded from config service at runtime
-		AlpacaAPIKey:                getEnv("ALPACA_API_KEY", ""),
-		AlpacaAPISecret:             getEnv("ALPACA_API_SECRET", ""),
-		AlpacaPaperURL:              getEnv("ALPACA_PAPER_URL", "https://paper-api.alpaca.markets"),
-		AlpacaLiveURL:               getEnv("ALPACA_LIVE_URL", "https://api.alpaca.markets"),
-		AlpacaPaper:                 getEnvBool("ALPACA_PAPER", true),
 		BrokerAccountsEncryptionKey: os.Getenv("BROKER_ACCOUNTS_ENCRYPTION_KEY"),
-		AppEnv:                      os.Getenv("APP_ENV"),
+		TradingMode:                 getEnv("TRADING_MODE", "paper"),
+		ApplicationEnv:              getEnv("APPLICATION_ENV", "development"),
 	}
 }
 

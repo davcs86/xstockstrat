@@ -25,7 +25,7 @@ def init_telemetry() -> None:
 
         endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317")
         svc_name = os.getenv("OTEL_SERVICE_NAME", "xstockstrat-indicators")
-        environment = os.getenv("APP_ENV", "dev")
+        environment = os.getenv("APPLICATION_ENV", "development")
 
         resource = Resource.create(
             {

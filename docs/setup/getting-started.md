@@ -37,7 +37,7 @@ Both tracks end in the same place: all 13 services running locally via Docker Co
 ### Step 1 — Clone
 
 ```bash
-git clone https://github.com/davcs86/xstockstrat-orchestration.git
+git clone https://github.com/<your-org>/xstockstrat-orchestration.git
 cd xstockstrat-orchestration
 ```
 
@@ -47,17 +47,26 @@ cd xstockstrat-orchestration
 cp .env.example .env
 ```
 
+**Three-file convention** — local dev uses three env files with different scopes:
+
+| File | Committed? | Scope | Purpose |
+|---|---|---|---|
+| `.env` | **No** (secrets) | compose interpolation | Secrets: `POSTGRES_PASSWORD`, `ALPACA_*`, `JWT_SECRET`, `GRAFANA_OTLP_TOKEN` |
+| `.env.local` | Yes | all 13 containers | Structural non-secrets: `APPLICATION_ENV`, `NODE_ENV`, `GRAFANA_OTLP_ENDPOINT` |
+| `.env.fe.local` | Yes | 3 Next.js containers only | Frontend-only non-secrets: `APP_URL` |
+
+You only need to edit `.env`. The other two files are pre-populated and committed.
+
 Edit `.env` and fill in the required values:
 
 | Variable | Required? | Notes |
 |---|---|---|
-| `ALPACA_API_KEY` | **Yes** | Paper trading key from alpaca.markets |
+| `POSTGRES_PASSWORD` | Leave default | `devpassword` works for local dev; docker-compose constructs `DATABASE_URL` automatically from this |
+| `ALPACA_API_KEY` | **Yes** | Paper trading key from alpaca.markets; used only by `xstockstrat-marketdata` |
 | `ALPACA_API_SECRET` | **Yes** | Matching secret |
-| `ALPACA_PAPER` | **Yes** | Keep `true` for local dev |
 | `JWT_SECRET` | **Yes** | Generate: `openssl rand -hex 32` |
-| `DATABASE_URL` | Leave default | docker-compose injects this into all service containers; the default in `.env.example` works for local dev |
-| `N8N_WEBHOOK_SECRET` | Optional | Only needed if testing n8n integrations locally |
-| `OTEL_ENABLED` | Optional | Set `true` only if you have a Grafana Cloud account; see `setup/grafana-cloud.md` |
+| `GRAFANA_OTLP_TOKEN` | Optional | Only needed when enabling OpenTelemetry; see [`setup/grafana-cloud.md`](grafana-cloud.md) |
+| `GRAFANA_OTLP_ENDPOINT` | Optional | Override default `http://localhost:4317` with your real Grafana Cloud OTLP URL |
 
 For Alpaca key setup, see [`setup/alpaca.md`](alpaca.md).
 

@@ -75,7 +75,7 @@ HTTP_PORT=8054
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
-APP_ENV=dev                            # dev | production
+APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
 ```
 

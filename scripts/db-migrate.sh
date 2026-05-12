@@ -16,7 +16,12 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DB_URL="${DATABASE_URL:-postgres://xstockstrat:devpassword@localhost:5432/xstockstrat?sslmode=disable}"
+if [ -z "${DATABASE_URL:-}" ]; then
+  echo "ERROR: DATABASE_URL is required. Set it in .env or export it before running this script."
+  echo "  Example: export DATABASE_URL=postgres://xstockstrat:<password>@localhost:5432/xstockstrat?sslmode=disable"
+  exit 1
+fi
+DB_URL="${DATABASE_URL}"
 COMMAND="${1:-up}"
 
 # Build a DATABASE_URL with schema-scoped migration tracking.

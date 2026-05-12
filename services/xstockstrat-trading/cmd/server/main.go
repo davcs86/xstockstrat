@@ -105,9 +105,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Seed alpaca-default row if pool is empty and env vars are present.
-	svc.EnsureAlpacaDefault(ctx)
-
 	// Start fill poller — detects broker fills and emits order.filled events.
 	go svc.StartFillPoller(ctx)
 	// Start position sync poller — reconciles broker positions every N ms.

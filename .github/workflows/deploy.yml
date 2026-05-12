@@ -23,8 +23,11 @@ jobs:
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
+      - name: Substitute GitHub org in app spec
+        run: sed "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" ${{ inputs.app_spec }} > /tmp/app_spec_substituted.yaml
+
       - name: Deploy to DigitalOcean App Platform
-        run: doctl apps update ${{ secrets.DO_APP_ID }} --spec ${{ inputs.app_spec }}
+        run: doctl apps update ${{ secrets.DO_APP_ID }} --spec /tmp/app_spec_substituted.yaml
 
       - name: Wait for deployment
         run: |

@@ -63,7 +63,7 @@ NOTIFY_HTTP_ENDPOINT=http://xstockstrat-notify:8059
 IDENTITY_HTTP_ENDPOINT=http://xstockstrat-identity:8058
 TRADING_HTTP_ENDPOINT=http://xstockstrat-trading:8051
 PORTFOLIO_HTTP_ENDPOINT=http://xstockstrat-portfolio:8052
-APP_ENV=dev                            # dev | production
+APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
 ```
 

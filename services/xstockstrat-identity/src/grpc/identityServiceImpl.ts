@@ -15,8 +15,13 @@ export class IdentityServiceImpl {
   ) {}
 
   private get jwtSecret(): string {
-    // Secret keys are not stored in config service — sourced from env only
-    return process.env.JWT_SECRET ?? 'dev-jwt-secret-change-in-production';
+    // Secret keys are not stored in config service — sourced from env only.
+    // JWT_SECRET must be set in the environment; see .env.example.
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error('JWT_SECRET environment variable is required but not set. See .env.example.');
+    }
+    return secret;
   }
 
   private get accessTtlSeconds(): number {

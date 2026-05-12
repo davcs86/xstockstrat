@@ -7,8 +7,61 @@ on:
       - main
 
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      matched: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # Each filter name is referenced verbatim by downstream `if:` gates.
+          # Service filter names MUST match the matrix.service values exactly.
+          filters: |
+            ci:
+              - '.github/workflows/ci.yml'
+            proto:
+              - 'packages/proto/**'
+              - 'scripts/buf-gen.sh'
+            go-shared:
+              - 'go.work'
+              - 'go.work.sum'
+            node-shared:
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'package.json'
+            xstockstrat-trading:    ['services/xstockstrat-trading/**']
+            xstockstrat-marketdata: ['services/xstockstrat-marketdata/**']
+            xstockstrat-portfolio:  ['services/xstockstrat-portfolio/**']
+            xstockstrat-indicators: ['services/xstockstrat-indicators/**']
+            xstockstrat-ingest:     ['services/xstockstrat-ingest/**']
+            xstockstrat-analysis:   ['services/xstockstrat-analysis/**']
+            xstockstrat-config:     ['services/xstockstrat-config/**']
+            xstockstrat-ledger:     ['services/xstockstrat-ledger/**']
+            xstockstrat-identity:   ['services/xstockstrat-identity/**']
+            xstockstrat-notify:     ['services/xstockstrat-notify/**']
+            xstockstrat-trader:     ['services/xstockstrat-trader/**']
+            xstockstrat-insights:   ['services/xstockstrat-insights/**']
+            xstockstrat-config-ui:  ['services/xstockstrat-config-ui/**']
+            dockerfiles:
+              - '**/Dockerfile*'
+              - '.hadolint.yaml'
+            scripts:
+              - 'scripts/**'
+              - '.claude/hooks/**'
+            claude-md:
+              - '**/CLAUDE.md'
+              - '.markdownlint.yaml'
+
   proto-lint:
     name: Proto lint and breaking check
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'proto') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -32,6 +85,10 @@ jobs:
 
   proto-freshness:
     name: Proto stubs are up to date
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'proto') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -43,6 +100,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
+          cache-dependency-path: packages/proto/go.sum
 
       - name: Install Go proto plugins
         run: |
@@ -54,6 +112,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: 'pip'
 
       - name: Install Python gRPC tools
         run: pip install grpcio-tools==1.80.0
@@ -65,6 +124,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
@@ -79,6 +140,12 @@ jobs:
 
   go-lint:
     name: Go lint and test (${{ matrix.service }})
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'proto') ||
+      contains(fromJson(needs.changes.outputs.matched), 'go-shared') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -161,6 +228,11 @@ jobs:
 
   python-lint:
     name: Python lint (${{ matrix.service }})
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'proto') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -192,6 +264,11 @@ jobs:
 
   python-test:
     name: Python test and coverage (${{ matrix.service }})
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'proto') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -237,6 +314,12 @@ jobs:
 
   node-lint:
     name: Node lint (${{ matrix.service }})
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'proto') ||
+      contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -274,6 +357,12 @@ jobs:
 
   frontend-e2e:
     name: Frontend E2E (${{ matrix.service }})
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'proto') ||
+      contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -333,6 +422,12 @@ jobs:
 
   node-test:
     name: Node test and coverage (${{ matrix.service }})
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'proto') ||
+      contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -375,3 +470,78 @@ jobs:
           name: node-coverage-${{ matrix.service }}
           path: services/${{ matrix.service }}/coverage/lcov.info
           if-no-files-found: ignore
+
+  dockerfile-lint:
+    name: Dockerfile lint (hadolint)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'dockerfiles') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          recursive: true
+          config: .hadolint.yaml
+
+  shell-lint:
+    name: Shell script lint (shellcheck + shfmt)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'scripts') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install shellcheck and shfmt
+        run: sudo apt-get install -y shellcheck shfmt
+
+      - name: shellcheck
+        run: shellcheck scripts/*.sh .claude/hooks/*.sh
+
+      - name: shfmt (diff check)
+        run: shfmt -d -i 2 scripts/*.sh .claude/hooks/*.sh
+
+  markdown-lint:
+    name: CLAUDE.md lint (markdownlint)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'claude-md') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: markdownlint
+        uses: DavidAnson/markdownlint-cli2-action@v20
+        with:
+          config: .markdownlint.yaml
+          globs: '**/CLAUDE.md'
+
+  secret-scan:
+    name: Secret scan (trufflehog + gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history required for trufflehog git-history scan
+          fetch-depth: 0
+
+      - name: TruffleHog — scan full git history
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT_SCAN }}
+
+      - name: Gitleaks — scan working tree
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT_SCAN }}

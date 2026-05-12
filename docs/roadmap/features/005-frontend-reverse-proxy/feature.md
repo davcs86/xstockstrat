@@ -3,7 +3,7 @@
 **Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/frontend-reverse-proxy`
 **Created**: 2026-05-11
-**Last Updated**: 2026-05-11
+**Last Updated**: 2026-05-12
 
 ---
 
@@ -36,11 +36,11 @@ Snapshot from docs/runbooks/reviewer-registry.md, fixed at implementation-ready.
 
 | Role | Review Focus |
 |---|---|
-| Platform Lead | Cross-service routing architecture, port assignments, single-entry-point design |
-| `xstockstrat-trader` service owner | Trading UI routing correctness, Connect-RPC call safety after basePath changes |
-| `xstockstrat-insights` service owner | Analytics UI routing correctness, SSE polling through reverse proxy |
-| `xstockstrat-config-ui` service owner | Config mutation safety through reverse proxy, environment scope correctness |
+| Platform Lead | Port uniqueness, service registry consistency, inter-service dependency graph correctness |
+| `xstockstrat-trader` service owner | Trading UI correctness, Connect-RPC call safety, no direct DB access from frontend |
+| `xstockstrat-insights` service owner | Analytics display accuracy, SSE polling resilience, read-only access pattern |
+| `xstockstrat-config-ui` service owner | Config mutation safety, environment scope correctness, no secret values rendered in UI |
 
 ## Next Action
 
-`/sdd-execute frontend-reverse-proxy` — begin step-by-step execution (impl-spec review passed)
+`/sdd-execute frontend-reverse-proxy next` — resume execution at Step 3 (next.config.js basePath for trader). Steps 1 & 2 are `done`; Steps 3–6 remain `pending`. The 2026-05-12 `/sdd-review impl-spec` advisory check returned PASS (0 failures, 3 warnings — 2 since resolved on this branch: Step 6 Dockerfile reference, make-repo-public-secure overlap now moot).
