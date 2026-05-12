@@ -186,7 +186,14 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ```
 
-Prepend the new changelog entry (from P4) immediately after the `---` separator line.
+Check if an entry for today's date (`## YYYY-MM-DD`) already exists in the file:
+```bash
+grep "^## $(date +%Y-%m-%d)$" CHANGELOG.md
+```
+
+**If the entry exists**: Replace the entire entry (from `## YYYY-MM-DD` to the next `---` separator or EOF) with the new changelog entry (from P4).
+
+**If the entry does not exist**: Prepend the new changelog entry (from P4) immediately after the `---` separator line.
 
 Write the file back.
 
