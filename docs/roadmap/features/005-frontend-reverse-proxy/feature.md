@@ -44,4 +44,4 @@ Snapshot from docs/runbooks/reviewer-registry.md, fixed at implementation-ready.
 
 ## Next Action
 
-`/sdd-review frontend-reverse-proxy impl-spec` — validate refreshed implementation spec, then `/sdd-execute frontend-reverse-proxy`
+`/sdd-execute frontend-reverse-proxy next` — resume execution at Step 3 (next.config.js basePath for trader). Steps 1 & 2 are `done`; Steps 3–6 remain `pending`. The 2026-05-12 `/sdd-review impl-spec` advisory check returned PASS (0 failures, 3 warnings — 2 since resolved on this branch: Step 6 Dockerfile reference, make-repo-public-secure overlap now moot).
