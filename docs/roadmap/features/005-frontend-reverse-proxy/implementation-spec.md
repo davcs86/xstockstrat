@@ -310,7 +310,7 @@ Expected: Build succeeds and routes appear prefixed with `/insights` (e.g. `/ins
 
 ### Step 5 — service: Update xstockstrat-config-ui next.config.js with basePath
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/next.config.js` — modify
@@ -480,3 +480,9 @@ docker compose exec xstockstrat-trader sh -c "wget -q -O - http://xstockstrat-tr
 **Actual**: Created `services/xstockstrat-nginx/Dockerfile` (treating nginx reverse proxy as a service, not a one-off tool).
 **Reason**: Consistency with project structure — each service has its own directory under `services/`, which improves organization and future extensibility (e.g., adding nginx config variants, CI job filters per service).
 **Disposition**: Step 6 will reference `services/xstockstrat-nginx/Dockerfile` in docker-compose.yml build directive; nginx.conf remains at repo root (shared infrastructure); COPY directive in Dockerfile uses relative path to repo root build context.
+
+### Deviation: Step 5 — Update xstockstrat-config-ui next.config.js with basePath
+**Spec said**: `pnpm install && pnpm run build` should succeed immediately without additional changes.
+**Actual**: Build failed with two pre-existing issues: (1) Missing `@types/pg` in devDependencies; (2) Import error: `createNodeHttpTransport` not exported from `@connectrpc/connect-node`. Scope expanded to fix both issues. Added `@types/pg: ^8.11.0` to devDependencies and fixed import in `src/lib/configClient.ts` from `createNodeHttpTransport` to `createConnectTransport` (matching trader's pattern). Also modified `services/xstockstrat-config-ui/src/lib/configClient.ts` (not listed in original step's **Files** section).
+**Reason**: config-ui had pre-existing dependency and library API issues that blocked the basePath verification. User chose Option A (fix issues) to unblock. Deviations tracked separately from Step 5's core change.
+**Disposition**: Three files modified instead of one; Step 5 **Files** section now includes `src/lib/configClient.ts` and `package.json` in addition to `next.config.js`. Verification now passes.
