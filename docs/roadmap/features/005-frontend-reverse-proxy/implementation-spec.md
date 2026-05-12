@@ -1,6 +1,6 @@
 # Implementation Spec: frontend-reverse-proxy
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-05-11
 **Feature**: `docs/roadmap/features/005-frontend-reverse-proxy/feature.md`
 **Total Steps**: 6
@@ -201,7 +201,7 @@ Expected curl output: `{"status":"ok","service":"nginx-reverse-proxy"}`
 
 ### Step 3 — service: Update xstockstrat-trader next.config.js with basePath
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/next.config.js` — modify
@@ -255,7 +255,7 @@ Expected: Build succeeds and the Next.js build summary shows routes prefixed wit
 
 ### Step 4 — service: Update xstockstrat-insights next.config.js with basePath
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/next.config.js` — modify
@@ -310,7 +310,7 @@ Expected: Build succeeds and routes appear prefixed with `/insights` (e.g. `/ins
 
 ### Step 5 — service: Update xstockstrat-config-ui next.config.js with basePath
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/next.config.js` — modify
@@ -367,7 +367,7 @@ Expected: Build succeeds and routes appear prefixed with `/config-ui` (e.g. `/co
 
 ### Step 6 — service: Update docker-compose.yml to add nginx reverse proxy service
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docker-compose.yml` (infrastructure — repo root)
 **Files**:
 - `docker-compose.yml` — modify
@@ -480,3 +480,15 @@ docker compose exec xstockstrat-trader sh -c "wget -q -O - http://xstockstrat-tr
 **Actual**: Created `services/xstockstrat-nginx/Dockerfile` (treating nginx reverse proxy as a service, not a one-off tool).
 **Reason**: Consistency with project structure — each service has its own directory under `services/`, which improves organization and future extensibility (e.g., adding nginx config variants, CI job filters per service).
 **Disposition**: Step 6 will reference `services/xstockstrat-nginx/Dockerfile` in docker-compose.yml build directive; nginx.conf remains at repo root (shared infrastructure); COPY directive in Dockerfile uses relative path to repo root build context.
+
+### Deviation: Step 5 — Update xstockstrat-config-ui next.config.js with basePath
+**Spec said**: `pnpm install && pnpm run build` should succeed immediately without additional changes.
+**Actual**: Build failed with two pre-existing issues: (1) Missing `@types/pg` in devDependencies; (2) Import error: `createNodeHttpTransport` not exported from `@connectrpc/connect-node`. Scope expanded to fix both issues. Added `@types/pg: ^8.11.0` to devDependencies and fixed import in `src/lib/configClient.ts` from `createNodeHttpTransport` to `createConnectTransport` (matching trader's pattern). Also modified `services/xstockstrat-config-ui/src/lib/configClient.ts` (not listed in original step's **Files** section).
+**Reason**: config-ui had pre-existing dependency and library API issues that blocked the basePath verification. User chose Option A (fix issues) to unblock. Deviations tracked separately from Step 5's core change.
+**Disposition**: Three files modified instead of one; Step 5 **Files** section now includes `src/lib/configClient.ts` and `package.json` in addition to `next.config.js`. Verification now passes.
+
+### Deviation: Step 6 — Update docker-compose.yml to add nginx reverse proxy service
+**Spec said**: Verification commands including `docker compose config`, `docker compose build nginx`, `docker compose up -d`, and `curl http://localhost/trader/` must succeed to confirm YAML syntax, image build, service startup, and path-based routing.
+**Actual**: Docker daemon not available in execution sandbox. Full runtime verification cannot be run. Structural validation completed: YAML indentation matches existing service pattern; nginx block follows `<<: *svc` anchor pattern like other services; referenced files (`services/xstockstrat-nginx/Dockerfile`, `nginx.conf`) confirmed present.
+**Reason**: Environment constraint (no Docker), not a spec or implementation issue.
+**Disposition**: Full verification will execute in actual deployment environment (local dev machine, CI/CD pipeline, or production) where Docker is available. Structural correctness verified as precondition. `docker-compose.yml` will fail at runtime if configuration is invalid (nginx will refuse to start on malformed config).
