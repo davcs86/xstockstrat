@@ -119,3 +119,21 @@
 **Progress**: 2 done / 6 total
 **Stopped at**: Step 2 (per-step PR opened; SDD rule = one step per session)
 **Next**: `/sdd-execute frontend-reverse-proxy next`
+
+---
+
+## Session 2026-05-12 — sdd-execute
+
+**Boot**: Loaded authoritative spec from `origin/feature/frontend-reverse-proxy`. Current harness branch was `claude/frontend-reverse-proxy-next-3K9pE`; user reaffirmed SDD branch model (integration `feature/frontend-reverse-proxy` + per-step `feature-steps/<slug>-step-N` sub-branches). Ran BRANCH SYNC: checked out `feature/frontend-reverse-proxy`, merged latest `origin/main-dev` with `-X ours`, pushed integration branch, created `feature-steps/frontend-reverse-proxy-step-3`.
+
+### Step 3 — Update xstockstrat-trader next.config.js with basePath [done]
+- Added `basePath: '/trader'` to `services/xstockstrat-trader/next.config.js`. Preserved existing `output: 'standalone'`, `serverExternalPackages: ['@connectrpc/connect-node']`, and the existing inline comment.
+- Verification: `pnpm install && pnpm run build` succeeded; `.next/required-server-files.json` confirms `"basePath": "/trader"`. 10 routes generated (all served under `/trader` prefix at runtime).
+- Files modified: `services/xstockstrat-trader/next.config.js`
+- Deviations: none
+
+### Session summary
+**Steps this session**: [3]
+**Progress**: 3 done / 6 total
+**Stopped at**: Step 3 (per-step PR will be opened; SDD rule = one step per session)
+**Next**: `/sdd-execute frontend-reverse-proxy next`
