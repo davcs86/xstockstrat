@@ -92,6 +92,36 @@
 
 ---
 
+## Session 2026-05-11 — sdd-execute
+
+**Boot**: Loaded authoritative spec from `origin/main-dev` (feature branch `feature/frontend-reverse-proxy` not yet pushed; created during BRANCH SYNC for Step 1).
+
+**Branch model decision**: User selected the SDD branch model (integration branch `feature/frontend-reverse-proxy` + per-step `feature-steps/<slug>-step-N` sub-branches), not the harness-assigned `claude/frontend-reverse-proxy-next-MXsoC` branch.
+
+### Step 1 — Create nginx reverse proxy configuration [done]
+- Wrote `nginx.conf` at repo root with three upstream blocks (trader/insights/config_ui), six location blocks (`/trader`, `/trader/`, `/insights`, `/insights/`, `/config-ui`, `/config-ui/`), `/health` endpoint returning JSON, and proxy directives for streaming (`proxy_buffering off`, `Connection: upgrade`).
+- Files modified: `nginx.conf`
+- Deviations: 1 — verification (`nginx -t`) not runnable in sandbox (no Docker daemon, no local nginx, apt mirrors 404). Tracked as follow-up to Step 6, which builds + starts the full stack and would fail fast if the config is invalid. Full detail in Deviation Log.
+
+### Step 2 — Create Dockerfile for nginx reverse proxy [done]
+- Wrote `services/xstockstrat-nginx/Dockerfile` (moved from repo root to treat nginx as a service) with nginx:1.27-alpine base, COPY nginx.conf, HEALTHCHECK (10s/3s/5s/3r), EXPOSE 80, CMD with daemon off
+- Files modified: `services/xstockstrat-nginx/Dockerfile`
+- Deviations: 2 — (1) location moved to services/ per user feedback; (2) verification (`docker build`) not runnable in sandbox (no Docker daemon). Same as Step 1; deferred to Step 6 full-stack integration test.
+
+## Open Items
+
+| Item | Earliest step | Notes |
+|---|---|---|
+| Confirm `docker build` passes against `Dockerfile.nginx` | Step 6 | Step 6 verification runs `docker-compose build` + `docker-compose up -d`; Docker will fail if Dockerfile is invalid. If Step 6 verification runs in an env with Docker, this gap closes automatically.
+
+### Session summary
+**Steps this session**: [2]
+**Progress**: 2 done / 6 total
+**Stopped at**: Step 2 (per-step PR opened; SDD rule = one step per session)
+**Next**: `/sdd-execute frontend-reverse-proxy next`
+
+---
+
 ## Session 2026-05-12 — sdd-spec (refresh)
 
 **Implementation spec regenerated**: Same 6-step shape; refreshed codebase evidence after re-grepping the current tree.
