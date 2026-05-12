@@ -1,9 +1,9 @@
 # Feature: make-repo-public-secure
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
 **Development Branch**: `feature/make-repo-public-secure`
 **Created**: 2026-05-10
-**Last Updated**: 2026-05-11T01:11:00Z
+**Last Updated**: 2026-05-12
 
 ---
 
@@ -21,6 +21,7 @@
 | 2026-05-11 | `in-progress` → `code-completed` | /sdd-execute | Step 10 complete (.env.local, APPLICATION_ENV all services, APP_URL frontends, deploy sed, Step 11 skipped) |
 | 2026-05-11 | `code-completed` → Final PR | /sdd-execute | Integration PR #157 created: feature/make-repo-public-secure → main-dev |
 | 2026-05-11 | `code-completed` (unchanged) | /sdd-execute | GH_PAT_SCAN token wired into secret-scan job (trufflehog + gitleaks) |
+| 2026-05-11 | `code-completed` → `launched` | /promote | PR #157 promoted to production via promotion PR #158 (`release: promote main-dev to main (2026-05-11)`) |
 
 ---
 
@@ -48,4 +49,4 @@ _(Snapshot finalized by /sdd-spec 2026-05-11. Re-run /sdd-spec if the registry c
 
 ## Next Action
 
-All steps complete (Step 11 skipped — absorbed into Step 10). Final integration PR created: [#157](https://github.com/davcs86/xstockstrat-orchestration/pull/157). Merge when CI passes and reviewers approve.
+— launched in production via promotion PR [#158](https://github.com/davcs86/xstockstrat-orchestration/pull/158) (integration PR [#157](https://github.com/davcs86/xstockstrat-orchestration/pull/157)).
