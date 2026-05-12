@@ -462,3 +462,26 @@ services:
         condition: service_completed_successfully
       xstockstrat-config:
         condition: service_started
+
+  # ── Reverse Proxy ───────────────────────────────────────────────────────
+  # Single public entry point that routes /trader, /insights, /config-ui to
+  # their respective Next.js frontends. Service-to-service Connect-RPC calls
+  # remain on the internal network and do NOT flow through nginx.
+  nginx:
+    <<: *svc
+    build:
+      context: .
+      dockerfile: services/xstockstrat-nginx/Dockerfile
+    container_name: xstockstrat-nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - xstockstrat-trader
+      - xstockstrat-insights
+      - xstockstrat-config-ui
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 3

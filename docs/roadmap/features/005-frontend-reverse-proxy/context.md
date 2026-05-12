@@ -181,3 +181,29 @@
 **Progress**: 5 done / 6 total
 **Stopped at**: Step 5 (per-step PR will be opened; SDD rule = one step per session)
 **Next**: `/sdd-execute frontend-reverse-proxy next`
+
+---
+
+## Session 2026-05-12 — sdd-execute (late)
+
+**Boot**: Loaded authoritative spec from `origin/feature/frontend-reverse-proxy`. Current branch: `feature-steps/frontend-reverse-proxy-step-5`. Ran BRANCH SYNC: pulled latest feature branch, merged main-dev, created `feature-steps/frontend-reverse-proxy-step-6`.
+
+### Step 6 — Update docker-compose.yml to add nginx reverse proxy service [done]
+- Discovery: confirmed all 5 prior steps completed and files present ✓
+- Plan: append 19-line nginx service block to docker-compose.yml (after xstockstrat-config-ui) matching existing YAML anchor pattern ✓
+- Execution: appended nginx service block with correct 2-space indentation, matching <<: *svc pattern, correct port (80), depends_on list (three frontends), and healthcheck ✓
+- **Verification**: Docker not available in sandbox environment. Structural validation completed: YAML indentation matches existing services, referenced files (`services/xstockstrat-nginx/Dockerfile`, `nginx.conf`) confirmed present. Full runtime verification (`docker compose build`, `curl routing tests`) deferred to deployment environment (local dev, CI, or production). Tracked as Deviation 6.
+- Files modified: `docker-compose.yml`
+- Deviations: 1 — structural validation only (Docker unavailable)
+
+### All Steps Complete
+- Lifecycle updated: feature.md status → `code-completed`
+- Implementation spec status → `complete`
+- Ready for integration PR: `feature/frontend-reverse-proxy` → `main-dev`
+- Check merge-order.md before merging (advisory overlaps with 002-broker-accounts-ui, 003-formula-management-ui, 004-make-repo-public-secure)
+
+### Session summary
+**Steps this session**: [6]
+**Progress**: 6 done / 6 total (FEATURE COMPLETE)
+**Stopped at**: All steps complete; ready for integration PR
+**Next**: Create integration PR `feature/frontend-reverse-proxy` → `main-dev`; reviewers: Platform Lead, service owners per implementation-spec.md

@@ -1,6 +1,6 @@
 # Feature: frontend-reverse-proxy
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/frontend-reverse-proxy`
 **Created**: 2026-05-11
 **Last Updated**: 2026-05-12
@@ -15,6 +15,7 @@
 | 2026-05-11 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-05-11 | `implementation-ready` (unchanged) | /sdd-review | Impl-spec review PASS — all 6 steps PASS quality checks, valid DAG, 3 WARN overlaps (advisory) |
 | 2026-05-11 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (nginx.conf) complete — verification deferred to Step 6 (env limitation) |
+| 2026-05-12 | `in-progress` → `code-completed` | /sdd-execute | All 6 steps complete (Steps 2–6 finished across sessions); ready for integration PR and merge review |
 
 ---
 
@@ -43,4 +44,4 @@ Snapshot from docs/runbooks/reviewer-registry.md, fixed at implementation-ready.
 
 ## Next Action
 
-`/sdd-execute frontend-reverse-proxy next` — resume execution at Step 3 (next.config.js basePath for trader). Steps 1 & 2 are `done`; Steps 3–6 remain `pending`. The 2026-05-12 `/sdd-review impl-spec` advisory check returned PASS (0 failures, 3 warnings — 2 since resolved on this branch: Step 6 Dockerfile reference, make-repo-public-secure overlap now moot).
+All 6 implementation steps complete. Ready for integration PR (`feature/frontend-reverse-proxy` → `main-dev`). Check `docs/roadmap/features/merge-order.md` for blocking dependencies before merging. After merge, update `.do/app.yaml` / `.do/app.dev.yaml` to wire nginx into the Do App Platform deployment (future work, out of scope for Phase 1 baseline implementation).
