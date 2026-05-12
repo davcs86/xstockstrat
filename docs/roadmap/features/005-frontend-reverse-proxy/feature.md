@@ -3,7 +3,7 @@
 **Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/frontend-reverse-proxy`
 **Created**: 2026-05-11
-**Last Updated**: 2026-05-11
+**Last Updated**: 2026-05-12
 
 ---
 
@@ -14,6 +14,7 @@
 | 2026-05-11 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-11 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-05-11 | `implementation-ready` (unchanged) | /sdd-review | Impl-spec review PASS — all 6 steps PASS quality checks, valid DAG, 3 WARN overlaps (advisory) |
+| 2026-05-12 | `implementation-ready` (refreshed) | /sdd-spec | Implementation spec regenerated with refreshed line-number evidence (docker-compose.yml frontend blocks shifted: trader L391, insights L416, config-ui L443); 6 steps unchanged in shape |
 
 ---
 
@@ -35,11 +36,11 @@ Snapshot from docs/runbooks/reviewer-registry.md, fixed at implementation-ready.
 
 | Role | Review Focus |
 |---|---|
-| Platform Lead | Cross-service routing architecture, port assignments, single-entry-point design |
-| `xstockstrat-trader` service owner | Trading UI routing correctness, Connect-RPC call safety after basePath changes |
-| `xstockstrat-insights` service owner | Analytics UI routing correctness, SSE polling through reverse proxy |
-| `xstockstrat-config-ui` service owner | Config mutation safety through reverse proxy, environment scope correctness |
+| Platform Lead | Port uniqueness, service registry consistency, inter-service dependency graph correctness |
+| `xstockstrat-trader` service owner | Trading UI correctness, Connect-RPC call safety, no direct DB access from frontend |
+| `xstockstrat-insights` service owner | Analytics display accuracy, SSE polling resilience, read-only access pattern |
+| `xstockstrat-config-ui` service owner | Config mutation safety, environment scope correctness, no secret values rendered in UI |
 
 ## Next Action
 
-`/sdd-execute frontend-reverse-proxy` — begin step-by-step execution (impl-spec review passed)
+`/sdd-review frontend-reverse-proxy impl-spec` — validate refreshed implementation spec, then `/sdd-execute frontend-reverse-proxy`
