@@ -1,6 +1,6 @@
 # Feature: do-nginx-integration
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/do-nginx-integration`
 **Created**: 2026-05-12
 **Last Updated**: 2026-05-12
@@ -13,13 +13,14 @@
 |---|---|---|---|
 | 2026-05-12 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings: feature overlaps with 002, 003, 004, 005 — all advisory) |
+| 2026-05-12 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps. Key findings: feature 005 provides nginx.conf + Dockerfile on feature/frontend-reverse-proxy branch; Steps 1–2 update DO app specs (remove frontend http_port, add nginx on port 80); Step 3 creates docker-entrypoint.sh for envsubst templating of DO private URLs; Step 4 documents nginx in CLAUDE.md. |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec do-nginx-integration`_
+- [Implementation Spec](implementation-spec.md) — 4 steps with concrete DO app spec changes and docker-entrypoint.sh script
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -43,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec do-nginx-integration` — generate implementation spec from the approved product spec
+`/sdd-review do-nginx-integration impl-spec` — validate implementation spec for quality and overlap, then `/sdd-execute do-nginx-integration` to begin execution
