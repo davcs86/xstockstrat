@@ -402,7 +402,7 @@ Expected: Build succeeds and routes appear prefixed with `/config-ui` (e.g. `/co
     <<: *svc
     build:
       context: .
-      dockerfile: Dockerfile.nginx
+      dockerfile: services/xstockstrat-nginx/Dockerfile
     container_name: xstockstrat-nginx
     ports:
       - "80:80"
