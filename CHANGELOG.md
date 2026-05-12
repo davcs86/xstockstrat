@@ -5,8 +5,12 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ## 2026-05-12
 
+### Features
+- broker-accounts-ui: Surfaces registered broker accounts and per-account portfolio data in the `xstockstrat-trader` UI, completing the UI half of the `add-ikbr-account-support` feature which added backend RPCs but explicitly deferred all frontend changes.
+- frontend-reverse-proxy: Implement a production-ready nginx reverse proxy that routes all frontend requests from a unified public URL (`/trader`, `/insights`, `/config-ui`) and centralizes authentication, CORS, rate limiting, and security middleware across all three Next.js frontends.
+
 ### Summary
-3 commits, 0 feature merges since last promotion.
+10 commits, 4 feature merges since last promotion.
 ---
 
 ## 2026-05-12
