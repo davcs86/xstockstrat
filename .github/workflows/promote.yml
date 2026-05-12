@@ -79,10 +79,34 @@ jobs:
           TODAY=$(date +%Y-%m-%d)
           echo "today=$TODAY" >> "$GITHUB_OUTPUT"
 
-          COMMIT_COUNT=$(git log origin/main..origin/main-dev --oneline | wc -l | tr -d ' ')
-          echo "commit_count=$COMMIT_COUNT" >> "$GITHUB_OUTPUT"
+          TOTAL_COMMITS=$(git log origin/main..origin/main-dev --oneline | wc -l | tr -d ' ')
+          TOTAL_MERGES=$(git log origin/main..origin/main-dev --merges --oneline | wc -l | tr -d ' ')
 
-          MERGE_COUNT=$(git log origin/main..origin/main-dev --merges --oneline | wc -l | tr -d ' ')
+          # If an entry for today already exists, extract the previous counts
+          # and report only the delta (commits added since the previous entry)
+          if grep -q "^## ${TODAY}$" CHANGELOG.md; then
+            # Extract the first "X commits, Y merges" from today's entries
+            PREV_COUNTS=$(awk '/^## '${TODAY}'$/,/^---$/' CHANGELOG.md | \
+              grep -oP '\d+(?= commits)' | head -1)
+            if [ -n "$PREV_COUNTS" ]; then
+              COMMIT_COUNT=$((TOTAL_COMMITS - PREV_COUNTS))
+            else
+              COMMIT_COUNT=$TOTAL_COMMITS
+            fi
+
+            PREV_MERGES=$(awk '/^## '${TODAY}'$/,/^---$/' CHANGELOG.md | \
+              grep -oP '\d+(?= feature merges)' | head -1)
+            if [ -n "$PREV_MERGES" ]; then
+              MERGE_COUNT=$((TOTAL_MERGES - PREV_MERGES))
+            else
+              MERGE_COUNT=$TOTAL_MERGES
+            fi
+          else
+            COMMIT_COUNT=$TOTAL_COMMITS
+            MERGE_COUNT=$TOTAL_MERGES
+          fi
+
+          echo "commit_count=$COMMIT_COUNT" >> "$GITHUB_OUTPUT"
           echo "merge_count=$MERGE_COUNT" >> "$GITHUB_OUTPUT"
 
           # New .up.sql migration files
