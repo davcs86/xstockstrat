@@ -10,13 +10,27 @@ networks:
 volumes:
   timescaledb_data:
 
-# Shared environment variables injected into every application service via <<: *common-env.
-# Override per-service as needed — service-level environment keys take precedence.
+# ── YAML Anchors ─────────────────────────────────────────────────────────────
+#
+# &common-env   Env vars injected into every application service via <<: *common-env.
+#               Override per-service as needed — service-level keys take precedence.
 x-common-env: &common-env
   APPLICATION_ENV: development
   TRADING_MODE: paper
   OTEL_ENABLED: ${OTEL_ENABLED:-false}
   OTEL_RESOURCE_ATTRIBUTES: environment=development,trading_mode=paper
+
+# &db-url       Constructed from POSTGRES_PASSWORD (set in .env) and the bridged-network
+#               hostname. Merged into environment: for all services that use the DB.
+x-db-url: &db-url
+  DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
+
+# &svc          Applied at the service level — every application container and the
+#               otel-collector share the same network and restart policy.
+x-svc: &svc
+  networks:
+    - xstockstrat
+  restart: unless-stopped
 
 services:
 
@@ -28,6 +42,7 @@ services:
   # http://localhost:4317 (no-op); override in .env with the real Grafana Cloud URL.
   # See packages/otel/otel-collector-config.yaml and docs/setup/grafana-cloud.md.
   otel-collector:
+    <<: *svc
     image: otel/opentelemetry-collector-contrib:0.103.0
     container_name: xstockstrat-otel-collector
     command: ["--config=/etc/otel/otel-collector-config.yaml"]
@@ -40,9 +55,6 @@ services:
       - "4317:4317"   # OTLP gRPC receiver
       - "4318:4318"   # OTLP HTTP receiver
       - "13133:13133" # Health check endpoint
-    networks:
-      - xstockstrat
-    restart: unless-stopped
 
   # Required .env var: POSTGRES_PASSWORD (copy .env.example to .env). Never commit .env.
   # DATABASE_URL is constructed from POSTGRES_PASSWORD by docker-compose — no need to set it separately.
@@ -72,7 +84,7 @@ services:
       dockerfile: scripts/Dockerfile.migrate
     container_name: xstockstrat-db-migrator
     environment:
-      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
+      <<: *db-url
     volumes:
       - .:/repo
     networks:
@@ -84,50 +96,45 @@ services:
 
   # ── Config Service (must start before all others) ───────────────────────
   xstockstrat-config:
+    <<: *svc
     build:
       context: .
       dockerfile: services/xstockstrat-config/Dockerfile
     container_name: xstockstrat-config
     env_file: [".env.local"]
     environment:
-      <<: *common-env
+      <<: [*common-env, *db-url]
       GRPC_PORT: "50060"
       HTTP_PORT: "8060"
-      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-config
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50060:50060"
       - "8060:8060"
-    networks:
-      - xstockstrat
     depends_on:
       timescaledb:
         condition: service_healthy
       db-migrator:
         condition: service_completed_successfully
-    restart: unless-stopped
 
   # ── Ledger Service ──────────────────────────────────────────────────────
   xstockstrat-ledger:
+    <<: *svc
     build:
       context: .
       dockerfile: services/xstockstrat-ledger/Dockerfile
     container_name: xstockstrat-ledger
     env_file: [".env.local"]
     environment:
-      <<: *common-env
+      <<: [*common-env, *db-url]
       GRPC_PORT: "50057"
       HTTP_PORT: "8057"
       CONFIG_ENDPOINT: xstockstrat-config:50060
-      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-ledger
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50057:50057"
       - "8057:8057"
-    networks:
-      - xstockstrat
     depends_on:
       timescaledb:
         condition: service_healthy
@@ -135,30 +142,27 @@ services:
         condition: service_completed_successfully
       xstockstrat-config:
         condition: service_started
-    restart: unless-stopped
 
   # ── Identity Service ────────────────────────────────────────────────────
   xstockstrat-identity:
+    <<: *svc
     build:
       context: .
       dockerfile: services/xstockstrat-identity/Dockerfile
     container_name: xstockstrat-identity
     env_file: [".env.local"]
     environment:
-      <<: *common-env
+      <<: [*common-env, *db-url]
       GRPC_PORT: "50058"
       HTTP_PORT: "8058"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
-      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - copy .env.example to .env (run: openssl rand -hex 32)}
       OTEL_SERVICE_NAME: xstockstrat-identity
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50058:50058"
       - "8058:8058"
-    networks:
-      - xstockstrat
     depends_on:
       timescaledb:
         condition: service_healthy
@@ -168,29 +172,26 @@ services:
         condition: service_started
       xstockstrat-ledger:
         condition: service_started
-    restart: unless-stopped
 
   # ── Notify Service ──────────────────────────────────────────────────────
   xstockstrat-notify:
+    <<: *svc
     build:
       context: .
       dockerfile: services/xstockstrat-notify/Dockerfile
     container_name: xstockstrat-notify
     env_file: [".env.local"]
     environment:
-      <<: *common-env
+      <<: [*common-env, *db-url]
       GRPC_PORT: "50059"
       HTTP_PORT: "8059"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
-      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-notify
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50059:50059"
       - "8059:8059"
-    networks:
-      - xstockstrat
     depends_on:
       timescaledb:
         condition: service_healthy
@@ -200,23 +201,22 @@ services:
         condition: service_started
       xstockstrat-ledger:
         condition: service_started
-    restart: unless-stopped
 
   # ── MarketData Service (sole Alpaca integration point) ──────────────────
   xstockstrat-marketdata:
+    <<: *svc
     build:
       context: ./services/xstockstrat-marketdata
       dockerfile: Dockerfile
     container_name: xstockstrat-marketdata
     env_file: [".env.local"]
     environment:
-      <<: *common-env
+      <<: [*common-env, *db-url]
       GRPC_PORT: "50053"
       HTTP_PORT: "8053"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       ALPACA_API_KEY: ${ALPACA_API_KEY:?ALPACA_API_KEY is required - set it in .env (see .env.example)}
       ALPACA_API_SECRET: ${ALPACA_API_SECRET:?ALPACA_API_SECRET is required - set it in .env (see .env.example)}
       ALPACA_BASE_URL: https://paper-api.alpaca.markets
@@ -226,8 +226,6 @@ services:
     ports:
       - "50053:50053"
       - "8053:8053"
-    networks:
-      - xstockstrat
     depends_on:
       db-migrator:
         condition: service_completed_successfully
@@ -237,10 +235,10 @@ services:
         condition: service_started
       xstockstrat-notify:
         condition: service_started
-    restart: unless-stopped
 
   # ── Indicators Service ──────────────────────────────────────────────────
   xstockstrat-indicators:
+    <<: *svc
     build:
       context: ./services/xstockstrat-indicators
       dockerfile: Dockerfile
@@ -258,51 +256,46 @@ services:
     ports:
       - "50054:50054"
       - "8054:8054"
-    networks:
-      - xstockstrat
     depends_on:
       - xstockstrat-config
       - xstockstrat-ledger
-    restart: unless-stopped
 
   # ── Ingest Service ──────────────────────────────────────────────────────
   xstockstrat-ingest:
+    <<: *svc
     build:
       context: ./services/xstockstrat-ingest
       dockerfile: Dockerfile
     container_name: xstockstrat-ingest
     env_file: [".env.local"]
     environment:
-      <<: *common-env
+      <<: [*common-env, *db-url]
       GRPC_PORT: "50055"
       HTTP_PORT: "8055"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-ingest
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50055:50055"
       - "8055:8055"
-    networks:
-      - xstockstrat
     depends_on:
       - xstockstrat-config
       - xstockstrat-marketdata
       - xstockstrat-ledger
-    restart: unless-stopped
 
   # ── Analysis Service ────────────────────────────────────────────────────
   xstockstrat-analysis:
+    <<: *svc
     build:
       context: ./services/xstockstrat-analysis
       dockerfile: Dockerfile
     container_name: xstockstrat-analysis
     env_file: [".env.local"]
     environment:
-      <<: *common-env
+      <<: [*common-env, *db-url]
       GRPC_PORT: "50056"
       HTTP_PORT: "8056"
       CONFIG_ENDPOINT: xstockstrat-config:50060
@@ -310,14 +303,11 @@ services:
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-analysis
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50056:50056"
       - "8056:8056"
-    networks:
-      - xstockstrat
     depends_on:
       db-migrator:
         condition: service_completed_successfully
@@ -329,31 +319,28 @@ services:
         condition: service_started
       xstockstrat-ledger:
         condition: service_started
-    restart: unless-stopped
 
   # ── Portfolio Service ───────────────────────────────────────────────────
   xstockstrat-portfolio:
+    <<: *svc
     build:
       context: ./services/xstockstrat-portfolio
       dockerfile: Dockerfile
     container_name: xstockstrat-portfolio
     env_file: [".env.local"]
     environment:
-      <<: *common-env
+      <<: [*common-env, *db-url]
       GRPC_PORT: "50052"
       HTTP_PORT: "8052"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-portfolio
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50052:50052"
       - "8052:8052"
-    networks:
-      - xstockstrat
     depends_on:
       db-migrator:
         condition: service_completed_successfully
@@ -363,17 +350,17 @@ services:
         condition: service_started
       xstockstrat-marketdata:
         condition: service_started
-    restart: unless-stopped
 
   # ── Trading Service ─────────────────────────────────────────────────────
   xstockstrat-trading:
+    <<: *svc
     build:
       context: ./services/xstockstrat-trading
       dockerfile: Dockerfile
     container_name: xstockstrat-trading
     env_file: [".env.local"]
     environment:
-      <<: *common-env
+      <<: [*common-env, *db-url]
       GRPC_PORT: "50051"
       HTTP_PORT: "8051"
       CONFIG_ENDPOINT: xstockstrat-config:50060
@@ -381,14 +368,11 @@ services:
       PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-trading
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50051:50051"
       - "8051:8051"
-    networks:
-      - xstockstrat
     depends_on:
       db-migrator:
         condition: service_completed_successfully
@@ -402,10 +386,10 @@ services:
         condition: service_started
       xstockstrat-indicators:
         condition: service_started
-    restart: unless-stopped
 
   # ── Trader Frontend ─────────────────────────────────────────────────────
   xstockstrat-trader:
+    <<: *svc
     build:
       context: ./services/xstockstrat-trader
       dockerfile: Dockerfile
@@ -413,7 +397,7 @@ services:
     env_file: [".env.local", ".env.fe.local"]
     environment:
       <<: *common-env
-      # Connect-RPC HTTP endpoints (replaces raw gRPC endpoints)
+      # Connect-RPC HTTP endpoints (not raw gRPC ports)
       TRADING_HTTP_ENDPOINT: http://xstockstrat-trading:8051
       PORTFOLIO_HTTP_ENDPOINT: http://xstockstrat-portfolio:8052
       NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
@@ -422,17 +406,15 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "3000:3000"
-    networks:
-      - xstockstrat
     depends_on:
       - xstockstrat-trading
       - xstockstrat-portfolio
       - xstockstrat-notify
       - xstockstrat-identity
-    restart: unless-stopped
 
   # ── Insights Frontend ───────────────────────────────────────────────────
   xstockstrat-insights:
+    <<: *svc
     build:
       context: ./services/xstockstrat-insights
       dockerfile: Dockerfile
@@ -440,7 +422,7 @@ services:
     env_file: [".env.local", ".env.fe.local"]
     environment:
       <<: *common-env
-      # Connect-RPC HTTP endpoints (replaces raw gRPC endpoints)
+      # Connect-RPC HTTP endpoints (not raw gRPC ports)
       ANALYSIS_HTTP_ENDPOINT: http://xstockstrat-analysis:8056
       INDICATORS_HTTP_ENDPOINT: http://xstockstrat-indicators:8054
       MARKETDATA_HTTP_ENDPOINT: http://xstockstrat-marketdata:8053
@@ -452,32 +434,27 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "3001:3001"
-    networks:
-      - xstockstrat
     depends_on:
       - xstockstrat-analysis
       - xstockstrat-indicators
       - xstockstrat-marketdata
-    restart: unless-stopped
 
   # ── Config UI ───────────────────────────────────────────────────────────
   xstockstrat-config-ui:
+    <<: *svc
     build:
       context: ./services/xstockstrat-config-ui
       dockerfile: Dockerfile
     container_name: xstockstrat-config-ui
     env_file: [".env.local", ".env.fe.local"]
     environment:
-      <<: *common-env
+      <<: [*common-env, *db-url]
       # Connect-RPC HTTP endpoint for xstockstrat-config
       CONFIG_HTTP_ENDPOINT: http://xstockstrat-config:8060
-      DATABASE_URL: "postgres://xstockstrat:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env}@timescaledb:5432/xstockstrat?sslmode=disable"
       OTEL_SERVICE_NAME: xstockstrat-config-ui
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "3002:3002"
-    networks:
-      - xstockstrat
     depends_on:
       timescaledb:
         condition: service_healthy
@@ -485,4 +462,3 @@ services:
         condition: service_completed_successfully
       xstockstrat-config:
         condition: service_started
-    restart: unless-stopped
