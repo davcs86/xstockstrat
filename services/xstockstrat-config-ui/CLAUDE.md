@@ -45,8 +45,8 @@ The config service returns values appropriate for the selected scope.
 
 ```
 CONFIG_HTTP_ENDPOINT=http://xstockstrat-config:8060    # Connect-RPC HTTP port (not gRPC)
-DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable
-APP_ENV=dev
+DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable  # .env
+APPLICATION_ENV=development            # .env.local
 TRADING_MODE=paper
 ```
 

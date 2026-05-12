@@ -24,9 +24,9 @@ services:
 
   # OpenTelemetry Collector — central fan-out gateway for logs, metrics, traces.
   # All services push OTLP to this container; it forwards to Grafana Cloud.
-  # Requires GRAFANA_OTLP_ENDPOINT and GRAFANA_OTLP_TOKEN in .env.
-  # See packages/otel/otel-collector-config.yaml and
-  #     _tasks/x-observability-otel-grafana.md for setup instructions.
+  # GRAFANA_OTLP_TOKEN must be set in .env. GRAFANA_OTLP_ENDPOINT defaults to
+  # http://localhost:4317 (no-op); override in .env with the real Grafana Cloud URL.
+  # See packages/otel/otel-collector-config.yaml and docs/setup/grafana-cloud.md.
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.103.0
     container_name: xstockstrat-otel-collector

@@ -89,6 +89,6 @@ MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
-APP_ENV=dev                            # dev | production
+APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
 ```

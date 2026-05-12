@@ -69,8 +69,8 @@ All config changes via n8n must comply with the governance rules in the root `CL
 ```
 GRPC_PORT=50060
 HTTP_PORT=8060
-DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable
-APP_ENV=dev          # dev | production — default scope for this instance
+DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable  # .env
+APPLICATION_ENV=development  # development | production — default scope for this instance
 TRADING_MODE=paper   # paper | live — default scope for this instance
 ```
 

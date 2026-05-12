@@ -49,14 +49,16 @@ Namespace: `identity`
 
 ## Environment Variables
 
+Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_ENV` and `NODE_ENV` come from `.env.local` (committed). `DATABASE_URL` and `JWT_SECRET` come from `.env` (see `.env.example`).
+
 ```
 GRPC_PORT=50058
 HTTP_PORT=8058
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
-DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable
-JWT_SECRET=<secret — use secret store in production>
-APP_ENV=dev                            # dev | production
+DATABASE_URL=postgres://user:pass@timescaledb:5432/xstockstrat?sslmode=disable  # .env
+JWT_SECRET=<secret>                    # .env — generate: openssl rand -hex 32
+APPLICATION_ENV=development            # .env.local
 TRADING_MODE=paper                     # paper | live
 ```
 
