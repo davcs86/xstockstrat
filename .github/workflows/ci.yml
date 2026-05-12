@@ -46,6 +46,15 @@ jobs:
             xstockstrat-trader:     ['services/xstockstrat-trader/**']
             xstockstrat-insights:   ['services/xstockstrat-insights/**']
             xstockstrat-config-ui:  ['services/xstockstrat-config-ui/**']
+            dockerfiles:
+              - '**/Dockerfile*'
+              - '.hadolint.yaml'
+            scripts:
+              - 'scripts/**'
+              - '.claude/hooks/**'
+            claude-md:
+              - '**/CLAUDE.md'
+              - '.markdownlint.yaml'
 
   proto-lint:
     name: Proto lint and breaking check
@@ -461,6 +470,57 @@ jobs:
           name: node-coverage-${{ matrix.service }}
           path: services/${{ matrix.service }}/coverage/lcov.info
           if-no-files-found: ignore
+
+  dockerfile-lint:
+    name: Dockerfile lint (hadolint)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'dockerfiles') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          recursive: true
+          config: .hadolint.yaml
+
+  shell-lint:
+    name: Shell script lint (shellcheck + shfmt)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'scripts') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install shellcheck and shfmt
+        run: sudo apt-get install -y shellcheck shfmt
+
+      - name: shellcheck
+        run: shellcheck scripts/*.sh .claude/hooks/*.sh
+
+      - name: shfmt (diff check)
+        run: shfmt -d -i 2 scripts/*.sh .claude/hooks/*.sh
+
+  markdown-lint:
+    name: CLAUDE.md lint (markdownlint)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'claude-md') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: markdownlint
+        uses: DavidAnson/markdownlint-cli2-action@v20
+        with:
+          config: .markdownlint.yaml
+          globs: '**/CLAUDE.md'
 
   secret-scan:
     name: Secret scan (trufflehog + gitleaks)

@@ -89,3 +89,60 @@
 **Feature status**: `implementation-ready` (unchanged — impl-spec review is advisory).
 
 **Next action**: `/sdd-execute frontend-reverse-proxy` — begin step-by-step execution.
+
+---
+
+## Session 2026-05-11 — sdd-execute
+
+**Boot**: Loaded authoritative spec from `origin/main-dev` (feature branch `feature/frontend-reverse-proxy` not yet pushed; created during BRANCH SYNC for Step 1).
+
+**Branch model decision**: User selected the SDD branch model (integration branch `feature/frontend-reverse-proxy` + per-step `feature-steps/<slug>-step-N` sub-branches), not the harness-assigned `claude/frontend-reverse-proxy-next-MXsoC` branch.
+
+### Step 1 — Create nginx reverse proxy configuration [done]
+- Wrote `nginx.conf` at repo root with three upstream blocks (trader/insights/config_ui), six location blocks (`/trader`, `/trader/`, `/insights`, `/insights/`, `/config-ui`, `/config-ui/`), `/health` endpoint returning JSON, and proxy directives for streaming (`proxy_buffering off`, `Connection: upgrade`).
+- Files modified: `nginx.conf`
+- Deviations: 1 — verification (`nginx -t`) not runnable in sandbox (no Docker daemon, no local nginx, apt mirrors 404). Tracked as follow-up to Step 6, which builds + starts the full stack and would fail fast if the config is invalid. Full detail in Deviation Log.
+
+### Step 2 — Create Dockerfile for nginx reverse proxy [done]
+- Wrote `services/xstockstrat-nginx/Dockerfile` (moved from repo root to treat nginx as a service) with nginx:1.27-alpine base, COPY nginx.conf, HEALTHCHECK (10s/3s/5s/3r), EXPOSE 80, CMD with daemon off
+- Files modified: `services/xstockstrat-nginx/Dockerfile`
+- Deviations: 2 — (1) location moved to services/ per user feedback; (2) verification (`docker build`) not runnable in sandbox (no Docker daemon). Same as Step 1; deferred to Step 6 full-stack integration test.
+
+## Open Items
+
+| Item | Earliest step | Notes |
+|---|---|---|
+| Confirm `docker build` passes against `Dockerfile.nginx` | Step 6 | Step 6 verification runs `docker-compose build` + `docker-compose up -d`; Docker will fail if Dockerfile is invalid. If Step 6 verification runs in an env with Docker, this gap closes automatically.
+
+### Session summary
+**Steps this session**: [2]
+**Progress**: 2 done / 6 total
+**Stopped at**: Step 2 (per-step PR opened; SDD rule = one step per session)
+**Next**: `/sdd-execute frontend-reverse-proxy next`
+
+---
+
+## Session 2026-05-12 — sdd-spec (refresh)
+
+**Implementation spec regenerated**: Same 6-step shape; refreshed codebase evidence after re-grepping the current tree.
+
+**Key codebase findings (verified this session)**:
+- `find -maxdepth 2 -name "nginx*"` and `find -maxdepth 2 -name "Dockerfile.nginx"` → no matches; nothing has been created yet for the reverse proxy.
+- `docker-compose.yml` frontend block line numbers shifted since the prior 2026-05-11 spec — the prior spec said trader at L418/435, insights at L447/465, config-ui at L476/491. Current state (verified via Read + grep):
+  - `xstockstrat-trader` block L391–413; `container_name` L396; `"3000:3000"` L408.
+  - `xstockstrat-insights` block L416–440; `container_name` L421; `"3001:3001"` L436.
+  - `xstockstrat-config-ui` block L443–464; `container_name` L448; `"3002:3002"` L457.
+  - File is 464 lines total — config-ui is the last service. New nginx block goes at end of `services:`.
+- All three frontends use the YAML anchor `<<: *svc` (defined L30 with `networks: [xstockstrat]` + `restart: unless-stopped`). The new nginx service block now uses the same anchor for consistency (the 2026-05-11 spec redundantly inlined `networks:` and `restart:`).
+- All three `next.config.js` files are byte-identical to the 2026-05-11 spec snapshots — no `basePath` present, `output: 'standalone'` present in all three. Trader uses the new `serverExternalPackages` key (Next.js 14 stable form); insights and config-ui use the legacy `experimental.serverComponentsExternalPackages` form.
+
+**Spec-level refinements made vs 2026-05-11**:
+- Removed the redundant trailing-slash `location /trader/ { proxy_pass http://trader_backend/; }` rules from nginx.conf; the single non-trailing-slash `location /trader { proxy_pass http://trader_backend; }` form is correct for basePath routing (trailing-slash form would strip the prefix and break Next.js).
+- Added `proxy_http_version 1.1;` to nginx.conf for correct keep-alive + WebSocket upgrade behaviour.
+- Used `<<: *svc` anchor in the new nginx service block (matches the existing app-service convention).
+- Verification commands now use `docker compose` (Compose v2, no hyphen) consistent with current tooling.
+- Reviewers snapshot now uses the verbatim `Review Focus` strings from `docs/runbooks/reviewer-registry.md` (the prior snapshot paraphrased them).
+
+**Feature status**: `implementation-ready` (unchanged).
+
+**Next action**: `/sdd-review frontend-reverse-proxy impl-spec` to re-validate the refreshed spec, then `/sdd-execute frontend-reverse-proxy`.
