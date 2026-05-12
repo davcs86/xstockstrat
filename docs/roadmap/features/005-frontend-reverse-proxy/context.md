@@ -122,27 +122,88 @@
 
 ---
 
-## Session 2026-05-12 — sdd-spec (refresh)
+## Session 2026-05-12 — sdd-execute
 
-**Implementation spec regenerated**: Same 6-step shape; refreshed codebase evidence after re-grepping the current tree.
+**Boot**: Loaded authoritative spec from `origin/feature/frontend-reverse-proxy`. Current harness branch was `claude/frontend-reverse-proxy-next-3K9pE`; user reaffirmed SDD branch model (integration `feature/frontend-reverse-proxy` + per-step `feature-steps/<slug>-step-N` sub-branches). Ran BRANCH SYNC: checked out `feature/frontend-reverse-proxy`, merged latest `origin/main-dev` with `-X ours`, pushed integration branch, created `feature-steps/frontend-reverse-proxy-step-3`.
 
-**Key codebase findings (verified this session)**:
-- `find -maxdepth 2 -name "nginx*"` and `find -maxdepth 2 -name "Dockerfile.nginx"` → no matches; nothing has been created yet for the reverse proxy.
-- `docker-compose.yml` frontend block line numbers shifted since the prior 2026-05-11 spec — the prior spec said trader at L418/435, insights at L447/465, config-ui at L476/491. Current state (verified via Read + grep):
-  - `xstockstrat-trader` block L391–413; `container_name` L396; `"3000:3000"` L408.
-  - `xstockstrat-insights` block L416–440; `container_name` L421; `"3001:3001"` L436.
-  - `xstockstrat-config-ui` block L443–464; `container_name` L448; `"3002:3002"` L457.
-  - File is 464 lines total — config-ui is the last service. New nginx block goes at end of `services:`.
-- All three frontends use the YAML anchor `<<: *svc` (defined L30 with `networks: [xstockstrat]` + `restart: unless-stopped`). The new nginx service block now uses the same anchor for consistency (the 2026-05-11 spec redundantly inlined `networks:` and `restart:`).
-- All three `next.config.js` files are byte-identical to the 2026-05-11 spec snapshots — no `basePath` present, `output: 'standalone'` present in all three. Trader uses the new `serverExternalPackages` key (Next.js 14 stable form); insights and config-ui use the legacy `experimental.serverComponentsExternalPackages` form.
+### Step 3 — Update xstockstrat-trader next.config.js with basePath [done]
+- Added `basePath: '/trader'` to `services/xstockstrat-trader/next.config.js`. Preserved existing `output: 'standalone'`, `serverExternalPackages: ['@connectrpc/connect-node']`, and the existing inline comment.
+- Verification: `pnpm install && pnpm run build` succeeded; `.next/required-server-files.json` confirms `"basePath": "/trader"`. 10 routes generated (all served under `/trader` prefix at runtime).
+- Files modified: `services/xstockstrat-trader/next.config.js`
+- Deviations: none
 
-**Spec-level refinements made vs 2026-05-11**:
-- Removed the redundant trailing-slash `location /trader/ { proxy_pass http://trader_backend/; }` rules from nginx.conf; the single non-trailing-slash `location /trader { proxy_pass http://trader_backend; }` form is correct for basePath routing (trailing-slash form would strip the prefix and break Next.js).
-- Added `proxy_http_version 1.1;` to nginx.conf for correct keep-alive + WebSocket upgrade behaviour.
-- Used `<<: *svc` anchor in the new nginx service block (matches the existing app-service convention).
-- Verification commands now use `docker compose` (Compose v2, no hyphen) consistent with current tooling.
-- Reviewers snapshot now uses the verbatim `Review Focus` strings from `docs/runbooks/reviewer-registry.md` (the prior snapshot paraphrased them).
+### Session summary
+**Steps this session**: [3]
+**Progress**: 3 done / 6 total
+**Stopped at**: Step 3 (per-step PR will be opened; SDD rule = one step per session)
+**Next**: `/sdd-execute frontend-reverse-proxy next`
 
-**Feature status**: `implementation-ready` (unchanged).
+---
 
-**Next action**: `/sdd-review frontend-reverse-proxy impl-spec` to re-validate the refreshed spec, then `/sdd-execute frontend-reverse-proxy`.
+## Session 2026-05-12 — sdd-execute
+
+**Boot**: Loaded authoritative spec from `origin/feature/frontend-reverse-proxy`. Current harness branch was `claude/frontend-reverse-proxy-next-U1TAC`; following SDD branch model per prior session reaffirmations. Ran BRANCH SYNC: checked out `feature/frontend-reverse-proxy` (already up to date with `origin/main-dev`), created `feature-steps/frontend-reverse-proxy-step-4`.
+
+### Step 4 — Update xstockstrat-insights next.config.js with basePath [done]
+- Added `basePath: '/insights'` to `services/xstockstrat-insights/next.config.js`. Preserved existing `output: 'standalone'` and `experimental.serverComponentsExternalPackages: ['@connectrpc/connect-node']`.
+- Verification: `pnpm install && pnpm run build` succeeded; `.next/required-server-files.json` confirms `"basePath": "/insights"` and `"assetPrefix": "/insights"`. 10 routes generated (all served under `/insights` prefix at runtime).
+- Files modified: `services/xstockstrat-insights/next.config.js`
+- Deviations: none
+
+### Session summary
+**Steps this session**: [4]
+**Progress**: 4 done / 6 total
+**Stopped at**: Step 4 (per-step PR will be opened; SDD rule = one step per session)
+**Next**: `/sdd-execute frontend-reverse-proxy next`
+
+---
+
+## Session 2026-05-12 (late) — sdd-execute
+
+**Boot**: Loaded authoritative spec from `origin/feature/frontend-reverse-proxy`. Current branch: `feature-steps/frontend-reverse-proxy-step-4`. Ran BRANCH SYNC: pulled latest feature branch, merged main-dev, created `feature-steps/frontend-reverse-proxy-step-5`.
+
+### Step 5 — Update xstockstrat-config-ui next.config.js with basePath [done]
+- Discovery: confirmed `services/xstockstrat-config-ui/next.config.js` exists and lacks basePath ✓
+- Phase 2 plan: add `basePath: '/config-ui'` ✓ User approved
+- Phase 3 execution: applied basePath change, ran `pnpm install && pnpm run build`
+- **Build verification FAILED** — two pre-existing issues encountered:
+  1. Missing `@types/pg` in devDependencies
+  2. `createNodeHttpTransport` not exported from `@connectrpc/connect-node` — library API mismatch
+- **Gap decision**: User chose Option A (fix issues now)
+  - Added `@types/pg: ^8.11.0` to devDependencies
+  - Fixed import in `src/lib/configClient.ts`: changed `createNodeHttpTransport` → `createConnectTransport` (matching trader's pattern in `src/lib/connectTransport.ts`)
+- **Verification**: `pnpm install && pnpm run build` succeeded; `.next/required-server-files.json` confirms `"basePath": "/config-ui"`. 9 routes generated.
+- Files modified: `services/xstockstrat-config-ui/next.config.js`, `services/xstockstrat-config-ui/src/lib/configClient.ts`, `services/xstockstrat-config-ui/package.json`
+- Deviations: 2 scope expansions (fixing pre-existing dependency and API issues) to unblock Step 5 verification
+
+### Session summary
+**Steps this session**: [5]
+**Progress**: 5 done / 6 total
+**Stopped at**: Step 5 (per-step PR will be opened; SDD rule = one step per session)
+**Next**: `/sdd-execute frontend-reverse-proxy next`
+
+---
+
+## Session 2026-05-12 — sdd-execute (late)
+
+**Boot**: Loaded authoritative spec from `origin/feature/frontend-reverse-proxy`. Current branch: `feature-steps/frontend-reverse-proxy-step-5`. Ran BRANCH SYNC: pulled latest feature branch, merged main-dev, created `feature-steps/frontend-reverse-proxy-step-6`.
+
+### Step 6 — Update docker-compose.yml to add nginx reverse proxy service [done]
+- Discovery: confirmed all 5 prior steps completed and files present ✓
+- Plan: append 19-line nginx service block to docker-compose.yml (after xstockstrat-config-ui) matching existing YAML anchor pattern ✓
+- Execution: appended nginx service block with correct 2-space indentation, matching <<: *svc pattern, correct port (80), depends_on list (three frontends), and healthcheck ✓
+- **Verification**: Docker not available in sandbox environment. Structural validation completed: YAML indentation matches existing services, referenced files (`services/xstockstrat-nginx/Dockerfile`, `nginx.conf`) confirmed present. Full runtime verification (`docker compose build`, `curl routing tests`) deferred to deployment environment (local dev, CI, or production). Tracked as Deviation 6.
+- Files modified: `docker-compose.yml`
+- Deviations: 1 — structural validation only (Docker unavailable)
+
+### All Steps Complete
+- Lifecycle updated: feature.md status → `code-completed`
+- Implementation spec status → `complete`
+- Ready for integration PR: `feature/frontend-reverse-proxy` → `main-dev`
+- Check merge-order.md before merging (advisory overlaps with 002-broker-accounts-ui, 003-formula-management-ui, 004-make-repo-public-secure)
+
+### Session summary
+**Steps this session**: [6]
+**Progress**: 6 done / 6 total (FEATURE COMPLETE)
+**Stopped at**: All steps complete; ready for integration PR
+**Next**: Create integration PR `feature/frontend-reverse-proxy` → `main-dev`; reviewers: Platform Lead, service owners per implementation-spec.md

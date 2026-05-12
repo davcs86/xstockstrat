@@ -4,6 +4,8 @@
 **Development Branch**: `feature/make-repo-public-secure`
 **Created**: 2026-05-10
 **Last Updated**: 2026-05-12
+**Committed to main**: 89e07ef
+**Launched date**: 2026-05-11
 
 ---
 

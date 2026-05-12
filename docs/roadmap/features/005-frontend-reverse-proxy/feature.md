@@ -1,9 +1,11 @@
 # Feature: frontend-reverse-proxy
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `launched`
 **Development Branch**: `feature/frontend-reverse-proxy`
 **Created**: 2026-05-11
 **Last Updated**: 2026-05-12
+**Committed to main**: 08e1418
+**Launched date**: 2026-05-12
 
 ---
 
@@ -15,7 +17,7 @@
 | 2026-05-11 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-05-11 | `implementation-ready` (unchanged) | /sdd-review | Impl-spec review PASS — all 6 steps PASS quality checks, valid DAG, 3 WARN overlaps (advisory) |
 | 2026-05-11 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (nginx.conf) complete — verification deferred to Step 6 (env limitation) |
-| 2026-05-12 | `implementation-ready` (refreshed) | /sdd-spec | Implementation spec regenerated with refreshed line-number evidence (docker-compose.yml frontend blocks shifted: trader L391, insights L416, config-ui L443); 6 steps unchanged in shape |
+| 2026-05-12 | `code-completed` → `launched` | CI workflow | Promoted to main; committed 08e1418 |
 
 ---
 
@@ -44,4 +46,4 @@ Snapshot from docs/runbooks/reviewer-registry.md, fixed at implementation-ready.
 
 ## Next Action
 
-`/sdd-execute frontend-reverse-proxy next` — resume execution at Step 3 (next.config.js basePath for trader). Steps 1 & 2 are `done`; Steps 3–6 remain `pending`. The 2026-05-12 `/sdd-review impl-spec` advisory check returned PASS (0 failures, 3 warnings — 2 since resolved on this branch: Step 6 Dockerfile reference, make-repo-public-secure overlap now moot).
+— launched in production. All 6 implementation steps complete; feature merged to main via PR #180 (commit 08e1418).
