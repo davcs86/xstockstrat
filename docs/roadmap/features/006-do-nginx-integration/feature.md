@@ -1,6 +1,6 @@
 # Feature: do-nginx-integration
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/do-nginx-integration`
 **Created**: 2026-05-12
 **Last Updated**: 2026-05-12
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-12 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-05-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings: feature overlaps with 002, 003, 004, 005 — all advisory) |
 
 ---
 
@@ -42,4 +43,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review do-nginx-integration product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec do-nginx-integration` — generate implementation spec from the approved product spec

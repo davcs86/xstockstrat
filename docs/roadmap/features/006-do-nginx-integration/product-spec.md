@@ -27,7 +27,6 @@ FR-7. Service-to-service Connect-RPC calls (e.g. trader → xstockstrat-trading:
 - TLS/HTTPS termination at nginx level (handled by DigitalOcean load balancer or managed cert at DO ingress layer).
 - Auth middleware (JWT validation, OAuth2) — deferred to a future phase per 005 product-spec decisions.
 - Rate limiting or CORS headers in nginx (deferred, hooks left as comments in nginx.conf).
-- Modifying the nginx reverse proxy configuration (`nginx.conf`) itself — this spec only changes the DO app deployment specs.
 - Any changes to backend service DO configurations (only frontend + nginx entries are in scope).
 
 ## Affected Services
@@ -73,6 +72,6 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] DigitalOcean App Platform build context for nginx: DO builds from GitHub — confirm that `dockerfile` path `services/xstockstrat-nginx/Dockerfile` and `nginx.conf` at repo root are both reachable from the repo root build context in `.do/app.yaml`.
-- [ ] Port configuration in DO App Platform: DO uses `http_port` in the service spec (not the docker `ports` mapping). Confirm nginx listens on port 80 in the Dockerfile `EXPOSE` directive matches what DO expects.
-- [ ] Internal service discovery on DO App Platform: nginx upstream blocks in `nginx.conf` reference container names (e.g. `xstockstrat-trader:3000`). Confirm whether DO App Platform resolves these via service name or requires a different internal hostname format.
+- [x] DigitalOcean App Platform build context for nginx: DO builds from GitHub — `dockerfile` path `services/xstockstrat-nginx/Dockerfile` and `nginx.conf` at repo root are both reachable from the repo root build context in `.do/app.yaml`. ✓ Confirmed.
+- [x] Port configuration in DO App Platform: DO uses `http_port` in the service spec (not the docker `ports` mapping). Nginx listens on port 80 per Dockerfile `EXPOSE 80` directive, matching `http_port: 80` in app specs. ✓ Confirmed.
+- [x] Internal service discovery on DO App Platform: nginx upstream blocks in `nginx.conf` will be templated at container startup using `envsubst` to substitute DO private URL env vars (e.g. `${XSTOCKSTRAT_TRADER_PRIVATE_URL}:3000`) instead of container-name DNS. This resolves the mismatch: local docker-compose uses container names, but DO uses private URL env vars. ✓ In-scope for implementation.
