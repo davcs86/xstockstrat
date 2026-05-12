@@ -4,6 +4,8 @@
 **Development Branch**: `feature/add-ikbr-account-support`
 **Created**: 2026-05-02
 **Last Updated**: 2026-05-12
+**Committed to main**: 95860d0
+**Launched date**: 2026-05-12
 
 ---
 

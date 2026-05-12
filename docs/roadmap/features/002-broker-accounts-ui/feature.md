@@ -4,6 +4,8 @@
 **Development Branch**: `feature/broker-accounts-ui`
 **Created**: 2026-05-06
 **Last Updated**: 2026-05-12
+**Committed to main**: 5619f53
+**Launched date**: 2026-05-12
 
 ---
 
