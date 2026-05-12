@@ -155,3 +155,29 @@
 **Progress**: 4 done / 6 total
 **Stopped at**: Step 4 (per-step PR will be opened; SDD rule = one step per session)
 **Next**: `/sdd-execute frontend-reverse-proxy next`
+
+---
+
+## Session 2026-05-12 (late) — sdd-execute
+
+**Boot**: Loaded authoritative spec from `origin/feature/frontend-reverse-proxy`. Current branch: `feature-steps/frontend-reverse-proxy-step-4`. Ran BRANCH SYNC: pulled latest feature branch, merged main-dev, created `feature-steps/frontend-reverse-proxy-step-5`.
+
+### Step 5 — Update xstockstrat-config-ui next.config.js with basePath [done]
+- Discovery: confirmed `services/xstockstrat-config-ui/next.config.js` exists and lacks basePath ✓
+- Phase 2 plan: add `basePath: '/config-ui'` ✓ User approved
+- Phase 3 execution: applied basePath change, ran `pnpm install && pnpm run build`
+- **Build verification FAILED** — two pre-existing issues encountered:
+  1. Missing `@types/pg` in devDependencies
+  2. `createNodeHttpTransport` not exported from `@connectrpc/connect-node` — library API mismatch
+- **Gap decision**: User chose Option A (fix issues now)
+  - Added `@types/pg: ^8.11.0` to devDependencies
+  - Fixed import in `src/lib/configClient.ts`: changed `createNodeHttpTransport` → `createConnectTransport` (matching trader's pattern in `src/lib/connectTransport.ts`)
+- **Verification**: `pnpm install && pnpm run build` succeeded; `.next/required-server-files.json` confirms `"basePath": "/config-ui"`. 9 routes generated.
+- Files modified: `services/xstockstrat-config-ui/next.config.js`, `services/xstockstrat-config-ui/src/lib/configClient.ts`, `services/xstockstrat-config-ui/package.json`
+- Deviations: 2 scope expansions (fixing pre-existing dependency and API issues) to unblock Step 5 verification
+
+### Session summary
+**Steps this session**: [5]
+**Progress**: 5 done / 6 total
+**Stopped at**: Step 5 (per-step PR will be opened; SDD rule = one step per session)
+**Next**: `/sdd-execute frontend-reverse-proxy next`
