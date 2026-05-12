@@ -3,6 +3,9 @@
 # Checks content correctness (stale references, contradictions, clarity) — not markdown syntax.
 # Output is informational only; exits 0 regardless of findings.
 #
+# Prefer /proofread-claude-md within a Claude Code session — it runs in-session via the
+# Read tool at no extra API cost. This script is for non-interactive / scripted contexts.
+#
 # Usage:
 #   ./scripts/proofread-claude-md.sh                         # all CLAUDE.md files
 #   ./scripts/proofread-claude-md.sh services/foo/CLAUDE.md  # specific files
