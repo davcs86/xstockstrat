@@ -19,6 +19,15 @@
             "command": "jq -r '.tool_input.file_path // empty' | { read -r f; [[ \"$f\" == *.sh ]] && chmod +x \"$f\"; } 2>/dev/null || true"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; [[ \"$f\" == *CLAUDE.md ]] && echo \"[hook] $f modified — run /proofread-claude-md $f to check for stale references or contradictions\"; } 2>/dev/null || true"
+          }
+        ]
       }
     ]
   }
