@@ -41,11 +41,7 @@ git clone https://github.com/<your-org>/xstockstrat-orchestration.git
 cd xstockstrat-orchestration
 ```
 
-### Step 2 — Environment file
-
-```bash
-cp .env.example .env
-```
+### Step 2 — Environment file (Interactive Setup)
 
 **Three-file convention** — local dev uses three env files with different scopes:
 
@@ -55,20 +51,38 @@ cp .env.example .env
 | `.env.local` | Yes | all 13 containers | Structural non-secrets: `APPLICATION_ENV`, `NODE_ENV`, `GRAFANA_OTLP_ENDPOINT` |
 | `.env.fe.local` | Yes | 3 Next.js containers only | Frontend-only non-secrets: `APP_URL` |
 
-You only need to edit `.env`. The other two files are pre-populated and committed.
+You only need to create and configure `.env`. The other two files are pre-populated and committed.
 
-Edit `.env` and fill in the required values:
+#### Automatic Interactive Setup
 
-| Variable | Required? | Notes |
-|---|---|---|
-| `POSTGRES_PASSWORD` | Leave default | `devpassword` works for local dev; docker-compose constructs `DATABASE_URL` automatically from this |
-| `ALPACA_API_KEY` | **Yes** | Paper trading key from alpaca.markets; used only by `xstockstrat-marketdata` |
-| `ALPACA_API_SECRET` | **Yes** | Matching secret |
-| `JWT_SECRET` | **Yes** | Generate: `openssl rand -hex 32` |
-| `GRAFANA_OTLP_TOKEN` | Optional | Only needed when enabling OpenTelemetry; see [`setup/grafana-cloud.md`](grafana-cloud.md) |
-| `GRAFANA_OTLP_ENDPOINT` | Optional | Override default `http://localhost:4317` with your real Grafana Cloud OTLP URL |
+Run the interactive setup script, which will guide you through filling in each value:
 
-For Alpaca key setup, see [`setup/alpaca.md`](alpaca.md).
+```bash
+./scripts/setup-env.sh
+```
+
+The script will prompt you for:
+
+| Variable | Notes |
+|---|---|
+| `POSTGRES_PASSWORD` | Suggested default: `devpassword` for local dev |
+| `ALPACA_API_KEY` | Paper trading key from alpaca.markets; script links to [setup/alpaca.md](alpaca.md) |
+| `ALPACA_API_SECRET` | Matching secret |
+| `JWT_SECRET` | Auto-generated securely or manually provided |
+| `GRAFANA_OTLP_TOKEN` | Optional; for OpenTelemetry / Grafana Cloud observability |
+
+#### Manual Setup
+
+If you prefer to configure `.env` manually:
+
+```bash
+cp .env.example .env
+# Edit .env with your favorite editor
+nano .env    # or vim, VS Code, etc.
+```
+
+For Alpaca API key details, see [`setup/alpaca.md`](alpaca.md).
+For OpenTelemetry setup, see [`setup/grafana-cloud.md`](grafana-cloud.md).
 
 ### Step 3 — Bootstrap
 
@@ -77,12 +91,15 @@ For Alpaca key setup, see [`setup/alpaca.md`](alpaca.md).
 ```
 
 This script:
-1. Verifies Docker is installed and the daemon is running (exits on failure)
-2. Generates proto stubs inside Docker via `localenv-setup.sh` — skipped if stubs already exist
-3. **If pnpm is installed:** installs Node.js dependencies for all 7 Node/Next.js services
-4. **If python3 is installed:** installs Python dependencies for all 3 Python services
+1. **Creates `.env` file** (if it doesn't exist) — calls `setup-env.sh` interactively to collect secrets
+2. Verifies Docker is installed and the daemon is running (exits on failure)
+3. Generates proto stubs inside Docker via `localenv-setup.sh` — skipped if stubs already exist
+4. **If pnpm is installed:** installs Node.js dependencies for all 7 Node/Next.js services
+5. **If python3 is installed:** installs Python dependencies for all 3 Python services
 
-Steps 3 and 4 are optional — services run fine via Docker without them. Install the language toolchains and re-run `bootstrap.sh` any time you want to enable local test and lint runs.
+Steps 4 and 5 are optional — services run fine via Docker without them. Install the language toolchains and re-run `bootstrap.sh` any time you want to enable local test and lint runs.
+
+**Skip the interactive setup:** if `.env` already exists, bootstrap skips step 1. To reconfigure: `rm .env && ./scripts/bootstrap.sh`
 
 ### Step 4 — Start all services
 

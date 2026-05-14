@@ -13,6 +13,16 @@ echo "======================================================"
 echo " xstockstrat-orchestration Bootstrap"
 echo "======================================================"
 
+# ── 0. Setup .env if needed ────────────────────────────────────────────────
+echo ""
+if [ ! -f "$REPO_ROOT/.env" ]; then
+  echo "==> .env file not found. Starting interactive setup..."
+  "$REPO_ROOT/scripts/setup-env.sh"
+else
+  echo "==> .env file exists — skipping setup."
+  echo "    (To reconfigure: rm .env && ./scripts/setup-env.sh)"
+fi
+
 # ── 1. Check required tools ────────────────────────────────────────────────
 echo ""
 echo "==> Checking required tools..."
