@@ -2,7 +2,7 @@
 name: onboard
 description: Interactive new-dev setup — prereqs, env file, proto gen, bootstrap, health checks.
 argument-hint: (no arguments)
-allowed-tools: Read Bash(ls *) Bash(find *) Bash(cat *) Bash(docker *) Bash(openssl *) Bash(command -v *) Bash(./scripts/check-prereqs.sh) Bash(./scripts/localenv-setup.sh) Bash(./scripts/bootstrap.sh) Bash(docker compose *)
+allowed-tools: Read Bash(ls *) Bash(find *) Bash(cat *) Bash(docker *) Bash(openssl *) Bash(command -v *) Bash(./scripts/check-prereqs.sh) Bash(./scripts/setup-env.sh) Bash(./scripts/localenv-setup.sh) Bash(./scripts/bootstrap.sh) Bash(docker compose *)
 effort: medium
 ---
 
@@ -42,7 +42,7 @@ The script checks two tiers:
 
 ---
 
-## Phase 2: Environment File Check
+## Phase 2: Environment File Setup
 
 Check whether `.env` exists:
 
@@ -52,23 +52,29 @@ ls "$REPO_ROOT/.env" 2>/dev/null
 
 **If missing:**
 
-1. Show: "`.env` not found. Copying from `.env.example`..."
-2. Read `$REPO_ROOT/.env.example` to show the user which vars they must fill in.
-3. Tell the user to run: `cp .env.example .env` then edit `.env`.
-4. Required vars to fill in:
+1. Show: "`.env` not found. Starting interactive setup..."
+2. Explain that the setup script will guide them through configuring:
+   - `POSTGRES_PASSWORD` — local database password (default: `devpassword`)
    - `ALPACA_API_KEY` — paper trading key from alpaca.markets (see `docs/setup/alpaca.md`)
    - `ALPACA_API_SECRET` — matching secret
-   - `JWT_SECRET` — generate with: `openssl rand -hex 32`
-   - `DATABASE_URL` — leave the default for local dev (docker-compose sets this for all containers)
-5. Ask the user to confirm when `.env` is filled before continuing.
+   - `JWT_SECRET` — auto-generated or manually provided
+   - `GRAFANA_OTLP_TOKEN` — optional, for observability (see `docs/setup/grafana-cloud.md`)
+3. Run the interactive setup:
 
-**If present:** Report "`.env` exists — skipping." Do not read or display its contents.
+```bash
+cd "$REPO_ROOT" && ./scripts/setup-env.sh
+```
+
+4. The script will prompt for each variable with context and helpful links. Passwords are hidden from terminal output.
+
+**If present:** Report "`.env` exists — skipping setup." Do not read or display its contents.
 
 ---
 
 ## Phase 3: Bootstrap
 
 Summarise what `bootstrap.sh` will do:
+- If `.env` is missing: run `setup-env.sh` interactively to create it (already done if Phase 2 was completed)
 - Re-run `check-prereqs.sh` (confirms Docker is running)
 - If proto stubs are absent in `packages/proto/gen/`, run `localenv-setup.sh` automatically to generate them inside a Docker container (takes a few minutes on first run)
 - If `pnpm` is installed: install Node.js deps for all 7 Node/Next.js services (enables local test/lint)
