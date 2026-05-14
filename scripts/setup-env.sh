@@ -31,6 +31,14 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 err()     { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 section() { echo -e "\n${BOLD}${CYAN}===> $*${NC}"; }
 
+# ── Skip in CI environments ────────────────────────────────────────────────────
+if [ -n "${CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then
+  err "This script is for local development only."
+  err "In CI environments, secrets are injected via GitHub Actions."
+  err "See: .github/workflows/ci.yml"
+  exit 1
+fi
+
 # ── Check if .env exists ───────────────────────────────────────────────────────
 if [ -f "$ENV_FILE" ]; then
   case "${1:-}" in
