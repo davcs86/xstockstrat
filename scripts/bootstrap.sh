@@ -13,6 +13,23 @@ echo "======================================================"
 echo " xstockstrat-orchestration Bootstrap"
 echo "======================================================"
 
+# ── 0. Setup .env if needed (local dev only, skip in CI) ──────────────────
+echo ""
+if [ -z "${CI:-}" ] && [ -z "${GITHUB_ACTIONS:-}" ]; then
+  # Local development environment
+  if [ ! -f "$REPO_ROOT/.env" ]; then
+    echo "==> .env file not found. Starting interactive setup..."
+    "$REPO_ROOT/scripts/setup-env.sh"
+  else
+    echo "==> .env file exists — skipping setup."
+    echo "    (To reconfigure: rm .env && ./scripts/setup-env.sh)"
+  fi
+else
+  # CI environment — skip .env setup (secrets injected via GitHub Actions)
+  echo "==> CI environment detected — skipping .env setup."
+  echo "    (Secrets are injected via GitHub Actions environment variables)"
+fi
+
 # ── 1. Check required tools ────────────────────────────────────────────────
 echo ""
 echo "==> Checking required tools..."
