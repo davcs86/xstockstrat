@@ -1,5 +1,21 @@
 # DigitalOcean Account & App Platform Setup
 
+## Quick start — interactive skill (recommended)
+
+Run the following in a Claude Code session to be guided through every step interactively:
+
+```
+/digitalocean-setup
+```
+
+The skill detects what is already done via live `doctl` and `gh` queries, skips completed steps,
+and uses `gh secret set` to wire GitHub Actions secrets automatically.
+Resume from a specific step with `/digitalocean-setup <step-number>` (1–9).
+
+The manual steps below are kept as a reference for edge cases and troubleshooting.
+
+---
+
 This runbook walks through creating and configuring the DigitalOcean infrastructure that hosts all 13 xstockstrat services. Two App Platform deployments exist — one for paper trading (dev, `main-dev` branch) and one for live trading (prod, `main` branch).
 
 ---
