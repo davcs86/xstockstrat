@@ -36,9 +36,10 @@ re-run /sdd-spec if the registry changes.)_
 | Role | Review Focus |
 |---|---|
 | `xstockstrat-ingest` owner | Signal normalization correctness, idempotent ingestion, newsletter source schema stability |
+| `xstockstrat-config-ui` owner | Config mutation safety, environment scope correctness, no secret values rendered in UI |
 | Proto Reviewer | Field number uniqueness, no breaking changes without deprecation, `buf lint` passes |
 | DBA | Migration NNN numbering, up+down pair present, JSONB column strategy, index correctness |
-| Security | credentials_ref pattern — no secrets stored in registry row, secret.* prefix enforced |
+| Security | credentials_ref never in responses, admin auth scope on ManageSignalSource, secret.* prefix enforced |
 
 ## Next Action
 
