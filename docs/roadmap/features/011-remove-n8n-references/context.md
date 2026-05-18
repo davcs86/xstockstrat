@@ -14,6 +14,14 @@
 - Files modified: `services/xstockstrat-config/src/index.ts`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`, `docs/roadmap/features/011-remove-n8n-references/feature.md`
 - Deviations: none
 
+## Session 2026-05-18T04:30:00Z — sdd-execute step 3
+
+**Step 3 — service: xstockstrat-identity — delete webhook layer** [done]
+
+- Removed n8n webhook layer from xstockstrat-identity: deleted `src/n8n/webhookRouter.ts` and removed empty `src/n8n/` directory (note: identity has no top-level n8n dir unlike config/ledger), removed import and router invocation from `src/index.ts`, removed webhook dispatch block from HTTP request handler.
+- Files modified: `services/xstockstrat-identity/src/index.ts`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`
+- Deviations: none
+
 ## Session 2026-05-18T04:00:00Z — sdd-execute step 2
 
 **Step 2 — service: xstockstrat-ledger — delete webhook layer** [done]
