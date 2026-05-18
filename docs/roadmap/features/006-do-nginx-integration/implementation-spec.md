@@ -114,7 +114,7 @@ yq eval '.services[] | select(.name == "xstockstrat-config-ui") | .http_port' .d
 
 ### Step 2 — docs: Add nginx service to .do/app.yaml (production)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.do/app.yaml` (infrastructure file)
 **Files**:
 - `.do/app.yaml` — modify (add nginx service entry, change trader/insights/config-ui http_port + remove expose, change APP_URL)
@@ -364,3 +364,8 @@ grep -q "Nginx Reverse Proxy" CLAUDE.md && echo "✓ Nginx section added"
 **Spec said**: `yq eval '.services[] | select(.name == "xstockstrat-nginx") | .http_port' .do/app.dev.yaml` for verification
 **Actual**: `python3 -c "import yaml; ..."` used instead for all YAML checks
 **Reason**: Installed `yq` at `/usr/bin/yq` is the Python jq-wrapper (`yq 0.0.0`), not mikefarah's yq; the `yq eval` subcommand syntax is not supported. Python pyyaml is available and produces equivalent verification coverage.
+
+### Deviation: Step 2 — docs: Add nginx service to .do/app.yaml (production)
+**Spec said**: `yq eval '.services[] | select(.name == "xstockstrat-nginx") | .http_port' .do/app.yaml` for verification
+**Actual**: `python3 -c "import yaml; ..."` used instead for all YAML checks (8 checks: http_port, branch, 3 frontend http_port removals, 3 env keys)
+**Reason**: Same as Step 1 — installed yq is Python jq-wrapper, not mikefarah's yq.
