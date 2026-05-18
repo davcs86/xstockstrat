@@ -1,9 +1,10 @@
 # Feature: remove-n8n-references
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/remove-n8n-references`
 **Created**: 2026-05-16
-**Last Updated**: 2026-05-16
+**Last Updated**: 2026-05-18
+**Note**: Product spec revised 2026-05-18 — scope expanded from rename-only to selective deletion; Track A services (config, ledger, identity, trading, indicators) lose webhook layer entirely; Track B services (ingest, notify, analysis) keep surviving endpoints with path rename.
 
 ---
 
@@ -12,38 +13,38 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-16 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-05-18 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 16 steps |
+| 2026-05-18 | `implementation-ready` → `implementation-ready` | /sdd-spec | Implementation spec regenerated with 16 steps (revised scope: Track A = delete entirely, Track B = rename path) |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec remove-n8n-references`_
+- [Implementation Spec](implementation-spec.md) — 16 steps, generated 2026-05-18
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
 
 ## Summary
 
-Remove all n8n references from the codebase and documentation — renaming webhook handler files/directories, changing URL paths from `/webhooks/n8n/<action>` to `/webhooks/<action>`, deleting the unused `packages/n8n/` directory, and updating all docs. Endpoint functionality is unchanged; only naming and paths change.
+Remove all n8n references from the codebase and documentation. Webhook endpoints used only by n8n (config, ledger, identity, trading, indicators) are deleted entirely — callers use Connect-RPC directly. Endpoints that serve the agent MCP server's ingestion goal (ingest, notify, analysis) are kept with the `/n8n/` path segment removed. The `packages/n8n/` directory is deleted and all docs updated.
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized at /sdd-spec time 2026-05-18 regeneration. Re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| `xstockstrat-config` owner | Config mutation safety, no broken route registrations after rename |
-| `xstockstrat-ledger` owner | Append-only invariant unaffected; webhook path change doesn't break event emission |
-| `xstockstrat-notify` owner | Stream delivery unaffected; no broken alert webhook paths |
-| `xstockstrat-identity` owner | Auth webhook path change doesn't break token validation flows |
-| `xstockstrat-trading` owner | Order execution correctness unaffected; no broken n8n.go handler references |
-| `xstockstrat-indicators` owner | No side-effects from webhook rename; formula execution unaffected |
-| `xstockstrat-analysis` owner | Backtest endpoint path change consistent with other services |
-| `xstockstrat-ingest` owner | Signal ingestion unaffected; webhook path change propagated correctly |
+| `xstockstrat-config` owner | Config mutation safety; webhook layer removed — Connect-RPC routes unaffected |
+| `xstockstrat-ledger` owner | Append-only invariant unaffected; webhook layer removed — Connect-RPC routes unaffected |
+| `xstockstrat-notify` owner | Stream delivery unaffected; `emit-alert` and `list-alerts` survive with new paths |
+| `xstockstrat-identity` owner | Auth correctness unaffected; webhook layer removed — Connect-RPC routes unaffected |
+| `xstockstrat-trading` owner | Order execution correctness unaffected; webhook handler deleted — Connect-RPC routes unaffected |
+| `xstockstrat-indicators` owner | Formula execution unaffected; webhook routes deleted from `app/http_server.py` and `n8n/webhook.py` |
+| `xstockstrat-analysis` owner | `run-backtest` survives with new path; `score-strategy` webhook deleted |
+| `xstockstrat-ingest` owner | All three ingestion endpoints survive with new paths |
 
 ## Next Action
 
-`/sdd-review remove-n8n-references product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-review remove-n8n-references impl-spec` — validate regenerated implementation spec (revised scope: Track A delete, Track B rename), then `/sdd-execute remove-n8n-references`
