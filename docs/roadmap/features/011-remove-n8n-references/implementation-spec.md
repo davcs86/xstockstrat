@@ -214,7 +214,7 @@ find services/xstockstrat-indicators -name "*n8n*" -o -name "n8n" -type d && ech
 
 ### Step 6 — service: xstockstrat-notify — rename webhook router and update paths
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/n8n/webhookRouter.ts` — delete
