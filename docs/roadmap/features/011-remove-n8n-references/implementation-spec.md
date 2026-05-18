@@ -663,7 +663,7 @@ grep "n8n Cloud Integration" CLAUDE.md && echo "FAIL: section heading not update
 
 ### Step 15 — service: update scripts/integration-test.sh
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/integration-test.sh` — modify
