@@ -6,6 +6,46 @@
 
 ---
 
+## Session 2026-05-18T02:00:00Z — sdd-spec (regeneration)
+
+- Regenerated implementation-spec.md with 16 steps to reflect the revised product spec scope (Track A = delete entirely, Track B = rename path only).
+- Status remains `implementation-ready`.
+- Key codebase findings confirming revised scope:
+  - Track A services confirmed: config `src/index.ts` L67 and L51 reference `n8n` router; ledger L66 and L55; identity L61 and L50; trading `cmd/server/main.go` L134, L138, L139; indicators `app/http_server.py` L60 and L73 define inline `n8n_*` routes.
+  - Track B services confirmed: notify `src/n8n/webhookRouter.ts` serves `emit-alert` and `list-alerts` (both kept); analysis `app/http_server.py` L46 `run-backtest` kept + L58 `score-strategy` deleted; ingest `app/http_server.py` L52/L64/L72 all three kept.
+  - `n8n/webhook.py` in indicators is a standalone file (NOT imported by http_server.py) — both the standalone file and the inline routes in http_server.py must be deleted.
+  - Identity has no top-level `n8n/` directory (unlike config, ledger, notify which all have orphaned top-level `n8n/webhookRouter.ts`).
+  - `packages/n8n/` contains 7 workflow JSON files + README — all deleted in Step 9.
+  - Integration test `scripts/integration-test.sh` function `section_12_n8n_webhook()` uses old path at L405, L423, L439, L470 (Step 15).
+  - `docs/setup/alpaca.md` L212 references deleted `place-order` webhook — Step 14 must update to Connect-RPC equivalent.
+
+## Session 2026-05-18T01:00:00Z — product-spec revision
+
+- Scope expanded beyond rename-only after impl-spec review and user decision.
+- Key decision: webhooks that existed solely for n8n are deleted entirely; only endpoints serving the agent MCP server's ingestion goal are preserved (with path rename).
+- Track A (delete entirely): config (set-config, rollout, list-keys), ledger (append-event, query-events), identity (validate-token, create-apikey), trading (place-order, cancel-order), indicators (compute-indicator, execute-formula), analysis (score-strategy).
+- Track B (keep + rename path): ingest (all 3), notify (emit-alert, list-alerts), analysis (run-backtest).
+- `score-strategy` on analysis was evaluated: it is a one-field JSON shim over `ScoreStrategyRequest`; the identical call is already available via Connect-RPC at `/xstockstrat.analysis.v1.AnalysisService/ScoreStrategy`. Deleted.
+- `list-alerts` on notify: explicitly kept by user decision (useful for agent observability).
+- `N8N_WEBHOOK_SECRET` env var name left unchanged — renaming is out of scope.
+- Product-spec.md, feature.md updated. Implementation spec is now stale — must re-run /sdd-spec.
+- Next: /sdd-spec remove-n8n-references
+
+## Session 2026-05-18T00:00:00Z — sdd-spec
+
+- Generated implementation-spec.md with 16 steps. Status → implementation-ready.
+- Key codebase findings:
+  - Four Node.js services (config, ledger, notify, identity) each have TWO n8n webhook router files: a live one at `src/n8n/webhookRouter.ts` (imported by `src/index.ts`) and an orphaned one at `<service>/n8n/webhookRouter.ts` (top-level, uses express.Router(), never imported). Both must be deleted in Steps 1–4.
+  - Identity service has no top-level `n8n/` directory — only `src/n8n/`. All others that have top-level n8n dirs: config, ledger, notify.
+  - indicators: `n8n/webhook.py` is a standalone file NOT imported by `app/http_server.py`. The http_server.py defines its own inline webhook routes. Both must be updated.
+  - analysis and ingest: no separate n8n/ directory — webhook routes are inline in `app/http_server.py` only.
+  - packages/n8n contains 7 workflow JSON files + README. Deleted entirely in Step 9.
+  - Integration test script `scripts/integration-test.sh` has a `section_12_n8n_webhook()` function that uses the old paths (Step 15).
+  - docs/setup/alpaca.md has 4 curl examples with old `/webhooks/n8n/` paths (Step 14).
+  - docs/runbooks/add-data-source.md has the most n8n references of any runbook (Step 11).
+  - 009 product spec tool definitions table has 3 paths to update (Step 13).
+  - Feature was in `draft` status when /sdd-spec was run (product-spec review had not been completed). Proceeding per implicit user confirmation via skill invocation.
+
 ## Session 2026-05-16T00:00:00Z — sdd-story
 
 - Created feature.md (status: draft), product-spec.md, context.md from user story.
