@@ -46,3 +46,10 @@
   - `JWT_SECRET` is in `.do/app.dev.yaml` and `.do/app.yaml` only for the identity service. All three frontends need it added.
   - `IDENTITY_HTTP_ENDPOINT` is missing from `docker-compose.yml` and DO specs for `xstockstrat-config-ui` — confirmed via grep.
   - Existing API routes in trader already have `TODO(wire-fe-auth)` comments at `orders/route.ts:L28,57` and `portfolio/route.ts:L14` — exact replace targets confirmed.
+
+## Session 2026-05-18T00:00:00Z — sdd-execute
+
+### Step 1 — Add `jose` dependency to all three Next.js frontends [done]
+- Added `"jose": "^5.0.0"` alphabetically to dependencies in trader, insights, and config-ui package.json files. Ran `pnpm install` from repo root; lockfile updated cleanly.
+- Files modified: `services/xstockstrat-trader/package.json`, `services/xstockstrat-insights/package.json`, `services/xstockstrat-config-ui/package.json`, `pnpm-lock.yaml`
+- Deviations: none

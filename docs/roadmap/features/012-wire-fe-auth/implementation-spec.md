@@ -1,6 +1,6 @@
 # Implementation Spec: wire-fe-auth
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-18
 **Feature**: `docs/roadmap/features/012-wire-fe-auth/feature.md`
 **Total Steps**: 15
@@ -24,7 +24,7 @@ The implementation proceeds in four waves. Wave 1 (Steps 1–3) adds the `jose` 
 
 ### Step 1 — service: Add `jose` dependency to all three Next.js frontends
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-trader/package.json` — modify
