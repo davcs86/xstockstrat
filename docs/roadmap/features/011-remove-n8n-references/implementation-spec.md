@@ -461,7 +461,7 @@ wc -l docs/setup/n8n.md
 
 ### Step 11 — docs: update docs/runbooks references
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/runbooks/config-rollout.md` — modify

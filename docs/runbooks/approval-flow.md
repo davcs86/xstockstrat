@@ -45,7 +45,7 @@ Threshold check
                               │
             ┌─────────────────┴─────────────────┐
             ▼                                   ▼
-    Approved (via API / n8n)           Rejected / Timeout
+    Approved (via API / agent)         Rejected / Timeout
             │                                   │
             ▼                                   ▼
   Submit to broker              Cancel order, emit alert
@@ -63,10 +63,10 @@ Authorization: Bearer <admin_jwt>
 Body: { "approved_by": "user@example.com", "reason": "reviewed and approved" }
 ```
 
-### 2. n8n Workflow Trigger
-- n8n webhook: `POST /webhooks/n8n/approve-order`
+### 2. Agent / Webhook Trigger
+- Webhook: `POST /webhooks/approve-order`
 - Payload: `{ "order_id": "...", "approved_by": "...", "reason": "..." }`
-- n8n workflow: receives approval notification email → reviewer clicks approve → posts to webhook
+- Agent or external caller: receives approval notification → reviewer approves → posts to webhook
 
 ### 3. xstockstrat-trader UI
 - Pending approvals appear in the Orders tab with status `PENDING_APPROVAL`

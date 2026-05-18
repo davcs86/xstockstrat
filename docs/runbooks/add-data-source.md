@@ -20,8 +20,8 @@ Newsletter / Signal feeds                 Market data feeds (REST/stream)
 (Unusual Whales, MarketWatch, etc.)       (Polygon, Tiingo, Yahoo Finance, etc.)
         │                                          │
         ▼                                          ▼
-  n8n Cloud / manual upload              xstockstrat-marketdata
-  POST /webhooks/n8n/ingest-signal       (new source client, mirrors alpaca/)
+  agent / manual upload                  xstockstrat-marketdata
+  POST /webhooks/ingest-signal           (new source client, mirrors alpaca/)
         │                                          │
         ▼                                          ▼
   xstockstrat-ingest                     TimescaleDB: marketdata.ohlcv
@@ -145,19 +145,21 @@ Mirror the existing Alpaca event names with the new source identifier:
 | `marketdata.backfill.completed` | Backfill done |
 | `marketdata.backfill.failed` | Backfill error |
 
-## Step 7 — n8n Webhook (optional)
+## Step 7 — Webhook (optional)
 
-If you want n8n to trigger backfills for the new source, add the `source` field to the existing webhook handler at `POST /webhooks/n8n/backfill`:
+If you want to trigger backfills for the new source via HTTP, add the `source` field to the existing webhook handler at `POST /webhooks/backfill`:
 
-```json
-POST http://xstockstrat-marketdata:8053/webhooks/n8n/backfill
+```bash
+curl -X POST http://xstockstrat-marketdata:8053/webhooks/backfill \
+  -H 'Content-Type: application/json' \
+  -d '{
 {
-  "symbols": ["AAPL", "MSFT"],
-  "timeframe": "1d",
-  "start": "2024-01-01T00:00:00Z",
-  "end": "2024-12-31T00:00:00Z",
-  "source": "polygon"
-}
+    "symbols": ["AAPL", "MSFT"],
+    "timeframe": "1d",
+    "start": "2024-01-01T00:00:00Z",
+    "end": "2024-12-31T00:00:00Z",
+    "source": "polygon"
+  }'
 ```
 
 ## Step 8 — Verify
@@ -349,15 +351,15 @@ In `xstockstrat-config` (via Config UI at `http://localhost:3002`):
 
 Replace `<source>` with: `unusual_whales`, `marketwatch`, `dividendology`, `pure_power_picks`, `simply_wall_st`.
 
-## Step 5 — Add the n8n Webhook Endpoint
+## Step 5 — Add the Webhook Endpoint
 
 Add to `services/xstockstrat-ingest/app/http_server.py`:
 
 ```python
-@router.post("/webhooks/n8n/ingest-signal")
+@router.post("/webhooks/ingest-signal")
 async def ingest_signal_webhook(body: dict):
     """
-    n8n calls this endpoint after parsing a newsletter signal.
+    The agent or HTTP caller calls this endpoint after parsing a newsletter signal.
     Expected payload:
     {
       "source": "unusual_whales",
@@ -375,26 +377,26 @@ async def ingest_signal_webhook(body: dict):
     ...
 ```
 
-## Step 6 — Wire n8n to Each Newsletter Source
+## Step 6 — Wire Agent/Caller to Each Newsletter Source
 
-Each newsletter source requires its own n8n workflow. The ingestion pattern depends on how you receive the newsletter:
+Each newsletter source requires a caller workflow (agent MCP server or custom integration). The ingestion pattern depends on how you receive the newsletter:
 
 ### Option A — Email parsing (most common)
 ```
-n8n: Email trigger (IMAP / Gmail)
+Agent/caller: Email trigger (IMAP / Gmail)
   → Extract body text
   → HTTP Request: POST https://your-llm-api/parse-signal
       body: { "text": "{{email body}}", "source": "unusual_whales" }
-  → HTTP Request: POST http://xstockstrat-ingest:8055/webhooks/n8n/ingest-signal
+  → HTTP Request: POST http://xstockstrat-ingest:8055/webhooks/ingest-signal
       body: { "source": "unusual_whales", "symbol": "{{parsed_symbol}}", ... }
 ```
 
 ### Option B — RSS / Atom feed monitoring
 ```
-n8n: RSS Feed trigger (poll every 15 minutes)
+Agent/caller: RSS Feed trigger (poll every 15 minutes)
   → Filter: new items only
   → Code node: extract symbol, direction, tags from title/description
-  → HTTP Request: POST http://xstockstrat-ingest:8055/webhooks/n8n/ingest-signal
+  → HTTP Request: POST http://xstockstrat-ingest:8055/webhooks/ingest-signal
 ```
 
 ### Option C — Manual CSV upload
@@ -584,7 +586,7 @@ print(f"Win rate: {result.win_rate:.2%}")
   ```
 - [ ] `QuerySignals` returns the stored signal filtered by symbol and active window
 - [ ] Ledger event `ingest.signal.ingested` appears in ledger stream
-- [ ] n8n workflow can POST to `/webhooks/n8n/ingest-signal` and receive 200
+- [ ] Agent or caller can POST to `/webhooks/ingest-signal` and receive 200
 - [ ] Composite formula `ExecuteFormula` returns `active_signal_count > 0` for a symbol with active signals
 
 ## Signal weighting in analysis
@@ -609,6 +611,6 @@ print(f"Win rate: {result.win_rate:.2%}")
 
 Track registered sources here after setup is complete.
 
-| Date added | Source | Type | n8n workflow | Owner |
+| Date added | Source | Type | Workflow / caller | Owner |
 |---|---|---|---|---|
 | — | — | — | — | — |
