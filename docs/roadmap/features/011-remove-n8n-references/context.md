@@ -6,6 +6,14 @@
 
 ---
 
+## Session 2026-05-18T07:00:00Z — sdd-execute step 7
+
+**Step 7 — service: xstockstrat-analysis — remove score-strategy, rename run-backtest path** [done]
+
+- Removed `score-strategy` webhook endpoint (L58–L66) entirely and renamed `run-backtest` from `/webhooks/n8n/run-backtest` to `/webhooks/run-backtest` with function rename `n8n_run_backtest` → `run_backtest_webhook`, updated module docstring and section comment. CLAUDE.md n8n references intentionally left for Step 16. ruff not installed in this environment; grep check on app/ passes — linting runs in CI.
+- Files modified: `services/xstockstrat-analysis/app/http_server.py`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`
+- Deviations: ruff not available; fell back to grep-based verification on app/ directory (same as Step 5)
+
 ## Session 2026-05-18T06:00:00Z — sdd-execute step 6
 
 **Step 6 — service: xstockstrat-notify — rename webhook router and update paths** [done]

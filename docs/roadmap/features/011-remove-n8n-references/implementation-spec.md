@@ -268,7 +268,7 @@ find services/xstockstrat-notify -name "*n8n*" -o -name "n8n" -type d && echo "F
 
 ### Step 7 — service: xstockstrat-analysis — remove score-strategy, rename run-backtest path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/http_server.py` — modify
@@ -748,4 +748,7 @@ grep -rn "Callers (n8n" services/*/CLAUDE.md && echo "FAIL" || echo "PASS"
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 7 — xstockstrat-analysis — remove score-strategy, rename run-backtest path
+**Spec said**: `cd services/xstockstrat-analysis && python3 -m ruff check app/ && python3 -m ruff format --check app/`
+**Actual**: ruff not installed in the execution environment; fell back to grep-based verification on the `app/` directory only (CLAUDE.md n8n references confirmed as intentionally deferred to Step 16)
+**Reason**: Same environment constraint as Step 5 — `python3 -m ruff` not available. Linting runs in CI.
