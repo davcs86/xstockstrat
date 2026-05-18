@@ -10,8 +10,6 @@ matching the Connect-RPC protocol:
 
 Also exposes:
   GET /healthz                          → 200 OK
-  POST /webhooks/n8n/compute-indicator  → ComputeIndicator
-  POST /webhooks/n8n/execute-formula    → ExecuteFormula
 """
 
 import logging
@@ -55,33 +53,6 @@ def build_app(servicer) -> FastAPI:
     @app.post("/xstockstrat.indicators.v1.IndicatorsService/GetFormula")
     async def get_formula(request: Request):
         return await _call(request, indicators_pb2.GetFormulaRequest, servicer.GetFormula)
-
-    # ── n8n webhook routes ────────────────────────────────────────────────────
-    @app.post("/webhooks/n8n/compute-indicator")
-    async def n8n_compute_indicator(request: Request):
-        """n8n → ComputeIndicator webhook."""
-        body = await request.json()
-        req_msg = indicators_pb2.ComputeIndicatorRequest(
-            indicator=body.get("indicator", "SMA"),
-            values=body.get("values", []),
-            params=body.get("params", {}),
-            symbol=body.get("symbol", ""),
-        )
-        resp = await servicer.ComputeIndicator(req_msg, _NoopContext())
-        return JSONResponse(json_format.MessageToDict(resp))
-
-    @app.post("/webhooks/n8n/execute-formula")
-    async def n8n_execute_formula(request: Request):
-        """n8n → ExecuteFormula webhook."""
-        body = await request.json()
-        req_msg = indicators_pb2.ExecuteFormulaRequest(
-            formula_source=body.get("formula_source", ""),
-            formula_id=body.get("formula_id", ""),
-            timeout_ms_override=body.get("timeout_ms_override", 0),
-        )
-        req_msg.input_data.update(body.get("input_data", {}))
-        resp = await servicer.ExecuteFormula(req_msg, _NoopContext())
-        return JSONResponse(json_format.MessageToDict(resp))
 
     return app
 

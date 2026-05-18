@@ -23,7 +23,7 @@ Steps 1–5 cover Track A services (config, ledger, identity, trading, indicator
 
 ### Step 1 — service: xstockstrat-config — delete webhook layer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/n8n/webhookRouter.ts` — delete
@@ -67,7 +67,7 @@ find services/xstockstrat-config -name "*n8n*" && echo "FAIL: n8n files remain" 
 
 ### Step 2 — service: xstockstrat-ledger — delete webhook layer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/n8n/webhookRouter.ts` — delete
@@ -104,7 +104,7 @@ find services/xstockstrat-ledger -name "*n8n*" && echo "FAIL: n8n files remain" 
 
 ### Step 3 — service: xstockstrat-identity — delete webhook layer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/n8n/webhookRouter.ts` — delete
@@ -138,7 +138,7 @@ find services/xstockstrat-identity -name "*n8n*" && echo "FAIL: n8n files remain
 
 ### Step 4 — service: xstockstrat-trading — delete webhook handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/handler/n8n.go` — delete
@@ -176,7 +176,7 @@ grep -rn "webhooks/n8n" services/xstockstrat-trading/ && echo "FAIL" || echo "PA
 
 ### Step 5 — service: xstockstrat-indicators — delete webhook routes and standalone file
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/n8n/webhook.py` — delete
@@ -214,7 +214,7 @@ find services/xstockstrat-indicators -name "*n8n*" -o -name "n8n" -type d && ech
 
 ### Step 6 — service: xstockstrat-notify — rename webhook router and update paths
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/n8n/webhookRouter.ts` — delete
@@ -268,7 +268,7 @@ find services/xstockstrat-notify -name "*n8n*" -o -name "n8n" -type d && echo "F
 
 ### Step 7 — service: xstockstrat-analysis — remove score-strategy, rename run-backtest path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/http_server.py` — modify
@@ -318,7 +318,7 @@ grep -rn "n8n\|webhooks/n8n" services/xstockstrat-analysis/ && echo "FAIL" || ec
 
 ### Step 8 — service: xstockstrat-ingest — rename webhook route paths and function names
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/http_server.py` — modify
@@ -363,7 +363,7 @@ grep -rn "n8n\|webhooks/n8n" services/xstockstrat-ingest/ && echo "FAIL" || echo
 
 ### Step 9 — service: delete packages/n8n directory
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/n8n`
 **Files**:
 - `packages/n8n/README.md` — delete
@@ -405,7 +405,7 @@ grep -rn "packages/n8n" . --include="*.ts" --include="*.go" --include="*.py" && 
 
 ### Step 10 — docs: replace docs/setup/n8n.md with deprecation stub
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/setup/n8n.md` — replace entire file
@@ -461,7 +461,7 @@ wc -l docs/setup/n8n.md
 
 ### Step 11 — docs: update docs/runbooks references
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/runbooks/config-rollout.md` — modify
@@ -528,7 +528,7 @@ grep -rn "n8n workflow" docs/runbooks/ && echo "WARN: check if historical or act
 
 ### Step 12 — docs: update docs/roadmap/ references
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/roadmap/implementation-roadmap.md` — modify
@@ -581,7 +581,7 @@ grep -n "/n8n/" docs/roadmap/ -r && echo "WARN: check context" || echo "PASS"
 
 ### Step 13 — docs: update 009 product spec tool definitions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/roadmap/features/009-agent-mcp-server/product-spec.md` — modify
@@ -609,7 +609,7 @@ grep "webhooks/n8n" docs/roadmap/features/009-agent-mcp-server/product-spec.md &
 
 ### Step 14 — docs: update root CLAUDE.md and docs/setup/alpaca.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `CLAUDE.md` — modify
@@ -663,7 +663,7 @@ grep "n8n Cloud Integration" CLAUDE.md && echo "FAIL: section heading not update
 
 ### Step 15 — service: update scripts/integration-test.sh
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/`
 **Files**:
 - `scripts/integration-test.sh` — modify
@@ -697,7 +697,7 @@ bash -n scripts/integration-test.sh && echo "PASS: syntax ok" || echo "FAIL: syn
 
 ### Step 16 — docs: update service CLAUDE.md files
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: multiple
 **Files**:
 - `services/xstockstrat-config/CLAUDE.md` — modify
@@ -748,4 +748,12 @@ grep -rn "Callers (n8n" services/*/CLAUDE.md && echo "FAIL" || echo "PASS"
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 12 — docs: update docs/roadmap/ references
+**Spec said**: Modify `docs/roadmap/implementation-roadmap.md` and `docs/roadmap/phase6-deviations.md` to replace old n8n webhook paths and update section headings.
+**Actual**: Only `docs/roadmap/CLAUDE.md` was modified. The two roadmap files were left untouched.
+**Reason**: User declared `implementation-roadmap.md` and `phase6-deviations.md` as historical files that should not be altered.
+
+### Deviation: Step 7 — xstockstrat-analysis — remove score-strategy, rename run-backtest path
+**Spec said**: `cd services/xstockstrat-analysis && python3 -m ruff check app/ && python3 -m ruff format --check app/`
+**Actual**: ruff not installed in the execution environment; fell back to grep-based verification on the `app/` directory only (CLAUDE.md n8n references confirmed as intentionally deferred to Step 16)
+**Reason**: Same environment constraint as Step 5 — `python3 -m ruff` not available. Linting runs in CI.

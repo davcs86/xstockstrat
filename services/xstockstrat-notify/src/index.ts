@@ -10,7 +10,7 @@ import { createNotifyServiceDefinition } from './grpc/serviceDefinition';
 import { createConnectRouter } from './connect/connectRouter';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { getLogger } from './services/logger';
-import { createN8nRouter } from './n8n/webhookRouter';
+import { createWebhookRouter } from './webhooks/router';
 
 const log = getLogger('notify:server');
 
@@ -44,7 +44,7 @@ async function main() {
 
   // ── Connect-RPC HTTP server (browser + external clients, port 8059) ────
   const connectHandler = connectNodeAdapter({ routes: createConnectRouter(notifyImpl) });
-  const n8nRouter = createN8nRouter(notifyImpl);
+  const webhookRouter = createWebhookRouter(notifyImpl);
   const httpServer = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -55,7 +55,7 @@ async function main() {
       res.end(JSON.stringify({ status: 'ok', service: 'xstockstrat-notify' }));
       return;
     }
-    if (req.url?.startsWith('/webhooks/n8n/')) { n8nRouter(req, res); return; }
+    if (req.url?.startsWith('/webhooks/')) { webhookRouter(req, res); return; }
     connectHandler(req, res);
   });
   httpServer.listen(parseInt(httpPort, 10), () => {

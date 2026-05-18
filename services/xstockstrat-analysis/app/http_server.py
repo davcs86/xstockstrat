@@ -1,7 +1,7 @@
 """
 Connect-RPC compatible HTTP server for xstockstrat-analysis.
 
-Exposes AnalysisService methods via HTTP POST (JSON encoding) and n8n webhooks.
+Exposes AnalysisService methods via HTTP POST (JSON encoding) and webhooks.
 """
 
 import logging
@@ -42,10 +42,10 @@ def build_app(servicer) -> FastAPI:
             request, analysis_pb2.GetStrategyReportRequest, servicer.GetStrategyReport
         )
 
-    # ── n8n webhook routes ────────────────────────────────────────────────────
-    @app.post("/webhooks/n8n/run-backtest")
-    async def n8n_run_backtest(request: Request):
-        """n8n → RunBacktest webhook."""
+    # ── Webhook routes ──────────────────────────────────────────────────────────
+    @app.post("/webhooks/run-backtest")
+    async def run_backtest_webhook(request: Request):
+        """Webhook → RunBacktest."""
         body = await request.json()
         req_msg = analysis_pb2.RunBacktestRequest(
             strategy_id=body.get("strategy_id", ""),
@@ -53,16 +53,6 @@ def build_app(servicer) -> FastAPI:
             initial_capital=body.get("initial_capital", 100000.0),
         )
         resp = await servicer.RunBacktest(req_msg, _NoopContext())
-        return JSONResponse(json_format.MessageToDict(resp))
-
-    @app.post("/webhooks/n8n/score-strategy")
-    async def n8n_score_strategy(request: Request):
-        """n8n → ScoreStrategy webhook."""
-        body = await request.json()
-        req_msg = analysis_pb2.ScoreStrategyRequest(
-            strategy_id=body.get("strategy_id", ""),
-        )
-        resp = await servicer.ScoreStrategy(req_msg, _NoopContext())
         return JSONResponse(json_format.MessageToDict(resp))
 
     return app
