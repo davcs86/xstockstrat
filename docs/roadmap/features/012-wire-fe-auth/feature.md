@@ -21,7 +21,7 @@
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 15 steps, updated 2026-05-18
+- [Implementation Spec](implementation-spec.md) — 16 steps, updated 2026-05-18
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
