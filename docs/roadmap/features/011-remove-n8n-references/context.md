@@ -14,6 +14,14 @@
 - Files modified: `services/xstockstrat-config/src/index.ts`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`, `docs/roadmap/features/011-remove-n8n-references/feature.md`
 - Deviations: none
 
+## Session 2026-05-18T04:00:00Z — sdd-execute step 2
+
+**Step 2 — service: xstockstrat-ledger — delete webhook layer** [done]
+
+- Removed n8n webhook layer from xstockstrat-ledger: deleted `src/n8n/webhookRouter.ts` and orphaned `n8n/webhookRouter.ts` files, removed import and router invocation from `src/index.ts`, cleaned up empty directories.
+- Files modified: `services/xstockstrat-ledger/src/index.ts`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`
+- Deviations: none
+
 ## Session 2026-05-18T02:00:00Z — sdd-spec (regeneration)
 
 - Regenerated implementation-spec.md with 16 steps to reflect the revised product spec scope (Track A = delete entirely, Track B = rename path only).

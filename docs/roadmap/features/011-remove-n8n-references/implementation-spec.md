@@ -67,7 +67,7 @@ find services/xstockstrat-config -name "*n8n*" && echo "FAIL: n8n files remain" 
 
 ### Step 2 — service: xstockstrat-ledger — delete webhook layer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/n8n/webhookRouter.ts` — delete
