@@ -6,6 +6,14 @@
 
 ---
 
+## Session 2026-05-18T13:00:00Z — sdd-execute step 13
+
+**Step 13 — docs: update 009 product spec tool definitions** [done]
+
+- Updated 3 lines in `docs/roadmap/features/009-agent-mcp-server/product-spec.md` tool definitions table (L24–L26): changed old `/webhooks/n8n/*` paths to new `/webhooks/*` paths for `ingest_signal`, `emit_alert`, and `run_backtest` tools.
+- Files modified: `docs/roadmap/features/009-agent-mcp-server/product-spec.md`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`, `docs/roadmap/features/011-remove-n8n-references/context.md`
+- Deviations: none
+
 ## Session 2026-05-18T12:00:00Z — sdd-execute step 12
 
 **Step 12 — docs: update docs/roadmap/ references** [done]
