@@ -26,13 +26,19 @@ FR-5. Each frontend must expose a logout action that calls `RevokeToken` on the 
 
 FR-6. Frontend API routes must forward `x-user-id: <userId>` as a header on all outbound Connect-RPC calls to backend services. The `userId` value is extracted from the verified JWT claims in the session cookie. Backend services trust this header only from internal callers.
 
-FR-7. nginx must strip `x-user-id` from all inbound external requests (port 80) to prevent external callers from spoofing user identity. The header is only valid when set by a frontend service inside the internal network.
+FR-7. nginx must strip `x-user-id`, `x-access-scope`, and `x-trace-id` from all inbound external requests (port 80) to prevent external callers from spoofing user identity, permission scope, or trace context. These headers are only valid when set by frontend or backend services inside the internal network.
+
+FR-8. Each frontend auth library must export a `rolesToAccessScope(roles: string[]): number` function that maps role strings to a permissions bitmap (`read = 0x01`, `write = 0x02`, `admin = 0x04`, `trading = 0x08`; unrecognized roles contribute `0`). Role-to-bit mapping: `viewer` → `read`; `trader` → `read | write | trading`; `admin` → `read | write | admin | trading`. Frontend API routes must forward `x-access-scope: <decimal-string>` on all outbound Connect-RPC calls, derived from `claims.roles`. Backend services forward this value verbatim — they do not re-compute the bitmap.
+
+FR-9. Each frontend's `middleware.ts` must attach a `x-trace-id` (UUID v4) to every request. If the incoming request already carries `x-trace-id`, preserve it; otherwise generate one via `crypto.randomUUID()`. The trace ID is injected into Next.js forwarded request headers via `NextResponse.next({ request: { headers: ... } })` so that API route handlers can read it from `req.headers.get('x-trace-id')` and forward it on all outbound Connect-RPC calls. Propagation is upstream only — `x-trace-id` must never be set on response headers.
+
+FR-10. All backend services must implement a propagation layer that reads `x-user-id`, `x-access-scope`, and `x-trace-id` from incoming gRPC metadata and injects them into all outbound service-to-service gRPC calls within the same request context. Services that receive these headers but make no outbound service calls (`xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config`) require server-side extraction only (for structured logging context).
 
 ## Out of Scope
 
 - Multi-factor authentication (MFA)
 - Social/OAuth login (Google, GitHub, etc.)
-- Role-based access control (RBAC) enforcement at the UI or route level
+- Role-based access control (RBAC) enforcement at the UI, route, or service level — `x-access-scope` is forwarded for observability and future use only; backend services must not enforce it in this feature
 - A new dedicated auth frontend service
 - gRPC-level JWT interceptors on services not currently enforcing them (covered by Phase 7+ hardening)
 - API key authentication flow from the UI
@@ -40,11 +46,25 @@ FR-7. nginx must strip `x-user-id` from all inbound external requests (port 80) 
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-trader` — add login page, `middleware.ts`, fix API routes to extract userId from JWT claims and forward as `x-user-id`
-- `xstockstrat-insights` — add login page, `middleware.ts`, forward `x-user-id` on outbound calls
-- `xstockstrat-config-ui` — add login page, `middleware.ts`, forward `x-user-id` on outbound calls
+
+Frontend services — auth wiring, JWT session, and three-header forwarding:
+- `xstockstrat-trader` — add login page, `middleware.ts` (with trace ID), fix API routes to extract userId + accessScope from JWT claims and forward all three headers (`x-user-id`, `x-access-scope`, `x-trace-id`) on all outbound calls
+- `xstockstrat-insights` — same as trader
+- `xstockstrat-config-ui` — same as trader
 - `xstockstrat-identity` — consumed as-is; no source changes required
-- `xstockstrat-nginx` — add `proxy_set_header x-user-id ""` to strip the header on inbound external requests
+- `xstockstrat-nginx` — strip `x-user-id`, `x-access-scope`, and `x-trace-id` from all inbound external requests
+
+Backend services — propagation interceptor (server + client for callers; server-only for leaves):
+- `xstockstrat-trading` — Go unary interceptors: extract on server, inject on client calls to ledger/notify/portfolio
+- `xstockstrat-portfolio` — Go unary interceptors: extract on server, inject on client calls to ledger/marketdata/notify
+- `xstockstrat-marketdata` — Go unary interceptors: extract on server, inject on client calls to ledger/notify
+- `xstockstrat-indicators` — Python per-method extraction + outbound metadata: extract from servicer context, pass to ingest stub calls
+- `xstockstrat-ingest` — Python per-method extraction + outbound metadata: extract from servicer context, pass to marketdata/ledger stub calls
+- `xstockstrat-analysis` — Python per-method extraction + outbound metadata: extract from servicer context, pass to marketdata/indicators/ingest/ledger stub calls
+- `xstockstrat-ledger` — Node.js AsyncLocalStorage middleware: extract from HTTP headers on Connect-RPC path (no outbound service calls)
+- `xstockstrat-identity` — Node.js AsyncLocalStorage middleware: extract from HTTP headers (no outbound service calls)
+- `xstockstrat-notify` — Node.js AsyncLocalStorage middleware: extract from HTTP headers (no outbound service calls)
+- `xstockstrat-config` — Node.js AsyncLocalStorage middleware: extract from HTTP headers (no outbound service calls)
 
 ## Proto Contract Changes
 
@@ -74,9 +94,12 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 6. Logout clears cookies and the identity service marks the refresh token as revoked.
 7. nginx strips `x-user-id` from all inbound external requests.
 8. Expired or tampered tokens return a 401 on API routes and redirect browser requests to `/login`.
+9. All outbound Connect-RPC calls from Next.js API routes carry `x-access-scope: <bitmap>` and `x-trace-id: <uuid>` alongside `x-user-id`.
+10. A request trace originating at a frontend API route carries the same `x-trace-id` value through all downstream backend service calls.
+11. nginx strips `x-access-scope` and `x-trace-id` from inbound external requests alongside `x-user-id` (same test vector as AC-7).
 
 ## Open Questions
 
-- [ ] Should all three frontends share a single `@xstockstrat/auth` workspace package for the middleware and token-refresh logic, or duplicate the implementation per frontend?
-- [ ] Should the login page be its own standalone page per frontend, or should nginx route `/login` to a single shared login app (deferred — out of scope per this spec, but worth noting for future SSO consideration)?
-- [ ] What is the token storage strategy for SSR API routes — read from cookie header on each request, or cache in a server-side session store?
+- [x] **OQ-1 — DEFERRED to impl-spec**: Shared `@xstockstrat/auth` workspace package decision deferred to `/sdd-spec`; see context.md 2026-05-18.
+- [x] **OQ-2 — DEFERRED/OUT OF SCOPE**: Per-frontend login pages per this spec; shared nginx-routed login app deferred for future SSO consideration.
+- [x] **OQ-3 — RESOLVED**: Read from the `httpOnly` cookie header on each incoming request (stateless). No server-side session store. Consistent with FR-3.
