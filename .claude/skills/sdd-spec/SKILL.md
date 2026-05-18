@@ -78,6 +78,19 @@ d. Read the handler/servicer file (contains existing RPC implementations):
 e. Run: `grep -rn "func \|def \|export function\|export const\|register\|handler\|servicer" services/<name>/` — locate real symbols with line numbers
 f. Run: `ls services/<name>/migrations/ 2>/dev/null | sort` — find last NNN migration number
 g. Run: `grep -rn "GetConfig\|WatchConfig\|config\." services/<name>/` — find config key read patterns
+h. Grep all three deployment files to record the service's current env var wiring
+   and detect missing entries for new variables the feature requires:
+   ```bash
+   grep -n "<service-name>" docker-compose.yml .do/app.dev.yaml .do/app.yaml
+   ```
+   For each new env var the feature will introduce (e.g. a new upstream endpoint key),
+   confirm it is absent from all three files:
+   ```bash
+   grep -n "NEW_VAR_NAME" docker-compose.yml .do/app.dev.yaml .do/app.yaml
+   ```
+   Record the result: **absent** (must add in the step's `**Files**` + `**Instructions**`) or
+   **present** (no change needed). New ports must also be absent from the `ports:` block in
+   `docker-compose.yml` and from port-related entries in the app specs.
 
 ### 4. Search proto files (if proto changes required)
 
@@ -92,6 +105,7 @@ Before writing any step instruction, verify you have grep or Read evidence for e
 - ✗ "create a migration" → ✓ "create `services/xstockstrat-ingest/migrations/002_add_signals_table.up.sql` — confirmed last file is `001_newsletter_signals.up.sql` via `ls`"
 - ✗ "update the config handler" → ✓ "add key `ingest.signals.polygon.enabled` following the SetConfig call pattern at `services/xstockstrat-config/src/handlers/config.ts:L34`"
 - If a file or function is not found: write "**Not found** — this must be created from scratch; no existing pattern available in the codebase"
+- ✗ "add the env var to docker-compose" → ✓ "add `NEW_ENDPOINT: http://xstockstrat-new:8061` to the `xstockstrat-<name>` `environment:` block in `docker-compose.yml` (confirmed absent: `grep -n NEW_ENDPOINT docker-compose.yml` → no match); add `- key: NEW_ENDPOINT` / `value: ${xstockstrat-new.PRIVATE_URL}` to the `xstockstrat-<name>` `envs:` block in `.do/app.dev.yaml` and `.do/app.yaml` (confirmed absent: same grep)"
 
 ### 6. Write implementation-spec.md
 
@@ -125,6 +139,9 @@ Write `$FEATURE_DIR/implementation-spec.md`:
 **Service**: `xstockstrat-<name>` (or `packages/proto`, `docs/runbooks/`, etc.)
 **Files**:
 - `exact/path/to/file` — modify | create | delete
+(For `service` steps that introduce a new environment variable or port: also list
+`docker-compose.yml`, `.do/app.dev.yaml`, and `.do/app.yaml` as modify — confirmed absent
+via the grep run in Step 3h.)
 
 **Reviewers**: <role1> — <focus phrase from registry>, <role2> — <focus phrase>
 (Look up step category + **Service** in docs/runbooks/reviewer-registry.md governance matrix.
@@ -153,6 +170,24 @@ _Populated by /sdd-execute as implementation proceeds._
 ```
 
 Categories to use for step naming: `proto`, `proto-gen`, `migration`, `service`, `config`, `docs`, `test`.
+
+**Test step pairing rule**: Every `service` step for a non-frontend service must have a
+corresponding `test` step. Place it immediately after the `service` step, or declare it in
+`## Step Dependencies` (e.g. "Step 5 [test] covers Step 4 [service]"). The `test` step's
+`**Verification**` must be a runnable bash command enforcing the CI coverage threshold:
+
+| Service | Threshold | Verification command |
+|---|---|---|
+| xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata | 40% | `cd services/<name> && GOWORK=off COVERPKGS=$(go list ./... \| grep -Ev '/(cmd\|handler\|repository\|telemetry\|service)(/\|$)' \| tr '\n' ',' \| sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out \| grep "^total:"` — confirm ≥ 40% |
+| xstockstrat-indicators | 50% | `cd services/xstockstrat-indicators && pytest --cov=app --cov-fail-under=50` |
+| xstockstrat-ingest, xstockstrat-analysis | 40% | `cd services/<name> && pytest --cov=app --cov-fail-under=40` |
+| xstockstrat-config, xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify | 40% | `cd services/<name> && pnpm run test:coverage` — confirm threshold passes |
+| xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui | n/a | No coverage threshold — use `pnpm test:e2e` or note existing E2E coverage applies |
+
+If new code lands only in Go packages excluded from CI measurement (`cmd/`, `handler/`,
+`repository/`, `telemetry/`, `service/`), note this in the `test` step:
+"New logic is in an excluded package — no coverage threshold applies; integration test
+verification is sufficient." A `test` step is still required.
 
 ### 7. Update feature.md status
 
