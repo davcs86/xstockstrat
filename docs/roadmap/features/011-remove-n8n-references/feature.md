@@ -1,9 +1,11 @@
 # Feature: remove-n8n-references
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
 **Development Branch**: `feature/remove-n8n-references`
 **Created**: 2026-05-16
 **Last Updated**: 2026-05-18
+**Committed to main**: 6dbc75e
+**Launched date**: 2026-05-18
 **Note**: Product spec revised 2026-05-18 — scope expanded from rename-only to selective deletion; Track A services (config, ledger, identity, trading, indicators) lose webhook layer entirely; Track B services (ingest, notify, analysis) keep surviving endpoints with path rename.
 
 ---
@@ -17,6 +19,7 @@
 | 2026-05-18 | `implementation-ready` → `implementation-ready` | /sdd-spec | Implementation spec regenerated with 16 steps (revised scope: Track A = delete entirely, Track B = rename path) |
 | 2026-05-18 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 completed (xstockstrat-config webhook removal) |
 | 2026-05-18 | `in-progress` → `code-completed` | /sdd-execute | All 16 steps completed; ready for integration PR |
+| 2026-05-18 | `code-completed` → `launched` | production promotion | Merged to main via commit 6dbc75e; now live in production |
 
 ---
 
