@@ -11,7 +11,7 @@ Node.js 20 + TypeScript
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50059` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8059` | Connect-RPC + n8n webhooks |
+| HTTP (Connect-RPC) | `8059` | Connect-RPC + webhooks |
 
 ## Connect-RPC
 
@@ -20,7 +20,7 @@ Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8059`.
 - Router: `src/connect/connectRouter.ts` — exposes `EmitAlert`, `AcknowledgeAlert` via `connectNodeAdapter`
 - Entry: `src/index.ts` — HTTP server with CORS headers mounts the Connect router
 - Note: `StreamAlerts` (server-streaming) remains gRPC-only on port `50059`; frontends poll via SSE proxied through Next.js API routes
-- Callers (n8n, frontends) use HTTP `8059`; internal services use gRPC `50059`
+- Callers (frontends, agent) use HTTP `8059`; internal services use gRPC `50059`
 
 ## Key Design
 
@@ -47,12 +47,12 @@ Namespace: `notify`
 | `notify.alert.retention_days` | int | `30` | Alert history retention |
 | `notify.alert.max_body_bytes` | int | `4096` | Max alert body size |
 
-## n8n Webhooks
+## Webhooks
 
 | Endpoint | Method | Payload | Action |
 |---|---|---|---|
-| `/webhooks/n8n/emit-alert` | POST | `{severity, category, title, body, source_service, target_user_id}` | Emits alert via gRPC |
-| `/webhooks/n8n/list-alerts` | POST | `{user_id, categories, limit}` | Returns recent alerts |
+| `/webhooks/emit-alert` | POST | `{severity, category, title, body, source_service, target_user_id}` | Emits alert via gRPC |
+| `/webhooks/list-alerts` | POST | `{user_id, categories, limit}` | Returns recent alerts |
 
 ## Environment Variables
 

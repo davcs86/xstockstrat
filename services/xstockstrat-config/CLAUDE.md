@@ -11,7 +11,7 @@ Node.js 20 + TypeScript
 | Port | Protocol | Usage |
 |---|---|---|
 | `50060` | gRPC (HTTP/2) | Internal service-to-service WatchConfig stream |
-| `8060` | Connect-RPC (HTTP/1.1 + HTTP/2) | Browser clients, config-ui, n8n webhooks |
+| `8060` | Connect-RPC (HTTP/1.1 + HTTP/2) | Browser clients, config-ui |
 
 ## Critical Invariants
 
@@ -36,7 +36,7 @@ Service startup
               ├── First message: update_type=SNAPSHOT (full config dump)
               └── Subsequent messages: update_type=DELTA (changed keys only)
 
-Config change (via SetConfig RPC or n8n webhook)
+Config change (via SetConfig RPC)
   └── INSERT/UPDATE config.config_values
         └── audit trigger fires → config.config_audit row written
         └── pg_notify('config_changed', {namespace, key})
@@ -49,17 +49,13 @@ Config change (via SetConfig RPC or n8n webhook)
 
 See `migrations/001_config_tables.up.sql` for the canonical seed list and full platform config schema.
 
-## n8n Webhooks
+## Webhooks
 
-| Endpoint | Method | Payload | Action |
-|---|---|---|---|
-| `/webhooks/n8n/set-config` | POST | `{namespace, key, value, author, reason}` | Updates a config value |
-| `/webhooks/n8n/list-keys` | POST | `{namespace}` | Lists all keys for namespace |
-| `/webhooks/n8n/rollout` | POST | `{changes: [{namespace, key, value}], author, reason}` | Atomic multi-key rollout |
+_Webhook layer removed in feature-011. Use Connect-RPC directly on port 8060 for config mutations: POST /xstockstrat.config.v1.ConfigService/SetConfig._
 
 ## Config Governance
 
-All config changes via n8n must comply with the governance rules in the root `CLAUDE.md`. Key rules:
+All config changes via webhook must comply with the governance rules in the root `CLAUDE.md`. Key rules:
 - New keys require PR to `packages/proto/` (for type documentation)
 - Sensitive keys (`is_secret=true`) values are never stored as plaintext
 - All changes are written to `config.config_audit` automatically

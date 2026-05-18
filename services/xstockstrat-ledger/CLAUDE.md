@@ -11,7 +11,7 @@ Node.js 20 + TypeScript
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50057` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8057` | Connect-RPC + n8n webhooks |
+| HTTP (Connect-RPC) | `8057` | Connect-RPC |
 
 ## Connect-RPC
 
@@ -19,7 +19,7 @@ Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8057`.
 
 - Router: `src/connect/connectRouter.ts` — exposes `AppendEvent`, `QueryEvents` via `connectNodeAdapter`
 - Entry: `src/index.ts` — HTTP server with CORS headers mounts the Connect router
-- Callers (n8n, frontends) use HTTP `8057`; internal services use gRPC `50057`
+- Callers (frontends, agent) use HTTP `8057`; internal services use gRPC `50057`
 
 ## Critical Invariants
 
@@ -65,12 +65,9 @@ Namespace: `ledger`
 | `alert:{alert_id}` | xstockstrat-notify |
 | `config:{namespace}` | xstockstrat-config |
 
-## n8n Webhooks
+## Webhooks
 
-| Endpoint | Method | Payload | Action |
-|---|---|---|---|
-| `/webhooks/n8n/query-events` | POST | `{stream_key, event_type, start, end}` | Returns paginated events |
-| `/webhooks/n8n/append-event` | POST | `{event_type, source_service, stream_key, payload}` | Appends event |
+_Webhook layer removed in feature-011. Use Connect-RPC directly on port 8057._
 
 ## Environment Variables
 
