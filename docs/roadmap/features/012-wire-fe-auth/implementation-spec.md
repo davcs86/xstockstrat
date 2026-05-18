@@ -60,7 +60,7 @@ All three must print a line with `"jose": "^5.0.0"`.
 
 ### Step 2 — service: Create `src/lib/auth.ts` in xstockstrat-trader
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/lib/auth.ts` — create
@@ -761,4 +761,7 @@ No lint errors. All four services must pass their existing test suites: `pnpm ru
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 2 — Create `src/lib/auth.ts` in xstockstrat-trader
+**Spec said**: "`IDENTITY_HTTP_ENDPOINT` already exported from `connectTransport.ts:L29`" (implying import from that file)
+**Actual**: Inlined `process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058'` directly in `auth.ts` as a module-level constant.
+**Reason**: `connectTransport.ts` imports `@connectrpc/connect-node` which is not Edge Runtime-compatible. Since `auth.ts` is used by `middleware.ts` (Step 5), which runs in the Edge Runtime, importing from `connectTransport.ts` would cause a runtime crash. The spec's Step 5 notes `auth.ts` must use only Edge-compatible APIs.
