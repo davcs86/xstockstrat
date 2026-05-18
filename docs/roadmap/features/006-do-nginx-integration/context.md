@@ -36,3 +36,17 @@
   - CLAUDE.md Service Registry (L32) already has xstockstrat-nginx entry (added by 005's /sdd-review).
 - **Step dependencies**: Steps 1–2 (app specs) and Step 4 (docs) are independent; Step 3 (entrypoint script) depends on Steps 1–2 being conceptually complete.
 - **Next action**: `/sdd-review do-nginx-integration impl-spec` then `/sdd-execute do-nginx-integration`.
+
+---
+
+## Session 2026-05-18T00:00:00Z — sdd-execute
+
+**Steps this session**: [1]
+**Progress**: 1 done / 4 total
+**Stopped at**: Step 1 (complete — PR pending merge)
+**Next**: /sdd-execute do-nginx-integration next
+
+### Step 1 — docs: Add nginx service to .do/app.dev.yaml [done]
+- Added `xstockstrat-nginx` service block (http_port: 80, basic-xs, 3 PRIVATE_URL envs) before trader in `.do/app.dev.yaml`; removed `http_port` from xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui making them internal-only.
+- Files modified: `.do/app.dev.yaml`, `implementation-spec.md`, `feature.md`, `context.md`
+- Deviations: Spec verification used `yq eval` (mikefarah syntax) but installed yq is Python jq-wrapper; used `python3 -c "import yaml; ..."` instead — all 7 checks passed.

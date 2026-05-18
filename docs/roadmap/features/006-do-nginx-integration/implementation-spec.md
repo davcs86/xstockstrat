@@ -1,6 +1,6 @@
 # Implementation Spec: do-nginx-integration
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-12
 **Feature**: `docs/roadmap/features/006-do-nginx-integration/feature.md`
 **Total Steps**: 4
@@ -23,7 +23,7 @@ Wire the nginx reverse proxy (created by feature 005-frontend-reverse-proxy on t
 
 ### Step 1 — docs: Add nginx service to .do/app.dev.yaml
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.do/app.dev.yaml` (infrastructure file)
 **Files**:
 - `.do/app.dev.yaml` — modify (add nginx service entry, change trader/insights/config-ui http_port + remove expose, change APP_URL)
@@ -360,4 +360,7 @@ grep -q "Nginx Reverse Proxy" CLAUDE.md && echo "✓ Nginx section added"
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 1 — docs: Add nginx service to .do/app.dev.yaml
+**Spec said**: `yq eval '.services[] | select(.name == "xstockstrat-nginx") | .http_port' .do/app.dev.yaml` for verification
+**Actual**: `python3 -c "import yaml; ..."` used instead for all YAML checks
+**Reason**: Installed `yq` at `/usr/bin/yq` is the Python jq-wrapper (`yq 0.0.0`), not mikefarah's yq; the `yq eval` subcommand syntax is not supported. Python pyyaml is available and produces equivalent verification coverage.
