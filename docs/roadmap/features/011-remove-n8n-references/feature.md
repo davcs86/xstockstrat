@@ -4,6 +4,7 @@
 **Development Branch**: `feature/remove-n8n-references`
 **Created**: 2026-05-16
 **Last Updated**: 2026-05-18
+**Note**: Product spec revised 2026-05-18 — scope expanded from rename-only to selective deletion; Track A services (config, ledger, identity, trading, indicators) lose webhook layer entirely; Track B services (ingest, notify, analysis) keep surviving endpoints with path rename.
 
 ---
 
@@ -26,7 +27,7 @@
 
 ## Summary
 
-Remove all n8n references from the codebase and documentation — renaming webhook handler files/directories, changing URL paths from `/webhooks/n8n/<action>` to `/webhooks/<action>`, deleting the unused `packages/n8n/` directory, and updating all docs. Endpoint functionality is unchanged; only naming and paths change.
+Remove all n8n references from the codebase and documentation. Webhook endpoints used only by n8n (config, ledger, identity, trading, indicators) are deleted entirely — callers use Connect-RPC directly. Endpoints that serve the agent MCP server's ingestion goal (ingest, notify, analysis) are kept with the `/n8n/` path segment removed. The `packages/n8n/` directory is deleted and all docs updated.
 
 ## Reviewers
 
@@ -34,14 +35,14 @@ _(Snapshot finalized at /sdd-spec time 2026-05-18. Re-run /sdd-spec if the regis
 
 | Role | Review Focus |
 |---|---|
-| `xstockstrat-config` owner | Config mutation safety, no broken route registrations after rename |
-| `xstockstrat-ledger` owner | Append-only invariant unaffected; webhook path change doesn't break event emission |
-| `xstockstrat-notify` owner | Stream delivery unaffected; no broken alert webhook paths |
-| `xstockstrat-identity` owner | Auth webhook path change doesn't break token validation flows |
-| `xstockstrat-trading` owner | Order execution correctness unaffected; no broken handler references |
-| `xstockstrat-indicators` owner | No side-effects from webhook rename; formula execution unaffected |
-| `xstockstrat-analysis` owner | Backtest endpoint path change consistent with other services |
-| `xstockstrat-ingest` owner | Signal ingestion unaffected; webhook path change propagated correctly |
+| `xstockstrat-config` owner | Config mutation safety; webhook layer removed — Connect-RPC routes unaffected |
+| `xstockstrat-ledger` owner | Append-only invariant unaffected; webhook layer removed — Connect-RPC routes unaffected |
+| `xstockstrat-notify` owner | Stream delivery unaffected; `emit-alert` and `list-alerts` survive with new paths |
+| `xstockstrat-identity` owner | Auth correctness unaffected; webhook layer removed — Connect-RPC routes unaffected |
+| `xstockstrat-trading` owner | Order execution correctness unaffected; webhook handler deleted — Connect-RPC routes unaffected |
+| `xstockstrat-indicators` owner | Formula execution unaffected; webhook routes deleted from `app/http_server.py` and `n8n/webhook.py` |
+| `xstockstrat-analysis` owner | `run-backtest` survives with new path; `score-strategy` webhook deleted |
+| `xstockstrat-ingest` owner | All three ingestion endpoints survive with new paths |
 
 ## Next Action
 

@@ -1,6 +1,6 @@
 # Implementation Spec: remove-n8n-references
 
-**Status**: `pending`
+**Status**: `stale — product spec revised 2026-05-18; re-run /sdd-spec before executing`
 **Created**: 2026-05-18
 **Feature**: `docs/roadmap/features/011-remove-n8n-references/feature.md`
 **Total Steps**: 16

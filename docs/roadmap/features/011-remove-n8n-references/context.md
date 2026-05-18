@@ -6,6 +6,18 @@
 
 ---
 
+## Session 2026-05-18T01:00:00Z — product-spec revision
+
+- Scope expanded beyond rename-only after impl-spec review and user decision.
+- Key decision: webhooks that existed solely for n8n are deleted entirely; only endpoints serving the agent MCP server's ingestion goal are preserved (with path rename).
+- Track A (delete entirely): config (set-config, rollout, list-keys), ledger (append-event, query-events), identity (validate-token, create-apikey), trading (place-order, cancel-order), indicators (compute-indicator, execute-formula), analysis (score-strategy).
+- Track B (keep + rename path): ingest (all 3), notify (emit-alert, list-alerts), analysis (run-backtest).
+- `score-strategy` on analysis was evaluated: it is a one-field JSON shim over `ScoreStrategyRequest`; the identical call is already available via Connect-RPC at `/xstockstrat.analysis.v1.AnalysisService/ScoreStrategy`. Deleted.
+- `list-alerts` on notify: explicitly kept by user decision (useful for agent observability).
+- `N8N_WEBHOOK_SECRET` env var name left unchanged — renaming is out of scope.
+- Product-spec.md, feature.md updated. Implementation spec is now stale — must re-run /sdd-spec.
+- Next: /sdd-spec remove-n8n-references
+
 ## Session 2026-05-18T00:00:00Z — sdd-spec
 
 - Generated implementation-spec.md with 16 steps. Status → implementation-ready.
