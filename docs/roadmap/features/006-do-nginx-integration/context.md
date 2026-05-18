@@ -64,3 +64,18 @@
 - Added `xstockstrat-nginx` service block (http_port: 80, branch: main, basic-xs, 3 PRIVATE_URL envs) before trader in `.do/app.yaml`; removed `http_port` from xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui making them internal-only in the production DO spec.
 - Files modified: `.do/app.yaml`, `implementation-spec.md`, `context.md`
 - Deviations: Same yq deviation as Step 1 — used `python3 -c "import yaml; ..."` for verification; 8 checks all passed.
+
+---
+
+## Session 2026-05-18T00:02:00Z — sdd-execute
+
+**Steps this session**: [3]
+**Progress**: 3 done / 4 total
+**Stopped at**: Step 3 (complete — PR pending merge)
+**Next**: /sdd-execute do-nginx-integration next
+
+### Step 3 — service: Create nginx entrypoint script [done]
+- Created `docker-entrypoint.sh` that strips protocol prefix from DO PRIVATE_URL env vars, runs `envsubst` (scoped to the three upstream vars) against `nginx.conf.template`, verifies nginx syntax, then starts nginx.
+- **Option A scope expansion** (user approved): also updated `nginx.conf` upstream blocks to use `${TRADER_UPSTREAM}:3000` etc., updated `Dockerfile` to install gettext, copy template, and use ENTRYPOINT, and updated `docker-compose.yml` to inject PRIVATE_URL env vars for local dev.
+- Files modified: `services/xstockstrat-nginx/docker-entrypoint.sh` (created), `nginx.conf`, `services/xstockstrat-nginx/Dockerfile`, `docker-compose.yml`, `implementation-spec.md`, `context.md`
+- Deviations: (1) Scope expanded per Option A; (2) envsubst scoped to three vars to avoid clobbering nginx's own `$variables`; (3) `apk add gettext` added to Dockerfile since envsubst is not in the base nginx Alpine image.
