@@ -79,3 +79,20 @@
 - **Option A scope expansion** (user approved): also updated `nginx.conf` upstream blocks to use `${TRADER_UPSTREAM}:3000` etc., updated `Dockerfile` to install gettext, copy template, and use ENTRYPOINT, and updated `docker-compose.yml` to inject PRIVATE_URL env vars for local dev.
 - Files modified: `services/xstockstrat-nginx/docker-entrypoint.sh` (created), `nginx.conf`, `services/xstockstrat-nginx/Dockerfile`, `docker-compose.yml`, `implementation-spec.md`, `context.md`
 - Deviations: (1) Scope expanded per Option A; (2) envsubst scoped to three vars to avoid clobbering nginx's own `$variables`; (3) `apk add gettext` added to Dockerfile since envsubst is not in the base nginx Alpine image.
+
+---
+
+## Session 2026-05-18T00:03:00Z — sdd-execute
+
+**Steps this session**: [4]
+**Progress**: 4 done / 4 total
+**Stopped at**: Step 4 (complete — all steps done, lifecycle → code-completed)
+**Next**: Open final integration PR (`feature/do-nginx-integration` → `main-dev`)
+
+### Step 4 — docs: Update CLAUDE.md with nginx configuration notes [done]
+- Added `## Nginx Reverse Proxy` section to `CLAUDE.md` after Observability section (L221): describes local dev vs DO behavior, lists the three files with their roles, and documents the three `XSTOCKSTRAT_*_PRIVATE_URL` environment variables.
+- Added `| Nginx config | ... |` row to "Key File Paths Reference" table (after `DO dev app spec` row) referencing `nginx.conf`, `Dockerfile`, and `docker-entrypoint.sh`.
+- Updated `implementation-spec.md` overall status → `done`, Step 4 status → `done`.
+- Updated `feature.md` lifecycle → `code-completed`, added status history row.
+- Files modified: `CLAUDE.md`, `implementation-spec.md`, `feature.md`, `context.md`
+- Deviations: none.

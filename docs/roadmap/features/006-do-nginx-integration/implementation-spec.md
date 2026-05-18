@@ -1,6 +1,6 @@
 # Implementation Spec: do-nginx-integration
 
-**Status**: `in-progress`
+**Status**: `done`
 **Created**: 2026-05-12
 **Feature**: `docs/roadmap/features/006-do-nginx-integration/feature.md`
 **Total Steps**: 4
@@ -291,7 +291,7 @@ sh -n /home/user/xstockstrat-orchestration/services/xstockstrat-nginx/docker-ent
 
 ### Step 4 — docs: Update CLAUDE.md with nginx configuration notes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` (documentation)
 **Files**:
 - `CLAUDE.md` — modify (add nginx.conf template notes)
