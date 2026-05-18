@@ -1,6 +1,6 @@
 # Feature: wire-fe-auth
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/wire-fe-auth`
 **Created**: 2026-05-18
 **Last Updated**: 2026-05-18
@@ -13,13 +13,14 @@
 |---|---|---|---|
 | 2026-05-18 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-18 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
+| 2026-05-18 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec wire-fe-auth`_
+- [Implementation Spec](implementation-spec.md) — 12 steps, generated 2026-05-18
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -30,13 +31,10 @@ Wire the fully-built `xstockstrat-identity` service into all three Next.js front
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| `xstockstrat-identity` owner | JWT expiry and rotation, API key scoping, secret store integration (never plaintext secrets in config) |
 | `xstockstrat-trader` owner | Trading UI correctness, Connect-RPC call safety, no direct DB access from frontend |
 | `xstockstrat-insights` owner | Analytics display accuracy, SSE polling resilience, read-only access pattern |
 | `xstockstrat-config-ui` owner | Config mutation safety, environment scope correctness, no secret values rendered in UI |
@@ -44,4 +42,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec wire-fe-auth` — generate implementation spec from the approved product spec
+`/sdd-review wire-fe-auth impl-spec` — validate implementation spec, then `/sdd-execute wire-fe-auth`
