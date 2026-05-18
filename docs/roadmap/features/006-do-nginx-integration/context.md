@@ -50,3 +50,17 @@
 - Added `xstockstrat-nginx` service block (http_port: 80, basic-xs, 3 PRIVATE_URL envs) before trader in `.do/app.dev.yaml`; removed `http_port` from xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui making them internal-only.
 - Files modified: `.do/app.dev.yaml`, `implementation-spec.md`, `feature.md`, `context.md`
 - Deviations: Spec verification used `yq eval` (mikefarah syntax) but installed yq is Python jq-wrapper; used `python3 -c "import yaml; ..."` instead — all 7 checks passed.
+
+---
+
+## Session 2026-05-18T00:01:00Z — sdd-execute
+
+**Steps this session**: [2]
+**Progress**: 2 done / 4 total
+**Stopped at**: Step 2 (complete — PR pending merge)
+**Next**: /sdd-execute do-nginx-integration next
+
+### Step 2 — docs: Add nginx service to .do/app.yaml (production) [done]
+- Added `xstockstrat-nginx` service block (http_port: 80, branch: main, basic-xs, 3 PRIVATE_URL envs) before trader in `.do/app.yaml`; removed `http_port` from xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui making them internal-only in the production DO spec.
+- Files modified: `.do/app.yaml`, `implementation-spec.md`, `context.md`
+- Deviations: Same yq deviation as Step 1 — used `python3 -c "import yaml; ..."` for verification; 8 checks all passed.
