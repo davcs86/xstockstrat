@@ -23,6 +23,18 @@
 - Open questions resolved: OQ-1 deferred to impl-spec; OQ-2 deferred/out of scope; OQ-3 resolved as stateless cookie-read per request (no server-side session store).
 - Overlap findings: formula-management-ui (003) and do-nginx-integration (006) both touch xstockstrat-insights; do-nginx-integration (006) also touches xstockstrat-trader, xstockstrat-config-ui, xstockstrat-nginx — advisory WARNs only, no FAIL-level conflicts. Recommend merging 006 and 011 before running /sdd-spec so nginx and identity baselines are stable.
 
+## Session 2026-05-18T00:00:00Z — scope expansion (pre-execution)
+
+- Expanded scope to add `x-access-scope` (permissions bitmap) and `x-trace-id` (UUID v4) alongside the existing `x-user-id`.
+- Key decisions:
+  - `x-access-scope` is computed from JWT `roles` by each frontend's auth lib using `rolesToAccessScope()`. Bit map: read=0x01, write=0x02, admin=0x04, trading=0x08. Backend services forward verbatim — no re-computation.
+  - `x-trace-id` is generated in `middleware.ts` (UUID v4 via `crypto.randomUUID()`) if not already present on the incoming request and injected into forwarded request headers (upstream only).
+  - **Propagation is upstream only (request direction).** Headers are never set on responses. The redirect-to-login path does NOT set `x-trace-id` as a response header.
+  - nginx strips all three headers from inbound external requests (FR-7 updated).
+  - Backend propagation: Go services use `grpc.ChainUnaryInterceptor` (server) + `grpc.WithChainUnaryInterceptor` (client). Python services use per-method `context.invocation_metadata()` extraction + `metadata=` kwarg on stub calls. Node.js backend services (leaf nodes — no outbound service calls) use AsyncLocalStorage wrapping the HTTP Connect-RPC handler.
+  - Implementation spec grew from 12 → 15 steps. Step 13 (Go), Step 14 (Python), Step 15 (Node.js backend) are Wave 4, independent of Wave 2 and can execute in parallel.
+  - All 10 backend services now listed in Affected Services.
+
 ## Session 2026-05-18T00:00:00Z — sdd-spec
 
 - Generated implementation-spec.md with 12 steps. Status → implementation-ready.

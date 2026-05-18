@@ -3,14 +3,14 @@
 **Status**: `pending`
 **Created**: 2026-05-18
 **Feature**: `docs/roadmap/features/012-wire-fe-auth/feature.md`
-**Total Steps**: 12
+**Total Steps**: 15
 **Feature Branch**: `feature/wire-fe-auth`
 
 ---
 
 ## Execution Summary
 
-The implementation proceeds in three waves. Wave 1 (Steps 1–3) adds the `jose` JWT dependency and shared auth utilities to all three Next.js frontends. Wave 2 (Steps 4–9) wires auth into each frontend in isolation: login page, `middleware.ts`, API route updates, and package.json env additions. Wave 3 (Steps 10–12) adds the nginx `x-user-id` strip, updates docker-compose and DO app specs with `JWT_SECRET` for frontends, and adds E2E auth smoke tests. The identity service itself requires no source changes.
+The implementation proceeds in four waves. Wave 1 (Steps 1–3) adds the `jose` JWT dependency and shared auth utilities — including `rolesToAccessScope` bitmap and `generateTraceId` — to all three Next.js frontends. Wave 2 (Steps 4–9) wires auth into each frontend in isolation: login page, `middleware.ts` with trace ID generation, API route updates forwarding all three headers (`x-user-id`, `x-access-scope`, `x-trace-id`), and package.json env additions. Wave 3 (Steps 10–12) strips all three headers in nginx, wires env vars, and adds E2E auth smoke tests. Wave 4 (Steps 13–15) adds header propagation to all backend services: Go unary interceptors (Step 13), Python per-method metadata extraction (Step 14), and Node.js AsyncLocalStorage middleware (Step 15). The identity service requires no source changes.
 
 ## Step Dependencies
 
@@ -18,6 +18,7 @@ The implementation proceeds in three waves. Wave 1 (Steps 1–3) adds the `jose`
 - Step 10 (nginx) is independent of Steps 4–9 and can run in parallel
 - Step 11 (env wiring) should run after all service steps so env keys match the completed implementation
 - Step 12 (tests) requires Steps 4–9 to be complete
+- Steps 13–15 (backend propagation, Wave 4) are fully independent of Steps 1–12 and can be executed in parallel with Wave 2
 
 ---
 
@@ -91,6 +92,10 @@ Create `services/xstockstrat-trader/src/lib/auth.ts` with the following responsi
 
 8. Export constant `ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS = 60` (FR-4).
 
+9. **`rolesToAccessScope(roles: string[]): number`** — maps role strings to a permissions bitmap. Bit definitions: `read = 0x01`, `write = 0x02`, `admin = 0x04`, `trading = 0x08`. Mapping: `'viewer'` → `read`; `'trader'` → `read | write | trading`; `'admin'` → `read | write | admin | trading`. Unrecognized roles contribute `0`. Returns the OR of all matching bits (FR-8).
+
+10. **`generateTraceId(): string`** — returns `crypto.randomUUID()`. Available in both the Node.js runtime (≥14.17) and the Edge Runtime (FR-9).
+
 **Verification**:
 ```bash
 cd services/xstockstrat-trader && pnpm run lint
@@ -120,7 +125,7 @@ Create `services/xstockstrat-insights/src/lib/auth.ts` with the identical interf
 
 Create `services/xstockstrat-config-ui/app/lib/auth.ts` with the same interface. In config-ui, `IDENTITY_HTTP_ENDPOINT` is not yet exported from a transport file; inline `process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058'` directly in the auth file for now (Step 11 adds the env var to compose and DO specs).
 
-Both files must export the same `JwtClaims` interface, `verifyAccessToken`, `getSessionFromRequest`, `refreshSession`, `revokeToken`, `setSessionCookies`, `clearSessionCookies`, and `ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS` — identical contract to Step 2.
+Both files must export the same `JwtClaims` interface, `verifyAccessToken`, `getSessionFromRequest`, `refreshSession`, `revokeToken`, `setSessionCookies`, `clearSessionCookies`, `ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS`, `rolesToAccessScope`, and `generateTraceId` — identical contract to Step 2.
 
 **Verification**:
 ```bash
@@ -210,9 +215,14 @@ Create `services/xstockstrat-trader/src/middleware.ts`:
    c. If `claims` is valid:
       - Check whether `claims.expires_at - Math.floor(Date.now() / 1000) < ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS`.
       - If token is near expiry, call the internal `/api/auth/refresh` route to rotate it (via a server-side `fetch` to the local origin). If refresh fails, redirect to `/login`.
-      - Allow the request through.
+      - Allow the request through (see step d).
 
-3. The middleware runs in the Edge Runtime — only import from `next/server` and `jose` (no Node.js built-ins). The `@/lib/auth` module uses only `jose` and `fetch`, both Edge-compatible.
+   d. **Trace ID propagation** (upstream only — request direction; never set as a response header):
+      - Read `req.headers.get('x-trace-id')`. If present use it; otherwise call `generateTraceId()` from `@/lib/auth`.
+      - When allowing the request through, inject the trace ID into the forwarded request headers via `NextResponse.next({ request: { headers: new Headers({ ...Object.fromEntries(req.headers), 'x-trace-id': traceId }) } })` so that API route handlers can read `req.headers.get('x-trace-id')` and forward it upstream.
+      - When redirecting to `/login`, do NOT set `x-trace-id` on the redirect response. The trace ID travels with requests only.
+
+3. The middleware runs in the Edge Runtime — only import from `next/server` and `jose` (no Node.js built-ins). `@/lib/auth` uses only `jose`, `fetch`, and `crypto.randomUUID()`, all Edge-compatible.
 
 **Verification**:
 ```bash
@@ -244,17 +254,17 @@ No lint errors. Manually: `curl -s -c /dev/null http://localhost:3000/` (no cook
 
 **`src/app/api/orders/route.ts`**:
 1. Import `getSessionFromRequest` from `@/lib/auth`.
-2. In `POST`: replace the `body.user_id` check with `const claims = await getSessionFromRequest(req); if (!claims) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });`. Use `claims.user_id` as `userId` in the PlaceOrder body. Add `'x-user-id': claims.user_id` to the fetch headers.
-3. In `GET`: replace `searchParams.get('user_id')` with `claims.user_id` from JWT. Remove the `user_id` query param dependency entirely.
+2. In `POST`: replace the `body.user_id` check with `const claims = await getSessionFromRequest(req); if (!claims) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });`. Use `claims.user_id` as `userId` in the PlaceOrder body. Build the propagation headers: `import { rolesToAccessScope, generateTraceId } from '@/lib/auth'; const accessScope = String(rolesToAccessScope(claims.roles)); const traceId = req.headers.get('x-trace-id') ?? generateTraceId();`. Add `'x-user-id': claims.user_id`, `'x-access-scope': accessScope`, and `'x-trace-id': traceId` to the fetch headers.
+3. In `GET`: replace `searchParams.get('user_id')` with `claims.user_id` from JWT. Remove the `user_id` query param dependency entirely. Add the same three propagation headers to the fetch call.
 
 **`src/app/api/portfolio/route.ts`**:
-1. Import `getSessionFromRequest` from `@/lib/auth`.
-2. Replace `searchParams.get('user_id')` with `claims.user_id` from `getSessionFromRequest`. Add `'x-user-id': claims.user_id` to the fetch headers.
+1. Import `getSessionFromRequest`, `rolesToAccessScope`, `generateTraceId` from `@/lib/auth`.
+2. Replace `searchParams.get('user_id')` with `claims.user_id` from `getSessionFromRequest`. Build `accessScope` and `traceId` the same way as in orders. Add all three headers to the fetch headers.
 
 **`src/app/api/alerts/stream/route.ts`**:
-1. Import `getSessionFromRequest` from `@/lib/auth`.
+1. Import `getSessionFromRequest`, `rolesToAccessScope`, `generateTraceId` from `@/lib/auth`.
 2. Extract claims from request at the top of the `GET` handler. If no valid session, return a 401 response immediately (before opening the stream).
-3. Pass `claims.user_id` as the `userId` field in the `ListAlerts` body (replacing `userId: ''` at L28). Add `'x-user-id': claims.user_id` to the fetch headers.
+3. Pass `claims.user_id` as the `userId` field in the `ListAlerts` body (replacing `userId: ''` at L28). Add all three propagation headers to the fetch headers.
 
 **Verification**:
 ```bash
@@ -299,9 +309,10 @@ Apply the same pattern as Steps 4 and 5 for xstockstrat-trader, adapted for insi
 3. Create `src/middleware.ts` with the same matcher and redirect logic as Step 5.
 
 4. In all four API route files (`backtest`, `strategies`, `report/[id]`, `portfolio`):
-   - Import `getSessionFromRequest` from `@/lib/auth`.
+   - Import `getSessionFromRequest`, `rolesToAccessScope`, `generateTraceId` from `@/lib/auth`.
    - At the top of each handler, call `getSessionFromRequest(req)`. If `null`, return 401.
-   - Add `'x-user-id': claims.user_id` to every outbound `fetch` call's headers (all four route files use `application/connect+json` fetches — confirmed via code read).
+   - Build: `const accessScope = String(rolesToAccessScope(claims.roles)); const traceId = req.headers.get('x-trace-id') ?? generateTraceId();`
+   - Add `'x-user-id': claims.user_id`, `'x-access-scope': accessScope`, `'x-trace-id': traceId` to every outbound `fetch` call's headers.
 
 **Note**: The `strategies` route at L21 passes `userId: ''` to `ListStrategies` — replace with `claims.user_id`.
 
@@ -346,9 +357,10 @@ Apply the same pattern as Steps 4 and 5, adapted for config-ui's `app/` director
 3. Create `middleware.ts` at the service root (i.e., `services/xstockstrat-config-ui/middleware.ts`) with the same matcher and redirect logic as Step 5. In config-ui, check the tsconfig `paths` (at `services/xstockstrat-config-ui/tsconfig.json`) to confirm the `@/` alias resolves to `app/` or root — adjust the import path for `auth.ts` accordingly.
 
 4. In `app/api/config/route.ts`:
-   - Import `getSessionFromRequest` from the auth lib.
+   - Import `getSessionFromRequest`, `rolesToAccessScope`, `generateTraceId` from the auth lib.
    - At the top of both `GET` and `POST` handlers, call `getSessionFromRequest(req)`. Return 401 if `null`.
-   - Add `'x-user-id': claims.user_id` to the outbound fetch headers in both the `rpc()` helper and any direct calls.
+   - Build: `const accessScope = String(rolesToAccessScope(claims.roles)); const traceId = req.headers.get('x-trace-id') ?? generateTraceId();`
+   - Add `'x-user-id': claims.user_id`, `'x-access-scope': accessScope`, `'x-trace-id': traceId` to the outbound fetch headers.
    - In `POST`, set `author: claims.user_id` (replacing `author ?? 'config-ui'`).
 
 5. In `app/api/audit/route.ts`:
@@ -409,13 +421,15 @@ Build must complete with no TypeScript errors related to module resolution.
 **Instructions**:
 In `nginx.conf`, inside the `server {}` block (after the existing `proxy_set_header Upgrade $http_upgrade;` line at approximately L51), add:
 ```nginx
-# Strip x-user-id from all inbound external requests (FR-7).
-# Prevents external callers from spoofing user identity.
-# Frontends set this header internally on outbound Connect-RPC calls only.
+# Strip auth propagation headers from all inbound external requests (FR-7, FR-9).
+# Prevents external callers from spoofing user identity, permission scope, or trace context.
+# These headers are only valid when set by internal services.
 proxy_set_header x-user-id "";
+proxy_set_header x-access-scope "";
+proxy_set_header x-trace-id "";
 ```
 
-This clears the `x-user-id` header for all proxied requests through nginx. The `proxy_set_header` directive with an empty string value removes the header from the upstream request.
+This clears all three propagation headers for every proxied request through nginx. The `proxy_set_header` directive with an empty string value removes the header from the upstream request.
 
 **Verification**:
 ```bash
@@ -509,6 +523,239 @@ cd services/xstockstrat-insights && pnpm test:e2e -- --reporter=line 2>&1 | tail
 cd services/xstockstrat-config-ui && pnpm test:e2e -- --reporter=line 2>&1 | tail -20
 ```
 All auth tests must pass. Existing smoke tests must continue to pass (they now require a valid session cookie — update them to include a mock `access_token` cookie in the request context if they start failing after Steps 4–9).
+
+---
+
+---
+
+### Step 13 — service: Add header propagation interceptor to Go services (xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata)
+
+**Status**: `pending`
+**Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
+**Files**:
+- `services/xstockstrat-trading/internal/middleware/propagation.go` — create
+- `services/xstockstrat-trading/cmd/server/main.go` — modify
+- `services/xstockstrat-trading/internal/service/trading.go` — modify
+- `services/xstockstrat-portfolio/internal/middleware/propagation.go` — create
+- `services/xstockstrat-portfolio/cmd/server/main.go` — modify
+- `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
+- `services/xstockstrat-marketdata/internal/middleware/propagation.go` — create
+- `services/xstockstrat-marketdata/cmd/server/main.go` — modify
+- `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
+
+**Reviewers**: `xstockstrat-trading` owner — Order execution correctness; `xstockstrat-portfolio` owner — P&L calculation accuracy; `xstockstrat-marketdata` owner — OHLCV ingestion integrity
+
+**Codebase Evidence**:
+- Server init (trading): `services/xstockstrat-trading/cmd/server/main.go:L121-128` — `grpc.NewServer(grpc.StatsHandler(...), grpc.KeepaliveParams(...))` — no unary interceptors; add `grpc.ChainUnaryInterceptor` here
+- Server init (portfolio): `services/xstockstrat-portfolio/cmd/server/main.go:L81-88` — same pattern
+- Server init (marketdata): `services/xstockstrat-marketdata/cmd/server/main.go:L95-102` — same pattern
+- Client creation (trading): `services/xstockstrat-trading/internal/service/trading.go:L88-99` — `grpc.NewClient(endpoint, grpc.WithTransportCredentials(...), clientKeepAlive)` — 3 clients (ledger, notify, portfolio); add `grpc.WithChainUnaryInterceptor` here
+- Client creation (portfolio): `services/xstockstrat-portfolio/internal/service/portfolio_service.go:L46-54` — 3 clients (ledger, marketdata, notify)
+- Client creation (marketdata): `services/xstockstrat-marketdata/internal/service/marketdata_service.go:L46-52` — 2 clients (ledger, notify)
+- Existing metadata import: `services/xstockstrat-trading/internal/handler/trading.go:L10` — `"google.golang.org/grpc/metadata"` already present
+- Existing extraction pattern: `services/xstockstrat-trading/internal/handler/trading.go:L172-182` — `extractUserID(ctx)` uses `metadata.FromIncomingContext(ctx)` — this step generalizes that pattern into a reusable interceptor
+
+**Instructions**:
+
+Create `internal/middleware/propagation.go` in each of the three Go services with identical content (swap only the `package` declaration's path — the package name is always `middleware`):
+
+```go
+package middleware
+
+import (
+	"context"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
+)
+
+type propKey struct{}
+
+// PropagationData holds the three upstream-propagation headers.
+type PropagationData struct {
+	UserID      string
+	AccessScope string
+	TraceID     string
+}
+
+// FromContext retrieves PropagationData stored by UnaryServerInterceptor.
+func FromContext(ctx context.Context) PropagationData {
+	v, _ := ctx.Value(propKey{}).(PropagationData)
+	return v
+}
+
+// UnaryServerInterceptor extracts x-user-id, x-access-scope, x-trace-id from incoming
+// metadata and stores them in context for use by client interceptors downstream.
+func UnaryServerInterceptor(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	ctx = context.WithValue(ctx, propKey{}, PropagationData{
+		UserID:      first(md.Get("x-user-id")),
+		AccessScope: first(md.Get("x-access-scope")),
+		TraceID:     first(md.Get("x-trace-id")),
+	})
+	return handler(ctx, req)
+}
+
+// UnaryClientInterceptor reads PropagationData from context and injects the three headers
+// into outgoing upstream gRPC metadata (request direction only — never set on responses).
+func UnaryClientInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	data := FromContext(ctx)
+	if data.UserID != "" || data.AccessScope != "" || data.TraceID != "" {
+		ctx = metadata.AppendToOutgoingContext(ctx,
+			"x-user-id", data.UserID,
+			"x-access-scope", data.AccessScope,
+			"x-trace-id", data.TraceID,
+		)
+	}
+	return invoker(ctx, method, req, reply, cc, opts...)
+}
+
+func first(vals []string) string {
+	if len(vals) == 0 {
+		return ""
+	}
+	return vals[0]
+}
+```
+
+In `cmd/server/main.go` for each service: add `grpc.ChainUnaryInterceptor(middleware.UnaryServerInterceptor)` as the first option in the `grpc.NewServer(...)` call. Confirm the import path from each service's `go.mod` module declaration (pattern: `<module-root>/internal/middleware`).
+
+In the service layer for each service: for every `grpc.NewClient(...)` call, append `grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor)` to the options slice.
+
+**Verification**:
+```bash
+cd services/xstockstrat-trading && GOWORK=off go build ./... 2>&1
+cd services/xstockstrat-portfolio && GOWORK=off go build ./... 2>&1
+cd services/xstockstrat-marketdata && GOWORK=off go build ./... 2>&1
+```
+All three must build without errors. Also run: `cd services/xstockstrat-trading && GOWORK=off go vet ./...`
+
+---
+
+### Step 14 — service: Add header propagation to Python services (xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis)
+
+**Status**: `pending`
+**Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-indicators/app/handlers/servicer.py` — modify
+- `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
+- `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
+
+**Reviewers**: `xstockstrat-indicators` owner — Formula sandboxing, numeric precision; `xstockstrat-ingest` owner — Signal normalization correctness; `xstockstrat-analysis` owner — Backtest reproducibility
+
+**Codebase Evidence**:
+- Analysis servicer: `services/xstockstrat-analysis/app/handlers/servicer.py:L1-16` — instantiates 4 stubs (marketdata, indicators, ingest, ledger); outbound calls via `await self._ledger.AppendEvent(...)`, `await self._marketdata.GetBars(...)`, `await self._indicators.ComputeIndicator(...)`
+- Ingest servicer: `services/xstockstrat-ingest/app/handlers/servicer.py:L1-8` — instantiates `MarketDataServiceStub` and `LedgerServiceStub`; makes upstream calls to both
+- gRPC aio context API: `grpc.aio.ServicerContext.invocation_metadata()` returns a sequence of `(key, value)` tuples; `dict(context.invocation_metadata())` extracts by key
+- Outbound stub call metadata: all gRPC aio stub methods accept a `metadata=` kwarg of type `Sequence[Tuple[str, str]]` — confirmed by grpc.aio API contract
+
+**Instructions**:
+
+In each servicer method that makes outbound stub calls, extract the three propagation headers from the incoming `context` and pass them as `metadata=` to every outbound stub call. The upstream-only pattern for each modified method:
+
+```python
+# Extract once at the top of each servicer method that makes outbound calls:
+incoming = dict(context.invocation_metadata())
+propagation_meta = [
+    ('x-user-id',      incoming.get('x-user-id', '')),
+    ('x-access-scope', incoming.get('x-access-scope', '0')),
+    ('x-trace-id',     incoming.get('x-trace-id', '')),
+]
+
+# Add metadata= to every upstream stub call:
+result = await self._ledger.AppendEvent(request, metadata=propagation_meta)
+result = await self._marketdata.GetBars(request, metadata=propagation_meta)
+# etc.
+```
+
+Apply to all RPC methods in:
+- `services/xstockstrat-analysis/app/handlers/servicer.py` — all methods calling downstream stubs
+- `services/xstockstrat-ingest/app/handlers/servicer.py` — all methods calling marketdata or ledger stubs
+- `services/xstockstrat-indicators/app/handlers/servicer.py` — all methods calling ingest stubs
+
+Do NOT apply to config watcher channels — those are background streams, not request-scoped.
+
+**Verification**:
+```bash
+cd services/xstockstrat-analysis && python -m ruff check app/ && python -m ruff format --check app/
+cd services/xstockstrat-ingest && python -m ruff check app/ && python -m ruff format --check app/
+cd services/xstockstrat-indicators && python -m ruff check app/ && python -m ruff format --check app/
+```
+No lint or format errors.
+
+---
+
+### Step 15 — service: Add header propagation middleware to Node.js backend services (xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, xstockstrat-config)
+
+**Status**: `pending`
+**Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config`
+**Files**:
+- `services/xstockstrat-ledger/src/middleware/propagation.ts` — create
+- `services/xstockstrat-ledger/src/index.ts` — modify
+- `services/xstockstrat-identity/src/middleware/propagation.ts` — create
+- `services/xstockstrat-identity/src/index.ts` — modify
+- `services/xstockstrat-notify/src/middleware/propagation.ts` — create
+- `services/xstockstrat-notify/src/index.ts` — modify
+- `services/xstockstrat-config/src/middleware/propagation.ts` — create
+- `services/xstockstrat-config/src/index.ts` — modify
+
+**Reviewers**: `xstockstrat-ledger` owner — Append-only invariant; `xstockstrat-identity` owner — JWT expiry and rotation; Security — No secrets in config service state
+
+**Codebase Evidence**:
+- HTTP server (ledger): `services/xstockstrat-ledger/src/index.ts:L54-65` — `http.createServer(connectHandler).listen(HTTP_PORT, ...)` — wrapping `connectHandler` in a closure is the injection point for AsyncLocalStorage context
+- gRPC server (ledger): `services/xstockstrat-ledger/src/index.ts:L36-41` — `new grpc.Server()` without interceptors; servicer impl at `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:L18` uses `call: any` with `call.metadata: grpc.Metadata`
+- Same HTTP/gRPC structure confirmed for identity, notify, config (all follow the same index.ts pattern)
+- These four services have no outbound service-to-service calls — server-side extraction only is needed
+
+**Instructions**:
+
+Create `src/middleware/propagation.ts` in each of the four services with identical content:
+
+```typescript
+import { AsyncLocalStorage } from 'async_hooks';
+import type { IncomingMessage } from 'http';
+
+export interface PropagationContext {
+  userId: string;
+  accessScope: string;
+  traceId: string;
+}
+
+export const propagationStore = new AsyncLocalStorage<PropagationContext>();
+
+// Extract the three upstream-propagation headers from an incoming HTTP request.
+// Used on the Connect-RPC HTTP path.
+export function extractFromHttpRequest(req: IncomingMessage): PropagationContext {
+  return {
+    userId:      (req.headers['x-user-id']      as string) ?? '',
+    accessScope: (req.headers['x-access-scope'] as string) ?? '0',
+    traceId:     (req.headers['x-trace-id']     as string) ?? '',
+  };
+}
+```
+
+In `src/index.ts` for each service, locate the `http.createServer(connectHandler)` call and wrap it so every Connect-RPC request runs inside the AsyncLocalStorage context:
+
+```typescript
+import { propagationStore, extractFromHttpRequest } from './middleware/propagation';
+
+// Replace: http.createServer(connectHandler).listen(...)
+// With:
+http.createServer((req, res) => {
+  propagationStore.run(extractFromHttpRequest(req), () => connectHandler(req, res));
+}).listen(HTTP_PORT, () => { /* existing callback unchanged */ });
+```
+
+The gRPC path (requests arriving on the gRPC port) is not wrapped here — headers on that path are available via `call.metadata` in each servicer impl if needed for future structured logging. No changes to servicer impl files are required for this step.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ledger   && pnpm run lint
+cd services/xstockstrat-identity && pnpm run lint
+cd services/xstockstrat-notify   && pnpm run lint
+cd services/xstockstrat-config   && pnpm run lint
+```
+No lint errors. All four services must pass their existing test suites: `pnpm run test:coverage` for each.
 
 ---
 
