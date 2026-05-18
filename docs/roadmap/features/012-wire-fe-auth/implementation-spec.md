@@ -159,7 +159,7 @@ No lint errors.
 
 **`src/app/api/auth/login/route.ts`** — POST handler:
 1. Parse `{ email, password }` from request body; return 400 if either is missing.
-2. POST to `${IDENTITY_BASE_URL}/xstockstrat.identity.v1.IdentityService/AuthenticateUser` with `application/connect+json` content type.
+2. POST to `${process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058'}/xstockstrat.identity.v1.IdentityService/AuthenticateUser` with `application/connect+json` content type.
 3. On success, call `setSessionCookies(response, data.access_token, data.refresh_token)` from `@/lib/auth`.
 4. Return `{ ok: true }` with the cookies set. On failure return 401.
 
@@ -302,7 +302,7 @@ No lint errors. Manually: `curl -s http://localhost:3000/api/orders` (no cookie)
 **Instructions**:
 Apply the same pattern as Steps 4 and 5 for xstockstrat-trader, adapted for insights:
 
-1. Create `src/app/api/auth/login/route.ts`, `refresh/route.ts`, and `logout/route.ts` with the same logic as Step 4, importing from `@/lib/auth` (which maps to `services/xstockstrat-insights/src/lib/auth.ts` from Step 3).
+1. Create `src/app/api/auth/login/route.ts`, `refresh/route.ts`, and `logout/route.ts` with the same logic as Step 4, importing from `@/lib/auth` (which maps to `services/xstockstrat-insights/src/lib/auth.ts` from Step 3). **Note**: use `process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058'` for the identity endpoint URL — `IDENTITY_BASE_URL` does not exist in the codebase and must not be used.
 
 2. Create `src/app/login/page.tsx` with the same email + password form pattern as Step 4.
 
@@ -350,7 +350,7 @@ No lint errors. Manually: `curl -s http://localhost:3001/api/analysis/strategies
 **Instructions**:
 Apply the same pattern as Steps 4 and 5, adapted for config-ui's `app/` directory layout:
 
-1. Create `app/api/auth/login/route.ts`, `refresh/route.ts`, and `logout/route.ts` with identical logic as Step 4.
+1. Create `app/api/auth/login/route.ts`, `refresh/route.ts`, and `logout/route.ts` with identical logic as Step 4. **Note**: use `process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058'` for the identity endpoint URL — `IDENTITY_BASE_URL` does not exist in the codebase and must not be used.
 
 2. Create `app/login/page.tsx` with the same form pattern as Step 4.
 
