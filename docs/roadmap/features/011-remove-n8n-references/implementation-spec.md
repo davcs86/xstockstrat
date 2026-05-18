@@ -363,7 +363,7 @@ grep -rn "n8n\|webhooks/n8n" services/xstockstrat-ingest/ && echo "FAIL" || echo
 
 ### Step 9 — service: delete packages/n8n directory
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/n8n`
 **Files**:
 - `packages/n8n/README.md` — delete

@@ -6,6 +6,14 @@
 
 ---
 
+## Session 2026-05-18T09:00:00Z — sdd-execute step 9
+
+**Step 9 — service: delete packages/n8n directory** [done]
+
+- Deleted entire `packages/n8n/` directory (rm -rf) containing README.md and 8 workflow JSON files (config-update, emit-alert, ingest-signal-csv, ingest-signal-email, ingest-signal-rss, ledger-query-events, place-order). No code imports from this directory exist. Verification: find packages/n8n returned 0 files.
+- Files modified: `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`, `docs/roadmap/features/011-remove-n8n-references/context.md`
+- Deviations: none
+
 ## Session 2026-05-18T08:00:00Z — sdd-execute step 8
 
 **Step 8 — service: xstockstrat-ingest — rename webhook route paths and function names** [done]
