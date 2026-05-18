@@ -281,7 +281,16 @@ When a new Next.js frontend (e.g. `xstockstrat-newui` on port `3003`) needs to b
    - XSTOCKSTRAT_NEWUI_PRIVATE_URL=xstockstrat-newui
    ```
 
-6. **`CLAUDE.md`** (this file) — add a row to the Environment Variables table above, and add `xstockstrat-newui` to the Service Registry table at the top.
+6. **`services/xstockstrat-newui/next.config.js`** — set `basePath` to the nginx route prefix so Next.js generates correct internal links and static asset URLs:
+   ```js
+   const nextConfig = {
+     basePath: '/newui',
+     // ... rest of config unchanged
+   };
+   ```
+   Without this, the app's page links, `_next/static` asset paths, and API routes will 404 when served through the `/newui/` nginx location.
+
+7. **`CLAUDE.md`** (this file) — add a row to the Environment Variables table above, and add `xstockstrat-newui` to the Service Registry table at the top.
 
 ---
 
