@@ -9,7 +9,6 @@ import { getLogger } from './services/logger';
 import { ConfigServiceImpl } from './grpc/configServiceImpl';
 import { createConfigServiceDefinition } from './grpc/serviceDefinition';
 import { createConnectRouter } from './connect/connectRouter';
-import { createN8nRouter } from './n8n/webhookRouter';
 
 const log = getLogger('config:server');
 
@@ -48,7 +47,6 @@ async function main() {
 
   // ── Connect-RPC HTTP server (browser + external clients, port 8060) ────
   const connectHandler = connectNodeAdapter({ routes: createConnectRouter(configImpl) });
-  const n8nRouter = createN8nRouter(configImpl);
   const httpServer = http.createServer((req, res) => {
     // Add CORS headers for browser clients
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -62,10 +60,6 @@ async function main() {
     if (req.method === 'GET' && req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'ok', service: 'xstockstrat-config' }));
-      return;
-    }
-    if (req.url?.startsWith('/webhooks/n8n/')) {
-      n8nRouter(req, res);
       return;
     }
     connectHandler(req, res);

@@ -23,7 +23,7 @@ Steps 1–5 cover Track A services (config, ledger, identity, trading, indicator
 
 ### Step 1 — service: xstockstrat-config — delete webhook layer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/n8n/webhookRouter.ts` — delete
