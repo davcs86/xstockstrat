@@ -14,6 +14,17 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ### Features
 - do-nginx-integration: Wire the nginx reverse proxy (established locally by feature 005-frontend-reverse-proxy) into the DigitalOcean App Platform deployment by updating `.do/app.yaml` and `.do/app.dev.yaml` so that the unified `/trader`, `/insights`, `/config-ui` routing is live in both dev and production environments.
+- remove-n8n-references: Remove all n8n references from the codebase and documentation. Webhook endpoints used only by n8n (config, ledger, identity, trading, indicators) are deleted entirely — callers use Connect-RPC directly. Endpoints that serve the agent MCP server's ingestion goal (ingest, notify, analysis) are kept with the `/n8n/` path segment removed. The `packages/n8n/` directory is deleted and all docs updated.
+
+### Summary
+2 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-05-18
+
+### Features
+- do-nginx-integration: Wire the nginx reverse proxy (established locally by feature 005-frontend-reverse-proxy) into the DigitalOcean App Platform deployment by updating `.do/app.yaml` and `.do/app.dev.yaml` so that the unified `/trader`, `/insights`, `/config-ui` routing is live in both dev and production environments.
 
 ### Summary
 1 commits, 0 feature merges since last promotion.

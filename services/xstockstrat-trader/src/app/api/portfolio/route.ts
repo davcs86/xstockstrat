@@ -11,7 +11,11 @@ function toTradingModeEnum(mode?: string | null): number {
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const userId = searchParams.get('user_id') ?? 'default';
+  // TODO(wire-fe-auth): extract userId from verified JWT claims in session cookie
+  const userId = searchParams.get('user_id');
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const tradingMode = toTradingModeEnum(searchParams.get('trading_mode'));
   const accountId = searchParams.get('account_id') ?? '';
   try {

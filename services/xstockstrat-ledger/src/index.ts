@@ -10,7 +10,6 @@ import { createLedgerServiceDefinition } from './grpc/serviceDefinition';
 import { createConnectRouter } from './connect/connectRouter';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { Pool } from 'pg';
-import { createN8nRouter } from './n8n/webhookRouter';
 
 const log = getLogger('ledger:server');
 
@@ -52,7 +51,6 @@ async function main() {
 
   // ── Connect-RPC HTTP server (browser + external clients, port 8057) ────
   const connectHandler = connectNodeAdapter({ routes: createConnectRouter(ledgerImpl) });
-  const n8nRouter = createN8nRouter(ledgerImpl);
   const httpServer = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -63,7 +61,6 @@ async function main() {
       res.end(JSON.stringify({ status: 'ok', service: 'xstockstrat-ledger' }));
       return;
     }
-    if (req.url?.startsWith('/webhooks/n8n/')) { n8nRouter(req, res); return; }
     connectHandler(req, res);
   });
   httpServer.listen(parseInt(httpPort, 10), () => {

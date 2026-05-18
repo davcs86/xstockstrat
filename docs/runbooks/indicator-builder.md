@@ -103,13 +103,16 @@ formula_id = resp.formula_id
 print(f"Registered: {formula_id}")
 ```
 
-### Via n8n Webhook
-```
-POST /webhooks/n8n/execute-formula
-{
-  "formula_source": "...",
-  "input_data": { "close": [...], "period": 20 }
-}
+### Via Connect-RPC
+The webhook endpoint `execute-formula` was removed in feature-011. Use `ExecuteFormula` RPC on port 8054 directly:
+
+```bash
+curl -X POST http://xstockstrat-indicators:8054/xstockstrat.indicators.v1.IndicatorsService/ExecuteFormula \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "formula_source": "...",
+    "input_data": { "close": [...], "period": 20 }
+  }'
 ```
 
 ---

@@ -17,7 +17,7 @@ Python 3.12 (asyncio, grpc.aio)
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50056` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8056` | Connect-RPC + n8n webhooks |
+| HTTP (Connect-RPC) | `8056` | Connect-RPC + webhooks |
 
 ## Connect-RPC
 
@@ -25,7 +25,7 @@ Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8056` via `asyncio.gat
 
 - Handler: `app/main.py` — `start_connect_server(servicer)` runs uvicorn with `ConnectHandler` ASGI wrapper
 - `asyncio.gather(grpc_server.wait_for_termination(), start_connect_server(servicer))` starts both concurrently
-- Callers (n8n, frontends) use HTTP `8056`; internal services use gRPC `50056`
+- Callers (frontends, agent) use HTTP `8056`; internal services use gRPC `50056`
 
 ## Dependencies
 
@@ -64,12 +64,11 @@ Namespace: `analysis`
 | `analysis.scoring.drawdown_weight` | float | `0.3` | Weight of max drawdown |
 | `analysis.scoring.win_rate_weight` | float | `0.3` | Weight of win rate |
 
-## n8n Webhooks
+## Webhooks
 
 | Endpoint | Method | Payload | Action |
 |---|---|---|---|
-| `/webhooks/n8n/run-backtest` | POST | `{strategy_id, symbols, start, end, initial_capital}` | Runs backtest |
-| `/webhooks/n8n/score-strategy` | POST | `{strategy_id, start, end}` | Scores strategy |
+| `/webhooks/run-backtest` | POST | `{strategy_id, symbols, start, end, initial_capital}` | Runs backtest |
 
 ## Ledger Events Emitted
 

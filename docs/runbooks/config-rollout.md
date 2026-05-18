@@ -9,7 +9,7 @@ Config changes propagate live to all services via `xstockstrat-config`'s `WatchC
 ## Config Architecture Recap
 
 ```
-Author (n8n / API / CLI)
+Author (agent / API / CLI)
     │
     ▼ SetConfig RPC
 xstockstrat-config (ConfigService)
@@ -90,26 +90,27 @@ resp = stub.SetConfig(config_pb2.SetConfigRequest(
 print(f"Updated. Version: {resp.version}")
 ```
 
-### Via n8n Webhook
-```json
-POST /webhooks/n8n/set-config
-{
-  "namespace": "trading",
-  "key": "approval.require_above_notional",
-  "value": { "float_val": 100000.0 },
-  "author": "platform-team",
-  "reason": "Increase approval threshold for Q3 — TICKET-1234"
-}
+### Via Connect-RPC
+```bash
+curl -X POST http://xstockstrat-config:8060/xstockstrat.config.v1.ConfigService/SetConfig \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "namespace": "trading",
+    "key": "approval.require_above_notional",
+    "value": { "float_val": 100000.0 },
+    "author": "platform-team",
+    "reason": "Increase approval threshold for Q3 — TICKET-1234"
+  }'
 ```
 
 ---
 
 ## Step 3 — Rollout Multiple Keys (Atomic-ish)
 
-For related changes across multiple keys, use the `/webhooks/n8n/rollout` endpoint which applies all changes sequentially and emits a single broadcast per namespace:
+For related changes across multiple keys, use the `RolloutConfig` Connect-RPC endpoint which applies all changes sequentially and emits a single broadcast per namespace:
 
-```json
-POST /webhooks/n8n/rollout
+```bash
+curl -X POST http://xstockstrat-config:8060/xstockstrat.config.v1.ConfigService/RolloutConfig
 {
   "changes": [
     { "namespace": "indicators", "key": "sandbox.timeout_ms",    "value": { "int_val": 10000 } },
