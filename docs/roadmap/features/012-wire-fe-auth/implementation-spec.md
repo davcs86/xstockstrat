@@ -107,7 +107,7 @@ No lint errors. The file compiles without errors (confirmed by lint).
 
 ### Step 3 — service: Create `src/lib/auth.ts` in xstockstrat-insights and `app/lib/auth.ts` in xstockstrat-config-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-insights/src/lib/auth.ts` — create
@@ -804,3 +804,8 @@ All commands must exit 0 and show passing tests. Coverage must meet or exceed th
 **Spec said**: "`IDENTITY_HTTP_ENDPOINT` already exported from `connectTransport.ts:L29`" (implying import from that file)
 **Actual**: Inlined `process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058'` directly in `auth.ts` as a module-level constant.
 **Reason**: `connectTransport.ts` imports `@connectrpc/connect-node` which is not Edge Runtime-compatible. Since `auth.ts` is used by `middleware.ts` (Step 5), which runs in the Edge Runtime, importing from `connectTransport.ts` would cause a runtime crash. The spec's Step 5 notes `auth.ts` must use only Edge-compatible APIs.
+
+### Deviation: Step 3 — Create `src/lib/auth.ts` in xstockstrat-insights
+**Spec said**: "substituting the `IDENTITY_HTTP_ENDPOINT` import from `services/xstockstrat-insights/src/lib/connectTransport.ts` where the endpoint constant is already exported at L44"
+**Actual**: Inlined `process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058'` directly in `auth.ts` (same pattern as Step 2). Note: the exported constant in connectTransport.ts is named `IDENTITY_BASE_URL` (not `IDENTITY_HTTP_ENDPOINT`), and imports `@connectrpc/connect-node` — not Edge Runtime-compatible.
+**Reason**: Same Edge Runtime compatibility constraint as Step 2. The insights `auth.ts` will be used in `middleware.ts` (Step 7), which runs in the Edge Runtime. Importing from `connectTransport.ts` would cause a runtime crash.

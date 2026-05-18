@@ -67,3 +67,14 @@
 - Created `services/xstockstrat-trader/src/lib/auth.ts` with all 10 exports: `JwtClaims`, `ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS`, `verifyAccessToken`, `getSessionFromRequest`, `refreshSession`, `revokeToken`, `setSessionCookies`, `clearSessionCookies`, `rolesToAccessScope`, `generateTraceId`. Lint passed with no errors (pre-existing warnings in other files only).
 - Files modified: `services/xstockstrat-trader/src/lib/auth.ts`
 - Deviations: Inlined `IDENTITY_ENDPOINT` constant instead of importing from `connectTransport.ts` to preserve Edge Runtime compatibility (connectTransport imports `@connectrpc/connect-node`). Full detail in Deviation Log.
+
+### Step 3 — Create `src/lib/auth.ts` in xstockstrat-insights and `app/lib/auth.ts` in xstockstrat-config-ui [done]
+- Created `services/xstockstrat-insights/src/lib/auth.ts` and `services/xstockstrat-config-ui/app/lib/auth.ts` (creating the `app/lib/` directory). Both files export all 10 symbols with identical contract to Step 2. Lint passed with no errors in either service (pre-existing warnings in other files only).
+- Files modified: `services/xstockstrat-insights/src/lib/auth.ts`, `services/xstockstrat-config-ui/app/lib/auth.ts`
+- Deviations: Insights — inlined `IDENTITY_ENDPOINT` constant instead of importing `IDENTITY_BASE_URL` from `connectTransport.ts` (same Edge Runtime constraint as Step 2; connectTransport.ts imports `@connectrpc/connect-node`). Full detail in Deviation Log.
+
+## Session 2026-05-18T00:00:00Z — sdd-execute (Step 3)
+**Steps this session**: [3]
+**Progress**: 3 done / 16 total
+**Stopped at**: Step 3 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
