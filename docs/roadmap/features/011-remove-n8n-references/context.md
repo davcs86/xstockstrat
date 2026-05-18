@@ -6,6 +6,19 @@
 
 ---
 
+## Session 2026-05-18T02:00:00Z — sdd-spec (regeneration)
+
+- Regenerated implementation-spec.md with 16 steps to reflect the revised product spec scope (Track A = delete entirely, Track B = rename path only).
+- Status remains `implementation-ready`.
+- Key codebase findings confirming revised scope:
+  - Track A services confirmed: config `src/index.ts` L67 and L51 reference `n8n` router; ledger L66 and L55; identity L61 and L50; trading `cmd/server/main.go` L134, L138, L139; indicators `app/http_server.py` L60 and L73 define inline `n8n_*` routes.
+  - Track B services confirmed: notify `src/n8n/webhookRouter.ts` serves `emit-alert` and `list-alerts` (both kept); analysis `app/http_server.py` L46 `run-backtest` kept + L58 `score-strategy` deleted; ingest `app/http_server.py` L52/L64/L72 all three kept.
+  - `n8n/webhook.py` in indicators is a standalone file (NOT imported by http_server.py) — both the standalone file and the inline routes in http_server.py must be deleted.
+  - Identity has no top-level `n8n/` directory (unlike config, ledger, notify which all have orphaned top-level `n8n/webhookRouter.ts`).
+  - `packages/n8n/` contains 7 workflow JSON files + README — all deleted in Step 9.
+  - Integration test `scripts/integration-test.sh` function `section_12_n8n_webhook()` uses old path at L405, L423, L439, L470 (Step 15).
+  - `docs/setup/alpaca.md` L212 references deleted `place-order` webhook — Step 14 must update to Connect-RPC equivalent.
+
 ## Session 2026-05-18T01:00:00Z — product-spec revision
 
 - Scope expanded beyond rename-only after impl-spec review and user decision.

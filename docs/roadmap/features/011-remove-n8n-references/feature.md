@@ -14,6 +14,7 @@
 |---|---|---|---|
 | 2026-05-16 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-18 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 16 steps |
+| 2026-05-18 | `implementation-ready` → `implementation-ready` | /sdd-spec | Implementation spec regenerated with 16 steps (revised scope: Track A = delete entirely, Track B = rename path) |
 
 ---
 
@@ -31,7 +32,7 @@ Remove all n8n references from the codebase and documentation. Webhook endpoints
 
 ## Reviewers
 
-_(Snapshot finalized at /sdd-spec time 2026-05-18. Re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized at /sdd-spec time 2026-05-18 regeneration. Re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
@@ -46,4 +47,4 @@ _(Snapshot finalized at /sdd-spec time 2026-05-18. Re-run /sdd-spec if the regis
 
 ## Next Action
 
-`/sdd-review remove-n8n-references impl-spec` — validate implementation spec, then `/sdd-execute remove-n8n-references`
+`/sdd-review remove-n8n-references impl-spec` — validate regenerated implementation spec (revised scope: Track A delete, Track B rename), then `/sdd-execute remove-n8n-references`
