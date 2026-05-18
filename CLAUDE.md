@@ -134,7 +134,7 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 2. **Config key naming convention**: `<service-short-name>.<category>.<key>` — e.g., `indicators.sandbox.timeout_ms`
 3. **All services subscribe to xstockstrat-config at startup** before accepting traffic. They must pass `environment` and `trading_mode` in the WatchConfig request.
 4. **Config values are scoped** by `environment` (`dev`/`production`) and `trading_mode` (`paper`/`live`/`all`). Rows with `trading_mode='all'` apply to all modes.
-5. **Config changes flow via n8n** → config webhook handler → config service → WatchConfig stream → all subscribers.
+5. **Config changes flow via agent or webhook caller** → config webhook handler → config service → WatchConfig stream → all subscribers.
 6. **Sensitive keys** (API keys, secrets) use the `secret.*` prefix and are resolved from the secret store at runtime; they are never stored in config service state.
 7. **Default values** must be declared in each service's `CLAUDE.md` under "Config Keys".
 8. **Config UI** available at `http://localhost:3002` — manage config values by environment and trading mode.
@@ -180,18 +180,16 @@ All services run migrations against their own schema, orchestrated centrally by 
 
 ---
 
-## n8n Cloud Integration
+## Webhook Integration
 
-Each service exposes HTTP webhook handlers (under `/webhooks/n8n/`) on the HTTP port (80XX) alongside the Connect-RPC routes. n8n workflows trigger on external events (alerts, schedule, external APIs) and call these handlers.
+Selected services expose HTTP webhook handlers (under `/webhooks/`) on the HTTP port (80XX) alongside the Connect-RPC routes. The agent MCP server (009) and other callers trigger these handlers for signal ingestion, alert emission, and backtest triggering.
 
 Pattern:
 ```
-n8n Cloud → POST /webhooks/n8n/<action> → service webhook handler → internal gRPC client → target service
+Agent / Caller → POST /webhooks/<action> → service webhook handler → internal gRPC client → target service
 ```
 
-Connect-RPC is also directly callable from n8n via HTTP POST to the service's Connect-RPC endpoint (port 80XX), using JSON or protobuf encoding.
-
-n8n workflow files are stored in `packages/n8n/workflows/`. See `docs/setup/n8n.md` for import instructions.
+Connect-RPC is directly callable from the agent or any HTTP client via POST to the service's Connect-RPC endpoint (port 80XX), using JSON or protobuf encoding.
 
 ---
 
@@ -468,7 +466,7 @@ Active phases and their current status. See `docs/roadmap/implementation-roadmap
 | Phase 3 | Processing: indicators, ingest, analysis | **DONE** |
 | Phase 4 | Trading core | **DONE** |
 | Phase 5 | UI layer: trader, insights, config-ui | **DONE** |
-| Phase 6 | Integration & n8n wiring | **DONE** |
+| Phase 6 | Integration & webhook wiring | **DONE** |
 | Phase 7 | Observability: OTel + Grafana Cloud | Pending |
 
 Deviation notes for completed phases: `docs/roadmap/phase[3-6]-deviations.md`.
@@ -515,7 +513,6 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sd
 | Next.js UIs | `services/xstockstrat-{trader,insights,config-ui}/` |
 | Docker Compose | `docker-compose.yml` |
 | OTel Collector config | `packages/otel/otel-collector-config.yaml` |
-| n8n workflow files | `packages/n8n/workflows/` |
 | DO prod app spec | `.do/app.yaml` |
 | DO dev app spec | `.do/app.dev.yaml` |
 | Nginx config | `nginx.conf` (root), `services/xstockstrat-nginx/Dockerfile`, `services/xstockstrat-nginx/docker-entrypoint.sh` |
