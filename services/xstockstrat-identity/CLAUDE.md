@@ -11,7 +11,7 @@ Node.js 20 + TypeScript
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50058` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8058` | Connect-RPC + n8n webhooks |
+| HTTP (Connect-RPC) | `8058` | Connect-RPC |
 
 ## Connect-RPC
 
@@ -19,7 +19,7 @@ Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8058`.
 
 - Router: `src/connect/connectRouter.ts` — exposes `AuthenticateUser`, `ValidateToken`, `CreateApiKey` via `connectNodeAdapter`
 - Entry: `src/index.ts` — HTTP server with CORS headers mounts the Connect router
-- Callers (n8n, frontends) use HTTP `8058`; internal services use gRPC `50058`
+- Callers (frontends, agent) use HTTP `8058`; internal services use gRPC `50058`
 
 ## Dependencies
 
@@ -40,12 +40,9 @@ Namespace: `identity`
 | `identity.jwt.secret` | string (secret) | — | JWT signing key (resolved from secret store) |
 | `identity.apikey.max_per_user` | int | `10` | Max API keys per user |
 
-## n8n Webhooks
+## Webhooks
 
-| Endpoint | Method | Payload | Action |
-|---|---|---|---|
-| `/webhooks/n8n/validate-token` | POST | `{token}` | Validates JWT, returns claims |
-| `/webhooks/n8n/create-apikey` | POST | `{user_id, name, scopes}` | Creates new API key |
+_Webhook layer removed in feature-011. Use Connect-RPC directly on port 8058._
 
 ## Environment Variables
 

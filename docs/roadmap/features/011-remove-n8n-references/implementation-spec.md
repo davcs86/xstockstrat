@@ -697,7 +697,7 @@ bash -n scripts/integration-test.sh && echo "PASS: syntax ok" || echo "FAIL: syn
 
 ### Step 16 — docs: update service CLAUDE.md files
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: multiple
 **Files**:
 - `services/xstockstrat-config/CLAUDE.md` — modify

@@ -13,7 +13,7 @@ Python 3.12 (asyncio, grpc.aio)
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50054` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8054` | Connect-RPC + n8n webhooks |
+| HTTP (Connect-RPC) | `8054` | Connect-RPC |
 
 ## Connect-RPC
 
@@ -21,7 +21,7 @@ Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8054` via `asyncio.gat
 
 - Handler: `app/main.py` — `start_connect_server(servicer)` runs uvicorn with `ConnectHandler` ASGI wrapper
 - `asyncio.gather(grpc_server.wait_for_termination(), start_connect_server(servicer))` starts both concurrently
-- Callers (n8n, frontends) use HTTP `8054`; internal services use gRPC `50054`
+- Callers (frontends, agent) use HTTP `8054`; internal services use gRPC `50054`
 
 ## Dependencies
 
@@ -51,12 +51,9 @@ Namespace: `indicators`
 - **Builtin filter**: dangerous builtins (`open`, `exec`, `eval`, `__import__` override, etc.) removed
 - **No network/filesystem**: `socket`, `urllib`, `requests`, `os.system` not in whitelist
 
-## n8n Webhooks
+## Webhooks
 
-| Endpoint | Method | Payload | Action |
-|---|---|---|---|
-| `/webhooks/n8n/compute-indicator` | POST | `{indicator, values, params, symbol}` | Computes built-in indicator |
-| `/webhooks/n8n/execute-formula` | POST | `{formula_source, input_data, timeout_ms_override}` | Runs sandboxed formula |
+_Webhook layer removed in feature-011. Use Connect-RPC directly on port 8054._
 
 ## Ledger Events Emitted
 

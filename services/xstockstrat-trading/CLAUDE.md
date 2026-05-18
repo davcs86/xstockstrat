@@ -15,14 +15,14 @@ Go 1.22
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50051` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8051` | Connect-RPC + n8n webhooks (HTTP/1.1 + HTTP/2 via h2c) |
+| HTTP (Connect-RPC) | `8051` | Connect-RPC (HTTP/1.1 + HTTP/2 via h2c) |
 
 ## Connect-RPC
 
 Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8051`. Both servers delegate to the same handler implementation.
 
 - Handler registration: `cmd/server/main.go` — uses `tradingv1connect.NewTradingServiceHandler` wrapped with `h2c.NewHandler`
-- Callers (frontends, n8n) use HTTP `8051`; internal services use gRPC `50051`
+- Callers (frontends, agent) use HTTP `8051`; internal services use gRPC `50051`
 - Transport: `golang.org/x/net/http2/h2c` supports HTTP/1.1 and HTTP/2 cleartext on same port
 
 ## Dependencies
@@ -54,12 +54,9 @@ All config values are served by **xstockstrat-config** namespace `trading`.
 | `trading.broker.paper` | bool | `true` | Route orders to paper API when true; live API when false |
 | `trading.broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout |
 
-## n8n Webhooks
+## Webhooks
 
-| Endpoint | Method | Payload | Action |
-|---|---|---|---|
-| `/webhooks/n8n/place-order` | POST | `{symbol, side, qty, order_type, limit_price, strategy_id, user_id}` | Places order via gRPC |
-| `/webhooks/n8n/cancel-order` | POST | `{order_id, user_id}` | Cancels order via gRPC |
+_Webhook layer removed in feature-011. Use Connect-RPC directly on port 8051._
 
 ## Database
 

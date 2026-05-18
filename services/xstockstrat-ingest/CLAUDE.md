@@ -13,7 +13,7 @@ Python 3.12 (asyncio, grpc.aio)
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50055` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8055` | Connect-RPC + n8n webhooks |
+| HTTP (Connect-RPC) | `8055` | Connect-RPC + webhooks |
 
 ## Connect-RPC
 
@@ -21,7 +21,7 @@ Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8055` via `asyncio.gat
 
 - Handler: `app/main.py` — `start_connect_server(servicer)` runs uvicorn with `ConnectHandler` ASGI wrapper
 - `asyncio.gather(grpc_server.wait_for_termination(), start_connect_server(servicer))` starts both concurrently
-- Callers (n8n, frontends) use HTTP `8055`; internal services use gRPC `50055`
+- Callers (frontends, agent) use HTTP `8055`; internal services use gRPC `50055`
 
 ## Dependencies
 
@@ -60,13 +60,13 @@ Namespace: `ingest`
 | `ingest.signals.dedup_window_hours` | int | `24` | Skip re-ingesting same symbol+source+direction within this window |
 | `platform.ledger_endpoint` | string | — | Ledger address |
 
-## n8n Webhooks
+## Webhooks
 
 | Endpoint | Method | Payload | Action |
 |---|---|---|---|
-| `/webhooks/n8n/trigger-backfill` | POST | `{symbols, timeframe, start, end, overwrite}` | Starts backfill job |
-| `/webhooks/n8n/backfill-status` | POST | `{job_id}` | Returns job status |
-| `/webhooks/n8n/ingest-signal` | POST | `{source, symbol, direction, conviction?, valid_from, valid_until?, headline?, raw_url?, tags?}` | Ingests a newsletter signal |
+| `/webhooks/trigger-backfill` | POST | `{symbols, timeframe, start, end, overwrite}` | Starts backfill job |
+| `/webhooks/backfill-status` | POST | `{job_id}` | Returns job status |
+| `/webhooks/ingest-signal` | POST | `{source, symbol, direction, conviction?, valid_from, valid_until?, headline?, raw_url?, tags?}` | Ingests a newsletter signal |
 
 ## Ledger Events Emitted
 
