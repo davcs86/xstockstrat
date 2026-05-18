@@ -207,6 +207,8 @@ For each numbered step in `implementation-spec.md`, apply:
 | Migration steps: down file | `.down.sql` counterpart not listed in `**Files**` |
 | Proto steps: buf commands | `buf lint` and `buf breaking` not included in `**Verification**` |
 | Proto steps: field numbers stated | Field numbers not specified for new fields |
+| `service` steps: deployment files | A `service` step whose `**Instructions**` introduce a new environment variable or port does not list all three of `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml` in `**Files**` |
+| `test` steps: threshold explicit | A `test` step's `**Verification**` is absent, is prose-only with no bash command, or does not state the specific coverage threshold (`--cov-fail-under=N` for Python/Node, or `≥ N%` assertion for Go) |
 
 WARN (advisory):
 - `**Instructions**` are verbose but complete
@@ -217,6 +219,15 @@ WARN (advisory):
 - Flag FAIL if any `service` step has a dependency on a `migration` step that appears later in the spec.
 - Flag FAIL if any `service` step has a dependency on a `proto-gen` step that appears later.
 - Flag WARN if `## Step Dependencies` section is empty but steps clearly have ordering constraints.
+- Flag FAIL if any `service` step for a non-frontend service (`xstockstrat-trader`,
+  `xstockstrat-insights`, and `xstockstrat-config-ui` are frontends — all others are not)
+  has no corresponding `test` step in the spec — neither immediately following it nor
+  referenced in `## Step Dependencies`.
+  Message: "Step N [service: <title>] for `<service>` has no paired `test` step.
+  CI enforces a coverage threshold for this service — add a `test` step with a runnable
+  coverage verification command."
+- Flag WARN if any `service` step for a frontend service has no Playwright E2E step and
+  no note confirming existing E2E coverage applies.
 
 ### B4. Parallel feature overlap check (impl-spec level)
 
