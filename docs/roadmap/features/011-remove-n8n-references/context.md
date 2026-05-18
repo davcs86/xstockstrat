@@ -14,6 +14,14 @@
 - Files modified: `services/xstockstrat-config/src/index.ts`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`, `docs/roadmap/features/011-remove-n8n-references/feature.md`
 - Deviations: none
 
+## Session 2026-05-18T05:00:00Z — sdd-execute step 4
+
+**Step 4 — service: xstockstrat-trading — delete webhook handler** [done]
+
+- Removed n8n webhook handler from xstockstrat-trading: deleted `internal/handler/n8n.go`, removed handler instantiation and route registrations from `cmd/server/main.go`, updated HTTP server comment. Go build verification passed.
+- Files modified: `services/xstockstrat-trading/cmd/server/main.go`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`
+- Deviations: none
+
 ## Session 2026-05-18T04:30:00Z — sdd-execute step 3
 
 **Step 3 — service: xstockstrat-identity — delete webhook layer** [done]

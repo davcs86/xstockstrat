@@ -138,7 +138,7 @@ find services/xstockstrat-identity -name "*n8n*" && echo "FAIL: n8n files remain
 
 ### Step 4 — service: xstockstrat-trading — delete webhook handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/handler/n8n.go` — delete
