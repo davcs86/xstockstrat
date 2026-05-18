@@ -6,7 +6,7 @@
 
 ## Problem Statement
 
-The `xstockstrat-identity` service is fully implemented (JWT issuance, refresh token rotation, API keys, bcrypt passwords), but no frontend consumes it. All three Next.js UIs serve pages to unauthenticated users, API routes accept `user_id` from the caller with a silent `'default'` fallback, and Connect-RPC calls carry no `Authorization` header. Operations cannot be attributed to a real user in logs, ledger events, or downstream services.
+The `xstockstrat-identity` service is fully implemented (JWT issuance, refresh token rotation, API keys, bcrypt passwords), but no frontend consumes it. All three Next.js UIs serve pages to unauthenticated users and API routes accept `user_id` from the caller with a silent `'default'` fallback. Operations cannot be attributed to a real user in logs, ledger events, or downstream services.
 
 ## User Story
 
@@ -18,17 +18,15 @@ FR-1. Each Next.js frontend (trader, insights, config-ui) must expose a `/login`
 
 FR-2. Each Next.js frontend must include a `middleware.ts` that validates the access token (via local JWT signature verification using `JWT_SECRET`) on every request and redirects unauthenticated or expired sessions to `/login`, preserving the original destination in a `redirect` query param.
 
-FR-3. The Connect-RPC transport (`src/lib/connectTransport.ts` in each frontend) must attach `Authorization: Bearer <access_token>` to all outbound calls via an interceptor, reading the token from the server-side cookie.
+FR-3. All Next.js API routes must extract `userId` from the verified JWT claims in the session cookie — never from request body fields or query parameters. The frontends are the authentication boundary; backend services receive user identity exclusively via the `x-user-id` metadata header (see FR-7), not via forwarded tokens.
 
-FR-4. All Next.js API routes must extract `userId` from the verified JWT claims in the session cookie — never from request body fields or query parameters.
+FR-4. Access tokens must be silently refreshed (via `RefreshToken` RPC) when less than 60 seconds remain before expiry. Refresh token rotation is handled automatically by the identity service. If refresh fails, the session must be cleared and the user redirected to `/login`.
 
-FR-5. Access tokens must be silently refreshed (via `RefreshToken` RPC) when less than 60 seconds remain before expiry. Refresh token rotation is handled automatically by the identity service. If refresh fails, the session must be cleared and the user redirected to `/login`.
+FR-5. Each frontend must expose a logout action that calls `RevokeToken` on the identity service and clears the session cookies.
 
-FR-6. Each frontend must expose a logout action that calls `RevokeToken` on the identity service and clears the session cookies.
+FR-6. Frontend API routes must forward `x-user-id: <userId>` as a header on all outbound Connect-RPC calls to backend services. The `userId` value is extracted from the verified JWT claims in the session cookie. Backend services trust this header only from internal callers.
 
-FR-7. Service-to-service gRPC calls must propagate the authenticated `user_id` in gRPC metadata under the key `x-user-id`. When a frontend API route calls a backend service, it must extract `userId` from the JWT claims and forward it as `x-user-id` metadata on the outbound gRPC/Connect-RPC request. Backend services receiving this header must trust it only from internal callers (i.e., no external `x-user-id` header accepted at the nginx boundary).
-
-FR-8. nginx must strip `x-user-id` from inbound external requests (i.e., requests entering via port 80) to prevent external callers from spoofing user identity.
+FR-7. nginx must strip `x-user-id` from all inbound external requests (port 80) to prevent external callers from spoofing user identity. The header is only valid when set by a frontend service inside the internal network.
 
 ## Out of Scope
 
@@ -42,9 +40,9 @@ FR-8. nginx must strip `x-user-id` from inbound external requests (i.e., request
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-trader` — add login page, `middleware.ts`, auth interceptor in `connectTransport.ts`, fix API routes to extract userId from JWT
-- `xstockstrat-insights` — add login page, `middleware.ts`, auth interceptor in `connectTransport.ts`
-- `xstockstrat-config-ui` — add login page, `middleware.ts`, auth interceptor in `connectTransport.ts`
+- `xstockstrat-trader` — add login page, `middleware.ts`, fix API routes to extract userId from JWT claims and forward as `x-user-id`
+- `xstockstrat-insights` — add login page, `middleware.ts`, forward `x-user-id` on outbound calls
+- `xstockstrat-config-ui` — add login page, `middleware.ts`, forward `x-user-id` on outbound calls
 - `xstockstrat-identity` — consumed as-is; no source changes required
 - `xstockstrat-nginx` — add `proxy_set_header x-user-id ""` to strip the header on inbound external requests
 
@@ -70,13 +68,12 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 1. Navigating to any frontend route without a valid session cookie redirects to `/login`.
 2. Successful login with valid credentials stores access + refresh tokens as `httpOnly` cookies and redirects to the originally requested page.
-3. All Connect-RPC calls from Next.js API routes include `Authorization: Bearer <access_token>` in the request headers.
-4. API routes extract `userId` exclusively from verified JWT claims — not from request body or query parameters.
+3. API routes extract `userId` exclusively from verified JWT claims in the session cookie — not from request body or query parameters.
+4. All outbound Connect-RPC calls from Next.js API routes carry `x-user-id: <userId>` derived from the JWT claims; no Bearer token is forwarded.
 5. Access tokens are refreshed automatically before expiry; failed refresh clears the session and redirects to `/login`.
 6. Logout clears cookies and the identity service marks the refresh token as revoked.
-7. All backend gRPC/Connect-RPC calls from API routes include `x-user-id: <userId>` metadata derived from the JWT claims.
-8. nginx strips `x-user-id` from all inbound external requests.
-9. Expired or tampered tokens return a 401 on API routes and redirect browser requests to `/login`.
+7. nginx strips `x-user-id` from all inbound external requests.
+8. Expired or tampered tokens return a 401 on API routes and redirect browser requests to `/login`.
 
 ## Open Questions
 
