@@ -6,6 +6,14 @@
 
 ---
 
+## Session 2026-05-18T08:00:00Z — sdd-execute step 8
+
+**Step 8 — service: xstockstrat-ingest — rename webhook route paths and function names** [done]
+
+- Renamed three webhook routes in xstockstrat-ingest from `/webhooks/n8n/*` to `/webhooks/*` and updated function names from `n8n_*` to `*_webhook`: `trigger-backfill` → `trigger_backfill_webhook`, `backfill-status` → `backfill_status_webhook`, `ingest-signal` → `ingest_signal_webhook`. Updated module docstring and section comment. All three endpoints kept (Track B). CLAUDE.md n8n references intentionally left for Step 16. grep check on app/ passes.
+- Files modified: `services/xstockstrat-ingest/app/http_server.py`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`
+- Deviations: none
+
 ## Session 2026-05-18T07:00:00Z — sdd-execute step 7
 
 **Step 7 — service: xstockstrat-analysis — remove score-strategy, rename run-backtest path** [done]

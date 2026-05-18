@@ -318,7 +318,7 @@ grep -rn "n8n\|webhooks/n8n" services/xstockstrat-analysis/ && echo "FAIL" || ec
 
 ### Step 8 — service: xstockstrat-ingest — rename webhook route paths and function names
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/http_server.py` — modify

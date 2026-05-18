@@ -1,7 +1,7 @@
 """
 Connect-RPC compatible HTTP server for xstockstrat-ingest.
 
-Exposes IngestService methods via HTTP POST (JSON encoding) and n8n webhooks.
+Exposes IngestService methods via HTTP POST (JSON encoding) and webhooks.
 """
 
 import logging
@@ -48,10 +48,10 @@ def build_app(servicer) -> FastAPI:
     async def query_signals(request: Request):
         return await _call(request, ingest_pb2.QuerySignalsRequest, servicer.QuerySignals)
 
-    # ── n8n webhook routes ────────────────────────────────────────────────────
-    @app.post("/webhooks/n8n/trigger-backfill")
-    async def n8n_trigger_backfill(request: Request):
-        """n8n → TriggerBackfill webhook."""
+    # ── Webhook routes ──────────────────────────────────────────────────────────
+    @app.post("/webhooks/trigger-backfill")
+    async def trigger_backfill_webhook(request: Request):
+        """Webhook → TriggerBackfill."""
         body = await request.json()
         req_msg = ingest_pb2.TriggerBackfillRequest(
             symbols=body.get("symbols", []),
@@ -61,18 +61,18 @@ def build_app(servicer) -> FastAPI:
         resp = await servicer.TriggerBackfill(req_msg, _NoopContext())
         return JSONResponse(json_format.MessageToDict(resp))
 
-    @app.post("/webhooks/n8n/backfill-status")
-    async def n8n_backfill_status(request: Request):
-        """n8n → GetBackfillStatus webhook."""
+    @app.post("/webhooks/backfill-status")
+    async def backfill_status_webhook(request: Request):
+        """Webhook → GetBackfillStatus."""
         body = await request.json()
         req_msg = ingest_pb2.GetBackfillStatusRequest(job_id=body.get("job_id", ""))
         resp = await servicer.GetBackfillStatus(req_msg, _NoopContext())
         return JSONResponse(json_format.MessageToDict(resp))
 
-    @app.post("/webhooks/n8n/ingest-signal")
-    async def n8n_ingest_signal(request: Request):
+    @app.post("/webhooks/ingest-signal")
+    async def ingest_signal_webhook(request: Request):
         """
-        n8n → IngestSignal webhook.
+        Webhook → IngestSignal.
         Expected payload:
         {
           "source": "unusual_whales",
