@@ -482,11 +482,11 @@ wc -l docs/setup/n8n.md
 **Instructions**:
 1. In `docs/runbooks/config-rollout.md`:
    - L12: change `Author (n8n / API / CLI)` → `Author (agent / API / CLI)`
-   - L93: change `### Via n8n Webhook` → `### Via Webhook`
-   - L95: change `POST /webhooks/n8n/set-config` → `POST /webhooks/set-config`
-   - L109: change `/webhooks/n8n/rollout` → `/webhooks/rollout`
-   - L112: change `POST /webhooks/n8n/rollout` → `POST /webhooks/rollout`
-   - Update all surrounding prose describing `n8n` as the webhook caller to use `agent` or `webhook caller` instead
+   - L93: change `### Via n8n Webhook` → `### Via Connect-RPC`
+   - L95: change `POST /webhooks/n8n/set-config` → `POST /xstockstrat.config.v1.ConfigService/SetConfig` (the webhook endpoint was removed in feature-011; callers must use Connect-RPC on port 8060 directly)
+   - L109: change `/webhooks/n8n/rollout` → `/xstockstrat.config.v1.ConfigService/RolloutConfig`
+   - L112: change `POST /webhooks/n8n/rollout` → `POST /xstockstrat.config.v1.ConfigService/RolloutConfig`
+   - Update all surrounding prose: the `set-config` and `rollout` webhook endpoints no longer exist; replace instructions that call these webhooks with equivalent Connect-RPC calls on `http://<config-host>:8060`
 2. In `docs/runbooks/historical-backfill.md`:
    - L12: change `Operator / n8n` → `Operator / agent`
    - L70: change `### Via n8n Webhook` → `### Via Webhook`
@@ -498,9 +498,10 @@ wc -l docs/setup/n8n.md
    - L67: change `n8n webhook: POST /webhooks/n8n/approve-order` → `Webhook: POST /webhooks/approve-order`
    - Update surrounding prose to replace n8n references with `agent` or `webhook caller`
 4. In `docs/runbooks/indicator-builder.md`:
-   - L106: change `### Via n8n Webhook` → `### Via Webhook`
-   - L108: change `POST /webhooks/n8n/execute-formula` → `POST /webhooks/execute-formula`
-   - L165: change `via n8n \`config-update\` workflow` → `via the Config UI or webhook caller`
+   - L106: change `### Via n8n Webhook` → `### Via Connect-RPC`
+   - L108: change `POST /webhooks/n8n/execute-formula` → `POST /xstockstrat.indicators.v1.IndicatorsService/ExecuteFormula` (the webhook endpoint was removed in feature-011; callers must use Connect-RPC on port 8054 directly)
+   - Update surrounding prose in that section: the `execute-formula` webhook no longer exists; replace instructions that call it with the equivalent Connect-RPC call on `http://<indicators-host>:8054`
+   - L165: change `via n8n \`config-update\` workflow` → `via the Config UI or Connect-RPC`
 5. In `docs/runbooks/add-data-source.md`:
    - L23: change `n8n Cloud / manual upload` → `agent / manual upload`
    - L24: change `POST /webhooks/n8n/ingest-signal` → `POST /webhooks/ingest-signal`
@@ -682,15 +683,9 @@ grep "n8n Cloud Integration" CLAUDE.md && echo "FAIL: section heading not update
 
 **Instructions**:
 1. In `scripts/integration-test.sh`:
-   - L399: rename function `section_12_n8n_webhook()` → `section_12_webhook()`
-   - L401: change `log "SECTION 12 — n8n webhook: config set-config"` → `log "SECTION 12 — webhook: config set-config"`
-   - L405: change `"${CONFIG_URL}/webhooks/n8n/set-config"` → `"${CONFIG_URL}/webhooks/set-config"`
-   - L416: change `ok "n8n webhook set-config — accepted"` → `ok "webhook set-config — accepted"`
-   - L418: change `fail "n8n webhook set-config — unexpected response"` → `fail "webhook set-config — unexpected response"`
-   - L423: change `post_raw "${CONFIG_URL}/webhooks/n8n/set-config"` → `post_raw "${CONFIG_URL}/webhooks/set-config"`
-   - L439: change `"${CONFIG_URL}/webhooks/n8n/set-config"` → `"${CONFIG_URL}/webhooks/set-config"`
-   - L470: change `"${CONFIG_URL}/webhooks/n8n/set-config"` → `"${CONFIG_URL}/webhooks/set-config"`
-   - L504: change `section_12_n8n_webhook` → `section_12_webhook`
+   - Delete the entire `section_12_n8n_webhook()` function body (L399–L503): the config webhook endpoint (`/webhooks/n8n/set-config`) was deleted in feature-011 Track A; there is no `/webhooks/set-config` to call. Renaming the URL would cause every CI run to fail with 404.
+   - Remove the `section_12_n8n_webhook` call at L504 in `main()`
+   - Do NOT add a replacement Connect-RPC test — adding new integration test coverage is out of scope for this feature.
 
 **Verification**:
 ```bash
