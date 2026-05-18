@@ -6,6 +6,14 @@
 
 ---
 
+## Session 2026-05-18T06:00:00Z — sdd-execute step 6
+
+**Step 6 — service: xstockstrat-notify — rename webhook router and update paths** [done]
+
+- Renamed n8n webhook layer in xstockstrat-notify to generic webhook layer: created `src/webhooks/router.ts` from `src/n8n/webhookRouter.ts` with 11 targeted changes (logger name, JSDoc, function names, endpoint paths, error messages), updated `src/index.ts` imports and dispatch condition, deleted old `src/n8n/webhookRouter.ts` and orphaned `n8n/webhookRouter.ts` files, cleaned up empty directories. Webhook endpoints `/webhooks/emit-alert` and `/webhooks/list-alerts` remain with new paths; default `source_service` changed from 'n8n' to 'webhook'.
+- Files modified: `services/xstockstrat-notify/src/webhooks/router.ts` (created), `services/xstockstrat-notify/src/index.ts`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`
+- Deviations: none
+
 ## Session 2026-05-18T03:30:00Z — sdd-execute step 1
 
 **Step 1 — service: xstockstrat-config — delete webhook layer** [done]
