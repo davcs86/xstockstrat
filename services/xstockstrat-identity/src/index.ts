@@ -10,7 +10,6 @@ import { IdentityServiceImpl } from './grpc/identityServiceImpl';
 import { createConnectRouter } from './connect/connectRouter';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { getLogger } from './services/logger';
-import { createN8nRouter } from './n8n/webhookRouter';
 
 const log = getLogger('identity:server');
 
@@ -47,7 +46,6 @@ async function main() {
 
   // ── Connect-RPC HTTP server (browser + external clients, port 8058) ────
   const connectHandler = connectNodeAdapter({ routes: createConnectRouter(identityImpl) });
-  const n8nRouter = createN8nRouter(identityImpl);
   const httpServer = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -58,7 +56,6 @@ async function main() {
       res.end(JSON.stringify({ status: 'ok', service: 'xstockstrat-identity' }));
       return;
     }
-    if (req.url?.startsWith('/webhooks/n8n/')) { n8nRouter(req, res); return; }
     connectHandler(req, res);
   });
   httpServer.listen(parseInt(httpPort, 10), () => {
