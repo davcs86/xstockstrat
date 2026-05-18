@@ -1,9 +1,9 @@
 # Feature: do-nginx-integration
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/do-nginx-integration`
 **Created**: 2026-05-12
-**Last Updated**: 2026-05-12
+**Last Updated**: 2026-05-18
 
 ---
 
@@ -14,6 +14,8 @@
 | 2026-05-12 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings: feature overlaps with 002, 003, 004, 005 — all advisory) |
 | 2026-05-12 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps. Key findings: feature 005 provides nginx.conf + Dockerfile on feature/frontend-reverse-proxy branch; Steps 1–2 update DO app specs (remove frontend http_port, add nginx on port 80); Step 3 creates docker-entrypoint.sh for envsubst templating of DO private URLs; Step 4 documents nginx in CLAUDE.md. |
+| 2026-05-18 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done: added xstockstrat-nginx service (http_port: 80) to .do/app.dev.yaml; removed http_port from trader, insights, config-ui. |
+| 2026-05-18 | `in-progress` → `code-completed` | /sdd-execute | All 4 steps done. Step 4: added Nginx Reverse Proxy section to CLAUDE.md and Nginx config row to Key File Paths Reference table. |
 
 ---
 

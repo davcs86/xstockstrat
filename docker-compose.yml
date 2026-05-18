@@ -473,6 +473,10 @@ services:
       context: .
       dockerfile: services/xstockstrat-nginx/Dockerfile
     container_name: xstockstrat-nginx
+    environment:
+      - XSTOCKSTRAT_TRADER_PRIVATE_URL=xstockstrat-trader
+      - XSTOCKSTRAT_INSIGHTS_PRIVATE_URL=xstockstrat-insights
+      - XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL=xstockstrat-config-ui
     ports:
       - "80:80"
     depends_on:

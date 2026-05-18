@@ -1,6 +1,6 @@
 # Implementation Spec: do-nginx-integration
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-05-12
 **Feature**: `docs/roadmap/features/006-do-nginx-integration/feature.md`
 **Total Steps**: 4
@@ -23,7 +23,7 @@ Wire the nginx reverse proxy (created by feature 005-frontend-reverse-proxy on t
 
 ### Step 1 — docs: Add nginx service to .do/app.dev.yaml
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.do/app.dev.yaml` (infrastructure file)
 **Files**:
 - `.do/app.dev.yaml` — modify (add nginx service entry, change trader/insights/config-ui http_port + remove expose, change APP_URL)
@@ -114,7 +114,7 @@ yq eval '.services[] | select(.name == "xstockstrat-config-ui") | .http_port' .d
 
 ### Step 2 — docs: Add nginx service to .do/app.yaml (production)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.do/app.yaml` (infrastructure file)
 **Files**:
 - `.do/app.yaml` — modify (add nginx service entry, change trader/insights/config-ui http_port + remove expose, change APP_URL)
@@ -205,7 +205,7 @@ yq eval '.services[] | select(.name == "xstockstrat-config-ui") | .http_port' .d
 
 ### Step 3 — service: Create nginx entrypoint script for DO environment variable substitution
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-nginx` (new infrastructure service)
 **Files**:
 - `services/xstockstrat-nginx/docker-entrypoint.sh` — create
@@ -291,7 +291,7 @@ sh -n /home/user/xstockstrat-orchestration/services/xstockstrat-nginx/docker-ent
 
 ### Step 4 — docs: Update CLAUDE.md with nginx configuration notes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` (documentation)
 **Files**:
 - `CLAUDE.md` — modify (add nginx.conf template notes)
@@ -360,4 +360,27 @@ grep -q "Nginx Reverse Proxy" CLAUDE.md && echo "✓ Nginx section added"
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 1 — docs: Add nginx service to .do/app.dev.yaml
+**Spec said**: `yq eval '.services[] | select(.name == "xstockstrat-nginx") | .http_port' .do/app.dev.yaml` for verification
+**Actual**: `python3 -c "import yaml; ..."` used instead for all YAML checks
+**Reason**: Installed `yq` at `/usr/bin/yq` is the Python jq-wrapper (`yq 0.0.0`), not mikefarah's yq; the `yq eval` subcommand syntax is not supported. Python pyyaml is available and produces equivalent verification coverage.
+
+### Deviation: Step 2 — docs: Add nginx service to .do/app.yaml (production)
+**Spec said**: `yq eval '.services[] | select(.name == "xstockstrat-nginx") | .http_port' .do/app.yaml` for verification
+**Actual**: `python3 -c "import yaml; ..."` used instead for all YAML checks (8 checks: http_port, branch, 3 frontend http_port removals, 3 env keys)
+**Reason**: Same as Step 1 — installed yq is Python jq-wrapper, not mikefarah's yq.
+
+### Deviation: Step 3 — service: Create nginx entrypoint script (Option A scope expansion)
+**Spec said**: Create only `services/xstockstrat-nginx/docker-entrypoint.sh`; Dockerfile already assumed to have `ENTRYPOINT` from feature 005
+**Actual**: Also modified `nginx.conf` (template variables), `services/xstockstrat-nginx/Dockerfile` (ENTRYPOINT + gettext + template copy), and `docker-compose.yml` (env vars for nginx service)
+**Reason**: Feature 005 committed a minimal Dockerfile with `CMD` (not ENTRYPOINT); nginx.conf had hardcoded hostnames. Without these changes the entrypoint script would exist but never be invoked. User selected Option A to expand scope.
+
+### Deviation: Step 3 — envsubst variable scoping
+**Spec said**: `envsubst < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf`
+**Actual**: `envsubst '$TRADER_UPSTREAM $INSIGHTS_UPSTREAM $CONFIG_UI_UPSTREAM' < ... > ...`
+**Reason**: Bare `envsubst` substitutes ALL environment variables including nginx's own runtime variables (`$host`, `$remote_addr`, `$scheme`, etc.), which would render them as empty strings and break the nginx config. Scoping to only the three upstream variables preserves nginx variable syntax.
+
+### Deviation: Step 3 — Dockerfile requires gettext for envsubst
+**Spec said**: Dockerfile update assumed envsubst was available in the base image
+**Actual**: Added `RUN apk add --no-cache gettext` to Dockerfile
+**Reason**: `nginx:1.27-alpine` does not include `envsubst` by default; it lives in the `gettext` Alpine package.

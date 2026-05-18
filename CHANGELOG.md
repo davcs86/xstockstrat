@@ -10,6 +10,16 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-05-18
+
+### Features
+- do-nginx-integration: Wire the nginx reverse proxy (established locally by feature 005-frontend-reverse-proxy) into the DigitalOcean App Platform deployment by updating `.do/app.yaml` and `.do/app.dev.yaml` so that the unified `/trader`, `/insights`, `/config-ui` routing is live in both dev and production environments.
+
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-05-16
 
 ### Summary
