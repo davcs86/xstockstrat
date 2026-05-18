@@ -242,6 +242,47 @@ The **xstockstrat-nginx** service (port 80) proxies all frontend requests to the
 | `XSTOCKSTRAT_INSIGHTS_PRIVATE_URL` | DO injected | Private URL for xstockstrat-insights service |
 | `XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL` | DO injected | Private URL for xstockstrat-config-ui service |
 
+### Adding a new frontend service
+
+When a new Next.js frontend (e.g. `xstockstrat-newui` on port `3003`) needs to be routed through nginx, touch these 6 files in order:
+
+1. **`nginx.conf`** — add an upstream block and a location block:
+   ```nginx
+   upstream newui_backend {
+       server ${NEWUI_UPSTREAM}:3003;
+   }
+   ```
+   ```nginx
+   location /newui/ {
+       proxy_pass http://newui_backend/;
+       # copy the proxy_set_header lines from an existing location block
+   }
+   ```
+
+2. **`services/xstockstrat-nginx/docker-entrypoint.sh`** — strip the protocol prefix and export the new upstream var, following the existing pattern:
+   ```sh
+   NEWUI_UPSTREAM="${XSTOCKSTRAT_NEWUI_PRIVATE_URL#http://}"
+   NEWUI_UPSTREAM="${NEWUI_UPSTREAM#https://}"
+   export NEWUI_UPSTREAM
+   ```
+   Also add `$NEWUI_UPSTREAM` to the `envsubst` variable list at the bottom of the script.
+
+3. **`.do/app.dev.yaml`** — add the new env var to the `xstockstrat-nginx` service's `envs` block:
+   ```yaml
+   - key: XSTOCKSTRAT_NEWUI_PRIVATE_URL
+     value: ${xstockstrat-newui.PRIVATE_URL}
+   ```
+   Ensure `xstockstrat-newui` itself has **no** `http_port` entry (internal-only).
+
+4. **`.do/app.yaml`** — same change as step 3, for the production spec.
+
+5. **`docker-compose.yml`** — add the env var to the `nginx` service's `environment` block (use the container name as the value, no protocol prefix):
+   ```yaml
+   - XSTOCKSTRAT_NEWUI_PRIVATE_URL=xstockstrat-newui
+   ```
+
+6. **`CLAUDE.md`** (this file) — add a row to the Environment Variables table above, and add `xstockstrat-newui` to the Service Registry table at the top.
+
 ---
 
 ## Generating Proto Stubs
