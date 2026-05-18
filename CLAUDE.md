@@ -218,6 +218,32 @@ Each service has an `internal/telemetry/` (Go), `app/telemetry.py` (Python), or 
 
 ---
 
+## Nginx Reverse Proxy
+
+The **xstockstrat-nginx** service (port 80) proxies all frontend requests to the three Next.js UIs.
+
+- **Local dev** (`docker-compose.yml`): nginx resolves upstream services via Docker DNS container names (e.g., `xstockstrat-trader:3000`)
+- **DigitalOcean**: nginx receives private service URLs via environment variables (`XSTOCKSTRAT_TRADER_PRIVATE_URL`, etc.) and templates them into `nginx.conf` at startup using `docker-entrypoint.sh` + `envsubst`. The script extracts the hostname from the DO private URL (strips protocol prefix) and injects it into the upstream directives.
+
+### Files
+
+- `nginx.conf` (repo root): Main nginx configuration with upstream blocks and location rules
+  - Upstream template placeholders: `${TRADER_UPSTREAM}`, `${INSIGHTS_UPSTREAM}`, `${CONFIG_UI_UPSTREAM}`
+  - Routes: `/trader/*` → trader backend (port 3000), `/insights/*` → insights backend (port 3001), `/config-ui/*` → config-ui backend (port 3002)
+  - Health endpoint: `GET /health` → `{"status":"ok","service":"nginx-reverse-proxy"}`
+- `services/xstockstrat-nginx/Dockerfile`: Copies `nginx.conf` (as template) and `docker-entrypoint.sh` into the container; installs `gettext` for `envsubst`
+- `services/xstockstrat-nginx/docker-entrypoint.sh`: Startup script that strips the protocol prefix from DO private URLs, runs `envsubst` (scoped to the three upstream vars) to render `nginx.conf`, verifies syntax, then starts nginx
+
+### Environment Variables (DO App Platform)
+
+| Variable | Source | Purpose |
+|---|---|---|
+| `XSTOCKSTRAT_TRADER_PRIVATE_URL` | DO injected | Private URL for xstockstrat-trader service |
+| `XSTOCKSTRAT_INSIGHTS_PRIVATE_URL` | DO injected | Private URL for xstockstrat-insights service |
+| `XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL` | DO injected | Private URL for xstockstrat-config-ui service |
+
+---
+
 ## Generating Proto Stubs
 
 ```bash
@@ -442,6 +468,7 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sd
 | n8n workflow files | `packages/n8n/workflows/` |
 | DO prod app spec | `.do/app.yaml` |
 | DO dev app spec | `.do/app.dev.yaml` |
+| Nginx config | `nginx.conf` (root), `services/xstockstrat-nginx/Dockerfile`, `services/xstockstrat-nginx/docker-entrypoint.sh` |
 | Local env setup script | `scripts/localenv-setup.sh` |
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
