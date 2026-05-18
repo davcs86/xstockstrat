@@ -21,9 +21,9 @@ FR-2. The MCP server must expose the following tools, each delegating via HTTP t
 | Tool | HTTP target | Notes |
 |---|---|---|
 | `list_signal_sources` | `GET`-equivalent call to ingest's `ListSignalSources` RPC via Connect-RPC HTTP | Returns slug, display_name, source_type for all active sources |
-| `ingest_signal` | `POST /webhooks/n8n/ingest-signal` on `xstockstrat-ingest:8055` | Full ExternalSignal fields; source slug validated by ingest (FR-3 of 008) |
-| `emit_alert` | `POST /webhooks/n8n/emit-alert` on `xstockstrat-notify:8059` | severity, category, title, body, source_service, target_user_id |
-| `run_backtest` | `POST /webhooks/n8n/run-backtest` on `xstockstrat-analysis:8056` | strategy_id, symbols, initial_capital |
+| `ingest_signal` | `POST /webhooks/ingest-signal` on `xstockstrat-ingest:8055` | Full ExternalSignal fields; source slug validated by ingest (FR-3 of 008) |
+| `emit_alert` | `POST /webhooks/emit-alert` on `xstockstrat-notify:8059` | severity, category, title, body, source_service, target_user_id |
+| `run_backtest` | `POST /webhooks/run-backtest` on `xstockstrat-analysis:8056` | strategy_id, symbols, initial_capital |
 
 FR-3. A shared system prompt file must be maintained at `services/xstockstrat-agent/app/prompts/signal_extraction.md`. It must encode:
   - How to identify a trading signal in freeform text

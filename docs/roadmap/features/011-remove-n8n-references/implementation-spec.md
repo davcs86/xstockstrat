@@ -581,7 +581,7 @@ grep -n "/n8n/" docs/roadmap/ -r && echo "WARN: check context" || echo "PASS"
 
 ### Step 13 — docs: update 009 product spec tool definitions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/roadmap/features/009-agent-mcp-server/product-spec.md` — modify
