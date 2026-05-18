@@ -176,7 +176,7 @@ grep -rn "webhooks/n8n" services/xstockstrat-trading/ && echo "FAIL" || echo "PA
 
 ### Step 5 — service: xstockstrat-indicators — delete webhook routes and standalone file
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/n8n/webhook.py` — delete

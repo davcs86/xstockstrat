@@ -14,6 +14,14 @@
 - Files modified: `services/xstockstrat-config/src/index.ts`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`, `docs/roadmap/features/011-remove-n8n-references/feature.md`
 - Deviations: none
 
+## Session 2026-05-18T05:30:00Z — sdd-execute step 5
+
+**Step 5 — service: xstockstrat-indicators — delete webhook routes and standalone file** [done]
+
+- Removed n8n webhook routes from xstockstrat-indicators: deleted `n8n/webhook.py` standalone file and empty `n8n/` directory, removed inline webhook route decorators and functions from `app/http_server.py`, updated module docstring. Verification showed no n8n references in code (CLAUDE.md references remain for later docs updates).
+- Files modified: `services/xstockstrat-indicators/app/http_server.py`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`
+- Deviations: none
+
 ## Session 2026-05-18T05:00:00Z — sdd-execute step 4
 
 **Step 4 — service: xstockstrat-trading — delete webhook handler** [done]
