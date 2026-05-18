@@ -77,6 +77,6 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] Should all three frontends share a single `@xstockstrat/auth` workspace package for the middleware and token-refresh logic, or duplicate the implementation per frontend?
-- [ ] Should the login page be its own standalone page per frontend, or should nginx route `/login` to a single shared login app (deferred — out of scope per this spec, but worth noting for future SSO consideration)?
-- [ ] What is the token storage strategy for SSR API routes — read from cookie header on each request, or cache in a server-side session store?
+- [x] **OQ-1 — DEFERRED to impl-spec**: Shared `@xstockstrat/auth` workspace package decision deferred to `/sdd-spec`; see context.md 2026-05-18.
+- [x] **OQ-2 — DEFERRED/OUT OF SCOPE**: Per-frontend login pages per this spec; shared nginx-routed login app deferred for future SSO consideration.
+- [x] **OQ-3 — RESOLVED**: Read from the `httpOnly` cookie header on each incoming request (stateless). No server-side session store. Consistent with FR-3.

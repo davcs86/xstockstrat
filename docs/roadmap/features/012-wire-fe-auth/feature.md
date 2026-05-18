@@ -1,6 +1,6 @@
 # Feature: wire-fe-auth
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/wire-fe-auth`
 **Created**: 2026-05-18
 **Last Updated**: 2026-05-18
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-18 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-05-18 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 
 ---
 
@@ -43,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review wire-fe-auth product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec wire-fe-auth` — generate implementation spec from the approved product spec
