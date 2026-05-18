@@ -1,6 +1,6 @@
 # Feature: wire-fe-auth
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/wire-fe-auth`
 **Created**: 2026-05-18
 **Last Updated**: 2026-05-18
@@ -14,6 +14,7 @@
 | 2026-05-18 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-18 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 | 2026-05-18 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
+| 2026-05-18 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — jose added to all three frontends |
 
 ---
 
