@@ -6,6 +6,22 @@
 
 ---
 
+## Session 2026-05-18T16:00:00Z — sdd-execute step 16
+
+**Step 16 — docs: update service CLAUDE.md files** [done]
+
+- Updated all 8 service CLAUDE.md files: Track A services (config, ledger, identity, trading, indicators) replaced `## n8n Webhooks` section with deprecation notes pointing to Connect-RPC on their respective ports. Updated port table descriptions to remove "n8n webhooks" references. Updated "Callers" descriptions from "(n8n, ...)" to "(agent, ...)" or "(frontends, agent)". Updated config governance and WatchConfig flow descriptions. Track B services (notify, analysis, ingest) renamed `## n8n Webhooks` → `## Webhooks`, updated all endpoint paths to remove `/n8n/` segment (6 paths total), updated port table descriptions to "Connect-RPC + webhooks", updated "Callers" descriptions. Analysis also removed `score-strategy` row (endpoint deleted in Step 7).
+- Files modified: `services/xstockstrat-config/CLAUDE.md`, `services/xstockstrat-ledger/CLAUDE.md`, `services/xstockstrat-identity/CLAUDE.md`, `services/xstockstrat-trading/CLAUDE.md`, `services/xstockstrat-indicators/CLAUDE.md`, `services/xstockstrat-notify/CLAUDE.md`, `services/xstockstrat-analysis/CLAUDE.md`, `services/xstockstrat-ingest/CLAUDE.md`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`, `docs/roadmap/features/011-remove-n8n-references/context.md`
+- Deviations: none
+
+## Session 2026-05-18T15:00:00Z — sdd-execute step 15
+
+**Step 15 — service: update scripts/integration-test.sh** [done]
+
+- Deleted entire `section_12_n8n_webhook()` function (L399–L427) — the config webhook endpoint `/webhooks/n8n/set-config` was deleted in Track A services; no replacement endpoint exists. Removed function call from `main()` at L504. Removed webhook fallback calls from `section_13_maintenance_mode()` (L438–L441 and L469–L472), keeping only the Connect-RPC endpoint calls.
+- Files modified: `scripts/integration-test.sh`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`, `docs/roadmap/features/011-remove-n8n-references/context.md`
+- Deviations: none
+
 ## Session 2026-05-18T14:00:00Z — sdd-execute step 14
 
 **Step 14 — docs: update root CLAUDE.md and docs/setup/alpaca.md** [done]

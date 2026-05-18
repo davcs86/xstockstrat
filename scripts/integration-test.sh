@@ -396,36 +396,6 @@ section_11_notify() {
     '{"categories":["trade"],"limit":5}'
 }
 
-section_12_n8n_webhook() {
-  sep
-  log "SECTION 12 — n8n webhook: config set-config"
-
-  local webhook_resp
-  webhook_resp=$(post_raw \
-    "${CONFIG_URL}/webhooks/n8n/set-config" \
-    "{
-      \"key\": \"platform.log_level\",
-      \"value\": {\"string_val\": \"debug\"},
-      \"environment\": \"DEV\",
-      \"trading_mode\": \"ALL\",
-      \"author\": \"integration-test\",
-      \"reason\": \"Phase 6 integration test\"
-    }")
-
-  if echo "$webhook_resp" | grep -qE "ok|success|updated|string_val"; then
-    ok "n8n webhook set-config — accepted"
-  else
-    fail "n8n webhook set-config — unexpected response"
-    echo "  Response: $webhook_resp"
-  fi
-
-  # Reset log level back to info
-  post_raw "${CONFIG_URL}/webhooks/n8n/set-config" \
-    '{"key":"platform.log_level","value":{"string_val":"info"},"environment":"DEV","trading_mode":"ALL","author":"integration-test","reason":"reset after Phase 6 test"}' \
-    > /dev/null 2>&1 || true
-  log "  Reset platform.log_level to 'info'"
-}
-
 section_13_maintenance_mode() {
   sep
   log "SECTION 13 — Maintenance mode propagation"
@@ -434,10 +404,6 @@ section_13_maintenance_mode() {
   post_raw \
     "${CONFIG_URL}/xstockstrat.config.v1.ConfigService/SetConfig" \
     '{"key":"platform.maintenance_mode","value":{"bool_val":true},"environment":"DEV","trading_mode":"ALL"}' \
-    > /dev/null 2>&1 || \
-  post_raw \
-    "${CONFIG_URL}/webhooks/n8n/set-config" \
-    '{"key":"platform.maintenance_mode","value":{"bool_val":true},"environment":"DEV","trading_mode":"ALL","author":"integration-test","reason":"maintenance mode test"}' \
     > /dev/null 2>&1 || true
 
   log "  Waiting 3s for WatchConfig propagation..."
@@ -465,10 +431,6 @@ section_13_maintenance_mode() {
   post_raw \
     "${CONFIG_URL}/xstockstrat.config.v1.ConfigService/SetConfig" \
     '{"key":"platform.maintenance_mode","value":{"bool_val":false},"environment":"DEV","trading_mode":"ALL"}' \
-    > /dev/null 2>&1 || \
-  post_raw \
-    "${CONFIG_URL}/webhooks/n8n/set-config" \
-    '{"key":"platform.maintenance_mode","value":{"bool_val":false},"environment":"DEV","trading_mode":"ALL","author":"integration-test","reason":"maintenance mode test cleanup"}' \
     > /dev/null 2>&1 || true
 
   log "  Maintenance mode cleared."
@@ -501,7 +463,6 @@ main() {
   section_9_event_chain
   section_10_portfolio
   section_11_notify
-  section_12_n8n_webhook
   section_13_maintenance_mode
 
   sep
