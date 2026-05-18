@@ -609,7 +609,7 @@ grep "webhooks/n8n" docs/roadmap/features/009-agent-mcp-server/product-spec.md &
 
 ### Step 14 — docs: update root CLAUDE.md and docs/setup/alpaca.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `CLAUDE.md` — modify

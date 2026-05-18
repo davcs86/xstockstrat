@@ -162,7 +162,7 @@ For `xstockstrat-trading`, the broker URL selection is controlled by `ALPACA_PAP
 
 ## Step 7 — Runtime Mode via Config Service
 
-The config service (`xstockstrat-config`) governs Alpaca behavior at runtime without requiring restarts. Set these keys via the Config UI (`http://localhost:3002`) or via n8n `config-update` workflow:
+The config service (`xstockstrat-config`) governs Alpaca behavior at runtime without requiring restarts. Set these keys via the Config UI (`http://localhost:3002`) or via webhook caller:
 
 | Config Key | Type | Default | Description |
 |---|---|---|---|
@@ -183,7 +183,7 @@ The config service (`xstockstrat-config`) governs Alpaca behavior at runtime wit
 Trigger a small historical backfill via the webhook:
 
 ```bash
-curl -X POST http://localhost:8053/webhooks/n8n/backfill \
+curl -X POST http://localhost:8053/webhooks/backfill \
   -H "x-webhook-secret: $N8N_WEBHOOK_SECRET" \
   -H "Content-Type: application/json" \
   -d '{
@@ -206,32 +206,33 @@ Expected output: lines showing bars fetched from Alpaca and stored in TimescaleD
 
 ### Check broker (trading) connectivity
 
-Place a paper order:
+Place a paper order via the `TradingService/PlaceOrder` Connect-RPC endpoint:
 
 ```bash
-curl -X POST http://localhost:8051/webhooks/n8n/place-order \
-  -H "x-webhook-secret: $N8N_WEBHOOK_SECRET" \
+curl -X POST http://localhost:8051/xstockstrat.trading.v1.TradingService/PlaceOrder \
   -H "Content-Type: application/json" \
   -d '{
     "symbol": "AAPL",
-    "side": "buy",
+    "side": "BUY",
     "qty": 1,
-    "order_type": "market",
+    "order_type": "MARKET",
     "strategy_id": "test-strategy",
     "user_id": "test-user"
   }'
 ```
 
-Expected response: `{"order_id": "<alpaca-order-id>", "status": "accepted"}`
+Expected response: `{"order_id": "<alpaca-order-id>", "status": "ACCEPTED"}`
 
 This places a real paper order on Alpaca. Confirm in the Alpaca paper trading dashboard under **Orders**.
+
+> Note: The `/webhooks/n8n/place-order` endpoint has been deleted as part of feature-011. Use the Connect-RPC endpoint shown above instead.
 
 ### Check real-time stream
 
 Subscribe to a symbol stream:
 
 ```bash
-curl -X POST http://localhost:8053/webhooks/n8n/subscribe \
+curl -X POST http://localhost:8053/webhooks/subscribe \
   -H "x-webhook-secret: $N8N_WEBHOOK_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"symbols": ["AAPL", "TSLA"], "timeframe": "1Min"}'
@@ -248,7 +249,7 @@ To populate the TimescaleDB OHLCV hypertable with historical data for backtestin
 Quick start:
 
 ```bash
-curl -X POST http://localhost:8053/webhooks/n8n/backfill \
+curl -X POST http://localhost:8053/webhooks/backfill \
   -H "x-webhook-secret: $N8N_WEBHOOK_SECRET" \
   -H "Content-Type: application/json" \
   -d '{

@@ -6,6 +6,14 @@
 
 ---
 
+## Session 2026-05-18T14:00:00Z — sdd-execute step 14
+
+**Step 14 — docs: update root CLAUDE.md and docs/setup/alpaca.md** [done]
+
+- Updated 8 lines in `CLAUDE.md`: L137 (config flow), L183 (section heading), L185 (webhook handler description), L189 (pattern comment), L192 (Connect-RPC accessibility), L194 (removed n8n workflow files line), L471 (phase description), L518 (removed table row). Updated 5 lines in `docs/setup/alpaca.md`: L165 (config update method), L186 (backfill endpoint path), L212 (place-order endpoint — changed to Connect-RPC with explanatory note), L234 (subscribe endpoint path), L251 (backfill endpoint path).
+- Files modified: `CLAUDE.md`, `docs/setup/alpaca.md`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`, `docs/roadmap/features/011-remove-n8n-references/context.md`
+- Deviations: none
+
 ## Session 2026-05-18T13:00:00Z — sdd-execute step 13
 
 **Step 13 — docs: update 009 product spec tool definitions** [done]
