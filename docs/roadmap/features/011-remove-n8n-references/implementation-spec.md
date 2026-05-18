@@ -528,7 +528,7 @@ grep -rn "n8n workflow" docs/runbooks/ && echo "WARN: check if historical or act
 
 ### Step 12 — docs: update docs/roadmap/ references
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/roadmap/implementation-roadmap.md` — modify
@@ -747,6 +747,11 @@ grep -rn "Callers (n8n" services/*/CLAUDE.md && echo "FAIL" || echo "PASS"
 ---
 
 ## Deviation Log
+
+### Deviation: Step 12 — docs: update docs/roadmap/ references
+**Spec said**: Modify `docs/roadmap/implementation-roadmap.md` and `docs/roadmap/phase6-deviations.md` to replace old n8n webhook paths and update section headings.
+**Actual**: Only `docs/roadmap/CLAUDE.md` was modified. The two roadmap files were left untouched.
+**Reason**: User declared `implementation-roadmap.md` and `phase6-deviations.md` as historical files that should not be altered.
 
 ### Deviation: Step 7 — xstockstrat-analysis — remove score-strategy, rename run-backtest path
 **Spec said**: `cd services/xstockstrat-analysis && python3 -m ruff check app/ && python3 -m ruff format --check app/`

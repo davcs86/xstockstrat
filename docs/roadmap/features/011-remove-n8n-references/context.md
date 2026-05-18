@@ -6,6 +6,14 @@
 
 ---
 
+## Session 2026-05-18T12:00:00Z — sdd-execute step 12
+
+**Step 12 — docs: update docs/roadmap/ references** [done]
+
+- Updated `docs/roadmap/CLAUDE.md` L9 to replace `n8n workflow storage in packages/n8n/workflows/` with `webhook path cleanup via feature-011 (packages/n8n/ deleted)`. `docs/roadmap/implementation-roadmap.md` and `docs/roadmap/phase6-deviations.md` were left untouched per user declaration that they are historical files.
+- Files modified: `docs/roadmap/CLAUDE.md`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`, `docs/roadmap/features/011-remove-n8n-references/context.md`
+- Deviations: implementation-roadmap.md and phase6-deviations.md not modified (historical files per user decision)
+
 ## Session 2026-05-18T11:00:00Z — sdd-execute step 11
 
 **Step 11 — docs: update docs/runbooks references** [done]
