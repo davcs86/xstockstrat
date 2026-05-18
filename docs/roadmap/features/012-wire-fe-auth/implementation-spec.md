@@ -3,14 +3,14 @@
 **Status**: `pending`
 **Created**: 2026-05-18
 **Feature**: `docs/roadmap/features/012-wire-fe-auth/feature.md`
-**Total Steps**: 15
+**Total Steps**: 16
 **Feature Branch**: `feature/wire-fe-auth`
 
 ---
 
 ## Execution Summary
 
-The implementation proceeds in four waves. Wave 1 (Steps 1–3) adds the `jose` JWT dependency and shared auth utilities — including `rolesToAccessScope` bitmap and `generateTraceId` — to all three Next.js frontends. Wave 2 (Steps 4–9) wires auth into each frontend in isolation: login page, `middleware.ts` with trace ID generation, API route updates forwarding all three headers (`x-user-id`, `x-access-scope`, `x-trace-id`), and package.json env additions. Wave 3 (Steps 10–12) strips all three headers in nginx, wires env vars, and adds E2E auth smoke tests. Wave 4 (Steps 13–15) adds header propagation to all backend services: Go unary interceptors (Step 13), Python per-method metadata extraction (Step 14), and Node.js AsyncLocalStorage middleware (Step 15). The identity service requires no source changes.
+The implementation proceeds in four waves. Wave 1 (Steps 1–3) adds the `jose` JWT dependency and shared auth utilities — including `rolesToAccessScope` bitmap and `generateTraceId` — to all three Next.js frontends. Wave 2 (Steps 4–9) wires auth into each frontend in isolation: login page, `middleware.ts` with trace ID generation, API route updates forwarding all three headers (`x-user-id`, `x-access-scope`, `x-trace-id`), and package.json env additions. Wave 3 (Steps 10–12) strips all three headers in nginx, wires env vars, and adds E2E auth smoke tests. Wave 4 (Steps 13–16) adds header propagation to all backend services and verifies existing test suites: Go unary interceptors (Step 13), Python per-method metadata extraction (Step 14), Node.js AsyncLocalStorage middleware (Step 15), and Wave 4 test verification across all 10 backend services (Step 16). The identity service requires no source changes.
 
 ## Step Dependencies
 
@@ -19,6 +19,7 @@ The implementation proceeds in four waves. Wave 1 (Steps 1–3) adds the `jose` 
 - Step 11 (env wiring) should run after all service steps so env keys match the completed implementation
 - Step 12 (tests) requires Steps 4–9 to be complete
 - Steps 13–15 (backend propagation, Wave 4) are fully independent of Steps 1–12 and can be executed in parallel with Wave 2
+- Step 16 (test: Wave 4 backend suites) requires Steps 13–15 to be complete
 
 ---
 
@@ -756,6 +757,44 @@ cd services/xstockstrat-notify   && pnpm run lint
 cd services/xstockstrat-config   && pnpm run lint
 ```
 No lint errors. All four services must pass their existing test suites: `pnpm run test:coverage` for each.
+
+---
+
+### Step 16 — test: Verify Wave 4 backend service test suites after propagation changes
+
+**Status**: `pending`
+**Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`, `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`, `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config`
+**Files**: _(none — verification only; no source files modified in this step)_
+
+**Reviewers**: `xstockstrat-trading` owner — Order execution correctness; `xstockstrat-portfolio` owner — P&L calculation accuracy; `xstockstrat-marketdata` owner — OHLCV ingestion integrity; `xstockstrat-indicators` owner — Formula sandboxing, numeric precision; `xstockstrat-ingest` owner — Signal normalization correctness; `xstockstrat-analysis` owner — Backtest reproducibility; `xstockstrat-ledger` owner — Append-only invariant; `xstockstrat-identity` owner — JWT expiry and rotation; `xstockstrat-notify` owner — Stream delivery guarantees; `xstockstrat-config` owner — WatchConfig stream stability
+
+**Codebase Evidence**:
+- CI coverage thresholds confirmed via `CLAUDE.md` §CI Jobs: `go test -race` ≥40% for Go services; `pytest --cov` ≥40% for Python services (indicators: ≥50%); `pnpm run test:coverage` ≥40% for Node.js services
+- `test:coverage` script confirmed present in Node.js service package.json files (ledger, identity, notify, config) via existing CI job matrix
+- pytest runner confirmed for Python services via pyproject.toml in each service directory
+
+**Instructions**:
+Run the existing test suites for all 10 Wave 4 backend services to confirm that the propagation changes introduced in Steps 13–15 do not regress coverage thresholds or break existing tests.
+
+No new test code is required — the propagation middleware (`propagation.go` from Step 13, metadata extraction from Step 14, `propagation.ts` from Step 15) is thin glue code exercised by the existing handler-level test suites. If any service's suite fails, diagnose whether the failure pre-dates Steps 13–15 before attributing it to this feature.
+
+**Verification**:
+```bash
+# Go services — ≥40% coverage each
+cd services/xstockstrat-trading    && GOWORK=off go test -race ./... 2>&1 | tail -5
+cd services/xstockstrat-portfolio  && GOWORK=off go test -race ./... 2>&1 | tail -5
+cd services/xstockstrat-marketdata && GOWORK=off go test -race ./... 2>&1 | tail -5
+# Python services — indicators: ≥50%, others: ≥40%
+cd services/xstockstrat-indicators && python -m pytest --cov=app --cov-fail-under=50 2>&1 | tail -5
+cd services/xstockstrat-ingest     && python -m pytest --cov=app --cov-fail-under=40 2>&1 | tail -5
+cd services/xstockstrat-analysis   && python -m pytest --cov=app --cov-fail-under=40 2>&1 | tail -5
+# Node.js services — ≥40% coverage each
+cd services/xstockstrat-ledger   && pnpm run test:coverage 2>&1 | tail -5
+cd services/xstockstrat-identity && pnpm run test:coverage 2>&1 | tail -5
+cd services/xstockstrat-notify   && pnpm run test:coverage 2>&1 | tail -5
+cd services/xstockstrat-config   && pnpm run test:coverage 2>&1 | tail -5
+```
+All commands must exit 0 and show passing tests. Coverage must meet or exceed the stated thresholds.
 
 ---
 
