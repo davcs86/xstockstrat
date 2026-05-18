@@ -6,6 +6,14 @@
 
 ---
 
+## Session 2026-05-18T10:00:00Z — sdd-execute step 10
+
+**Step 10 — docs: replace docs/setup/n8n.md with deprecation stub** [done]
+
+- Replaced entire n8n.md (439 lines) with 24-line deprecation stub explaining n8n is no longer used and linking to 009-agent-mcp-server as replacement. Listed 6 surviving webhook endpoints with new paths (emit-alert, list-alerts, run-backtest, trigger-backfill, backfill-status, ingest-signal). Updated docs/setup/CLAUDE.md table entry and scenario list to mark n8n.md as deprecated.
+- Files modified: `docs/setup/n8n.md`, `docs/setup/CLAUDE.md`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`, `docs/roadmap/features/011-remove-n8n-references/context.md`
+- Deviations: none
+
 ## Session 2026-05-18T09:00:00Z — sdd-execute step 9
 
 **Step 9 — service: delete packages/n8n directory** [done]

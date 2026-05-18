@@ -405,7 +405,7 @@ grep -rn "packages/n8n" . --include="*.ts" --include="*.go" --include="*.py" && 
 
 ### Step 10 — docs: replace docs/setup/n8n.md with deprecation stub
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/setup/n8n.md` — replace entire file
