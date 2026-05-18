@@ -9,7 +9,7 @@ Historical market data (OHLCV bars) is stored in `xstockstrat-marketdata`'s Time
 ## Architecture
 
 ```
-Operator / n8n
+Operator / agent
     │
     ▼
 xstockstrat-ingest  (TriggerBackfill RPC)
@@ -67,16 +67,18 @@ resp = stub.TriggerBackfill(ingest_pb2.TriggerBackfillRequest(
 print(f"Job ID: {resp.job_id}, Status: {ingest_pb2.BackfillStatus.Name(resp.status)}")
 ```
 
-### Via n8n Webhook
-```json
-POST /webhooks/n8n/trigger-backfill
+### Via Webhook
+```bash
+curl -X POST http://xstockstrat-ingest:8055/webhooks/trigger-backfill \
+  -H 'Content-Type: application/json' \
+  -d '{
 {
-  "symbols": ["AAPL", "MSFT", "NVDA", "TSLA"],
-  "timeframe": "1d",
-  "start": "2020-01-01T00:00:00Z",
-  "end": "2024-12-31T00:00:00Z",
-  "overwrite": false
-}
+    "symbols": ["AAPL", "MSFT", "NVDA", "TSLA"],
+    "timeframe": "1d",
+    "start": "2020-01-01T00:00:00Z",
+    "end": "2024-12-31T00:00:00Z",
+    "overwrite": false
+  }'
 ```
 
 ---
@@ -164,7 +166,7 @@ For large datasets, split by:
 ```bash
 # Example: 4-year backfill split by year
 for year in 2020 2021 2022 2023; do
-  curl -X POST http://xstockstrat-ingest:8055/webhooks/n8n/trigger-backfill \
+  curl -X POST http://xstockstrat-ingest:8055/webhooks/trigger-backfill \
     -H 'Content-Type: application/json' \
     -d "{
       \"symbols\": [\"AAPL\",\"MSFT\",\"NVDA\",\"TSLA\",\"GOOGL\"],

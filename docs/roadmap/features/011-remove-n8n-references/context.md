@@ -6,6 +6,14 @@
 
 ---
 
+## Session 2026-05-18T11:00:00Z — sdd-execute step 11
+
+**Step 11 — docs: update docs/runbooks references** [done]
+
+- Updated 5 runbooks (config-rollout, historical-backfill, approval-flow, indicator-builder, add-data-source) replacing old `/webhooks/n8n/*` paths with new paths or Connect-RPC equivalents, and updating n8n references to agent/webhook/caller terminology. config-rollout and indicator-builder now show Connect-RPC calls (endpoints were deleted); historical-backfill, approval-flow, and add-data-source show new `/webhooks/*` paths (endpoints survive with path rename).
+- Files modified: `docs/runbooks/config-rollout.md`, `docs/runbooks/historical-backfill.md`, `docs/runbooks/approval-flow.md`, `docs/runbooks/indicator-builder.md`, `docs/runbooks/add-data-source.md`, `docs/roadmap/features/011-remove-n8n-references/implementation-spec.md`, `docs/roadmap/features/011-remove-n8n-references/context.md`
+- Deviations: None; all references found and updated per spec
+
 ## Session 2026-05-18T10:00:00Z — sdd-execute step 10
 
 **Step 10 — docs: replace docs/setup/n8n.md with deprecation stub** [done]
