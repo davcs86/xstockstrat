@@ -24,6 +24,7 @@ import (
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
 	"github.com/xstockstrat/trading/internal/broker"
 	"github.com/xstockstrat/trading/internal/config"
+	"github.com/xstockstrat/trading/internal/middleware"
 	"github.com/xstockstrat/trading/internal/repository"
 )
 
@@ -85,15 +86,15 @@ func NewTradingService(
 	repo *repository.TradingRepo,
 	encKey string,
 ) (*TradingService, error) {
-	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive)
+	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial ledger: %w", err)
 	}
-	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive)
+	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
-	portfolioConn, err := grpc.NewClient(cfg.PortfolioEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive)
+	portfolioConn, err := grpc.NewClient(cfg.PortfolioEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial portfolio: %w", err)
 	}

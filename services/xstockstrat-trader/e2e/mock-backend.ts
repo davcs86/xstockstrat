@@ -10,11 +10,14 @@
  * and NOTIFY_HTTP_ENDPOINT in playwright.config.ts webServer.env.
  */
 import * as http from 'http';
+import { SignJWT } from 'jose';
 
 export const MOCK_PORT = 9091;
 
+const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
+
 // Canned responses keyed by Connect-RPC path: /<package>.<Service>/<Method>
-const RESPONSES: Record<string, object> = {
+let RESPONSES: Record<string, object> = {
   '/xstockstrat.trading.v1.TradingService/PlaceOrder': {
     order_id: 'mock-order-001',
     status: 'ORDER_STATUS_FILLED',
@@ -123,7 +126,26 @@ const RESPONSES: Record<string, object> = {
 
 let server: http.Server | null = null;
 
-export function startMockBackend(): Promise<void> {
+export async function startMockBackend(): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  const secret = new TextEncoder().encode(TEST_JWT_SECRET);
+  const testAccessToken = await new SignJWT({
+    user_id: 'test-user-001',
+    email: 'test@example.com',
+    roles: [],
+    issued_at: now,
+    expires_at: now + 3600,
+  }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('1h').sign(secret);
+
+  const identityPayload = {
+    access_token: testAccessToken,
+    refresh_token: 'test-refresh-token',
+    claims: { user_id: 'test-user-001', email: 'test@example.com', roles: [] },
+  };
+  RESPONSES['/xstockstrat.identity.v1.IdentityService/AuthenticateUser'] = identityPayload;
+  RESPONSES['/xstockstrat.identity.v1.IdentityService/RefreshToken'] = identityPayload;
+  RESPONSES['/xstockstrat.identity.v1.IdentityService/RevokeToken'] = { success: true };
+
   return new Promise((resolve, reject) => {
     server = http.createServer((req, res) => {
       const path = req.url ?? '/';

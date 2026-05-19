@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/lib/auth';
 
 const TRADING_BASE_URL =
   process.env.TRADING_HTTP_ENDPOINT ?? 'http://xstockstrat-trading:8051';
@@ -11,23 +12,30 @@ function toTradingModeEnum(mode?: string | null): number {
   return 0;
 }
 
-async function rpc(method: string, body: object): Promise<Response> {
+async function rpc(method: string, body: object, propagationHeaders: Record<string, string>): Promise<Response> {
   return fetch(`${TRADING_BASE_URL}/${method}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/connect+json' },
+    headers: { 'Content-Type': 'application/connect+json', ...propagationHeaders },
     body: JSON.stringify(body),
   });
 }
 
 export async function POST(req: NextRequest) {
+  const claims = await getSessionFromRequest(req);
+  if (!claims) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const accessScope = String(rolesToAccessScope(claims.roles));
+  const traceId = req.headers.get('x-trace-id') ?? generateTraceId();
+  const propagationHeaders = {
+    'x-user-id': claims.user_id,
+    'x-access-scope': accessScope,
+    'x-trace-id': traceId,
+  };
   try {
     const body = await req.json();
     if (!body.symbol) {
       return NextResponse.json({ error: 'symbol is required' }, { status: 400 });
-    }
-    // TODO(wire-fe-auth): extract userId from verified JWT claims in session cookie
-    if (!body.user_id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const res = await rpc('xstockstrat.trading.v1.TradingService/PlaceOrder', {
       symbol: body.symbol,
@@ -38,9 +46,9 @@ export async function POST(req: NextRequest) {
       stopPrice: body.stop_price ?? 0,
       timeInForce: body.time_in_force ?? 'day',
       strategyId: body.strategy_id ?? '',
-      userId: body.user_id,
+      userId: claims.user_id,
       tradingMode: toTradingModeEnum(body.trading_mode),
-    });
+    }, propagationHeaders);
     const order = await res.json();
     return NextResponse.json({
       order_id: order.order_id ?? order.orderId,
@@ -53,21 +61,27 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  // TODO(wire-fe-auth): extract userId from verified JWT claims in session cookie
-  const userId = searchParams.get('user_id');
-  if (!userId) {
+  const claims = await getSessionFromRequest(req);
+  if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const accessScope = String(rolesToAccessScope(claims.roles));
+  const traceId = req.headers.get('x-trace-id') ?? generateTraceId();
+  const propagationHeaders = {
+    'x-user-id': claims.user_id,
+    'x-access-scope': accessScope,
+    'x-trace-id': traceId,
+  };
+  const { searchParams } = new URL(req.url);
   const tradingMode = toTradingModeEnum(searchParams.get('trading_mode'));
   const accountId = searchParams.get('account_id') ?? '';
   try {
     const res = await rpc('xstockstrat.trading.v1.TradingService/ListOrders', {
-      userId,
+      userId: claims.user_id,
       page: { pageSize: 50 },
       ...(tradingMode !== 0 && { tradingMode }),
       ...(accountId && { accountId }),
-    });
+    }, propagationHeaders);
     const result = await res.json();
     return NextResponse.json(result);
   } catch (err: any) {

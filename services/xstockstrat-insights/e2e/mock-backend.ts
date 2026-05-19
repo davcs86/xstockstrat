@@ -9,10 +9,13 @@
  * keeping test behaviour predictable.
  */
 import * as http from 'http';
+import { SignJWT } from 'jose';
 
 export const MOCK_PORT = 9092;
 
-const RESPONSES: Record<string, object> = {
+const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
+
+let RESPONSES: Record<string, object> = {
   '/xstockstrat.analysis.v1.AnalysisService/ListStrategies': {
     strategies: [
       {
@@ -78,7 +81,26 @@ const RESPONSES: Record<string, object> = {
 
 let server: http.Server | null = null;
 
-export function startMockBackend(): Promise<void> {
+export async function startMockBackend(): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  const secret = new TextEncoder().encode(TEST_JWT_SECRET);
+  const testAccessToken = await new SignJWT({
+    user_id: 'test-user-001',
+    email: 'test@example.com',
+    roles: [],
+    issued_at: now,
+    expires_at: now + 3600,
+  }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('1h').sign(secret);
+
+  const identityPayload = {
+    access_token: testAccessToken,
+    refresh_token: 'test-refresh-token',
+    claims: { user_id: 'test-user-001', email: 'test@example.com', roles: [] },
+  };
+  RESPONSES['/xstockstrat.identity.v1.IdentityService/AuthenticateUser'] = identityPayload;
+  RESPONSES['/xstockstrat.identity.v1.IdentityService/RefreshToken'] = identityPayload;
+  RESPONSES['/xstockstrat.identity.v1.IdentityService/RevokeToken'] = { success: true };
+
   return new Promise((resolve, reject) => {
     server = http.createServer((req, res) => {
       const path = req.url ?? '/';

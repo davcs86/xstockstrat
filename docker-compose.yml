@@ -402,6 +402,7 @@ services:
       PORTFOLIO_HTTP_ENDPOINT: http://xstockstrat-portfolio:8052
       NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
       IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       OTEL_SERVICE_NAME: xstockstrat-trader
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
@@ -430,6 +431,7 @@ services:
       TRADING_HTTP_ENDPOINT: http://xstockstrat-trading:8051
       NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
       IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       OTEL_SERVICE_NAME: xstockstrat-insights
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
@@ -451,6 +453,8 @@ services:
       <<: [*common-env, *db-url]
       # Connect-RPC HTTP endpoint for xstockstrat-config
       CONFIG_HTTP_ENDPOINT: http://xstockstrat-config:8060
+      IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       OTEL_SERVICE_NAME: xstockstrat-config-ui
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
@@ -461,6 +465,8 @@ services:
       db-migrator:
         condition: service_completed_successfully
       xstockstrat-config:
+        condition: service_started
+      xstockstrat-identity:
         condition: service_started
 
   # ── Reverse Proxy ───────────────────────────────────────────────────────
