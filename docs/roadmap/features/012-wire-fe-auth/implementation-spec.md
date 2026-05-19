@@ -139,7 +139,7 @@ No lint errors.
 
 ### Step 4 — service: Add `/login` page and `/api/auth/*` routes to xstockstrat-trader
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/app/login/page.tsx` — create

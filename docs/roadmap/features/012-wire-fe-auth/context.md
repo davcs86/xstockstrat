@@ -78,3 +78,14 @@
 **Progress**: 3 done / 16 total
 **Stopped at**: Step 3 (step complete — PR created)
 **Next**: /sdd-execute wire-fe-auth next
+
+### Step 4 — Add `/login` page and `/api/auth/*` routes to xstockstrat-trader [done]
+- Created `src/app/api/auth/login/route.ts`, `refresh/route.ts`, `logout/route.ts`, and `src/app/login/page.tsx`. Login page wraps `useSearchParams()` in a `<Suspense>` boundary per Next.js 14 App Router requirement. All routes import from `@/lib/auth`. Lint passed with no new errors.
+- Files modified: `services/xstockstrat-trader/src/app/api/auth/login/route.ts`, `services/xstockstrat-trader/src/app/api/auth/refresh/route.ts`, `services/xstockstrat-trader/src/app/api/auth/logout/route.ts`, `services/xstockstrat-trader/src/app/login/page.tsx`
+- Deviations: none
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 4)
+**Steps this session**: [4]
+**Progress**: 4 done / 16 total
+**Stopped at**: Step 4 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
