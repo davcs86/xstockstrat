@@ -57,6 +57,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             list(request.symbols),
         )
 
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+
         # Emit start event
         from google.protobuf.struct_pb2 import Struct
 
@@ -68,7 +74,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 source_service="xstockstrat-analysis",
                 stream_key=f"backtest:{backtest_id}",
                 payload=payload,
-            )
+            ),
+            metadata=propagation_meta,
         )
 
         # Extract strategy params from the Struct
@@ -109,6 +116,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     initial_equity=equity,
                     commission=commission,
                     slippage=slippage,
+                    propagation_meta=propagation_meta,
                 )
                 all_trades.extend(trades)
                 daily_equity.extend(daily_eq)
@@ -159,7 +167,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 source_service="xstockstrat-analysis",
                 stream_key=f"backtest:{backtest_id}",
                 payload=payload2,
-            )
+            ),
+            metadata=propagation_meta,
         )
 
         return result
@@ -177,6 +186,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         initial_equity,
         commission,
         slippage,
+        propagation_meta=(),
     ):
         """Run SMA crossover backtest for a single symbol.
 
@@ -189,7 +199,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 symbol=symbol,
                 timeframe="1Day",
                 range=range_msg,
-            )
+            ),
+            metadata=propagation_meta,
         )
         bars = list(bars_resp.bars)
         if len(bars) < slow_period + 2:
@@ -208,7 +219,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 params={"period": float(fast_period)},
                 symbol=symbol,
                 timeframe="1Day",
-            )
+            ),
+            metadata=propagation_meta,
         )
         slow_resp = await self._indicators.ComputeIndicator(
             indicators_pb2.ComputeIndicatorRequest(
@@ -217,7 +229,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 params={"period": float(slow_period)},
                 symbol=symbol,
                 timeframe="1Day",
-            )
+            ),
+            metadata=propagation_meta,
         )
 
         # Build aligned SMA arrays (points only available after warm-up period)
@@ -232,7 +245,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     ingest_pb2.QuerySignalsRequest(
                         symbol=symbol,
                         active_window=range_msg,
-                    )
+                    ),
+                    metadata=propagation_meta,
                 )
                 for sig in sig_resp.signals:
                     if sig.source in signal_sources:
@@ -365,6 +379,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return trades, equity, daily_equity
 
     async def ScoreStrategy(self, request, context):
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
         sharpe_weight = self._cfg.get_float("analysis.scoring.sharpe_weight", 0.4)
         drawdown_weight = self._cfg.get_float("analysis.scoring.drawdown_weight", 0.3)
         winrate_weight = self._cfg.get_float("analysis.scoring.win_rate_weight", 0.3)
@@ -426,7 +445,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     source_service="xstockstrat-analysis",
                     stream_key=f"strategy:{request.strategy_id}",
                     payload=payload,
-                )
+                ),
+                metadata=propagation_meta,
             )
         except Exception as e:
             log.warning("failed to emit ledger event for score: %s", e)

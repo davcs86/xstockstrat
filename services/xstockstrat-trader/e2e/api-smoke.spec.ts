@@ -1,17 +1,39 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+import { SignJWT } from 'jose';
 
 /**
  * API smoke tests for xstockstrat-trader Next.js route handlers.
  *
  * These tests make HTTP requests directly to the Next.js API routes via
- * Playwright's APIRequestContext.  The route handlers call the real Connect-RPC
- * client code which points at the mock backend started in globalSetup — so the
- * full server-side path is exercised.
+ * Playwright's page.request (BrowserContext request context).  The route
+ * handlers call the real Connect-RPC client code which points at the mock
+ * backend started in globalSetup — so the full server-side path is exercised.
  *
- * Each assertion mirrors the exact field access in the UI components so that
- * a mismatch between the route's response shape and the component's expectations
- * is immediately visible as a test failure.
+ * Auth cookies are injected via addAuthCookie() so each test exercises the
+ * authenticated code path.  The auth.spec.ts file covers the unauthenticated
+ * (redirect/401) and login/logout flows separately.
  */
+
+const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
+const BASE_URL = 'http://localhost:3000';
+
+async function addAuthCookie(page: Page): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  const token = await new SignJWT({
+    user_id: 'test-user-001',
+    email: 'test@example.com',
+    roles: [],
+    issued_at: now,
+    expires_at: now + 3600,
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime('1h')
+    .sign(new TextEncoder().encode(TEST_JWT_SECRET));
+
+  await page.context().addCookies([
+    { name: 'access_token', value: token, url: BASE_URL, httpOnly: true, sameSite: 'Lax' },
+  ]);
+}
 
 test.describe('GET /api/orders — OrderBook data contract', () => {
   /**
@@ -25,8 +47,9 @@ test.describe('GET /api/orders — OrderBook data contract', () => {
    *   order.filled_avg_price → formatted as $N.NN or '—'
    *   order.status     → mapped to Badge variant via statusVariant lookup
    */
-  test('returns orders array with all UI-required fields', async ({ request }) => {
-    const res = await request.get('/api/orders?trading_mode=paper');
+  test('returns orders array with all UI-required fields', async ({ page }) => {
+    await addAuthCookie(page);
+    const res = await page.request.get('/api/orders?trading_mode=paper');
     expect(res.status()).toBe(200);
 
     const body = await res.json();
@@ -62,8 +85,9 @@ test.describe('POST /api/orders — OrderForm success path', () => {
    *
    * Both order_id and status must be present in the response.
    */
-  test('returns order_id and status used in the success message', async ({ request }) => {
-    const res = await request.post('/api/orders', {
+  test('returns order_id and status used in the success message', async ({ page }) => {
+    await addAuthCookie(page);
+    const res = await page.request.post('/api/orders', {
       data: {
         symbol: 'AAPL',
         side: 'buy',
@@ -87,9 +111,10 @@ test.describe('POST /api/orders — OrderForm success path', () => {
     expect(body).toHaveProperty('trading_mode');
   });
 
-  test('returns error field when order placement fails', async ({ request }) => {
+  test('returns error field when order placement fails', async ({ page }) => {
+    await addAuthCookie(page);
     // Send an invalid payload (missing required fields) to trigger a 500
-    const res = await request.post('/api/orders', {
+    const res = await page.request.post('/api/orders', {
       data: { symbol: '', qty: -1 },
     });
     // Route handler catches errors and returns JSON { error: ... } with status 500
@@ -113,8 +138,9 @@ test.describe('GET /api/portfolio — PortfolioSummary data contract', () => {
    *     pos.symbol          → displayed
    *     pos.unrealized_pnl  → compared >= 0 for colour, formatted ±$N.NN
    */
-  test('returns all numeric fields required by PortfolioSummary', async ({ request }) => {
-    const res = await request.get('/api/portfolio?trading_mode=paper');
+  test('returns all numeric fields required by PortfolioSummary', async ({ page }) => {
+    await addAuthCookie(page);
+    const res = await page.request.get('/api/portfolio?trading_mode=paper');
     expect(res.status()).toBe(200);
 
     const body = await res.json();
@@ -140,8 +166,9 @@ test.describe('GET /api/portfolio — PortfolioSummary data contract', () => {
     expect(Math.abs(Number(body.day_pnl_pct))).toBeLessThan(100);
   });
 
-  test('positions array contains symbol and unrealized_pnl', async ({ request }) => {
-    const res = await request.get('/api/portfolio?trading_mode=paper');
+  test('positions array contains symbol and unrealized_pnl', async ({ page }) => {
+    await addAuthCookie(page);
+    const res = await page.request.get('/api/portfolio?trading_mode=paper');
     const body = await res.json();
 
     expect(Array.isArray(body.positions)).toBe(true);

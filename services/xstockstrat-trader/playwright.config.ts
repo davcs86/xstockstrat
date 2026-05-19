@@ -47,6 +47,8 @@ export default defineConfig({
       TRADING_HTTP_ENDPOINT: 'http://127.0.0.1:9091',
       PORTFOLIO_HTTP_ENDPOINT: 'http://127.0.0.1:9091',
       NOTIFY_HTTP_ENDPOINT: 'http://127.0.0.1:9091',
+      IDENTITY_HTTP_ENDPOINT: 'http://127.0.0.1:9091',
+      JWT_SECRET: 'test-jwt-secret-for-e2e-tests-min32c',
     },
   },
 });

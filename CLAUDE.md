@@ -12,6 +12,32 @@ All service repos are siblings under `services/`. They consume generated code fr
 
 ---
 
+## Context Guide
+
+This file covers always-needed platform conventions. For larger reference sections, read only what is relevant to your current task — don't load the rest.
+
+| Task | Read |
+|---|---|
+| Building or modifying a Next.js frontend | `docs/patterns/frontend-auth.md` |
+| Adding nginx routing for a new frontend | `docs/patterns/nginx-routing.md` |
+| Adding a new backend service (any language) | `docs/patterns/header-propagation.md` |
+| Syncing git subtrees to/from service repos | `docs/patterns/git-subtree.md` |
+| Config key naming, scoping, startup wiring | `docs/patterns/config-governance.md` |
+| DB schema map, migration tooling, run order | `docs/patterns/database.md` |
+| OTel setup, env vars, per-language modules | `docs/patterns/observability.md` |
+| CI job matrix, coverage thresholds, deploys | `docs/patterns/ci-overview.md` |
+| Proto / buf changes | `docs/runbooks/proto-versioning.md` |
+| Adding a data source (Polygon, Tiingo, etc.) | `docs/runbooks/add-data-source.md` |
+| Building a custom indicator formula | `docs/runbooks/indicator-builder.md` |
+| Bug triage / hotfix | `docs/runbooks/bug-triage.md` |
+| Config rollout | `docs/runbooks/config-rollout.md` |
+| Backfilling historical data | `docs/runbooks/historical-backfill.md` |
+| First-time DigitalOcean setup | `docs/setup/digitalocean.md` |
+| OTel / Grafana Cloud wiring | `docs/setup/grafana-cloud.md` |
+| Feature workflow (branch, PR, promote) | `docs/runbooks/feature-workflow.md` |
+
+---
+
 ## Service Registry
 
 | Service | Language | Role | gRPC Port | HTTP (Connect-RPC) Port |
@@ -84,99 +110,33 @@ To change a language or tool version:
 
 ---
 
-## Spine Pattern
-
-The **Spine** is this orchestration repo. It does not contain runtime service code. It owns:
-1. **Proto contracts** (`packages/proto/`) — all `.proto` files; all generated stubs live here after `buf generate`
-2. **Docs** (`docs/`) — runbooks, setup guides, and implementation roadmap (`docs/runbooks/`, `docs/setup/`, `docs/roadmap/`)
-3. **Scripts** (`scripts/`) — `buf-gen.sh`, `bootstrap.sh`, `db-migrate.sh`
-4. **Config schema** — canonical list of config keys consumed by each service
-
-Services reference this repo as a git submodule or via the generated package registry (npm, PyPI, Go module proxy) depending on language.
-
----
-
 ## Proto Contract Governance
 
-- All `.proto` changes require a PR to **this repo** first.
-- Breaking changes (field removal, type change, service rename) require:
-  1. Deprecation comment in `.proto` for one release cycle
-  2. Migration note in `docs/runbooks/config-rollout.md`
-  3. Approval from 2 service owners (see Approval Flow below)
-- `buf lint` and `buf breaking` run on every PR via CI.
-- Generated stubs are committed to `packages/proto/gen/` and versioned.
-- CI enforces freshness: `proto-freshness` job regenerates stubs and fails if the committed stubs differ — run `./scripts/buf-gen.sh` before committing proto changes.
-- Proto definitions are published to the **Buf Schema Registry (BSR)** on push to `main` (production) and as a draft on push to `main-dev` (requires `BUF_TOKEN` secret).
-- For v1/v2 breaking-change workflow, see `docs/runbooks/proto-versioning.md`.
+All `.proto` changes require a PR to this repo first. `buf lint` + `buf breaking` run on every CI PR. Run `./scripts/buf-gen.sh` before committing (CI `proto-freshness` job enforces this).
+
+For breaking-change workflow, BSR publishing, and approval requirements → `docs/runbooks/proto-versioning.md`.
 
 ---
 
 ## Approval Flow
 
-See `docs/runbooks/approval-flow.md` for full detail. Summary:
-
-| Change Type | Required Approvers |
-|---|---|
-| New proto field (non-breaking) | 1 service owner |
-| Breaking proto change | 2 service owners + platform lead |
-| New config key | Service owner + config team |
-| Config key removal | Config team + all consuming services |
-| New service addition | Platform lead |
-| Database schema migration | DBA review + service owner |
+See `docs/runbooks/approval-flow.md`. Breaking proto: 2 owners + platform lead. New config key: owner + config team. New service: platform lead. DB migration: DBA + service owner.
 
 ---
 
 ## Config Governance Rules
 
-All runtime configuration is served by **xstockstrat-config** via `WatchConfig` streaming RPC (gRPC on port 50060 / Connect-RPC on port 8060). Rules:
+Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060 / HTTP 8060). Key rules: no hardcoded values in source; naming is `<service>.<category>.<key>`; all services subscribe at startup; sensitive keys use `secret.*` prefix; defaults declared in each service's `CLAUDE.md`.
 
-1. **No hardcoded config values** in service source code. All env-specific values must be registered in the config service.
-2. **Config key naming convention**: `<service-short-name>.<category>.<key>` — e.g., `indicators.sandbox.timeout_ms`
-3. **All services subscribe to xstockstrat-config at startup** before accepting traffic. They must pass `environment` and `trading_mode` in the WatchConfig request.
-4. **Config values are scoped** by `environment` (`dev`/`production`) and `trading_mode` (`paper`/`live`/`all`). Rows with `trading_mode='all'` apply to all modes.
-5. **Config changes flow via agent or webhook caller** → config webhook handler → config service → WatchConfig stream → all subscribers.
-6. **Sensitive keys** (API keys, secrets) use the `secret.*` prefix and are resolved from the secret store at runtime; they are never stored in config service state.
-7. **Default values** must be declared in each service's `CLAUDE.md` under "Config Keys".
-8. **Config UI** available at `http://localhost:3002` — manage config values by environment and trading mode.
-
-### Global Config Keys
-
-| Key | Type | Default | Description |
-|---|---|---|---|
-| `platform.maintenance_mode` | bool | false | Halts all trading operations |
-| `platform.log_level` | string | info | Global log level override |
-| `platform.ledger_endpoint` | string | — | xstockstrat-ledger gRPC address |
-| `platform.config_endpoint` | string | — | xstockstrat-config gRPC address |
-| `platform.otel.enabled` | bool | false | Master OTel export switch |
-| `platform.otel.endpoint` | string | — | OTLP endpoint (set via secret) |
-| `platform.otel.sample_rate` | float | 1.0 | Trace sample rate (0.0–1.0) |
+**Full rules, global key table, and registration steps** → `docs/patterns/config-governance.md`.
 
 ---
 
 ## Database
 
-**Primary DB**: TimescaleDB (PostgreSQL extension)
+TimescaleDB (PostgreSQL). Each service owns its schema; migrations run via `scripts/db-migrate.sh` (golang-migrate). Convention: `NNN_description.up.sql` + `.down.sql` in `services/<service>/migrations/`. Never edit an applied migration — add a new numbered one instead.
 
-| Service | Schema | Hypertable | Partition By |
-|---|---|---|---|
-| xstockstrat-marketdata | marketdata | ohlcv | time (1 day chunks) |
-| xstockstrat-marketdata | marketdata | quotes | time (1 hour chunks) |
-| xstockstrat-ledger | ledger | events | time (1 day chunks) |
-| xstockstrat-trading | trading | orders | time (1 day chunks) |
-| xstockstrat-portfolio | portfolio | snapshots | time (1 day chunks) |
-| xstockstrat-ingest | ingest | newsletter_signals | ingested_at (7 day chunks) |
-
-All services run migrations against their own schema, orchestrated centrally by `scripts/db-migrate.sh` using **golang-migrate**. State is tracked in a `schema_migrations` table inside each service's schema so re-runs only apply new files.
-
-**Migration run order** (dependency-respecting): `config → ledger → identity → marketdata → trading → portfolio → notify → ingest`
-
-**Migration file convention**: `NNN_description.up.sql` + `NNN_description.down.sql` in `services/<service>/migrations/`. NNN is a zero-padded sequence number continuing from the last file in that service's directory.
-
-**To add a new migration:**
-1. Create `services/<service>/migrations/NNN_description.up.sql` with the schema change
-2. Create a matching `NNN_description.down.sql` (rollback SQL, or a stub comment if rollback is not supported)
-3. Test locally: `./scripts/db-migrate.sh`
-4. On DigitalOcean, the `db-migrator` PRE_DEPLOY job runs automatically on every deploy — no manual step needed
+**Schema map, migration run order, and step-by-step guide** → `docs/patterns/database.md`.
 
 ---
 
@@ -195,175 +155,45 @@ Connect-RPC is directly callable from the agent or any HTTP client via POST to t
 
 ## Observability
 
-**Stack**: OpenTelemetry SDK (per-language) → OTLP push → Grafana Cloud (Loki + Mimir + Tempo)
+OTel SDK → OTLP → Grafana Cloud. Toggle: `OTEL_ENABLED=true`. OTel init errors must never prevent startup. Each service has `internal/telemetry/` (Go), `app/telemetry.py` (Python), or `src/telemetry.ts` (Node.js).
 
-- **Local dev**: Services push OTLP to `otel-collector:4317` (Docker Compose). Config: `packages/otel/otel-collector-config.yaml`.
-- **Production**: Services push OTLP directly to Grafana Cloud OTLP gateway (no collector needed on DO App Platform).
-- **Toggle**: Set `OTEL_ENABLED=true` env var on each service. Config key `platform.otel.enabled` provides a live switch without restart.
-- **Non-fatal**: OTel init errors never prevent service startup.
-
-Key env vars (read by OTel SDK automatically):
-
-| Variable | Local Dev | Production |
-|---|---|---|
-| `OTEL_ENABLED` | `true` | `true` |
-| `OTEL_SERVICE_NAME` | `xstockstrat-<name>` | `xstockstrat-<name>` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4317` | Grafana Cloud OTLP URL |
-| `OTEL_EXPORTER_OTLP_HEADERS` | — | `Authorization=Basic <token>` |
-| `OTEL_RESOURCE_ATTRIBUTES` | `environment=dev,trading_mode=paper` | `environment=production,...` |
-
-Each service has an `internal/telemetry/` (Go), `app/telemetry.py` (Python), or `src/telemetry.ts` (Node.js) module. See Phase 7 in `docs/roadmap/implementation-roadmap.md` for per-language implementation patterns.
+**Env var table, local vs. prod endpoints, and per-language patterns** → `docs/patterns/observability.md`.
 
 ---
 
 ## Nginx Reverse Proxy
 
-The **xstockstrat-nginx** service (port 80) proxies all frontend requests to the three Next.js UIs.
+`xstockstrat-nginx` (port 80) proxies all frontend requests to the three Next.js UIs via upstream blocks in `nginx.conf`. Routes: `/trader/*` → port 3000, `/insights/*` → 3001, `/config-ui/*` → 3002. Health: `GET /health`.
 
-- **Local dev** (`docker-compose.yml`): nginx resolves upstream services via Docker DNS container names (e.g., `xstockstrat-trader:3000`)
-- **DigitalOcean**: nginx receives private service URLs via environment variables (`XSTOCKSTRAT_TRADER_PRIVATE_URL`, etc.) and templates them into `nginx.conf` at startup using `docker-entrypoint.sh` + `envsubst`. The script extracts the hostname from the DO private URL (strips protocol prefix) and injects it into the upstream directives.
+**Adding a new frontend or changing nginx routing** → read `docs/patterns/nginx-routing.md` for the full 8-step procedure (nginx.conf, docker-entrypoint.sh, DO specs, docker-compose, next.config.js, auth wiring).
 
-### Files
+---
 
-- `nginx.conf` (repo root): Main nginx configuration with upstream blocks and location rules
-  - Upstream template placeholders: `${TRADER_UPSTREAM}`, `${INSIGHTS_UPSTREAM}`, `${CONFIG_UI_UPSTREAM}`
-  - Routes: `/trader/*` → trader backend (port 3000), `/insights/*` → insights backend (port 3001), `/config-ui/*` → config-ui backend (port 3002)
-  - Health endpoint: `GET /health` → `{"status":"ok","service":"nginx-reverse-proxy"}`
-- `services/xstockstrat-nginx/Dockerfile`: Copies `nginx.conf` (as template) and `docker-entrypoint.sh` into the container; installs `gettext` for `envsubst`
-- `services/xstockstrat-nginx/docker-entrypoint.sh`: Startup script that strips the protocol prefix from DO private URLs, runs `envsubst` (scoped to the three upstream vars) to render `nginx.conf`, verifies syntax, then starts nginx
+## Frontend Authentication Pattern
 
-### Environment Variables (DO App Platform)
+Every new Next.js frontend **must** implement JWT auth via `lib/auth.ts` (Edge Runtime, `jose`), `middleware.ts` (route protection + trace ID injection), `/api/auth/{login,refresh,logout}` routes, and forward `x-user-id` / `x-access-scope` / `x-trace-id` on all outbound fetches. Required env vars: `JWT_SECRET`, `IDENTITY_HTTP_ENDPOINT`.
 
-| Variable | Source | Purpose |
-|---|---|---|
-| `XSTOCKSTRAT_TRADER_PRIVATE_URL` | DO injected | Private URL for xstockstrat-trader service |
-| `XSTOCKSTRAT_INSIGHTS_PRIVATE_URL` | DO injected | Private URL for xstockstrat-insights service |
-| `XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL` | DO injected | Private URL for xstockstrat-config-ui service |
-
-### Adding a new frontend service
-
-When a new Next.js frontend (e.g. `xstockstrat-newui` on port `3003`) needs to be routed through nginx, touch these 6 files in order:
-
-1. **`nginx.conf`** — add an upstream block and a location block:
-   ```nginx
-   upstream newui_backend {
-       server ${NEWUI_UPSTREAM}:3003;
-   }
-   ```
-   ```nginx
-   location /newui/ {
-       proxy_pass http://newui_backend/;
-       # copy the proxy_set_header lines from an existing location block
-   }
-   ```
-
-2. **`services/xstockstrat-nginx/docker-entrypoint.sh`** — strip the protocol prefix and export the new upstream var, following the existing pattern:
-   ```sh
-   NEWUI_UPSTREAM="${XSTOCKSTRAT_NEWUI_PRIVATE_URL#http://}"
-   NEWUI_UPSTREAM="${NEWUI_UPSTREAM#https://}"
-   export NEWUI_UPSTREAM
-   ```
-   Also add `$NEWUI_UPSTREAM` to the `envsubst` variable list at the bottom of the script.
-
-3. **`.do/app.dev.yaml`** — add the new env var to the `xstockstrat-nginx` service's `envs` block:
-   ```yaml
-   - key: XSTOCKSTRAT_NEWUI_PRIVATE_URL
-     value: ${xstockstrat-newui.PRIVATE_URL}
-   ```
-   Ensure `xstockstrat-newui` itself has **no** `http_port` entry (internal-only).
-
-4. **`.do/app.yaml`** — same change as step 3, for the production spec.
-
-5. **`docker-compose.yml`** — add the env var to the `nginx` service's `environment` block (use the container name as the value, no protocol prefix):
-   ```yaml
-   - XSTOCKSTRAT_NEWUI_PRIVATE_URL=xstockstrat-newui
-   ```
-
-6. **`services/xstockstrat-newui/next.config.js`** — set `basePath` to the nginx route prefix so Next.js generates correct internal links and static asset URLs:
-   ```js
-   const nextConfig = {
-     basePath: '/newui',
-     // ... rest of config unchanged
-   };
-   ```
-   Without this, the app's page links, `_next/static` asset paths, and API routes will 404 when served through the `/newui/` nginx location.
-
-7. **`CLAUDE.md`** (this file) — add a row to the Environment Variables table above, and add `xstockstrat-newui` to the Service Registry table at the top.
+**Full pattern, required files, and code snippets** → read `docs/patterns/frontend-auth.md`. Reference implementation: `services/xstockstrat-trader/`.
 
 ---
 
 ## Generating Proto Stubs
 
-```bash
-cd packages/proto
-buf generate          # generates TypeScript, Python, Go stubs
-buf lint              # lint all protos
-buf breaking --against '.git#branch=main-dev'  # check for breaking changes against dev trunk
-```
-
-Or use the wrapper script (also runs TS compilation):
-
-```bash
-./scripts/buf-gen.sh
-```
-
-Generated output:
-- `packages/proto/gen/go/` — Go stubs (consumed by Go services as local module)
-- `packages/proto/gen/python/` — Python stubs (installed via `pip -e`)
-- `packages/proto/gen/ts/` — TypeScript stubs + compiled JS in `gen/ts/dist/`
-
-**Node/Next.js services** consume TS stubs via the `@xstockstrat/proto` workspace package. Build it before running Node lint/test:
-
-```bash
-pnpm --filter @xstockstrat/proto run build
-```
+Run `./scripts/buf-gen.sh` — generates TypeScript, Python, and Go stubs and compiles the TS package. Run after any `.proto` change. For manual `buf` commands and BSR publishing → `docs/runbooks/proto-versioning.md`.
 
 ---
 
 ## Repository Bootstrap
 
-```bash
-./scripts/localenv-setup.sh  # (first time only) build proto-gen container + generate stubs
-./scripts/bootstrap.sh       # install service deps, start TimescaleDB, run migrations
-./scripts/buf-gen.sh         # re-run any time proto files change
-./scripts/db-migrate.sh      # run pending DB migrations
-```
-
-`localenv-setup.sh` uses Docker to generate proto stubs (`packages/proto/gen/`) without
-installing Go, Python, or Node on the host. Run it once after cloning, or any time the
-generated stubs are missing (e.g. after a fresh clone or a clean). After it completes,
-`docker compose build` will succeed.
+First time: `./scripts/localenv-setup.sh` (builds proto-gen container, generates stubs via Docker — no Go/Python/Node required on host). Then: `./scripts/bootstrap.sh` (installs deps, starts TimescaleDB, runs migrations). Re-run `./scripts/buf-gen.sh` after proto changes; `./scripts/db-migrate.sh` for pending migrations.
 
 ---
 
 ## CI/CD Overview
 
-CI runs on every PR targeting `main-dev` or `main` (`.github/workflows/ci.yml`).
+CI runs on every PR to `main-dev` or `main`. Coverage thresholds: Go/Python/Node.js ≥40% (indicators ≥50%). Deploys: `main-dev` push → DO dev app; `main` push → DO prod app.
 
-### CI Jobs
-
-| Job | What it checks | Coverage threshold |
-|---|---|---|
-| `proto-lint` | `buf lint` on `packages/proto/` | — |
-| `proto-freshness` | Regenerates stubs, fails on diff with committed stubs | — |
-| `buf-push` | Publishes to BSR on push to `main` (production) | — |
-| `buf-push-dev` | Publishes to BSR as draft on push to `main-dev` | — |
-| `go-lint` (×3) | `golangci-lint` per Go service | — |
-| `go-test` (×3) | `go test -race` + coverage (excludes cmd/handler/repository/telemetry/service packages) | 40% |
-| `python-lint` (×3) | `ruff check` + `ruff format --check` | — |
-| `python-test` (×3) | `pytest --cov` | 40% (indicators: 50%) |
-| `node-lint` (×7) | `pnpm run lint` (all Node + Next.js services) | — |
-| `node-test` (×4) | `pnpm run test:coverage` (Node.js services only) | 40% |
-| `frontend-e2e` (×3) | Playwright on trader, insights, config-ui | — |
-
-### Deployment Pipelines
-
-| Branch | Trigger | Target |
-|---|---|---|
-| `main-dev` | push | DigitalOcean App Platform **dev** (`DO_DEV_APP_ID` / `.do/app.dev.yaml`) |
-| `main` | push | DigitalOcean App Platform **prod** (`DO_APP_ID` / `.do/app.yaml`) |
-
-Deployment waits up to 15 minutes for the DO App Platform phase to reach `ACTIVE`.
+**Full job matrix, coverage notes, and deployment pipeline** → `docs/patterns/ci-overview.md`.
 
 ---
 
@@ -393,40 +223,19 @@ xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted ba
 
 ---
 
+## Header Propagation Convention
+
+Every backend service **must** propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from inbound requests to all outbound gRPC/Connect-RPC calls. Nginx strips them from external requests so they are trusted as platform-internal values.
+
+**Language-specific patterns (Go interceptor, Python per-method, Node.js AsyncLocalStorage), code snippets, and reference implementations** → read `docs/patterns/header-propagation.md`.
+
+---
+
 ## Git Subtree Workflow
 
-Each `services/<name>/` directory is linked to its own remote GitHub repo via `git subtree`. The monorepo remains the canonical source; service repos are mirrors for independent CI and direct service work.
+`services/<name>/` directories are linked to individual GitHub repos via `git subtree`. Push: `./scripts/subtree-sync.sh push <service>`. Pull: `./scripts/subtree-sync.sh pull <service>`. Always pull before editing if someone may have pushed directly to a service repo.
 
-### Initial Setup (run once)
-
-Requires `gh` CLI installed and authenticated (`gh auth login`):
-
-```bash
-./scripts/subtree-setup.sh
-```
-
-This creates each service's GitHub repo, splits the `services/<name>/` history, and pushes to `main` on each remote.
-
-### Push changes (monorepo → service repo)
-
-```bash
-./scripts/subtree-sync.sh push xstockstrat-config   # single service
-./scripts/subtree-sync.sh push all                  # all services
-```
-
-### Pull changes (service repo → monorepo)
-
-```bash
-./scripts/subtree-sync.sh pull xstockstrat-config   # single service
-./scripts/subtree-sync.sh pull all                  # all services
-```
-
-### Rules
-
-- **Never edit `services/<name>/` in both the monorepo and the service repo between syncs** without pulling first — this will cause merge conflicts.
-- Always run `subtree-sync.sh pull <service>` before starting work if someone else may have pushed directly to a service repo.
-- `git subtree pull` uses `--squash` to keep monorepo history clean.
-- Service remotes are named after the service (e.g., `xstockstrat-config`). View all with `git remote -v`.
+**Full workflow, initial setup, and rules** → read `docs/patterns/git-subtree.md`.
 
 ---
 
@@ -516,6 +325,10 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sd
 | DO prod app spec | `.do/app.yaml` |
 | DO dev app spec | `.do/app.dev.yaml` |
 | Nginx config | `nginx.conf` (root), `services/xstockstrat-nginx/Dockerfile`, `services/xstockstrat-nginx/docker-entrypoint.sh` |
+| Frontend auth pattern | `docs/patterns/frontend-auth.md` — required for all Next.js services |
+| Backend propagation pattern | `docs/patterns/header-propagation.md` — required for all backend services |
+| Nginx routing pattern | `docs/patterns/nginx-routing.md` — required when adding a new frontend |
+| Git subtree workflow | `docs/patterns/git-subtree.md` |
 | Local env setup script | `scripts/localenv-setup.sh` |
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
