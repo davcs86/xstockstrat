@@ -408,7 +408,7 @@ Build must complete with no TypeScript errors related to module resolution.
 
 ### Step 10 — service: Strip `x-user-id` from inbound external requests in nginx
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-nginx`
 **Files**:
 - `nginx.conf` — modify (repo root)
@@ -819,3 +819,8 @@ All commands must exit 0 and show passing tests. Coverage must meet or exceed th
 **Spec said**: The step may modify tsconfig if the `@/` alias was missing; otherwise it is read-only. Step 8 was expected to leave tsconfig unchanged.
 **Actual**: Step 8's tsconfig change (`"@/*": ["./src/*", "./app/*"]`) caused a webpack build error — `@/app/lib/auth` double-prefixed to `./app/app/lib/auth`. Step 9 corrected tsconfig to `"@/*": ["./*"]` (root-relative wildcard), so `@/app/lib/auth` resolves correctly to `./app/lib/auth.ts`. No other `@/` imports were affected (grep confirmed zero existing uses of `@/lib/*` in config-ui).
 **Reason**: The Step 8 path array `["./src/*", "./app/*"]` applied the pattern-suffix (`lib/auth`) to the base (`./app/`), yielding `./app/lib/auth` — but the import `@/app/lib/auth` passes `app/lib/auth` as the suffix, yielding `./app/app/lib/auth`. Root-relative `["./*"]` avoids this double-prefix and is the correct pattern for a service with a top-level `app/` directory (not `src/app/`).
+
+### Deviation: Step 10 — Strip x-user-id from inbound external requests in nginx
+**Spec said**: Verification via `docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf:ro nginx:alpine nginx -t 2>&1` — output must include `syntax is ok` and `test is successful`.
+**Actual**: Docker daemon is not available in the execution environment. Nginx is also not installed locally. Verification was performed via manual inspection: the three `proxy_set_header <name> "";` directives are valid nginx syntax, placed inside the `server {}` block outside all `location {}` blocks, consistent with the existing `proxy_set_header` directives at the same level. The CI nginx container will run the full `nginx -t` check on deploy.
+**Reason**: Execution environment has no Docker socket (`/var/run/docker.sock: no such file or directory`).
