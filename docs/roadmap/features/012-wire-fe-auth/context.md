@@ -209,3 +209,15 @@
 **Progress**: 14 done / 16 total
 **Stopped at**: Step 14 (step complete — PR created)
 **Next**: /sdd-execute wire-fe-auth next
+
+### Step 15 — Add header propagation middleware to Node.js backend services [done]
+- Created `src/middleware/propagation.ts` in xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, and xstockstrat-config — identical content: `AsyncLocalStorage<PropagationContext>` store + `extractFromHttpRequest` helper that reads `x-user-id`, `x-access-scope`, `x-trace-id` from incoming HTTP headers.
+- Modified `src/index.ts` in all four services: added import for `propagationStore` and `extractFromHttpRequest`, wrapped `connectHandler(req, res)` call with `propagationStore.run(extractFromHttpRequest(req), () => connectHandler(req, res))` within each service's existing HTTP request callback.
+- Files modified: `services/xstockstrat-ledger/src/middleware/propagation.ts` (create), `services/xstockstrat-ledger/src/index.ts`, `services/xstockstrat-identity/src/middleware/propagation.ts` (create), `services/xstockstrat-identity/src/index.ts`, `services/xstockstrat-notify/src/middleware/propagation.ts` (create), `services/xstockstrat-notify/src/index.ts`, `services/xstockstrat-config/src/middleware/propagation.ts` (create), `services/xstockstrat-config/src/index.ts`
+- Deviations: spec assumed `http.createServer(connectHandler)` pattern; actual code already had custom callback — wrapped only `connectHandler(req, res)` call, functionally equivalent. Full detail in Deviation Log.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 15)
+**Steps this session**: [15]
+**Progress**: 15 done / 16 total
+**Stopped at**: Step 15 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next

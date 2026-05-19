@@ -1,6 +1,8 @@
 import { initTelemetry } from './telemetry';
 initTelemetry();
 
+import { propagationStore, extractFromHttpRequest } from './middleware/propagation';
+
 import * as grpc from '@grpc/grpc-js';
 import * as http from 'http';
 import { getLogger } from './services/logger';
@@ -61,7 +63,7 @@ async function main() {
       res.end(JSON.stringify({ status: 'ok', service: 'xstockstrat-ledger' }));
       return;
     }
-    connectHandler(req, res);
+    propagationStore.run(extractFromHttpRequest(req), () => connectHandler(req, res));
   });
   httpServer.listen(parseInt(httpPort, 10), () => {
     log.info(`Ledger Connect-RPC HTTP service listening on port ${httpPort}`);
