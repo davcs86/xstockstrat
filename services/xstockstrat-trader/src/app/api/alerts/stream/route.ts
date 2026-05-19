@@ -4,7 +4,8 @@
  * alerts as they arrive. The browser AlertStream component reconnects
  * automatically via EventSource.
  */
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,28 +19,40 @@ const SEVERITY_MAP: Record<string, number> = {
   ALERT_SEVERITY_CRITICAL: 4,
 };
 
-async function listAlerts(): Promise<any[]> {
-  const res = await fetch(
-    `${NOTIFY_BASE_URL}/xstockstrat.notify.v1.NotifyService/ListAlerts`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: '',
-        categories: [],
-        limit: 20,
-        pageToken: '',
-      }),
-      // Short timeout to avoid blocking the polling loop
-      signal: AbortSignal.timeout(4000),
-    },
-  );
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.alerts ?? [];
-}
-
 export async function GET(request: NextRequest) {
+  const claims = await getSessionFromRequest(request);
+  if (!claims) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const accessScope = String(rolesToAccessScope(claims.roles));
+  const traceId = request.headers.get('x-trace-id') ?? generateTraceId();
+  const propagationHeaders = {
+    'x-user-id': claims.user_id,
+    'x-access-scope': accessScope,
+    'x-trace-id': traceId,
+  };
+
+  const listAlerts = async (): Promise<any[]> => {
+    const res = await fetch(
+      `${NOTIFY_BASE_URL}/xstockstrat.notify.v1.NotifyService/ListAlerts`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...propagationHeaders },
+        body: JSON.stringify({
+          userId: claims.user_id,
+          categories: [],
+          limit: 20,
+          pageToken: '',
+        }),
+        // Short timeout to avoid blocking the polling loop
+        signal: AbortSignal.timeout(4000),
+      },
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.alerts ?? [];
+  };
+
   const encoder = new TextEncoder();
   const seenIds = new Set<string>();
 

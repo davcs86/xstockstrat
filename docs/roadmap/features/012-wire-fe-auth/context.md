@@ -100,3 +100,14 @@
 **Progress**: 5 done / 16 total
 **Stopped at**: Step 5 (step complete — PR created)
 **Next**: /sdd-execute wire-fe-auth next
+
+### Step 6 — Fix API routes in xstockstrat-trader to extract userId from JWT [done]
+- Updated `orders/route.ts` (POST + GET), `portfolio/route.ts` (GET), and `alerts/stream/route.ts` (GET). All three handlers now call `getSessionFromRequest()` at entry and return 401 if no valid session. All outbound Connect-RPC fetch calls receive `x-user-id`, `x-access-scope`, and `x-trace-id` propagation headers. The `listAlerts` function in alerts/stream was moved inside GET to close over the captured claims and headers. Lint passed with no new errors (only pre-existing `any` warnings throughout the codebase).
+- Files modified: `services/xstockstrat-trader/src/app/api/orders/route.ts`, `services/xstockstrat-trader/src/app/api/portfolio/route.ts`, `services/xstockstrat-trader/src/app/api/alerts/stream/route.ts`
+- Deviations: none
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 6)
+**Steps this session**: [6]
+**Progress**: 6 done / 16 total
+**Stopped at**: Step 6 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
