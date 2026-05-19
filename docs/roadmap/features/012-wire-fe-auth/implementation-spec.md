@@ -1,6 +1,6 @@
 # Implementation Spec: wire-fe-auth
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-05-18
 **Feature**: `docs/roadmap/features/012-wire-fe-auth/feature.md`
 **Total Steps**: 16
@@ -762,7 +762,7 @@ No lint errors. All four services must pass their existing test suites: `pnpm ru
 
 ### Step 16 — test: Verify Wave 4 backend service test suites after propagation changes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`, `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`, `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config`
 **Files**: _(none — verification only; no source files modified in this step)_
 
@@ -835,6 +835,11 @@ All commands must exit 0 and show passing tests. Coverage must meet or exceed th
 **Spec said**: Apply metadata extraction at the top of each servicer method.
 **Actual**: `_run_backfill` runs detached from the original gRPC context via `asyncio.create_task`. The gRPC context object is not safe to read after `TriggerBackfill` returns. User selected Option A (expand scope): extract `propagation_meta` in `TriggerBackfill` before spawning the task, add it as a `propagation_meta=()` parameter to `_run_backfill`, and pass `metadata=propagation_meta` to `BackfillBars` and `AppendEvent` inside the task.
 **Reason**: asyncio tasks created by `create_task` execute concurrently and the originating gRPC `context` may become invalid once the parent RPC returns. Passing the already-extracted list is the safe pattern.
+
+### Deviation: Step 16 — xstockstrat-ingest coverage was pre-existing below 40%; new infrastructure tests added
+**Spec said**: "No new test code is required — if any service's suite fails, diagnose whether the failure pre-dates Steps 13–15 before attributing it to this feature."
+**Actual**: `xstockstrat-ingest` reported 39.90% total coverage (vs. 40% threshold). Diagnosis confirmed the shortfall pre-existed on `origin/main-dev` (39.59%) — caused entirely by `http_server.py` (81 stmts, 0%), `main.py` (57 stmts, 0%), and `telemetry.py` (25 stmts, 0%) — infrastructure files not touched by Steps 13–15. Step 14's propagation changes marginally improved coverage (+0.31pp). User selected Option A: add minimal infrastructure tests. Two new test files added: `tests/test_http_server.py` (3 tests: build_app route registration, _NoopContext.abort, _NoopContext.send_initial_metadata) and `tests/test_telemetry.py` (2 tests: no-op path, enabled+exception path). Final coverage: 54.80%, 46 tests pass.
+**Reason**: Pre-existing gap surfaced by the verification step. `main.py` was excluded from testing because its module-level `raise RuntimeError` guard (DATABASE_URL check) makes import-time testing impractical without extensive mocking.
 
 ### Deviation: Step 15 — injection point adapted to existing custom HTTP handler
 **Spec said**: "locate the `http.createServer(connectHandler)` call and wrap it" — spec code sketch assumed `http.createServer(connectHandler)` as a direct pattern.

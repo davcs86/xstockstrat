@@ -221,3 +221,19 @@
 **Progress**: 15 done / 16 total
 **Stopped at**: Step 15 (step complete — PR created)
 **Next**: /sdd-execute wire-fe-auth next
+
+### Step 16 — test: Verify Wave 4 backend service test suites after propagation changes [done]
+- Ran all 10 backend service test suites: Go ×3, Python ×3, Node.js ×4. All pass.
+- Go (trading, portfolio, marketdata): all tests pass ≥40% coverage ✓
+- Python indicators: 14 passed, 78% ≥50% ✓
+- Python analysis: 53 passed, 46.77% ≥40% ✓
+- Python ingest: pre-existing 39.90% coverage shortfall diagnosed (main-dev baseline was 39.59%); caused by http_server.py, main.py, telemetry.py at 0% — infrastructure files not touched by this feature. User selected Option A: added `tests/test_http_server.py` (3 tests) and `tests/test_telemetry.py` (2 tests). Final: 46 passed, 54.80% ✓
+- Node.js (ledger, identity, notify, config): all tests pass; coverage display shows 0% (pre-existing tooling issue with c8/TypeScript, consistent with prior steps) ✓
+- Files modified: `services/xstockstrat-ingest/tests/test_http_server.py` (create), `services/xstockstrat-ingest/tests/test_telemetry.py` (create)
+- Deviations: ingest coverage pre-existing shortfall fixed with infrastructure tests (Option A). Full detail in Deviation Log.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 16)
+**Steps this session**: [16]
+**Progress**: 16 done / 16 total
+**Stopped at**: Step 16 (all steps complete — feature code-completed)
+**Next**: Check merge-order.md, then create integration PR targeting main-dev
