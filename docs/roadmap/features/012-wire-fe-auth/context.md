@@ -46,3 +46,24 @@
   - `JWT_SECRET` is in `.do/app.dev.yaml` and `.do/app.yaml` only for the identity service. All three frontends need it added.
   - `IDENTITY_HTTP_ENDPOINT` is missing from `docker-compose.yml` and DO specs for `xstockstrat-config-ui` — confirmed via grep.
   - Existing API routes in trader already have `TODO(wire-fe-auth)` comments at `orders/route.ts:L28,57` and `portfolio/route.ts:L14` — exact replace targets confirmed.
+
+## Session 2026-05-18T00:00:00Z — sdd-review impl-spec
+
+- Ran `/sdd-review wire-fe-auth impl-spec`. Advisory review (no lifecycle change).
+- Steps 1–12 passed all criteria.
+- **3 FAILs fixed**: Steps 13, 14, 15 were `service` steps for non-frontend services with no corresponding `test` step. Added **Step 16** (test: Verify Wave 4 backend service test suites) to cover all 10 backend services. Total steps: 15 → 16.
+- Step 16 runs existing test suites with explicit thresholds: Go ≥40%, Python ≥40% (indicators ≥50%), Node.js ≥40%.
+- Warnings (advisory, not fixed): Step 9 Verification grep exits 1 on success; Step 12 E2E lacks explicit threshold statement (by design for Playwright).
+- Overlap WARNs with `formula-management-ui` (003): both touch `xstockstrat-insights` and `xstockstrat-indicators`; `package.json` and `servicer.py` are shared write targets. Recommend executing `wire-fe-auth` first so formula routes are written against the auth-enabled baseline.
+
+## Session 2026-05-18T00:00:00Z — sdd-execute
+
+### Step 1 — Add `jose` dependency to all three Next.js frontends [done]
+- Added `"jose": "^5.0.0"` alphabetically to dependencies in trader, insights, and config-ui package.json files. Ran `pnpm install` from repo root; lockfile updated cleanly.
+- Files modified: `services/xstockstrat-trader/package.json`, `services/xstockstrat-insights/package.json`, `services/xstockstrat-config-ui/package.json`, `pnpm-lock.yaml`
+- Deviations: none
+
+### Step 2 — Create `src/lib/auth.ts` in xstockstrat-trader [done]
+- Created `services/xstockstrat-trader/src/lib/auth.ts` with all 10 exports: `JwtClaims`, `ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS`, `verifyAccessToken`, `getSessionFromRequest`, `refreshSession`, `revokeToken`, `setSessionCookies`, `clearSessionCookies`, `rolesToAccessScope`, `generateTraceId`. Lint passed with no errors (pre-existing warnings in other files only).
+- Files modified: `services/xstockstrat-trader/src/lib/auth.ts`
+- Deviations: Inlined `IDENTITY_ENDPOINT` constant instead of importing from `connectTransport.ts` to preserve Edge Runtime compatibility (connectTransport imports `@connectrpc/connect-node`). Full detail in Deviation Log.
