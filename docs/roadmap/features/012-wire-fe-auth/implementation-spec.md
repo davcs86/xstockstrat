@@ -190,7 +190,7 @@ No lint errors. Manually: `curl -s -X POST http://localhost:3000/api/auth/login 
 
 ### Step 5 — service: Add `middleware.ts` to xstockstrat-trader
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/middleware.ts` — create

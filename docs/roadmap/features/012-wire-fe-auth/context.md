@@ -89,3 +89,14 @@
 **Progress**: 4 done / 16 total
 **Stopped at**: Step 4 (step complete — PR created)
 **Next**: /sdd-execute wire-fe-auth next
+
+### Step 5 — Add `middleware.ts` to xstockstrat-trader [done]
+- Created `services/xstockstrat-trader/src/middleware.ts` with matcher (excludes static assets, auth login, and health routes), JWT session check, near-expiry token refresh via `/api/auth/refresh`, and trace ID propagation (request direction only). Lint passed with no new errors.
+- Files modified: `services/xstockstrat-trader/src/middleware.ts`
+- Deviations: none
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 5)
+**Steps this session**: [5]
+**Progress**: 5 done / 16 total
+**Stopped at**: Step 5 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
