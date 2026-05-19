@@ -688,7 +688,7 @@ No lint or format errors.
 
 ### Step 15 — service: Add header propagation middleware to Node.js backend services (xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, xstockstrat-config)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-ledger/src/middleware/propagation.ts` — create
@@ -835,3 +835,8 @@ All commands must exit 0 and show passing tests. Coverage must meet or exceed th
 **Spec said**: Apply metadata extraction at the top of each servicer method.
 **Actual**: `_run_backfill` runs detached from the original gRPC context via `asyncio.create_task`. The gRPC context object is not safe to read after `TriggerBackfill` returns. User selected Option A (expand scope): extract `propagation_meta` in `TriggerBackfill` before spawning the task, add it as a `propagation_meta=()` parameter to `_run_backfill`, and pass `metadata=propagation_meta` to `BackfillBars` and `AppendEvent` inside the task.
 **Reason**: asyncio tasks created by `create_task` execute concurrently and the originating gRPC `context` may become invalid once the parent RPC returns. Passing the already-extracted list is the safe pattern.
+
+### Deviation: Step 15 — injection point adapted to existing custom HTTP handler
+**Spec said**: "locate the `http.createServer(connectHandler)` call and wrap it" — spec code sketch assumed `http.createServer(connectHandler)` as a direct pattern.
+**Actual**: All four `src/index.ts` files already use `http.createServer((req, res) => { /* CORS/OPTIONS/health handling */ ... connectHandler(req, res); })`. The `propagationStore.run(extractFromHttpRequest(req), () => connectHandler(req, res))` wrapping was applied only to the `connectHandler(req, res)` call inside the existing callback, leaving the CORS/OPTIONS/health handling untouched.
+**Reason**: Functionally equivalent — `propagationStore` context is established before any Connect-RPC handler executes. Wrapping the whole server would have duplicated the CORS/health logic unnecessarily.
