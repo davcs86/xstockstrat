@@ -8,3 +8,7 @@ Reusable implementation patterns for new services. Each file is a self-contained
 | `nginx-routing.md` | Adding a new frontend to the nginx reverse proxy |
 | `header-propagation.md` | Adding a new backend service (Go, Python, or Node.js) |
 | `git-subtree.md` | Syncing a service to/from its individual GitHub repo |
+| `config-governance.md` | Writing any service that reads runtime config (naming, scoping, startup) |
+| `database.md` | Adding or modifying DB schemas and migrations |
+| `observability.md` | Wiring OTel into a service or configuring Grafana Cloud |
+| `ci-overview.md` | Debugging CI failures, checking coverage thresholds, understanding deploys |
