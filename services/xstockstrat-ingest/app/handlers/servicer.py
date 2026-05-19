@@ -39,13 +39,18 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             status=ingest_pb2.BACKFILL_STATUS_QUEUED,
         )
         self._jobs[job_id] = job
-        asyncio.create_task(self._run_backfill(job_id, request))
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+        asyncio.create_task(self._run_backfill(job_id, request, propagation_meta))
         return ingest_pb2.TriggerBackfillResponse(
             job_id=job_id,
             status=ingest_pb2.BACKFILL_STATUS_QUEUED,
         )
 
-    async def _run_backfill(self, job_id: str, request):
+    async def _run_backfill(self, job_id: str, request, propagation_meta=()):
         job = self._jobs[job_id]
         job.status = ingest_pb2.BACKFILL_STATUS_RUNNING
         log.info("backfill job %s starting symbols=%s", job_id, list(request.symbols))
@@ -57,7 +62,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     timeframe=request.timeframe,
                     range=request.range,
                     overwrite_existing=request.overwrite,
-                )
+                ),
+                metadata=propagation_meta,
             )
             job.bars_processed = resp.bars_written
             job.status = (
@@ -90,7 +96,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     source_service="xstockstrat-ingest",
                     stream_key=f"backfill:{job_id}",
                     payload=payload,
-                )
+                ),
+                metadata=propagation_meta,
             )
         except Exception as e:
             job.status = ingest_pb2.BACKFILL_STATUS_FAILED
@@ -141,6 +148,11 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
 
     async def IngestSignal(self, request, context):
         """Persist an ExternalSignal to ingest.newsletter_signals hypertable."""
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
@@ -219,7 +231,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     source_service="xstockstrat-ingest",
                     stream_key=f"signal:{signal.source}:{signal.symbol}",
                     payload=payload,
-                )
+                ),
+                metadata=propagation_meta,
             )
         except Exception as e:
             log.warning("failed to emit ledger event for signal %d: %s", signal_id, e)

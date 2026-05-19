@@ -193,3 +193,19 @@
 **Progress**: 13 done / 16 total
 **Stopped at**: Step 13 (step complete — PR created)
 **Next**: /sdd-execute wire-fe-auth next
+
+### Step 14 — Add header propagation to Python services [done]
+- Modified `services/xstockstrat-analysis/app/handlers/servicer.py`: extracted `propagation_meta` in `RunBacktest` and `ScoreStrategy`; threaded `propagation_meta=propagation_meta` kwarg into `_backtest_symbol`; added `metadata=propagation_meta` to all 6 outbound stub calls (2× `_ledger.AppendEvent` in RunBacktest, `_marketdata.GetBars`, 2× `_indicators.ComputeIndicator`, `_ingest.QuerySignals`, 1× `_ledger.AppendEvent` in ScoreStrategy).
+- Modified `services/xstockstrat-ingest/app/handlers/servicer.py`: extracted `propagation_meta` in `TriggerBackfill` before `asyncio.create_task` (user Option A — expand scope); added `propagation_meta=()` param to `_run_backfill`; added `metadata=propagation_meta` to `BackfillBars` and `AppendEvent` inside the task; extracted `propagation_meta` in `IngestSignal` and added `metadata=propagation_meta` to its `AppendEvent`.
+- NO changes to `services/xstockstrat-indicators/app/handlers/servicer.py` (user Option C — open item): indicators servicer has no outbound stub instances at all; spec assumption was wrong. If ledger/ingest stubs are added to indicators later, add propagation_meta threading at that point.
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-ingest/app/handlers/servicer.py`
+- Deviations: indicators has no stubs (tracked as open item); ingest background task pattern required Option A scope expansion. Full detail in Deviation Log.
+
+## Open Items
+- **indicators propagation**: `IndicatorsServicer` currently has no outbound gRPC stubs. If `ledger` or `ingest` stubs are added in future (e.g. signal-aware formula execution), add `propagation_meta` extraction and `metadata=` threading at that time. Earliest applicable step: any future step touching `services/xstockstrat-indicators/app/handlers/servicer.py`.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 14)
+**Steps this session**: [14]
+**Progress**: 14 done / 16 total
+**Stopped at**: Step 14 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
