@@ -235,7 +235,7 @@ No lint errors. Manually: `curl -s -c /dev/null http://localhost:3000/` (no cook
 
 ### Step 6 — service: Fix API routes in xstockstrat-trader to extract userId from JWT
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/app/api/orders/route.ts` — modify
