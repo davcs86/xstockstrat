@@ -180,3 +180,16 @@
 **Progress**: 12 done / 16 total
 **Stopped at**: Step 12 (step complete — PR created)
 **Next**: /sdd-execute wire-fe-auth next
+
+### Step 13 — Add header propagation interceptor to Go services [done]
+- Created `internal/middleware/propagation.go` in xstockstrat-trading, xstockstrat-portfolio, and xstockstrat-marketdata with identical `UnaryServerInterceptor` (extracts x-user-id/x-access-scope/x-trace-id from incoming metadata → context) and `UnaryClientInterceptor` (reads from context → appends to outgoing metadata).
+- Added `grpc.ChainUnaryInterceptor(middleware.UnaryServerInterceptor)` as first option in `grpc.NewServer(...)` in all three `cmd/server/main.go` files.
+- Added `grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor)` to all 8 `grpc.NewClient(...)` calls across the three service layers (3 in trading, 3 in portfolio, 2 in marketdata).
+- Files modified: `services/xstockstrat-trading/internal/middleware/propagation.go` (create), `services/xstockstrat-trading/cmd/server/main.go`, `services/xstockstrat-trading/internal/service/trading.go`, `services/xstockstrat-portfolio/internal/middleware/propagation.go` (create), `services/xstockstrat-portfolio/cmd/server/main.go`, `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-marketdata/internal/middleware/propagation.go` (create), `services/xstockstrat-marketdata/cmd/server/main.go`, `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+- Deviations: none
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 13)
+**Steps this session**: [13]
+**Progress**: 13 done / 16 total
+**Stopped at**: Step 13 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next

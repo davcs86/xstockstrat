@@ -531,7 +531,7 @@ All auth tests must pass. Existing smoke tests must continue to pass (they now r
 
 ### Step 13 — service: Add header propagation interceptor to Go services (xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/middleware/propagation.go` — create

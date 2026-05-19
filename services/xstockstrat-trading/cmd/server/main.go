@@ -26,6 +26,7 @@ import (
 	tradingv1connect "github.com/xstockstrat/contracts/gen/go/trading/v1/tradingv1connect"
 	"github.com/xstockstrat/trading/internal/config"
 	"github.com/xstockstrat/trading/internal/handler"
+	"github.com/xstockstrat/trading/internal/middleware"
 	"github.com/xstockstrat/trading/internal/repository"
 	"github.com/xstockstrat/trading/internal/service"
 	"github.com/xstockstrat/trading/internal/telemetry"
@@ -119,6 +120,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(middleware.UnaryServerInterceptor),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			MaxConnectionIdle: 60 * time.Second,
