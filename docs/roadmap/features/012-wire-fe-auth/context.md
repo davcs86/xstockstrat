@@ -144,3 +144,14 @@
 **Progress**: 9 done / 16 total
 **Stopped at**: Step 9 (step complete — PR created)
 **Next**: /sdd-execute wire-fe-auth next
+
+### Step 10 — Strip x-user-id from inbound external requests in nginx [done]
+- Added three `proxy_set_header x-user-id "";`, `proxy_set_header x-access-scope "";`, `proxy_set_header x-trace-id "";` directives to the `server {}` block in `nginx.conf` after the existing proxy header section. These clear all three propagation headers for every inbound external request, preventing spoofing.
+- Files modified: `nginx.conf`
+- Deviations: Docker unavailable for verification; nginx syntax manually verified as correct. Full detail in Deviation Log.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 10)
+**Steps this session**: [10]
+**Progress**: 10 done / 16 total
+**Stopped at**: Step 10 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
