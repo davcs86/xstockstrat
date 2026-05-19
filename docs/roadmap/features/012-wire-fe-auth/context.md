@@ -155,3 +155,14 @@
 **Progress**: 10 done / 16 total
 **Stopped at**: Step 10 (step complete — PR created)
 **Next**: /sdd-execute wire-fe-auth next
+
+### Step 11 — Wire JWT_SECRET and IDENTITY_HTTP_ENDPOINT env vars [done]
+- Added `JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}` to trader and insights environment blocks in docker-compose.yml. Added `IDENTITY_HTTP_ENDPOINT` + `JWT_SECRET` to config-ui environment block. Added `xstockstrat-identity: condition: service_started` to config-ui `depends_on`. Applied identical changes (JWT_SECRET as `type: SECRET` + IDENTITY_HTTP_ENDPOINT for config-ui) to both `.do/app.dev.yaml` and `.do/app.yaml`. Verification: `grep -c "JWT_SECRET" .do/app.dev.yaml` = 4; `grep -c "JWT_SECRET" .do/app.yaml` = 4.
+- Files modified: `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`
+- Deviations: `docker compose config` not available; YAML correctness verified by grep.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 11)
+**Steps this session**: [11]
+**Progress**: 11 done / 16 total
+**Stopped at**: Step 11 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
