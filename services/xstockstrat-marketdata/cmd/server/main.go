@@ -27,6 +27,7 @@ import (
 	"github.com/xstockstrat/marketdata/internal/alpaca"
 	"github.com/xstockstrat/marketdata/internal/config"
 	"github.com/xstockstrat/marketdata/internal/handler"
+	"github.com/xstockstrat/marketdata/internal/middleware"
 	"github.com/xstockstrat/marketdata/internal/repository"
 	"github.com/xstockstrat/marketdata/internal/service"
 	"github.com/xstockstrat/marketdata/internal/telemetry"
@@ -93,6 +94,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(middleware.UnaryServerInterceptor),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			MaxConnectionIdle: 60 * time.Second,

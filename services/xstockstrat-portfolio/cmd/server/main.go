@@ -25,6 +25,7 @@ import (
 	portfoliov1connect "github.com/xstockstrat/contracts/gen/go/portfolio/v1/portfoliov1connect"
 	"github.com/xstockstrat/portfolio/internal/config"
 	"github.com/xstockstrat/portfolio/internal/handler"
+	"github.com/xstockstrat/portfolio/internal/middleware"
 	"github.com/xstockstrat/portfolio/internal/service"
 	"github.com/xstockstrat/portfolio/internal/telemetry"
 )
@@ -79,6 +80,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(middleware.UnaryServerInterceptor),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			MaxConnectionIdle: 60 * time.Second,

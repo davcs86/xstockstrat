@@ -1,6 +1,8 @@
 import { initTelemetry } from './telemetry';
 initTelemetry();
 
+import { propagationStore, extractFromHttpRequest } from './middleware/propagation';
+
 import * as grpc from '@grpc/grpc-js';
 import * as http from 'http';
 import { Pool } from 'pg';
@@ -56,7 +58,7 @@ async function main() {
       return;
     }
     if (req.url?.startsWith('/webhooks/')) { webhookRouter(req, res); return; }
-    connectHandler(req, res);
+    propagationStore.run(extractFromHttpRequest(req), () => connectHandler(req, res));
   });
   httpServer.listen(parseInt(httpPort, 10), () => {
     log.info(`Notify Connect-RPC HTTP service listening on port ${httpPort}`);

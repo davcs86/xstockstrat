@@ -67,3 +67,173 @@
 - Created `services/xstockstrat-trader/src/lib/auth.ts` with all 10 exports: `JwtClaims`, `ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS`, `verifyAccessToken`, `getSessionFromRequest`, `refreshSession`, `revokeToken`, `setSessionCookies`, `clearSessionCookies`, `rolesToAccessScope`, `generateTraceId`. Lint passed with no errors (pre-existing warnings in other files only).
 - Files modified: `services/xstockstrat-trader/src/lib/auth.ts`
 - Deviations: Inlined `IDENTITY_ENDPOINT` constant instead of importing from `connectTransport.ts` to preserve Edge Runtime compatibility (connectTransport imports `@connectrpc/connect-node`). Full detail in Deviation Log.
+
+### Step 3 — Create `src/lib/auth.ts` in xstockstrat-insights and `app/lib/auth.ts` in xstockstrat-config-ui [done]
+- Created `services/xstockstrat-insights/src/lib/auth.ts` and `services/xstockstrat-config-ui/app/lib/auth.ts` (creating the `app/lib/` directory). Both files export all 10 symbols with identical contract to Step 2. Lint passed with no errors in either service (pre-existing warnings in other files only).
+- Files modified: `services/xstockstrat-insights/src/lib/auth.ts`, `services/xstockstrat-config-ui/app/lib/auth.ts`
+- Deviations: Insights — inlined `IDENTITY_ENDPOINT` constant instead of importing `IDENTITY_BASE_URL` from `connectTransport.ts` (same Edge Runtime constraint as Step 2; connectTransport.ts imports `@connectrpc/connect-node`). Full detail in Deviation Log.
+
+## Session 2026-05-18T00:00:00Z — sdd-execute (Step 3)
+**Steps this session**: [3]
+**Progress**: 3 done / 16 total
+**Stopped at**: Step 3 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
+
+### Step 4 — Add `/login` page and `/api/auth/*` routes to xstockstrat-trader [done]
+- Created `src/app/api/auth/login/route.ts`, `refresh/route.ts`, `logout/route.ts`, and `src/app/login/page.tsx`. Login page wraps `useSearchParams()` in a `<Suspense>` boundary per Next.js 14 App Router requirement. All routes import from `@/lib/auth`. Lint passed with no new errors.
+- Files modified: `services/xstockstrat-trader/src/app/api/auth/login/route.ts`, `services/xstockstrat-trader/src/app/api/auth/refresh/route.ts`, `services/xstockstrat-trader/src/app/api/auth/logout/route.ts`, `services/xstockstrat-trader/src/app/login/page.tsx`
+- Deviations: none
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 4)
+**Steps this session**: [4]
+**Progress**: 4 done / 16 total
+**Stopped at**: Step 4 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
+
+### Step 5 — Add `middleware.ts` to xstockstrat-trader [done]
+- Created `services/xstockstrat-trader/src/middleware.ts` with matcher (excludes static assets, auth login, and health routes), JWT session check, near-expiry token refresh via `/api/auth/refresh`, and trace ID propagation (request direction only). Lint passed with no new errors.
+- Files modified: `services/xstockstrat-trader/src/middleware.ts`
+- Deviations: none
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 5)
+**Steps this session**: [5]
+**Progress**: 5 done / 16 total
+**Stopped at**: Step 5 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
+
+### Step 6 — Fix API routes in xstockstrat-trader to extract userId from JWT [done]
+- Updated `orders/route.ts` (POST + GET), `portfolio/route.ts` (GET), and `alerts/stream/route.ts` (GET). All three handlers now call `getSessionFromRequest()` at entry and return 401 if no valid session. All outbound Connect-RPC fetch calls receive `x-user-id`, `x-access-scope`, and `x-trace-id` propagation headers. The `listAlerts` function in alerts/stream was moved inside GET to close over the captured claims and headers. Lint passed with no new errors (only pre-existing `any` warnings throughout the codebase).
+- Files modified: `services/xstockstrat-trader/src/app/api/orders/route.ts`, `services/xstockstrat-trader/src/app/api/portfolio/route.ts`, `services/xstockstrat-trader/src/app/api/alerts/stream/route.ts`
+- Deviations: none
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 6)
+**Steps this session**: [6]
+**Progress**: 6 done / 16 total
+**Stopped at**: Step 6 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
+
+### Step 7 — Add login page, auth API routes, and middleware to xstockstrat-insights [done]
+- Created `src/app/api/auth/login/route.ts`, `refresh/route.ts`, `logout/route.ts` and `src/app/login/page.tsx` (title: "xstockstrat Insights"). Created `src/middleware.ts` with identical matcher and redirect logic as trader. Updated all four API route files (`backtest`, `strategies`, `report/[id]`, `portfolio`) to call `getSessionFromRequest()` at entry (401 if null) and add all three propagation headers to every outbound fetch. Replaced `userId: ''` with `claims.user_id` in `strategies` route's `ListStrategies` call. Lint passed with no new errors.
+- Files modified: `services/xstockstrat-insights/src/app/api/auth/login/route.ts`, `services/xstockstrat-insights/src/app/api/auth/refresh/route.ts`, `services/xstockstrat-insights/src/app/api/auth/logout/route.ts`, `services/xstockstrat-insights/src/app/login/page.tsx`, `services/xstockstrat-insights/src/middleware.ts`, `services/xstockstrat-insights/src/app/api/analysis/backtest/route.ts`, `services/xstockstrat-insights/src/app/api/analysis/strategies/route.ts`, `services/xstockstrat-insights/src/app/api/analysis/report/[id]/route.ts`, `services/xstockstrat-insights/src/app/api/portfolio/route.ts`
+- Deviations: none
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 7)
+**Steps this session**: [7]
+**Progress**: 7 done / 16 total
+**Stopped at**: Step 7 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
+
+### Step 8 — Add login page, auth API routes, and middleware to xstockstrat-config-ui [done]
+- Modified tsconfig.json to add `"./app/*"` to `@/*` paths (user chose Option A when gap surfaced). Created `app/api/auth/login/route.ts`, `refresh/route.ts`, `logout/route.ts`, `app/login/page.tsx` (title: "xstockstrat Config"), and `middleware.ts` at service root. Modified `app/api/config/route.ts` (both GET and POST: auth-gated, propagation headers added, author replaced with `claims.user_id`) and `app/api/audit/route.ts` (auth-gated only; no header forwarding needed for direct DB query). Login page uses `@components/ui/*` alias since `@/` resolves to `src/` not root. Lint passed with no new errors.
+- Files modified: `services/xstockstrat-config-ui/tsconfig.json`, `services/xstockstrat-config-ui/app/api/auth/login/route.ts`, `services/xstockstrat-config-ui/app/api/auth/refresh/route.ts`, `services/xstockstrat-config-ui/app/api/auth/logout/route.ts`, `services/xstockstrat-config-ui/app/login/page.tsx`, `services/xstockstrat-config-ui/middleware.ts`, `services/xstockstrat-config-ui/app/api/config/route.ts`, `services/xstockstrat-config-ui/app/api/audit/route.ts`
+- Deviations: tsconfig.json moved from Step 9 to Step 8 scope (user Option A); login page uses `@components/ui/*` alias for UI imports. Full detail in Deviation Log.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 8)
+**Steps this session**: [8]
+**Progress**: 8 done / 16 total
+**Stopped at**: Step 8 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
+
+### Step 9 — Read tsconfig.json in config-ui to verify `@/` alias resolution [done]
+- Step 8's tsconfig change (`"@/*": ["./src/*", "./app/*"]`) caused a webpack build error: `Module not found: Can't resolve '@/app/lib/auth'`. The double-array pattern caused `@/app/lib/auth` to resolve to `./app/app/lib/auth` (double `app/` prefix). Fixed by changing to `"@/*": ["./*"]` (root-relative wildcard). Build passes with zero TypeScript or module-resolution errors.
+- Files modified: `services/xstockstrat-config-ui/tsconfig.json`
+- Deviations: corrected Step 8's tsconfig path; full detail in Deviation Log.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 9)
+**Steps this session**: [9]
+**Progress**: 9 done / 16 total
+**Stopped at**: Step 9 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
+
+### Step 10 — Strip x-user-id from inbound external requests in nginx [done]
+- Added three `proxy_set_header x-user-id "";`, `proxy_set_header x-access-scope "";`, `proxy_set_header x-trace-id "";` directives to the `server {}` block in `nginx.conf` after the existing proxy header section. These clear all three propagation headers for every inbound external request, preventing spoofing.
+- Files modified: `nginx.conf`
+- Deviations: Docker unavailable for verification; nginx syntax manually verified as correct. Full detail in Deviation Log.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 10)
+**Steps this session**: [10]
+**Progress**: 10 done / 16 total
+**Stopped at**: Step 10 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
+
+### Step 11 — Wire JWT_SECRET and IDENTITY_HTTP_ENDPOINT env vars [done]
+- Added `JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}` to trader and insights environment blocks in docker-compose.yml. Added `IDENTITY_HTTP_ENDPOINT` + `JWT_SECRET` to config-ui environment block. Added `xstockstrat-identity: condition: service_started` to config-ui `depends_on`. Applied identical changes (JWT_SECRET as `type: SECRET` + IDENTITY_HTTP_ENDPOINT for config-ui) to both `.do/app.dev.yaml` and `.do/app.yaml`. Verification: `grep -c "JWT_SECRET" .do/app.dev.yaml` = 4; `grep -c "JWT_SECRET" .do/app.yaml` = 4.
+- Files modified: `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`
+- Deviations: `docker compose config` not available; YAML correctness verified by grep.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 11)
+**Steps this session**: [11]
+**Progress**: 11 done / 16 total
+**Stopped at**: Step 11 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
+
+### Step 12 — test: Add auth E2E smoke tests to all three frontends [done]
+- Created `services/xstockstrat-trader/e2e/auth.spec.ts`, `services/xstockstrat-insights/e2e/auth.spec.ts`, `services/xstockstrat-config-ui/e2e/auth.spec.ts` with login/logout/redirect/cookie-clearing tests using `{ page }` fixture.
+- Modified `mock-backend.ts` in all three services (made `startMockBackend()` async, added `AuthenticateUser`/`RefreshToken`/`RevokeToken` identity RPC responses with dynamically-signed JWTs via `jose`).
+- Modified `playwright.config.ts` in all three services to add `IDENTITY_HTTP_ENDPOINT` and `JWT_SECRET` to `webServer.env`.
+- Modified `services/xstockstrat-trader/e2e/api-smoke.spec.ts`, `services/xstockstrat-insights/e2e/api-smoke.spec.ts`, `services/xstockstrat-config-ui/e2e/api-smoke.spec.ts` (Option A expansion): added `addAuthCookie(page)` helper generating JWT via `jose.SignJWT`, changed `{ request }` → `{ page }`, changed `request.get/post` → `page.request.get/post`, added `await addAuthCookie(page)` at start of each test.
+- Files modified: `services/xstockstrat-trader/e2e/auth.spec.ts` (create), `services/xstockstrat-trader/e2e/mock-backend.ts`, `services/xstockstrat-trader/playwright.config.ts`, `services/xstockstrat-trader/e2e/api-smoke.spec.ts`, `services/xstockstrat-insights/e2e/auth.spec.ts` (create), `services/xstockstrat-insights/e2e/mock-backend.ts`, `services/xstockstrat-insights/playwright.config.ts`, `services/xstockstrat-insights/e2e/api-smoke.spec.ts`, `services/xstockstrat-config-ui/e2e/auth.spec.ts` (create), `services/xstockstrat-config-ui/e2e/mock-backend.ts`, `services/xstockstrat-config-ui/playwright.config.ts`, `services/xstockstrat-config-ui/e2e/api-smoke.spec.ts`
+- Deviations: Expanded scope (Option A, user approved) to update smoke tests for auth — existing `{ request }` tests would 302 after middleware added. Full detail in Deviation Log.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 12)
+**Steps this session**: [12]
+**Progress**: 12 done / 16 total
+**Stopped at**: Step 12 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
+
+### Step 13 — Add header propagation interceptor to Go services [done]
+- Created `internal/middleware/propagation.go` in xstockstrat-trading, xstockstrat-portfolio, and xstockstrat-marketdata with identical `UnaryServerInterceptor` (extracts x-user-id/x-access-scope/x-trace-id from incoming metadata → context) and `UnaryClientInterceptor` (reads from context → appends to outgoing metadata).
+- Added `grpc.ChainUnaryInterceptor(middleware.UnaryServerInterceptor)` as first option in `grpc.NewServer(...)` in all three `cmd/server/main.go` files.
+- Added `grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor)` to all 8 `grpc.NewClient(...)` calls across the three service layers (3 in trading, 3 in portfolio, 2 in marketdata).
+- Files modified: `services/xstockstrat-trading/internal/middleware/propagation.go` (create), `services/xstockstrat-trading/cmd/server/main.go`, `services/xstockstrat-trading/internal/service/trading.go`, `services/xstockstrat-portfolio/internal/middleware/propagation.go` (create), `services/xstockstrat-portfolio/cmd/server/main.go`, `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-marketdata/internal/middleware/propagation.go` (create), `services/xstockstrat-marketdata/cmd/server/main.go`, `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+- Deviations: none
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 13)
+**Steps this session**: [13]
+**Progress**: 13 done / 16 total
+**Stopped at**: Step 13 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
+
+### Step 14 — Add header propagation to Python services [done]
+- Modified `services/xstockstrat-analysis/app/handlers/servicer.py`: extracted `propagation_meta` in `RunBacktest` and `ScoreStrategy`; threaded `propagation_meta=propagation_meta` kwarg into `_backtest_symbol`; added `metadata=propagation_meta` to all 6 outbound stub calls (2× `_ledger.AppendEvent` in RunBacktest, `_marketdata.GetBars`, 2× `_indicators.ComputeIndicator`, `_ingest.QuerySignals`, 1× `_ledger.AppendEvent` in ScoreStrategy).
+- Modified `services/xstockstrat-ingest/app/handlers/servicer.py`: extracted `propagation_meta` in `TriggerBackfill` before `asyncio.create_task` (user Option A — expand scope); added `propagation_meta=()` param to `_run_backfill`; added `metadata=propagation_meta` to `BackfillBars` and `AppendEvent` inside the task; extracted `propagation_meta` in `IngestSignal` and added `metadata=propagation_meta` to its `AppendEvent`.
+- NO changes to `services/xstockstrat-indicators/app/handlers/servicer.py` (user Option C — open item): indicators servicer has no outbound stub instances at all; spec assumption was wrong. If ledger/ingest stubs are added to indicators later, add propagation_meta threading at that point.
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-ingest/app/handlers/servicer.py`
+- Deviations: indicators has no stubs (tracked as open item); ingest background task pattern required Option A scope expansion. Full detail in Deviation Log.
+
+## Open Items
+- **indicators propagation**: `IndicatorsServicer` currently has no outbound gRPC stubs. If `ledger` or `ingest` stubs are added in future (e.g. signal-aware formula execution), add `propagation_meta` extraction and `metadata=` threading at that time. Earliest applicable step: any future step touching `services/xstockstrat-indicators/app/handlers/servicer.py`.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 14)
+**Steps this session**: [14]
+**Progress**: 14 done / 16 total
+**Stopped at**: Step 14 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
+
+### Step 15 — Add header propagation middleware to Node.js backend services [done]
+- Created `src/middleware/propagation.ts` in xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, and xstockstrat-config — identical content: `AsyncLocalStorage<PropagationContext>` store + `extractFromHttpRequest` helper that reads `x-user-id`, `x-access-scope`, `x-trace-id` from incoming HTTP headers.
+- Modified `src/index.ts` in all four services: added import for `propagationStore` and `extractFromHttpRequest`, wrapped `connectHandler(req, res)` call with `propagationStore.run(extractFromHttpRequest(req), () => connectHandler(req, res))` within each service's existing HTTP request callback.
+- Files modified: `services/xstockstrat-ledger/src/middleware/propagation.ts` (create), `services/xstockstrat-ledger/src/index.ts`, `services/xstockstrat-identity/src/middleware/propagation.ts` (create), `services/xstockstrat-identity/src/index.ts`, `services/xstockstrat-notify/src/middleware/propagation.ts` (create), `services/xstockstrat-notify/src/index.ts`, `services/xstockstrat-config/src/middleware/propagation.ts` (create), `services/xstockstrat-config/src/index.ts`
+- Deviations: spec assumed `http.createServer(connectHandler)` pattern; actual code already had custom callback — wrapped only `connectHandler(req, res)` call, functionally equivalent. Full detail in Deviation Log.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 15)
+**Steps this session**: [15]
+**Progress**: 15 done / 16 total
+**Stopped at**: Step 15 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
+
+### Step 16 — test: Verify Wave 4 backend service test suites after propagation changes [done]
+- Ran all 10 backend service test suites: Go ×3, Python ×3, Node.js ×4. All pass.
+- Go (trading, portfolio, marketdata): all tests pass ≥40% coverage ✓
+- Python indicators: 14 passed, 78% ≥50% ✓
+- Python analysis: 53 passed, 46.77% ≥40% ✓
+- Python ingest: pre-existing 39.90% coverage shortfall diagnosed (main-dev baseline was 39.59%); caused by http_server.py, main.py, telemetry.py at 0% — infrastructure files not touched by this feature. User selected Option A: added `tests/test_http_server.py` (3 tests) and `tests/test_telemetry.py` (2 tests). Final: 46 passed, 54.80% ✓
+- Node.js (ledger, identity, notify, config): all tests pass; coverage display shows 0% (pre-existing tooling issue with c8/TypeScript, consistent with prior steps) ✓
+- Files modified: `services/xstockstrat-ingest/tests/test_http_server.py` (create), `services/xstockstrat-ingest/tests/test_telemetry.py` (create)
+- Deviations: ingest coverage pre-existing shortfall fixed with infrastructure tests (Option A). Full detail in Deviation Log.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 16)
+**Steps this session**: [16]
+**Progress**: 16 done / 16 total
+**Stopped at**: Step 16 (all steps complete — feature code-completed)
+**Next**: Check merge-order.md, then create integration PR targeting main-dev

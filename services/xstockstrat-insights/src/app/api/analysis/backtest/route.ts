@@ -6,11 +6,18 @@
  * Returns: BacktestResult
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/lib/auth';
 
 const ANALYSIS_BASE_URL =
   process.env.ANALYSIS_HTTP_ENDPOINT ?? 'http://xstockstrat-analysis:8056';
 
 export async function POST(req: NextRequest) {
+  const claims = await getSessionFromRequest(req);
+  if (!claims) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const accessScope = String(rolesToAccessScope(claims.roles));
+  const traceId = req.headers.get('x-trace-id') ?? generateTraceId();
   try {
     const body = await req.json();
     const { strategy_id, symbol, start, end, initial_capital = 100000 } = body;
@@ -19,7 +26,12 @@ export async function POST(req: NextRequest) {
       `${ANALYSIS_BASE_URL}/xstockstrat.analysis.v1.AnalysisService/RunBacktest`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/connect+json' },
+        headers: {
+          'Content-Type': 'application/connect+json',
+          'x-user-id': claims.user_id,
+          'x-access-scope': accessScope,
+          'x-trace-id': traceId,
+        },
         body: JSON.stringify({
           strategyId: strategy_id,
           symbols: symbol ? [symbol] : [],

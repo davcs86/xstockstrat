@@ -1,6 +1,6 @@
 # Implementation Spec: wire-fe-auth
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-05-18
 **Feature**: `docs/roadmap/features/012-wire-fe-auth/feature.md`
 **Total Steps**: 16
@@ -107,7 +107,7 @@ No lint errors. The file compiles without errors (confirmed by lint).
 
 ### Step 3 — service: Create `src/lib/auth.ts` in xstockstrat-insights and `app/lib/auth.ts` in xstockstrat-config-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-insights/src/lib/auth.ts` — create
@@ -139,7 +139,7 @@ No lint errors.
 
 ### Step 4 — service: Add `/login` page and `/api/auth/*` routes to xstockstrat-trader
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/app/login/page.tsx` — create
@@ -190,7 +190,7 @@ No lint errors. Manually: `curl -s -X POST http://localhost:3000/api/auth/login 
 
 ### Step 5 — service: Add `middleware.ts` to xstockstrat-trader
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/middleware.ts` — create
@@ -235,7 +235,7 @@ No lint errors. Manually: `curl -s -c /dev/null http://localhost:3000/` (no cook
 
 ### Step 6 — service: Fix API routes in xstockstrat-trader to extract userId from JWT
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/app/api/orders/route.ts` — modify
@@ -277,7 +277,7 @@ No lint errors. Manually: `curl -s http://localhost:3000/api/orders` (no cookie)
 
 ### Step 7 — service: Add login page, auth API routes, and middleware to xstockstrat-insights
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/src/app/login/page.tsx` — create
@@ -327,7 +327,7 @@ No lint errors. Manually: `curl -s http://localhost:3001/api/analysis/strategies
 
 ### Step 8 — service: Add login page, auth API routes, and middleware to xstockstrat-config-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/app/login/page.tsx` — create
@@ -379,7 +379,7 @@ No lint errors. Manually: `curl -s http://localhost:3002/api/config?namespace=pl
 
 ### Step 9 — service: Read tsconfig.json in config-ui to verify `@/` alias resolution
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/tsconfig.json` — read only (may modify if paths need adding)
@@ -408,7 +408,7 @@ Build must complete with no TypeScript errors related to module resolution.
 
 ### Step 10 — service: Strip `x-user-id` from inbound external requests in nginx
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-nginx`
 **Files**:
 - `nginx.conf` — modify (repo root)
@@ -442,7 +442,7 @@ Output must include `syntax is ok` and `test is successful`. Also verify end-to-
 
 ### Step 11 — service: Wire `JWT_SECRET` and `IDENTITY_HTTP_ENDPOINT` env vars into docker-compose.yml and DO app specs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `docker-compose.yml` — modify
@@ -476,7 +476,7 @@ Must show `JWT_SECRET` appearing in `xstockstrat-trader`, `xstockstrat-insights`
 
 ### Step 12 — test: Add auth E2E smoke tests to all three frontends
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-trader/e2e/auth.spec.ts` — create
@@ -531,7 +531,7 @@ All auth tests must pass. Existing smoke tests must continue to pass (they now r
 
 ### Step 13 — service: Add header propagation interceptor to Go services (xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/middleware/propagation.go` — create
@@ -635,7 +635,7 @@ All three must build without errors. Also run: `cd services/xstockstrat-trading 
 
 ### Step 14 — service: Add header propagation to Python services (xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-indicators/app/handlers/servicer.py` — modify
@@ -688,7 +688,7 @@ No lint or format errors.
 
 ### Step 15 — service: Add header propagation middleware to Node.js backend services (xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, xstockstrat-config)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-ledger/src/middleware/propagation.ts` — create
@@ -762,7 +762,7 @@ No lint errors. All four services must pass their existing test suites: `pnpm ru
 
 ### Step 16 — test: Verify Wave 4 backend service test suites after propagation changes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`, `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`, `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config`
 **Files**: _(none — verification only; no source files modified in this step)_
 
@@ -804,3 +804,44 @@ All commands must exit 0 and show passing tests. Coverage must meet or exceed th
 **Spec said**: "`IDENTITY_HTTP_ENDPOINT` already exported from `connectTransport.ts:L29`" (implying import from that file)
 **Actual**: Inlined `process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058'` directly in `auth.ts` as a module-level constant.
 **Reason**: `connectTransport.ts` imports `@connectrpc/connect-node` which is not Edge Runtime-compatible. Since `auth.ts` is used by `middleware.ts` (Step 5), which runs in the Edge Runtime, importing from `connectTransport.ts` would cause a runtime crash. The spec's Step 5 notes `auth.ts` must use only Edge-compatible APIs.
+
+### Deviation: Step 3 — Create `src/lib/auth.ts` in xstockstrat-insights
+**Spec said**: "substituting the `IDENTITY_HTTP_ENDPOINT` import from `services/xstockstrat-insights/src/lib/connectTransport.ts` where the endpoint constant is already exported at L44"
+**Actual**: Inlined `process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058'` directly in `auth.ts` (same pattern as Step 2). Note: the exported constant in connectTransport.ts is named `IDENTITY_BASE_URL` (not `IDENTITY_HTTP_ENDPOINT`), and imports `@connectrpc/connect-node` — not Edge Runtime-compatible.
+**Reason**: Same Edge Runtime compatibility constraint as Step 2. The insights `auth.ts` will be used in `middleware.ts` (Step 7), which runs in the Edge Runtime. Importing from `connectTransport.ts` would cause a runtime crash.
+
+### Deviation: Step 8 — Add login page, auth API routes, and middleware to xstockstrat-config-ui
+**Spec said**: Step 9 is responsible for reading `tsconfig.json` and fixing `@/` path alias resolution if needed.
+**Actual**: `tsconfig.json` was modified in Step 8 (adding `"./app/*"` to the `@/*` paths array). Discovery confirmed `"@/*": ["./src/*"]` would cause `@/app/lib/auth` to resolve to the non-existent `./src/app/lib/auth`. Step 9 is now a verify-only step.
+**Reason**: User selected Option A when the gap was surfaced — tsconfig must be fixed before Step 8 files can compile. Deferring the fix to Step 9 would have left Step 8 files with broken imports. Also used `@components/ui/*` alias (already in tsconfig) for login page UI imports instead of `@/components/ui/*`, since `@/` maps to `src/` not the root `components/` directory.
+
+### Deviation: Step 9 — Read tsconfig.json in config-ui to verify `@/` alias resolution
+**Spec said**: The step may modify tsconfig if the `@/` alias was missing; otherwise it is read-only. Step 8 was expected to leave tsconfig unchanged.
+**Actual**: Step 8's tsconfig change (`"@/*": ["./src/*", "./app/*"]`) caused a webpack build error — `@/app/lib/auth` double-prefixed to `./app/app/lib/auth`. Step 9 corrected tsconfig to `"@/*": ["./*"]` (root-relative wildcard), so `@/app/lib/auth` resolves correctly to `./app/lib/auth.ts`. No other `@/` imports were affected (grep confirmed zero existing uses of `@/lib/*` in config-ui).
+**Reason**: The Step 8 path array `["./src/*", "./app/*"]` applied the pattern-suffix (`lib/auth`) to the base (`./app/`), yielding `./app/lib/auth` — but the import `@/app/lib/auth` passes `app/lib/auth` as the suffix, yielding `./app/app/lib/auth`. Root-relative `["./*"]` avoids this double-prefix and is the correct pattern for a service with a top-level `app/` directory (not `src/app/`).
+
+### Deviation: Step 10 — Strip x-user-id from inbound external requests in nginx
+**Spec said**: Verification via `docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf:ro nginx:alpine nginx -t 2>&1` — output must include `syntax is ok` and `test is successful`.
+**Actual**: Docker daemon is not available in the execution environment. Nginx is also not installed locally. Verification was performed via manual inspection: the three `proxy_set_header <name> "";` directives are valid nginx syntax, placed inside the `server {}` block outside all `location {}` blocks, consistent with the existing `proxy_set_header` directives at the same level. The CI nginx container will run the full `nginx -t` check on deploy.
+**Reason**: Execution environment has no Docker socket (`/var/run/docker.sock: no such file or directory`).
+
+### Deviation: Step 14 — xstockstrat-indicators has no outbound stubs
+**Spec said**: `services/xstockstrat-indicators/app/handlers/servicer.py` — apply propagation_meta extraction to all methods calling ingest stubs.
+**Actual**: The indicators servicer (`IndicatorsServicer`) was inspected and found to have no outbound gRPC stub instances at all. Its `__init__` accepts only `config_watcher`; all five methods (`ComputeIndicator`, `ExecuteFormula`, `ListIndicators`, `RegisterFormula`, `GetFormula`) operate on internal state or call the sandbox subprocess — no downstream stubs. No changes were made to `services/xstockstrat-indicators/app/handlers/servicer.py`.
+**Reason**: The spec was written before Phase 3 implemented indicators as a self-contained service. The CLAUDE.md lists ledger and notify as future dependencies but neither stub is currently instantiated. User selected Option C: track as open item in context.md.
+**Disposition**: Open item — if ledger or ingest stubs are added to indicators (e.g. for signal-aware formula execution), add `propagation_meta` threading at that time.
+
+### Deviation: Step 14 — ingest _run_backfill is an asyncio background task
+**Spec said**: Apply metadata extraction at the top of each servicer method.
+**Actual**: `_run_backfill` runs detached from the original gRPC context via `asyncio.create_task`. The gRPC context object is not safe to read after `TriggerBackfill` returns. User selected Option A (expand scope): extract `propagation_meta` in `TriggerBackfill` before spawning the task, add it as a `propagation_meta=()` parameter to `_run_backfill`, and pass `metadata=propagation_meta` to `BackfillBars` and `AppendEvent` inside the task.
+**Reason**: asyncio tasks created by `create_task` execute concurrently and the originating gRPC `context` may become invalid once the parent RPC returns. Passing the already-extracted list is the safe pattern.
+
+### Deviation: Step 16 — xstockstrat-ingest coverage was pre-existing below 40%; new infrastructure tests added
+**Spec said**: "No new test code is required — if any service's suite fails, diagnose whether the failure pre-dates Steps 13–15 before attributing it to this feature."
+**Actual**: `xstockstrat-ingest` reported 39.90% total coverage (vs. 40% threshold). Diagnosis confirmed the shortfall pre-existed on `origin/main-dev` (39.59%) — caused entirely by `http_server.py` (81 stmts, 0%), `main.py` (57 stmts, 0%), and `telemetry.py` (25 stmts, 0%) — infrastructure files not touched by Steps 13–15. Step 14's propagation changes marginally improved coverage (+0.31pp). User selected Option A: add minimal infrastructure tests. Two new test files added: `tests/test_http_server.py` (3 tests: build_app route registration, _NoopContext.abort, _NoopContext.send_initial_metadata) and `tests/test_telemetry.py` (2 tests: no-op path, enabled+exception path). Final coverage: 54.80%, 46 tests pass.
+**Reason**: Pre-existing gap surfaced by the verification step. `main.py` was excluded from testing because its module-level `raise RuntimeError` guard (DATABASE_URL check) makes import-time testing impractical without extensive mocking.
+
+### Deviation: Step 15 — injection point adapted to existing custom HTTP handler
+**Spec said**: "locate the `http.createServer(connectHandler)` call and wrap it" — spec code sketch assumed `http.createServer(connectHandler)` as a direct pattern.
+**Actual**: All four `src/index.ts` files already use `http.createServer((req, res) => { /* CORS/OPTIONS/health handling */ ... connectHandler(req, res); })`. The `propagationStore.run(extractFromHttpRequest(req), () => connectHandler(req, res))` wrapping was applied only to the `connectHandler(req, res)` call inside the existing callback, leaving the CORS/OPTIONS/health handling untouched.
+**Reason**: Functionally equivalent — `propagationStore` context is established before any Connect-RPC handler executes. Wrapping the whole server would have duplicated the CORS/health logic unnecessarily.

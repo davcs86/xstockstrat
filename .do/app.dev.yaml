@@ -319,6 +319,9 @@ services:
         value: ${xstockstrat-identity.PRIVATE_URL}
       - key: APP_URL
         value: ${APP_URL}
+      - key: JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET
 
   - name: xstockstrat-insights
     github:
@@ -346,6 +349,9 @@ services:
         value: ${xstockstrat-identity.PRIVATE_URL}
       - key: APP_URL
         value: ${APP_URL}
+      - key: JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET
 
   - name: xstockstrat-config-ui
     github:
@@ -359,8 +365,13 @@ services:
     envs:
       - key: CONFIG_HTTP_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_URL}
+      - key: IDENTITY_HTTP_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_URL}
       - key: APP_URL
         value: ${APP_URL}
+      - key: JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET
 
 jobs:
   # Runs golang-migrate against all service schemas before services start.

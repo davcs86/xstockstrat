@@ -12,6 +12,28 @@ All service repos are siblings under `services/`. They consume generated code fr
 
 ---
 
+## Context Guide
+
+This file covers always-needed platform conventions. For larger reference sections, read only what is relevant to your current task — don't load the rest.
+
+| Task | Read |
+|---|---|
+| Building or modifying a Next.js frontend | `docs/patterns/frontend-auth.md` |
+| Adding nginx routing for a new frontend | `docs/patterns/nginx-routing.md` |
+| Adding a new backend service (any language) | `docs/patterns/header-propagation.md` |
+| Syncing git subtrees to/from service repos | `docs/patterns/git-subtree.md` |
+| Proto / buf changes | `docs/runbooks/proto-versioning.md` |
+| Adding a data source (Polygon, Tiingo, etc.) | `docs/runbooks/add-data-source.md` |
+| Building a custom indicator formula | `docs/runbooks/indicator-builder.md` |
+| Bug triage / hotfix | `docs/runbooks/bug-triage.md` |
+| Config rollout | `docs/runbooks/config-rollout.md` |
+| Backfilling historical data | `docs/runbooks/historical-backfill.md` |
+| First-time DigitalOcean setup | `docs/setup/digitalocean.md` |
+| OTel / Grafana Cloud wiring | `docs/setup/grafana-cloud.md` |
+| Feature workflow (branch, PR, promote) | `docs/runbooks/feature-workflow.md` |
+
+---
+
 ## Service Registry
 
 | Service | Language | Role | gRPC Port | HTTP (Connect-RPC) Port |
@@ -218,77 +240,17 @@ Each service has an `internal/telemetry/` (Go), `app/telemetry.py` (Python), or 
 
 ## Nginx Reverse Proxy
 
-The **xstockstrat-nginx** service (port 80) proxies all frontend requests to the three Next.js UIs.
+`xstockstrat-nginx` (port 80) proxies all frontend requests to the three Next.js UIs via upstream blocks in `nginx.conf`. Routes: `/trader/*` → port 3000, `/insights/*` → 3001, `/config-ui/*` → 3002. Health: `GET /health`.
 
-- **Local dev** (`docker-compose.yml`): nginx resolves upstream services via Docker DNS container names (e.g., `xstockstrat-trader:3000`)
-- **DigitalOcean**: nginx receives private service URLs via environment variables (`XSTOCKSTRAT_TRADER_PRIVATE_URL`, etc.) and templates them into `nginx.conf` at startup using `docker-entrypoint.sh` + `envsubst`. The script extracts the hostname from the DO private URL (strips protocol prefix) and injects it into the upstream directives.
+**Adding a new frontend or changing nginx routing** → read `docs/patterns/nginx-routing.md` for the full 8-step procedure (nginx.conf, docker-entrypoint.sh, DO specs, docker-compose, next.config.js, auth wiring).
 
-### Files
+---
 
-- `nginx.conf` (repo root): Main nginx configuration with upstream blocks and location rules
-  - Upstream template placeholders: `${TRADER_UPSTREAM}`, `${INSIGHTS_UPSTREAM}`, `${CONFIG_UI_UPSTREAM}`
-  - Routes: `/trader/*` → trader backend (port 3000), `/insights/*` → insights backend (port 3001), `/config-ui/*` → config-ui backend (port 3002)
-  - Health endpoint: `GET /health` → `{"status":"ok","service":"nginx-reverse-proxy"}`
-- `services/xstockstrat-nginx/Dockerfile`: Copies `nginx.conf` (as template) and `docker-entrypoint.sh` into the container; installs `gettext` for `envsubst`
-- `services/xstockstrat-nginx/docker-entrypoint.sh`: Startup script that strips the protocol prefix from DO private URLs, runs `envsubst` (scoped to the three upstream vars) to render `nginx.conf`, verifies syntax, then starts nginx
+## Frontend Authentication Pattern
 
-### Environment Variables (DO App Platform)
+Every new Next.js frontend **must** implement JWT auth via `lib/auth.ts` (Edge Runtime, `jose`), `middleware.ts` (route protection + trace ID injection), `/api/auth/{login,refresh,logout}` routes, and forward `x-user-id` / `x-access-scope` / `x-trace-id` on all outbound fetches. Required env vars: `JWT_SECRET`, `IDENTITY_HTTP_ENDPOINT`.
 
-| Variable | Source | Purpose |
-|---|---|---|
-| `XSTOCKSTRAT_TRADER_PRIVATE_URL` | DO injected | Private URL for xstockstrat-trader service |
-| `XSTOCKSTRAT_INSIGHTS_PRIVATE_URL` | DO injected | Private URL for xstockstrat-insights service |
-| `XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL` | DO injected | Private URL for xstockstrat-config-ui service |
-
-### Adding a new frontend service
-
-When a new Next.js frontend (e.g. `xstockstrat-newui` on port `3003`) needs to be routed through nginx, touch these 6 files in order:
-
-1. **`nginx.conf`** — add an upstream block and a location block:
-   ```nginx
-   upstream newui_backend {
-       server ${NEWUI_UPSTREAM}:3003;
-   }
-   ```
-   ```nginx
-   location /newui/ {
-       proxy_pass http://newui_backend/;
-       # copy the proxy_set_header lines from an existing location block
-   }
-   ```
-
-2. **`services/xstockstrat-nginx/docker-entrypoint.sh`** — strip the protocol prefix and export the new upstream var, following the existing pattern:
-   ```sh
-   NEWUI_UPSTREAM="${XSTOCKSTRAT_NEWUI_PRIVATE_URL#http://}"
-   NEWUI_UPSTREAM="${NEWUI_UPSTREAM#https://}"
-   export NEWUI_UPSTREAM
-   ```
-   Also add `$NEWUI_UPSTREAM` to the `envsubst` variable list at the bottom of the script.
-
-3. **`.do/app.dev.yaml`** — add the new env var to the `xstockstrat-nginx` service's `envs` block:
-   ```yaml
-   - key: XSTOCKSTRAT_NEWUI_PRIVATE_URL
-     value: ${xstockstrat-newui.PRIVATE_URL}
-   ```
-   Ensure `xstockstrat-newui` itself has **no** `http_port` entry (internal-only).
-
-4. **`.do/app.yaml`** — same change as step 3, for the production spec.
-
-5. **`docker-compose.yml`** — add the env var to the `nginx` service's `environment` block (use the container name as the value, no protocol prefix):
-   ```yaml
-   - XSTOCKSTRAT_NEWUI_PRIVATE_URL=xstockstrat-newui
-   ```
-
-6. **`services/xstockstrat-newui/next.config.js`** — set `basePath` to the nginx route prefix so Next.js generates correct internal links and static asset URLs:
-   ```js
-   const nextConfig = {
-     basePath: '/newui',
-     // ... rest of config unchanged
-   };
-   ```
-   Without this, the app's page links, `_next/static` asset paths, and API routes will 404 when served through the `/newui/` nginx location.
-
-7. **`CLAUDE.md`** (this file) — add a row to the Environment Variables table above, and add `xstockstrat-newui` to the Service Registry table at the top.
+**Full pattern, required files, and code snippets** → read `docs/patterns/frontend-auth.md`. Reference implementation: `services/xstockstrat-trader/`.
 
 ---
 
@@ -393,40 +355,19 @@ xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted ba
 
 ---
 
+## Header Propagation Convention
+
+Every backend service **must** propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from inbound requests to all outbound gRPC/Connect-RPC calls. Nginx strips them from external requests so they are trusted as platform-internal values.
+
+**Language-specific patterns (Go interceptor, Python per-method, Node.js AsyncLocalStorage), code snippets, and reference implementations** → read `docs/patterns/header-propagation.md`.
+
+---
+
 ## Git Subtree Workflow
 
-Each `services/<name>/` directory is linked to its own remote GitHub repo via `git subtree`. The monorepo remains the canonical source; service repos are mirrors for independent CI and direct service work.
+`services/<name>/` directories are linked to individual GitHub repos via `git subtree`. Push: `./scripts/subtree-sync.sh push <service>`. Pull: `./scripts/subtree-sync.sh pull <service>`. Always pull before editing if someone may have pushed directly to a service repo.
 
-### Initial Setup (run once)
-
-Requires `gh` CLI installed and authenticated (`gh auth login`):
-
-```bash
-./scripts/subtree-setup.sh
-```
-
-This creates each service's GitHub repo, splits the `services/<name>/` history, and pushes to `main` on each remote.
-
-### Push changes (monorepo → service repo)
-
-```bash
-./scripts/subtree-sync.sh push xstockstrat-config   # single service
-./scripts/subtree-sync.sh push all                  # all services
-```
-
-### Pull changes (service repo → monorepo)
-
-```bash
-./scripts/subtree-sync.sh pull xstockstrat-config   # single service
-./scripts/subtree-sync.sh pull all                  # all services
-```
-
-### Rules
-
-- **Never edit `services/<name>/` in both the monorepo and the service repo between syncs** without pulling first — this will cause merge conflicts.
-- Always run `subtree-sync.sh pull <service>` before starting work if someone else may have pushed directly to a service repo.
-- `git subtree pull` uses `--squash` to keep monorepo history clean.
-- Service remotes are named after the service (e.g., `xstockstrat-config`). View all with `git remote -v`.
+**Full workflow, initial setup, and rules** → read `docs/patterns/git-subtree.md`.
 
 ---
 
@@ -516,6 +457,10 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sd
 | DO prod app spec | `.do/app.yaml` |
 | DO dev app spec | `.do/app.dev.yaml` |
 | Nginx config | `nginx.conf` (root), `services/xstockstrat-nginx/Dockerfile`, `services/xstockstrat-nginx/docker-entrypoint.sh` |
+| Frontend auth pattern | `docs/patterns/frontend-auth.md` — required for all Next.js services |
+| Backend propagation pattern | `docs/patterns/header-propagation.md` — required for all backend services |
+| Nginx routing pattern | `docs/patterns/nginx-routing.md` — required when adding a new frontend |
+| Git subtree workflow | `docs/patterns/git-subtree.md` |
 | Local env setup script | `scripts/localenv-setup.sh` |
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
