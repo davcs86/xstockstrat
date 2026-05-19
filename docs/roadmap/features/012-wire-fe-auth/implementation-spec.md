@@ -476,7 +476,7 @@ Must show `JWT_SECRET` appearing in `xstockstrat-trader`, `xstockstrat-insights`
 
 ### Step 12 — test: Add auth E2E smoke tests to all three frontends
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-trader/e2e/auth.spec.ts` — create

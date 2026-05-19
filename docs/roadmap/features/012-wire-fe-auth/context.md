@@ -166,3 +166,17 @@
 **Progress**: 11 done / 16 total
 **Stopped at**: Step 11 (step complete — PR created)
 **Next**: /sdd-execute wire-fe-auth next
+
+### Step 12 — test: Add auth E2E smoke tests to all three frontends [done]
+- Created `services/xstockstrat-trader/e2e/auth.spec.ts`, `services/xstockstrat-insights/e2e/auth.spec.ts`, `services/xstockstrat-config-ui/e2e/auth.spec.ts` with login/logout/redirect/cookie-clearing tests using `{ page }` fixture.
+- Modified `mock-backend.ts` in all three services (made `startMockBackend()` async, added `AuthenticateUser`/`RefreshToken`/`RevokeToken` identity RPC responses with dynamically-signed JWTs via `jose`).
+- Modified `playwright.config.ts` in all three services to add `IDENTITY_HTTP_ENDPOINT` and `JWT_SECRET` to `webServer.env`.
+- Modified `services/xstockstrat-trader/e2e/api-smoke.spec.ts`, `services/xstockstrat-insights/e2e/api-smoke.spec.ts`, `services/xstockstrat-config-ui/e2e/api-smoke.spec.ts` (Option A expansion): added `addAuthCookie(page)` helper generating JWT via `jose.SignJWT`, changed `{ request }` → `{ page }`, changed `request.get/post` → `page.request.get/post`, added `await addAuthCookie(page)` at start of each test.
+- Files modified: `services/xstockstrat-trader/e2e/auth.spec.ts` (create), `services/xstockstrat-trader/e2e/mock-backend.ts`, `services/xstockstrat-trader/playwright.config.ts`, `services/xstockstrat-trader/e2e/api-smoke.spec.ts`, `services/xstockstrat-insights/e2e/auth.spec.ts` (create), `services/xstockstrat-insights/e2e/mock-backend.ts`, `services/xstockstrat-insights/playwright.config.ts`, `services/xstockstrat-insights/e2e/api-smoke.spec.ts`, `services/xstockstrat-config-ui/e2e/auth.spec.ts` (create), `services/xstockstrat-config-ui/e2e/mock-backend.ts`, `services/xstockstrat-config-ui/playwright.config.ts`, `services/xstockstrat-config-ui/e2e/api-smoke.spec.ts`
+- Deviations: Expanded scope (Option A, user approved) to update smoke tests for auth — existing `{ request }` tests would 302 after middleware added. Full detail in Deviation Log.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 12)
+**Steps this session**: [12]
+**Progress**: 12 done / 16 total
+**Stopped at**: Step 12 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
