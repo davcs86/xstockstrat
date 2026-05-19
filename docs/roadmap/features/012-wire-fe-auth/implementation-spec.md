@@ -277,7 +277,7 @@ No lint errors. Manually: `curl -s http://localhost:3000/api/orders` (no cookie)
 
 ### Step 7 — service: Add login page, auth API routes, and middleware to xstockstrat-insights
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/src/app/login/page.tsx` — create
