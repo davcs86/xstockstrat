@@ -635,7 +635,7 @@ All three must build without errors. Also run: `cd services/xstockstrat-trading 
 
 ### Step 14 — service: Add header propagation to Python services (xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-indicators/app/handlers/servicer.py` — modify
@@ -824,3 +824,14 @@ All commands must exit 0 and show passing tests. Coverage must meet or exceed th
 **Spec said**: Verification via `docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf:ro nginx:alpine nginx -t 2>&1` — output must include `syntax is ok` and `test is successful`.
 **Actual**: Docker daemon is not available in the execution environment. Nginx is also not installed locally. Verification was performed via manual inspection: the three `proxy_set_header <name> "";` directives are valid nginx syntax, placed inside the `server {}` block outside all `location {}` blocks, consistent with the existing `proxy_set_header` directives at the same level. The CI nginx container will run the full `nginx -t` check on deploy.
 **Reason**: Execution environment has no Docker socket (`/var/run/docker.sock: no such file or directory`).
+
+### Deviation: Step 14 — xstockstrat-indicators has no outbound stubs
+**Spec said**: `services/xstockstrat-indicators/app/handlers/servicer.py` — apply propagation_meta extraction to all methods calling ingest stubs.
+**Actual**: The indicators servicer (`IndicatorsServicer`) was inspected and found to have no outbound gRPC stub instances at all. Its `__init__` accepts only `config_watcher`; all five methods (`ComputeIndicator`, `ExecuteFormula`, `ListIndicators`, `RegisterFormula`, `GetFormula`) operate on internal state or call the sandbox subprocess — no downstream stubs. No changes were made to `services/xstockstrat-indicators/app/handlers/servicer.py`.
+**Reason**: The spec was written before Phase 3 implemented indicators as a self-contained service. The CLAUDE.md lists ledger and notify as future dependencies but neither stub is currently instantiated. User selected Option C: track as open item in context.md.
+**Disposition**: Open item — if ledger or ingest stubs are added to indicators (e.g. for signal-aware formula execution), add `propagation_meta` threading at that time.
+
+### Deviation: Step 14 — ingest _run_backfill is an asyncio background task
+**Spec said**: Apply metadata extraction at the top of each servicer method.
+**Actual**: `_run_backfill` runs detached from the original gRPC context via `asyncio.create_task`. The gRPC context object is not safe to read after `TriggerBackfill` returns. User selected Option A (expand scope): extract `propagation_meta` in `TriggerBackfill` before spawning the task, add it as a `propagation_meta=()` parameter to `_run_backfill`, and pass `metadata=propagation_meta` to `BackfillBars` and `AppendEvent` inside the task.
+**Reason**: asyncio tasks created by `create_task` execute concurrently and the originating gRPC `context` may become invalid once the parent RPC returns. Passing the already-extracted list is the safe pattern.
