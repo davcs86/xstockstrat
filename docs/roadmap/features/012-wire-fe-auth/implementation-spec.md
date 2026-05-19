@@ -442,7 +442,7 @@ Output must include `syntax is ok` and `test is successful`. Also verify end-to-
 
 ### Step 11 — service: Wire `JWT_SECRET` and `IDENTITY_HTTP_ENDPOINT` env vars into docker-compose.yml and DO app specs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `docker-compose.yml` — modify
