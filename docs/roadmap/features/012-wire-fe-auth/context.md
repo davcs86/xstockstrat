@@ -122,3 +122,14 @@
 **Progress**: 7 done / 16 total
 **Stopped at**: Step 7 (step complete — PR created)
 **Next**: /sdd-execute wire-fe-auth next
+
+### Step 8 — Add login page, auth API routes, and middleware to xstockstrat-config-ui [done]
+- Modified tsconfig.json to add `"./app/*"` to `@/*` paths (user chose Option A when gap surfaced). Created `app/api/auth/login/route.ts`, `refresh/route.ts`, `logout/route.ts`, `app/login/page.tsx` (title: "xstockstrat Config"), and `middleware.ts` at service root. Modified `app/api/config/route.ts` (both GET and POST: auth-gated, propagation headers added, author replaced with `claims.user_id`) and `app/api/audit/route.ts` (auth-gated only; no header forwarding needed for direct DB query). Login page uses `@components/ui/*` alias since `@/` resolves to `src/` not root. Lint passed with no new errors.
+- Files modified: `services/xstockstrat-config-ui/tsconfig.json`, `services/xstockstrat-config-ui/app/api/auth/login/route.ts`, `services/xstockstrat-config-ui/app/api/auth/refresh/route.ts`, `services/xstockstrat-config-ui/app/api/auth/logout/route.ts`, `services/xstockstrat-config-ui/app/login/page.tsx`, `services/xstockstrat-config-ui/middleware.ts`, `services/xstockstrat-config-ui/app/api/config/route.ts`, `services/xstockstrat-config-ui/app/api/audit/route.ts`
+- Deviations: tsconfig.json moved from Step 9 to Step 8 scope (user Option A); login page uses `@components/ui/*` alias for UI imports. Full detail in Deviation Log.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 8)
+**Steps this session**: [8]
+**Progress**: 8 done / 16 total
+**Stopped at**: Step 8 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next

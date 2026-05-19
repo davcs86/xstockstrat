@@ -10,6 +10,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { getSessionFromRequest } from '@/app/lib/auth';
 
 let pool: Pool | null = null;
 
@@ -24,6 +25,10 @@ function getPool(): Pool {
 }
 
 export async function GET(req: NextRequest) {
+  const claims = await getSessionFromRequest(req);
+  if (!claims) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const { searchParams } = new URL(req.url);
   const namespace = searchParams.get('namespace');
   const limit = parseInt(searchParams.get('limit') ?? '50', 10);

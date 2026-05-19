@@ -327,7 +327,7 @@ No lint errors. Manually: `curl -s http://localhost:3001/api/analysis/strategies
 
 ### Step 8 — service: Add login page, auth API routes, and middleware to xstockstrat-config-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/app/login/page.tsx` — create
@@ -809,3 +809,8 @@ All commands must exit 0 and show passing tests. Coverage must meet or exceed th
 **Spec said**: "substituting the `IDENTITY_HTTP_ENDPOINT` import from `services/xstockstrat-insights/src/lib/connectTransport.ts` where the endpoint constant is already exported at L44"
 **Actual**: Inlined `process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058'` directly in `auth.ts` (same pattern as Step 2). Note: the exported constant in connectTransport.ts is named `IDENTITY_BASE_URL` (not `IDENTITY_HTTP_ENDPOINT`), and imports `@connectrpc/connect-node` — not Edge Runtime-compatible.
 **Reason**: Same Edge Runtime compatibility constraint as Step 2. The insights `auth.ts` will be used in `middleware.ts` (Step 7), which runs in the Edge Runtime. Importing from `connectTransport.ts` would cause a runtime crash.
+
+### Deviation: Step 8 — Add login page, auth API routes, and middleware to xstockstrat-config-ui
+**Spec said**: Step 9 is responsible for reading `tsconfig.json` and fixing `@/` path alias resolution if needed.
+**Actual**: `tsconfig.json` was modified in Step 8 (adding `"./app/*"` to the `@/*` paths array). Discovery confirmed `"@/*": ["./src/*"]` would cause `@/app/lib/auth` to resolve to the non-existent `./src/app/lib/auth`. Step 9 is now a verify-only step.
+**Reason**: User selected Option A when the gap was surfaced — tsconfig must be fixed before Step 8 files can compile. Deferring the fix to Step 9 would have left Step 8 files with broken imports. Also used `@components/ui/*` alias (already in tsconfig) for login page UI imports instead of `@/components/ui/*`, since `@/` maps to `src/` not the root `components/` directory.
