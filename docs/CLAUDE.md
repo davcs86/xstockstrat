@@ -1,6 +1,6 @@
 # docs/ — xstockstrat Platform Documentation
 
-Operational runbooks, one-time setup guides, and implementation roadmap for the xstockstrat platform. Three subdirectories, each with its own CLAUDE.md index.
+Operational runbooks, one-time setup guides, implementation roadmap, and reusable implementation patterns for the xstockstrat platform. Four subdirectories, each with its own CLAUDE.md index.
 
 ---
 
@@ -8,6 +8,7 @@ Operational runbooks, one-time setup guides, and implementation roadmap for the 
 
 | Directory | What's inside | Use when |
 |---|---|---|
+| [`patterns/`](patterns/CLAUDE.md) | Reusable implementation patterns for new services | Creating a new frontend, backend service, or wiring nginx/auth/propagation |
 | [`runbooks/`](runbooks/CLAUDE.md) | Operational procedures for day-to-day platform tasks | Adding a data source, rolling out a config change, backfilling data, building an indicator, managing proto versions |
 | [`setup/`](setup/CLAUDE.md) | One-time setup guides for external services | First-time Alpaca, DigitalOcean, Grafana Cloud, or n8n setup |
 | [`roadmap/`](roadmap/CLAUDE.md) | Implementation roadmap and per-phase deviation notes | Understanding what was built, why a decision was made, or what's left to implement |
@@ -18,6 +19,10 @@ Operational runbooks, one-time setup guides, and implementation roadmap for the 
 
 | I need to… | File |
 |---|---|
+| Build or modify a Next.js frontend (auth, middleware, routes) | `patterns/frontend-auth.md` |
+| Wire a new frontend through nginx | `patterns/nginx-routing.md` |
+| Add header propagation to a new backend service | `patterns/header-propagation.md` |
+| Sync a service to/from its individual GitHub repo | `patterns/git-subtree.md` |
 | Triage and fix a bug (SEV-1 hotfix, config fix, or SDD path) | `runbooks/bug-triage.md` |
 | View the production hotfix incident history | `runbooks/hotfix-log.md` |
 | Roll out a config change safely | `runbooks/config-rollout.md` |
