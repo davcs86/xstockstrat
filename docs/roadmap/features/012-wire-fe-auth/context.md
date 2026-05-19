@@ -133,3 +133,14 @@
 **Progress**: 8 done / 16 total
 **Stopped at**: Step 8 (step complete — PR created)
 **Next**: /sdd-execute wire-fe-auth next
+
+### Step 9 — Read tsconfig.json in config-ui to verify `@/` alias resolution [done]
+- Step 8's tsconfig change (`"@/*": ["./src/*", "./app/*"]`) caused a webpack build error: `Module not found: Can't resolve '@/app/lib/auth'`. The double-array pattern caused `@/app/lib/auth` to resolve to `./app/app/lib/auth` (double `app/` prefix). Fixed by changing to `"@/*": ["./*"]` (root-relative wildcard). Build passes with zero TypeScript or module-resolution errors.
+- Files modified: `services/xstockstrat-config-ui/tsconfig.json`
+- Deviations: corrected Step 8's tsconfig path; full detail in Deviation Log.
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 9)
+**Steps this session**: [9]
+**Progress**: 9 done / 16 total
+**Stopped at**: Step 9 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next

@@ -379,7 +379,7 @@ No lint errors. Manually: `curl -s http://localhost:3002/api/config?namespace=pl
 
 ### Step 9 — service: Read tsconfig.json in config-ui to verify `@/` alias resolution
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/tsconfig.json` — read only (may modify if paths need adding)
@@ -814,3 +814,8 @@ All commands must exit 0 and show passing tests. Coverage must meet or exceed th
 **Spec said**: Step 9 is responsible for reading `tsconfig.json` and fixing `@/` path alias resolution if needed.
 **Actual**: `tsconfig.json` was modified in Step 8 (adding `"./app/*"` to the `@/*` paths array). Discovery confirmed `"@/*": ["./src/*"]` would cause `@/app/lib/auth` to resolve to the non-existent `./src/app/lib/auth`. Step 9 is now a verify-only step.
 **Reason**: User selected Option A when the gap was surfaced — tsconfig must be fixed before Step 8 files can compile. Deferring the fix to Step 9 would have left Step 8 files with broken imports. Also used `@components/ui/*` alias (already in tsconfig) for login page UI imports instead of `@/components/ui/*`, since `@/` maps to `src/` not the root `components/` directory.
+
+### Deviation: Step 9 — Read tsconfig.json in config-ui to verify `@/` alias resolution
+**Spec said**: The step may modify tsconfig if the `@/` alias was missing; otherwise it is read-only. Step 8 was expected to leave tsconfig unchanged.
+**Actual**: Step 8's tsconfig change (`"@/*": ["./src/*", "./app/*"]`) caused a webpack build error — `@/app/lib/auth` double-prefixed to `./app/app/lib/auth`. Step 9 corrected tsconfig to `"@/*": ["./*"]` (root-relative wildcard), so `@/app/lib/auth` resolves correctly to `./app/lib/auth.ts`. No other `@/` imports were affected (grep confirmed zero existing uses of `@/lib/*` in config-ui).
+**Reason**: The Step 8 path array `["./src/*", "./app/*"]` applied the pattern-suffix (`lib/auth`) to the base (`./app/`), yielding `./app/lib/auth` — but the import `@/app/lib/auth` passes `app/lib/auth` as the suffix, yielding `./app/app/lib/auth`. Root-relative `["./*"]` avoids this double-prefix and is the correct pattern for a service with a top-level `app/` directory (not `src/app/`).
