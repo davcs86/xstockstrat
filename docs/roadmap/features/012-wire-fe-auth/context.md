@@ -111,3 +111,14 @@
 **Progress**: 6 done / 16 total
 **Stopped at**: Step 6 (step complete — PR created)
 **Next**: /sdd-execute wire-fe-auth next
+
+### Step 7 — Add login page, auth API routes, and middleware to xstockstrat-insights [done]
+- Created `src/app/api/auth/login/route.ts`, `refresh/route.ts`, `logout/route.ts` and `src/app/login/page.tsx` (title: "xstockstrat Insights"). Created `src/middleware.ts` with identical matcher and redirect logic as trader. Updated all four API route files (`backtest`, `strategies`, `report/[id]`, `portfolio`) to call `getSessionFromRequest()` at entry (401 if null) and add all three propagation headers to every outbound fetch. Replaced `userId: ''` with `claims.user_id` in `strategies` route's `ListStrategies` call. Lint passed with no new errors.
+- Files modified: `services/xstockstrat-insights/src/app/api/auth/login/route.ts`, `services/xstockstrat-insights/src/app/api/auth/refresh/route.ts`, `services/xstockstrat-insights/src/app/api/auth/logout/route.ts`, `services/xstockstrat-insights/src/app/login/page.tsx`, `services/xstockstrat-insights/src/middleware.ts`, `services/xstockstrat-insights/src/app/api/analysis/backtest/route.ts`, `services/xstockstrat-insights/src/app/api/analysis/strategies/route.ts`, `services/xstockstrat-insights/src/app/api/analysis/report/[id]/route.ts`, `services/xstockstrat-insights/src/app/api/portfolio/route.ts`
+- Deviations: none
+
+## Session 2026-05-19T00:00:00Z — sdd-execute (Step 7)
+**Steps this session**: [7]
+**Progress**: 7 done / 16 total
+**Stopped at**: Step 7 (step complete — PR created)
+**Next**: /sdd-execute wire-fe-auth next
