@@ -290,6 +290,94 @@ When a new Next.js frontend (e.g. `xstockstrat-newui` on port `3003`) needs to b
 
 7. **`CLAUDE.md`** (this file) — add a row to the Environment Variables table above, and add `xstockstrat-newui` to the Service Registry table at the top.
 
+8. **Auth pattern** — follow the steps in the **Frontend Authentication Pattern** section below: add `jose`, create `lib/auth.ts`, login page, `/api/auth/*` routes, `middleware.ts`, and ensure all outbound API route fetches forward the three propagation headers. Add `JWT_SECRET` and `IDENTITY_HTTP_ENDPOINT` env vars to compose and DO specs.
+
+---
+
+## Frontend Authentication Pattern
+
+Every new Next.js frontend service **must** implement the following auth pattern. This was established by feature `wire-fe-auth` and applies to trader, insights, config-ui, and all future frontends.
+
+### Required files (relative to the service root)
+
+| File | Purpose |
+|---|---|
+| `lib/auth.ts` (or `src/lib/auth.ts`) | Shared auth utilities — Edge Runtime compatible |
+| `app/login/page.tsx` | Login form — renders when middleware redirects unauthenticated users |
+| `app/api/auth/login/route.ts` | Authenticates credentials via `xstockstrat-identity`, sets cookies |
+| `app/api/auth/refresh/route.ts` | Refreshes the access token using the refresh token cookie |
+| `app/api/auth/logout/route.ts` | Revokes token and clears cookies |
+| `middleware.ts` | Route protection — runs on every request in the Edge Runtime |
+
+### `lib/auth.ts` — required exports
+
+Must be **Edge Runtime compatible** (no Node.js-only imports). Use `jose` for JWT operations.
+
+```typescript
+export const IDENTITY_HTTP_ENDPOINT =
+  process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058';
+// NOTE: do NOT import this from connectTransport.ts — that file imports
+// @connectrpc/connect-node which is not Edge Runtime compatible.
+
+export type JwtClaims = { user_id: string; email: string; roles: string[] };
+
+export async function verifyAccessToken(token: string): Promise<JwtClaims | null>
+export async function getSessionFromRequest(req: NextRequest): Promise<JwtClaims | null>
+export async function refreshSession(refreshToken: string): Promise<{ accessToken: string; refreshToken: string; claims: JwtClaims } | null>
+export async function revokeToken(token: string): Promise<void>
+export function rolesToAccessScope(roles: string[]): number  // bitmap
+export function generateTraceId(): string                    // crypto.randomUUID()
+```
+
+### `middleware.ts` — required behaviour
+
+- Protect all routes **except** `/login` and `/api/auth/*`.
+- If the access token cookie is valid: allow the request and inject `x-trace-id` (generate if absent).
+- If the access token is expired but a refresh token exists: attempt silent refresh, rewrite cookies, allow.
+- Otherwise: redirect to `/login?next=<encoded-url>`.
+
+### API routes — header forwarding (required)
+
+Every outbound `fetch` call from an API route to a backend service **must** forward the three propagation headers:
+
+```typescript
+const claims = await getSessionFromRequest(req);  // guaranteed non-null — middleware already verified
+const accessScope = String(rolesToAccessScope(claims.roles));
+const traceId = req.headers.get('x-trace-id') ?? generateTraceId();
+
+fetch(upstreamUrl, {
+  headers: {
+    'Content-Type': 'application/connect+json',
+    'x-user-id':      claims.user_id,
+    'x-access-scope': accessScope,
+    'x-trace-id':     traceId,
+  },
+  // ...
+});
+```
+
+### Required environment variables
+
+| Variable | Where set | Notes |
+|---|---|---|
+| `JWT_SECRET` | `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml` | Must be `≥32` chars; same value across all frontends and identity service |
+| `IDENTITY_HTTP_ENDPOINT` | Same | DO: use `${xstockstrat-identity.PRIVATE_URL}`; local: `http://xstockstrat-identity:8058` |
+
+### Required `package.json` additions
+
+```json
+"jose": "^5.x.x"
+```
+
+### Adding a new frontend service
+
+When a new Next.js frontend (e.g. `xstockstrat-newui`) is added, beyond the nginx steps in the Nginx Reverse Proxy section above, also:
+
+1. Copy the auth file structure from an existing frontend (`xstockstrat-trader` is the reference implementation).
+2. Add `JWT_SECRET` and `IDENTITY_HTTP_ENDPOINT` to `docker-compose.yml`, `.do/app.dev.yaml`, and `.do/app.yaml` under the new service.
+3. Add `xstockstrat-identity` to the new service's `depends_on` in `docker-compose.yml`.
+4. Ensure all outbound Connect-RPC `fetch` calls in API routes forward the three propagation headers.
+
 ---
 
 ## Generating Proto Stubs
@@ -389,6 +477,123 @@ All services → xstockstrat-notify (alert emissions)
 xstockstrat-ingest → xstockstrat-marketdata (raw data push)
 xstockstrat-indicators → xstockstrat-ingest (QuerySignals for signal-aware formulas)
 xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted backtests)
+```
+
+---
+
+## Header Propagation Convention
+
+Every service that receives **inbound** gRPC or Connect-RPC calls **must** extract and forward the three propagation headers on all **outbound** calls. This convention was established by feature `wire-fe-auth`.
+
+| Header | Carries | Set by |
+|---|---|---|
+| `x-user-id` | Authenticated user ID from JWT | Frontend middlewares; propagated by all backend services |
+| `x-access-scope` | Bitmap of user roles | Frontend API routes; propagated by all backend services |
+| `x-trace-id` | Request trace identifier | Frontend `middleware.ts` (generates if absent); propagated by all backend services |
+
+Nginx strips all three headers from **inbound external requests** so internal services can trust them as platform-generated values.
+
+### Go services
+
+Create `internal/middleware/propagation.go`:
+
+```go
+// PropagationKeys for context storage
+type propagationKey struct{ name string }
+var userIDKey      = propagationKey{"x-user-id"}
+var accessScopeKey = propagationKey{"x-access-scope"}
+var traceIDKey     = propagationKey{"x-trace-id"}
+
+// PropagationUnaryInterceptor extracts the three headers from incoming gRPC
+// metadata and stashes them in the context for outbound call forwarding.
+func PropagationUnaryInterceptor(
+    ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+) (any, error) {
+    if md, ok := metadata.FromIncomingContext(ctx); ok {
+        ctx = context.WithValue(ctx, userIDKey,      first(md["x-user-id"]))
+        ctx = context.WithValue(ctx, accessScopeKey, first(md["x-access-scope"]))
+        ctx = context.WithValue(ctx, traceIDKey,     first(md["x-trace-id"]))
+    }
+    return handler(ctx, req)
+}
+
+func UserID(ctx context.Context) string      { return strVal(ctx, userIDKey) }
+func AccessScope(ctx context.Context) string { return strVal(ctx, accessScopeKey) }
+func TraceID(ctx context.Context) string     { return strVal(ctx, traceIDKey) }
+```
+
+Register in `grpc.NewServer`:
+```go
+grpc.NewServer(grpc.ChainUnaryInterceptor(middleware.PropagationUnaryInterceptor, ...))
+```
+
+Forward on outbound calls:
+```go
+outMD := metadata.Pairs(
+    "x-user-id",      middleware.UserID(ctx),
+    "x-access-scope", middleware.AccessScope(ctx),
+    "x-trace-id",     middleware.TraceID(ctx),
+)
+stub.SomeRPC(metadata.NewOutgoingContext(ctx, outMD), req)
+```
+
+### Python services (grpc.aio)
+
+Extract at the top of every handler method, then pass `metadata=propagation_meta` to all downstream stub calls:
+
+```python
+propagation_meta = [
+    (k, v)
+    for k, v in context.invocation_metadata()
+    if k in ("x-user-id", "x-access-scope", "x-trace-id")
+]
+# ...
+await self._some_stub.SomeRPC(request, metadata=propagation_meta)
+```
+
+**Background tasks**: `asyncio.create_task` detaches from the gRPC context — extract `propagation_meta` **before** spawning the task and pass it as an explicit parameter to the task function:
+
+```python
+propagation_meta = [(k, v) for k, v in context.invocation_metadata()
+                    if k in ("x-user-id", "x-access-scope", "x-trace-id")]
+asyncio.create_task(self._background_task(arg, propagation_meta))
+
+async def _background_task(self, arg, propagation_meta=()):
+    await self._stub.SomeRPC(req, metadata=propagation_meta)
+```
+
+### Node.js services (Connect-RPC)
+
+Create `src/middleware/propagation.ts`:
+
+```typescript
+import { AsyncLocalStorage } from 'async_hooks';
+import type { IncomingMessage } from 'http';
+
+export interface PropagationContext {
+  userId: string;
+  accessScope: string;
+  traceId: string;
+}
+
+export const propagationStore = new AsyncLocalStorage<PropagationContext>();
+
+export function extractFromHttpRequest(req: IncomingMessage): PropagationContext {
+  return {
+    userId:      (req.headers['x-user-id']      as string) ?? '',
+    accessScope: (req.headers['x-access-scope'] as string) ?? '0',
+    traceId:     (req.headers['x-trace-id']     as string) ?? '',
+  };
+}
+```
+
+In `src/index.ts`, wrap the `connectHandler` call (inside the existing CORS/health callback — do NOT replace the whole callback):
+
+```typescript
+import { propagationStore, extractFromHttpRequest } from './middleware/propagation';
+// ...
+// Inside the existing http.createServer callback:
+propagationStore.run(extractFromHttpRequest(req), () => connectHandler(req, res));
 ```
 
 ---
@@ -516,6 +721,10 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sd
 | DO prod app spec | `.do/app.yaml` |
 | DO dev app spec | `.do/app.dev.yaml` |
 | Nginx config | `nginx.conf` (root), `services/xstockstrat-nginx/Dockerfile`, `services/xstockstrat-nginx/docker-entrypoint.sh` |
+| Frontend auth lib (reference) | `services/xstockstrat-trader/src/lib/auth.ts` — copy to each new frontend |
+| Frontend middleware (reference) | `services/xstockstrat-trader/src/middleware.ts` — copy to each new frontend |
+| Go propagation interceptor (reference) | `services/xstockstrat-trading/internal/middleware/propagation.go` — copy to each new Go service |
+| Node.js propagation middleware (reference) | `services/xstockstrat-ledger/src/middleware/propagation.ts` — copy to each new Node.js service |
 | Local env setup script | `scripts/localenv-setup.sh` |
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
