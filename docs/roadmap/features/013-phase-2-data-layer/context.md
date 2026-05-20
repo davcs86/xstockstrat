@@ -16,3 +16,16 @@ Append-only session log. Never edit past entries.
 - Proto field `portfolio/v1/portfolio.proto:60` confirms `realized_pnl` is specified.
 
 **Status**: `idea` — no product spec yet.
+
+---
+
+## 2026-05-20 — Scope revision: streaming gaps dismissed
+
+**Trigger**: User questioned whether WebSocket streaming is needed for a non-day-trading platform.
+
+**Follow-up audit findings**:
+- `grep -rn "StreamBars\|StreamQuotes\|SubscribeBars\|SubscribeQuotes"` across `xstockstrat-trading`, `xstockstrat-analysis`, `xstockstrat-indicators` — **zero callers**. No service calls the streaming RPCs.
+- All consumers (`analysis/app/handlers/servicer.py:197`, `trading`) use `GetBars` (request/response over REST). Polling stubs are irrelevant.
+- `SourceRegistry` is an extensibility concern for future multi-provider support, not a correctness bug.
+
+**Revised scope**: Only gap worth fixing is `GetPnL.realized_pnl = 0` in `portfolio_service.go:255–270`. feature.md updated accordingly.

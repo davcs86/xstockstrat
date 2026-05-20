@@ -25,35 +25,31 @@
 
 ## Summary
 
-Complete the Phase 2 data layer: replace the polling stubs in `xstockstrat-marketdata` with real Alpaca WebSocket streaming, introduce the `SourceRegistry` pattern to enable additional data providers without code changes, and implement realized P&L computation in `xstockstrat-portfolio`. Phases 3–6 are already live and depend on these services — they currently work but degrade silently when the stubs fall short (60s bar lag, no true real-time quotes, incorrect P&L on closed positions).
+Fix the one real correctness gap left by the Phase 2 skip: `GetPnL` in `xstockstrat-portfolio` always returns `realized_pnl = 0` because the ledger is never queried for closed-position events. Unrealized P&L is correct. The `SourceRegistry` pattern (for multi-provider marketdata) is a separate extensibility concern, not a correctness bug.
 
 ---
 
-## Specific Gaps (from code audit 2026-05-19)
-
-### xstockstrat-marketdata (`services/xstockstrat-marketdata/`)
-
-| Gap | Location | Detail |
-|---|---|---|
-| WebSocket streaming stub | `internal/alpaca/client.go:164` | `StreamBars` polls Alpaca REST every 60 s. Comment: "For production, replace with Alpaca WebSocket (`wss://stream.data.alpaca.markets/v2/{feed}`)." |
-| Quote streaming stub | `internal/alpaca/client.go:198` | `StreamQuotes` polls REST every 5 s. Comment: "For production, replace with Alpaca WebSocket." |
-| No SourceRegistry | `internal/service/marketdata_service.go` | Roadmap §Phase 2A requires `sourceRegistry.Register("alpaca", ...)` dispatch pattern; all RPCs hard-code `s.alpaca.*`. Adding Polygon/Tiingo requires code changes instead of registration. |
+## Specific Gap (from code audit 2026-05-19, revised 2026-05-20)
 
 ### xstockstrat-portfolio (`services/xstockstrat-portfolio/`)
 
 | Gap | Location | Detail |
 |---|---|---|
-| `realized_pnl` always 0 | `internal/service/portfolio_service.go:255–270` | `GetPnL` computes unrealized correctly (via `GetLatestQuote`) but never sets `RealizedPnl`. Proto field exists (`portfolio/v1/portfolio.proto:60`). Requires querying ledger for closed-position events (`order.filled` pairs). |
+| `realized_pnl` always 0 | `internal/service/portfolio_service.go:255–270` | `GetPnL` computes unrealized correctly via `GetLatestQuote` but never sets `RealizedPnl`. Proto field exists (`portfolio/v1/portfolio.proto:60`). Requires querying ledger for paired `order.filled` events (entry + exit) to compute realized gain/loss. |
+
+### xstockstrat-marketdata — assessed and dismissed
+
+| Item | Verdict |
+|---|---|
+| `StreamBars` polling stub (`client.go:164`) | **Not a problem** — no service calls `StreamBars`; all consumers (`analysis`, `trading`) use `GetBars` (request/response). 60s lag is irrelevant for a position/swing trading platform. |
+| `StreamQuotes` polling stub (`client.go:198`) | **Not a problem** — same reason; no callers. |
+| No `SourceRegistry` pattern | **Out of scope here** — extensibility concern for a future add-data-source feature, not a correctness bug. |
 
 ---
 
-## Why This Is a Sleeper Risk
+## Why This Is Still Worth Fixing
 
-- Phases 3–6 (indicators, analysis, trading, UIs) are live and call `GetLatestQuote` and `GetBars` from marketdata, and call `GetPnL` from portfolio.
-- **Unrealized P&L is functionally correct** only while the `quotes` hypertable has fresh rows — which happens only if `StreamQuotes` was started at service boot for the right symbols.
-- **Realized P&L is structurally wrong** (always 0). The insights dashboard and trader UI will show incorrect total P&L for any closed position.
-- **The 60-second bar lag** means any strategy scoring in analysis that depends on near-real-time bars is working on stale data in production.
-- None of these failures are loud — there are no panics or gRPC errors, only quietly wrong numbers.
+`realized_pnl` is structurally wrong (always 0) — the insights dashboard and trader UI show incorrect total P&L for any closed position. No error is surfaced; it silently understates performance for profitable trades and overstates it for losers.
 
 ---
 
