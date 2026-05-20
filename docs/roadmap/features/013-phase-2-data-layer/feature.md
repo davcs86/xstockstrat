@@ -1,6 +1,6 @@
 # Feature: phase-2-data-layer
 
-**Lifecycle Status**: `idea`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/phase-2-data-layer`
 **Created**: 2026-05-19
 **Last Updated**: 2026-05-20
@@ -12,51 +12,33 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-19 | `idea` | backlog | Surfaced as sleeper risk — Phase 2 skipped while Phases 3–6 completed |
+| 2026-05-20 | `idea` → `draft` | /sdd-story | Product spec generated; scope narrowed to realized_pnl fix only |
+| 2026-05-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
+| 2026-05-20 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 2 steps |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — _not yet written — run `/sdd-story phase-2-data-layer`_
-- [Implementation Spec](implementation-spec.md) — _not yet generated_
+- [Product Spec](product-spec.md) — requirements and governance
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
 
 ## Summary
 
-Two gaps from the Phase 2 skip: (1) `GetPnL` in `xstockstrat-portfolio` always returns `realized_pnl = 0` because the ledger is never queried for closed-position events; (2) `xstockstrat-marketdata` has no `SourceRegistry` — all RPCs hard-code the Alpaca client, making additional data providers (Polygon, Tiingo) require code changes instead of registration. The `SourceRegistry` pattern was implemented directly in this session (see context.md); the `realized_pnl` fix is pending.
+`GetPnL` in `xstockstrat-portfolio` always returns `realized_pnl = 0` because the service never queries the ledger for closed-position fills. The root cause is in `xstockstrat-trading`: neither broker engine (`AlpacaClient` nor `IBKRClient`) populates `FilledAvgPrice` in `BrokerOrder`, so `order.filled` ledger events are always emitted with `fill_price = 0.0`. This feature fixes both bugs: the trading service broker/pollFills root cause, and the portfolio service GetPnL ledger-query gap.
 
----
+## Reviewers
 
-## Specific Gap (from code audit 2026-05-19, revised 2026-05-20)
+_(Snapshot finalized by /sdd-spec 2026-05-20; updated 2026-05-20 for scope expansion to trading service. Re-run /sdd-spec if the registry changes.)_
 
-### xstockstrat-portfolio (`services/xstockstrat-portfolio/`)
-
-| Gap | Location | Detail |
-|---|---|---|
-| `realized_pnl` always 0 | `internal/service/portfolio_service.go:255–270` | `GetPnL` computes unrealized correctly via `GetLatestQuote` but never sets `RealizedPnl`. Proto field exists (`portfolio/v1/portfolio.proto:60`). Requires querying ledger for paired `order.filled` events (entry + exit) to compute realized gain/loss. |
-
-### xstockstrat-marketdata — SourceRegistry implemented 2026-05-20
-
-| Item | Status |
+| Role | Review Focus |
 |---|---|
-| `StreamBars` polling stub (`client.go:164`) | **Not a problem** — no callers; 60s lag irrelevant for swing trading. |
-| `StreamQuotes` polling stub (`client.go:198`) | **Not a problem** — no callers. |
-| No `SourceRegistry` pattern | **Implemented** — `internal/source/source.go` added; `marketdata_service.go` + `main.go` updated. See context.md 2026-05-20 entry. |
-
----
-
-## Why This Is Still Worth Fixing
-
-`realized_pnl` is structurally wrong (always 0) — the insights dashboard and trader UI show incorrect total P&L for any closed position. No error is surfaced; it silently understates performance for profitable trades and overstates it for losers.
-
----
-
-## Dependencies
-
-None — this is a standalone data layer fix. Does not block or depend on any active feature.
+| Service owner (`xstockstrat-trading`) | Broker interface changes, fill price parsing accuracy, IBKR API field name correctness, pollFills event payload |
+| Service owner (`xstockstrat-portfolio`) | P&L calculation accuracy, position snapshot consistency, concurrent write safety |
 
 ## Next Action
 
-Run `/sdd-story phase-2-data-layer` to generate the product spec covering the remaining `realized_pnl` gap (SourceRegistry is already done).
+`/sdd-execute phase-2-data-layer` — implementation spec finalized (5 steps); execute Step 1 first.
