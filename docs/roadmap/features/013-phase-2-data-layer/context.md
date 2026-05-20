@@ -29,3 +29,13 @@ Append-only session log. Never edit past entries.
 - `SourceRegistry` is an extensibility concern for future multi-provider support, not a correctness bug.
 
 **Revised scope**: Only gap worth fixing is `GetPnL.realized_pnl = 0` in `portfolio_service.go:255–270`. feature.md updated accordingly.
+
+---
+
+## 2026-05-20 — Origin of StreamBars/StreamQuotes clarified
+
+**Trigger**: User asked what the RPCs were originally designed for.
+
+**Finding**: Roadmap Phase 5C (`implementation-roadmap.md:442`) explicitly specified a "Chart panel: `StreamBars` / `GetBars` OHLCV candlestick chart" in `xstockstrat-trader`. `StreamQuotes` was intended to feed live bid/ask price to the order entry form. Neither was built — `phase5-deviations.md` documents other trader changes (Connect-RPC refactor, SSE alert polling) but silently drops the chart panel.
+
+**Implication**: The streaming RPCs are not dead code — they are waiting for a trader chart panel feature. When that feature is built, the choice between true WebSocket streaming vs. polling `GetBars` should be revisited based on the required bar timeframe (1D bars need no streaming; 1m bars might justify it).
