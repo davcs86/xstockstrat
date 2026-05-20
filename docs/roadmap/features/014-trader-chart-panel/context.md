@@ -21,3 +21,22 @@
 - Warnings: 012-wire-fe-auth (code-completed) also modifies xstockstrat-trader — 014 should be built on top of merged 012.
 - Overlap findings: no FAIL-level conflicts; no merge-order.md entry required.
 - FR-8 added (bar-count selector: 50/100/200, default 100) to resolve final open question (user chose option B — user-adjustable).
+
+## Session 2026-05-20T00:00:00Z — sdd-spec
+
+- Generated implementation-spec.md with 5 steps. Status → implementation-ready.
+- Key codebase findings:
+  - `MARKETDATA_HTTP_ENDPOINT` is absent from the `xstockstrat-trader` service block in all three deployment files (`docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`); it exists only in the `xstockstrat-insights` blocks. Step 3 adds it to all three trader sections.
+  - Connect-RPC route pattern: `fetch(${BASE_URL}/${rpc_path}, { method: 'POST', headers: { 'Content-Type': 'application/connect+json', ...propagationHeaders }, body: JSON.stringify(body) })` — confirmed in `services/xstockstrat-trader/src/app/api/orders/route.ts` L16–20.
+  - `lightweight-charts` is not yet in `package.json` (confirmed absent); Step 1 adds it at `^4.2.0`. The component uses dynamic `import('lightweight-charts')` inside `useEffect` to avoid SSR issues.
+  - Mock backend at `e2e/mock-backend.ts` L20 does not include `GetBars` or `ListAssets` paths; Step 5 adds both. `MARKETDATA_HTTP_ENDPOINT` is also absent from `playwright.config.ts` webServer.env (L46–52); Step 5 adds it.
+  - The trading dashboard grid (`src/app/page.tsx` L29–39) uses `grid-cols-1 md:grid-cols-12`; chart panel will be mounted as a full-width row below the existing 3-column grid within the same `space-y-4` container.
+
+## Session 2026-05-20T00:00:00Z — sdd-review impl-spec
+
+- Advisory review passed: 0 failures, 3 warnings.
+- Warnings resolved in spec (except wire-fe-auth overlap — known, deferred):
+  - Step 1 **Files**: added `pnpm-lock.yaml` (updated by `pnpm install`).
+  - Step 2 **Verification**: replaced placeholder-curl with `pnpm build`; curl demoted to commented smoke-test hint.
+  - Step 4 lightweight-charts API uncertainty: already self-documented in the code note — no change needed.
+- wire-fe-auth (012, code-completed) overlap on `e2e/mock-backend.ts` and `playwright.config.ts` noted but deferred per user instruction; build Step 5 on top of merged 012 or rebase those two files before opening the final PR.
