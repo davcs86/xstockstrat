@@ -15,12 +15,13 @@ As a trader using the xstockstrat platform, I want `GetPnL` to return the correc
 ## Functional Requirements
 
 FR-1. `GetPnL` must query `xstockstrat-ledger` for `order.filled` events associated with the requested portfolio, filtered to the caller's user context (propagated via `x-user-id` header).
-FR-2. For each matched pair of an entry fill (buy) and an exit fill (sell) on the same ticker, realized gain/loss must be computed as `(exit_price - entry_price) × quantity` and accumulated into `realized_pnl`.
+FR-2. Fill events must be processed individually in ledger-recorded order — partial fills for the same order (multiple `order.filled` events with partial quantities) are NOT pre-aggregated before computation. Each event is fed directly into a per-symbol running average-cost-basis accumulator. On a closing fill (opposite direction to current net position), realized gain/loss is computed from the running average and accumulated into `realized_pnl`.
 FR-3. The computed `realized_pnl` must be returned in the `GetPnLResponse` proto message field `realized_pnl` (defined at `portfolio/v1/portfolio.proto:60`) alongside the existing `unrealized_pnl` without regression.
+FR-4. Short positions must be supported read-only (observation of ledger events only — no order creation). A sell fill that opens or increases a net short position is treated as an entry; a subsequent buy fill that reduces or closes the net short computes realized P&L as `(average_entry_price − exit_price) × quantity_closed`. Profit on a short occurs when the exit price is lower than the entry price.
 
 ## Out of Scope
 
-- Short-selling P&L (reverse entry/exit pairs where sell precedes buy)
+- Short order creation — this feature only reads ledger events; placing short orders is out of scope
 - Tax lot accounting (FIFO / LIFO / specific lot matching) — average cost basis is sufficient
 - `xstockstrat-marketdata` SourceRegistry gap — already implemented (2026-05-20; see context.md)
 - `StreamBars` / `StreamQuotes` WebSocket streaming — no callers; deferred to future chart panel feature
@@ -54,11 +55,13 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Acceptance Criteria
 
-1. Calling `GetPnL` for a portfolio with at least one closed position (matched buy + sell fills in the ledger) returns a non-zero `realized_pnl` equal to the sum of `(exit_price - entry_price) × quantity` across all closed trades.
-2. Calling `GetPnL` for a portfolio with no closed positions (all positions still open, or no fills at all) returns `realized_pnl = 0`.
-3. `unrealized_pnl` is unchanged for all portfolios — open-position computation is not regressed.
-4. The gRPC call from `xstockstrat-portfolio` to `xstockstrat-ledger` propagates `x-user-id`, `x-access-scope`, and `x-trace-id` headers per the platform header-propagation convention.
-5. Unit tests cover the three cases above: closed positions, no closed positions, mixed open+closed.
+1. Calling `GetPnL` for a portfolio with at least one closed long position (buy then sell fills in the ledger) returns a non-zero `realized_pnl` equal to the sum of `(exit_price - entry_price) × quantity` across all closed long trades.
+2. Calling `GetPnL` for a portfolio with at least one closed short position (sell then buy fills) returns a non-zero `realized_pnl` equal to `(entry_price - exit_price) × quantity` for each closed short.
+3. Calling `GetPnL` for a portfolio with no closed positions (all positions still open, or no fills at all) returns `realized_pnl = 0`.
+4. Partial fills (multiple `order.filled` events with partial quantities for the same order) are processed as independent events and produce the same total `realized_pnl` as a single equivalent fill would.
+5. `unrealized_pnl` is unchanged for all portfolios — open-position computation is not regressed.
+6. The gRPC call from `xstockstrat-portfolio` to `xstockstrat-ledger` propagates `x-user-id`, `x-access-scope`, and `x-trace-id` headers per the platform header-propagation convention.
+7. Unit tests cover: closed long, closed short, no fills, partial fills, mixed open+closed.
 
 ## Open Questions
 
@@ -66,4 +69,4 @@ _No unresolved product questions. The following implementation details will be c
 
 - Ledger event schema for `order.filled`: what fields encode ticker, fill price, quantity, and side? (affects FR-1 query construction)
 - Ledger gRPC client wiring in `xstockstrat-portfolio`: existing client or new one required? (affects implementation scope)
-- Partial fill modeling: single aggregated event or per-tranche? If per-tranche, FR-2 matching must accumulate partial quantities before pairing. (affects FR-2 algorithm)
+- Partial fill modeling: resolved — each `order.filled` event is processed independently; no pre-aggregation (per FR-2).

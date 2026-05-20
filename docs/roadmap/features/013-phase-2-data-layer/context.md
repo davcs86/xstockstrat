@@ -42,6 +42,24 @@ Append-only session log. Never edit past entries.
 
 ---
 
+## 2026-05-20 — spec amendments: short-selling support + partial fill clarification
+
+**Trigger**: User clarified two out-of-scope decisions after impl-spec review.
+
+**Changes to product-spec.md**:
+- FR-2 updated: partial fills processed as independent events per ledger order, no pre-aggregation
+- FR-4 added: short-selling P&L supported read-only (observe ledger events, no order creation)
+- Out of Scope: "Short-selling P&L" replaced with "Short order creation" (read-only is now in scope)
+- AC-2 added for closed short positions; AC-4 added for partial fill equivalence
+- Open questions: partial fill question marked resolved
+
+**Changes to implementation-spec.md**:
+- Step 1: algorithm updated to signed accumulator (unified long/short); `math.Abs` import check added; position reversal handled (excess fill qty opens opposite-direction position)
+- Step 1: evidence extended to confirm `fill.Mode` (Go field name, L112) and all three `PnLResponse` fields (L376–378) — closes both ✗ failures from /sdd-review impl-spec
+- Step 2: tests renamed; `TestRealizedPnL_ClosedShort` and `TestRealizedPnL_PartialFills` added; total test count = 5
+
+---
+
 ## 2026-05-20 — sdd-review product-spec
 
 - Product spec approved. Status: draft → spec-ready.
