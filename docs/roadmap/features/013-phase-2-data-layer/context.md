@@ -158,3 +158,24 @@ The existing portfolio subscriber (`portfolio_service.go:88`) already filters on
 - Summary updated to mention root-cause
 - Reviewers: added `xstockstrat-trading` service owner
 - Next Action: updated to `/sdd-execute`
+
+---
+
+## 2026-05-20 — partially-filled-then-canceled orders added to scope
+
+**Trigger**: User observed that partially filled orders that are never fully completed (e.g., buy 100 shares, only 50 fill, then canceled) would be silently dropped from realized P&L under the current spec. User explicitly: "i don't want the partially filled orders that are never fully completed to disappear silently. Include them in the scope."
+
+**Design decision**: Two-pass approach.
+- Pass 1: query `order.filled` events → accumulate P&L via `applyFill` closure, collect `filledOrderIDs map[string]bool`.
+- Pass 2: query `order.partially_filled` events → collect `latestPartials map[string]orderFillPayload` (overwrite per `order_id` since events arrive in `recorded_at` order, so last = highest cumulative `filled_qty`). After the loop, for each `order_id` in `latestPartials` NOT in `filledOrderIDs`, call `applyFill(fill.FilledQty, fill.FillPrice, fill.Symbol)`.
+- Note: Pass 1 complete fills are applied before Pass 2 partial fills, regardless of chronological order. For the common case (partial fill precedes any subsequent complete fills for the same symbol) this produces correct results; in unusual interleaved scenarios the cost-basis ordering may differ from strict chronological order. This approximation is acceptable for the current scope.
+
+**Changes to product-spec.md**:
+- FR-2 rewritten: two-pass algorithm; last-per-order deduplication of `order.partially_filled`; partial fills for non-completed orders are included
+- AC-4 (multiple orders): unchanged; added AC-5 for partially-filled-then-canceled orders
+- AC-8 (formerly AC-7): updated to mention 6 test cases including `TestRealizedPnL_PartiallyFilledCanceled`
+
+**Changes to implementation-spec.md**:
+- Step 4 Codebase Evidence: `orderFillPayload` needs `OrderID string \`json:"order_id"\`` and `FilledQty float64 \`json:"filled_qty"\``; updated two-event-type evidence bullet
+- Step 4 Instructions: added section A (two new struct fields); replaced single-loop algorithm with `applyFill` closure + Pass 1 (`order.filled`) + Pass 2 (`order.partially_filled`) + post-loop application
+- Step 5 Instructions: helper signature `computeRealizedPnL(completeFills, partialFills []orderFillPayload) float64`; added test 7 `TestRealizedPnL_PartiallyFilledCanceled` (partial buy 50@50 never completed + complete sell 50@70 → realized 1000.0); updated verification to "six new test cases"
