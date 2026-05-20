@@ -1,6 +1,6 @@
 # Feature: phase-2-data-layer
 
-**Lifecycle Status**: `idea`
+**Lifecycle Status**: `draft`
 **Development Branch**: `feature/phase-2-data-layer`
 **Created**: 2026-05-19
 **Last Updated**: 2026-05-20
@@ -12,51 +12,33 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-19 | `idea` | backlog | Surfaced as sleeper risk — Phase 2 skipped while Phases 3–6 completed |
+| 2026-05-20 | `idea` → `draft` | /sdd-story | Product spec generated; scope narrowed to realized_pnl fix only |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — _not yet written — run `/sdd-story phase-2-data-layer`_
-- [Implementation Spec](implementation-spec.md) — _not yet generated_
+- [Product Spec](product-spec.md) — requirements and governance
+- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec phase-2-data-layer`_
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
 
 ## Summary
 
-Two gaps from the Phase 2 skip: (1) `GetPnL` in `xstockstrat-portfolio` always returns `realized_pnl = 0` because the ledger is never queried for closed-position events; (2) `xstockstrat-marketdata` has no `SourceRegistry` — all RPCs hard-code the Alpaca client, making additional data providers (Polygon, Tiingo) require code changes instead of registration. The `SourceRegistry` pattern was implemented directly in this session (see context.md); the `realized_pnl` fix is pending.
+`GetPnL` in `xstockstrat-portfolio` always returns `realized_pnl = 0` because the service never queries the ledger for closed-position fills. This causes the insights dashboard and trader UI to silently report incorrect total P&L for any account with closed positions.
 
----
+## Reviewers
 
-## Specific Gap (from code audit 2026-05-19, revised 2026-05-20)
+_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
+change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
+re-run /sdd-spec if the registry changes.)_
 
-### xstockstrat-portfolio (`services/xstockstrat-portfolio/`)
-
-| Gap | Location | Detail |
-|---|---|---|
-| `realized_pnl` always 0 | `internal/service/portfolio_service.go:255–270` | `GetPnL` computes unrealized correctly via `GetLatestQuote` but never sets `RealizedPnl`. Proto field exists (`portfolio/v1/portfolio.proto:60`). Requires querying ledger for paired `order.filled` events (entry + exit) to compute realized gain/loss. |
-
-### xstockstrat-marketdata — SourceRegistry implemented 2026-05-20
-
-| Item | Status |
+| Role | Review Focus |
 |---|---|
-| `StreamBars` polling stub (`client.go:164`) | **Not a problem** — no callers; 60s lag irrelevant for swing trading. |
-| `StreamQuotes` polling stub (`client.go:198`) | **Not a problem** — no callers. |
-| No `SourceRegistry` pattern | **Implemented** — `internal/source/source.go` added; `marketdata_service.go` + `main.go` updated. See context.md 2026-05-20 entry. |
-
----
-
-## Why This Is Still Worth Fixing
-
-`realized_pnl` is structurally wrong (always 0) — the insights dashboard and trader UI show incorrect total P&L for any closed position. No error is surfaced; it silently understates performance for profitable trades and overstates it for losers.
-
----
-
-## Dependencies
-
-None — this is a standalone data layer fix. Does not block or depend on any active feature.
+| Service owner (`xstockstrat-portfolio`) | P&L calculation accuracy, position snapshot consistency, concurrent write safety |
+| Service owner (`xstockstrat-ledger`) | Append-only invariant (no deletes or updates), event ordering, hypertable partition safety |
 
 ## Next Action
 
-Run `/sdd-story phase-2-data-layer` to generate the product spec covering the remaining `realized_pnl` gap (SourceRegistry is already done).
+`/sdd-review phase-2-data-layer product-spec` — AI review of product spec before running /sdd-spec

@@ -42,6 +42,14 @@ Append-only session log. Never edit past entries.
 
 ---
 
+## 2026-05-20 — sdd-story: product spec generated
+
+- Created product-spec.md and rewrote feature.md (status: idea → draft) from inline story.
+- Scope confirmed: realized_pnl fix only. SourceRegistry already done; streaming stubs out of scope.
+- Three open questions flagged in product-spec.md for /sdd-spec codebase audit: ledger event schema, existing ledger client wiring in portfolio, partial fill modeling.
+
+---
+
 ## 2026-05-20 — SourceRegistry implemented (scope expansion — skipped SDD flow)
 
 **Trigger**: User asked to fix the SourceRegistry gap in 013. Implementation was done directly without going through `/sdd-story` → `/sdd-spec` → `/sdd-execute` first. **Deviation from SDD process** — noted here for audit trail.
