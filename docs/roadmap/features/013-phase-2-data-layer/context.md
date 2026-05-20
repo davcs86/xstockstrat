@@ -42,6 +42,14 @@ Append-only session log. Never edit past entries.
 
 ---
 
+## 2026-05-20 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: Feature `wire-fe-auth` (012, code-completed) also modifies `xstockstrat-portfolio` and `xstockstrat-ledger` — merge 012 first.
+- Overlap findings: no FAIL-level conflicts; two ⚠ WARN on shared services with wire-fe-auth.
+
+---
+
 ## 2026-05-20 — sdd-story: product spec generated
 
 - Created product-spec.md and rewrote feature.md (status: idea → draft) from inline story.

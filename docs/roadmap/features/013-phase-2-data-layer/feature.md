@@ -1,6 +1,6 @@
 # Feature: phase-2-data-layer
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/phase-2-data-layer`
 **Created**: 2026-05-19
 **Last Updated**: 2026-05-20
@@ -13,6 +13,7 @@
 |---|---|---|---|
 | 2026-05-19 | `idea` | backlog | Surfaced as sleeper risk — Phase 2 skipped while Phases 3–6 completed |
 | 2026-05-20 | `idea` → `draft` | /sdd-story | Product spec generated; scope narrowed to realized_pnl fix only |
+| 2026-05-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 
 ---
 
@@ -41,4 +42,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review phase-2-data-layer product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec phase-2-data-layer` — generate implementation spec from the approved product spec

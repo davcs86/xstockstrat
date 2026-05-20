@@ -62,6 +62,8 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] What event type key and payload schema does `xstockstrat-ledger` use for `order.filled` events — specifically what fields encode ticker, fill price, quantity, and side (buy/sell)? Needs code audit of ledger event schema at `/sdd-spec` time.
-- [ ] Does `xstockstrat-portfolio` already have a ledger gRPC client wired in its service layer, or does one need to be added? Needs code audit of `portfolio_service.go` imports and constructor.
-- [ ] How are partial fills modeled? If an order is filled in multiple partial tranches, does each tranche produce a separate ledger event, or is there a single aggregated event? Answer affects how fill pairs are matched in FR-2.
+_No unresolved product questions. The following implementation details will be confirmed by `/sdd-spec` codebase audit before writing steps:_
+
+- Ledger event schema for `order.filled`: what fields encode ticker, fill price, quantity, and side? (affects FR-1 query construction)
+- Ledger gRPC client wiring in `xstockstrat-portfolio`: existing client or new one required? (affects implementation scope)
+- Partial fill modeling: single aggregated event or per-tranche? If per-tranche, FR-2 matching must accumulate partial quantities before pairing. (affects FR-2 algorithm)
