@@ -3,7 +3,7 @@
 **Lifecycle Status**: `idea`
 **Development Branch**: `feature/phase-2-data-layer`
 **Created**: 2026-05-19
-**Last Updated**: 2026-05-19
+**Last Updated**: 2026-05-20
 
 ---
 
@@ -25,7 +25,7 @@
 
 ## Summary
 
-Fix the one real correctness gap left by the Phase 2 skip: `GetPnL` in `xstockstrat-portfolio` always returns `realized_pnl = 0` because the ledger is never queried for closed-position events. Unrealized P&L is correct. The `SourceRegistry` pattern (for multi-provider marketdata) is a separate extensibility concern, not a correctness bug.
+Two gaps from the Phase 2 skip: (1) `GetPnL` in `xstockstrat-portfolio` always returns `realized_pnl = 0` because the ledger is never queried for closed-position events; (2) `xstockstrat-marketdata` has no `SourceRegistry` — all RPCs hard-code the Alpaca client, making additional data providers (Polygon, Tiingo) require code changes instead of registration. The `SourceRegistry` pattern was implemented directly in this session (see context.md); the `realized_pnl` fix is pending.
 
 ---
 
@@ -37,13 +37,13 @@ Fix the one real correctness gap left by the Phase 2 skip: `GetPnL` in `xstockst
 |---|---|---|
 | `realized_pnl` always 0 | `internal/service/portfolio_service.go:255–270` | `GetPnL` computes unrealized correctly via `GetLatestQuote` but never sets `RealizedPnl`. Proto field exists (`portfolio/v1/portfolio.proto:60`). Requires querying ledger for paired `order.filled` events (entry + exit) to compute realized gain/loss. |
 
-### xstockstrat-marketdata — assessed and dismissed
+### xstockstrat-marketdata — SourceRegistry implemented 2026-05-20
 
-| Item | Verdict |
+| Item | Status |
 |---|---|
-| `StreamBars` polling stub (`client.go:164`) | **Not a problem** — no service calls `StreamBars`; all consumers (`analysis`, `trading`) use `GetBars` (request/response). 60s lag is irrelevant for a position/swing trading platform. |
-| `StreamQuotes` polling stub (`client.go:198`) | **Not a problem** — same reason; no callers. |
-| No `SourceRegistry` pattern | **Out of scope here** — extensibility concern for a future add-data-source feature, not a correctness bug. |
+| `StreamBars` polling stub (`client.go:164`) | **Not a problem** — no callers; 60s lag irrelevant for swing trading. |
+| `StreamQuotes` polling stub (`client.go:198`) | **Not a problem** — no callers. |
+| No `SourceRegistry` pattern | **Implemented** — `internal/source/source.go` added; `marketdata_service.go` + `main.go` updated. See context.md 2026-05-20 entry. |
 
 ---
 
@@ -59,4 +59,4 @@ None — this is a standalone data layer fix. Does not block or depend on any ac
 
 ## Next Action
 
-Run `/sdd-story phase-2-data-layer` to generate the product spec, then `/sdd-spec` for the implementation spec.
+Run `/sdd-story phase-2-data-layer` to generate the product spec covering the remaining `realized_pnl` gap (SourceRegistry is already done).

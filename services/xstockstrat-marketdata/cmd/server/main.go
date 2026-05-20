@@ -30,6 +30,7 @@ import (
 	"github.com/xstockstrat/marketdata/internal/middleware"
 	"github.com/xstockstrat/marketdata/internal/repository"
 	"github.com/xstockstrat/marketdata/internal/service"
+	"github.com/xstockstrat/marketdata/internal/source"
 	"github.com/xstockstrat/marketdata/internal/telemetry"
 )
 
@@ -80,7 +81,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	svc, err := service.NewMarketDataService(alpacaClient, repo, cfgWatcher, cfg.LedgerEndpoint, cfg.NotifyEndpoint)
+	reg := source.NewRegistry()
+	reg.Register("alpaca", alpacaClient)
+
+	svc, err := service.NewMarketDataService(reg, repo, cfgWatcher, cfg.LedgerEndpoint, cfg.NotifyEndpoint)
 	if err != nil {
 		slog.Error("service init failed", "error", err)
 		os.Exit(1)

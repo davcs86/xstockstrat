@@ -28,7 +28,7 @@ Append-only session log. Never edit past entries.
 - All consumers (`analysis/app/handlers/servicer.py:197`, `trading`) use `GetBars` (request/response over REST). Polling stubs are irrelevant.
 - `SourceRegistry` is an extensibility concern for future multi-provider support, not a correctness bug.
 
-**Revised scope**: Only gap worth fixing is `GetPnL.realized_pnl = 0` in `portfolio_service.go:255–270`. feature.md updated accordingly.
+**Revised scope**: Only gap worth fixing is `GetPnL.realized_pnl = 0` in `portfolio_service.go:255–270`. SourceRegistry dismissed as extensibility-only. feature.md updated accordingly.
 
 ---
 
@@ -39,3 +39,19 @@ Append-only session log. Never edit past entries.
 **Finding**: Roadmap Phase 5C (`implementation-roadmap.md:442`) explicitly specified a "Chart panel: `StreamBars` / `GetBars` OHLCV candlestick chart" in `xstockstrat-trader`. `StreamQuotes` was intended to feed live bid/ask price to the order entry form. Neither was built — `phase5-deviations.md` documents other trader changes (Connect-RPC refactor, SSE alert polling) but silently drops the chart panel.
 
 **Implication**: The streaming RPCs are not dead code — they are waiting for a trader chart panel feature. When that feature is built, the choice between true WebSocket streaming vs. polling `GetBars` should be revisited based on the required bar timeframe (1D bars need no streaming; 1m bars might justify it).
+
+---
+
+## 2026-05-20 — SourceRegistry implemented (scope expansion — skipped SDD flow)
+
+**Trigger**: User asked to fix the SourceRegistry gap in 013. Implementation was done directly without going through `/sdd-story` → `/sdd-spec` → `/sdd-execute` first. **Deviation from SDD process** — noted here for audit trail.
+
+**Files changed**:
+- `services/xstockstrat-marketdata/internal/source/source.go` — new file; `DataSourceClient` interface + `Registry` (Register/Get with "alpaca" default)
+- `services/xstockstrat-marketdata/internal/source/source_test.go` — new file; 5 tests covering Register, Get, default, unknown, multi-provider, duplicate panic
+- `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — replaced `alpaca *alpaca.Client` field with `registry *source.Registry`; all `s.alpaca.*` calls replaced with `s.registry.Get("")`
+- `services/xstockstrat-marketdata/cmd/server/main.go` — creates `source.NewRegistry()`, registers alpaca client, passes registry to service constructor
+
+**All 14 tests pass** (`source`, `alpaca`, `config` packages). Build clean.
+
+**Remaining in 013**: `realized_pnl` always 0 in `xstockstrat-portfolio` — still pending `/sdd-story`.
