@@ -71,3 +71,16 @@ Append-only session log. Never edit past entries.
 **All 14 tests pass** (`source`, `alpaca`, `config` packages). Build clean.
 
 **Remaining in 013**: `realized_pnl` always 0 in `xstockstrat-portfolio` — still pending `/sdd-story`.
+
+---
+
+## Session 2026-05-20T00:00:00Z — sdd-spec
+
+- Generated implementation-spec.md with 2 steps. Status → implementation-ready.
+- Key codebase findings:
+  - Bug confirmed at `services/xstockstrat-portfolio/internal/service/portfolio_service.go:254–272` — `GetPnL` returns `RealizedPnl = 0` (zero value); unrealized is computed correctly.
+  - Ledger client already dialed in `NewPortfolioService` at L47 with `middleware.UnaryClientInterceptor` — header propagation is automatic; no new gRPC connection required.
+  - `QueryEvents` unary RPC available on existing `s.ledger` client (`ledger_grpc.pb.go:36`). Filters `event_type + source_service`; user filtering must be done in-memory by comparing `payload.user_id` to `req.UserId`.
+  - `order.filled` stream_key is `order:{order_id}` (not per-user); user_id is only in the event payload (`orderFillPayload` struct already defined at portfolio_service.go:107–114).
+  - Last migration file: `003_positions_account_id` — no new migration needed (no schema changes).
+  - `fillAccumulator` struct (new) and `computeRealizedPnL` test helper are the only new symbols; all imports are already present.
