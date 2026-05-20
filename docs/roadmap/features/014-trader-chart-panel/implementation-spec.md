@@ -27,6 +27,7 @@ All work is confined to `xstockstrat-trader`. Steps execute in strict order: add
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/package.json` — modify
+- `services/xstockstrat-trader/pnpm-lock.yaml` — modify (updated by `pnpm install`)
 
 **Reviewers**: `xstockstrat-trader` owner — Trading UI correctness, Connect-RPC call safety, no direct DB access from frontend
 
@@ -175,10 +176,11 @@ Note: `ListAssets` is served via `POST /api/chart` (action route doubles as asse
 
 **Verification**:
 ```bash
-# Start dev server with mock backend env vars, then:
-curl -s -b "access_token=<valid-jwt>" \
-  "http://localhost:3000/api/chart?symbol=AAPL&timeframe=1d&limit=100" | jq '.bars | length'
-# Expected: returns a JSON object with a "bars" array (may be empty if mock backend not set up for this route yet)
+cd services/xstockstrat-trader && pnpm build
+# Expected: build completes without TypeScript errors
+# Smoke test (requires running dev server + valid JWT cookie):
+# curl -s -b "access_token=<valid-jwt>" \
+#   "http://localhost:3000/api/chart?symbol=AAPL&timeframe=1d&limit=100" | jq '.bars | length'
 ```
 
 ---

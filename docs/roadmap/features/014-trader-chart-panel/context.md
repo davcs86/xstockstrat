@@ -31,3 +31,12 @@
   - `lightweight-charts` is not yet in `package.json` (confirmed absent); Step 1 adds it at `^4.2.0`. The component uses dynamic `import('lightweight-charts')` inside `useEffect` to avoid SSR issues.
   - Mock backend at `e2e/mock-backend.ts` L20 does not include `GetBars` or `ListAssets` paths; Step 5 adds both. `MARKETDATA_HTTP_ENDPOINT` is also absent from `playwright.config.ts` webServer.env (L46–52); Step 5 adds it.
   - The trading dashboard grid (`src/app/page.tsx` L29–39) uses `grid-cols-1 md:grid-cols-12`; chart panel will be mounted as a full-width row below the existing 3-column grid within the same `space-y-4` container.
+
+## Session 2026-05-20T00:00:00Z — sdd-review impl-spec
+
+- Advisory review passed: 0 failures, 3 warnings.
+- Warnings resolved in spec (except wire-fe-auth overlap — known, deferred):
+  - Step 1 **Files**: added `pnpm-lock.yaml` (updated by `pnpm install`).
+  - Step 2 **Verification**: replaced placeholder-curl with `pnpm build`; curl demoted to commented smoke-test hint.
+  - Step 4 lightweight-charts API uncertainty: already self-documented in the code note — no change needed.
+- wire-fe-auth (012, code-completed) overlap on `e2e/mock-backend.ts` and `playwright.config.ts` noted but deferred per user instruction; build Step 5 on top of merged 012 or rebase those two files before opening the final PR.
