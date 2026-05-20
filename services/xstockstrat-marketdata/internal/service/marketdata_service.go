@@ -16,16 +16,16 @@ import (
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
-	"github.com/xstockstrat/marketdata/internal/alpaca"
 	"github.com/xstockstrat/marketdata/internal/config"
 	"github.com/xstockstrat/marketdata/internal/middleware"
 	"github.com/xstockstrat/marketdata/internal/repository"
+	"github.com/xstockstrat/marketdata/internal/source"
 )
 
 // MarketDataService implements business logic for the marketdata service.
 type MarketDataService struct {
-	alpaca *alpaca.Client
-	repo   *repository.MarketDataRepo
+	registry *source.Registry
+	repo     *repository.MarketDataRepo
 	cfg    *config.Watcher
 	ledger ledgerv1.LedgerServiceClient
 	notify notifyv1.NotifyServiceClient
@@ -38,7 +38,7 @@ type MarketDataService struct {
 
 // NewMarketDataService creates the service and dials ledger + notify.
 func NewMarketDataService(
-	alpacaClient *alpaca.Client,
+	registry *source.Registry,
 	repo *repository.MarketDataRepo,
 	cfgWatcher *config.Watcher,
 	ledgerEndpoint string,
@@ -53,7 +53,7 @@ func NewMarketDataService(
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
 	return &MarketDataService{
-		alpaca:    alpacaClient,
+		registry:  registry,
 		repo:      repo,
 		cfg:       cfgWatcher,
 		ledger:    ledgerv1.NewLedgerServiceClient(ledgerConn),
@@ -104,15 +104,22 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 func (s *MarketDataService) GetLatestQuote(ctx context.Context, symbol string) (*marketdatav1.Quote, error) {
 	q, err := s.repo.GetLatestQuote(ctx, symbol)
 	if err != nil {
-		// Fall back to Alpaca if no local data
-		return s.alpaca.GetLatestQuote(ctx, symbol)
+		src, err := s.registry.Get("")
+		if err != nil {
+			return nil, err
+		}
+		return src.GetLatestQuote(ctx, symbol)
 	}
 	return q, nil
 }
 
-// ListAssets delegates to the Alpaca client.
+// ListAssets delegates to the default data source.
 func (s *MarketDataService) ListAssets(ctx context.Context, req *marketdatav1.ListAssetsRequest) (*marketdatav1.ListAssetsResponse, error) {
-	assets, err := s.alpaca.ListAssets(ctx, req.AssetClass)
+	src, err := s.registry.Get("")
+	if err != nil {
+		return nil, err
+	}
+	assets, err := src.ListAssets(ctx, req.AssetClass)
 	if err != nil {
 		return nil, err
 	}
@@ -149,8 +156,13 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 	var totalWritten int64
 	var failedSymbols []string
 
+	src, err := s.registry.Get("")
+	if err != nil {
+		return nil, fmt.Errorf("resolve source: %w", err)
+	}
+
 	for _, sym := range req.Symbols {
-		bars, err := s.alpaca.GetBars(ctx, sym, req.Timeframe, start, end)
+		bars, err := src.GetBars(ctx, sym, req.Timeframe, start, end)
 		if err != nil {
 			slog.Error("backfill failed", "symbol", sym, "error", err)
 			failedSymbols = append(failedSymbols, sym)
@@ -223,10 +235,15 @@ func (s *MarketDataService) UnsubscribeQuotes(id string) {
 	s.mu.Unlock()
 }
 
-// StartBarStream begins the Alpaca bar feed for given symbols/timeframe
+// StartBarStream begins the bar feed for given symbols/timeframe
 // and fans out to all registered subscribers.
 func (s *MarketDataService) StartBarStream(ctx context.Context, symbols []string, timeframe string) {
-	feed, err := s.alpaca.StreamBars(ctx, symbols, timeframe)
+	src, err := s.registry.Get("")
+	if err != nil {
+		slog.Error("source registry error", "error", err)
+		return
+	}
+	feed, err := src.StreamBars(ctx, symbols, timeframe)
 	if err != nil {
 		slog.Error("stream bars failed", "error", err)
 		s.emitAlert(ctx, "marketdata feed stream error: "+err.Error())
@@ -253,9 +270,14 @@ func (s *MarketDataService) StartBarStream(ctx context.Context, symbols []string
 	}()
 }
 
-// StartQuoteStream begins the Alpaca quote feed and fans out to subscribers.
+// StartQuoteStream begins the quote feed and fans out to subscribers.
 func (s *MarketDataService) StartQuoteStream(ctx context.Context, symbols []string) {
-	feed, err := s.alpaca.StreamQuotes(ctx, symbols)
+	src, err := s.registry.Get("")
+	if err != nil {
+		slog.Error("source registry error", "error", err)
+		return
+	}
+	feed, err := src.StreamQuotes(ctx, symbols)
 	if err != nil {
 		slog.Error("stream quotes failed", "error", err)
 		return
