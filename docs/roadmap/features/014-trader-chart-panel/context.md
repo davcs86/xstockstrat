@@ -12,4 +12,5 @@
 - Backend data path confirmed fully implemented: `GetBars` RPC, `MarketDataHandler`, `MarketDataService`, Alpaca REST client, `marketdata.ohlcv` hypertable.
 - `StreamBars`/`StreamQuotes` exist in handler but have zero callers — polling `GetBars` chosen deliberately; streaming not needed at ≥5m timeframe.
 - Origin of the missing chart panel: roadmap §5C specified it; `phase5-deviations.md` silently dropped it. Documented in `013-phase-2-data-layer/context.md`.
-- Charting library recommendation: `lightweight-charts` (TradingView, MIT) — noted as open question pending user decision.
+- Charting library: **`lightweight-charts`** (TradingView, MIT) — decided by user 2026-05-20.
+- Default symbol: **first result from `ListAssets`** — decided by user 2026-05-20.

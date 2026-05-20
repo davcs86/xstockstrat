@@ -67,6 +67,6 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] Which charting library? Candidates: `lightweight-charts` (TradingView, MIT, ~40 kB), `recharts` (React-native, larger bundle). Recommend `lightweight-charts` — purpose-built for financial OHLCV, smaller, no D3 dependency.
-- [ ] Default symbol on first load — hardcode `AAPL`, or use the first result from `ListAssets`?
+- [x] Charting library: **`lightweight-charts`** (TradingView, MIT, ~40 kB) — decided 2026-05-20.
+- [x] Default symbol on first load: **first result from `ListAssets`** — decided 2026-05-20.
 - [ ] How many bars to show? 100 bars proposed; should this be user-adjustable (date range picker)?
