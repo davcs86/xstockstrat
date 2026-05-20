@@ -19,8 +19,9 @@ FR-2. A symbol selector allows the user to switch between tradable symbols (popu
 FR-3. A timeframe switcher supports: 1m, 5m, 15m, 1h, 1d.
 FR-4. The chart fetches bars via the existing `GetBars` Connect-RPC endpoint on `xstockstrat-marketdata` (port 8053). No new RPCs required.
 FR-5. The chart auto-refreshes on a fixed interval: 30 seconds for intraday timeframes (1m, 5m, 15m, 1h), once on load for 1d.
-FR-6. The chart displays a configurable number of bars (default: last 100 bars).
+FR-6. The chart displays the number of bars selected by the user (see FR-8); default is 100.
 FR-7. Loading and error states are handled gracefully — a spinner while fetching, an inline error message on failure.
+FR-8. A bar-count selector allows the user to choose how many bars to display: 50, 100, or 200. Default is 100. Changing the selection immediately re-fetches and re-renders the chart.
 
 ## Out of Scope
 
@@ -64,9 +65,10 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 5. If `GetBars` returns an error, the chart shows an inline error message instead of a blank area.
 6. Auto-refresh fires every 30 seconds for intraday timeframes; does not fire for 1d.
 7. No direct DB queries from the frontend — all data flows through the `/api/chart` route → `GetBars` RPC.
+8. Selecting 50, 100, or 200 from the bar-count selector re-fetches and updates the chart immediately.
 
 ## Open Questions
 
 - [x] Charting library: **`lightweight-charts`** (TradingView, MIT, ~40 kB) — decided 2026-05-20.
 - [x] Default symbol on first load: **first result from `ListAssets`** — decided 2026-05-20.
-- [ ] How many bars to show? 100 bars proposed; should this be user-adjustable (date range picker)?
+- [x] How many bars to show? **User-adjustable dropdown: 50 / 100 / 200, default 100** — decided 2026-05-20 (FR-8).
