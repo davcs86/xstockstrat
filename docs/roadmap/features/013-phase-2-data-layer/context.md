@@ -42,6 +42,26 @@ Append-only session log. Never edit past entries.
 
 ---
 
+## 2026-05-20 — fill.Mode verification + partial fill event-type correction
+
+**Trigger**: User asked to verify whether fill.Mode distinguishes partial fills.
+
+**Finding**: `fill.Mode` confirmed as trading mode only (`json:"trading_mode"`, values `"TRADING_MODE_PAPER"` / `"TRADING_MODE_LIVE"` — `portfolio_service.go:112`). Not related to partial fills.
+
+**Critical discovery**: Two distinct ledger event types exist (`trading.go:511–526`):
+- `order.filled` — fires **once** when order is fully filled; payload key `qty` = total order qty
+- `order.partially_filled` — fires during Alpaca polling as order fills incrementally; payload key `filled_qty` = cumulative partial qty
+
+The existing portfolio subscriber (`portfolio_service.go:88`) already filters on `order.filled` only. `GetPnL` must do the same. `order.partially_filled` events are observability-only and excluded from P&L computation.
+
+**Spec corrections**:
+- FR-2: corrected "multiple `order.filled` events for one order" (wrong) to "one `order.filled` per completed order; `order.partially_filled` excluded"
+- AC-4: corrected "partial fills" to "multiple independent completed orders"
+- Impl-spec evidence: added two-event-type finding at Step 1
+- Test renamed: `TestRealizedPnL_PartialFills` → `TestRealizedPnL_MultipleOrders` (tests multiple independent orders, not partial fills)
+
+---
+
 ## 2026-05-20 — spec amendments: short-selling support + partial fill clarification
 
 **Trigger**: User clarified two out-of-scope decisions after impl-spec review.
