@@ -122,3 +122,39 @@ The existing portfolio subscriber (`portfolio_service.go:88`) already filters on
   - `order.filled` stream_key is `order:{order_id}` (not per-user); user_id is only in the event payload (`orderFillPayload` struct already defined at portfolio_service.go:107–114).
   - Last migration file: `003_positions_account_id` — no new migration needed (no schema changes).
   - `fillAccumulator` struct (new) and `computeRealizedPnL` test helper are the only new symbols; all imports are already present.
+
+---
+
+## 2026-05-20 — scope expansion: fill_price = 0 root cause in xstockstrat-trading
+
+**Trigger**: User asked how IBKR handles fill price in `order.filled` events, leading to discovery that `fill_price = 0.0` for all orders across both brokers.
+
+**Root cause confirmed**:
+- `BrokerOrder` struct (`broker.go:6–9`) carries only `BrokerOrderID` and `Status` — no `FilledAvgPrice`.
+- Alpaca `GetOrder` (`alpaca.go:206`): `AlpacaOrder.FilledAvgPrice string \`json:"filled_avg_price"\`` is present in the response struct (`alpaca.go:79`) but discarded; return is `&BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status}`.
+- IBKR `GetOrder` (`ibkr.go:177–187`): inline response struct has only `orderId` and `status`; return is `&BrokerOrder{BrokerOrderID: o.OrderID, Status: o.Status}`.
+- `pollFills` (`trading.go:500–502`): sets `order.Status` and `order.UpdatedAt` from broker response, but not `order.FilledAvgPrice`; stale comment at L502 documents this explicitly.
+- Both `order.filled` (`trading.go:514`) and `order.partially_filled` (`trading.go:524`) events use `order.FilledAvgPrice`, which is always 0.0.
+
+**User decision**: "yes, add it to the scope" — expand feature 013 to fix the root cause in `xstockstrat-trading` before implementing the portfolio service ledger query.
+
+**Changes to product-spec.md**:
+- Problem Statement: added root-cause paragraph
+- FR-5: trading service must populate `FilledAvgPrice` in `BrokerOrder` and propagate to `order.filled` payload
+- Affected Services: added `xstockstrat-trading`
+- AC-8: non-zero `fill_price` in `order.filled` events after trading fix
+
+**Changes to implementation-spec.md**:
+- Total Steps: 2 → 5
+- Execution Summary: updated to describe both service fixes
+- Step Dependencies: updated for 5-step dependency chain
+- Step 1 [broker]: extend `BrokerOrder` + update Alpaca `GetOrder` (parse string `filled_avg_price` via `strconv.ParseFloat`) + update IBKR `GetOrder` (add float64 `avgPrice` field to inline struct) — files: broker.go, alpaca.go, ibkr.go
+- Step 2 [service]: update `pollFills` to set `order.FilledAvgPrice = brokerOrder.FilledAvgPrice`; remove stale comment at L502 — file: trading.go
+- Step 3 [test]: append `TestGetOrder_AlpacaFilledAvgPrice` to alpaca_test.go; create ibkr_test.go with `TestGetOrder_IBKRAvgPrice`
+- Old Step 1 → Step 4 (portfolio service GetPnL fix)
+- Old Step 2 → Step 5 (portfolio service unit tests)
+
+**Changes to feature.md**:
+- Summary updated to mention root-cause
+- Reviewers: added `xstockstrat-trading` service owner
+- Next Action: updated to `/sdd-execute`

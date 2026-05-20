@@ -8,6 +8,8 @@
 
 `xstockstrat-portfolio`'s `GetPnL` RPC always returns `realized_pnl = 0` for every portfolio, regardless of how many positions have been closed. The proto field exists and unrealized P&L is computed correctly, but the service never queries the ledger for closed-position fill events. Traders and platform operators viewing the insights dashboard or trader UI see silently incorrect total P&L figures for any account with closed positions.
 
+The root cause is a compounding bug in `xstockstrat-trading`: the `BrokerOrder` interface carries only `BrokerOrderID` and `Status` — neither Alpaca nor IBKR `GetOrder` implementations populate `FilledAvgPrice`, so `order.filled` ledger events are emitted with `fill_price = 0.0` for every completed order across both brokers. Even after implementing the ledger-query logic in portfolio, `realized_pnl` would remain 0 until this root cause is fixed. Both bugs are fixed together in this feature.
+
 ## User Story
 
 As a trader using the xstockstrat platform, I want `GetPnL` to return the correct realized P&L for my closed positions, so that the insights dashboard and trader UI show accurate total portfolio performance.
@@ -18,6 +20,7 @@ FR-1. `GetPnL` must query `xstockstrat-ledger` for `order.filled` events associa
 FR-2. `GetPnL` must process each `order.filled` event independently in ledger-recorded order. There is exactly one `order.filled` event per completed order (fired when the order transitions to fully-filled status). `order.partially_filled` events (cumulative Alpaca polling updates during order execution) are **not** included in P&L computation — they are observability events only. Each `order.filled` event is fed into a per-symbol signed average-cost-basis accumulator; on a closing fill (opposite direction to current net position), realized gain/loss is computed and accumulated into `realized_pnl`.
 FR-3. The computed `realized_pnl` must be returned in the `GetPnLResponse` proto message field `realized_pnl` (defined at `portfolio/v1/portfolio.proto:60`) alongside the existing `unrealized_pnl` without regression.
 FR-4. Short positions must be supported read-only (observation of ledger events only — no order creation). A sell fill that opens or increases a net short position is treated as an entry; a subsequent buy fill that reduces or closes the net short computes realized P&L as `(average_entry_price − exit_price) × quantity_closed`. Profit on a short occurs when the exit price is lower than the entry price.
+FR-5. The trading service must populate `FilledAvgPrice` in the `BrokerOrder` struct returned by both `AlpacaClient.GetOrder` and `IBKRClient.GetOrder`, and `pollFills` must propagate `brokerOrder.FilledAvgPrice` to `order.FilledAvgPrice` so that `order.filled` ledger events contain a non-zero `fill_price` for completed orders. Alpaca encodes `filled_avg_price` as a decimal string in its API response; IBKR encodes `avgPrice` as a float64.
 
 ## Out of Scope
 
@@ -30,7 +33,8 @@ FR-4. Short positions must be supported read-only (observation of ledger events 
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-portfolio` — contains the buggy `GetPnL` implementation; receives the fix
+- `xstockstrat-trading` — root-cause fix: `BrokerOrder` struct extension, `GetOrder` fill-price parsing for both Alpaca and IBKR engines, and `pollFills` propagation to ledger event payload
+- `xstockstrat-portfolio` — contains the buggy `GetPnL` implementation; receives the ledger-query fix
 - `xstockstrat-ledger` — read-only: queried for `order.filled` events to derive realized gains/losses
 
 ## Proto Contract Changes
@@ -62,6 +66,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 5. `unrealized_pnl` is unchanged for all portfolios — open-position computation is not regressed.
 6. The gRPC call from `xstockstrat-portfolio` to `xstockstrat-ledger` propagates `x-user-id`, `x-access-scope`, and `x-trace-id` headers per the platform header-propagation convention.
 7. Unit tests cover: closed long, closed short, no fills, partial fills, mixed open+closed.
+8. After the trading service fix, `order.filled` events in the ledger contain a non-zero `fill_price` in their payload when an order is filled at a non-zero price. Both Alpaca and IBKR broker `GetOrder` implementations return `FilledAvgPrice` correctly parsed from their respective API response formats.
 
 ## Open Questions
 

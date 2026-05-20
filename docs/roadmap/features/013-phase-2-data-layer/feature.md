@@ -28,16 +28,17 @@
 
 ## Summary
 
-`GetPnL` in `xstockstrat-portfolio` always returns `realized_pnl = 0` because the service never queries the ledger for closed-position fills. This causes the insights dashboard and trader UI to silently report incorrect total P&L for any account with closed positions.
+`GetPnL` in `xstockstrat-portfolio` always returns `realized_pnl = 0` because the service never queries the ledger for closed-position fills. The root cause is in `xstockstrat-trading`: neither broker engine (`AlpacaClient` nor `IBKRClient`) populates `FilledAvgPrice` in `BrokerOrder`, so `order.filled` ledger events are always emitted with `fill_price = 0.0`. This feature fixes both bugs: the trading service broker/pollFills root cause, and the portfolio service GetPnL ledger-query gap.
 
 ## Reviewers
 
-_(Snapshot finalized by /sdd-spec 2026-05-20. Re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized by /sdd-spec 2026-05-20; updated 2026-05-20 for scope expansion to trading service. Re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
+| Service owner (`xstockstrat-trading`) | Broker interface changes, fill price parsing accuracy, IBKR API field name correctness, pollFills event payload |
 | Service owner (`xstockstrat-portfolio`) | P&L calculation accuracy, position snapshot consistency, concurrent write safety |
 
 ## Next Action
 
-`/sdd-review phase-2-data-layer impl-spec` — validate implementation spec, then `/sdd-execute phase-2-data-layer`
+`/sdd-execute phase-2-data-layer` — implementation spec finalized (5 steps); execute Step 1 first.

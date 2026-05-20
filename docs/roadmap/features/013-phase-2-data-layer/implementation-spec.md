@@ -3,26 +3,267 @@
 **Status**: `pending`
 **Created**: 2026-05-20
 **Feature**: `docs/roadmap/features/013-phase-2-data-layer/feature.md`
-**Total Steps**: 2
+**Total Steps**: 5
 **Feature Branch**: `feature/phase-2-data-layer`
 
 ---
 
 ## Execution Summary
 
-There are no proto, migration, or config changes. The entire fix is contained in `xstockstrat-portfolio`'s `GetPnL` method in `services/xstockstrat-portfolio/internal/service/portfolio_service.go`. The existing `s.ledger` client (a `ledgerv1.LedgerServiceClient` already dialed at L47–65) exposes `QueryEvents` — a unary RPC confirmed in the generated stub at `packages/proto/gen/go/ledger/v1/ledger_grpc.pb.go:36`. The fix replaces the stub return-zero body with a ledger query + FIFO realized-P&L loop, followed by a paired unit-test step.
+There are no proto, migration, or config changes. The fix spans two services:
 
-The ledger service is **read-only** from portfolio's perspective (no writes added). Header propagation for the new `QueryEvents` call is handled automatically by the existing `middleware.UnaryClientInterceptor` already wired into the `ledgerConn` at `portfolio_service.go:47`.
+**`xstockstrat-trading` (Steps 1–3)**: The root cause is that `BrokerOrder` carries only `BrokerOrderID` and `Status` — both `AlpacaClient.GetOrder` and `IBKRClient.GetOrder` parse the broker API response but discard the fill price. `pollFills` in `trading.go` then emits `order.filled` ledger events with `fill_price = 0.0`. The fix adds `FilledAvgPrice float64` to `BrokerOrder`, updates both `GetOrder` implementations to parse the fill price from their respective API formats (Alpaca: string `filled_avg_price`, IBKR: float64 `avgPrice`), and adds one line to `pollFills` to propagate the value to `order.FilledAvgPrice`.
+
+**`xstockstrat-portfolio` (Steps 4–5)**: `GetPnL` never queries the ledger; `RealizedPnl` is always the Go zero value. The fix adds a paginated `QueryEvents` loop against the existing `s.ledger` client (a `ledgerv1.LedgerServiceClient` already dialed at L47–65 with `middleware.UnaryClientInterceptor`). Qualifying fills feed a per-symbol signed average-cost-basis accumulator; realized P&L is returned in all three `PnLResponse` fields.
+
+Steps 4–5 are logically independent from Steps 1–3 at implementation time (different services), but require Steps 1–3 to be deployed first to produce non-zero `fill_price` values in the ledger.
 
 ---
 
 ## Step Dependencies
 
-- Step 2 [test] requires Step 1 [service]: tests exercise the logic added in Step 1.
+- Step 2 [service] requires Step 1 [broker]: `pollFills` uses `BrokerOrder.FilledAvgPrice` added in Step 1.
+- Step 3 [test] requires Steps 1–2: tests exercise the broker and pollFills changes.
+- Step 4 [service] is logically independent from Steps 1–3 (different service), but correct non-zero P&L output requires Steps 1–3 to be deployed first so the ledger contains non-zero fill prices.
+- Step 5 [test] requires Step 4: tests exercise the logic added in Step 4.
 
 ---
 
-### Step 1 — service: fix GetPnL to compute realized P&L from ledger order.filled events
+### Step 1 — broker: extend BrokerOrder struct and update both GetOrder implementations
+
+**Status**: `pending`
+**Service**: `xstockstrat-trading`
+**Files**:
+- `services/xstockstrat-trading/internal/broker/broker.go` — modify
+- `services/xstockstrat-trading/internal/broker/alpaca.go` — modify
+- `services/xstockstrat-trading/internal/broker/ibkr.go` — modify
+
+**Reviewers**: Service owner (`xstockstrat-trading`) — broker interface changes, fill price parsing accuracy, IBKR API field name correctness
+
+**Codebase Evidence**:
+- `BrokerOrder` struct confirmed at `broker.go:6–9`: only `BrokerOrderID string` and `Status string`; no `FilledAvgPrice`. Interface declared at `broker.go:19–25`.
+- Alpaca `GetOrder` at `alpaca.go:177–207`: deserializes response into `AlpacaOrder`. `AlpacaOrder.FilledAvgPrice string \`json:"filled_avg_price"\`` is present at `alpaca.go:79` and parsed but discarded — return at `alpaca.go:206` is `&BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status}`.
+- Alpaca encodes fill price as a decimal string (same pattern as `Qty` and `FilledQty`). `strconv` already imported at `alpaca.go:10`.
+- IBKR `GetOrder` at `ibkr.go:155–188`: inline response struct at `ibkr.go:177–182` has only `OrderID string \`json:"orderId"\`` and `Status string \`json:"status"\``; IBKR Web API `/iserver/account/orders` returns `avgPrice float64` for the average fill price. Return at `ibkr.go:187` is `&BrokerOrder{BrokerOrderID: o.OrderID, Status: o.Status}`.
+- `strconv` already imported at `ibkr.go:14` (used in `signRequest`).
+
+**Instructions**:
+
+1. In `services/xstockstrat-trading/internal/broker/broker.go`, add `FilledAvgPrice float64` to `BrokerOrder`. Replace:
+   ```go
+   type BrokerOrder struct {
+       BrokerOrderID string
+       Status        string
+   }
+   ```
+   With:
+   ```go
+   type BrokerOrder struct {
+       BrokerOrderID  string
+       Status         string
+       FilledAvgPrice float64 // zero for unfilled orders
+   }
+   ```
+
+2. In `services/xstockstrat-trading/internal/broker/alpaca.go`, update `GetOrder` return (currently at L206). Replace:
+   ```go
+   return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status}, nil
+   ```
+   With:
+   ```go
+   var filledAvgPrice float64
+   if alpacaResp.FilledAvgPrice != "" {
+       filledAvgPrice, _ = strconv.ParseFloat(alpacaResp.FilledAvgPrice, 64)
+   }
+   return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status, FilledAvgPrice: filledAvgPrice}, nil
+   ```
+
+3. In `services/xstockstrat-trading/internal/broker/ibkr.go`, update the inline response struct inside `GetOrder` (at `ibkr.go:177–182`). Replace:
+   ```go
+   var result struct {
+       Orders []struct {
+           OrderID string `json:"orderId"`
+           Status  string `json:"status"`
+       } `json:"orders"`
+   }
+   ```
+   With:
+   ```go
+   var result struct {
+       Orders []struct {
+           OrderID  string  `json:"orderId"`
+           Status   string  `json:"status"`
+           AvgPrice float64 `json:"avgPrice"`
+       } `json:"orders"`
+   }
+   ```
+   Then update the return at `ibkr.go:187`. Replace:
+   ```go
+   return &BrokerOrder{BrokerOrderID: o.OrderID, Status: o.Status}, nil
+   ```
+   With:
+   ```go
+   return &BrokerOrder{BrokerOrderID: o.OrderID, Status: o.Status, FilledAvgPrice: o.AvgPrice}, nil
+   ```
+
+**Note on IBKR field name**: The IBKR Web API field `avgPrice` (float64) is used by the `/iserver/account/orders` response for the average fill price. If integration tests reveal the actual field name differs (e.g., `avgFillPrice`), update the JSON tag accordingly — the Go struct field name `AvgPrice` and the `FilledAvgPrice` propagation are correct regardless.
+
+**Verification**:
+```bash
+cd /home/user/xstockstrat-orchestration/services/xstockstrat-trading && GOWORK=off go build ./...
+```
+Build must succeed with zero errors. All existing broker tests must still pass:
+```bash
+cd /home/user/xstockstrat-orchestration/services/xstockstrat-trading && GOWORK=off go test ./internal/broker/... -v
+```
+
+---
+
+### Step 2 — service: propagate FilledAvgPrice in pollFills
+
+**Status**: `pending`
+**Service**: `xstockstrat-trading`
+**Files**:
+- `services/xstockstrat-trading/internal/service/trading.go` — modify
+
+**Reviewers**: Service owner (`xstockstrat-trading`) — fill event payload correctness
+
+**Codebase Evidence**:
+- `pollFills` at `trading.go:445–539` calls `entry.client.GetOrder(ctx, order.BrokerOrderId)` (L489), storing the result in `brokerOrder`.
+- After `order.Status = newStatus` (L500) and `order.UpdatedAt = timestamppb.New(time.Now())` (L501), a now-stale comment at L502 reads: "BrokerOrder.Status is the only normalized field; fill qty/price are broker-specific."
+- `order.FilledAvgPrice` is used in the `order.filled` event emit at `trading.go:514` (`"fill_price": order.FilledAvgPrice`) but is always 0.0 because it is never populated from `brokerOrder`.
+
+**Instructions**:
+
+In `services/xstockstrat-trading/internal/service/trading.go` at lines 500–502, replace the status update block (including the now-stale comment):
+```go
+		order.Status = newStatus
+		order.UpdatedAt = timestamppb.New(time.Now())
+		// BrokerOrder.Status is the only normalized field; fill qty/price are broker-specific.
+```
+With:
+```go
+		order.Status = newStatus
+		order.UpdatedAt = timestamppb.New(time.Now())
+		order.FilledAvgPrice = brokerOrder.FilledAvgPrice
+```
+
+**Verification**:
+```bash
+cd /home/user/xstockstrat-orchestration/services/xstockstrat-trading && GOWORK=off go build ./...
+```
+Build must succeed. The `order.filled` event at `trading.go:514` will now emit a non-zero `fill_price` for completed orders when the broker reports a non-zero fill price.
+
+---
+
+### Step 3 — test: unit tests for broker fill price parsing
+
+**Status**: `pending`
+**Service**: `xstockstrat-trading`
+**Files**:
+- `services/xstockstrat-trading/internal/broker/alpaca_test.go` — modify (append new test)
+- `services/xstockstrat-trading/internal/broker/ibkr_test.go` — create
+
+**Reviewers**: Service owner (`xstockstrat-trading`) — fill price parsing accuracy, test mock correctness
+
+**Codebase Evidence**:
+- `alpaca_test.go` exists at `services/xstockstrat-trading/internal/broker/alpaca_test.go`; package `broker_test`; existing tests use `makeTestServer` helper (L15–21) that creates a `httptest.Server` with routes on `/v2/orders` and `/v2/orders/`. `broker.AlpacaOrder` is exported. Existing tests cover `SubmitOrder`, `CancelOrder`, `IsPaper` — `GetOrder` is not yet tested.
+- No `ibkr_test.go` exists. `broker.NewIBKRClient` and `broker.IBKRConfig` are exported at `ibkr.go:42–57`. IBKR `GetOrder` URL is `{baseURL}/iserver/account/orders` with `orderId` query param (L156–163).
+
+**Instructions**:
+
+1. Append `TestGetOrder_AlpacaFilledAvgPrice` to `services/xstockstrat-trading/internal/broker/alpaca_test.go`:
+   ```go
+   func TestGetOrder_AlpacaFilledAvgPrice(t *testing.T) {
+       srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+           if r.Method != http.MethodGet {
+               t.Errorf("expected GET, got %s", r.Method)
+           }
+           w.Header().Set("Content-Type", "application/json")
+           _ = json.NewEncoder(w).Encode(broker.AlpacaOrder{
+               ID:             "order-abc",
+               Status:         "filled",
+               FilledAvgPrice: "75.50",
+           })
+       })
+       defer srv.Close()
+
+       c := broker.NewClient(broker.ClientConfig{
+           APIKey: "k", APISecret: "s", PaperURL: srv.URL, LiveURL: srv.URL, Paper: true,
+       })
+
+       o, err := c.GetOrder(context.Background(), "order-abc")
+       if err != nil {
+           t.Fatalf("GetOrder failed: %v", err)
+       }
+       if o.FilledAvgPrice != 75.50 {
+           t.Errorf("expected FilledAvgPrice 75.50, got %f", o.FilledAvgPrice)
+       }
+       if o.Status != "filled" {
+           t.Errorf("expected status filled, got %s", o.Status)
+       }
+   }
+   ```
+
+2. Create `services/xstockstrat-trading/internal/broker/ibkr_test.go`:
+   ```go
+   package broker_test
+
+   import (
+       "context"
+       "encoding/json"
+       "net/http"
+       "net/http/httptest"
+       "testing"
+
+       "github.com/xstockstrat/trading/internal/broker"
+   )
+
+   func TestGetOrder_IBKRAvgPrice(t *testing.T) {
+       srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+           if r.URL.Path != "/iserver/account/orders" {
+               http.NotFound(w, r)
+               return
+           }
+           w.Header().Set("Content-Type", "application/json")
+           _ = json.NewEncoder(w).Encode(map[string]interface{}{
+               "orders": []map[string]interface{}{
+                   {"orderId": "ibkr-ord-1", "status": "Filled", "avgPrice": 82.25},
+               },
+           })
+       }))
+       defer srv.Close()
+
+       c := broker.NewIBKRClient(broker.IBKRConfig{
+           BaseURL: srv.URL,
+       })
+
+       o, err := c.GetOrder(context.Background(), "ibkr-ord-1")
+       if err != nil {
+           t.Fatalf("GetOrder failed: %v", err)
+       }
+       if o.FilledAvgPrice != 82.25 {
+           t.Errorf("expected FilledAvgPrice 82.25, got %f", o.FilledAvgPrice)
+       }
+       if o.Status != "Filled" {
+           t.Errorf("expected status Filled, got %s", o.Status)
+       }
+   }
+   ```
+
+**Verification**:
+```bash
+cd /home/user/xstockstrat-orchestration/services/xstockstrat-trading && GOWORK=off go test ./internal/broker/... -v -run TestGetOrder
+```
+Both `TestGetOrder_AlpacaFilledAvgPrice` and `TestGetOrder_IBKRAvgPrice` must pass. All existing broker tests must remain green:
+```bash
+cd /home/user/xstockstrat-orchestration/services/xstockstrat-trading && GOWORK=off go test ./... -race -count=1
+```
+Zero failures.
+
+---
+
+### Step 4 — service: fix GetPnL to compute realized P&L from ledger order.filled events
 
 **Status**: `pending`
 **Service**: `xstockstrat-portfolio`
@@ -186,7 +427,7 @@ Build must succeed with zero errors.
 
 ---
 
-### Step 2 — test: unit tests for GetPnL realized P&L computation
+### Step 5 — test: unit tests for GetPnL realized P&L computation
 
 **Status**: `pending`
 **Service**: `xstockstrat-portfolio`
