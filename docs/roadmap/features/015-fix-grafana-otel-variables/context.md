@@ -14,4 +14,8 @@
   2. Both DO app specs (`app.dev.yaml`, `app.yaml`) have `OTEL_ENABLED: "false"` globally but are entirely missing `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, and `OTEL_RESOURCE_ATTRIBUTES` for all 13 services.
   3. `docs/patterns/observability.md` env var table omits `platform=xstockstrat` from the Local Dev `OTEL_RESOURCE_ATTRIBUTES` row.
 
-**Decision**: Use `APPLICATION_ENV` (existing variable, values `development`/`production`) as the source of truth for the OTel `environment` resource attribute rather than a separate hardcoded value. `TRADING_MODE` (also existing) likewise drives `trading_mode`. `OTEL_RESOURCE_ATTRIBUTES` becomes `environment=${APPLICATION_ENV},trading_mode=${TRADING_MODE},platform=xstockstrat` across all targets. Consequence: the OTel collector's resource processor `environment: dev` upsert must be removed — it would silently override the correct `development` value to `dev`.
+**Decision — APPLICATION_ENV as source of truth**: Use `APPLICATION_ENV` (values `development`/`production`) for the OTel `environment` attribute; `TRADING_MODE` drives `trading_mode`. `OTEL_RESOURCE_ATTRIBUTES` references both. Consequence: OTel collector resource processor `environment: dev` upsert must be removed (would override correct `development` → `dev`).
+
+**Decision — OTEL_EXPORTER_OTLP_HEADERS**: Single global SECRET in both DO app specs (not per-service).
+
+**Decision — service.name in OTEL_RESOURCE_ATTRIBUTES**: Add `service.name=${OTEL_SERVICE_NAME}` to `OTEL_RESOURCE_ATTRIBUTES` in docker-compose (Docker Compose resolves per-container at runtime so the per-service `OTEL_SERVICE_NAME` is in scope). In DO app specs, global env vars cannot reference component-level vars, so `service.name` is omitted from the global `OTEL_RESOURCE_ATTRIBUTES`; the OTel SDK promotes `OTEL_SERVICE_NAME` to `service.name` automatically.
