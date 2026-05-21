@@ -1,7 +1,9 @@
 # Feature: wire-fe-auth
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
 **Development Branch**: `feature/wire-fe-auth`
+**Committed to main**: fb84473
+**Launched date**: 2026-05-19
 **Created**: 2026-05-18
 **Last Updated**: 2026-05-21
 
@@ -16,6 +18,7 @@
 | 2026-05-18 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 | 2026-05-18 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — jose added to all three frontends |
 | 2026-05-19 | `in-progress` → `code-completed` | /sdd-execute | Step 16 complete — all 16 steps done, all 10 backend service test suites pass |
+| 2026-05-19 | `code-completed` → `launched` | /promote | Promoted to production via PR #250 (commit fb84473) |
 
 ---
 
@@ -44,4 +47,4 @@ _(Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry chan
 
 ## Next Action
 
-Integration PR #248 merged to `main-dev` on 2026-05-19. Run `/promote` to create a production promotion PR — CI will automatically mark this feature `launched` when that PR merges to `main`.
+Feature is live in production.
