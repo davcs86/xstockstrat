@@ -19,12 +19,14 @@ export function initTelemetry(): void {
     const { SEMRESATTRS_SERVICE_NAME, SEMRESATTRS_DEPLOYMENT_ENVIRONMENT } = require('@opentelemetry/semantic-conventions');
 
     const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'grpc://otel-collector:4317';
-    const serviceName = process.env.OTEL_SERVICE_NAME ?? 'xstockstrat-config';
+    const serviceName = process.env.SERVICE_NAME ?? 'config';
 
     const sdk = new NodeSDK({
       resource: new Resource({
         [SEMRESATTRS_SERVICE_NAME]: serviceName,
         [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.APPLICATION_ENV ?? 'development',
+        trading_mode: process.env.TRADING_MODE ?? 'paper',
+        platform: 'xstockstrat',
       }),
       traceExporter: new OTLPTraceExporter({ url: endpoint }),
       instrumentations: [new GrpcInstrumentation()],

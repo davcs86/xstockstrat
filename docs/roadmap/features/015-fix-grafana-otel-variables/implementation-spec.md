@@ -1,6 +1,6 @@
 # Implementation Spec: fix-grafana-otel-variables
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-05-21
 **Feature**: `docs/roadmap/features/015-fix-grafana-otel-variables/feature.md`
 **Total Steps**: 9
@@ -29,7 +29,7 @@ No migrations, proto changes, or config key additions are needed.
 
 ### Step 1 — service: Add `trading_mode` and `platform` attributes to Go telemetry — `xstockstrat-trading`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify
@@ -85,7 +85,7 @@ Expected: `go build` exits 0; grep shows both `attribute.String("trading_mode", 
 
 ### Step 2 — service: Add `trading_mode` and `platform` attributes to Go telemetry — `xstockstrat-portfolio`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/telemetry/otel.go` — modify
@@ -122,7 +122,7 @@ Expected: build succeeds; both new attribute lines present.
 
 ### Step 3 — service: Add `trading_mode` and `platform` attributes to Go telemetry — `xstockstrat-marketdata`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/telemetry/otel.go` — modify
@@ -158,7 +158,7 @@ Expected: build succeeds; both new attribute lines present.
 
 ### Step 4 — service: Add `trading_mode` and `platform` attributes to Python telemetry — `xstockstrat-indicators`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/telemetry.py` — modify
@@ -221,7 +221,7 @@ Expected: import succeeds; both new keys present.
 
 ### Step 5 — service: Add `trading_mode` and `platform` attributes to Python telemetry — `xstockstrat-ingest`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/telemetry.py` — modify
@@ -253,7 +253,7 @@ Expected: import succeeds; both new keys present.
 
 ### Step 6 — service: Add `trading_mode` and `platform` attributes to Python telemetry — `xstockstrat-analysis`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/telemetry.py` — modify
@@ -285,7 +285,7 @@ Expected: import succeeds; both new keys present.
 
 ### Step 7 — service: Add `trading_mode` and `platform` attributes to Node.js backend telemetry (all four services)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-ledger/src/telemetry.ts` — modify
@@ -345,7 +345,7 @@ Expected: `tsc --noEmit` exits 0 for all four; both keys present in all four fil
 
 ### Step 8 — service: Create `src/telemetry.ts` and `instrumentation.ts` for Next.js frontends
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-trader/src/telemetry.ts` — **create** (not found — `find services/xstockstrat-trader -name "telemetry*"` → no match)
@@ -483,7 +483,7 @@ Expected: TypeScript compiles cleanly; all attribute and import lines present in
 
 ### Step 9 — config: Clean up infrastructure files and update documentation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: Infrastructure / docs (cross-cutting)
 **Files**:
 - `docker-compose.yml` — modify
@@ -604,4 +604,12 @@ Expected: no output.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 8 — OTel package versions and API changes
+**Spec said**: Use `@opentelemetry/sdk-node: "^0.52.0"`, `@opentelemetry/resources: "^1.25.0"`, `@opentelemetry/semantic-conventions: "^1.25.0"`, `@opentelemetry/exporter-trace-otlp-http: "^0.52.0"`; use `new Resource({...})`, `SEMRESATTRS_SERVICE_NAME`, `SEMRESATTRS_DEPLOYMENT_ENVIRONMENT`.
+**Actual**: Upgraded to `@opentelemetry/sdk-node: "^0.218.0"`, `@opentelemetry/exporter-trace-otlp-http: "^0.218.0"`, `@opentelemetry/resources: "^2.7.1"`, `@opentelemetry/semantic-conventions: "^1.41.1"`. Used `resourceFromAttributes({...})` instead of `new Resource({...})`; used `ATTR_SERVICE_NAME` instead of `SEMRESATTRS_SERVICE_NAME`; used plain string `'deployment.environment'` instead of `ATTR_DEPLOYMENT_ENVIRONMENT_NAME` (which resolves to `'deployment.environment.name'` in semconv@1.41.1 — a different key that would break cross-service consistency in Grafana dashboards).
+**Reason**: User requested package version upgrades to latest. `resources@2.x` removed the `Resource` class constructor in favour of `resourceFromAttributes`; `semantic-conventions@1.41.1` renamed `SEMRESATTRS_*` to `ATTR_*` and changed the deployment environment key. Plain string `'deployment.environment'` kept to match Go/Python services.
+
+### Deviation: Step 7 — Node.js backend telemetry verification
+**Spec said**: Run `pnpm exec tsc --noEmit` in each of the four service directories and confirm exit 0.
+**Actual**: `tsc --noEmit` exited 2 with pre-existing errors across all files (`process`, `require`, `console` not found) caused by `node_modules` not being installed in the remote execution environment. Errors are identical before and after the change and are unrelated to the two new `Resource` attribute keys. Substituted verification: `grep -n "trading_mode\|platform"` across all four files confirmed both keys present at lines 28–29 in every file.
+**Reason**: Remote execution environment does not have `node_modules` installed for Node.js services. The structural change (two plain string keys in an object literal) requires no imports and is correct TypeScript. CI will run `tsc` with a fully-installed workspace.

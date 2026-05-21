@@ -4,7 +4,7 @@ const nextConfig = {
   output: 'standalone',
   // Allow server-side Connect-RPC calls to backend services
   experimental: {
-    serverComponentsExternalPackages: ['@connectrpc/connect-node'],
+    serverComponentsExternalPackages: ['@connectrpc/connect-node', '@opentelemetry/sdk-node', '@opentelemetry/exporter-trace-otlp-http'],
   },
 };
 

@@ -1,5 +1,5 @@
 /**
- * OpenTelemetry initialisation for xstockstrat-ledger.
+ * OpenTelemetry initialisation for xstockstrat-config-ui.
  * Activated only when OTEL_ENABLED=true.
  * Must be called before any other imports to ensure auto-instrumentation works.
  */
@@ -10,26 +10,24 @@ export function initTelemetry(): void {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { NodeSDK } = require('@opentelemetry/sdk-node');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-grpc');
+    const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { GrpcInstrumentation } = require('@opentelemetry/instrumentation-grpc');
+    const { resourceFromAttributes } = require('@opentelemetry/resources');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Resource } = require('@opentelemetry/resources');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { SEMRESATTRS_SERVICE_NAME, SEMRESATTRS_DEPLOYMENT_ENVIRONMENT } = require('@opentelemetry/semantic-conventions');
+    const { ATTR_SERVICE_NAME } = require('@opentelemetry/semantic-conventions');
 
-    const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'grpc://otel-collector:4317';
-    const serviceName = process.env.SERVICE_NAME ?? 'ledger';
+    const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'http://otel-collector:4318';
+    const serviceName = process.env.SERVICE_NAME ?? 'config-ui';
 
     const sdk = new NodeSDK({
-      resource: new Resource({
-        [SEMRESATTRS_SERVICE_NAME]: serviceName,
-        [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.APPLICATION_ENV ?? 'development',
+      resource: resourceFromAttributes({
+        [ATTR_SERVICE_NAME]: serviceName,
+        'deployment.environment': process.env.APPLICATION_ENV ?? 'development',
         trading_mode: process.env.TRADING_MODE ?? 'paper',
         platform: 'xstockstrat',
       }),
       traceExporter: new OTLPTraceExporter({ url: endpoint }),
-      instrumentations: [new GrpcInstrumentation()],
+      instrumentations: [],
     });
 
     sdk.start();
