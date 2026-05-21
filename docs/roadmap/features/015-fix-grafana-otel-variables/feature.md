@@ -1,6 +1,6 @@
 # Feature: fix-grafana-otel-variables
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/fix-grafana-otel-variables`
 **Created**: 2026-05-21
 **Last Updated**: 2026-05-21
@@ -14,6 +14,7 @@
 | 2026-05-21 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning) |
 | 2026-05-21 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps |
+| 2026-05-21 | `implementation-ready` → `spec-ready` | scope-revision | Path B adopted: runtime derivation in telemetry init; impl-spec reset for regeneration |
 
 ---
 
