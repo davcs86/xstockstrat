@@ -76,6 +76,7 @@
 - Added `trading_mode = os.getenv("TRADING_MODE", "paper")` and two dict keys to `Resource.create({...})` in `app/telemetry.py`. Import check passes.
 - Files modified: `services/xstockstrat-indicators/app/telemetry.py`
 - Deviations: none
+
 ### Step 5 — Add `trading_mode` and `platform` attributes to Python telemetry — `xstockstrat-ingest` [done]
 - Identical change to Step 4 applied to `app/telemetry.py`. Import check passes.
 - Files modified: `services/xstockstrat-ingest/app/telemetry.py`
