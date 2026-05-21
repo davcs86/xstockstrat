@@ -198,3 +198,8 @@ The existing portfolio subscriber (`portfolio_service.go:88`) already filters on
 - Replaced stale comment at trading.go:502 with `order.FilledAvgPrice = brokerOrder.FilledAvgPrice`. The `order.filled` event at L514 now emits the actual fill price from the broker instead of always 0.0.
 - Files modified: `services/xstockstrat-trading/internal/service/trading.go`
 - Deviations: none
+
+### Step 3 — test: unit tests for broker fill price parsing [done]
+- Appended `TestGetOrder_AlpacaFilledAvgPrice` to alpaca_test.go (asserts string "75.50" parses to float64 75.50). Created ibkr_test.go with `TestGetOrder_IBKRAvgPrice` (asserts float64 avgPrice 82.25 propagates correctly). Both new tests pass; full suite with -race also clean.
+- Files modified: `services/xstockstrat-trading/internal/broker/alpaca_test.go`, `services/xstockstrat-trading/internal/broker/ibkr_test.go`
+- Deviations: none

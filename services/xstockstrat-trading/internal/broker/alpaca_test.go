@@ -143,3 +143,33 @@ func TestIsPaper(t *testing.T) {
 		t.Error("expected IsPaper=false")
 	}
 }
+
+func TestGetOrder_AlpacaFilledAvgPrice(t *testing.T) {
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("expected GET, got %s", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(broker.AlpacaOrder{
+			ID:             "order-abc",
+			Status:         "filled",
+			FilledAvgPrice: "75.50",
+		})
+	})
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{
+		APIKey: "k", APISecret: "s", PaperURL: srv.URL, LiveURL: srv.URL, Paper: true,
+	})
+
+	o, err := c.GetOrder(context.Background(), "order-abc")
+	if err != nil {
+		t.Fatalf("GetOrder failed: %v", err)
+	}
+	if o.FilledAvgPrice != 75.50 {
+		t.Errorf("expected FilledAvgPrice 75.50, got %f", o.FilledAvgPrice)
+	}
+	if o.Status != "filled" {
+		t.Errorf("expected status filled, got %s", o.Status)
+	}
+}
