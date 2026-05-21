@@ -4,8 +4,9 @@ import "context"
 
 // BrokerOrder is the normalized order representation returned by any broker.
 type BrokerOrder struct {
-	BrokerOrderID string
-	Status        string
+	BrokerOrderID  string
+	Status         string
+	FilledAvgPrice float64 // zero for unfilled orders
 }
 
 // BrokerPosition is a normalized position snapshot from a broker.

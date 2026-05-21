@@ -1,6 +1,6 @@
 # Implementation Spec: phase-2-data-layer
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-20
 **Feature**: `docs/roadmap/features/013-phase-2-data-layer/feature.md`
 **Total Steps**: 5
@@ -31,7 +31,7 @@ Steps 4–5 are logically independent from Steps 1–3 at implementation time (d
 
 ### Step 1 — broker: extend BrokerOrder struct and update both GetOrder implementations
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/broker.go` — modify

@@ -203,7 +203,11 @@ func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrd
 	if err := json.Unmarshal(respBody, &alpacaResp); err != nil {
 		return nil, fmt.Errorf("decode order response: %w", err)
 	}
-	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status}, nil
+	var filledAvgPrice float64
+	if alpacaResp.FilledAvgPrice != "" {
+		filledAvgPrice, _ = strconv.ParseFloat(alpacaResp.FilledAvgPrice, 64)
+	}
+	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status, FilledAvgPrice: filledAvgPrice}, nil
 }
 
 // GetPositions fetches all open positions via GET /v2/positions.
