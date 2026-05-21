@@ -132,6 +132,25 @@ Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060 / HTTP 8
 
 ---
 
+## Environment Variable Naming Convention
+
+All inter-service connection env vars follow these patterns. **Never invent new suffixes** — use only the forms below.
+
+| Pattern | Format | Used for | Example |
+|---|---|---|---|
+| `<SERVICE>_ENDPOINT` | `host:port` (no protocol) | gRPC connections | `IDENTITY_ENDPOINT=xstockstrat-identity:50058` |
+| `<SERVICE>_HTTP_ENDPOINT` | `http://host:port` (full URL) | HTTP Connect-RPC + webhook calls | `INGEST_HTTP_ENDPOINT=http://xstockstrat-ingest:8055` |
+| `XSTOCKSTRAT_<SERVICE>_PRIVATE_URL` | bare hostname on DO, container name in Compose | **nginx container only** — `envsubst` upstream resolution | `XSTOCKSTRAT_AGENT_PRIVATE_URL=xstockstrat-agent` |
+
+**Rules:**
+- No `XSTOCKSTRAT_` prefix except for nginx `PRIVATE_URL` vars.
+- No `_URL` suffix on inter-service connection vars — always `_ENDPOINT` or `_HTTP_ENDPOINT`.
+- `_ENDPOINT` and `_HTTP_ENDPOINT` for the same service coexist when a caller needs both gRPC and HTTP access.
+- When a new service introduces connection env vars, check `docker-compose.yml` first — the var may already exist in another service's block and only needs to be added to the new service's block with the same value.
+- `N8N_WEBHOOK_SECRET` was removed by feature 011 (`remove-n8n-references`). Do not reference it. The MCP agent uses `MCP_AGENT_SECRET` (sent as `x-mcp-secret` header on outbound calls to identify itself to platform services); the receiving services do not currently enforce it.
+
+---
+
 ## Database
 
 TimescaleDB (PostgreSQL). Each service owns its schema; migrations run via `scripts/db-migrate.sh` (golang-migrate). Convention: `NNN_description.up.sql` + `.down.sql` in `services/<service>/migrations/`. Never edit an applied migration — add a new numbered one instead.
