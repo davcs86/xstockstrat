@@ -42,6 +42,8 @@ FR-6. All downstream HTTP calls from the agent must include the `x-mcp-secret` h
 
 FR-9. The webhook handlers in `xstockstrat-ingest`, `xstockstrat-notify`, and `xstockstrat-analysis` must enforce the `x-mcp-secret` header. When `MCP_AGENT_SECRET` is set in the receiving service's environment, any request to a `/webhooks/*` path that omits the header or presents a mismatched value must be rejected with HTTP 401. When `MCP_AGENT_SECRET` is empty the check is skipped (allows gradual rollout). The same `MCP_AGENT_SECRET` value must be configured in both the agent and all three receiving services.
 
+FR-10. A tool reference doc must be created at `docs/runbooks/mcp-tools.md`. It must document all four MCP tools (`list_signal_sources`, `ingest_signal`, `emit_alert`, `run_backtest`) with: purpose, all parameters (name, type, required/optional, description), return shape, and error cases. It must also cover the two transport modes (stdio vs SSE), the `MCP_AGENT_SECRET` enforcement behaviour, and link to `claude_mcp_config.json` for connection setup.
+
 FR-7. A `docker-compose.yml` override or service entry must allow running `xstockstrat-agent` locally alongside the existing stack.
 
 FR-8. A `claude_mcp_config.json` example file must be included at `services/xstockstrat-agent/claude_mcp_config.json` showing the exact configuration snippet an operator pastes into Claude.ai or the Claude desktop app to connect to the MCP server.
@@ -103,6 +105,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 6. `run_backtest` triggers a backtest and returns results.
 7. All downstream calls from the agent include the `x-mcp-secret` header when `MCP_AGENT_SECRET` is set.
 13. Requests to `/webhooks/*` endpoints on ingest, notify, and analysis without a valid `x-mcp-secret` header return HTTP 401 when `MCP_AGENT_SECRET` is configured on the receiving service.
+14. `docs/runbooks/mcp-tools.md` exists and contains a parameter table for each of the four MCP tools, a return shape section, and an error cases section.
 8. The MCP server is connectable from Claude.ai using the config in `claude_mcp_config.json`.
 9. An operator can paste an email body into Claude.ai, Claude calls `list_signal_sources` then `ingest_signal`, and the signal appears in the ingest DB — end to end.
 10. The SSE endpoint at `/agent/sse` (via nginx port 80) returns HTTP 401 when the `Authorization` header is absent or the API key is invalid.

@@ -3,14 +3,14 @@
 **Status**: `pending`
 **Created**: 2026-05-21
 **Feature**: `docs/roadmap/features/009-agent-mcp-server/feature.md`
-**Total Steps**: 12
+**Total Steps**: 13
 **Feature Branch**: `feature/agent-mcp-server`
 
 ---
 
 ## Execution Summary
 
-This is a new standalone Python service with no proto changes and no DB migrations. Steps execute in this order: Step 1 creates the full service scaffold (pyproject.toml with all required deps including grpcio and protobuf for identity calls, Dockerfile with proto stubs layer, app package structure); Step 2 implements the HTTP client wrapper; Step 3 implements API-key auth middleware for SSE connections using the identity gRPC stub; Step 4 implements the MCP server core (tool definitions and main entry point with auth-gated SSE transport); Step 5 adds the system prompt file; Step 6 wires the service into docker-compose and `.env.example`; Step 7 adds nginx upstream and `/agent/sse` location block; Step 8 adds the service to `.do/app.dev.yaml` and `.do/app.yaml` and updates the nginx env vars in both; Step 9 adds the `claude_mcp_config.json` operator config file; Step 10 covers tests. Steps 2–9 require Step 1. Steps 2 and 5 are independent of each other. Step 4 requires Steps 2 and 3. Step 7 requires Step 6 (the `XSTOCKSTRAT_AGENT_PRIVATE_URL` env var added to nginx in Step 8 must match the agent entry added to the DO specs in Step 8, so Steps 7 and 8 should be executed together). Step 10 covers Steps 1–5. Step 11 updates the CLAUDE.md registry and is independent of all other steps. Step 12 adds `x-mcp-secret` enforcement middleware to the three receiving services (ingest, notify, analysis) and adds `MCP_AGENT_SECRET` to their docker-compose and DO spec env blocks; Step 12 is independent of Steps 1–11 and can execute in any order relative to them.
+This is a new standalone Python service with no proto changes and no DB migrations. Steps execute in this order: Step 1 creates the full service scaffold (pyproject.toml with all required deps including grpcio and protobuf for identity calls, Dockerfile with proto stubs layer, app package structure); Step 2 implements the HTTP client wrapper; Step 3 implements API-key auth middleware for SSE connections using the identity gRPC stub; Step 4 implements the MCP server core (tool definitions and main entry point with auth-gated SSE transport); Step 5 adds the system prompt file; Step 6 wires the service into docker-compose and `.env.example`; Step 7 adds nginx upstream and `/agent/sse` location block; Step 8 adds the service to `.do/app.dev.yaml` and `.do/app.yaml` and updates the nginx env vars in both; Step 9 adds the `claude_mcp_config.json` operator config file; Step 10 covers tests. Steps 2–9 require Step 1. Steps 2 and 5 are independent of each other. Step 4 requires Steps 2 and 3. Step 7 requires Step 6 (the `XSTOCKSTRAT_AGENT_PRIVATE_URL` env var added to nginx in Step 8 must match the agent entry added to the DO specs in Step 8, so Steps 7 and 8 should be executed together). Step 10 covers Steps 1–5. Step 11 updates the CLAUDE.md registry and is independent of all other steps. Step 12 adds `x-mcp-secret` enforcement middleware to the three receiving services (ingest, notify, analysis) and adds `MCP_AGENT_SECRET` to their docker-compose and DO spec env blocks; Step 12 is independent of Steps 1–11 and can execute in any order relative to them. Step 13 creates `docs/runbooks/mcp-tools.md` — the operator tool reference; it requires Step 4 (tool signatures must be final) and Step 5 (system prompt content informs the usage guidance), and is otherwise independent.
 
 **Prerequisite**: Feature 008 (`signal-source-registry`) must be merged first — specifically its Step 7 (HTTP wiring for `ListSignalSources`), which adds the Connect-RPC route `POST /xstockstrat.ingest.v1.IngestService/ListSignalSources` on port 8055 that the `list_signal_sources` tool delegates to.
 
@@ -24,6 +24,7 @@ This is a new standalone Python service with no proto changes and no DB migratio
 - Steps 7 and 8 (nginx/infrastructure) have no pytest test step: nginx config correctness is verified by the `docker nginx -t` syntax check in Step 7's Verification command; end-to-end SSE connectivity is covered by `scripts/integration-test.sh`. No Python coverage threshold applies to nginx config changes.
 - Step 9 (claude_mcp_config.json) has no pytest test step: correctness is verified by the `python3 -c "import json; json.load(...)"` command in Step 9's Verification.
 - Step 12 (service-side enforcement) modifies three existing services. Tests for the middleware live in each service's existing test suite. The Step 12 verification commands confirm the guard is present in each file without requiring re-running full test suites.
+- Step 13 (docs) has no test step. Correctness is verified by confirming all four tool sections and required subsections are present.
 
 ---
 
@@ -1344,6 +1345,236 @@ grep -n "MCP_AGENT_SECRET" docker-compose.yml
 
 # Confirm MCP_AGENT_SECRET added to DO specs for all three receiving services
 grep -n "MCP_AGENT_SECRET" .do/app.dev.yaml .do/app.yaml
+```
+
+---
+
+### Step 13 — docs: Create docs/runbooks/mcp-tools.md tool reference
+
+**Status**: `pending`
+**Service**: `docs`
+**Files**:
+- `docs/runbooks/mcp-tools.md` — create
+- `docs/runbooks/CLAUDE.md` — modify (add entry to index table)
+- `CLAUDE.md` — modify (add row to Context Guide table)
+
+**Reviewers**: none
+
+**Codebase Evidence**:
+- Tool signatures confirmed in Step 4 (`app/tools.py`): `list_signal_sources()`, `ingest_signal(source, symbol, direction, valid_from, conviction?, valid_until?, headline?, raw_url?, tags?)`, `emit_alert(severity, category, title, body, source_service?, target_user_id?)`, `run_backtest(strategy_id, symbols, initial_capital?)`.
+- Ingest valid directions confirmed: `services/xstockstrat-ingest/app/handlers/servicer.py:L167` — `{"buy", "sell", "hold", "watchlist"}`.
+- Ingest conviction range confirmed: `services/xstockstrat-ingest/app/handlers/servicer.py:L181` — `0.0–1.0`.
+- Return shapes confirmed from Step 10 test fixtures: `list_signal_sources` → `{"sources": [...]}`, `ingest_signal` → `{"signal_id": <int>}`, `emit_alert` → `{"success": true}`, `run_backtest` → `{"backtest_id": "<str>"}`.
+- Error cases confirmed: unknown source slug → ingest returns `INVALID_ARGUMENT` propagated as tool error (AC-4); HTTP 401 from receiving service when `MCP_AGENT_SECRET` mismatch (FR-9/Step 12); httpx network errors propagated as tool errors.
+- Transport modes confirmed: `MCP_TRANSPORT=stdio` (default) and `MCP_TRANSPORT=sse` with `MCP_SSE_PORT` (Step 4 `app/main.py`).
+- SSE auth confirmed: `Authorization: Bearer <api_key>` validated via identity `ValidateApiKey` (FR-5a, Step 3).
+- `claude_mcp_config.json` location: `services/xstockstrat-agent/claude_mcp_config.json` (Step 9).
+- Runbook index confirmed at `docs/runbooks/CLAUDE.md` — table with `| File | Purpose |` columns.
+- Root `CLAUDE.md` Context Guide table confirmed under `## Context Guide` — columns `| Task | Read |`.
+
+**Instructions**:
+
+1. Create `docs/runbooks/mcp-tools.md`:
+
+   ````markdown
+   # MCP Tools Reference — xstockstrat-agent
+
+   The `xstockstrat-agent` MCP server exposes four tools that bridge Claude.ai to the
+   xstockstrat platform. This document is the operator reference for tool parameters,
+   return shapes, and error handling.
+
+   For connection setup (transport modes, API keys, Claude Desktop config) see
+   `services/xstockstrat-agent/claude_mcp_config.json` and the sections below.
+
+   ---
+
+   ## Transport Modes
+
+   | Mode | `MCP_TRANSPORT` | How to connect | Auth required |
+   |---|---|---|---|
+   | stdio | `stdio` (default) | Claude Desktop runs the process directly | None — local process |
+   | SSE | `sse` | Connect to `http://localhost/agent/sse` via nginx | `Authorization: Bearer <api_key>` (validated via identity service) |
+
+   For local development the stdio mode is recommended. The SSE mode is used when the agent
+   runs in Docker Compose or on DigitalOcean and must be reachable from a remote Claude.ai session.
+
+   ---
+
+   ## Authentication — x-mcp-secret
+
+   When `MCP_AGENT_SECRET` is configured, the agent includes an `x-mcp-secret` header on
+   every downstream HTTP call. The three receiving services (ingest, notify, analysis) enforce
+   this header on all `/webhooks/*` requests and reject mismatched or absent values with HTTP 401.
+
+   Set the same value in the agent and all three receiving services:
+   ```
+   MCP_AGENT_SECRET=<shared-secret>   # in xstockstrat-agent, xstockstrat-ingest,
+                                       # xstockstrat-notify, xstockstrat-analysis
+   ```
+   Leave empty to disable enforcement (useful during initial local setup).
+
+   ---
+
+   ## Tools
+
+   ### `list_signal_sources`
+
+   Returns all active signal sources registered in `xstockstrat-ingest`.
+   **Always call this first** before calling `ingest_signal` to look up valid source slugs.
+
+   **Parameters**: none
+
+   **Returns**:
+   ```json
+   {
+     "sources": [
+       {
+         "slug": "unusual_whales",
+         "display_name": "Unusual Whales",
+         "source_type": "simple_website"
+       }
+     ]
+   }
+   ```
+
+   **Errors**:
+   | Condition | Behaviour |
+   |---|---|
+   | ingest service unreachable | Tool raises with HTTP/network error message |
+   | `x-mcp-secret` mismatch | Tool raises with HTTP 401 |
+
+   ---
+
+   ### `ingest_signal`
+
+   Ingests a trading signal into `xstockstrat-ingest`. Creates a row in
+   `ingest.newsletter_signals` and returns the new `signal_id`.
+
+   **Parameters**:
+
+   | Parameter | Type | Required | Description |
+   |---|---|---|---|
+   | `source` | string | Yes | Source slug from `list_signal_sources` — exact match |
+   | `symbol` | string | Yes | Ticker symbol, uppercase (e.g. `NVDA`) |
+   | `direction` | string | Yes | One of `buy`, `sell`, `hold`, `watchlist` |
+   | `valid_from` | string | Yes | Signal validity start — ISO 8601 UTC (e.g. `2026-05-01T00:00:00Z`) |
+   | `conviction` | float | No | Confidence score `0.0`–`1.0`; source default applied when omitted |
+   | `valid_until` | string | No | Signal expiry — ISO 8601 UTC; omit for open-ended signals |
+   | `headline` | string | No | One-line summary of the signal reason |
+   | `raw_url` | string | No | Source URL if present in the email/text |
+   | `tags` | list[string] | No | Relevant keywords (e.g. `["unusual_options", "earnings"]`) |
+
+   **Returns**:
+   ```json
+   { "signal_id": 42 }
+   ```
+
+   **Errors**:
+   | Condition | Behaviour |
+   |---|---|
+   | Unknown `source` slug | Tool raises with `INVALID_ARGUMENT` from ingest |
+   | Invalid `direction` value | Tool raises with `INVALID_ARGUMENT` from ingest |
+   | `conviction` outside `0.0`–`1.0` | Tool raises with `INVALID_ARGUMENT` from ingest |
+   | Duplicate signal | Tool raises with duplicate error from ingest |
+   | `x-mcp-secret` mismatch | Tool raises with HTTP 401 |
+
+   ---
+
+   ### `emit_alert`
+
+   Emits an operator-facing alert via `xstockstrat-notify`. Use this to surface
+   time-sensitive or high-conviction signals that need immediate attention, ingestion
+   failures, unregistered sources, or any observation worth flagging to the operator.
+
+   **Parameters**:
+
+   | Parameter | Type | Required | Description |
+   |---|---|---|---|
+   | `severity` | string | Yes | Alert urgency: `info`, `warning`, `critical` |
+   | `category` | string | Yes | Alert category: e.g. `signal`, `system`, `market` |
+   | `title` | string | Yes | Short one-line summary shown in the alert |
+   | `body` | string | Yes | Full alert description |
+   | `source_service` | string | No | Originating service name (default `xstockstrat-agent`) |
+   | `target_user_id` | string | No | User to target; empty string broadcasts to all operators |
+
+   **Returns**:
+   ```json
+   { "success": true }
+   ```
+
+   **Errors**:
+   | Condition | Behaviour |
+   |---|---|
+   | notify service unreachable | Tool raises with HTTP/network error message |
+   | `x-mcp-secret` mismatch | Tool raises with HTTP 401 |
+
+   **When to call vs. skip** — see `services/xstockstrat-agent/app/prompts/signal_extraction.md` §Step 4.
+
+   ---
+
+   ### `run_backtest`
+
+   Triggers a backtest via `xstockstrat-analysis` and returns the result synchronously.
+
+   **Parameters**:
+
+   | Parameter | Type | Required | Description |
+   |---|---|---|---|
+   | `strategy_id` | string | Yes | Strategy identifier (e.g. `sma_crossover`) |
+   | `symbols` | list[string] | Yes | Ticker symbols to backtest (e.g. `["NVDA", "AAPL"]`) |
+   | `initial_capital` | float | No | Starting capital in USD (default `100000.0`) |
+
+   **Returns**:
+   ```json
+   { "backtest_id": "bt-abc123", ... }
+   ```
+   Full return shape depends on the strategy; `backtest_id` is always present.
+
+   **Errors**:
+   | Condition | Behaviour |
+   |---|---|
+   | Unknown `strategy_id` | Tool raises with error from analysis service |
+   | analysis service unreachable | Tool raises with HTTP/network error message |
+   | `x-mcp-secret` mismatch | Tool raises with HTTP 401 |
+
+   ---
+
+   ## Usage Pattern
+
+   The recommended call sequence for processing an incoming email:
+
+   1. `list_signal_sources` — retrieve active slugs
+   2. Match email sender/newsletter to a slug; skip entirely if no match
+   3. `ingest_signal` — ingest each actionable signal found
+   4. `emit_alert` (optional) — surface high-conviction or time-sensitive signals to the operator
+
+   Full extraction guidance including conviction scoring and source-type mapping is in
+   `services/xstockstrat-agent/app/prompts/signal_extraction.md`.
+   ````
+
+2. Add a row to the `docs/runbooks/CLAUDE.md` index table (insert after the last runbook row, before the closing of the table):
+   ```
+   | `mcp-tools.md` | MCP tool reference — all four agent tools with parameter tables, return shapes, error cases, and transport/auth setup |
+   ```
+
+3. Add a row to the `## Context Guide` table in root `CLAUDE.md` (insert after the last row referencing a runbook):
+   ```
+   | Using or troubleshooting the agent MCP tools | `docs/runbooks/mcp-tools.md` |
+   ```
+
+**Verification**:
+```bash
+# Confirm file exists and all four tool sections are present
+grep -n "^### " docs/runbooks/mcp-tools.md
+
+# Confirm parameter tables present (one per tool)
+grep -c "| Parameter" docs/runbooks/mcp-tools.md
+
+# Confirm entry added to runbook index
+grep -n "mcp-tools" docs/runbooks/CLAUDE.md
+
+# Confirm entry added to root context guide
+grep -n "mcp-tools" CLAUDE.md
 ```
 
 ---

@@ -88,3 +88,10 @@
 - Added AC-13: receiving services return 401 when enforcement is active and header is invalid.
 - Added Step 12 to implementation-spec (total steps 11 → 12): Starlette `@app.middleware("http")` guard on ingest and analysis; inline check in notify's webhook router; `MCP_AGENT_SECRET` env var added to all three service blocks in docker-compose and DO specs.
 - Step 12 is independent of Steps 1–11 and can execute at any point during the feature.
+
+## Session 2026-05-21T00:15:00Z — add docs/runbooks/mcp-tools.md to scope
+
+- Added FR-10: tool reference doc at `docs/runbooks/mcp-tools.md` covering all four tools with parameter tables, return shapes, and error cases; also covers transport modes and `MCP_AGENT_SECRET` enforcement.
+- Added AC-14.
+- Added Step 13 to implementation spec (total steps 12 → 13): creates the runbook, adds an entry to `docs/runbooks/CLAUDE.md`, and adds a row to the root `CLAUDE.md` Context Guide table.
+- Step 13 requires Steps 4 and 5 to be final (tool signatures and system prompt content); otherwise independent.
