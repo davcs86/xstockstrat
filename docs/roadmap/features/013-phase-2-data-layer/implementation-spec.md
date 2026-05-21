@@ -121,7 +121,7 @@ cd /home/user/xstockstrat-orchestration/services/xstockstrat-trading && GOWORK=o
 
 ### Step 2 — service: propagate FilledAvgPrice in pollFills
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify

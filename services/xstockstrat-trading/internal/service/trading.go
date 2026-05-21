@@ -499,7 +499,7 @@ func (s *TradingService) pollFills(ctx context.Context) {
 
 		order.Status = newStatus
 		order.UpdatedAt = timestamppb.New(time.Now())
-		// BrokerOrder.Status is the only normalized field; fill qty/price are broker-specific.
+		order.FilledAvgPrice = brokerOrder.FilledAvgPrice
 
 		if err := s.repo.UpsertOrder(ctx, order); err != nil {
 			slog.Warn("fill poll: db upsert failed", "order_id", order.OrderId, "error", err)
