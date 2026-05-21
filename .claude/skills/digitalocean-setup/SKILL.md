@@ -219,10 +219,14 @@ Display the generated value so the user can record it externally if needed.
 
 **Optional — OTEL (Grafana Cloud):**
 
-Ask: "Do you have a Grafana Cloud OTLP endpoint? (paste URL or type `skip`)"
+Ask: "Do you have Grafana Cloud OTLP credentials? (y/n — you can add them later via `docs/setup/grafana-cloud.md`)"
 
-- If provided: also collect `OTEL_EXPORTER_OTLP_HEADERS` (the `Authorization: Basic <token>` header value)
-- If skipped: note that OTel can be added later — see `docs/setup/grafana-cloud.md`
+- If yes: collect both values together (they are tightly coupled — neither works without the other):
+  - `OTEL_ENDPOINT` — the OTLP gateway URL, e.g. `https://otlp-gateway-<region>.grafana.net/otlp`
+  - `OTEL_HEADERS` — the Authorization header value: `Basic <base64(instanceId:apiKey)>` (Grafana provides the pre-encoded string)
+- If no: skip and note OTel can be wired later — see `docs/setup/grafana-cloud.md`
+
+Both `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` are the same for dev and prod apps (same Grafana Cloud stack). When provided, apply them to both app specs.
 
 ### Apply to dev app — secrets stay in memory, never touch disk
 
@@ -233,6 +237,7 @@ import re, os
 content = open('$REPO_ROOT/.do/app.dev.yaml').read()
 content = content.replace('YOUR_GITHUB_ORG', os.environ['GH_ORG'])
 
+# Inject value: "" vars (ALPACA, JWT) — match existing empty-value pattern
 for key, val in [
     ('ALPACA_API_KEY',    os.environ['DEV_ALPACA_KEY']),
     ('ALPACA_API_SECRET', os.environ['DEV_ALPACA_SECRET']),
@@ -244,13 +249,27 @@ for key, val in [
         content
     )
 
+# Inject OTEL vars — these have scope: RUN_TIME but no value: field; insert it
+otel_endpoint = os.environ.get('OTEL_ENDPOINT', '')
+otel_headers  = os.environ.get('OTEL_HEADERS', '')
+if otel_endpoint:
+    content = re.sub(
+        r'(- key: OTEL_EXPORTER_OTLP_ENDPOINT\n    scope: RUN_TIME)',
+        r'\1\n    value: "' + otel_endpoint + '"',
+        content
+    )
+if otel_headers:
+    content = re.sub(
+        r'(- key: OTEL_EXPORTER_OTLP_HEADERS\n    scope: RUN_TIME\n    type: SECRET)',
+        r'\1\n    value: "' + otel_headers + '"',
+        content
+    )
+
 print(content)
 PYEOF
 ```
 
-Repeat for the prod app with `PROD_ALPACA_KEY` / `PROD_ALPACA_SECRET` and `$PROD_APP_ID`.
-
-If OTEL values were provided, apply them the same way for both apps.
+Repeat for the prod app using `PROD_ALPACA_KEY` / `PROD_ALPACA_SECRET` and `$PROD_APP_ID` (same `OTEL_ENDPOINT` / `OTEL_HEADERS` — same Grafana Cloud stack).
 
 Verify each `doctl apps update` exits 0 before proceeding.
 

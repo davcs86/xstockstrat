@@ -622,8 +622,8 @@ gateway. No collector deployment needed — simplifies the DO App Platform surfa
 2. Create a **stack** (e.g. `xstockstrat`). Note your stack slug and region
    (e.g. `prod-us-central-0`)
 3. Under **Home → Connections → Add new connection → OpenTelemetry**, copy:
-   - `GRAFANA_OTLP_ENDPOINT` — e.g. `https://otlp-gateway-prod-us-central-0.grafana.net/otlp`
-   - `GRAFANA_OTLP_TOKEN` — base64-encoded `<instanceId>:<apiKey>` (pre-encoded by Grafana)
+   - `OTEL_EXPORTER_OTLP_ENDPOINT` — e.g. `https://otlp-gateway-prod-us-central-0.grafana.net/otlp`
+   - `OTEL_EXPORTER_OTLP_HEADERS` — `Basic <base64(instanceId:apiKey)>` (pre-encoded by Grafana)
 4. Store both in your secret store. Set as env vars on all services and on the OTel Collector
    container in prod.
 5. For local dev, add to `.env` (never commit `.env`).
@@ -639,7 +639,7 @@ gateway. No collector deployment needed — simplifies the DO App Platform surfa
 
 The collector is an infrastructure dependency in `docker-compose.yml`. All services send
 OTLP to `otel-collector:4317` locally; the collector forwards to Grafana Cloud using
-`GRAFANA_OTLP_ENDPOINT` and `GRAFANA_OTLP_TOKEN` from `.env`.
+`OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` from `.env`.
 
 ```bash
 # Verify collector is running
@@ -697,7 +697,7 @@ import (
 )
 
 // Init configures the global OTEL tracer, meter, and log providers.
-// OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME must be set in env.
+// OTEL_EXPORTER_OTLP_ENDPOINT and SERVICE_NAME must be set in env.
 // Returns a shutdown function — call it on process exit.
 func Init(ctx context.Context, serviceName string) (shutdown func(context.Context) error, err error) {
     if os.Getenv("OTEL_ENABLED") != "true" {
@@ -941,16 +941,14 @@ Add to **every service block** in `.do/app.yaml` (prod) and `.do/app.dev.yaml` (
 ```yaml
 - key: OTEL_ENABLED
   value: "true"
-- key: OTEL_SERVICE_NAME
-  value: "xstockstrat-<service-name>"        # e.g. xstockstrat-trading
+- key: SERVICE_NAME
+  value: "<service-name>"                    # e.g. trading
 - key: OTEL_EXPORTER_OTLP_ENDPOINT
-  type: SECRET
-  value: "<GRAFANA_OTLP_ENDPOINT>"
+  value: "<OTLP gateway URL>"
 - key: OTEL_EXPORTER_OTLP_HEADERS
+  scope: RUN_TIME
   type: SECRET
-  value: "Authorization=Basic <GRAFANA_OTLP_TOKEN>"
-- key: OTEL_RESOURCE_ATTRIBUTES
-  value: "environment=production,trading_mode=paper"
+  # value: Authorization=Basic <base64(instanceId:apiKey)>  (set via DO dashboard)
 ```
 
 ```bash
@@ -1031,10 +1029,9 @@ SDK — no custom parsing required in service code.
 | Variable | Example Value | Set In |
 |---|---|---|
 | `OTEL_ENABLED` | `true` | `.env`, docker-compose, DO app spec |
-| `OTEL_SERVICE_NAME` | `xstockstrat-trading` | `.env`, docker-compose, DO app spec |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4317` (local) / Grafana Cloud URL (prod) | `.env`, DO secret |
-| `OTEL_EXPORTER_OTLP_HEADERS` | `Authorization=Basic <token>` | `.env`, DO secret |
-| `OTEL_RESOURCE_ATTRIBUTES` | `environment=dev,trading_mode=paper` | `.env`, docker-compose |
+| `SERVICE_NAME` | `trading` | docker-compose, DO app spec |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4317` (local) / Grafana Cloud URL (prod) | `.env`, DO app spec |
+| `OTEL_EXPORTER_OTLP_HEADERS` | `Basic <token>` (collector) / `Authorization=Basic <token>` (SDK) | `.env`, DO secret |
 
 #### Config service keys to register
 

@@ -483,7 +483,7 @@ Expected: TypeScript compiles cleanly; all attribute and import lines present in
 
 ### Step 9 — config: Clean up infrastructure files and update documentation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: Infrastructure / docs (cross-cutting)
 **Files**:
 - `docker-compose.yml` — modify

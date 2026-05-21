@@ -47,8 +47,8 @@ cd xstockstrat-orchestration
 
 | File | Committed? | Scope | Purpose |
 |---|---|---|---|
-| `.env` | **No** (secrets) | compose interpolation | Secrets: `POSTGRES_PASSWORD`, `ALPACA_*`, `JWT_SECRET`, `GRAFANA_OTLP_TOKEN` |
-| `.env.local` | Yes | all 13 containers | Structural non-secrets: `APPLICATION_ENV`, `NODE_ENV`, `GRAFANA_OTLP_ENDPOINT` |
+| `.env` | **No** (secrets) | compose interpolation | Secrets and credential-linked vars: `POSTGRES_PASSWORD`, `ALPACA_*`, `JWT_SECRET`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` |
+| `.env.local` | Yes | all 13 containers | Structural non-secrets: `APPLICATION_ENV`, `NODE_ENV` |
 | `.env.fe.local` | Yes | 3 Next.js containers only | Frontend-only non-secrets: `APP_URL` |
 
 You only need to create and configure `.env`. The other two files are pre-populated and committed.
@@ -69,7 +69,7 @@ The script will prompt you for:
 | `ALPACA_API_KEY` | Paper trading key from alpaca.markets; script links to [setup/alpaca.md](alpaca.md) |
 | `ALPACA_API_SECRET` | Matching secret |
 | `JWT_SECRET` | Auto-generated securely or manually provided |
-| `GRAFANA_OTLP_TOKEN` | Optional; for OpenTelemetry / Grafana Cloud observability |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Optional; for OpenTelemetry / Grafana Cloud observability |
 
 #### Manual Setup
 
