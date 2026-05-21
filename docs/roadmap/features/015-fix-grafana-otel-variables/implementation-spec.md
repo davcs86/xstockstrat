@@ -85,7 +85,7 @@ Expected: `go build` exits 0; grep shows both `attribute.String("trading_mode", 
 
 ### Step 2 — service: Add `trading_mode` and `platform` attributes to Go telemetry — `xstockstrat-portfolio`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/telemetry/otel.go` — modify
