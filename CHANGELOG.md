@@ -12,6 +12,13 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ## 2026-05-21
 
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-05-21
+
 ### Features
 - wire-fe-auth: Wire the fully-built `xstockstrat-identity` service into all three Next.js frontends (trader, insights, config-ui) — adding login pages, route-protection middleware, JWT session management, and Bearer token injection on all Connect-RPC calls. Establish a standard `user_id` propagation convention for service-to-service gRPC calls.
 
