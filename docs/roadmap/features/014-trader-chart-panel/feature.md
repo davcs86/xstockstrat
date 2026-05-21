@@ -1,6 +1,6 @@
 # Feature: trader-chart-panel
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/trader-chart-panel`
 **Created**: 2026-05-20
 **Last Updated**: 2026-05-20
@@ -13,13 +13,14 @@
 |---|---|---|---|
 | 2026-05-20 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning: 012-wire-fe-auth also modifies xstockstrat-trader — advisory merge order) |
+| 2026-05-20 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec trader-chart-panel`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -40,4 +41,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec trader-chart-panel` — generate implementation spec from the approved product spec
+`/sdd-review trader-chart-panel impl-spec` — validate implementation spec, then `/sdd-execute trader-chart-panel`
