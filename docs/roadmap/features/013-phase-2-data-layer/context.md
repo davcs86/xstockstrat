@@ -193,3 +193,8 @@ The existing portfolio subscriber (`portfolio_service.go:88`) already filters on
 - Added `FilledAvgPrice float64` to `BrokerOrder` in broker.go. Updated Alpaca `GetOrder` to parse `filled_avg_price` string via `strconv.ParseFloat`; updated IBKR `GetOrder` to add `avgPrice float64` to inline response struct and propagate to return value.
 - Files modified: `services/xstockstrat-trading/internal/broker/broker.go`, `services/xstockstrat-trading/internal/broker/alpaca.go`, `services/xstockstrat-trading/internal/broker/ibkr.go`
 - Deviations: none
+
+### Step 2 — service: propagate FilledAvgPrice in pollFills [done]
+- Replaced stale comment at trading.go:502 with `order.FilledAvgPrice = brokerOrder.FilledAvgPrice`. The `order.filled` event at L514 now emits the actual fill price from the broker instead of always 0.0.
+- Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: none
