@@ -522,7 +522,7 @@ Add a helper function and six test functions to `services/xstockstrat-portfolio/
    - After complete sell −50@70: acc.qty = −50 (short), costBasis = −3500.
    - After partial buy +50@50 (opposite direction, closing short): avgEntry = 70, realized += (−50) × (50 − 70) = +1000.
    - Expected realized == 1000.0.
-   - Note: Pass 1 (complete fills) is applied before Pass 2 (partial fills) regardless of chronological order; for this test case the result is equivalent to the chronologically correct order.
+   - Note: Pass 1 (complete fills) is applied before Pass 2 (partial fills) regardless of chronological order. On Alpaca this produces correct results in all cases: Alpaca enforces buy-to-cover semantics (a buy order must close any open short before opening a long), which prevents the specific interleaved scenario where a partial fill should cover a short that a subsequent complete fill covers instead. IBKR behavior is unverified; if IBKR enforces the same constraint (likely for standard accounts) the two-pass approach is also correct for IBKR.
 
 **New logic lands in `internal/service/` which is excluded from CI coverage measurement** (confirmed by `grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)'` in the CI threshold command). No coverage threshold applies; integration test verification via build + run is sufficient.
 
