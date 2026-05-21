@@ -144,13 +144,14 @@ In `.do/app.dev.yaml`, make two sets of changes:
   - key: OTEL_EXPORTER_OTLP_ENDPOINT
     value: ""
   - key: OTEL_EXPORTER_OTLP_HEADERS
+    scope: RUN_TIME
     type: SECRET
   - key: OTEL_RESOURCE_ATTRIBUTES
     value: "environment=${APPLICATION_ENV},trading_mode=${TRADING_MODE},platform=xstockstrat"
 ```
 Notes on global entries:
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: set to empty string as placeholder — the operator sets the real Grafana Cloud URL as a DO App Platform secret or env override at deploy time when enabling OTel. Alternatively, omit `value:` and set `type: SECRET` if you want it always secret; the empty string approach keeps it visible in the spec.
-- `OTEL_EXPORTER_OTLP_HEADERS`: `type: SECRET` — the operator sets the Grafana `Authorization: Basic <token>` value as a DO secret at deploy time.
+- `OTEL_EXPORTER_OTLP_HEADERS`: `scope: RUN_TIME` + `type: SECRET` — matches the pattern of all existing DO secrets (`JWT_SECRET`, `ALPACA_API_KEY`). The operator sets the Grafana `Authorization: Basic <token>` value as a DO secret at deploy time.
 - `OTEL_RESOURCE_ATTRIBUTES`: DO App Platform resolves global-level `${APPLICATION_ENV}` and `${TRADING_MODE}` from other global vars at deploy time, producing `environment=development,trading_mode=paper,platform=xstockstrat` for the dev app.
 
 **B. Add `OTEL_SERVICE_NAME` to each of the 13 application service `envs:` blocks** (excluding `xstockstrat-nginx`). For each service, append:
@@ -211,6 +212,7 @@ Expected: `grep -c` output is `13` (one per application service, excluding nginx
   - key: OTEL_EXPORTER_OTLP_ENDPOINT
     value: ""
   - key: OTEL_EXPORTER_OTLP_HEADERS
+    scope: RUN_TIME
     type: SECRET
   - key: OTEL_RESOURCE_ATTRIBUTES
     value: "environment=${APPLICATION_ENV},trading_mode=${TRADING_MODE},platform=xstockstrat"
