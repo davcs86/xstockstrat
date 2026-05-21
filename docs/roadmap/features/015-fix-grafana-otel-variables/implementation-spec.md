@@ -72,6 +72,8 @@ resource.WithAttributes(
 
 No other changes. The existing `OTEL_ENABLED` guard at line 18 ensures these attributes are only set when telemetry is active.
 
+**No test step**: This change adds two `attribute.String` calls to the OTel init function, which only runs when `OTEL_ENABLED=true` — always `false` in CI. No business logic is introduced; `go build ./...` in **Verification** is the correct compilation gate. A dedicated test step would have no meaningful behavior to assert.
+
 **Verification**:
 ```bash
 cd services/xstockstrat-trading && GOWORK=off go build ./... 2>&1
@@ -107,6 +109,8 @@ Apply the same two-part change as Step 1 to `services/xstockstrat-portfolio/inte
    attribute.String("platform", "xstockstrat"),
    ```
 
+**No test step**: Same rationale as Step 1 — two `attribute.String` calls in the OTel init guard; no business logic; `go build` is the appropriate gate.
+
 **Verification**:
 ```bash
 cd services/xstockstrat-portfolio && GOWORK=off go build ./... 2>&1
@@ -140,6 +144,8 @@ Apply the same change as Steps 1–2 to `services/xstockstrat-marketdata/interna
    attribute.String("trading_mode", os.Getenv("TRADING_MODE")),
    attribute.String("platform", "xstockstrat"),
    ```
+
+**No test step**: Same rationale as Step 1 — two `attribute.String` calls in the OTel init guard; no business logic; `go build` is the appropriate gate.
 
 **Verification**:
 ```bash
@@ -202,6 +208,8 @@ resource = Resource.create(
 
 No other changes. The existing `OTEL_ENABLED` guard at line 15 is preserved.
 
+**No test step**: This change adds one `os.getenv` call and two dict keys to the OTel init function, which only runs when `OTEL_ENABLED=true` — always `false` in CI. No business logic is introduced; the `python3 -c "from app.telemetry import init_telemetry"` import check in **Verification** is the correct gate. A dedicated test step would have no meaningful behavior to assert.
+
 **Verification**:
 ```bash
 cd services/xstockstrat-indicators && python3 -c "from app.telemetry import init_telemetry; print('import ok')"
@@ -232,6 +240,8 @@ Apply the same change as Step 4 to `services/xstockstrat-ingest/app/telemetry.py
 1. Add `trading_mode = os.getenv("TRADING_MODE", "paper")` after the `environment = ...` line (line 29).
 2. Add `"trading_mode": trading_mode` and `"platform": "xstockstrat"` to the `Resource.create({...})` dict.
 
+**No test step**: Same rationale as Step 4 — one `os.getenv` call and two dict keys in the OTel init guard; no business logic; import check is the appropriate gate.
+
 **Verification**:
 ```bash
 cd services/xstockstrat-ingest && python3 -c "from app.telemetry import init_telemetry; print('import ok')"
@@ -261,6 +271,8 @@ Apply the same change as Steps 4–5 to `services/xstockstrat-analysis/app/telem
 
 1. Add `trading_mode = os.getenv("TRADING_MODE", "paper")` after the `environment = ...` line (line 29).
 2. Add `"trading_mode": trading_mode` and `"platform": "xstockstrat"` to the `Resource.create({...})` dict.
+
+**No test step**: Same rationale as Step 4 — one `os.getenv` call and two dict keys in the OTel init guard; no business logic; import check is the appropriate gate.
 
 **Verification**:
 ```bash
@@ -314,6 +326,8 @@ resource: new Resource({
 
 No other changes to any of the four files. The existing `process.env.OTEL_ENABLED !== 'true'` guard at line 7 is preserved. No new imports are needed — custom string keys are valid plain object properties in the `Resource` constructor.
 
+**No test step**: This change adds two plain string keys to the OTel `Resource` constructor in each service's telemetry init, which only runs when `OTEL_ENABLED=true` — always `false` in CI. No business logic is introduced; `tsc --noEmit` in **Verification** is the correct compilation gate. A dedicated test step would have no meaningful behavior to assert.
+
 **Verification**:
 ```bash
 cd services/xstockstrat-ledger && pnpm exec tsc --noEmit 2>&1
@@ -346,6 +360,9 @@ Expected: `tsc --noEmit` exits 0 for all four; both keys present in all four fil
 - `services/xstockstrat-trader/next.config.js` — modify (add OTel to serverExternalPackages)
 - `services/xstockstrat-insights/next.config.js` — modify (add OTel to serverComponentsExternalPackages)
 - `services/xstockstrat-config-ui/next.config.js` — modify (add OTel to serverComponentsExternalPackages)
+- `services/xstockstrat-trader/pnpm-lock.yaml` — modify (updated by `pnpm install`)
+- `services/xstockstrat-insights/pnpm-lock.yaml` — modify (updated by `pnpm install`)
+- `services/xstockstrat-config-ui/pnpm-lock.yaml` — modify (updated by `pnpm install`)
 
 **Reviewers**: Service owner (trader) — Trading UI correctness, Connect-RPC call safety, no direct DB access from frontend; Service owner (insights) — Analytics display accuracy, SSE polling resilience, read-only access pattern; Service owner (config-ui) — Config mutation safety, environment scope correctness, no secret values rendered in UI
 
