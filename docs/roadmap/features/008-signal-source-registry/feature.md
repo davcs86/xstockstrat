@@ -43,4 +43,4 @@ _(Snapshot finalized by /sdd-spec on 2026-05-21. Re-run /sdd-spec if the registr
 
 ## Next Action
 
-`/sdd-review signal-source-registry impl-spec` — validate implementation spec, then `/sdd-execute signal-source-registry`
+`/sdd-execute signal-source-registry` — implementation spec reviewed and ready for execution

@@ -47,3 +47,13 @@
   - Feature `wire-fe-auth` (012, code-completed) also modifies `xstockstrat-ingest` — coordinate merge order.
 - Open question resolved: no seeding strategy required; sources are registered on-demand by operators via the config-ui `/sources` page after deployment.
 - Overlap findings: no FAIL-level conflicts with any active concurrent feature.
+
+## Session 2026-05-21T00:01:00Z — sdd-review impl-spec
+
+- Implementation spec reviewed. 0 failures, 1 advisory warning (Step 2: 12 files — unavoidable for proto-gen).
+- Two spec issues found and patched before final review:
+  - Step 4 Verification: added runnable python3 import check (was deferring entirely to Step 8).
+  - Step 6 Files: added docker-compose.yml, .do/app.dev.yaml, .do/app.yaml (Instructions modified all three but they were absent from Files list).
+- Trading domain checks: skipped (non-trading feature).
+- Overlap check: no file, migration, proto, or config key collisions with formula-management-ui (003), phase-2-data-layer (013), or trader-chart-panel (014).
+- Next action updated to: /sdd-execute signal-source-registry.
