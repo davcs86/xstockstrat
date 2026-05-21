@@ -158,7 +158,7 @@ Expected: build succeeds; both new attribute lines present.
 
 ### Step 4 — service: Add `trading_mode` and `platform` attributes to Python telemetry — `xstockstrat-indicators`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/telemetry.py` — modify
