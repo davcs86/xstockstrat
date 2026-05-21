@@ -36,11 +36,27 @@ FR-7. The `docs/patterns/observability.md` env var table must be updated to docu
 
 ## Affected Services
 
-All 13 application services are affected in the DO specs (env var additions), but no service source code changes:
+No service source code changes. All 13 services receive `OTEL_SERVICE_NAME` additions in the DO specs as passive env var recipients:
 
+- `xstockstrat-trading` — receives `OTEL_SERVICE_NAME` in `.do/app.dev.yaml` and `.do/app.yaml`
+- `xstockstrat-portfolio` — same
+- `xstockstrat-marketdata` — same
+- `xstockstrat-indicators` — same
+- `xstockstrat-ingest` — same
+- `xstockstrat-analysis` — same
+- `xstockstrat-ledger` — same
+- `xstockstrat-identity` — same
+- `xstockstrat-notify` — same
+- `xstockstrat-config` — same
+- `xstockstrat-trader` — same
+- `xstockstrat-insights` — same
+- `xstockstrat-config-ui` — same
+
+Infrastructure files changed (not services):
+
+- `docker-compose.yml` — fix `OTEL_RESOURCE_ATTRIBUTES` value in `x-common-env` anchor
 - `.do/app.dev.yaml` — add global OTel vars + per-service `OTEL_SERVICE_NAME` for all 13 services
 - `.do/app.yaml` — same as above for production
-- `docker-compose.yml` — fix `OTEL_RESOURCE_ATTRIBUTES` value in `x-common-env` anchor
 - `packages/otel/otel-collector-config.yaml` — remove `environment` upsert from resource processor
 - `docs/patterns/observability.md` — update env var table to show variable reference pattern
 
