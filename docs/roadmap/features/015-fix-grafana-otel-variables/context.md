@@ -100,3 +100,16 @@
 - Ran `pnpm install` in all three service directories — lockfiles updated successfully.
 - Deviation: upgraded from spec-pinned versions to latest; `resources@2.x` requires `resourceFromAttributes` (not `new Resource`); `semconv@1.41.1` requires `ATTR_SERVICE_NAME` (not `SEMRESATTRS_SERVICE_NAME`); kept `'deployment.environment'` as plain string to maintain cross-service key consistency with Go/Python services (not using `ATTR_DEPLOYMENT_ENVIRONMENT_NAME` which maps to `'deployment.environment.name'`).
 - Files modified: `services/xstockstrat-trader/src/telemetry.ts` (create), `services/xstockstrat-trader/instrumentation.ts` (create), `services/xstockstrat-trader/package.json`, `services/xstockstrat-trader/next.config.js`, `services/xstockstrat-trader/pnpm-lock.yaml`, `services/xstockstrat-insights/src/telemetry.ts` (create), `services/xstockstrat-insights/instrumentation.ts` (create), `services/xstockstrat-insights/package.json`, `services/xstockstrat-insights/next.config.js`, `services/xstockstrat-insights/pnpm-lock.yaml`, `services/xstockstrat-config-ui/src/telemetry.ts` (create), `services/xstockstrat-config-ui/instrumentation.ts` (create), `services/xstockstrat-config-ui/package.json`, `services/xstockstrat-config-ui/next.config.js`, `services/xstockstrat-config-ui/pnpm-lock.yaml`
+
+### Step 9 — Infrastructure cleanup and documentation update [done]
+- Removed `OTEL_RESOURCE_ATTRIBUTES: environment=development,trading_mode=paper` from `x-common-env` in `docker-compose.yml`.
+- Cleared OTel collector resource processor to `attributes: []` in `packages/otel/otel-collector-config.yaml` (added a comment explaining attributes are now derived by each service).
+- Added `OTEL_EXPORTER_OTLP_ENDPOINT` (value: "") and `OTEL_EXPORTER_OTLP_HEADERS` (SECRET) to global envs in both `.do/app.dev.yaml` and `.do/app.yaml`.
+- Added `OTEL_SERVICE_NAME: xstockstrat-<name>` to all 13 instrumented service entries in both DO specs (trading, portfolio, marketdata, indicators, ingest, analysis, ledger, identity, notify, config, trader, insights, config-ui). nginx excluded (not instrumented).
+- Updated `docs/patterns/observability.md`: removed `OTEL_RESOURCE_ATTRIBUTES` table row; added paragraph explaining programmatic derivation; added Next.js row to per-language telemetry modules table.
+- Updated `docs/setup/grafana-cloud.md`: updated Step 3b bullet from "Attaches..." to "Derives..."; removed `OTEL_RESOURCE_ATTRIBUTES=...` line from Step 3b env var block; removed `OTEL_RESOURCE_ATTRIBUTES=...` line from Step 4 env var block; added note about resource attributes being derived automatically.
+- Updated `.env.example` comment from "per service" to "as a single global secret".
+- Verification: OTEL_RESOURCE_ATTRIBUTES absent from all env-setting contexts; 13 OTEL_SERVICE_NAME entries in each DO spec; global OTel endpoint/headers confirmed in both specs; collector resource processor shows `attributes: []`.
+- Feature lifecycle updated to `code-completed`.
+- Deviations: none.
+- Files modified: `docker-compose.yml`, `packages/otel/otel-collector-config.yaml`, `.do/app.dev.yaml`, `.do/app.yaml`, `docs/patterns/observability.md`, `docs/setup/grafana-cloud.md`, `.env.example`

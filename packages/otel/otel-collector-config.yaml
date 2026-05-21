@@ -41,19 +41,10 @@ processors:
     send_batch_size: 1000
     send_batch_max_size: 2000
 
-  # Attach environment and trading_mode to all telemetry as resource attributes
-  # These are read from the collector's own environment at startup.
+  # Resource attributes are derived at runtime by each service's telemetry init module.
+  # No collector-level overrides needed.
   resource:
-    attributes:
-      - key: environment
-        value: dev
-        action: upsert
-      - key: trading_mode
-        value: paper
-        action: upsert
-      - key: platform
-        value: xstockstrat
-        action: upsert
+    attributes: []
 
 exporters:
   # Grafana Cloud OTLP gateway — handles logs, metrics, and traces in one endpoint.

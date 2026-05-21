@@ -10,6 +10,11 @@ envs:
     value: live
   - key: OTEL_ENABLED
     value: "false"
+  - key: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: ""
+  - key: OTEL_EXPORTER_OTLP_HEADERS
+    scope: RUN_TIME
+    type: SECRET
 
 services:
   # ── Go services ────────────────────────────────────────────────────────────
@@ -44,6 +49,8 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-trading
 
   - name: xstockstrat-portfolio
     github:
@@ -69,6 +76,8 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-portfolio
 
   - name: xstockstrat-marketdata
     github:
@@ -100,6 +109,8 @@ services:
       - key: ALPACA_API_SECRET
         scope: RUN_TIME
         type: SECRET
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-marketdata
 
   # ── Python services ────────────────────────────────────────────────────────
 
@@ -124,6 +135,8 @@ services:
         value: ${xstockstrat-ledger.PRIVATE_URL}
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_URL}
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-indicators
 
   - name: xstockstrat-ingest
     github:
@@ -151,6 +164,8 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-ingest
 
   - name: xstockstrat-analysis
     github:
@@ -180,6 +195,8 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-analysis
 
   # ── Node.js services ───────────────────────────────────────────────────────
 
@@ -204,6 +221,8 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-ledger
 
   - name: xstockstrat-identity
     github:
@@ -231,6 +250,8 @@ services:
       - key: JWT_SECRET
         scope: RUN_TIME
         type: SECRET
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-identity
 
   - name: xstockstrat-notify
     github:
@@ -253,6 +274,8 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-notify
 
   - name: xstockstrat-config
     github:
@@ -272,6 +295,8 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-config
 
   # ── Next.js frontends ──────────────────────────────────────────────────────
 
@@ -318,6 +343,8 @@ services:
       - key: JWT_SECRET
         scope: RUN_TIME
         type: SECRET
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-trader
 
   - name: xstockstrat-insights
     github:
@@ -348,6 +375,8 @@ services:
       - key: JWT_SECRET
         scope: RUN_TIME
         type: SECRET
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-insights
 
   - name: xstockstrat-config-ui
     github:
@@ -368,6 +397,8 @@ services:
       - key: JWT_SECRET
         scope: RUN_TIME
         type: SECRET
+      - key: OTEL_SERVICE_NAME
+        value: xstockstrat-config-ui
 
 jobs:
   # Runs golang-migrate against all service schemas before services start.

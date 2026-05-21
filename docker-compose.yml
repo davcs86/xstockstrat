@@ -18,7 +18,6 @@ x-common-env: &common-env
   APPLICATION_ENV: development
   TRADING_MODE: paper
   OTEL_ENABLED: ${OTEL_ENABLED:-false}
-  OTEL_RESOURCE_ATTRIBUTES: environment=development,trading_mode=paper
 
 # &db-url       Constructed from POSTGRES_PASSWORD (set in .env) and the bridged-network
 #               hostname. Merged into environment: for all services that use the DB.

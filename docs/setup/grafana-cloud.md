@@ -105,7 +105,7 @@ The `otel-collector` container starts automatically and reads `packages/otel/ote
 - Listens for OTLP on **HTTP :4318** (Node.js services connect here)
 - Applies a **memory limiter** (256 MiB max) to prevent OOM in dev
 - **Batches** spans/metrics/logs (10s window, 1000 items/batch) before forwarding
-- **Attaches** `environment=dev`, `trading_mode=paper`, `platform=xstockstrat` to all signals
+- **Derives** `environment`, `trading_mode`, and `platform` resource attributes from each service's `APPLICATION_ENV`, `TRADING_MODE` env vars and the hardcoded constant `xstockstrat` at startup
 - Forwards to Grafana Cloud via `otlphttp/grafana` exporter with gzip compression and retry
 
 Each service in docker-compose has these environment variables pre-set:
@@ -115,7 +115,6 @@ OTEL_ENABLED=${OTEL_ENABLED}
 OTEL_SERVICE_NAME=xstockstrat-<service>
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317   # Go/Python
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318   # Node.js
-OTEL_RESOURCE_ATTRIBUTES=environment=dev,trading_mode=paper,platform=xstockstrat
 ```
 
 ### 3c. Verify the collector is running
@@ -144,8 +143,9 @@ OTEL_ENABLED=true
 OTEL_SERVICE_NAME=xstockstrat-<service-name>
 OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-<region>.grafana.net/otlp
 OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <base64-token>
-OTEL_RESOURCE_ATTRIBUTES=environment=production,trading_mode=live,platform=xstockstrat
 ```
+
+Resource attributes (`environment`, `trading_mode`, `platform`) are derived automatically at startup from each service's `APPLICATION_ENV` and `TRADING_MODE` env vars — no `OTEL_RESOURCE_ATTRIBUTES` setting required.
 
 **Go services** use gRPC OTLP — point them at the gateway's gRPC port. Grafana Cloud's OTLP gateway accepts both HTTP and gRPC on port 443. Use the same HTTPS endpoint URL.
 

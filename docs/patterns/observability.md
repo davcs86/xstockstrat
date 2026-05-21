@@ -15,7 +15,8 @@
 | `OTEL_SERVICE_NAME` | `xstockstrat-<name>` | `xstockstrat-<name>` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4317` | Grafana Cloud OTLP URL |
 | `OTEL_EXPORTER_OTLP_HEADERS` | — | `Authorization=Basic <token>` |
-| `OTEL_RESOURCE_ATTRIBUTES` | `environment=dev,trading_mode=paper` | `environment=production,...` |
+
+`environment`, `trading_mode`, and `platform` resource attributes are derived programmatically at startup inside each service's telemetry init module from `APPLICATION_ENV`, `TRADING_MODE`, and the hardcoded constant `xstockstrat` respectively. No `OTEL_RESOURCE_ATTRIBUTES` env var is needed or set.
 
 ## Per-language telemetry modules
 
@@ -24,5 +25,6 @@
 | Go | `internal/telemetry/` | OTel SDK init + gRPC instrumentation |
 | Python | `app/telemetry.py` | `init_telemetry()` — no-op when `OTEL_ENABLED != "true"` |
 | Node.js | `src/telemetry.ts` | Same no-op guard |
+| Next.js | `src/telemetry.ts` + `instrumentation.ts` | `initTelemetry()` via Next.js instrumentation hook — no-op when `OTEL_ENABLED != "true"` |
 
 See Phase 7 in `docs/roadmap/implementation-roadmap.md` for per-language implementation patterns. For Grafana Cloud wiring: `docs/setup/grafana-cloud.md`.
