@@ -47,8 +47,8 @@ cd xstockstrat-orchestration
 
 | File | Committed? | Scope | Purpose |
 |---|---|---|---|
-| `.env` | **No** (secrets) | compose interpolation | Secrets: `POSTGRES_PASSWORD`, `ALPACA_*`, `JWT_SECRET`, `OTEL_EXPORTER_OTLP_HEADERS` |
-| `.env.local` | Yes | all 13 containers | Structural non-secrets: `APPLICATION_ENV`, `NODE_ENV`, `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| `.env` | **No** (secrets) | compose interpolation | Secrets and credential-linked vars: `POSTGRES_PASSWORD`, `ALPACA_*`, `JWT_SECRET`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` |
+| `.env.local` | Yes | all 13 containers | Structural non-secrets: `APPLICATION_ENV`, `NODE_ENV` |
 | `.env.fe.local` | Yes | 3 Next.js containers only | Frontend-only non-secrets: `APP_URL` |
 
 You only need to create and configure `.env`. The other two files are pre-populated and committed.

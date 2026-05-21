@@ -83,7 +83,7 @@ Copy `.env.example` to `.env` if you have not already:
 cp .env.example .env
 ```
 
-Set the OTEL variables:
+Set the OTEL variables in your `.env` file (both endpoint and headers live together in `.env` — they are tightly coupled):
 
 ```bash
 OTEL_ENABLED=true
