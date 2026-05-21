@@ -78,6 +78,32 @@ WARN (advisory, does not block):
 - `## Out of Scope` has items but they seem insufficiently explicit
 - Acceptance criteria exist but are qualitative rather than quantitative
 
+### A3b. Trading-domain consistency checks
+
+Detect whether the product spec is trading-domain-relevant:
+
+```bash
+grep -iEq 'IBKR|Alpaca|broker|order.?type|order.?status|partial.?fill|TRADING_MODE|paper.?trad|live.?trad|xstockstrat-trading|xstockstrat-portfolio|filled_qty|BrokerType|OrderType|OrderStatus' "$PRODUCT_SPEC"
+```
+
+If the command returns **non-zero exit** (no matches): print
+`Trading domain checks: skipped (non-trading feature).` and continue to A4.
+
+If matches found, apply the five criteria below. For each, run the detection grep to confirm the
+feature touches that sub-domain, then verify the spec explicitly addresses the consistency concern.
+Assign ✓ PASS / ⚠ WARN / ✗ FAIL.
+
+| # | Criterion | Detection grep | FAIL condition | WARN condition |
+|---|---|---|---|---|
+| C-1 | **Docker Compose ↔ DO value parity** | `grep -iE 'env.?var\|TRADING_MODE\|environment.?variable\|new.*port\|new.*service' "$PRODUCT_SPEC"` | Spec introduces a new env var, port, or service but does not explicitly state the expected value for each deployment target (local/compose, DO dev, DO prod), or does not note that all three deployment files need updating | Spec states env var changes but omits that `TRADING_MODE` must be `paper` in compose+dev and `live` in prod |
+| C-2 | **Broker/Ledger provider coverage** | `grep -iE 'IBKR\|Alpaca\|broker\|BrokerType\|credential\|account.*management\|order.*routing' "$PRODUCT_SPEC"` | Spec modifies broker behavior (order routing, account management, credential storage) but does not explicitly state which `BrokerType` values are in scope (`ALPACA`, `IBKR`) and which are out of scope | Spec adds broker logic for one provider without a note that the other provider is unaffected |
+| C-3 | **Trading mode (Paper vs Live)** | `grep -iE 'order.*execut\|PlaceOrder\|trade.*execut\|order.*routing\|TRADING_MODE' "$PRODUCT_SPEC"` | Spec changes order execution behavior but does not address how the feature behaves differently under `TRADING_MODE=paper` vs `TRADING_MODE=live` | Spec does not state whether the feature is paper-safe (testable in dev/compose without live market access) |
+| C-4 | **Order type coverage** | `grep -iE 'order.?type\|OrderType\|MARKET\|LIMIT\|STOP\|TRAILING_STOP' "$PRODUCT_SPEC"` | Spec introduces or modifies order type handling but does not enumerate which of the five `OrderType` values are supported (MARKET, LIMIT, STOP, STOP_LIMIT, TRAILING_STOP), or does not state "existing order types unaffected" | Acceptance criteria test only one order type without confirming others are unaffected |
+| C-5 | **Partial vs full fill handling** | `grep -iE 'fill\|PARTIALLY_FILLED\|filled_qty\|order.*status\|OrderStatus' "$PRODUCT_SPEC"` | Spec introduces or modifies order status lifecycle handling but does not explicitly address both `ORDER_STATUS_PARTIALLY_FILLED` and `ORDER_STATUS_FILLED`, or does not state "fill handling unaffected" | Acceptance criteria cover only the full-fill (happy-path) scenario |
+
+FAILs in C-1 through C-5 block lifecycle advancement (same weight as A3 failures).
+WARNs are advisory.
+
 ### A4. Parallel feature overlap check
 
 Discover all other currently active features:
@@ -142,11 +168,21 @@ Spec Criteria:
   ✗ Config keys — key `trading.orders.retries` missing service-category-key format
   ...
 
+Trading Domain Checks (trading feature: yes):
+  ✓ Docker Compose ↔ DO value parity — TRADING_MODE stated per deployment target
+  ✓ Broker/Ledger provider coverage — IBKR and Alpaca scope explicitly stated
+  ✗ Order type coverage — modifies OrderType handling but does not enumerate STOP, STOP_LIMIT, TRAILING_STOP
+  ...
+
+Or, for a non-trading feature:
+
+Trading Domain Checks: skipped (non-trading feature)
+
 Overlap Check (active concurrent features: <list or "none">):
   ⚠ Feature `add-polygon-source` also modifies `xstockstrat-marketdata`
   ...
 
-Result: FAIL (1 spec failure, 0 overlap failures)
+Result: FAIL (1 spec failure, 1 trading-domain failure, 0 overlap failures)
 Fix the items marked ✗, then re-run: /sdd-review <slug> product-spec
 ```
 
@@ -214,6 +250,28 @@ WARN (advisory):
 - `**Instructions**` are verbose but complete
 - Step touches many files (>5) — consider splitting
 
+### B2b. Trading-domain consistency checks (per step)
+
+For each step examined in B2, detect whether it touches the trading domain by checking the
+concatenation of its **Title**, **Files**, **Instructions**, **Codebase Evidence**, and
+**Verification** fields for these keywords:
+
+```bash
+grep -iEq 'IBKR|Alpaca|broker|OrderType|OrderStatus|partial.?fill|TRADING_MODE|paper|live|xstockstrat-trading|xstockstrat-portfolio|trading\.proto|common\.proto|broker_type|order_type|order_status|filled_qty|PlaceOrder|BrokerAccount' <step-combined-text>
+```
+
+If the grep returns non-zero for a step: skip trading-domain checks for that step.
+
+If matches found, apply the checks below. All findings are advisory (Mode B never blocks).
+
+| Check | Detection trigger | FAIL condition |
+|---|---|---|
+| **Docker Compose ↔ DO value parity** | Step mentions env var, TRADING_MODE, port, `docker-compose`, or `.do/app` | Step adds/changes an env var in one deployment file without addressing all three; OR step sets `TRADING_MODE` to the same value in both dev and prod targets (must be `paper` in compose+dev, `live` in prod); OR step adds env vars to `docker-compose.yml` without a corresponding instruction for `.do/` files or vice versa |
+| **Broker symmetry** | Step mentions IBKR, Alpaca, BrokerType, or broker-specific client code | Step implements logic for one BrokerType (ALPACA or IBKR) but has no companion step or note confirming the other supported broker is handled elsewhere in the spec or explicitly out of scope |
+| **Trading mode gate** | Step mentions order execution, PlaceOrder, trade routing, or broker client calls | Step modifies order placement or routing logic but Instructions do not reference a `TRADING_MODE` check or conditional gating |
+| **Order type exhaustiveness** | Step mentions OrderType, order type handling, or any specific type name (MARKET, LIMIT, STOP, STOP_LIMIT, TRAILING_STOP) | Step adds or changes order type handling but does not enumerate which of the five types are covered, or does not state "other types unaffected" |
+| **Fill state completeness** | Step mentions order status, fill, PARTIALLY_FILLED, filled_qty, or fill processing | Step modifies order status handling but Codebase Evidence or Instructions do not reference both `PARTIALLY_FILLED` and `FILLED` states; OR Verification only tests the full-fill (happy-path) scenario |
+
 ### B3. Step ordering validation
 
 - Flag FAIL if any `service` step has a dependency on a `migration` step that appears later in the spec.
@@ -272,6 +330,17 @@ Step 2 [migration: Add broker_accounts table]
   ✓ NNN naming correct
   ✓ down.sql listed
   ...
+
+Step N [service: xstockstrat-trading — Order status handler]  (trading-domain step example)
+  ✓ Codebase Evidence populated
+  ✓ Files exact paths
+  ⚠ Fill state completeness — Verification tests FILLED case only; add a partial-fill scenario
+  ✗ Order type exhaustiveness — Instructions handle MARKET/LIMIT but do not address STOP, STOP_LIMIT, TRAILING_STOP
+
+Step N+1 [service: xstockstrat-trading — Alpaca order routing]  (trading-domain step example)
+  ✓ Codebase Evidence populated
+  ✗ Broker symmetry — implements Alpaca routing but no step or note covers IBKR routing
+  ✗ Trading mode gate — PlaceOrder call in Instructions does not reference TRADING_MODE check
 
 Overlap Check:
   ✗ Feature `add-account-base-schema` Step 2 creates migration 003 in
