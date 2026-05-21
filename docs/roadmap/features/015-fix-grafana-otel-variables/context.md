@@ -71,3 +71,8 @@
 - Identical change applied to `internal/telemetry/otel.go`. `go build ./...` exits 0.
 - Files modified: `services/xstockstrat-marketdata/internal/telemetry/otel.go`
 - Deviations: none
+
+### Step 4 — Add `trading_mode` and `platform` attributes to Python telemetry — `xstockstrat-indicators` [done]
+- Added `trading_mode = os.getenv("TRADING_MODE", "paper")` and two dict keys to `Resource.create({...})` in `app/telemetry.py`. Import check passes.
+- Files modified: `services/xstockstrat-indicators/app/telemetry.py`
+- Deviations: none
