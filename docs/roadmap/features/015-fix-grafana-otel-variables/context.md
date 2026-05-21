@@ -142,3 +142,13 @@ User identified remaining inconsistencies after PR #277 was initially created. E
 - Decision: `OTEL_EXPORTER_OTLP_HEADERS` value format intentionally differs by deployment context — Docker collector uses header-value-only format (`Basic <token>`); DO SDK uses `key=value` format (`Authorization=Basic <token>`). Variable name is now consistent; format difference is documented in `.env.example` and `grafana-cloud.md`.
 - Deviations from original spec: SERVICE_NAME rename and GRAFANA_OTLP_* rename were not in the original spec — added at user request during Step 9 execution after observing continued inconsistency.
 - Implementation spec top-level status updated to `done`.
+
+## Session 2026-05-21 (CI: feature status automation — manual fallback)
+
+- Promotion PR #281 merged to main (commit 5342a70)
+- CI workflow `ci-validate-feature-status.yml` failed to detect feature due to three bugs:
+  1. Unescaped `**` in `grep "^**Lifecycle Status**:"` — `ugrep`/PCRE environments return empty status, `^**` is POSIX-undefined behavior in BRE; `sed -n` approach used in `promote.yml` is portable and was applied as the fix.
+  2. `grep "PR #"` never matches commit message format `(#281)` — `PROMOTION_PR` was always empty.
+  3. `sed -i "/^---$/i"` inserts before ALL `---` separators (3 in feature.md) — `awk` scoped to the Status History section replaces it.
+- Status updated manually: `code-completed` → `launched`
+- Launched date: 2026-05-21
