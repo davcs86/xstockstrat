@@ -122,7 +122,7 @@ Expected: build succeeds; both new attribute lines present.
 
 ### Step 3 — service: Add `trading_mode` and `platform` attributes to Go telemetry — `xstockstrat-marketdata`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/telemetry/otel.go` — modify
