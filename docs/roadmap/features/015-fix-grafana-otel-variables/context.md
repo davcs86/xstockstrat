@@ -54,3 +54,10 @@
   - `packages/otel/otel-collector-config.yaml` lines 46–56: all three upsert entries in resource processor — replace with `attributes: []`.
   - `.do/app.dev.yaml` and `.do/app.yaml`: `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` absent from global envs; `OTEL_SERVICE_NAME` absent from all 13 service entries. No `OTEL_RESOURCE_ATTRIBUTES` entries (correct — do not add).
   - `.env.example` line 44: "per service via DO dashboard" → "as a single global secret via DO dashboard".
+
+## Session 2026-05-21T00:00:00Z — sdd-execute
+
+### Step 1 — Add `trading_mode` and `platform` attributes to Go telemetry — `xstockstrat-trading` [done]
+- Added `"go.opentelemetry.io/otel/attribute"` import and two `attribute.String` calls to `resource.WithAttributes` in `internal/telemetry/otel.go`. `go build ./...` exits 0.
+- Files modified: `services/xstockstrat-trading/internal/telemetry/otel.go`
+- Deviations: none

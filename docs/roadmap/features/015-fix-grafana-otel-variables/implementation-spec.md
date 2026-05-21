@@ -1,6 +1,6 @@
 # Implementation Spec: fix-grafana-otel-variables
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-21
 **Feature**: `docs/roadmap/features/015-fix-grafana-otel-variables/feature.md`
 **Total Steps**: 9
@@ -29,7 +29,7 @@ No migrations, proto changes, or config key additions are needed.
 
 ### Step 1 — service: Add `trading_mode` and `platform` attributes to Go telemetry — `xstockstrat-trading`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify

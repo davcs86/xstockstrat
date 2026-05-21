@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -42,6 +43,8 @@ func Init(ctx context.Context) (func(context.Context) error, error) {
 		resource.WithAttributes(
 			semconv.ServiceName(svcName),
 			semconv.DeploymentEnvironment(os.Getenv("APPLICATION_ENV")),
+			attribute.String("trading_mode", os.Getenv("TRADING_MODE")),
+			attribute.String("platform", "xstockstrat"),
 		),
 	)
 	if err != nil {
