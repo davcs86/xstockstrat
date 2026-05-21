@@ -253,7 +253,7 @@ Expected: import succeeds; both new keys present.
 
 ### Step 6 — service: Add `trading_mode` and `platform` attributes to Python telemetry — `xstockstrat-analysis`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/telemetry.py` — modify
