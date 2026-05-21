@@ -285,7 +285,7 @@ Expected: import succeeds; both new keys present.
 
 ### Step 7 — service: Add `trading_mode` and `platform` attributes to Node.js backend telemetry (all four services)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-ledger/src/telemetry.ts` — modify
@@ -604,4 +604,7 @@ Expected: no output.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 7 — Node.js backend telemetry verification
+**Spec said**: Run `pnpm exec tsc --noEmit` in each of the four service directories and confirm exit 0.
+**Actual**: `tsc --noEmit` exited 2 with pre-existing errors across all files (`process`, `require`, `console` not found) caused by `node_modules` not being installed in the remote execution environment. Errors are identical before and after the change and are unrelated to the two new `Resource` attribute keys. Substituted verification: `grep -n "trading_mode\|platform"` across all four files confirmed both keys present at lines 28–29 in every file.
+**Reason**: Remote execution environment does not have `node_modules` installed for Node.js services. The structural change (two plain string keys in an object literal) requires no imports and is correct TypeScript. CI will run `tsc` with a fully-installed workspace.

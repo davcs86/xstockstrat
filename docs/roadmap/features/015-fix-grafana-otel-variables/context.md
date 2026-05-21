@@ -86,3 +86,8 @@
 - Identical change applied to `app/telemetry.py`. Import check passes.
 - Files modified: `services/xstockstrat-analysis/app/telemetry.py`
 - Deviations: none
+
+### Step 7 — Add `trading_mode` and `platform` attributes to Node.js backend telemetry (all four services) [done]
+- Added `trading_mode: process.env.TRADING_MODE ?? 'paper'` and `platform: 'xstockstrat'` to `new Resource({...})` in all four `src/telemetry.ts` files. Both attributes confirmed at lines 28–29 in each file.
+- Files modified: `services/xstockstrat-ledger/src/telemetry.ts`, `services/xstockstrat-identity/src/telemetry.ts`, `services/xstockstrat-notify/src/telemetry.ts`, `services/xstockstrat-config/src/telemetry.ts`
+- Deviations: `tsc --noEmit` could not run (node_modules absent in remote env); grep verification substituted — see Deviation Log

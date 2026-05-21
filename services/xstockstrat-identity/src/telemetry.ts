@@ -25,6 +25,8 @@ export function initTelemetry(): void {
       resource: new Resource({
         [SEMRESATTRS_SERVICE_NAME]: serviceName,
         [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.APPLICATION_ENV ?? 'development',
+        trading_mode: process.env.TRADING_MODE ?? 'paper',
+        platform: 'xstockstrat',
       }),
       traceExporter: new OTLPTraceExporter({ url: endpoint }),
       instrumentations: [new GrpcInstrumentation()],
