@@ -69,3 +69,11 @@
 - `IDENTITY_ENDPOINT` was already correct — no change.
 - `XSTOCKSTRAT_AGENT_PRIVATE_URL` was already correct (nginx-only pattern) — no change.
 - Documented the three env var naming patterns (`_ENDPOINT`, `_HTTP_ENDPOINT`, `XSTOCKSTRAT_<SERVICE>_PRIVATE_URL`) in root `CLAUDE.md` under a new "Environment Variable Naming Convention" section so future features follow the convention automatically.
+
+## Session 2026-05-21T00:05:00Z — rename WEBHOOK_SECRET → MCP_AGENT_SECRET
+
+- `WEBHOOK_SECRET` / `x-webhook-secret` — "webhook" no longer describes the purpose after feature 011 removed the n8n integration.
+- Renamed in product-spec, implementation-spec (all 11 steps), and CLAUDE.md:
+  - Env var: `WEBHOOK_SECRET` → `MCP_AGENT_SECRET`
+  - Header: `x-webhook-secret` → `x-mcp-secret`
+- Prior session notes in this context.md retain the old names — they are the historical decision log and are not rewritten.

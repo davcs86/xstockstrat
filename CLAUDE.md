@@ -147,7 +147,7 @@ All inter-service connection env vars follow these patterns. **Never invent new 
 - No `_URL` suffix on inter-service connection vars — always `_ENDPOINT` or `_HTTP_ENDPOINT`.
 - `_ENDPOINT` and `_HTTP_ENDPOINT` for the same service coexist when a caller needs both gRPC and HTTP access.
 - When a new service introduces connection env vars, check `docker-compose.yml` first — the var may already exist in another service's block and only needs to be added to the new service's block with the same value.
-- `N8N_WEBHOOK_SECRET` was removed by feature 011 (`remove-n8n-references`). Do not reference it. Webhook callers that want request authentication use `WEBHOOK_SECRET` (shared secret sent as `x-webhook-secret` header); the receiving services do not currently enforce it.
+- `N8N_WEBHOOK_SECRET` was removed by feature 011 (`remove-n8n-references`). Do not reference it. The MCP agent uses `MCP_AGENT_SECRET` (sent as `x-mcp-secret` header on outbound calls to identify itself to platform services); the receiving services do not currently enforce it.
 
 ---
 

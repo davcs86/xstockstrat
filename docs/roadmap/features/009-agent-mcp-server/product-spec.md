@@ -38,7 +38,7 @@ FR-5. The MCP server must support stdio transport (for Claude.ai desktop MCP int
 
 FR-5a. The SSE endpoint (`/agent/sse`) must require a valid API key in the `Authorization: Bearer <key>` header. The agent service validates the key against the identity service's `ValidateApiKey` RPC before accepting the SSE connection. Missing or invalid keys must return HTTP 401.
 
-FR-6. All downstream HTTP calls must include the `x-webhook-secret` header using the value from the `N8N_WEBHOOK_SECRET` environment variable. This also makes the MCP server the first caller to enforce the webhook secret that is documented but currently unimplemented across all services. (Note: the webhook secret enforcement on the service side is a separate security feature and is not in scope here — the MCP server sends the header regardless.)
+FR-6. All downstream HTTP calls must include the `x-mcp-secret` header using the value from the `MCP_AGENT_SECRET` environment variable. The MCP agent uses this to identify itself to platform service endpoints. (Note: the header enforcement on the service side is a separate security feature and is not in scope here — the MCP server sends the header regardless.)
 
 FR-7. A `docker-compose.yml` override or service entry must allow running `xstockstrat-agent` locally alongside the existing stack.
 
@@ -50,7 +50,7 @@ FR-8. A `claude_mcp_config.json` example file must be included at `services/xsto
 - Email fetching or Gmail API integration (the operator pastes email content into Claude.ai manually in Phase 1).
 - Persistent run logging or audit trail beyond what the ledger already captures via each downstream service.
 - Any new gRPC proto changes — all calls go via existing HTTP webhook endpoints.
-- Implementing the webhook secret check on the service side (separate security feature).
+- Implementing the `x-mcp-secret` header check on the service side (separate security feature).
 
 ## Affected Services
 
@@ -75,7 +75,7 @@ No new config service keys. All configuration is via environment variables on th
 | `NOTIFY_HTTP_ENDPOINT` | Base URL for xstockstrat-notify HTTP webhooks (default `http://xstockstrat-notify:8059`) |
 | `ANALYSIS_HTTP_ENDPOINT` | Base URL for xstockstrat-analysis HTTP webhooks (default `http://xstockstrat-analysis:8056`) |
 | `IDENTITY_ENDPOINT` | gRPC address for identity service (default `xstockstrat-identity:50058`) |
-| `WEBHOOK_SECRET` | Shared secret sent as `x-webhook-secret` header on all downstream calls (optional; header omitted when empty) |
+| `MCP_AGENT_SECRET` | Shared secret sent as `x-mcp-secret` header on all downstream calls (optional; header omitted when empty) |
 | `MCP_TRANSPORT` | `stdio` or `sse` (default `stdio`) |
 | `MCP_SSE_PORT` | Port for SSE transport listener (default `9000`) |
 
@@ -100,7 +100,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 4. `ingest_signal` called with an unknown source slug returns a tool error (propagated from ingest's `INVALID_ARGUMENT`).
 5. `emit_alert` successfully emits an alert visible in xstockstrat-notify.
 6. `run_backtest` triggers a backtest and returns results.
-7. All downstream calls include the `x-webhook-secret` header when `N8N_WEBHOOK_SECRET` is set.
+7. All downstream calls include the `x-mcp-secret` header when `N8N_MCP_AGENT_SECRET` is set.
 8. The MCP server is connectable from Claude.ai using the config in `claude_mcp_config.json`.
 9. An operator can paste an email body into Claude.ai, Claude calls `list_signal_sources` then `ingest_signal`, and the signal appears in the ingest DB — end to end.
 10. The SSE endpoint at `/agent/sse` (via nginx port 80) returns HTTP 401 when the `Authorization` header is absent or the API key is invalid.
