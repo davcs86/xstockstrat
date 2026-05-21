@@ -179,3 +179,17 @@ The existing portfolio subscriber (`portfolio_service.go:88`) already filters on
 - Step 4 Codebase Evidence: `orderFillPayload` needs `OrderID string \`json:"order_id"\`` and `FilledQty float64 \`json:"filled_qty"\``; updated two-event-type evidence bullet
 - Step 4 Instructions: added section A (two new struct fields); replaced single-loop algorithm with `applyFill` closure + Pass 1 (`order.filled`) + Pass 2 (`order.partially_filled`) + post-loop application
 - Step 5 Instructions: helper signature `computeRealizedPnL(completeFills, partialFills []orderFillPayload) float64`; added test 7 `TestRealizedPnL_PartiallyFilledCanceled` (partial buy 50@50 never completed + complete sell 50@70 → realized 1000.0); updated verification to "six new test cases"
+
+---
+
+## Session 2026-05-21T00:00:00Z — sdd-execute
+
+**Steps this session**: [1]
+**Progress**: 1 done / 5 total
+**Stopped at**: Step 1 (PR created, awaiting merge)
+**Next**: /sdd-execute phase-2-data-layer next
+
+### Step 1 — broker: extend BrokerOrder struct and update both GetOrder implementations [done]
+- Added `FilledAvgPrice float64` to `BrokerOrder` in broker.go. Updated Alpaca `GetOrder` to parse `filled_avg_price` string via `strconv.ParseFloat`; updated IBKR `GetOrder` to add `avgPrice float64` to inline response struct and propagate to return value.
+- Files modified: `services/xstockstrat-trading/internal/broker/broker.go`, `services/xstockstrat-trading/internal/broker/alpaca.go`, `services/xstockstrat-trading/internal/broker/ibkr.go`
+- Deviations: none
