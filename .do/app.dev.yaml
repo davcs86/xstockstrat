@@ -11,7 +11,7 @@ envs:
   - key: OTEL_ENABLED
     value: "false"
   - key: OTEL_EXPORTER_OTLP_ENDPOINT
-    value: ""
+    scope: RUN_TIME
   - key: OTEL_EXPORTER_OTLP_HEADERS
     scope: RUN_TIME
     type: SECRET
