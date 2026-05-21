@@ -1,6 +1,6 @@
 # Feature: fix-grafana-otel-variables
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/fix-grafana-otel-variables`
 **Created**: 2026-05-21
 **Last Updated**: 2026-05-21
@@ -13,13 +13,14 @@
 |---|---|---|---|
 | 2026-05-21 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning) |
+| 2026-05-21 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-grafana-otel-variables`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -40,4 +41,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec fix-grafana-otel-variables` — generate implementation spec from the approved product spec
+`` `/sdd-review fix-grafana-otel-variables impl-spec` — validate implementation spec, then `/sdd-execute fix-grafana-otel-variables` ``
