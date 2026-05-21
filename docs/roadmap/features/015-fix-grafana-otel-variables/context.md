@@ -19,3 +19,9 @@
 **Decision — OTEL_EXPORTER_OTLP_HEADERS**: Single global SECRET in both DO app specs (not per-service).
 
 **Decision — service.name in OTEL_RESOURCE_ATTRIBUTES**: Add `service.name=${OTEL_SERVICE_NAME}` to `OTEL_RESOURCE_ATTRIBUTES` in docker-compose (Docker Compose resolves per-container at runtime so the per-service `OTEL_SERVICE_NAME` is in scope). In DO app specs, global env vars cannot reference component-level vars, so `service.name` is omitted from the global `OTEL_RESOURCE_ATTRIBUTES`; the OTel SDK promotes `OTEL_SERVICE_NAME` to `service.name` automatically.
+
+## Session 2026-05-21T00:00:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: Affected Services section lists infrastructure files rather than service names (advisory — Platform Lead to confirm 13-service count and no source code changes).
+- Overlap findings: none — features 003, 008, 013, 014 touch different files entirely.
