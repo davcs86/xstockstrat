@@ -61,3 +61,8 @@
 - Added `"go.opentelemetry.io/otel/attribute"` import and two `attribute.String` calls to `resource.WithAttributes` in `internal/telemetry/otel.go`. `go build ./...` exits 0.
 - Files modified: `services/xstockstrat-trading/internal/telemetry/otel.go`
 - Deviations: none
+
+### Step 2 — Add `trading_mode` and `platform` attributes to Go telemetry — `xstockstrat-portfolio` [done]
+- Identical change to Step 1 applied to `internal/telemetry/otel.go`. `go build ./...` exits 0.
+- Files modified: `services/xstockstrat-portfolio/internal/telemetry/otel.go`
+- Deviations: none
