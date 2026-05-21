@@ -12,7 +12,7 @@
 | Variable | Local Dev | Production |
 |---|---|---|
 | `OTEL_ENABLED` | `true` | `true` |
-| `OTEL_SERVICE_NAME` | `xstockstrat-<name>` | `xstockstrat-<name>` |
+| `SERVICE_NAME` | `<name>` | `<name>` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4317` | Grafana Cloud OTLP URL |
 | `OTEL_EXPORTER_OTLP_HEADERS` | — | `Authorization=Basic <token>` |
 

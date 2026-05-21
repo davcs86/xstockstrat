@@ -17,7 +17,7 @@ export function initTelemetry(): void {
     const { ATTR_SERVICE_NAME } = require('@opentelemetry/semantic-conventions');
 
     const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'http://otel-collector:4318';
-    const serviceName = process.env.OTEL_SERVICE_NAME ?? 'xstockstrat-trader';
+    const serviceName = process.env.SERVICE_NAME ?? 'trader';
 
     const sdk = new NodeSDK({
       resource: resourceFromAttributes({

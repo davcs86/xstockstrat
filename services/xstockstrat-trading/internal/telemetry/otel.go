@@ -34,9 +34,9 @@ func Init(ctx context.Context) (func(context.Context) error, error) {
 		return nil, err
 	}
 
-	svcName := os.Getenv("OTEL_SERVICE_NAME")
+	svcName := os.Getenv("SERVICE_NAME")
 	if svcName == "" {
-		svcName = "xstockstrat-trading"
+		svcName = "trading"
 	}
 
 	res, err := resource.New(ctx,

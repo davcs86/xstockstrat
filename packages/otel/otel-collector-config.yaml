@@ -8,11 +8,15 @@
 #   - HTTP :4318  (preferred for Node.js services)
 #
 # Exports all three signal types (logs, metrics, traces) to Grafana Cloud via OTLP.
-# Requires GRAFANA_OTLP_ENDPOINT and GRAFANA_OTLP_TOKEN in the environment
+# Requires OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_EXPORTER_OTLP_HEADERS in the environment
 # (provided via docker-compose from your local .env file).
 #
+# OTEL_EXPORTER_OTLP_HEADERS must be the Authorization header VALUE only:
+#   Basic <base64(instanceId:apiKey)>
+# (Grafana Cloud provides the pre-encoded string — copy the part after "Basic ".)
+#
 # For production (DO App Platform), services push OTLP directly to Grafana Cloud —
-# no collector deployment is needed there. See _tasks/x-observability-otel-grafana.md.
+# no collector deployment is needed there. See docs/setup/grafana-cloud.md.
 
 extensions:
   health_check:
@@ -48,12 +52,12 @@ processors:
 
 exporters:
   # Grafana Cloud OTLP gateway — handles logs, metrics, and traces in one endpoint.
-  # GRAFANA_OTLP_ENDPOINT: https://otlp-gateway-<region>.grafana.net/otlp
-  # GRAFANA_OTLP_TOKEN:    Basic base64(<instanceId>:<apiKey>)  (Grafana provides pre-encoded)
+  # OTEL_EXPORTER_OTLP_ENDPOINT: https://otlp-gateway-<region>.grafana.net/otlp
+  # OTEL_EXPORTER_OTLP_HEADERS:  Basic base64(<instanceId>:<apiKey>)  (Grafana provides pre-encoded)
   otlphttp/grafana:
-    endpoint: ${env:GRAFANA_OTLP_ENDPOINT}
+    endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT}
     headers:
-      Authorization: "Basic ${env:GRAFANA_OTLP_TOKEN}"
+      Authorization: "${env:OTEL_EXPORTER_OTLP_HEADERS}"
     compression: gzip
     retry_on_failure:
       enabled: true

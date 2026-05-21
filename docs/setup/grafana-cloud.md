@@ -63,7 +63,7 @@ https://otlp-gateway-<region>.grafana.net/otlp
 ```
 Example: `https://otlp-gateway-prod-us-central-0.grafana.net/otlp`
 
-**Token** — Grafana provides a pre-encoded base64 token in the format `Basic <base64(instanceId:apiKey)>`. Copy the part **after** `Basic ` — that is your `GRAFANA_OTLP_TOKEN`.
+**Token** — Grafana provides a pre-encoded base64 token in the format `Basic <base64(instanceId:apiKey)>`. The full string including `Basic ` is your `OTEL_EXPORTER_OTLP_HEADERS` value.
 
 > If Grafana does not show a pre-encoded token, generate an API key manually:
 > 1. Grafana Cloud → **My Account → Security → API Keys → Add API key**
@@ -87,8 +87,8 @@ Set the OTEL variables:
 
 ```bash
 OTEL_ENABLED=true
-GRAFANA_OTLP_ENDPOINT=https://otlp-gateway-<region>.grafana.net/otlp
-GRAFANA_OTLP_TOKEN=<base64-encoded-instance-id:api-key>
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-<region>.grafana.net/otlp
+OTEL_EXPORTER_OTLP_HEADERS=Basic <base64-encoded-instance-id:api-key>
 ```
 
 Leave `OTEL_ENABLED=false` if you do not want to send telemetry during local dev (the collector will still start but export nothing).
@@ -112,7 +112,7 @@ Each service in docker-compose has these environment variables pre-set:
 
 ```
 OTEL_ENABLED=${OTEL_ENABLED}
-OTEL_SERVICE_NAME=xstockstrat-<service>
+SERVICE_NAME=<service>
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317   # Go/Python
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318   # Node.js
 ```
@@ -140,7 +140,7 @@ In production there is no collector container — each service pushes OTLP **dir
 
 ```
 OTEL_ENABLED=true
-OTEL_SERVICE_NAME=xstockstrat-<service-name>
+SERVICE_NAME=<service-name>
 OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-<region>.grafana.net/otlp
 OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <base64-token>
 ```
@@ -168,7 +168,7 @@ After starting the stack (dev) or deploying to DO (prod):
 1. Grafana Cloud → **Explore**
 2. Datasource: **Tempo**
 3. Query type: **Search**
-4. Service name: `xstockstrat-config`
+4. Service name: `config`
 5. Run query — you should see traces from startup (WatchConfig handshakes)
 
 ### Check Logs (Loki)
@@ -177,7 +177,7 @@ After starting the stack (dev) or deploying to DO (prod):
 2. Datasource: **Loki**
 3. Query:
    ```logql
-   {service_name="xstockstrat-trading"} |= "order"
+   {service_name="trading"} |= "order"
    ```
 4. You should see structured log lines from the trading service
 
@@ -187,7 +187,7 @@ After starting the stack (dev) or deploying to DO (prod):
 2. Datasource: **grafanacloud-<stack>-prom**
 3. Query:
    ```promql
-   {job="xstockstrat-marketdata"}
+   {job="marketdata"}
    ```
 
 ---
@@ -229,14 +229,14 @@ Use Tempo's **Trace to logs** and **Trace to metrics** features:
 Query Loki for config change events:
 
 ```logql
-{service_name="xstockstrat-config"} |= "SetConfig" | json | line_format "{{.namespace}}.{{.key}} = {{.value}} by {{.author}}"
+{service_name="config"} |= "SetConfig" | json | line_format "{{.namespace}}.{{.key}} = {{.value}} by {{.author}}"
 ```
 
 ### Dashboard 5: WatchConfig Stream Health
 
 | Panel | Description |
 |---|---|
-| Active Subscribers | Count of open WatchConfig gRPC streams on xstockstrat-config |
+| Active Subscribers | Count of open WatchConfig gRPC streams on config |
 | Config Delta Broadcast Latency | Time from DB `pg_notify` to subscriber delivery |
 | Reconnect Events | Count of subscriber reconnections (indicates instability) |
 
@@ -258,8 +258,8 @@ Severity: **Critical** | Notification: Slack/PagerDuty
 ### Alert: Trading Service Error Rate High
 
 ```promql
-rate(errors_total{service_name="xstockstrat-trading"}[5m]) /
-rate(requests_total{service_name="xstockstrat-trading"}[5m]) > 0.05
+rate(errors_total{service_name="trading"}[5m]) /
+rate(requests_total{service_name="trading"}[5m]) > 0.05
 ```
 
 Severity: **Critical** (> 5% error rate on order execution)
@@ -267,7 +267,7 @@ Severity: **Critical** (> 5% error rate on order execution)
 ### Alert: Alpaca Stream Reconnect Loop
 
 ```promql
-increase(alpaca_stream_reconnect_total{service_name="xstockstrat-marketdata"}[5m]) > 3
+increase(alpaca_stream_reconnect_total{service_name="marketdata"}[5m]) > 3
 ```
 
 Severity: **Warning** — indicates Alpaca WebSocket instability
@@ -277,7 +277,7 @@ Severity: **Warning** — indicates Alpaca WebSocket instability
 Query Loki for config change event:
 
 ```logql
-count_over_time({service_name="xstockstrat-config"} |= "platform.maintenance_mode" |= "true" [1m]) > 0
+count_over_time({service_name="config"} |= "platform.maintenance_mode" |= "true" [1m]) > 0
 ```
 
 Severity: **Warning** — all trading halted when this key is set
@@ -285,7 +285,7 @@ Severity: **Warning** — all trading halted when this key is set
 ### Alert: Ledger Write Failures
 
 ```promql
-rate(errors_total{service_name="xstockstrat-ledger"}[5m]) > 0
+rate(errors_total{service_name="ledger"}[5m]) > 0
 ```
 
 Severity: **Critical** — ledger is append-only; write failures mean audit trail gaps
@@ -298,19 +298,19 @@ Use these exact service names when querying by `service.name` or `service_name` 
 
 | Service | `service.name` |
 |---|---|
-| xstockstrat-trading | `xstockstrat-trading` |
-| xstockstrat-portfolio | `xstockstrat-portfolio` |
-| xstockstrat-marketdata | `xstockstrat-marketdata` |
-| xstockstrat-indicators | `xstockstrat-indicators` |
-| xstockstrat-ingest | `xstockstrat-ingest` |
-| xstockstrat-analysis | `xstockstrat-analysis` |
-| xstockstrat-ledger | `xstockstrat-ledger` |
-| xstockstrat-identity | `xstockstrat-identity` |
-| xstockstrat-notify | `xstockstrat-notify` |
-| xstockstrat-config | `xstockstrat-config` |
-| xstockstrat-trader | `xstockstrat-trader` |
-| xstockstrat-insights | `xstockstrat-insights` |
-| xstockstrat-config-ui | `xstockstrat-config-ui` |
+| xstockstrat-trading | `trading` |
+| xstockstrat-portfolio | `portfolio` |
+| xstockstrat-marketdata | `marketdata` |
+| xstockstrat-indicators | `indicators` |
+| xstockstrat-ingest | `ingest` |
+| xstockstrat-analysis | `analysis` |
+| xstockstrat-ledger | `ledger` |
+| xstockstrat-identity | `identity` |
+| xstockstrat-notify | `notify` |
+| xstockstrat-config | `config` |
+| xstockstrat-trader | `trader` |
+| xstockstrat-insights | `insights` |
+| xstockstrat-config-ui | `config-ui` |
 | otel-collector | `otel-collector` (local dev only) |
 
 ---
@@ -321,11 +321,11 @@ Use these exact service names when querying by `service.name` or `service_name` 
 
 1. Check `OTEL_ENABLED=true` is set in `.env`
 2. Check collector can reach Grafana: `docker compose logs otel-collector | grep -i error`
-3. Verify `GRAFANA_OTLP_ENDPOINT` and `GRAFANA_OTLP_TOKEN` are set correctly
+3. Verify `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` are set correctly
 4. Test with `curl`:
    ```bash
-   curl -v -H "Authorization: Basic $GRAFANA_OTLP_TOKEN" \
-     "${GRAFANA_OTLP_ENDPOINT}/v1/traces" \
+   curl -v -H "Authorization: $OTEL_EXPORTER_OTLP_HEADERS" \
+     "${OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces" \
      -d '{}'
    ```
    A `400 Bad Request` (not 401/403) means credentials are valid.

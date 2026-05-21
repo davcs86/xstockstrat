@@ -24,7 +24,7 @@ def init_telemetry() -> None:
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
         endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317")
-        svc_name = os.getenv("OTEL_SERVICE_NAME", "xstockstrat-ingest")
+        svc_name = os.getenv("SERVICE_NAME", "ingest")
         environment = os.getenv("APPLICATION_ENV", "development")
         trading_mode = os.getenv("TRADING_MODE", "paper")
 
