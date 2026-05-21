@@ -58,7 +58,8 @@ ls "$REPO_ROOT/.env" 2>/dev/null
    - `ALPACA_API_KEY` — paper trading key from alpaca.markets (see `docs/setup/alpaca.md`)
    - `ALPACA_API_SECRET` — matching secret
    - `JWT_SECRET` — auto-generated or manually provided
-   - `OTEL_EXPORTER_OTLP_HEADERS` — optional, for observability (see `docs/setup/grafana-cloud.md`)
+   - `OTEL_EXPORTER_OTLP_ENDPOINT` — optional, Grafana Cloud OTLP gateway URL (see `docs/setup/grafana-cloud.md`)
+   - `OTEL_EXPORTER_OTLP_HEADERS` — optional, Grafana Cloud auth header value (see `docs/setup/grafana-cloud.md`)
 3. Run the interactive setup:
 
 ```bash
@@ -98,7 +99,7 @@ If bootstrap exits non-zero, display the last 20 lines of output and suggest:
 
 ## Phase 4: Services Up + Health Checks
 
-Tell the user you'll now start all 13 services with Docker Compose.
+Tell the user you'll now start all services with Docker Compose (14 application services including nginx, plus infrastructure: `timescaledb` and `otel-collector`).
 
 Ask confirmation (this builds Docker images on first run — can take several minutes).
 
