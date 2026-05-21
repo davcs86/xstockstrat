@@ -71,11 +71,11 @@ No new config service keys. All configuration is via environment variables on th
 
 | Variable | Description |
 |---|---|
-| `INGEST_HTTP_URL` | Base URL for xstockstrat-ingest HTTP (default `http://xstockstrat-ingest:8055`) |
-| `NOTIFY_HTTP_URL` | Base URL for xstockstrat-notify HTTP (default `http://xstockstrat-notify:8059`) |
-| `ANALYSIS_HTTP_URL` | Base URL for xstockstrat-analysis HTTP (default `http://xstockstrat-analysis:8056`) |
+| `INGEST_HTTP_ENDPOINT` | Base URL for xstockstrat-ingest HTTP Connect-RPC + webhooks (default `http://xstockstrat-ingest:8055`) |
+| `NOTIFY_HTTP_ENDPOINT` | Base URL for xstockstrat-notify HTTP webhooks (default `http://xstockstrat-notify:8059`) |
+| `ANALYSIS_HTTP_ENDPOINT` | Base URL for xstockstrat-analysis HTTP webhooks (default `http://xstockstrat-analysis:8056`) |
 | `IDENTITY_ENDPOINT` | gRPC address for identity service (default `xstockstrat-identity:50058`) |
-| `N8N_WEBHOOK_SECRET` | Shared secret sent as `x-webhook-secret` header on all downstream calls |
+| `WEBHOOK_SECRET` | Shared secret sent as `x-webhook-secret` header on all downstream calls (optional; header omitted when empty) |
 | `MCP_TRANSPORT` | `stdio` or `sse` (default `stdio`) |
 | `MCP_SSE_PORT` | Port for SSE transport listener (default `9000`) |
 

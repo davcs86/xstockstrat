@@ -61,3 +61,11 @@
 - **Fix 4 (Step Dependencies)**: Added notes clarifying that Steps 7–8 (nginx/infrastructure) are verified by `docker nginx -t` + integration test (not pytest), and Step 9 (JSON file) is verified by json.load check.
 - Overlap warnings: Feature 008 (`signal-source-registry`) and Feature 014 (`trader-chart-panel`) also modify deployment config files — coordinate merge order (008 must merge before 009 per existing prerequisite).
 - Next action: `/sdd-execute agent-mcp-server`
+
+## Session 2026-05-21T00:04:00Z — env var naming corrections
+
+- `N8N_WEBHOOK_SECRET` removed from product-spec and impl-spec. Feature 011 (`remove-n8n-references`, launched 2026-05-18) deleted this env var entirely — grep confirmed zero remaining usage in services and deployment files. Replaced with `WEBHOOK_SECRET` (no N8N prefix).
+- `INGEST_HTTP_URL`, `NOTIFY_HTTP_URL`, `ANALYSIS_HTTP_URL` renamed to `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT` to match the established `<SERVICE>_HTTP_ENDPOINT` pattern used by all other services.
+- `IDENTITY_ENDPOINT` was already correct — no change.
+- `XSTOCKSTRAT_AGENT_PRIVATE_URL` was already correct (nginx-only pattern) — no change.
+- Documented the three env var naming patterns (`_ENDPOINT`, `_HTTP_ENDPOINT`, `XSTOCKSTRAT_<SERVICE>_PRIVATE_URL`) in root `CLAUDE.md` under a new "Environment Variable Naming Convention" section so future features follow the convention automatically.

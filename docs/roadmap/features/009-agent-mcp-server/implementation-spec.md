@@ -134,10 +134,10 @@ This is a new standalone Python service with no proto changes and no DB migratio
 
    @pytest.fixture(autouse=True)
    def set_env(monkeypatch):
-       monkeypatch.setenv("INGEST_HTTP_URL", "http://ingest-test:8055")
-       monkeypatch.setenv("NOTIFY_HTTP_URL", "http://notify-test:8059")
-       monkeypatch.setenv("ANALYSIS_HTTP_URL", "http://analysis-test:8056")
-       monkeypatch.setenv("N8N_WEBHOOK_SECRET", "test-secret")
+       monkeypatch.setenv("INGEST_HTTP_ENDPOINT", "http://ingest-test:8055")
+       monkeypatch.setenv("NOTIFY_HTTP_ENDPOINT", "http://notify-test:8059")
+       monkeypatch.setenv("ANALYSIS_HTTP_ENDPOINT", "http://analysis-test:8056")
+       monkeypatch.setenv("WEBHOOK_SECRET", "test-secret")
        monkeypatch.setenv("MCP_TRANSPORT", "stdio")
        monkeypatch.setenv("IDENTITY_ENDPOINT", "identity-test:50058")
    ```
@@ -174,10 +174,10 @@ Confirm the following paths exist:
 
 **Codebase Evidence**:
 - **ingest webhook endpoint** confirmed: `services/xstockstrat-ingest/app/http_server.py:L72` — `@app.post("/webhooks/ingest-signal")`. Payload fields at L89–122: `source`, `symbol`, `direction`, `conviction`, `valid_from`, `valid_until`, `headline`, `raw_url`, `tags`.
-- **ingest `ListSignalSources` Connect-RPC route** — **not yet present** in `services/xstockstrat-ingest/app/http_server.py` (added by feature 008 Step 7). MCP tool calls `POST /xstockstrat.ingest.v1.IngestService/ListSignalSources` on `INGEST_HTTP_URL`; Connect-RPC path convention confirmed at `services/xstockstrat-ingest/app/http_server.py:L27–49`.
+- **ingest `ListSignalSources` Connect-RPC route** — **not yet present** in `services/xstockstrat-ingest/app/http_server.py` (added by feature 008 Step 7). MCP tool calls `POST /xstockstrat.ingest.v1.IngestService/ListSignalSources` on `INGEST_HTTP_ENDPOINT`; Connect-RPC path convention confirmed at `services/xstockstrat-ingest/app/http_server.py:L27–49`.
 - **notify webhook endpoint** confirmed: `services/xstockstrat-notify/src/webhooks/router.ts:L46` — `url === '/webhooks/emit-alert'`.
 - **analysis webhook endpoint** confirmed: `services/xstockstrat-analysis/app/http_server.py:L46` — `@app.post("/webhooks/run-backtest")`.
-- **`N8N_WEBHOOK_SECRET` env var**: absent from `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`, `.env.example` — confirmed via grep → no match.
+- **`WEBHOOK_SECRET` env var**: absent from `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`, `.env.example` — confirmed via grep → no match.
 
 **Instructions**:
 
@@ -186,43 +186,43 @@ Create `services/xstockstrat-agent/app/client.py` — the shared async HTTP clie
 ```python
 """
 Shared async HTTP client for xstockstrat-agent.
-All downstream calls include x-webhook-secret header when N8N_WEBHOOK_SECRET is set.
+All downstream calls include x-webhook-secret header when WEBHOOK_SECRET is set.
 """
 import os
 from typing import Any
 
 import httpx
 
-INGEST_HTTP_URL = os.environ.get("INGEST_HTTP_URL", "http://xstockstrat-ingest:8055")
-NOTIFY_HTTP_URL = os.environ.get("NOTIFY_HTTP_URL", "http://xstockstrat-notify:8059")
-ANALYSIS_HTTP_URL = os.environ.get("ANALYSIS_HTTP_URL", "http://xstockstrat-analysis:8056")
-N8N_WEBHOOK_SECRET = os.environ.get("N8N_WEBHOOK_SECRET", "")
+INGEST_HTTP_ENDPOINT = os.environ.get("INGEST_HTTP_ENDPOINT", "http://xstockstrat-ingest:8055")
+NOTIFY_HTTP_ENDPOINT = os.environ.get("NOTIFY_HTTP_ENDPOINT", "http://xstockstrat-notify:8059")
+ANALYSIS_HTTP_ENDPOINT = os.environ.get("ANALYSIS_HTTP_ENDPOINT", "http://xstockstrat-analysis:8056")
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
 
 
 def _headers() -> dict[str, str]:
     h = {"Content-Type": "application/json"}
-    if N8N_WEBHOOK_SECRET:
-        h["x-webhook-secret"] = N8N_WEBHOOK_SECRET
+    if WEBHOOK_SECRET:
+        h["x-webhook-secret"] = WEBHOOK_SECRET
     return h
 
 
 async def post_ingest(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=30.0) as c:
-        r = await c.post(f"{INGEST_HTTP_URL}{path}", json=payload, headers=_headers())
+        r = await c.post(f"{INGEST_HTTP_ENDPOINT}{path}", json=payload, headers=_headers())
         r.raise_for_status()
         return r.json()
 
 
 async def post_notify(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=30.0) as c:
-        r = await c.post(f"{NOTIFY_HTTP_URL}{path}", json=payload, headers=_headers())
+        r = await c.post(f"{NOTIFY_HTTP_ENDPOINT}{path}", json=payload, headers=_headers())
         r.raise_for_status()
         return r.json()
 
 
 async def post_analysis(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=30.0) as c:
-        r = await c.post(f"{ANALYSIS_HTTP_URL}{path}", json=payload, headers=_headers())
+        r = await c.post(f"{ANALYSIS_HTTP_ENDPOINT}{path}", json=payload, headers=_headers())
         r.raise_for_status()
         return r.json()
 ```
@@ -233,10 +233,10 @@ async def post_analysis(path: str, payload: dict[str, Any]) -> dict[str, Any]:
 ls services/xstockstrat-agent/app/client.py
 
 # Confirm x-webhook-secret header logic
-grep -n "x-webhook-secret\|N8N_WEBHOOK_SECRET" services/xstockstrat-agent/app/client.py
+grep -n "x-webhook-secret\|WEBHOOK_SECRET" services/xstockstrat-agent/app/client.py
 
 # Confirm all three base URL env vars
-grep -n "INGEST_HTTP_URL\|NOTIFY_HTTP_URL\|ANALYSIS_HTTP_URL" services/xstockstrat-agent/app/client.py
+grep -n "INGEST_HTTP_ENDPOINT\|NOTIFY_HTTP_ENDPOINT\|ANALYSIS_HTTP_ENDPOINT" services/xstockstrat-agent/app/client.py
 ```
 
 ---
@@ -665,9 +665,9 @@ grep -n "list_signal_sources\|conviction\|source_type\|emit_alert" services/xsto
 **Status**: `pending`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
-- `docker-compose.yml` — modify (add xstockstrat-agent service block introducing `INGEST_HTTP_URL`, `NOTIFY_HTTP_URL`, `ANALYSIS_HTTP_URL`, `IDENTITY_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `N8N_WEBHOOK_SECRET`; confirmed absent: `grep -n "xstockstrat-agent" docker-compose.yml` → no match)
-- `.env.example` — modify (add `N8N_WEBHOOK_SECRET` entry; confirmed absent: `grep -n "N8N_WEBHOOK_SECRET" .env.example` → no match)
-- `.do/app.dev.yaml` — modify (add xstockstrat-agent service block with `INGEST_HTTP_URL`, `NOTIFY_HTTP_URL`, `ANALYSIS_HTTP_URL`, `IDENTITY_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `N8N_WEBHOOK_SECRET`; Instructions in Step 8)
+- `docker-compose.yml` — modify (add xstockstrat-agent service block introducing `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT`, `IDENTITY_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `WEBHOOK_SECRET`; confirmed absent: `grep -n "xstockstrat-agent" docker-compose.yml` → no match)
+- `.env.example` — modify (add `WEBHOOK_SECRET` entry; confirmed absent: `grep -n "WEBHOOK_SECRET" .env.example` → no match)
+- `.do/app.dev.yaml` — modify (add xstockstrat-agent service block with `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT`, `IDENTITY_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `WEBHOOK_SECRET`; Instructions in Step 8)
 - `.do/app.yaml` — modify (same as app.dev.yaml for prod; Instructions in Step 8)
 
 **Reviewers**: Platform Lead — port uniqueness, service registry consistency, inter-service dependency graph correctness; Security — no secrets in config service state, secret keys use `secret.*` prefix
@@ -677,8 +677,8 @@ grep -n "list_signal_sources\|conviction\|source_type\|emit_alert" services/xsto
 - No `DATABASE_URL` or `db-url` anchor needed — agent has no DB.
 - `env_file: [".env.local"]` pattern confirmed: `xstockstrat-ingest` block at `docker-compose.yml:L270`.
 - The agent Dockerfile requires build context `.` (repo root) because `COPY ../../packages/proto/gen/python` cannot reach above the specified context — ingest uses `context: ./services/xstockstrat-ingest` only because it is built with a separate `Dockerfile` that uses the same pattern; however, the agent's Dockerfile copies `../../packages/proto/gen/python` so **must use `context: .` (repo root)** and specify `dockerfile: services/xstockstrat-agent/Dockerfile`. Confirmed pattern: `services/xstockstrat-ledger`, `xstockstrat-notify`, `xstockstrat-config` all use `context: .` with `dockerfile: services/<name>/Dockerfile` at `docker-compose.yml:L120–145`.
-- `INGEST_HTTP_URL`, `NOTIFY_HTTP_URL`, `ANALYSIS_HTTP_URL`, `IDENTITY_ENDPOINT` confirmed absent from `docker-compose.yml`: `grep -n "INGEST_HTTP_URL\|NOTIFY_HTTP_URL\|ANALYSIS_HTTP_URL\|IDENTITY_ENDPOINT" docker-compose.yml` → no match.
-- `N8N_WEBHOOK_SECRET` confirmed absent from `docker-compose.yml` and `.env.example`: `grep -n "N8N_WEBHOOK_SECRET" docker-compose.yml .env.example` → no match.
+- `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT`, `IDENTITY_ENDPOINT` confirmed absent from `docker-compose.yml`: `grep -n "INGEST_HTTP_ENDPOINT\|NOTIFY_HTTP_ENDPOINT\|ANALYSIS_HTTP_ENDPOINT\|IDENTITY_ENDPOINT" docker-compose.yml` → no match.
+- `WEBHOOK_SECRET` confirmed absent from `docker-compose.yml` and `.env.example`: `grep -n "WEBHOOK_SECRET" docker-compose.yml .env.example` → no match.
 - `MCP_TRANSPORT`, `MCP_SSE_PORT` confirmed absent from `docker-compose.yml`: `grep -n "MCP_TRANSPORT\|MCP_SSE_PORT" docker-compose.yml` → no match.
 - Port 9000 confirmed absent: `grep -n "9000" docker-compose.yml` → no match.
 - Agent depends on ingest, notify, analysis, and identity (for SSE auth). Ingest block ends at `docker-compose.yml:L287`; nginx block begins at `docker-compose.yml:L476`. Agent block appended after nginx.
@@ -698,13 +698,13 @@ grep -n "list_signal_sources\|conviction\|source_type\|emit_alert" services/xsto
        env_file: [".env.local"]
        environment:
          <<: *common-env
-         INGEST_HTTP_URL: http://xstockstrat-ingest:8055
-         NOTIFY_HTTP_URL: http://xstockstrat-notify:8059
-         ANALYSIS_HTTP_URL: http://xstockstrat-analysis:8056
+         INGEST_HTTP_ENDPOINT: http://xstockstrat-ingest:8055
+         NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
+         ANALYSIS_HTTP_ENDPOINT: http://xstockstrat-analysis:8056
          IDENTITY_ENDPOINT: xstockstrat-identity:50058
          MCP_TRANSPORT: sse
          MCP_SSE_PORT: "9000"
-         N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-}
+         WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
        ports:
          - "9000:9000"
        depends_on:
@@ -715,22 +715,22 @@ grep -n "list_signal_sources\|conviction\|source_type\|emit_alert" services/xsto
    ```
    Note: `MCP_TRANSPORT: sse` so the container is reachable on port 9000 (and via nginx `/agent/sse`). Operators using Claude.ai desktop with stdio transport run `python -m app.main` locally with `MCP_TRANSPORT=stdio`.
 
-2. Add `N8N_WEBHOOK_SECRET` to `.env.example` after the `JWT_SECRET` line:
+2. Add `WEBHOOK_SECRET` to `.env.example` after the `JWT_SECRET` line:
    ```
    # ── Webhook Secret (xstockstrat-agent) ───────────────────────────────────
    # Shared secret sent as x-webhook-secret header on all downstream HTTP calls.
    # Set this to the same value configured in each service's webhook handler.
    # Leave empty to skip header (header is only sent when this var is non-empty).
-   N8N_WEBHOOK_SECRET=change-me-webhook-secret
+   WEBHOOK_SECRET=change-me-webhook-secret
    ```
 
 **Verification**:
 ```bash
 # Confirm agent service block added
-grep -n "xstockstrat-agent\|MCP_TRANSPORT\|MCP_SSE_PORT\|INGEST_HTTP_URL\|NOTIFY_HTTP_URL\|ANALYSIS_HTTP_URL\|IDENTITY_ENDPOINT" docker-compose.yml
+grep -n "xstockstrat-agent\|MCP_TRANSPORT\|MCP_SSE_PORT\|INGEST_HTTP_ENDPOINT\|NOTIFY_HTTP_ENDPOINT\|ANALYSIS_HTTP_ENDPOINT\|IDENTITY_ENDPOINT" docker-compose.yml
 
-# Confirm N8N_WEBHOOK_SECRET added to .env.example
-grep -n "N8N_WEBHOOK_SECRET" .env.example
+# Confirm WEBHOOK_SECRET added to .env.example
+grep -n "WEBHOOK_SECRET" .env.example
 
 # Confirm port 9000 added to docker-compose
 grep -n "9000" docker-compose.yml
@@ -822,7 +822,7 @@ docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf.template:ro \
 **Status**: `pending`
 **Service**: `xstockstrat-nginx` (DO env vars) + `xstockstrat-agent` (new DO entries)
 **Files**:
-- `.do/app.dev.yaml` — modify (add xstockstrat-agent service block with `INGEST_HTTP_URL`, `NOTIFY_HTTP_URL`, `ANALYSIS_HTTP_URL`, `IDENTITY_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `N8N_WEBHOOK_SECRET`; add `XSTOCKSTRAT_AGENT_PRIVATE_URL` to nginx `envs:`; confirmed absent: `grep -n "xstockstrat-agent\|AGENT" .do/app.dev.yaml` → no match)
+- `.do/app.dev.yaml` — modify (add xstockstrat-agent service block with `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT`, `IDENTITY_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `WEBHOOK_SECRET`; add `XSTOCKSTRAT_AGENT_PRIVATE_URL` to nginx `envs:`; confirmed absent: `grep -n "xstockstrat-agent\|AGENT" .do/app.dev.yaml` → no match)
 - `.do/app.yaml` — modify (same two additions for prod; confirmed absent: `grep -n "xstockstrat-agent\|AGENT" .do/app.yaml` → no match)
 - `docker-compose.yml` — modify (add `XSTOCKSTRAT_AGENT_PRIVATE_URL: xstockstrat-agent` to nginx service `environment:` block only; agent service env vars already added in Step 6; confirmed absent from nginx env: `grep -A20 "xstockstrat-nginx:" docker-compose.yml | grep "AGENT"` → no match)
 
@@ -835,7 +835,7 @@ docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf.template:ro \
 - Nginx `envs` block in `.do/app.dev.yaml:L293–300` — currently has `XSTOCKSTRAT_TRADER_PRIVATE_URL`, `XSTOCKSTRAT_INSIGHTS_PRIVATE_URL`, `XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL`; `XSTOCKSTRAT_AGENT_PRIVATE_URL` absent (confirmed via grep).
 - `http_port: 9000` for the agent — this is the port the agent listens on in SSE mode (confirmed from `MCP_SSE_PORT` default in `app/main.py`).
 - DO services with no DB do not include a `DATABASE_URL` env entry — confirmed for `xstockstrat-indicators` at `.do/app.dev.yaml:L106–127` (no `DATABASE_URL`).
-- `N8N_WEBHOOK_SECRET` must be set as a secret env in DO — it is a sensitive value matching the convention for secrets in DO app specs (type: SECRET, not plain value).
+- `WEBHOOK_SECRET` must be set as a secret env in DO — it is a sensitive value matching the convention for secrets in DO app specs (type: SECRET, not plain value).
 - `IDENTITY_ENDPOINT` on DO must reference the identity service private URL. Pattern: `${xstockstrat-identity.PRIVATE_URL}` — confirmed from `LEDGER_ENDPOINT` in other services at `.do/app.dev.yaml:L34`.
 
 **Instructions**:
@@ -853,11 +853,11 @@ docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf.template:ro \
      instance_count: 1
      instance_size_slug: basic-xs
      envs:
-       - key: INGEST_HTTP_URL
+       - key: INGEST_HTTP_ENDPOINT
          value: ${xstockstrat-ingest.PRIVATE_URL}
-       - key: NOTIFY_HTTP_URL
+       - key: NOTIFY_HTTP_ENDPOINT
          value: ${xstockstrat-notify.PRIVATE_URL}
-       - key: ANALYSIS_HTTP_URL
+       - key: ANALYSIS_HTTP_ENDPOINT
          value: ${xstockstrat-analysis.PRIVATE_URL}
        - key: IDENTITY_ENDPOINT
          value: ${xstockstrat-identity.PRIVATE_URL}
@@ -865,7 +865,7 @@ docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf.template:ro \
          value: sse
        - key: MCP_SSE_PORT
          value: "9000"
-       - key: N8N_WEBHOOK_SECRET
+       - key: WEBHOOK_SECRET
          scope: RUN_TIME
          type: SECRET
    ```
@@ -897,8 +897,8 @@ grep -n "xstockstrat-agent\|XSTOCKSTRAT_AGENT_PRIVATE_URL" .do/app.yaml
 # Confirm nginx env var added to docker-compose
 grep -n "XSTOCKSTRAT_AGENT_PRIVATE_URL" docker-compose.yml
 
-# Confirm IDENTITY_ENDPOINT and INGEST_HTTP_URL are in both DO specs
-grep -n "INGEST_HTTP_URL\|IDENTITY_ENDPOINT" .do/app.dev.yaml .do/app.yaml
+# Confirm IDENTITY_ENDPOINT and INGEST_HTTP_ENDPOINT are in both DO specs
+grep -n "INGEST_HTTP_ENDPOINT\|IDENTITY_ENDPOINT" .do/app.dev.yaml .do/app.yaml
 ```
 
 ---
@@ -935,10 +935,10 @@ Create `services/xstockstrat-agent/claude_mcp_config.json`:
       "cwd": "<absolute-path-to>/services/xstockstrat-agent",
       "env": {
         "MCP_TRANSPORT": "stdio",
-        "INGEST_HTTP_URL": "http://localhost:8055",
-        "NOTIFY_HTTP_URL": "http://localhost:8059",
-        "ANALYSIS_HTTP_URL": "http://localhost:8056",
-        "N8N_WEBHOOK_SECRET": "<your-webhook-secret-from-.env>"
+        "INGEST_HTTP_ENDPOINT": "http://localhost:8055",
+        "NOTIFY_HTTP_ENDPOINT": "http://localhost:8059",
+        "ANALYSIS_HTTP_ENDPOINT": "http://localhost:8056",
+        "WEBHOOK_SECRET": "<your-webhook-secret-from-.env>"
       }
     },
     "xstockstrat-sse-nginx": {
@@ -1000,7 +1000,7 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
 
    @pytest.mark.asyncio
    async def test_post_ingest_adds_webhook_secret_header():
-       """When N8N_WEBHOOK_SECRET is set, x-webhook-secret header is sent."""
+       """When WEBHOOK_SECRET is set, x-webhook-secret header is sent."""
        with respx.mock(base_url="http://ingest-test:8055") as mock:
            route = mock.post("/webhooks/ingest-signal").mock(
                return_value=httpx.Response(200, json={"signal_id": 1})
@@ -1037,8 +1037,8 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
 
    @pytest.mark.asyncio
    async def test_no_webhook_secret_when_env_empty(monkeypatch):
-       """When N8N_WEBHOOK_SECRET is empty, x-webhook-secret header is omitted."""
-       monkeypatch.setattr(client, "N8N_WEBHOOK_SECRET", "")
+       """When WEBHOOK_SECRET is empty, x-webhook-secret header is omitted."""
+       monkeypatch.setattr(client, "WEBHOOK_SECRET", "")
        with respx.mock(base_url="http://ingest-test:8055") as mock:
            route = mock.post("/webhooks/ingest-signal").mock(
                return_value=httpx.Response(200, json={})
