@@ -1,6 +1,7 @@
 package service
 
 import (
+	"math"
 	"testing"
 )
 
@@ -96,5 +97,137 @@ func TestPositionMath_OverSell(t *testing.T) {
 	// newQty goes negative — caller should detect this and close position
 	if newQty != -10.0 {
 		t.Errorf("OverSell qty: got %v, want -10", newQty)
+	}
+}
+
+// computeRealizedPnL mirrors the two-pass GetPnL algorithm for dependency-free unit testing.
+// completeFills use fill.Qty (order.filled events); partialFills use fill.FilledQty
+// (order.partially_filled events, deduplicated by OrderID keeping the last per ID).
+func computeRealizedPnL(completeFills, partialFills []orderFillPayload) float64 {
+	var realized float64
+	accs := make(map[string]*fillAccumulator)
+	filledOrderIDs := make(map[string]bool)
+
+	applyFill := func(qty, fillPrice float64, symbol string) {
+		acc := accs[symbol]
+		if acc == nil {
+			acc = &fillAccumulator{}
+			accs[symbol] = acc
+		}
+		sameDirection := acc.qty == 0 || (qty > 0) == (acc.qty > 0)
+		if sameDirection {
+			acc.qty += qty
+			acc.costBasis += qty * fillPrice
+		} else {
+			avgEntry := acc.costBasis / acc.qty
+			closeQty := qty
+			if math.Abs(closeQty) > math.Abs(acc.qty) {
+				closeQty = -acc.qty
+			}
+			realized += (-closeQty) * (fillPrice - avgEntry)
+			oldQty := acc.qty
+			acc.qty += closeQty
+			if math.Abs(acc.qty) < 1e-9 {
+				acc.qty = 0
+				acc.costBasis = 0
+			} else {
+				acc.costBasis = acc.costBasis * acc.qty / oldQty
+			}
+			remainder := qty - closeQty
+			if math.Abs(remainder) > 1e-9 {
+				acc.qty += remainder
+				acc.costBasis += remainder * fillPrice
+			}
+		}
+	}
+
+	// Pass 1: apply complete fills.
+	for _, fill := range completeFills {
+		filledOrderIDs[fill.OrderID] = true
+		applyFill(fill.Qty, fill.FillPrice, fill.Symbol)
+	}
+
+	// Pass 2: deduplicate partial fills by OrderID (last wins), apply for non-completed orders.
+	latestPartials := make(map[string]orderFillPayload)
+	for _, fill := range partialFills {
+		latestPartials[fill.OrderID] = fill
+	}
+	for orderID, fill := range latestPartials {
+		if filledOrderIDs[orderID] {
+			continue
+		}
+		applyFill(fill.FilledQty, fill.FillPrice, fill.Symbol)
+	}
+
+	return realized
+}
+
+func TestRealizedPnL_NoFills(t *testing.T) {
+	got := computeRealizedPnL(nil, nil)
+	if got != 0.0 {
+		t.Errorf("NoFills: got %f, want 0.0", got)
+	}
+}
+
+func TestRealizedPnL_ClosedLong(t *testing.T) {
+	fills := []orderFillPayload{
+		{OrderID: "A", Symbol: "AAPL", Qty: 100, FillPrice: 50},
+		{OrderID: "B", Symbol: "AAPL", Qty: -100, FillPrice: 70},
+	}
+	got := computeRealizedPnL(fills, nil)
+	if got != 2000.0 {
+		t.Errorf("ClosedLong: got %f, want 2000.0", got)
+	}
+}
+
+func TestRealizedPnL_ClosedShort(t *testing.T) {
+	fills := []orderFillPayload{
+		{OrderID: "A", Symbol: "TSLA", Qty: -100, FillPrice: 50}, // open short
+		{OrderID: "B", Symbol: "TSLA", Qty: 100, FillPrice: 40},  // close short
+	}
+	got := computeRealizedPnL(fills, nil)
+	if got != 1000.0 {
+		t.Errorf("ClosedShort: got %f, want 1000.0", got)
+	}
+}
+
+func TestRealizedPnL_MultipleOrders(t *testing.T) {
+	fills := []orderFillPayload{
+		{OrderID: "A", Symbol: "MSFT", Qty: 50, FillPrice: 50},
+		{OrderID: "B", Symbol: "MSFT", Qty: 50, FillPrice: 50},
+		{OrderID: "C", Symbol: "MSFT", Qty: -50, FillPrice: 70},
+		{OrderID: "D", Symbol: "MSFT", Qty: -50, FillPrice: 70},
+	}
+	got := computeRealizedPnL(fills, nil)
+	if got != 2000.0 {
+		t.Errorf("MultipleOrders: got %f, want 2000.0", got)
+	}
+}
+
+func TestRealizedPnL_MixedOpenAndClosed(t *testing.T) {
+	fills := []orderFillPayload{
+		{OrderID: "A", Symbol: "GOOG", Qty: 100, FillPrice: 50},
+		{OrderID: "B", Symbol: "GOOG", Qty: 50, FillPrice: 60},
+		{OrderID: "C", Symbol: "GOOG", Qty: -80, FillPrice: 75},
+	}
+	got := computeRealizedPnL(fills, nil)
+	// avg_cost after A+B = (5000+3000)/150 = 53.333...; sell 80@75 → 80*(75-53.333...) = 1733.333...
+	want := 80.0 * (75.0 - 8000.0/150.0)
+	if math.Abs(got-want) > 0.01 {
+		t.Errorf("MixedOpenAndClosed: got %f, want %f (±0.01)", got, want)
+	}
+}
+
+func TestRealizedPnL_PartiallyFilledCanceled(t *testing.T) {
+	completeFills := []orderFillPayload{
+		{OrderID: "B", Symbol: "NVDA", Qty: -50, FillPrice: 70}, // complete sell
+	}
+	partialFills := []orderFillPayload{
+		{OrderID: "A", Symbol: "NVDA", FilledQty: 50, FillPrice: 50}, // partial buy, never completed
+	}
+	got := computeRealizedPnL(completeFills, partialFills)
+	// Pass 1: sell -50@70 → short; Pass 2: buy 50@50 closes short → realized = (-50)*(50-70) = 1000
+	if got != 1000.0 {
+		t.Errorf("PartiallyFilledCanceled: got %f, want 1000.0", got)
 	}
 }
