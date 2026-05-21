@@ -200,8 +200,8 @@ info "To skip: just press Enter to leave empty."
 info "Setup details: docs/setup/grafana-cloud.md"
 info ""
 
-prompt_value GRAFANA_OTLP_TOKEN "" \
-  "Grafana Cloud OTLP token (base64-encoded instance ID and API key)." \
+prompt_value OTEL_EXPORTER_OTLP_HEADERS "" \
+  "Grafana Cloud OTLP auth header value (Basic <base64(instanceId:apiKey)> — see docs/setup/grafana-cloud.md)." \
   true
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -244,7 +244,7 @@ cat >> "$ENV_FILE" << 'EOF'
 # Leave empty to disable. Enable for Grafana Cloud observability.
 EOF
 
-[ -n "$GRAFANA_OTLP_TOKEN" ] && echo "GRAFANA_OTLP_TOKEN='$GRAFANA_OTLP_TOKEN'" >> "$ENV_FILE"
+[ -n "$OTEL_EXPORTER_OTLP_HEADERS" ] && echo "OTEL_EXPORTER_OTLP_HEADERS='$OTEL_EXPORTER_OTLP_HEADERS'" >> "$ENV_FILE"
 
 cat >> "$ENV_FILE" << 'EOF'
 
@@ -280,8 +280,8 @@ echo "✓ POSTGRES_PASSWORD     (database — local dev only)"
 echo "✓ ALPACA_API_KEY        (market data feed)"
 echo "✓ ALPACA_API_SECRET     (market data feed)"
 echo "✓ JWT_SECRET            (authentication tokens)"
-if [ -n "$GRAFANA_OTLP_TOKEN" ]; then
-  echo "✓ GRAFANA_OTLP_TOKEN    (observability — optional)"
+if [ -n "$OTEL_EXPORTER_OTLP_HEADERS" ]; then
+  echo "✓ OTEL_EXPORTER_OTLP_HEADERS (observability — optional)"
 fi
 
 echo ""

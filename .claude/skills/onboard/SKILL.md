@@ -58,7 +58,7 @@ ls "$REPO_ROOT/.env" 2>/dev/null
    - `ALPACA_API_KEY` — paper trading key from alpaca.markets (see `docs/setup/alpaca.md`)
    - `ALPACA_API_SECRET` — matching secret
    - `JWT_SECRET` — auto-generated or manually provided
-   - `GRAFANA_OTLP_TOKEN` — optional, for observability (see `docs/setup/grafana-cloud.md`)
+   - `OTEL_EXPORTER_OTLP_HEADERS` — optional, for observability (see `docs/setup/grafana-cloud.md`)
 3. Run the interactive setup:
 
 ```bash
