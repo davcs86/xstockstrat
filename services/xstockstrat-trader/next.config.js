@@ -3,7 +3,7 @@ const nextConfig = {
   basePath: '/trader',
   output: 'standalone',
   // Ensure Connect-RPC Node transport runs in server context without bundling issues
-  serverExternalPackages: ['@connectrpc/connect-node'],
+  serverExternalPackages: ['@connectrpc/connect-node', '@opentelemetry/sdk-node', '@opentelemetry/exporter-trace-otlp-http'],
 };
 
 module.exports = nextConfig;

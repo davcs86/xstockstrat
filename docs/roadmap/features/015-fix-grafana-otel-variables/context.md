@@ -54,3 +54,91 @@
   - `packages/otel/otel-collector-config.yaml` lines 46–56: all three upsert entries in resource processor — replace with `attributes: []`.
   - `.do/app.dev.yaml` and `.do/app.yaml`: `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` absent from global envs; `OTEL_SERVICE_NAME` absent from all 13 service entries. No `OTEL_RESOURCE_ATTRIBUTES` entries (correct — do not add).
   - `.env.example` line 44: "per service via DO dashboard" → "as a single global secret via DO dashboard".
+
+## Session 2026-05-21T00:00:00Z — sdd-execute
+
+### Step 1 — Add `trading_mode` and `platform` attributes to Go telemetry — `xstockstrat-trading` [done]
+- Added `"go.opentelemetry.io/otel/attribute"` import and two `attribute.String` calls to `resource.WithAttributes` in `internal/telemetry/otel.go`. `go build ./...` exits 0.
+- Files modified: `services/xstockstrat-trading/internal/telemetry/otel.go`
+- Deviations: none
+
+### Step 2 — Add `trading_mode` and `platform` attributes to Go telemetry — `xstockstrat-portfolio` [done]
+- Identical change to Step 1 applied to `internal/telemetry/otel.go`. `go build ./...` exits 0.
+- Files modified: `services/xstockstrat-portfolio/internal/telemetry/otel.go`
+- Deviations: none
+
+### Step 3 — Add `trading_mode` and `platform` attributes to Go telemetry — `xstockstrat-marketdata` [done]
+- Identical change applied to `internal/telemetry/otel.go`. `go build ./...` exits 0.
+- Files modified: `services/xstockstrat-marketdata/internal/telemetry/otel.go`
+- Deviations: none
+
+### Step 4 — Add `trading_mode` and `platform` attributes to Python telemetry — `xstockstrat-indicators` [done]
+- Added `trading_mode = os.getenv("TRADING_MODE", "paper")` and two dict keys to `Resource.create({...})` in `app/telemetry.py`. Import check passes.
+- Files modified: `services/xstockstrat-indicators/app/telemetry.py`
+- Deviations: none
+
+### Step 5 — Add `trading_mode` and `platform` attributes to Python telemetry — `xstockstrat-ingest` [done]
+- Identical change to Step 4 applied to `app/telemetry.py`. Import check passes.
+- Files modified: `services/xstockstrat-ingest/app/telemetry.py`
+- Deviations: none
+
+### Step 6 — Add `trading_mode` and `platform` attributes to Python telemetry — `xstockstrat-analysis` [done]
+- Identical change applied to `app/telemetry.py`. Import check passes.
+- Files modified: `services/xstockstrat-analysis/app/telemetry.py`
+- Deviations: none
+
+### Step 7 — Add `trading_mode` and `platform` attributes to Node.js backend telemetry (all four services) [done]
+- Added `trading_mode: process.env.TRADING_MODE ?? 'paper'` and `platform: 'xstockstrat'` to `new Resource({...})` in all four `src/telemetry.ts` files. Both attributes confirmed at lines 28–29 in each file.
+- Files modified: `services/xstockstrat-ledger/src/telemetry.ts`, `services/xstockstrat-identity/src/telemetry.ts`, `services/xstockstrat-notify/src/telemetry.ts`, `services/xstockstrat-config/src/telemetry.ts`
+- Deviations: `tsc --noEmit` could not run (node_modules absent in remote env); grep verification substituted — see Deviation Log
+
+### Step 8 — Create `src/telemetry.ts` and `instrumentation.ts` for Next.js frontends [done]
+- Created `src/telemetry.ts` in all three Next.js services (trader, insights, config-ui) using `resourceFromAttributes`, `ATTR_SERVICE_NAME`, HTTP OTLP exporter, `instrumentations: []`.
+- Created `instrumentation.ts` at the service root for each service (Next.js instrumentation hook that calls `initTelemetry()` only in `NEXT_RUNTIME === 'nodejs'`).
+- Added four OTel packages to each service's `package.json`: `@opentelemetry/sdk-node: "^0.218.0"`, `@opentelemetry/exporter-trace-otlp-http: "^0.218.0"`, `@opentelemetry/resources: "^2.7.1"`, `@opentelemetry/semantic-conventions: "^1.41.1"`.
+- Updated `next.config.js` to include OTel packages in external packages list (`serverExternalPackages` for trader/Next.js 15, `experimental.serverComponentsExternalPackages` for insights+config-ui/Next.js 14).
+- Ran `pnpm install` in all three service directories — lockfiles updated successfully.
+- Deviation: upgraded from spec-pinned versions to latest; `resources@2.x` requires `resourceFromAttributes` (not `new Resource`); `semconv@1.41.1` requires `ATTR_SERVICE_NAME` (not `SEMRESATTRS_SERVICE_NAME`); kept `'deployment.environment'` as plain string to maintain cross-service key consistency with Go/Python services (not using `ATTR_DEPLOYMENT_ENVIRONMENT_NAME` which maps to `'deployment.environment.name'`).
+- Files modified: `services/xstockstrat-trader/src/telemetry.ts` (create), `services/xstockstrat-trader/instrumentation.ts` (create), `services/xstockstrat-trader/package.json`, `services/xstockstrat-trader/next.config.js`, `services/xstockstrat-trader/pnpm-lock.yaml`, `services/xstockstrat-insights/src/telemetry.ts` (create), `services/xstockstrat-insights/instrumentation.ts` (create), `services/xstockstrat-insights/package.json`, `services/xstockstrat-insights/next.config.js`, `services/xstockstrat-insights/pnpm-lock.yaml`, `services/xstockstrat-config-ui/src/telemetry.ts` (create), `services/xstockstrat-config-ui/instrumentation.ts` (create), `services/xstockstrat-config-ui/package.json`, `services/xstockstrat-config-ui/next.config.js`, `services/xstockstrat-config-ui/pnpm-lock.yaml`
+
+### Step 9 — Infrastructure cleanup and documentation update [done]
+- Removed `OTEL_RESOURCE_ATTRIBUTES: environment=development,trading_mode=paper` from `x-common-env` in `docker-compose.yml`.
+- Cleared OTel collector resource processor to `attributes: []` in `packages/otel/otel-collector-config.yaml` (added a comment explaining attributes are now derived by each service).
+- Added `OTEL_EXPORTER_OTLP_ENDPOINT` (value: "") and `OTEL_EXPORTER_OTLP_HEADERS` (SECRET) to global envs in both `.do/app.dev.yaml` and `.do/app.yaml`.
+- Added `OTEL_SERVICE_NAME: xstockstrat-<name>` to all 13 instrumented service entries in both DO specs (trading, portfolio, marketdata, indicators, ingest, analysis, ledger, identity, notify, config, trader, insights, config-ui). nginx excluded (not instrumented).
+- Updated `docs/patterns/observability.md`: removed `OTEL_RESOURCE_ATTRIBUTES` table row; added paragraph explaining programmatic derivation; added Next.js row to per-language telemetry modules table.
+- Updated `docs/setup/grafana-cloud.md`: updated Step 3b bullet from "Attaches..." to "Derives..."; removed `OTEL_RESOURCE_ATTRIBUTES=...` line from Step 3b env var block; removed `OTEL_RESOURCE_ATTRIBUTES=...` line from Step 4 env var block; added note about resource attributes being derived automatically.
+- Updated `.env.example` comment from "per service" to "as a single global secret".
+- Verification: OTEL_RESOURCE_ATTRIBUTES absent from all env-setting contexts; 13 OTEL_SERVICE_NAME entries in each DO spec; global OTel endpoint/headers confirmed in both specs; collector resource processor shows `attributes: []`.
+- Feature lifecycle updated to `code-completed`.
+- Deviations: none.
+- Files modified: `docker-compose.yml`, `packages/otel/otel-collector-config.yaml`, `.do/app.dev.yaml`, `.do/app.yaml`, `docs/patterns/observability.md`, `docs/setup/grafana-cloud.md`, `.env.example`
+
+### Step 9 — Extended scope (post-merge corrections, same branch PR #277)
+
+User identified remaining inconsistencies after PR #277 was initially created. Extended Step 9 to cover:
+
+**GRAFANA_OTLP_* → standard OTel names**
+- Renamed `GRAFANA_OTLP_ENDPOINT` → `OTEL_EXPORTER_OTLP_ENDPOINT` and `GRAFANA_OTLP_TOKEN` → `OTEL_EXPORTER_OTLP_HEADERS` across all files: `docker-compose.yml`, `otel-collector-config.yaml`, `.env.example`, `.env.local`, `docs/setup/grafana-cloud.md`, `docs/setup/getting-started.md`, `docs/roadmap/implementation-roadmap.md`, `scripts/setup-env.sh`, `.claude/skills/onboard/SKILL.md`.
+
+**OTEL_SERVICE_NAME → SERVICE_NAME + strip xstockstrat- prefix**
+- All 13 telemetry init modules now read `SERVICE_NAME` (not `OTEL_SERVICE_NAME`).
+- Default fallback values stripped of `xstockstrat-` prefix (e.g. `"trading"` not `"xstockstrat-trading"`).
+- All 13 service entries in `docker-compose.yml`, `.do/app.yaml`, `.do/app.dev.yaml` updated from `OTEL_SERVICE_NAME: xstockstrat-<name>` → `SERVICE_NAME: <name>`.
+- All Grafana query examples in `docs/setup/grafana-cloud.md` updated to use short names.
+
+**OTEL_EXPORTER_OTLP_ENDPOINT moved from .env.local → .env**
+- Removed from committed `.env.local` (tightly coupled to Grafana credentials, belongs alongside `OTEL_EXPORTER_OTLP_HEADERS` in non-committed `.env`).
+- Updated `.env.example` 3-file convention comment, `getting-started.md` three-file table, `grafana-cloud.md` Step 3a.
+- `setup-env.sh` now prompts for endpoint and headers together.
+
+**DO app spec fix**
+- `OTEL_EXPORTER_OTLP_ENDPOINT: value: ""` → `scope: RUN_TIME` (no value) in both `.do/app.yaml` and `.do/app.dev.yaml` — empty string would have been passed to the OTel SDK at runtime.
+
+**Skills / tooling updated**
+- `.claude/skills/digitalocean-setup/SKILL.md` P6: added explicit regex block for injecting OTEL vars (different pattern from `value: ""` vars).
+- `.claude/skills/onboard/SKILL.md`: added `OTEL_EXPORTER_OTLP_ENDPOINT` to Phase 2 var list; corrected service count in Phase 4.
+
+- Decision: `OTEL_EXPORTER_OTLP_HEADERS` value format intentionally differs by deployment context — Docker collector uses header-value-only format (`Basic <token>`); DO SDK uses `key=value` format (`Authorization=Basic <token>`). Variable name is now consistent; format difference is documented in `.env.example` and `grafana-cloud.md`.
+- Deviations from original spec: SERVICE_NAME rename and GRAFANA_OTLP_* rename were not in the original spec — added at user request during Step 9 execution after observing continued inconsistency.
+- Implementation spec top-level status updated to `done`.

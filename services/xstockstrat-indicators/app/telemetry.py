@@ -24,13 +24,16 @@ def init_telemetry() -> None:
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
         endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317")
-        svc_name = os.getenv("OTEL_SERVICE_NAME", "xstockstrat-indicators")
+        svc_name = os.getenv("SERVICE_NAME", "indicators")
         environment = os.getenv("APPLICATION_ENV", "development")
+        trading_mode = os.getenv("TRADING_MODE", "paper")
 
         resource = Resource.create(
             {
                 "service.name": svc_name,
                 "deployment.environment": environment,
+                "trading_mode": trading_mode,
+                "platform": "xstockstrat",
             }
         )
         exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
