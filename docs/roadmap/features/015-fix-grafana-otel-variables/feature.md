@@ -1,9 +1,11 @@
 # Feature: fix-grafana-otel-variables
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
 **Development Branch**: `feature/fix-grafana-otel-variables`
 **Created**: 2026-05-21
 **Last Updated**: 2026-05-21
+**Committed to main**: 5342a70
+**Launched date**: 2026-05-21
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-05-21 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec regenerated with 9 steps (Path B: runtime derivation in telemetry init across all 13 services + infra cleanup) |
 | 2026-05-21 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — xstockstrat-trading Go telemetry updated |
 | 2026-05-21 | `in-progress` → `code-completed` | /sdd-execute | Step 9 complete — all 9 steps done |
+| 2026-05-21 | `code-completed` → `launched` | CI workflow (manual fallback) | Promoted via PR #281; committed 5342a70 to main |
 
 ---
 
