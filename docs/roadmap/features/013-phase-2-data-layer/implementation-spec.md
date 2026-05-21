@@ -265,7 +265,7 @@ Zero failures.
 
 ### Step 4 — service: fix GetPnL to compute realized P&L from ledger order.filled events
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify

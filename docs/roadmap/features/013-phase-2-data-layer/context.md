@@ -199,6 +199,11 @@ The existing portfolio subscriber (`portfolio_service.go:88`) already filters on
 - Files modified: `services/xstockstrat-trading/internal/service/trading.go`
 - Deviations: none
 
+### Step 4 — service: fix GetPnL to compute realized P&L from ledger order.filled events [done]
+- Added `"math"` import and `OrderID`/`FilledQty` fields to `orderFillPayload`. Replaced `GetPnL` stub body with two-pass `QueryEvents` algorithm: Pass 1 accumulates `order.filled` events into a signed avg-cost-basis accumulator and tracks `filledOrderIDs`; Pass 2 accumulates `order.partially_filled` keeping last per order ID, applying only those not seen in Pass 1. Returns `RealizedPnl`, `UnrealizedPnl`, and `TotalPnl`. Added `fillAccumulator` type. Build clean.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: none
+
 ### Step 3 — test: unit tests for broker fill price parsing [done]
 - Appended `TestGetOrder_AlpacaFilledAvgPrice` to alpaca_test.go (asserts string "75.50" parses to float64 75.50). Created ibkr_test.go with `TestGetOrder_IBKRAvgPrice` (asserts float64 avgPrice 82.25 propagates correctly). Both new tests pass; full suite with -race also clean.
 - Files modified: `services/xstockstrat-trading/internal/broker/alpaca_test.go`, `services/xstockstrat-trading/internal/broker/ibkr_test.go`
