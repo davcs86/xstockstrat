@@ -1,6 +1,6 @@
 # Feature: fix-grafana-otel-variables
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/fix-grafana-otel-variables`
 **Created**: 2026-05-21
 **Last Updated**: 2026-05-21
@@ -16,6 +16,7 @@
 | 2026-05-21 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps |
 | 2026-05-21 | `implementation-ready` → `spec-ready` | scope-revision | Path B adopted: runtime derivation in telemetry init; impl-spec reset for regeneration |
 | 2026-05-21 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec regenerated with 9 steps (Path B: runtime derivation in telemetry init across all 13 services + infra cleanup) |
+| 2026-05-21 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — xstockstrat-trading Go telemetry updated |
 
 ---
 
@@ -54,4 +55,4 @@ _(Snapshot finalized by /sdd-spec 2026-05-21. Re-run /sdd-spec if registry chang
 
 ## Next Action
 
-`` `/sdd-review fix-grafana-otel-variables impl-spec` — validate implementation spec, then `/sdd-execute fix-grafana-otel-variables` ``
+`/sdd-execute fix-grafana-otel-variables next` — continue with Step 2 (xstockstrat-portfolio Go telemetry)
