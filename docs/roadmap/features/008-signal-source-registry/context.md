@@ -24,6 +24,20 @@
 - extractor_module field is read-only in the UI after registration.
 - UI may optionally display extractor source code as a view-only reference (not a hard requirement).
 
+## Session 2026-05-21T00:01:00Z — sdd-spec
+
+- Generated implementation-spec.md with 11 steps. Status → implementation-ready.
+- Key codebase findings:
+  - Last ingest migration is `001_newsletter_signals.up.sql` → new migration is `002_add_signal_sources_registry`.
+  - `IngestServicer.__init__` at `app/handlers/servicer.py` L22–30 accepts `config_watcher, marketdata_channel, ledger_channel, db_pool`. Added `identity_channel` parameter (Step 6).
+  - `IDENTITY_ENDPOINT` absent from `xstockstrat-ingest` in all three deployment files (`docker-compose.yml` L271–287, `.do/app.dev.yaml` L138–153, `.do/app.yaml` L138–153) — must be added in Step 6.
+  - `INGEST_HTTP_ENDPOINT` absent from `xstockstrat-config-ui` in all three deployment files — must be added in Step 9.
+  - `ValidateApiKey` RPC confirmed in `packages/proto/identity/v1/identity.proto` L15, returns `TokenClaims { repeated string roles }` — admin gate checks `"admin" in roles`.
+  - `app/repositories/` and `app/extractors/` directories do not exist in `xstockstrat-ingest` — must be created from scratch in Steps 4 and 5.
+  - `google/protobuf/struct.proto` import pattern confirmed in `config/v1/config.proto` L8 and `analysis/v1/analysis.proto` L8 — safe to add to ingest proto.
+  - Connect-RPC HTTP route pattern in `http_server.py` L27–49: one `@app.post("/xstockstrat.ingest.v1.IngestService/MethodName")` per RPC using `_call()` helper. New routes for `ListSignalSources` (standard `_call`) and `ManageSignalSource` (new `_call_with_auth`) added in Step 7.
+  - Config-ui API route pattern (`app/api/config/route.ts`) uses raw `fetch` to `${ENDPOINT}/ServicePackage/MethodName` with `Content-Type: application/connect+json` — reused for `/api/sources/route.ts` in Step 9.
+
 ## Session 2026-05-21T00:00:00Z — sdd-review product-spec
 
 - Product spec approved. Status: draft → spec-ready.
