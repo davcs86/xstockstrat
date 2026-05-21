@@ -1,9 +1,9 @@
 # Feature: signal-source-registry
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/signal-source-registry`
 **Created**: 2026-05-16
-**Last Updated**: 2026-05-16
+**Last Updated**: 2026-05-21
 
 ---
 
@@ -12,13 +12,15 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-16 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-05-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
+| 2026-05-21 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec signal-source-registry`_
+- [Implementation Spec](implementation-spec.md) — numbered steps with codebase-grounded references
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -29,9 +31,7 @@ Add a DB-backed signal source registry to the ingest service that defines all va
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized by /sdd-spec on 2026-05-21. Re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
@@ -43,4 +43,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review signal-source-registry product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-execute signal-source-registry` — implementation spec reviewed and ready for execution
