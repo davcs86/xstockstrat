@@ -30,7 +30,7 @@
     "@opentelemetry/semantic-conventions": "^1.25.0",
     "google-protobuf": "^3.21.4",
     "pg": "^8.11.5",
-    "uuid": "^9.0.1",
+    "uuid": "^14.0.0",
     "winston": "^3.13.0"
   },
   "devDependencies": {
