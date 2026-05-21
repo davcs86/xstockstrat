@@ -3,6 +3,16 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-05-21
+
+### Features
+- fix-grafana-otel-variables: Fixes OTel env var configuration across docker-compose.yml and DigitalOcean app specs — runtime derivation of resource attributes in all 13 service telemetry modules, unified env var naming (OTEL_EXPORTER_OTLP_*), and SERVICE_NAME normalization. (`code-completed`)
+
+### Summary
+1 commit, 1 feature merge since last promotion.
+
+---
+
 ## 2026-05-16
 
 ### Summary
