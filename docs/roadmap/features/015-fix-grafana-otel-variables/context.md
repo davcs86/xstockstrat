@@ -66,3 +66,8 @@
 - Identical change to Step 1 applied to `internal/telemetry/otel.go`. `go build ./...` exits 0.
 - Files modified: `services/xstockstrat-portfolio/internal/telemetry/otel.go`
 - Deviations: none
+
+### Step 3 — Add `trading_mode` and `platform` attributes to Go telemetry — `xstockstrat-marketdata` [done]
+- Identical change applied to `internal/telemetry/otel.go`. `go build ./...` exits 0.
+- Files modified: `services/xstockstrat-marketdata/internal/telemetry/otel.go`
+- Deviations: none
