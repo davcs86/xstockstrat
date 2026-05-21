@@ -81,3 +81,8 @@
 - Identical change to Step 4 applied to `app/telemetry.py`. Import check passes.
 - Files modified: `services/xstockstrat-ingest/app/telemetry.py`
 - Deviations: none
+
+### Step 6 — Add `trading_mode` and `platform` attributes to Python telemetry — `xstockstrat-analysis` [done]
+- Identical change applied to `app/telemetry.py`. Import check passes.
+- Files modified: `services/xstockstrat-analysis/app/telemetry.py`
+- Deviations: none
