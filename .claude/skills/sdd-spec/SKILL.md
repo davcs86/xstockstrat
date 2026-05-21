@@ -92,6 +92,23 @@ h. Grep all three deployment files to record the service's current env var wirin
    **present** (no change needed). New ports must also be absent from the `ports:` block in
    `docker-compose.yml` and from port-related entries in the app specs.
 
+i. If the product spec is trading-domain-relevant — any of: `xstockstrat-trading` or
+   `xstockstrat-portfolio` in Affected Services, or mentions of IBKR, Alpaca, broker, order type,
+   order status, fill, or TRADING_MODE in the product spec — run these targeted surveys on each
+   affected service and record all matches in the relevant step's `**Codebase Evidence**` field:
+   ```bash
+   # Where paper/live gating is implemented today:
+   grep -rn "TRADING_MODE\|TradingMode\|trading_mode\|PAPER\|LIVE" services/<name>/
+   # How broker dispatch is currently handled:
+   grep -rn "BrokerType\|broker_type\|ALPACA\|IBKR\|AlpacaClient\|IBKRClient\|BrokerInterface" services/<name>/
+   # Which OrderType values are currently processed:
+   grep -rn "OrderType\|order_type\|ORDER_TYPE_MARKET\|ORDER_TYPE_LIMIT\|ORDER_TYPE_STOP\|ORDER_TYPE_TRAILING" services/<name>/
+   # Where fill state is currently tracked:
+   grep -rn "OrderStatus\|order_status\|PARTIALLY_FILLED\|FILLED\|filled_qty\|filled_avg_price" services/<name>/
+   ```
+   If a survey returns no matches, note "**not found** — pattern not yet present in this service"
+   in Codebase Evidence. These findings feed directly into the constraints in Step 5b.
+
 ### 4. Search proto files (if proto changes required)
 
 - Read `packages/proto/<service>/v1/<service>.proto` for each affected service
@@ -106,6 +123,20 @@ Before writing any step instruction, verify you have grep or Read evidence for e
 - ✗ "update the config handler" → ✓ "add key `ingest.signals.polygon.enabled` following the SetConfig call pattern at `services/xstockstrat-config/src/handlers/config.ts:L34`"
 - If a file or function is not found: write "**Not found** — this must be created from scratch; no existing pattern available in the codebase"
 - ✗ "add the env var to docker-compose" → ✓ "add `NEW_ENDPOINT: http://xstockstrat-new:8061` to the `xstockstrat-<name>` `environment:` block in `docker-compose.yml` (confirmed absent: `grep -n NEW_ENDPOINT docker-compose.yml` → no match); add `- key: NEW_ENDPOINT` / `value: ${xstockstrat-new.PRIVATE_URL}` to the `xstockstrat-<name>` `envs:` block in `.do/app.dev.yaml` and `.do/app.yaml` (confirmed absent: same grep)"
+
+### 5b. Trading-domain step constraints
+
+If the product spec is trading-domain-relevant (detected as in Step 3i), apply the following
+constraints when writing each affected step in Step 6. A step is "affected" when the Step 3i
+symbol survey produced matches relevant to that step's scope.
+
+| Domain | If step touches… | Required in **Instructions** | Required in **Verification** |
+|---|---|---|---|
+| **Docker Compose ↔ DO value parity** | `TRADING_MODE` or any env var with environment-specific values | State the exact value per deployment target: `TRADING_MODE: paper` in `docker-compose.yml` and `.do/app.dev.yaml`; `TRADING_MODE: live` in `.do/app.yaml` | `grep TRADING_MODE docker-compose.yml .do/app.dev.yaml .do/app.yaml` — confirm correct values in all three |
+| **Broker coverage** | `BrokerType`, Alpaca client, IBKR client, or order routing | Either handle all `BrokerType` values (ALPACA=1, IBKR=2) in this step — or add an explicit note: "`IBKR`/`ALPACA`: out of scope for this step — handled by Step N" or "other broker unaffected" | If handling both brokers: verify both dispatch paths are exercised in the test step |
+| **Trading mode gate** | Order placement, `PlaceOrder` RPC, or order submission logic | Include a `TRADING_MODE` check in Instructions — paper mode must not submit real orders; describe the conditional or the existing gate being reused (cite the grep hit from Step 3i) | `grep -n "TRADING_MODE\|TradingMode\|paper\|PAPER" <modified-file>` — confirm gate is present |
+| **Order type coverage** | `OrderType` enum, order creation, order dispatch, or routing | Enumerate which of the 5 `OrderType` values this step handles: MARKET, LIMIT, STOP, STOP_LIMIT, TRAILING_STOP — or state "order type handling unaffected by this step" | If adding type handling: confirm each named type is covered in the updated code |
+| **Fill state completeness** | `OrderStatus`, order fill callbacks, fill processing, or status updates | Address both `PARTIALLY_FILLED` and `FILLED` states in Instructions — describe how each is handled or propagated — or state "fill handling unaffected by this step" | Include a partial-fill test case alongside the full-fill (happy-path) case |
 
 ### 6. Write implementation-spec.md
 
