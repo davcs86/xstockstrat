@@ -41,3 +41,16 @@
   - Both DO app specs (`app.dev.yaml` and `app.yaml`): confirmed zero matches for `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` — all four vars entirely absent from both files; all 13 service entries confirmed present in each spec.
   - `docs/patterns/observability.md` line 18: `OTEL_RESOURCE_ATTRIBUTES` row shows `environment=dev,trading_mode=paper` — missing `platform=xstockstrat` and `service.name` with the Docker Compose vs. DO split note.
   - All steps are `config` or `docs` category; no `service`, `proto`, `migration`, or `test` steps required (no service source code changes, no proto/DB changes).
+
+## Session 2026-05-21T00:00:00Z — sdd-spec (regeneration, Path B)
+
+- Regenerated implementation-spec.md with 9 steps. Status → implementation-ready.
+- Key codebase findings:
+  - Go telemetry (3 services: trading, portfolio, marketdata): `internal/telemetry/otel.go` is identical across all three; currently sets `semconv.ServiceName` and `semconv.DeploymentEnvironment(APPLICATION_ENV)` — missing `trading_mode` and `platform`. Needs `"go.opentelemetry.io/otel/attribute"` import + `attribute.String(...)` calls.
+  - Python telemetry (3 services: indicators, ingest, analysis): `app/telemetry.py` is identical across all three; currently sets `"service.name"` and `"deployment.environment"` in `Resource.create({...})` — missing `"trading_mode"` and `"platform"`. Fix: add `trading_mode = os.getenv("TRADING_MODE", "paper")` + two dict keys.
+  - Node.js backend telemetry (4 services: ledger, identity, notify, config): `src/telemetry.ts` is identical across all four; currently sets `SEMRESATTRS_SERVICE_NAME` and `SEMRESATTRS_DEPLOYMENT_ENVIRONMENT` — missing `trading_mode` and `platform`. Plain string keys in `Resource` constructor (no new imports).
+  - Next.js frontends (3 services: trader, insights, config-ui): NO telemetry files exist yet — `src/telemetry.ts` and `instrumentation.ts` must be created from scratch. No `@opentelemetry` packages in `package.json`. Frontends use HTTP port 4318 (not gRPC 4317); use `@opentelemetry/exporter-trace-otlp-http`. `instrumentation.ts` (Next.js built-in hook) calls `register()` which dynamically imports `initTelemetry()`.
+  - `docker-compose.yml` line 21: `OTEL_RESOURCE_ATTRIBUTES` entry in x-common-env anchor — must be removed (only line 21).
+  - `packages/otel/otel-collector-config.yaml` lines 46–56: all three upsert entries in resource processor — replace with `attributes: []`.
+  - `.do/app.dev.yaml` and `.do/app.yaml`: `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` absent from global envs; `OTEL_SERVICE_NAME` absent from all 13 service entries. No `OTEL_RESOURCE_ATTRIBUTES` entries (correct — do not add).
+  - `.env.example` line 44: "per service via DO dashboard" → "as a single global secret via DO dashboard".
