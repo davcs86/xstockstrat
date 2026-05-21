@@ -158,7 +158,7 @@ Build must succeed. The `order.filled` event at `trading.go:514` will now emit a
 
 ### Step 3 — test: unit tests for broker fill price parsing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/alpaca_test.go` — modify (append new test)
