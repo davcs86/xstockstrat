@@ -345,7 +345,7 @@ Expected: `tsc --noEmit` exits 0 for all four; both keys present in all four fil
 
 ### Step 8 — service: Create `src/telemetry.ts` and `instrumentation.ts` for Next.js frontends
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-trader/src/telemetry.ts` — **create** (not found — `find services/xstockstrat-trader -name "telemetry*"` → no match)
@@ -603,6 +603,11 @@ Expected: no output.
 ---
 
 ## Deviation Log
+
+### Deviation: Step 8 — OTel package versions and API changes
+**Spec said**: Use `@opentelemetry/sdk-node: "^0.52.0"`, `@opentelemetry/resources: "^1.25.0"`, `@opentelemetry/semantic-conventions: "^1.25.0"`, `@opentelemetry/exporter-trace-otlp-http: "^0.52.0"`; use `new Resource({...})`, `SEMRESATTRS_SERVICE_NAME`, `SEMRESATTRS_DEPLOYMENT_ENVIRONMENT`.
+**Actual**: Upgraded to `@opentelemetry/sdk-node: "^0.218.0"`, `@opentelemetry/exporter-trace-otlp-http: "^0.218.0"`, `@opentelemetry/resources: "^2.7.1"`, `@opentelemetry/semantic-conventions: "^1.41.1"`. Used `resourceFromAttributes({...})` instead of `new Resource({...})`; used `ATTR_SERVICE_NAME` instead of `SEMRESATTRS_SERVICE_NAME`; used plain string `'deployment.environment'` instead of `ATTR_DEPLOYMENT_ENVIRONMENT_NAME` (which resolves to `'deployment.environment.name'` in semconv@1.41.1 — a different key that would break cross-service consistency in Grafana dashboards).
+**Reason**: User requested package version upgrades to latest. `resources@2.x` removed the `Resource` class constructor in favour of `resourceFromAttributes`; `semantic-conventions@1.41.1` renamed `SEMRESATTRS_*` to `ATTR_*` and changed the deployment environment key. Plain string `'deployment.environment'` kept to match Go/Python services.
 
 ### Deviation: Step 7 — Node.js backend telemetry verification
 **Spec said**: Run `pnpm exec tsc --noEmit` in each of the four service directories and confirm exit 0.
