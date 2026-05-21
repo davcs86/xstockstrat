@@ -522,7 +522,7 @@ Add a helper function and six test functions to `services/xstockstrat-portfolio/
    - After complete sell −50@70: acc.qty = −50 (short), costBasis = −3500.
    - After partial buy +50@50 (opposite direction, closing short): avgEntry = 70, realized += (−50) × (50 − 70) = +1000.
    - Expected realized == 1000.0.
-   - Note: Pass 1 (complete fills) is applied before Pass 2 (partial fills) regardless of chronological order; for this test case the result is equivalent to the chronologically correct order.
+   - Note: Pass 1 (complete fills) is applied before Pass 2 (partial fills) regardless of chronological order. On **Alpaca** this produces correct results in all cases: Alpaca prohibits simultaneous long and short positions in the same security (any order that would create an opposite-side position while the other side is open is rejected with `position intent mismatch`), making the problematic interleaved scenario structurally impossible. On **IBKR**: standard and margin accounts use netting mode by default (opposing positions are automatically offset, a buy closes a short) — same guarantee holds. IBKR Hedged mode (available for portfolio-margin/institutional accounts, must be explicitly enabled) does allow simultaneous long+short lots and would break this assumption; the current `IBKRConfig` struct has no hedge-mode flag, so the integration is assumed to target standard netting-mode accounts.
 
 **New logic lands in `internal/service/` which is excluded from CI coverage measurement** (confirmed by `grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)'` in the CI threshold command). No coverage threshold applies; integration test verification via build + run is sufficient.
 

@@ -34,9 +34,15 @@ FR-3. A shared system prompt file must be maintained at `services/xstockstrat-ag
 
 FR-4. The MCP server must be configurable via environment variables for all downstream service endpoints (`INGEST_HTTP_URL`, `NOTIFY_HTTP_URL`, `ANALYSIS_HTTP_URL`) so it works identically in local Docker Compose and on DigitalOcean.
 
-FR-5. The MCP server must support stdio transport (for Claude.ai desktop MCP integration) and SSE transport (for remote MCP connections). Transport is selected via the `MCP_TRANSPORT` environment variable (`stdio` | `sse`, default `stdio`).
+FR-5. The MCP server must support stdio transport (for Claude.ai desktop MCP integration) and SSE transport (for remote MCP connections). Transport is selected via the `MCP_TRANSPORT` environment variable (`stdio` | `sse`, default `stdio`). When running in SSE mode, the server listens on port 9000 and is exposed externally via `xstockstrat-nginx` at the path `/agent/sse` — operators connect using the nginx URL, not the raw port.
 
-FR-6. All downstream HTTP calls must include the `x-webhook-secret` header using the value from the `N8N_WEBHOOK_SECRET` environment variable. This also makes the MCP server the first caller to enforce the webhook secret that is documented but currently unimplemented across all services. (Note: the webhook secret enforcement on the service side is a separate security feature and is not in scope here — the MCP server sends the header regardless.)
+FR-5a. The SSE endpoint (`/agent/sse`) must require a valid API key in the `Authorization: Bearer <key>` header. The agent service validates the key against the identity service's `ValidateApiKey` RPC before accepting the SSE connection. Missing or invalid keys must return HTTP 401.
+
+FR-6. All downstream HTTP calls from the agent must include the `x-mcp-secret` header using the value from the `MCP_AGENT_SECRET` environment variable.
+
+FR-9. The webhook handlers in `xstockstrat-ingest`, `xstockstrat-notify`, and `xstockstrat-analysis` must enforce the `x-mcp-secret` header. When `MCP_AGENT_SECRET` is set in the receiving service's environment, any request to a `/webhooks/*` path that omits the header or presents a mismatched value must be rejected with HTTP 401. When `MCP_AGENT_SECRET` is empty the check is skipped (allows gradual rollout). The same `MCP_AGENT_SECRET` value must be configured in both the agent and all three receiving services.
+
+FR-10. A tool reference doc must be created at `docs/runbooks/mcp-tools.md`. It must document all four MCP tools (`list_signal_sources`, `ingest_signal`, `emit_alert`, `run_backtest`) with: purpose, all parameters (name, type, required/optional, description), return shape, and error cases. It must also cover the two transport modes (stdio vs SSE), the `MCP_AGENT_SECRET` enforcement behaviour, and link to `claude_mcp_config.json` for connection setup.
 
 FR-7. A `docker-compose.yml` override or service entry must allow running `xstockstrat-agent` locally alongside the existing stack.
 
@@ -48,14 +54,15 @@ FR-8. A `claude_mcp_config.json` example file must be included at `services/xsto
 - Email fetching or Gmail API integration (the operator pastes email content into Claude.ai manually in Phase 1).
 - Persistent run logging or audit trail beyond what the ledger already captures via each downstream service.
 - Any new gRPC proto changes — all calls go via existing HTTP webhook endpoints.
-- Implementing the webhook secret check on the service side (separate security feature).
 
 ## Affected Services
 
 - `xstockstrat-agent` — **new service** (Python, MCP server only, port 9000)
-- `xstockstrat-ingest` — called via HTTP (no code changes required)
-- `xstockstrat-notify` — called via HTTP (no code changes required)
-- `xstockstrat-analysis` — called via HTTP (no code changes required)
+- `xstockstrat-nginx` — new upstream block and `/agent/sse` location block added
+- `xstockstrat-identity` — called via `ValidateApiKey` RPC for SSE auth (no source changes required)
+- `xstockstrat-ingest` — called via HTTP; **code changes required** — add `x-mcp-secret` middleware to webhook handlers (FR-9)
+- `xstockstrat-notify` — called via HTTP; **code changes required** — add `x-mcp-secret` check to webhook router (FR-9)
+- `xstockstrat-analysis` — called via HTTP; **code changes required** — add `x-mcp-secret` middleware to webhook handlers (FR-9)
 
 ## Proto Contract Changes
 
@@ -67,10 +74,11 @@ No new config service keys. All configuration is via environment variables on th
 
 | Variable | Description |
 |---|---|
-| `INGEST_HTTP_URL` | Base URL for xstockstrat-ingest HTTP (default `http://xstockstrat-ingest:8055`) |
-| `NOTIFY_HTTP_URL` | Base URL for xstockstrat-notify HTTP (default `http://xstockstrat-notify:8059`) |
-| `ANALYSIS_HTTP_URL` | Base URL for xstockstrat-analysis HTTP (default `http://xstockstrat-analysis:8056`) |
-| `N8N_WEBHOOK_SECRET` | Shared secret sent as `x-webhook-secret` header on all downstream calls |
+| `INGEST_HTTP_ENDPOINT` | Base URL for xstockstrat-ingest HTTP Connect-RPC + webhooks (default `http://xstockstrat-ingest:8055`) |
+| `NOTIFY_HTTP_ENDPOINT` | Base URL for xstockstrat-notify HTTP webhooks (default `http://xstockstrat-notify:8059`) |
+| `ANALYSIS_HTTP_ENDPOINT` | Base URL for xstockstrat-analysis HTTP webhooks (default `http://xstockstrat-analysis:8056`) |
+| `IDENTITY_ENDPOINT` | gRPC address for identity service (default `xstockstrat-identity:50058`) |
+| `MCP_AGENT_SECRET` | Shared secret sent as `x-mcp-secret` header on all downstream calls (optional; header omitted when empty) |
 | `MCP_TRANSPORT` | `stdio` or `sse` (default `stdio`) |
 | `MCP_SSE_PORT` | Port for SSE transport listener (default `9000`) |
 
@@ -82,8 +90,8 @@ No new config service keys. All configuration is via environment variables on th
 
 Branch to create: `feature/agent-mcp-server` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (new service addition)
-- [x] Platform Lead approval (new service, new port assignment)
+- [x] 1 service owner approval (new service addition, nginx routing change)
+- [x] Platform Lead approval (new service, new port assignment, DO app spec addition)
 - [ ] 2 service owners + platform lead (breaking proto change) — not applicable
 - [ ] DBA review + service owner (schema migration) — not applicable
 
@@ -95,11 +103,16 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 4. `ingest_signal` called with an unknown source slug returns a tool error (propagated from ingest's `INVALID_ARGUMENT`).
 5. `emit_alert` successfully emits an alert visible in xstockstrat-notify.
 6. `run_backtest` triggers a backtest and returns results.
-7. All downstream calls include the `x-webhook-secret` header when `N8N_WEBHOOK_SECRET` is set.
+7. All downstream calls from the agent include the `x-mcp-secret` header when `MCP_AGENT_SECRET` is set.
+13. Requests to `/webhooks/*` endpoints on ingest, notify, and analysis without a valid `x-mcp-secret` header return HTTP 401 when `MCP_AGENT_SECRET` is configured on the receiving service.
+14. `docs/runbooks/mcp-tools.md` exists and contains a parameter table for each of the four MCP tools, a return shape section, and an error cases section.
 8. The MCP server is connectable from Claude.ai using the config in `claude_mcp_config.json`.
 9. An operator can paste an email body into Claude.ai, Claude calls `list_signal_sources` then `ingest_signal`, and the signal appears in the ingest DB — end to end.
+10. The SSE endpoint at `/agent/sse` (via nginx port 80) returns HTTP 401 when the `Authorization` header is absent or the API key is invalid.
+11. The SSE endpoint accepts a valid admin API key and establishes an SSE connection successfully.
+12. `xstockstrat-agent` starts successfully on DigitalOcean dev app alongside the existing stack.
 
 ## Open Questions
 
-- [ ] Should `xstockstrat-agent` be added to the DigitalOcean app spec (`.do/app.dev.yaml` / `.do/app.yaml`) for deployment, or is it local-only in Phase 1?
-- [ ] Should the SSE transport be exposed via nginx (the existing reverse proxy) or directly on port 9000?
+- [x] Should `xstockstrat-agent` be added to the DigitalOcean app spec? **RESOLVED**: Yes — added to both `.do/app.dev.yaml` and `.do/app.yaml`.
+- [x] Should the SSE transport be exposed via nginx or directly on port 9000? **RESOLVED**: Via nginx at `/agent/sse`. API key auth (validated via identity service `ValidateApiKey`) required on the SSE endpoint.
