@@ -23,3 +23,13 @@
 - credentials_ref never returned in any response; replaced by has_credentials boolean flag.
 - extractor_module field is read-only in the UI after registration.
 - UI may optionally display extractor source code as a view-only reference (not a hard requirement).
+
+## Session 2026-05-21T00:00:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings:
+  - `packages/proto` listed under Affected Services but is not in the Service Registry; advisory only — proto changes are already documented in Proto Contract Changes.
+  - Feature `wire-fe-auth` (012, code-completed) also modifies `xstockstrat-config-ui` — coordinate merge order.
+  - Feature `wire-fe-auth` (012, code-completed) also modifies `xstockstrat-ingest` — coordinate merge order.
+- Open question resolved: no seeding strategy required; sources are registered on-demand by operators via the config-ui `/sources` page after deployment.
+- Overlap findings: no FAIL-level conflicts with any active concurrent feature.

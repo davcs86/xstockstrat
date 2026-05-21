@@ -157,4 +157,4 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] What is the seeding strategy for initial sources — migration seed data, or a bootstrap admin call via the UI?
+- [x] What is the seeding strategy for initial sources — migration seed data, or a bootstrap admin call via the UI? **RESOLVED**: No seeding strategy required. Sources are registered on-demand by operators via the `/sources` page in config-ui after deployment. The migration is purely structural.

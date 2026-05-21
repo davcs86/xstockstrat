@@ -1,6 +1,6 @@
 # Feature: signal-source-registry
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/signal-source-registry`
 **Created**: 2026-05-16
 **Last Updated**: 2026-05-16
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-16 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-05-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 
 ---
 
@@ -43,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review signal-source-registry product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec signal-source-registry` — generate implementation spec from the approved product spec
