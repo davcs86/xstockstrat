@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
@@ -103,14 +104,16 @@ func (s *PortfolioService) streamFills(ctx context.Context) error {
 	}
 }
 
-// orderFillPayload is the expected shape of the order.filled event payload.
+// orderFillPayload is the expected shape of the order.filled / order.partially_filled event payload.
 type orderFillPayload struct {
 	UserID    string  `json:"user_id"`
 	Symbol    string  `json:"symbol"`
-	Qty       float64 `json:"qty"` // positive = buy, negative = sell
+	Qty       float64 `json:"qty"`        // set by order.filled (total); zero for order.partially_filled
+	FilledQty float64 `json:"filled_qty"` // set by order.partially_filled (cumulative); zero for order.filled
 	FillPrice float64 `json:"fill_price"`
 	Mode      string  `json:"trading_mode"` // "TRADING_MODE_PAPER" | "TRADING_MODE_LIVE"
 	AccountId string  `json:"account_id"`
+	OrderID   string  `json:"order_id"`
 }
 
 func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1.LedgerEvent) {
@@ -265,8 +268,146 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 			unrealized += (price - p.AvgEntryPrice) * p.Qty
 		}
 	}
+
+	var realized float64
+	accs := make(map[string]*fillAccumulator)
+	filledOrderIDs := make(map[string]bool)
+	latestPartials := make(map[string]orderFillPayload)
+
+	applyFill := func(qty, fillPrice float64, symbol string) {
+		acc := accs[symbol]
+		if acc == nil {
+			acc = &fillAccumulator{}
+			accs[symbol] = acc
+		}
+		sameDirection := acc.qty == 0 || (qty > 0) == (acc.qty > 0)
+		if sameDirection {
+			acc.qty += qty
+			acc.costBasis += qty * fillPrice
+		} else {
+			avgEntry := acc.costBasis / acc.qty
+			closeQty := qty
+			if math.Abs(closeQty) > math.Abs(acc.qty) {
+				closeQty = -acc.qty
+			}
+			realized += (-closeQty) * (fillPrice - avgEntry)
+			oldQty := acc.qty
+			acc.qty += closeQty
+			if math.Abs(acc.qty) < 1e-9 {
+				acc.qty = 0
+				acc.costBasis = 0
+			} else {
+				acc.costBasis = acc.costBasis * acc.qty / oldQty
+			}
+			remainder := qty - closeQty
+			if math.Abs(remainder) > 1e-9 {
+				acc.qty += remainder
+				acc.costBasis += remainder * fillPrice
+			}
+		}
+	}
+
+	// Pass 1 — query order.filled events; accumulate realized P&L and track completed order IDs.
+	var pageToken string
+	for {
+		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
+			EventType:     "order.filled",
+			SourceService: "trading",
+			Page:          &commonv1.PageRequest{PageSize: 500, PageToken: pageToken},
+		})
+		if err != nil {
+			slog.Warn("GetPnL: QueryEvents (filled) failed", "error", err)
+			break
+		}
+		for _, ev := range resp.GetEvents() {
+			if ev.Payload == nil {
+				continue
+			}
+			raw, err := ev.Payload.MarshalJSON()
+			if err != nil {
+				continue
+			}
+			var fill orderFillPayload
+			if err := json.Unmarshal(raw, &fill); err != nil {
+				continue
+			}
+			if fill.UserID != req.UserId {
+				continue
+			}
+			if req.TradingMode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
+				fillMode := commonv1.TradingMode_TRADING_MODE_PAPER
+				if fill.Mode == "TRADING_MODE_LIVE" {
+					fillMode = commonv1.TradingMode_TRADING_MODE_LIVE
+				}
+				if fillMode != req.TradingMode {
+					continue
+				}
+			}
+			filledOrderIDs[fill.OrderID] = true
+			applyFill(fill.Qty, fill.FillPrice, fill.Symbol)
+		}
+		if resp.GetPage().GetNextPageToken() == "" {
+			break
+		}
+		pageToken = resp.GetPage().GetNextPageToken()
+	}
+
+	// Pass 2 — query order.partially_filled events; keep last per order ID (highest cumulative FilledQty).
+	pageToken = ""
+	for {
+		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
+			EventType:     "order.partially_filled",
+			SourceService: "trading",
+			Page:          &commonv1.PageRequest{PageSize: 500, PageToken: pageToken},
+		})
+		if err != nil {
+			slog.Warn("GetPnL: QueryEvents (partially_filled) failed", "error", err)
+			break
+		}
+		for _, ev := range resp.GetEvents() {
+			if ev.Payload == nil {
+				continue
+			}
+			raw, err := ev.Payload.MarshalJSON()
+			if err != nil {
+				continue
+			}
+			var fill orderFillPayload
+			if err := json.Unmarshal(raw, &fill); err != nil {
+				continue
+			}
+			if fill.UserID != req.UserId {
+				continue
+			}
+			if req.TradingMode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
+				fillMode := commonv1.TradingMode_TRADING_MODE_PAPER
+				if fill.Mode == "TRADING_MODE_LIVE" {
+					fillMode = commonv1.TradingMode_TRADING_MODE_LIVE
+				}
+				if fillMode != req.TradingMode {
+					continue
+				}
+			}
+			// Events arrive in recorded_at order; overwrite = keep last (highest cumulative FilledQty).
+			latestPartials[fill.OrderID] = fill
+		}
+		if resp.GetPage().GetNextPageToken() == "" {
+			break
+		}
+		pageToken = resp.GetPage().GetNextPageToken()
+	}
+	// Apply partial fills only for orders that never reached order.filled status.
+	for orderID, fill := range latestPartials {
+		if filledOrderIDs[orderID] {
+			continue
+		}
+		applyFill(fill.FilledQty, fill.FillPrice, fill.Symbol)
+	}
+
 	return &portfoliov1.PnLResponse{
+		RealizedPnl:   realized,
 		UnrealizedPnl: unrealized,
+		TotalPnl:      realized + unrealized,
 		Range:         req.Range,
 	}, nil
 }
@@ -413,6 +554,12 @@ func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey s
 	if err != nil {
 		slog.Warn("ledger append failed", "event_type", eventType, "error", err)
 	}
+}
+
+// fillAccumulator tracks signed average-cost-basis state per symbol for realized P&L computation.
+type fillAccumulator struct {
+	qty       float64 // signed: positive = long, negative = short
+	costBasis float64 // signed: qty × avg_entry_price
 }
 
 // positionSyncPayload is the expected shape of the account.positions.synced event payload.
