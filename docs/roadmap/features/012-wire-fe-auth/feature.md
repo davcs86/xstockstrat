@@ -3,7 +3,7 @@
 **Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/wire-fe-auth`
 **Created**: 2026-05-18
-**Last Updated**: 2026-05-19
+**Last Updated**: 2026-05-21
 
 ---
 
@@ -44,4 +44,4 @@ _(Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry chan
 
 ## Next Action
 
-`/sdd-review wire-fe-auth impl-spec` — validate implementation spec, then `/sdd-execute wire-fe-auth`
+Integration PR #248 merged to `main-dev` on 2026-05-19. Run `/promote` to create a production promotion PR — CI will automatically mark this feature `launched` when that PR merges to `main`.
