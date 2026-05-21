@@ -1,6 +1,6 @@
 # Implementation Spec: fix-grafana-otel-variables
 
-**Status**: `in-progress`
+**Status**: `done`
 **Created**: 2026-05-21
 **Feature**: `docs/roadmap/features/015-fix-grafana-otel-variables/feature.md`
 **Total Steps**: 9

@@ -113,3 +113,32 @@
 - Feature lifecycle updated to `code-completed`.
 - Deviations: none.
 - Files modified: `docker-compose.yml`, `packages/otel/otel-collector-config.yaml`, `.do/app.dev.yaml`, `.do/app.yaml`, `docs/patterns/observability.md`, `docs/setup/grafana-cloud.md`, `.env.example`
+
+### Step 9 — Extended scope (post-merge corrections, same branch PR #277)
+
+User identified remaining inconsistencies after PR #277 was initially created. Extended Step 9 to cover:
+
+**GRAFANA_OTLP_* → standard OTel names**
+- Renamed `GRAFANA_OTLP_ENDPOINT` → `OTEL_EXPORTER_OTLP_ENDPOINT` and `GRAFANA_OTLP_TOKEN` → `OTEL_EXPORTER_OTLP_HEADERS` across all files: `docker-compose.yml`, `otel-collector-config.yaml`, `.env.example`, `.env.local`, `docs/setup/grafana-cloud.md`, `docs/setup/getting-started.md`, `docs/roadmap/implementation-roadmap.md`, `scripts/setup-env.sh`, `.claude/skills/onboard/SKILL.md`.
+
+**OTEL_SERVICE_NAME → SERVICE_NAME + strip xstockstrat- prefix**
+- All 13 telemetry init modules now read `SERVICE_NAME` (not `OTEL_SERVICE_NAME`).
+- Default fallback values stripped of `xstockstrat-` prefix (e.g. `"trading"` not `"xstockstrat-trading"`).
+- All 13 service entries in `docker-compose.yml`, `.do/app.yaml`, `.do/app.dev.yaml` updated from `OTEL_SERVICE_NAME: xstockstrat-<name>` → `SERVICE_NAME: <name>`.
+- All Grafana query examples in `docs/setup/grafana-cloud.md` updated to use short names.
+
+**OTEL_EXPORTER_OTLP_ENDPOINT moved from .env.local → .env**
+- Removed from committed `.env.local` (tightly coupled to Grafana credentials, belongs alongside `OTEL_EXPORTER_OTLP_HEADERS` in non-committed `.env`).
+- Updated `.env.example` 3-file convention comment, `getting-started.md` three-file table, `grafana-cloud.md` Step 3a.
+- `setup-env.sh` now prompts for endpoint and headers together.
+
+**DO app spec fix**
+- `OTEL_EXPORTER_OTLP_ENDPOINT: value: ""` → `scope: RUN_TIME` (no value) in both `.do/app.yaml` and `.do/app.dev.yaml` — empty string would have been passed to the OTel SDK at runtime.
+
+**Skills / tooling updated**
+- `.claude/skills/digitalocean-setup/SKILL.md` P6: added explicit regex block for injecting OTEL vars (different pattern from `value: ""` vars).
+- `.claude/skills/onboard/SKILL.md`: added `OTEL_EXPORTER_OTLP_ENDPOINT` to Phase 2 var list; corrected service count in Phase 4.
+
+- Decision: `OTEL_EXPORTER_OTLP_HEADERS` value format intentionally differs by deployment context — Docker collector uses header-value-only format (`Basic <token>`); DO SDK uses `key=value` format (`Authorization=Basic <token>`). Variable name is now consistent; format difference is documented in `.env.example` and `grafana-cloud.md`.
+- Deviations from original spec: SERVICE_NAME rename and GRAFANA_OTLP_* rename were not in the original spec — added at user request during Step 9 execution after observing continued inconsistency.
+- Implementation spec top-level status updated to `done`.
