@@ -77,3 +77,14 @@
   - Env var: `WEBHOOK_SECRET` → `MCP_AGENT_SECRET`
   - Header: `x-webhook-secret` → `x-mcp-secret`
 - Prior session notes in this context.md retain the old names — they are the historical decision log and are not rewritten.
+
+## Session 2026-05-21T00:10:00Z — move x-mcp-secret enforcement into scope
+
+- Service-side header enforcement was previously Out of Scope; moved in scope at operator request.
+- Added FR-9: ingest, notify, and analysis must reject `/webhooks/*` requests with an absent or mismatched `x-mcp-secret` header when `MCP_AGENT_SECRET` is set on the receiving service. Check is skipped when env var is empty (safe gradual rollout).
+- Removed Out of Scope bullet that exempted service-side enforcement.
+- Updated Affected Services: ingest, notify, analysis now marked as requiring code changes.
+- Fixed stale `N8N_MCP_AGENT_SECRET` → `MCP_AGENT_SECRET` in AC-7 (missed by previous rename session).
+- Added AC-13: receiving services return 401 when enforcement is active and header is invalid.
+- Added Step 12 to implementation-spec (total steps 11 → 12): Starlette `@app.middleware("http")` guard on ingest and analysis; inline check in notify's webhook router; `MCP_AGENT_SECRET` env var added to all three service blocks in docker-compose and DO specs.
+- Step 12 is independent of Steps 1–11 and can execute at any point during the feature.

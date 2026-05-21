@@ -38,7 +38,9 @@ FR-5. The MCP server must support stdio transport (for Claude.ai desktop MCP int
 
 FR-5a. The SSE endpoint (`/agent/sse`) must require a valid API key in the `Authorization: Bearer <key>` header. The agent service validates the key against the identity service's `ValidateApiKey` RPC before accepting the SSE connection. Missing or invalid keys must return HTTP 401.
 
-FR-6. All downstream HTTP calls must include the `x-mcp-secret` header using the value from the `MCP_AGENT_SECRET` environment variable. The MCP agent uses this to identify itself to platform service endpoints. (Note: the header enforcement on the service side is a separate security feature and is not in scope here — the MCP server sends the header regardless.)
+FR-6. All downstream HTTP calls from the agent must include the `x-mcp-secret` header using the value from the `MCP_AGENT_SECRET` environment variable.
+
+FR-9. The webhook handlers in `xstockstrat-ingest`, `xstockstrat-notify`, and `xstockstrat-analysis` must enforce the `x-mcp-secret` header. When `MCP_AGENT_SECRET` is set in the receiving service's environment, any request to a `/webhooks/*` path that omits the header or presents a mismatched value must be rejected with HTTP 401. When `MCP_AGENT_SECRET` is empty the check is skipped (allows gradual rollout). The same `MCP_AGENT_SECRET` value must be configured in both the agent and all three receiving services.
 
 FR-7. A `docker-compose.yml` override or service entry must allow running `xstockstrat-agent` locally alongside the existing stack.
 
@@ -50,16 +52,15 @@ FR-8. A `claude_mcp_config.json` example file must be included at `services/xsto
 - Email fetching or Gmail API integration (the operator pastes email content into Claude.ai manually in Phase 1).
 - Persistent run logging or audit trail beyond what the ledger already captures via each downstream service.
 - Any new gRPC proto changes — all calls go via existing HTTP webhook endpoints.
-- Implementing the `x-mcp-secret` header check on the service side (separate security feature).
 
 ## Affected Services
 
 - `xstockstrat-agent` — **new service** (Python, MCP server only, port 9000)
 - `xstockstrat-nginx` — new upstream block and `/agent/sse` location block added
 - `xstockstrat-identity` — called via `ValidateApiKey` RPC for SSE auth (no source changes required)
-- `xstockstrat-ingest` — called via HTTP (no code changes required)
-- `xstockstrat-notify` — called via HTTP (no code changes required)
-- `xstockstrat-analysis` — called via HTTP (no code changes required)
+- `xstockstrat-ingest` — called via HTTP; **code changes required** — add `x-mcp-secret` middleware to webhook handlers (FR-9)
+- `xstockstrat-notify` — called via HTTP; **code changes required** — add `x-mcp-secret` check to webhook router (FR-9)
+- `xstockstrat-analysis` — called via HTTP; **code changes required** — add `x-mcp-secret` middleware to webhook handlers (FR-9)
 
 ## Proto Contract Changes
 
@@ -100,7 +101,8 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 4. `ingest_signal` called with an unknown source slug returns a tool error (propagated from ingest's `INVALID_ARGUMENT`).
 5. `emit_alert` successfully emits an alert visible in xstockstrat-notify.
 6. `run_backtest` triggers a backtest and returns results.
-7. All downstream calls include the `x-mcp-secret` header when `N8N_MCP_AGENT_SECRET` is set.
+7. All downstream calls from the agent include the `x-mcp-secret` header when `MCP_AGENT_SECRET` is set.
+13. Requests to `/webhooks/*` endpoints on ingest, notify, and analysis without a valid `x-mcp-secret` header return HTTP 401 when `MCP_AGENT_SECRET` is configured on the receiving service.
 8. The MCP server is connectable from Claude.ai using the config in `claude_mcp_config.json`.
 9. An operator can paste an email body into Claude.ai, Claude calls `list_signal_sources` then `ingest_signal`, and the signal appears in the ingest DB — end to end.
 10. The SSE endpoint at `/agent/sse` (via nginx port 80) returns HTTP 401 when the `Authorization` header is absent or the API key is invalid.

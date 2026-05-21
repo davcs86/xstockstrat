@@ -3,14 +3,14 @@
 **Status**: `pending`
 **Created**: 2026-05-21
 **Feature**: `docs/roadmap/features/009-agent-mcp-server/feature.md`
-**Total Steps**: 11
+**Total Steps**: 12
 **Feature Branch**: `feature/agent-mcp-server`
 
 ---
 
 ## Execution Summary
 
-This is a new standalone Python service with no proto changes and no DB migrations. Steps execute in this order: Step 1 creates the full service scaffold (pyproject.toml with all required deps including grpcio and protobuf for identity calls, Dockerfile with proto stubs layer, app package structure); Step 2 implements the HTTP client wrapper; Step 3 implements API-key auth middleware for SSE connections using the identity gRPC stub; Step 4 implements the MCP server core (tool definitions and main entry point with auth-gated SSE transport); Step 5 adds the system prompt file; Step 6 wires the service into docker-compose and `.env.example`; Step 7 adds nginx upstream and `/agent/sse` location block; Step 8 adds the service to `.do/app.dev.yaml` and `.do/app.yaml` and updates the nginx env vars in both; Step 9 adds the `claude_mcp_config.json` operator config file; Step 10 covers tests. Steps 2–9 require Step 1. Steps 2 and 5 are independent of each other. Step 4 requires Steps 2 and 3. Step 7 requires Step 6 (the `XSTOCKSTRAT_AGENT_PRIVATE_URL` env var added to nginx in Step 8 must match the agent entry added to the DO specs in Step 8, so Steps 7 and 8 should be executed together). Step 10 covers Steps 1–5. Step 11 updates the CLAUDE.md registry and is independent of all other steps.
+This is a new standalone Python service with no proto changes and no DB migrations. Steps execute in this order: Step 1 creates the full service scaffold (pyproject.toml with all required deps including grpcio and protobuf for identity calls, Dockerfile with proto stubs layer, app package structure); Step 2 implements the HTTP client wrapper; Step 3 implements API-key auth middleware for SSE connections using the identity gRPC stub; Step 4 implements the MCP server core (tool definitions and main entry point with auth-gated SSE transport); Step 5 adds the system prompt file; Step 6 wires the service into docker-compose and `.env.example`; Step 7 adds nginx upstream and `/agent/sse` location block; Step 8 adds the service to `.do/app.dev.yaml` and `.do/app.yaml` and updates the nginx env vars in both; Step 9 adds the `claude_mcp_config.json` operator config file; Step 10 covers tests. Steps 2–9 require Step 1. Steps 2 and 5 are independent of each other. Step 4 requires Steps 2 and 3. Step 7 requires Step 6 (the `XSTOCKSTRAT_AGENT_PRIVATE_URL` env var added to nginx in Step 8 must match the agent entry added to the DO specs in Step 8, so Steps 7 and 8 should be executed together). Step 10 covers Steps 1–5. Step 11 updates the CLAUDE.md registry and is independent of all other steps. Step 12 adds `x-mcp-secret` enforcement middleware to the three receiving services (ingest, notify, analysis) and adds `MCP_AGENT_SECRET` to their docker-compose and DO spec env blocks; Step 12 is independent of Steps 1–11 and can execute in any order relative to them.
 
 **Prerequisite**: Feature 008 (`signal-source-registry`) must be merged first — specifically its Step 7 (HTTP wiring for `ListSignalSources`), which adds the Connect-RPC route `POST /xstockstrat.ingest.v1.IngestService/ListSignalSources` on port 8055 that the `list_signal_sources` tool delegates to.
 
@@ -23,6 +23,7 @@ This is a new standalone Python service with no proto changes and no DB migratio
 - Step 11 (docs) is independent of all other steps.
 - Steps 7 and 8 (nginx/infrastructure) have no pytest test step: nginx config correctness is verified by the `docker nginx -t` syntax check in Step 7's Verification command; end-to-end SSE connectivity is covered by `scripts/integration-test.sh`. No Python coverage threshold applies to nginx config changes.
 - Step 9 (claude_mcp_config.json) has no pytest test step: correctness is verified by the `python3 -c "import json; json.load(...)"` command in Step 9's Verification.
+- Step 12 (service-side enforcement) modifies three existing services. Tests for the middleware live in each service's existing test suite. The Step 12 verification commands confirm the guard is present in each file without requiring re-running full test suites.
 
 ---
 
@@ -1259,6 +1260,91 @@ Confirm >= 40% coverage passes. The test suite covers all 4 tool delegation path
 grep -n "xstockstrat-agent" CLAUDE.md
 ```
 Confirm two matches: one in the Service Registry table, one in the Language Map.
+
+---
+
+### Step 12 — service: Add x-mcp-secret enforcement to ingest, notify, and analysis webhook handlers
+
+**Status**: `pending`
+**Services**: `xstockstrat-ingest`, `xstockstrat-notify`, `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-ingest/app/http_server.py` — modify (add `x-mcp-secret` middleware)
+- `services/xstockstrat-analysis/app/http_server.py` — modify (add `x-mcp-secret` middleware)
+- `services/xstockstrat-notify/src/webhooks/router.ts` — modify (add `x-mcp-secret` check)
+- `docker-compose.yml` — modify (add `MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}` to ingest, notify, analysis service blocks)
+- `.do/app.dev.yaml` — modify (add `MCP_AGENT_SECRET` SECRET entry to ingest, notify, analysis `envs:`)
+- `.do/app.yaml` — modify (same for prod)
+
+**Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion, newsletter source schema stability; Security — no secrets in config service state, secret keys use `secret.*` prefix
+
+**Codebase Evidence**:
+- **ingest webhook handler** confirmed: `services/xstockstrat-ingest/app/http_server.py:L72` — `@app.post("/webhooks/ingest-signal")`. App object is a FastAPI/Starlette app; middleware can be added via `@app.middleware("http")`.
+- **analysis webhook handler** confirmed: `services/xstockstrat-analysis/app/http_server.py:L46` — `@app.post("/webhooks/run-backtest")`. Same FastAPI/Starlette pattern.
+- **notify webhook router** confirmed: `services/xstockstrat-notify/src/webhooks/router.ts:L46` — `url === '/webhooks/emit-alert'`. Node.js HTTP router (not Express); check is added inside the conditional branch handling webhook paths.
+- `MCP_AGENT_SECRET` confirmed absent from ingest, notify, analysis environment blocks in `docker-compose.yml`: `grep -n "MCP_AGENT_SECRET" docker-compose.yml` → matches only the agent service block added by Step 6.
+- Starlette `@app.middleware("http")` pattern confirmed: `services/xstockstrat-ingest/app/http_server.py` — `app` is a Starlette/FastAPI instance; this decorator is the standard injection point for request-scoped guards.
+- `JSONResponse` import confirmed available in both Python services (already used for error responses in http_server.py).
+- `process.env` pattern confirmed in `services/xstockstrat-notify/src/` — standard Node.js env var access.
+
+**Instructions**:
+
+1. In `services/xstockstrat-ingest/app/http_server.py`, add the `x-mcp-secret` middleware immediately after the `app` object is instantiated and before any route definitions:
+   ```python
+   import os
+   from starlette.requests import Request
+   from starlette.responses import Response
+
+   _MCP_AGENT_SECRET = os.environ.get("MCP_AGENT_SECRET", "")
+
+   @app.middleware("http")
+   async def enforce_mcp_secret(request: Request, call_next):
+       if _MCP_AGENT_SECRET and request.url.path.startswith("/webhooks/"):
+           if request.headers.get("x-mcp-secret") != _MCP_AGENT_SECRET:
+               return Response("Unauthorized", status_code=401)
+       return await call_next(request)
+   ```
+   Note: `os` and `_MCP_AGENT_SECRET` may already be imported/defined — check for duplicates before adding. Scope the guard to `/webhooks/` paths only so Connect-RPC routes and health checks are unaffected.
+
+2. Apply the identical middleware to `services/xstockstrat-analysis/app/http_server.py` immediately after the `app` object is instantiated.
+
+3. In `services/xstockstrat-notify/src/webhooks/router.ts`, add the header check inside the webhook dispatch block, before any webhook-specific branch. The check should read `MCP_AGENT_SECRET` from `process.env` at module scope and validate it per-request:
+   ```typescript
+   const MCP_AGENT_SECRET = process.env.MCP_AGENT_SECRET ?? '';
+
+   // Inside the request handler, before dispatching to specific webhook handlers:
+   if (MCP_AGENT_SECRET && req.headers['x-mcp-secret'] !== MCP_AGENT_SECRET) {
+     res.writeHead(401, { 'Content-Type': 'application/json' });
+     res.end(JSON.stringify({ error: 'Unauthorized' }));
+     return;
+   }
+   ```
+   Place the `MCP_AGENT_SECRET` constant at the top of the module (after imports). Place the guard at the start of the handler that routes `/webhooks/*` requests, before the `url === '/webhooks/emit-alert'` branch at L46.
+
+4. Add `MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}` to the `environment:` block of the `xstockstrat-ingest`, `xstockstrat-notify`, and `xstockstrat-analysis` service entries in `docker-compose.yml`. Confirm the existing env block structure for each service before adding to avoid duplicate keys.
+
+5. Add a `MCP_AGENT_SECRET` SECRET entry to the `envs:` block of `xstockstrat-ingest`, `xstockstrat-notify`, and `xstockstrat-analysis` in both `.do/app.dev.yaml` and `.do/app.yaml`:
+   ```yaml
+   - key: MCP_AGENT_SECRET
+     scope: RUN_TIME
+     type: SECRET
+   ```
+
+**Verification**:
+```bash
+# Confirm middleware added to Python services
+grep -n "enforce_mcp_secret\|MCP_AGENT_SECRET\|x-mcp-secret" \
+  services/xstockstrat-ingest/app/http_server.py \
+  services/xstockstrat-analysis/app/http_server.py
+
+# Confirm check added to notify router
+grep -n "MCP_AGENT_SECRET\|x-mcp-secret" services/xstockstrat-notify/src/webhooks/router.ts
+
+# Confirm MCP_AGENT_SECRET added to receiving service blocks in docker-compose
+grep -n "MCP_AGENT_SECRET" docker-compose.yml
+
+# Confirm MCP_AGENT_SECRET added to DO specs for all three receiving services
+grep -n "MCP_AGENT_SECRET" .do/app.dev.yaml .do/app.yaml
+```
 
 ---
 
