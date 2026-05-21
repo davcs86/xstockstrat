@@ -235,7 +235,11 @@ psql "$DATABASE_URL" -c "\di ingest.signal_sources_active_idx"
    - Returns `None` if validation passes.
 
 **Verification**:
-Run the test step (Step 8) — `signal_sources.py` is exercised via unit tests with an asyncpg mock. No standalone run needed at this step.
+```bash
+cd services/xstockstrat-ingest
+python3 -c "from app.repositories.signal_sources import get_active_source, list_all_sources, upsert_source, deactivate_source, validate_config_json; print('import OK')"
+```
+Full behavioural coverage is in Step 8 (unit tests with asyncpg mock).
 
 ---
 
@@ -355,6 +359,9 @@ Both must print their success message without import errors.
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
 - `services/xstockstrat-ingest/app/main.py` — modify
+- `docker-compose.yml` — modify
+- `.do/app.dev.yaml` — modify
+- `.do/app.yaml` — modify
 
 **Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion, newsletter source schema stability; Security — credentials_ref never in responses, admin auth scope on ManageSignalSource, secret.* prefix enforced
 
