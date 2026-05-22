@@ -95,3 +95,17 @@
 - Added AC-14.
 - Added Step 13 to implementation spec (total steps 12 → 13): creates the runbook, adds an entry to `docs/runbooks/CLAUDE.md`, and adds a row to the root `CLAUDE.md` Context Guide table.
 - Step 13 requires Steps 4 and 5 to be final (tool signatures and system prompt content); otherwise independent.
+
+## Session 2026-05-22T00:00:00Z — sdd-spec (re-run)
+
+- Regenerated implementation-spec.md with 13 steps (same count, but Steps 4, 5, 10, 13 substantially updated). Status remains implementation-ready.
+- Key codebase findings:
+  - Product spec now defines 6 MCP tools (FR-2): `list_signal_sources`, `extract_email_content`, `extract_website_content`, `ingest_signal`, `emit_alert`, `run_backtest`. Previous spec only had 4 — `extract_email_content` and `extract_website_content` were missing.
+  - `list_signal_sources` must enrich the response with `extractor_tool` field derived via type-level mapping: `mediated_email_attachment`/`mediated_linked_email` → `"extract_email_content"`; `mediated_simple_website`/`mediated_authenticated_website` → `"extract_website_content"`; all others → null. Mapping lives in `_EXTRACTOR_TOOL_MAP` in `app/tools.py`.
+  - `extract_email_content` requires `pymupdf>=1.24.0` (PyMuPDF, `import fitz`) for password-protected PDF decryption. `pypdf2` and `pymupdf` confirmed absent from all pyproject.toml files.
+  - Credential resolution uses one-shot `GetConfig` gRPC call to xstockstrat-config (not WatchConfig stream). `ConfigServiceStub.GetConfig` confirmed in `packages/proto/gen/python/config/v1/config_pb2_grpc.py:L45–47`. `CONFIG_ENDPOINT` added as required env var to docker-compose, `.do/app.dev.yaml`, and `.do/app.yaml`.
+  - `build_app` factory pattern confirmed in both `services/xstockstrat-ingest/app/http_server.py:L18` and `services/xstockstrat-analysis/app/http_server.py:L18` — `@app.middleware("http")` decorator must be placed inside `build_app()` after `FastAPI()` instantiation at L19. Module-level `_MCP_AGENT_SECRET` reads env var once at startup.
+  - `os` import absent from `services/xstockstrat-ingest/app/http_server.py` — must be added when adding middleware in Step 12.
+  - `services/xstockstrat-notify/src/webhooks/router.ts` webhook guard goes after `readBody` at L43, before `url` variable at L44 (inside `createWebhookRouter` function's `webhookHandler`).
+  - `credentials_ref` from feature 008's `ingest.signal_sources` table must never be exposed in any tool response — confirmed by stripping it in `list_signal_sources` enrichment loop and not including it in `extract_email_content`/`extract_website_content` return values.
+  - `xstockstrat-agent` service directory does NOT yet exist — confirmed `ls services/xstockstrat-agent` → NOT FOUND. All 13 steps remain pending.

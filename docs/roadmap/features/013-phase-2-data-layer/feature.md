@@ -1,6 +1,8 @@
 # Feature: phase-2-data-layer
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 1ff20d531e007cc519788dc50af97b4317cfc381
+**Launched date**: 2026-05-22
 **Development Branch**: `feature/phase-2-data-layer`
 **Created**: 2026-05-19
 **Last Updated**: 2026-05-21
@@ -18,6 +20,7 @@
 | 2026-05-21 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — BrokerOrder.FilledAvgPrice added; both GetOrder implementations updated |
 | 2026-05-21 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done — trading fill price root cause fixed; portfolio GetPnL ledger query implemented |
 
+| 2026-05-22 | `code-completed` → `launched` | CI workflow | Promoted via PR #290; committed 1ff20d531e007cc519788dc50af97b4317cfc381 |
 ---
 
 ## Artifacts

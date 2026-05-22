@@ -6,33 +6,45 @@
 
 ## Problem Statement
 
-The platform has fully implemented webhook endpoints for signal ingestion, alerting, and backtesting, but no client-side orchestration layer exists to drive them from unstructured inputs like emails or analyst notes. Operators have no way to leverage AI reasoning over incoming signals without building bespoke tooling. Phase 1 delivers a manually-triggered MCP server that bridges Claude.ai to the platform's webhook endpoints, with zero scheduling infrastructure and human review of every action before it takes effect.
+The platform has fully implemented webhook endpoints for signal ingestion, alerting, and backtesting, but no client-side orchestration layer exists to drive them from unstructured inputs like newsletter emails. Operators have no way to leverage AI reasoning over incoming signals without building bespoke tooling. Phase 1 delivers a manually-triggered MCP server that bridges Claude.ai to the platform's webhook endpoints. Claude uses the Gmail MCP server to read emails, the agent MCP server to extract their content and ingest structured signals, with full visibility into every tool call before it takes effect.
 
 ## User Story
 
-As a platform operator, I want to connect Claude.ai to the platform's MCP server so that I can manually instruct Claude to read my emails and ingest structured trading signals, with full visibility into every tool call before it is executed.
+As a platform operator, I want to connect Claude.ai to the platform's MCP server so that I can manually instruct Claude to read my newsletter emails and ingest structured trading signals, with full visibility into every tool call before it is executed.
 
 ## Functional Requirements
 
 FR-1. A new Python service `xstockstrat-agent` must be created at `services/xstockstrat-agent/`, following the same project layout as `xstockstrat-ingest` (pyproject.toml, `app/` package, `Dockerfile`). It runs on port 9000 and has no gRPC server — it is an MCP server only.
 
-FR-2. The MCP server must expose the following tools, each delegating via HTTP to the corresponding existing webhook endpoint:
+FR-2. The MCP server must expose the following tools:
 
-| Tool | HTTP target | Notes |
+| Tool | Implementation | Notes |
 |---|---|---|
-| `list_signal_sources` | `GET`-equivalent call to ingest's `ListSignalSources` RPC via Connect-RPC HTTP | Returns slug, display_name, source_type for all active sources |
-| `ingest_signal` | `POST /webhooks/ingest-signal` on `xstockstrat-ingest:8055` | Full ExternalSignal fields; source slug validated by ingest (FR-3 of 008) |
+| `list_signal_sources` | Connect-RPC HTTP call to ingest's `ListSignalSources` RPC on port 8055, response enriched by the agent service | Accepts optional `source_type` filter (e.g. `["mediated_simple_email","mediated_email_attachment","mediated_linked_email","mediated_simple_website","mediated_authenticated_website"]`). Returns slug, display_name, source_type, full `config_json`, and an `extractor_tool` field per source. `extractor_tool` is derived by the agent service from `source_type` using a fixed mapping: `mediated_email_attachment` and `mediated_linked_email` → `"extract_email_content"`; `mediated_simple_website` and `mediated_authenticated_website` → `"extract_website_content"`; `mediated_simple_email` → `null` (Claude reads the email body directly). Claude must follow `extractor_tool` exactly and must not derive or infer routing from `source_type` or any other field. Claude must follow `extractor_tool` exactly and must not derive or infer routing from `source_type` or any other field. Claude uses the `config_json` patterns (sender_patterns, subject_patterns, url_patterns, etc.) to build Gmail MCP queries. The underlying `ListSignalSources` RPC and proto are unchanged; `extractor_tool` is added only in the agent service's tool response layer. |
+| `extract_email_content` | Implemented directly in the agent service | Called only when a source's `extractor_tool` field equals `"extract_email_content"` (`source_type` is `mediated_email_attachment` or `mediated_linked_email`). Accepts `source_slug` and either `attachments_b64` (list of base64-encoded bytes) or `urls` (list of strings) — at least one must be provided. Looks up the source's `credentials_ref`, resolves credentials from the config service if present, performs content extraction (decrypt password-protected PDFs, fetch gated URLs, etc.), and returns `{ raw_text: str }`. Claude reads this raw text and identifies signals — the tool does not parse or structure signals. Credentials are never exposed to Claude. |
+| `extract_website_content` | Implemented directly in the agent service | Called only when a source's `extractor_tool` field equals `"extract_website_content"` (`source_type` is `mediated_simple_website` or `mediated_authenticated_website`). Accepts `source_slug` only — the URL is read from `config_json.url` in the registry, so Claude never constructs or passes a URL. Looks up the source's `credentials_ref`, resolves credentials from the config service if present, fetches the page (authenticating if required), and returns `{ raw_text: str }`. Credentials are never exposed to Claude. |
+| `ingest_signal` | `POST /webhooks/ingest-signal` on `xstockstrat-ingest:8055` | Full ExternalSignal fields; source slug validated by ingest (FR-3 of feature 008). Claude calls this once per signal it identified in the raw text. |
 | `emit_alert` | `POST /webhooks/emit-alert` on `xstockstrat-notify:8059` | severity, category, title, body, source_service, target_user_id |
 | `run_backtest` | `POST /webhooks/run-backtest` on `xstockstrat-analysis:8056` | strategy_id, symbols, initial_capital |
 
 FR-3. A shared system prompt file must be maintained at `services/xstockstrat-agent/app/prompts/signal_extraction.md`. It must encode:
-  - How to identify a trading signal in freeform text
-  - Source slug lookup instructions (always call `list_signal_sources` first)
+  - The standard email ingestion flow:
+    1. Call `list_signal_sources` filtered to `["mediated_simple_email", "mediated_email_attachment", "mediated_linked_email"]`. Each source in the response includes `config_json` patterns and an `extractor_tool` field.
+    2. Use the returned `config_json` patterns (sender_patterns, subject_patterns) to query Gmail via the Gmail MCP server and retrieve matching emails.
+    3. For each matching email, check the source's `extractor_tool` field. If `null`, read the email body directly from the Gmail MCP response. If non-null, call that tool with the source slug and the relevant email content (attachments or URLs). Do not infer which path to take — follow `extractor_tool` exactly.
+    4. Identify trading signals from the content (body text or raw text returned by the extractor tool) using judgment — do not infer signals that are not clearly present.
+    5. For each identified signal, call `ingest_signal` with the structured fields extracted from the content.
+  - The standard website ingestion flow:
+    1. Call `list_signal_sources` filtered to `["mediated_simple_website", "mediated_authenticated_website"]`. Each source includes `config_json` (with url and scrape_selector) and an `extractor_tool` field.
+    2. For each source, call `extract_website_content(source_slug)`. The tool fetches the registered URL and handles authentication internally.
+    3. Identify trading signals from the returned raw text using judgment.
+    4. For each identified signal, call `ingest_signal`.
+  - How to identify a trading signal in freeform text (tickers, direction, conviction indicators)
   - Conviction scoring guidance (0.0–1.0 scale, what factors increase/decrease it)
-  - Mapping of the five source types to expected input formats
-  - When to call `emit_alert` vs. silently skip a non-actionable email
+  - When to call `emit_alert` vs. silently skip non-actionable content
+  - How to handle sources that match but contain no actionable signals
 
-FR-4. The MCP server must be configurable via environment variables for all downstream service endpoints (`INGEST_HTTP_URL`, `NOTIFY_HTTP_URL`, `ANALYSIS_HTTP_URL`) so it works identically in local Docker Compose and on DigitalOcean.
+FR-4. The MCP server must be configurable via environment variables for all downstream service endpoints so it works identically in local Docker Compose and on DigitalOcean.
 
 FR-5. The MCP server must support stdio transport (for Claude.ai desktop MCP integration) and SSE transport (for remote MCP connections). Transport is selected via the `MCP_TRANSPORT` environment variable (`stdio` | `sse`, default `stdio`). When running in SSE mode, the server listens on port 9000 and is exposed externally via `xstockstrat-nginx` at the path `/agent/sse` — operators connect using the nginx URL, not the raw port.
 
@@ -42,7 +54,7 @@ FR-6. All downstream HTTP calls from the agent must include the `x-mcp-secret` h
 
 FR-9. The webhook handlers in `xstockstrat-ingest`, `xstockstrat-notify`, and `xstockstrat-analysis` must enforce the `x-mcp-secret` header. When `MCP_AGENT_SECRET` is set in the receiving service's environment, any request to a `/webhooks/*` path that omits the header or presents a mismatched value must be rejected with HTTP 401. When `MCP_AGENT_SECRET` is empty the check is skipped (allows gradual rollout). The same `MCP_AGENT_SECRET` value must be configured in both the agent and all three receiving services.
 
-FR-10. A tool reference doc must be created at `docs/runbooks/mcp-tools.md`. It must document all four MCP tools (`list_signal_sources`, `ingest_signal`, `emit_alert`, `run_backtest`) with: purpose, all parameters (name, type, required/optional, description), return shape, and error cases. It must also cover the two transport modes (stdio vs SSE), the `MCP_AGENT_SECRET` enforcement behaviour, and link to `claude_mcp_config.json` for connection setup.
+FR-10. A tool reference doc must be created at `docs/runbooks/mcp-tools.md`. It must document all six MCP tools (`list_signal_sources`, `extract_email_content`, `extract_website_content`, `ingest_signal`, `emit_alert`, `run_backtest`) with: purpose, all parameters (name, type, required/optional, description), return shape, and error cases. It must also cover the two transport modes (stdio vs SSE), the `MCP_AGENT_SECRET` enforcement behaviour, credential opacity for both extraction tools, and link to `claude_mcp_config.json` for connection setup.
 
 FR-7. A `docker-compose.yml` override or service entry must allow running `xstockstrat-agent` locally alongside the existing stack.
 
@@ -51,16 +63,17 @@ FR-8. A `claude_mcp_config.json` example file must be included at `services/xsto
 ## Out of Scope
 
 - Scheduling or automated triggering (belongs in agent-scheduler, Phase 2).
-- Email fetching or Gmail API integration (the operator pastes email content into Claude.ai manually in Phase 1).
 - Persistent run logging or audit trail beyond what the ledger already captures via each downstream service.
 - Any new gRPC proto changes — all calls go via existing HTTP webhook endpoints.
+- Signal extraction logic — `extract_email_content` returns raw text only; Claude is responsible for identifying and structuring signals from that text.
+- Processing programmatic source types (`simple_email`, `email_attachment`, `linked_email`, `simple_website`, `authenticated_website`) via the agent — these are handled by the ingest service's Python extractor pipeline.
 
 ## Affected Services
 
 - `xstockstrat-agent` — **new service** (Python, MCP server only, port 9000)
 - `xstockstrat-nginx` — new upstream block and `/agent/sse` location block added
 - `xstockstrat-identity` — called via `ValidateApiKey` RPC for SSE auth (no source changes required)
-- `xstockstrat-ingest` — called via HTTP; **code changes required** — add `x-mcp-secret` middleware to webhook handlers (FR-9)
+- `xstockstrat-ingest` — called via HTTP for `list_signal_sources` and `ingest_signal`; **code changes required** — add `x-mcp-secret` middleware to webhook handlers (FR-9)
 - `xstockstrat-notify` — called via HTTP; **code changes required** — add `x-mcp-secret` check to webhook router (FR-9)
 - `xstockstrat-analysis` — called via HTTP; **code changes required** — add `x-mcp-secret` middleware to webhook handlers (FR-9)
 
@@ -98,21 +111,30 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 ## Acceptance Criteria
 
 1. `xstockstrat-agent` starts successfully alongside the existing Docker Compose stack with no errors.
-2. `list_signal_sources` returns the active sources registered in the ingest DB.
-3. `ingest_signal` called with a valid source slug and required fields creates a row in `ingest.newsletter_signals` and returns a signal_id.
-4. `ingest_signal` called with an unknown source slug returns a tool error (propagated from ingest's `INVALID_ARGUMENT`).
-5. `emit_alert` successfully emits an alert visible in xstockstrat-notify.
-6. `run_backtest` triggers a backtest and returns results.
-7. All downstream calls from the agent include the `x-mcp-secret` header when `MCP_AGENT_SECRET` is set.
-13. Requests to `/webhooks/*` endpoints on ingest, notify, and analysis without a valid `x-mcp-secret` header return HTTP 401 when `MCP_AGENT_SECRET` is configured on the receiving service.
-14. `docs/runbooks/mcp-tools.md` exists and contains a parameter table for each of the four MCP tools, a return shape section, and an error cases section.
-8. The MCP server is connectable from Claude.ai using the config in `claude_mcp_config.json`.
-9. An operator can paste an email body into Claude.ai, Claude calls `list_signal_sources` then `ingest_signal`, and the signal appears in the ingest DB — end to end.
-10. The SSE endpoint at `/agent/sse` (via nginx port 80) returns HTTP 401 when the `Authorization` header is absent or the API key is invalid.
-11. The SSE endpoint accepts a valid admin API key and establishes an SSE connection successfully.
-12. `xstockstrat-agent` starts successfully on DigitalOcean dev app alongside the existing stack.
+2. `list_signal_sources` with no filter returns all active sources including full `config_json` and an `extractor_tool` field. `mediated_email_attachment` and `mediated_linked_email` return `extractor_tool: "extract_email_content"`; `mediated_simple_website` and `mediated_authenticated_website` return `extractor_tool: "extract_website_content"`; `mediated_simple_email` and all non-mediated types return `extractor_tool: null`. The underlying ingest `ListSignalSources` RPC and proto are unchanged — `extractor_tool` is present only in the agent service's MCP tool response.
+3. `extract_email_content` called with a valid slug and attachments or URLs returns `{ raw_text: str }` with no credentials or internal config values exposed in the response. Called with neither attachments nor URLs it returns a tool error.
+4. `extract_email_content` called with a slug whose source has a `credentials_ref` resolves the credential from the config service and uses it during extraction without exposing it in the tool response.
+5. `extract_email_content` called with an unknown slug returns a tool error.
+5a. `extract_website_content` called with a valid slug fetches the registered URL and returns `{ raw_text: str }` with no credentials exposed. For a `mediated_authenticated_website` slug, the agent resolves credentials from the config service and authenticates without exposing the credential.
+5b. `extract_website_content` called with an unknown slug returns a tool error.
+6. `ingest_signal` called with a valid source slug and required fields creates a row in `ingest.newsletter_signals` and returns a signal_id.
+7. `ingest_signal` called with an unknown source slug returns a tool error (propagated from ingest's `INVALID_ARGUMENT`).
+8. `emit_alert` successfully emits an alert visible in xstockstrat-notify.
+9. `run_backtest` triggers a backtest and returns results.
+10. All downstream calls from the agent include the `x-mcp-secret` header when `MCP_AGENT_SECRET` is set.
+11. Requests to `/webhooks/*` endpoints on ingest, notify, and analysis without a valid `x-mcp-secret` header return HTTP 401 when `MCP_AGENT_SECRET` is configured on the receiving service.
+12. `docs/runbooks/mcp-tools.md` exists and contains a parameter table for each of the five MCP tools, a return shape section, and an error cases section.
+13. The MCP server is connectable from Claude.ai using the config in `claude_mcp_config.json`.
+14. End-to-end flow: Claude calls `list_signal_sources`, uses the returned patterns to find matching emails via Gmail MCP, calls `extract_email_content` per email, identifies signals from the raw text, calls `ingest_signal` per signal — and the signal appears in the ingest DB.
+15. The SSE endpoint at `/agent/sse` (via nginx port 80) returns HTTP 401 when the `Authorization` header is absent or the API key is invalid.
+16. The SSE endpoint accepts a valid admin API key and establishes an SSE connection successfully.
+17. `xstockstrat-agent` starts successfully on DigitalOcean dev app alongside the existing stack.
 
 ## Open Questions
 
 - [x] Should `xstockstrat-agent` be added to the DigitalOcean app spec? **RESOLVED**: Yes — added to both `.do/app.dev.yaml` and `.do/app.yaml`.
 - [x] Should the SSE transport be exposed via nginx or directly on port 9000? **RESOLVED**: Via nginx at `/agent/sse`. API key auth (validated via identity service `ValidateApiKey`) required on the SSE endpoint.
+- [x] Should `list_signal_sources` expose full `config_json` to Claude? **RESOLVED**: Yes — full `config_json` is returned for flexibility. Claude uses the patterns to build Gmail MCP queries.
+- [x] Should credentials/passwords be passed by Claude to `extract_email_content`? **RESOLVED**: No — the agent service resolves credentials internally using the source's `credentials_ref` from the signal source registry. Claude never sees credential values.
+- [x] Should `extract_email_content` return structured signals or raw text? **RESOLVED**: Raw text only. Signal identification and structuring is Claude's responsibility; the tool handles content extraction only (decrypt, fetch, deprotect).
+- [x] Where should the `extractor_tool` routing live — per-source config, 008's config_json, or type-level mapping? **RESOLVED**: Type-level mapping in the agent service, derived from `source_type` values defined in 008. Five `mediated_*` types mirror the five programmatic types 1:1. `mediated_email_attachment` and `mediated_linked_email` map to `"extract_email_content"`; all others map to `null`. Adding a new Claude-mediated extraction path requires a new source type in 008, which is appropriate because the extraction mechanism IS definitional of what the type means. Per-source routing was rejected as it would require a shadow registry in 009.
