@@ -213,3 +213,10 @@ The existing portfolio subscriber (`portfolio_service.go:88`) already filters on
 - Appended `TestGetOrder_AlpacaFilledAvgPrice` to alpaca_test.go (asserts string "75.50" parses to float64 75.50). Created ibkr_test.go with `TestGetOrder_IBKRAvgPrice` (asserts float64 avgPrice 82.25 propagates correctly). Both new tests pass; full suite with -race also clean.
 - Files modified: `services/xstockstrat-trading/internal/broker/alpaca_test.go`, `services/xstockstrat-trading/internal/broker/ibkr_test.go`
 - Deviations: none
+
+## Session 2026-05-22 (CI: feature status automation)
+
+- Promotion PR #290 merged to main
+- Feature promoted and committed: 1ff20d531e007cc519788dc50af97b4317cfc381
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-05-22
