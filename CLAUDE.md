@@ -114,6 +114,8 @@ To change a language or tool version:
 
 All `.proto` changes require a PR to this repo first. `buf lint` + `buf breaking` run on every CI PR. Run `./scripts/buf-gen.sh` before committing (CI `proto-freshness` job enforces this).
 
+**Prefer enums over strings** for any field whose value set is closed and deployment-time-defined (e.g. status codes, operation verbs, fixed categories). Use `string` only when values are open/runtime-extensible (registered by operators at runtime) or when old clients silently dropping unknown enum values would be lossy. Every enum must have a zero-value `<NAME>_UNSPECIFIED = 0` sentinel.
+
 For breaking-change workflow, BSR publishing, and approval requirements → `docs/runbooks/proto-versioning.md`.
 
 ---
