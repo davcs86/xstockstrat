@@ -354,7 +354,7 @@ Both must print their success message without import errors.
 
 ### Step 6 — service: Update IngestSignal validation and add ListSignalSources + ManageSignalSource handlers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
