@@ -72,6 +72,29 @@ export async function startMockBackend(): Promise<void> {
   RESPONSES['/xstockstrat.identity.v1.IdentityService/RefreshToken'] = identityPayload;
   RESPONSES['/xstockstrat.identity.v1.IdentityService/RevokeToken'] = { success: true };
 
+  RESPONSES['/xstockstrat.ingest.v1.IngestService/ListSignalSources'] = {
+    sources: [{
+      slug: 'example_simple_email',
+      displayName: 'Example Simple Email',
+      sourceType: 'simple_email',
+      extractorModule: 'app.extractors.example_simple_email',
+      active: true,
+      hasCredentials: false,
+      configJson: { sender_patterns: ['noreply@example.com'], subject_patterns: ['Signal:'] },
+    }],
+  };
+  RESPONSES['/xstockstrat.ingest.v1.IngestService/ManageSignalSource'] = {
+    source: {
+      slug: 'example_simple_email',
+      displayName: 'Example Simple Email',
+      sourceType: 'simple_email',
+      extractorModule: 'app.extractors.example_simple_email',
+      active: true,
+      hasCredentials: false,
+      configJson: {},
+    },
+  };
+
   return new Promise((resolve, reject) => {
     server = http.createServer((req, res) => {
       const path = req.url ?? '/';
