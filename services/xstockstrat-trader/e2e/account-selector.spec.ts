@@ -2,25 +2,25 @@ import { test, expect } from '@playwright/test';
 
 test.describe('AccountSelector', () => {
   test('Account Selector is visible in the header', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/trader');
     await expect(page.getByRole('combobox').first()).toBeVisible({ timeout: 5000 });
   });
 
   test('Place Order button is disabled when no account is selected', async ({ page }) => {
-    await page.route('/api/accounts', async (route) => {
+    await page.route('/trader/api/accounts', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ accounts: [] }),
       });
     });
-    await page.goto('/');
+    await page.goto('/trader');
     const submitBtn = page.getByRole('button', { name: /buy|sell/i }).last();
     await expect(submitBtn).toBeDisabled({ timeout: 5000 });
   });
 
   test('Place Order button is enabled when an account is selected', async ({ page }) => {
-    await page.route('/api/accounts', async (route) => {
+    await page.route('/trader/api/accounts', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -35,19 +35,19 @@ test.describe('AccountSelector', () => {
         }),
       });
     });
-    await page.goto('/');
+    await page.goto('/trader');
     const submitBtn = page.getByRole('button', { name: /buy|sell/i }).last();
     await expect(submitBtn).toBeEnabled({ timeout: 5000 });
   });
 
   test('Account Management Panel opens via gear icon', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/trader');
     await page.getByRole('button', { name: /manage accounts/i }).click();
     await expect(page.getByRole('heading', { name: 'Add Account' })).toBeVisible({ timeout: 3000 });
   });
 
   test('Add Account form clears credential fields on success', async ({ page }) => {
-    await page.route('/api/accounts', async (route) => {
+    await page.route('/trader/api/accounts', async (route) => {
       if (route.request().method() === 'POST') {
         await route.fulfill({
           status: 200,
@@ -60,7 +60,7 @@ test.describe('AccountSelector', () => {
         await route.continue();
       }
     });
-    await page.goto('/');
+    await page.goto('/trader');
     await page.getByRole('button', { name: /manage accounts/i }).click();
     // Fill all required fields for Alpaca (broker_type 1)
     await page.getByPlaceholder('Display name').fill('Test Account');

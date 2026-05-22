@@ -9,7 +9,7 @@ import { test, expect } from '@playwright/test';
  */
 test.describe('OrderForm', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/trader');
   });
 
   test('renders the Place Order card', async ({ page }) => {
@@ -45,7 +45,7 @@ test.describe('OrderForm', () => {
 
   test('successful order submission shows order_id and status', async ({ page }) => {
     // Mock POST /api/orders to return a successful order
-    await page.route('/api/orders', async (route) => {
+    await page.route('/trader/api/orders', async (route) => {
       if (route.request().method() === 'POST') {
         await route.fulfill({
           status: 200,
@@ -71,7 +71,7 @@ test.describe('OrderForm', () => {
   });
 
   test('failed order submission shows error message', async ({ page }) => {
-    await page.route('/api/orders', async (route) => {
+    await page.route('/trader/api/orders', async (route) => {
       if (route.request().method() === 'POST') {
         await route.fulfill({
           status: 400,

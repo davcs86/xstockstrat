@@ -51,7 +51,7 @@ test.describe('GET /api/config — namespace config table data contract', () => 
    */
   test('returns { keys: [] } wrapper matching the ListKeysResponse interface', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/api/config?namespace=platform&env=dev&mode=paper');
+    const res = await page.request.get('/config-ui/api/config?namespace=platform&env=dev&mode=paper');
     expect(res.status()).toBe(200);
 
     const body = await res.json();
@@ -63,7 +63,7 @@ test.describe('GET /api/config — namespace config table data contract', () => 
 
   test('each key has all ConfigKey interface fields', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/api/config?namespace=platform&env=dev&mode=paper');
+    const res = await page.request.get('/config-ui/api/config?namespace=platform&env=dev&mode=paper');
     const { keys } = await res.json();
 
     expect(keys.length).toBeGreaterThan(0);
@@ -78,7 +78,7 @@ test.describe('GET /api/config — namespace config table data contract', () => 
 
   test('non-secret key: defaultValue is a readable string (not [secret])', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/api/config?namespace=platform&env=dev&mode=paper');
+    const res = await page.request.get('/config-ui/api/config?namespace=platform&env=dev&mode=paper');
     const { keys } = await res.json();
 
     const nonSecret = keys.find((k: { isSecret: boolean }) => !k.isSecret);
@@ -91,7 +91,7 @@ test.describe('GET /api/config — namespace config table data contract', () => 
 
   test('secret key: isSecret is true and value is masked', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/api/config?namespace=platform&env=dev&mode=paper');
+    const res = await page.request.get('/config-ui/api/config?namespace=platform&env=dev&mode=paper');
     const { keys } = await res.json();
 
     const secretKey = keys.find((k: { isSecret: boolean }) => k.isSecret);
@@ -111,7 +111,7 @@ test.describe('GET /api/config — namespace config table data contract', () => 
     await addAuthCookie(page);
     // GET with production/live scope — the mock returns the same keys regardless,
     // but the route must not error when receiving these params
-    const res = await page.request.get('/api/config?namespace=platform&env=production&mode=live');
+    const res = await page.request.get('/config-ui/api/config?namespace=platform&env=production&mode=live');
     expect(res.status()).toBe(200);
 
     const body = await res.json();
@@ -127,7 +127,7 @@ test.describe('POST /api/config — inline edit save flow', () => {
    */
   test('accepts a valid SetConfig payload and returns 200', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.post('/api/config', {
+    const res = await page.request.post('/config-ui/api/config', {
       data: {
         namespace: 'platform',
         key: 'platform.log_level',
@@ -143,7 +143,7 @@ test.describe('POST /api/config — inline edit save flow', () => {
 
   test('SetConfig does not return an error field on success', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.post('/api/config', {
+    const res = await page.request.post('/config-ui/api/config', {
       data: {
         namespace: 'platform',
         key: 'platform.log_level',
