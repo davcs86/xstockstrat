@@ -115,3 +115,37 @@ class TestNoopExtractor:
             url="https://example.com", html="", credentials={"token": "abc"}
         )
         assert await extractor.extract(raw) == []
+
+
+# ---------------------------------------------------------------------------
+# Dynamic importability
+# ---------------------------------------------------------------------------
+
+
+def test_noop_extractor_dynamically_importable():
+    import importlib
+
+    module = importlib.import_module("app.extractors.noop")
+    assert hasattr(module, "NoopExtractor")
+
+
+@pytest.mark.asyncio
+async def test_noop_returns_empty_for_all_input_types():
+    extractor = NoopExtractor()
+    inputs = [
+        SimpleEmailInput(body_text="BUY AAPL", body_html=""),
+        EmailAttachmentInput(body_text="", body_html="", attachments=[b"data"]),
+        LinkedEmailInput(body_text="", body_html="", urls=["https://example.com"]),
+        SimpleWebsiteInput(url="https://example.com", html="<p>text</p>"),
+        AuthenticatedWebsiteInput(url="https://example.com", html="", credentials={"token": "abc"}),
+    ]
+    for inp in inputs:
+        result = await extractor.extract(inp)
+        assert result == [], f"expected [] for {type(inp).__name__}, got {result}"
+
+
+def test_reference_extractor_dynamically_importable():
+    import importlib
+
+    module = importlib.import_module("app.extractors.example_simple_email")
+    assert hasattr(module, "ExampleSimpleEmailExtractor")

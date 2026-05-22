@@ -1,6 +1,6 @@
 # Implementation Spec: signal-source-registry
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-05-21
 **Updated**: 2026-05-22
 **Feature**: `docs/roadmap/features/008-signal-source-registry/feature.md`
@@ -968,7 +968,7 @@ All tests pass. No coverage threshold applies for Next.js frontends.
 
 ### Step 12 — test: Noop extractor coverage and mediated-type import verification
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_extractor.py` — modify (add noop + mediated type importability tests)
@@ -1074,3 +1074,8 @@ pytest --cov=app --cov-fail-under=40
 **Spec said**: Files list contained only `e2e/sources.spec.ts` and `e2e/mock-backend.ts`.
 **Actual**: Also modified `playwright.config.ts`: added `INGEST_HTTP_ENDPOINT` to webServer env (noted as gap in Phase 1) and corrected `webServer.url` from `http://localhost:3002` to `http://localhost:3002/config-ui/api/health` (the actual health endpoint given the app's basePath).
 **Reason**: Without the correct health URL, `pnpm test:e2e` times out waiting for the server. The `/config-ui/api/health` endpoint returns 200 and is the correct readiness check.
+
+### Deviation: Step 12 — pytest-asyncio installed into uv tool env to unblock async tests
+**Spec said**: Verify with `pytest tests/test_extractor.py -v`; all noop and dynamic-import tests pass.
+**Actual**: All 16 tests pass after running `uv tool install --with pytest-asyncio pytest --force` to add pytest-asyncio to the uv-managed pytest environment. This also retroactively fixes the same pre-existing limitation from Step 8.
+**Reason**: pytest-asyncio was missing from the uv pytest tool's isolated virtualenv. Fixed by reinstalling the tool with the extra dependency rather than documenting it as a permanent limitation.

@@ -190,3 +190,14 @@
 **Progress**: 11 done / 12 total
 **Stopped at**: Step 11 (PR created, waiting for merge before Step 12)
 **Next**: /sdd-execute signal-source-registry next
+
+### Step 12 — test: Noop extractor coverage and mediated-type import verification [done]
+- Appended 3 standalone test functions to `tests/test_extractor.py`: `test_noop_extractor_dynamically_importable`, `test_noop_returns_empty_for_all_input_types`, `test_reference_extractor_dynamically_importable`.
+- Files modified: `services/xstockstrat-ingest/tests/test_extractor.py`
+- Deviations: Added pytest-asyncio to the uv pytest tool env (`uv tool install --with pytest-asyncio pytest --force`); all 16 tests pass including all async tests.
+
+## Session 2026-05-22T00:11:00Z — sdd-execute
+**Steps this session**: [12]
+**Progress**: 12 done / 12 total
+**Stopped at**: Step 12 (all steps complete)
+**Next**: Create integration PR — /sdd-execute signal-source-registry (ALL-DONE PATH)

@@ -78,6 +78,16 @@ Namespace: `analysis`
 | `analysis.backtest.completed` | Backtest done |
 | `analysis.strategy.scored` | Strategy scored |
 
+## Running Tests
+
+```bash
+uv sync --extra dev   # install deps (including dev) from uv.lock
+uv run pytest         # run all tests
+uv run pytest --cov=app --cov-fail-under=40  # with coverage
+```
+
+After any change to `pyproject.toml`, run `uv lock` and commit the updated `uv.lock`.
+
 ## Environment Variables
 
 ```
