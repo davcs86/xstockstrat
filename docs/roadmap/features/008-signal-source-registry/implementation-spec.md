@@ -576,7 +576,7 @@ python3 -c "from app.handlers.servicer import IngestServicer; print('import OK')
 
 ### Step 7 — service: Wire ListSignalSources and ManageSignalSource to HTTP/Connect-RPC server
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/http_server.py` — modify

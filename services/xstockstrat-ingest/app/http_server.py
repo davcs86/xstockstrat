@@ -48,6 +48,14 @@ def build_app(servicer) -> FastAPI:
     async def query_signals(request: Request):
         return await _call(request, ingest_pb2.QuerySignalsRequest, servicer.QuerySignals)
 
+    @app.post("/xstockstrat.ingest.v1.IngestService/ListSignalSources")
+    async def list_signal_sources(request: Request):
+        return await _call(request, ingest_pb2.ListSignalSourcesRequest, servicer.ListSignalSources)
+
+    @app.post("/xstockstrat.ingest.v1.IngestService/ManageSignalSource")
+    async def manage_signal_source(request: Request):
+        return await _call_with_auth(request, ingest_pb2.ManageSignalSourceRequest, servicer.ManageSignalSource)
+
     # ── Webhook routes ──────────────────────────────────────────────────────────
     @app.post("/webhooks/trigger-backfill")
     async def trigger_backfill_webhook(request: Request):
@@ -137,9 +145,36 @@ async def _call(request: Request, req_cls, handler_fn):
     return JSONResponse(json_format.MessageToDict(resp))
 
 
+async def _call_with_auth(request: Request, req_cls, handler_fn):
+    """Like _call but passes Authorization header via context metadata."""
+    try:
+        body = await request.body()
+        req_msg = json_format.Parse(body or b"{}", req_cls())
+    except (DecodeError, Exception) as e:
+        raise HTTPException(status_code=400, detail=f"invalid request: {e}")
+
+    auth_header = request.headers.get("authorization", "")
+    ctx = _AuthContext(auth_header)
+    resp = await handler_fn(req_msg, ctx)
+    if resp is None:
+        raise HTTPException(status_code=500, detail="handler returned None")
+    return JSONResponse(json_format.MessageToDict(resp))
+
+
 class _NoopContext:
     async def abort(self, code, details):
         raise HTTPException(status_code=400, detail=details)
 
     async def send_initial_metadata(self, *args, **kwargs):
         pass
+
+
+class _AuthContext(_NoopContext):
+    """_NoopContext extended to expose Authorization header via invocation_metadata."""
+    def __init__(self, authorization: str):
+        self._auth = authorization
+
+    def invocation_metadata(self):
+        if self._auth:
+            return [("authorization", self._auth)]
+        return []
