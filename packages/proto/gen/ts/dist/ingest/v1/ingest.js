@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: ingest/v1/ingest.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IngestServiceClient = exports.IngestServiceService = exports.QuerySignalsResponse = exports.QuerySignalsRequest = exports.IngestSignalResponse = exports.IngestSignalRequest = exports.ExternalSignal = exports.NormalizeRawDataResponse = exports.NormalizeRawDataRequest = exports.ListBackfillJobsResponse = exports.ListBackfillJobsRequest = exports.GetBackfillStatusRequest = exports.TriggerBackfillResponse = exports.TriggerBackfillRequest = exports.BackfillJob = exports.BackfillStatus = exports.protobufPackage = void 0;
+exports.IngestServiceClient = exports.IngestServiceService = exports.ManageSignalSourceResponse = exports.ManageSignalSourceRequest = exports.ListSignalSourcesResponse = exports.ListSignalSourcesRequest = exports.SignalSource = exports.QuerySignalsResponse = exports.QuerySignalsRequest = exports.IngestSignalResponse = exports.IngestSignalRequest = exports.ExternalSignal = exports.NormalizeRawDataResponse = exports.NormalizeRawDataRequest = exports.ListBackfillJobsResponse = exports.ListBackfillJobsRequest = exports.GetBackfillStatusRequest = exports.TriggerBackfillResponse = exports.TriggerBackfillRequest = exports.BackfillJob = exports.BackfillStatus = exports.protobufPackage = void 0;
 exports.backfillStatusFromJSON = backfillStatusFromJSON;
 exports.backfillStatusToJSON = backfillStatusToJSON;
 exports.backfillStatusToNumber = backfillStatusToNumber;
@@ -13,6 +13,7 @@ exports.backfillStatusToNumber = backfillStatusToNumber;
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
 const common_1 = require("../../common/v1/common");
+const struct_1 = require("../../google/protobuf/struct");
 const timestamp_1 = require("../../google/protobuf/timestamp");
 exports.protobufPackage = "xstockstrat.ingest.v1";
 var BackfillStatus;
@@ -1340,6 +1341,431 @@ exports.QuerySignalsResponse = {
         return message;
     },
 };
+function createBaseSignalSource() {
+    return {
+        slug: "",
+        displayName: "",
+        sourceType: "",
+        extractorModule: "",
+        active: false,
+        hasCredentials: false,
+        configJson: undefined,
+    };
+}
+exports.SignalSource = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.slug !== "") {
+            writer.uint32(10).string(message.slug);
+        }
+        if (message.displayName !== "") {
+            writer.uint32(18).string(message.displayName);
+        }
+        if (message.sourceType !== "") {
+            writer.uint32(26).string(message.sourceType);
+        }
+        if (message.extractorModule !== "") {
+            writer.uint32(34).string(message.extractorModule);
+        }
+        if (message.active !== false) {
+            writer.uint32(40).bool(message.active);
+        }
+        if (message.hasCredentials !== false) {
+            writer.uint32(48).bool(message.hasCredentials);
+        }
+        if (message.configJson !== undefined) {
+            struct_1.Struct.encode(struct_1.Struct.wrap(message.configJson), writer.uint32(58).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSignalSource();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.slug = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.displayName = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.sourceType = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.extractorModule = reader.string();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.active = reader.bool();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 48) {
+                        break;
+                    }
+                    message.hasCredentials = reader.bool();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.configJson = struct_1.Struct.unwrap(struct_1.Struct.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            slug: isSet(object.slug) ? globalThis.String(object.slug) : "",
+            displayName: isSet(object.displayName)
+                ? globalThis.String(object.displayName)
+                : isSet(object.display_name)
+                    ? globalThis.String(object.display_name)
+                    : "",
+            sourceType: isSet(object.sourceType)
+                ? globalThis.String(object.sourceType)
+                : isSet(object.source_type)
+                    ? globalThis.String(object.source_type)
+                    : "",
+            extractorModule: isSet(object.extractorModule)
+                ? globalThis.String(object.extractorModule)
+                : isSet(object.extractor_module)
+                    ? globalThis.String(object.extractor_module)
+                    : "",
+            active: isSet(object.active) ? globalThis.Boolean(object.active) : false,
+            hasCredentials: isSet(object.hasCredentials)
+                ? globalThis.Boolean(object.hasCredentials)
+                : isSet(object.has_credentials)
+                    ? globalThis.Boolean(object.has_credentials)
+                    : false,
+            configJson: isObject(object.configJson)
+                ? object.configJson
+                : isObject(object.config_json)
+                    ? object.config_json
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.slug !== "") {
+            obj.slug = message.slug;
+        }
+        if (message.displayName !== "") {
+            obj.displayName = message.displayName;
+        }
+        if (message.sourceType !== "") {
+            obj.sourceType = message.sourceType;
+        }
+        if (message.extractorModule !== "") {
+            obj.extractorModule = message.extractorModule;
+        }
+        if (message.active !== false) {
+            obj.active = message.active;
+        }
+        if (message.hasCredentials !== false) {
+            obj.hasCredentials = message.hasCredentials;
+        }
+        if (message.configJson !== undefined) {
+            obj.configJson = message.configJson;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SignalSource.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSignalSource();
+        message.slug = object.slug ?? "";
+        message.displayName = object.displayName ?? "";
+        message.sourceType = object.sourceType ?? "";
+        message.extractorModule = object.extractorModule ?? "";
+        message.active = object.active ?? false;
+        message.hasCredentials = object.hasCredentials ?? false;
+        message.configJson = object.configJson ?? undefined;
+        return message;
+    },
+};
+function createBaseListSignalSourcesRequest() {
+    return { includeInactive: false };
+}
+exports.ListSignalSourcesRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.includeInactive !== false) {
+            writer.uint32(8).bool(message.includeInactive);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListSignalSourcesRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.includeInactive = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            includeInactive: isSet(object.includeInactive)
+                ? globalThis.Boolean(object.includeInactive)
+                : isSet(object.include_inactive)
+                    ? globalThis.Boolean(object.include_inactive)
+                    : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.includeInactive !== false) {
+            obj.includeInactive = message.includeInactive;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListSignalSourcesRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListSignalSourcesRequest();
+        message.includeInactive = object.includeInactive ?? false;
+        return message;
+    },
+};
+function createBaseListSignalSourcesResponse() {
+    return { sources: [] };
+}
+exports.ListSignalSourcesResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.sources) {
+            exports.SignalSource.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListSignalSourcesResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.sources.push(exports.SignalSource.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            sources: globalThis.Array.isArray(object?.sources)
+                ? object.sources.map((e) => exports.SignalSource.fromJSON(e))
+                : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.sources?.length) {
+            obj.sources = message.sources.map((e) => exports.SignalSource.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListSignalSourcesResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListSignalSourcesResponse();
+        message.sources = object.sources?.map((e) => exports.SignalSource.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseManageSignalSourceRequest() {
+    return { source: undefined, credentialsRef: "", operation: "" };
+}
+exports.ManageSignalSourceRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.source !== undefined) {
+            exports.SignalSource.encode(message.source, writer.uint32(10).fork()).join();
+        }
+        if (message.credentialsRef !== "") {
+            writer.uint32(18).string(message.credentialsRef);
+        }
+        if (message.operation !== "") {
+            writer.uint32(26).string(message.operation);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseManageSignalSourceRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.source = exports.SignalSource.decode(reader, reader.uint32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.credentialsRef = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.operation = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            source: isSet(object.source) ? exports.SignalSource.fromJSON(object.source) : undefined,
+            credentialsRef: isSet(object.credentialsRef)
+                ? globalThis.String(object.credentialsRef)
+                : isSet(object.credentials_ref)
+                    ? globalThis.String(object.credentials_ref)
+                    : "",
+            operation: isSet(object.operation) ? globalThis.String(object.operation) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.source !== undefined) {
+            obj.source = exports.SignalSource.toJSON(message.source);
+        }
+        if (message.credentialsRef !== "") {
+            obj.credentialsRef = message.credentialsRef;
+        }
+        if (message.operation !== "") {
+            obj.operation = message.operation;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ManageSignalSourceRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseManageSignalSourceRequest();
+        message.source = (object.source !== undefined && object.source !== null)
+            ? exports.SignalSource.fromPartial(object.source)
+            : undefined;
+        message.credentialsRef = object.credentialsRef ?? "";
+        message.operation = object.operation ?? "";
+        return message;
+    },
+};
+function createBaseManageSignalSourceResponse() {
+    return { source: undefined };
+}
+exports.ManageSignalSourceResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.source !== undefined) {
+            exports.SignalSource.encode(message.source, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseManageSignalSourceResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.source = exports.SignalSource.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { source: isSet(object.source) ? exports.SignalSource.fromJSON(object.source) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.source !== undefined) {
+            obj.source = exports.SignalSource.toJSON(message.source);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ManageSignalSourceResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseManageSignalSourceResponse();
+        message.source = (object.source !== undefined && object.source !== null)
+            ? exports.SignalSource.fromPartial(object.source)
+            : undefined;
+        return message;
+    },
+};
 exports.IngestServiceService = {
     triggerBackfill: {
         path: "/xstockstrat.ingest.v1.IngestService/TriggerBackfill",
@@ -1397,6 +1823,24 @@ exports.IngestServiceService = {
         responseSerialize: (value) => Buffer.from(exports.QuerySignalsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.QuerySignalsResponse.decode(value),
     },
+    listSignalSources: {
+        path: "/xstockstrat.ingest.v1.IngestService/ListSignalSources",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListSignalSourcesRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListSignalSourcesRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListSignalSourcesResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListSignalSourcesResponse.decode(value),
+    },
+    manageSignalSource: {
+        path: "/xstockstrat.ingest.v1.IngestService/ManageSignalSource",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ManageSignalSourceRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ManageSignalSourceRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ManageSignalSourceResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ManageSignalSourceResponse.decode(value),
+    },
 };
 exports.IngestServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.IngestServiceService, "xstockstrat.ingest.v1.IngestService");
 function bytesFromBase64(b64) {
@@ -1435,6 +1879,9 @@ function longToNumber(int64) {
         throw new globalThis.Error("Value is smaller than Number.MIN_SAFE_INTEGER");
     }
     return num;
+}
+function isObject(value) {
+    return typeof value === "object" && value !== null;
 }
 function isSet(value) {
     return value !== null && value !== undefined;

@@ -97,7 +97,7 @@ Both commands must exit 0. `buf lint` confirms naming and style; `buf breaking` 
 
 ### Step 2 — proto-gen: Regenerate stubs after proto update
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/python/ingest/v1/ingest_pb2.py` — modify (regenerated)
@@ -904,4 +904,12 @@ All tests pass. No coverage threshold applies for Next.js frontends.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 2 — proto-gen: Regenerate stubs after proto update
+**Spec said**: Run `./scripts/buf-gen.sh` from the repository root.
+**Actual**: `buf` was not installed in the environment. Downloaded buf v1.69.0 from GitHub releases to `/tmp/buf` and copied to `/usr/local/bin/buf`. Also installed Go plugins (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-connect-go`) via `go install` and TypeScript plugins via `pnpm install` in `packages/proto/gen/ts/`. Then ran `./scripts/buf-gen.sh` successfully — all stubs regenerated, buf lint + breaking passed, tsc compiled cleanly.
+**Reason**: `buf` and Go/TS proto plugins not pre-installed in the remote execution environment. Installation was required before the script could run. This follows the same deviation precedent as phase3-deviations.md.
+
+### Deviation: Step 2 — extra Go gRPC stubs regenerated
+**Spec said**: Files section listed only the 12 ingest-specific generated stubs.
+**Actual**: `buf-gen.sh` also updated `*_grpc.pb.go` for analysis, config, identity, indicators, ledger, marketdata, notify, portfolio, and trading services. All 21 changed files were staged and committed.
+**Reason**: The newer `protoc-gen-go-grpc` version (installed fresh via `go install`) produces slightly different output for all services. Generated files must be committed together to keep the repo consistent and pass CI `proto-freshness`. Leaving them uncommitted would cause a stale-stub failure on the next run.

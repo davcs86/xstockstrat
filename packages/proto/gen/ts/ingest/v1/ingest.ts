@@ -19,6 +19,7 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 import { PageRequest, PageResponse, TimeRange } from "../../common/v1/common";
+import { Struct } from "../../google/protobuf/struct";
 import { Timestamp } from "../../google/protobuf/timestamp";
 
 export const protobufPackage = "xstockstrat.ingest.v1";
@@ -194,6 +195,42 @@ export interface QuerySignalsRequest {
 export interface QuerySignalsResponse {
   signals: ExternalSignal[];
   page?: PageResponse | undefined;
+}
+
+/**
+ * SignalSource represents a registered signal source entry.
+ * credentials_ref is intentionally absent — use has_credentials on read.
+ */
+export interface SignalSource {
+  slug: string;
+  displayName: string;
+  sourceType: string;
+  extractorModule: string;
+  active: boolean;
+  hasCredentials: boolean;
+  configJson?: { [key: string]: any } | undefined;
+}
+
+export interface ListSignalSourcesRequest {
+  includeInactive: boolean;
+}
+
+export interface ListSignalSourcesResponse {
+  sources: SignalSource[];
+}
+
+/**
+ * ManageSignalSourceRequest: operation is "register" | "update" | "deactivate".
+ * credentials_ref is only processed on register/update; ignored on deactivate.
+ */
+export interface ManageSignalSourceRequest {
+  source?: SignalSource | undefined;
+  credentialsRef: string;
+  operation: string;
+}
+
+export interface ManageSignalSourceResponse {
+  source?: SignalSource | undefined;
 }
 
 function createBaseBackfillJob(): BackfillJob {
@@ -1569,6 +1606,474 @@ export const QuerySignalsResponse: MessageFns<QuerySignalsResponse> = {
   },
 };
 
+function createBaseSignalSource(): SignalSource {
+  return {
+    slug: "",
+    displayName: "",
+    sourceType: "",
+    extractorModule: "",
+    active: false,
+    hasCredentials: false,
+    configJson: undefined,
+  };
+}
+
+export const SignalSource: MessageFns<SignalSource> = {
+  encode(message: SignalSource, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.slug !== "") {
+      writer.uint32(10).string(message.slug);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(18).string(message.displayName);
+    }
+    if (message.sourceType !== "") {
+      writer.uint32(26).string(message.sourceType);
+    }
+    if (message.extractorModule !== "") {
+      writer.uint32(34).string(message.extractorModule);
+    }
+    if (message.active !== false) {
+      writer.uint32(40).bool(message.active);
+    }
+    if (message.hasCredentials !== false) {
+      writer.uint32(48).bool(message.hasCredentials);
+    }
+    if (message.configJson !== undefined) {
+      Struct.encode(Struct.wrap(message.configJson), writer.uint32(58).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SignalSource {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSignalSource();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.slug = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.displayName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.sourceType = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.extractorModule = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.active = reader.bool();
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.hasCredentials = reader.bool();
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.configJson = Struct.unwrap(Struct.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SignalSource {
+    return {
+      slug: isSet(object.slug) ? globalThis.String(object.slug) : "",
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : "",
+      sourceType: isSet(object.sourceType)
+        ? globalThis.String(object.sourceType)
+        : isSet(object.source_type)
+        ? globalThis.String(object.source_type)
+        : "",
+      extractorModule: isSet(object.extractorModule)
+        ? globalThis.String(object.extractorModule)
+        : isSet(object.extractor_module)
+        ? globalThis.String(object.extractor_module)
+        : "",
+      active: isSet(object.active) ? globalThis.Boolean(object.active) : false,
+      hasCredentials: isSet(object.hasCredentials)
+        ? globalThis.Boolean(object.hasCredentials)
+        : isSet(object.has_credentials)
+        ? globalThis.Boolean(object.has_credentials)
+        : false,
+      configJson: isObject(object.configJson)
+        ? object.configJson
+        : isObject(object.config_json)
+        ? object.config_json
+        : undefined,
+    };
+  },
+
+  toJSON(message: SignalSource): unknown {
+    const obj: any = {};
+    if (message.slug !== "") {
+      obj.slug = message.slug;
+    }
+    if (message.displayName !== "") {
+      obj.displayName = message.displayName;
+    }
+    if (message.sourceType !== "") {
+      obj.sourceType = message.sourceType;
+    }
+    if (message.extractorModule !== "") {
+      obj.extractorModule = message.extractorModule;
+    }
+    if (message.active !== false) {
+      obj.active = message.active;
+    }
+    if (message.hasCredentials !== false) {
+      obj.hasCredentials = message.hasCredentials;
+    }
+    if (message.configJson !== undefined) {
+      obj.configJson = message.configJson;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SignalSource>, I>>(base?: I): SignalSource {
+    return SignalSource.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SignalSource>, I>>(object: I): SignalSource {
+    const message = createBaseSignalSource();
+    message.slug = object.slug ?? "";
+    message.displayName = object.displayName ?? "";
+    message.sourceType = object.sourceType ?? "";
+    message.extractorModule = object.extractorModule ?? "";
+    message.active = object.active ?? false;
+    message.hasCredentials = object.hasCredentials ?? false;
+    message.configJson = object.configJson ?? undefined;
+    return message;
+  },
+};
+
+function createBaseListSignalSourcesRequest(): ListSignalSourcesRequest {
+  return { includeInactive: false };
+}
+
+export const ListSignalSourcesRequest: MessageFns<ListSignalSourcesRequest> = {
+  encode(message: ListSignalSourcesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.includeInactive !== false) {
+      writer.uint32(8).bool(message.includeInactive);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListSignalSourcesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListSignalSourcesRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.includeInactive = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListSignalSourcesRequest {
+    return {
+      includeInactive: isSet(object.includeInactive)
+        ? globalThis.Boolean(object.includeInactive)
+        : isSet(object.include_inactive)
+        ? globalThis.Boolean(object.include_inactive)
+        : false,
+    };
+  },
+
+  toJSON(message: ListSignalSourcesRequest): unknown {
+    const obj: any = {};
+    if (message.includeInactive !== false) {
+      obj.includeInactive = message.includeInactive;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListSignalSourcesRequest>, I>>(base?: I): ListSignalSourcesRequest {
+    return ListSignalSourcesRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListSignalSourcesRequest>, I>>(object: I): ListSignalSourcesRequest {
+    const message = createBaseListSignalSourcesRequest();
+    message.includeInactive = object.includeInactive ?? false;
+    return message;
+  },
+};
+
+function createBaseListSignalSourcesResponse(): ListSignalSourcesResponse {
+  return { sources: [] };
+}
+
+export const ListSignalSourcesResponse: MessageFns<ListSignalSourcesResponse> = {
+  encode(message: ListSignalSourcesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.sources) {
+      SignalSource.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListSignalSourcesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListSignalSourcesResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.sources.push(SignalSource.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListSignalSourcesResponse {
+    return {
+      sources: globalThis.Array.isArray(object?.sources)
+        ? object.sources.map((e: any) => SignalSource.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ListSignalSourcesResponse): unknown {
+    const obj: any = {};
+    if (message.sources?.length) {
+      obj.sources = message.sources.map((e) => SignalSource.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListSignalSourcesResponse>, I>>(base?: I): ListSignalSourcesResponse {
+    return ListSignalSourcesResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListSignalSourcesResponse>, I>>(object: I): ListSignalSourcesResponse {
+    const message = createBaseListSignalSourcesResponse();
+    message.sources = object.sources?.map((e) => SignalSource.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseManageSignalSourceRequest(): ManageSignalSourceRequest {
+  return { source: undefined, credentialsRef: "", operation: "" };
+}
+
+export const ManageSignalSourceRequest: MessageFns<ManageSignalSourceRequest> = {
+  encode(message: ManageSignalSourceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      SignalSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    if (message.credentialsRef !== "") {
+      writer.uint32(18).string(message.credentialsRef);
+    }
+    if (message.operation !== "") {
+      writer.uint32(26).string(message.operation);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ManageSignalSourceRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseManageSignalSourceRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.source = SignalSource.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.credentialsRef = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.operation = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ManageSignalSourceRequest {
+    return {
+      source: isSet(object.source) ? SignalSource.fromJSON(object.source) : undefined,
+      credentialsRef: isSet(object.credentialsRef)
+        ? globalThis.String(object.credentialsRef)
+        : isSet(object.credentials_ref)
+        ? globalThis.String(object.credentials_ref)
+        : "",
+      operation: isSet(object.operation) ? globalThis.String(object.operation) : "",
+    };
+  },
+
+  toJSON(message: ManageSignalSourceRequest): unknown {
+    const obj: any = {};
+    if (message.source !== undefined) {
+      obj.source = SignalSource.toJSON(message.source);
+    }
+    if (message.credentialsRef !== "") {
+      obj.credentialsRef = message.credentialsRef;
+    }
+    if (message.operation !== "") {
+      obj.operation = message.operation;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ManageSignalSourceRequest>, I>>(base?: I): ManageSignalSourceRequest {
+    return ManageSignalSourceRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ManageSignalSourceRequest>, I>>(object: I): ManageSignalSourceRequest {
+    const message = createBaseManageSignalSourceRequest();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? SignalSource.fromPartial(object.source)
+      : undefined;
+    message.credentialsRef = object.credentialsRef ?? "";
+    message.operation = object.operation ?? "";
+    return message;
+  },
+};
+
+function createBaseManageSignalSourceResponse(): ManageSignalSourceResponse {
+  return { source: undefined };
+}
+
+export const ManageSignalSourceResponse: MessageFns<ManageSignalSourceResponse> = {
+  encode(message: ManageSignalSourceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      SignalSource.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ManageSignalSourceResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseManageSignalSourceResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.source = SignalSource.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ManageSignalSourceResponse {
+    return { source: isSet(object.source) ? SignalSource.fromJSON(object.source) : undefined };
+  },
+
+  toJSON(message: ManageSignalSourceResponse): unknown {
+    const obj: any = {};
+    if (message.source !== undefined) {
+      obj.source = SignalSource.toJSON(message.source);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ManageSignalSourceResponse>, I>>(base?: I): ManageSignalSourceResponse {
+    return ManageSignalSourceResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ManageSignalSourceResponse>, I>>(object: I): ManageSignalSourceResponse {
+    const message = createBaseManageSignalSourceResponse();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? SignalSource.fromPartial(object.source)
+      : undefined;
+    return message;
+  },
+};
+
 export type IngestServiceService = typeof IngestServiceService;
 export const IngestServiceService = {
   triggerBackfill: {
@@ -1636,6 +2141,28 @@ export const IngestServiceService = {
       Buffer.from(QuerySignalsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): QuerySignalsResponse => QuerySignalsResponse.decode(value),
   },
+  listSignalSources: {
+    path: "/xstockstrat.ingest.v1.IngestService/ListSignalSources" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListSignalSourcesRequest): Buffer =>
+      Buffer.from(ListSignalSourcesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListSignalSourcesRequest => ListSignalSourcesRequest.decode(value),
+    responseSerialize: (value: ListSignalSourcesResponse): Buffer =>
+      Buffer.from(ListSignalSourcesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListSignalSourcesResponse => ListSignalSourcesResponse.decode(value),
+  },
+  manageSignalSource: {
+    path: "/xstockstrat.ingest.v1.IngestService/ManageSignalSource" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ManageSignalSourceRequest): Buffer =>
+      Buffer.from(ManageSignalSourceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ManageSignalSourceRequest => ManageSignalSourceRequest.decode(value),
+    responseSerialize: (value: ManageSignalSourceResponse): Buffer =>
+      Buffer.from(ManageSignalSourceResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ManageSignalSourceResponse => ManageSignalSourceResponse.decode(value),
+  },
 } as const;
 
 export interface IngestServiceServer extends UntypedServiceImplementation {
@@ -1647,6 +2174,8 @@ export interface IngestServiceServer extends UntypedServiceImplementation {
   ingestSignal: handleUnaryCall<IngestSignalRequest, IngestSignalResponse>;
   /** Signal query — returns active signals filtered by source/symbol/direction and time window */
   querySignals: handleUnaryCall<QuerySignalsRequest, QuerySignalsResponse>;
+  listSignalSources: handleUnaryCall<ListSignalSourcesRequest, ListSignalSourcesResponse>;
+  manageSignalSource: handleUnaryCall<ManageSignalSourceRequest, ManageSignalSourceResponse>;
 }
 
 export interface IngestServiceClient extends Client {
@@ -1742,6 +2271,36 @@ export interface IngestServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: QuerySignalsResponse) => void,
   ): ClientUnaryCall;
+  listSignalSources(
+    request: ListSignalSourcesRequest,
+    callback: (error: ServiceError | null, response: ListSignalSourcesResponse) => void,
+  ): ClientUnaryCall;
+  listSignalSources(
+    request: ListSignalSourcesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListSignalSourcesResponse) => void,
+  ): ClientUnaryCall;
+  listSignalSources(
+    request: ListSignalSourcesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListSignalSourcesResponse) => void,
+  ): ClientUnaryCall;
+  manageSignalSource(
+    request: ManageSignalSourceRequest,
+    callback: (error: ServiceError | null, response: ManageSignalSourceResponse) => void,
+  ): ClientUnaryCall;
+  manageSignalSource(
+    request: ManageSignalSourceRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ManageSignalSourceResponse) => void,
+  ): ClientUnaryCall;
+  manageSignalSource(
+    request: ManageSignalSourceRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ManageSignalSourceResponse) => void,
+  ): ClientUnaryCall;
 }
 
 export const IngestServiceClient = makeGenericClientConstructor(
@@ -1804,6 +2363,10 @@ function longToNumber(int64: { toString(): string }): number {
     throw new globalThis.Error("Value is smaller than Number.MIN_SAFE_INTEGER");
   }
   return num;
+}
+
+function isObject(value: any): boolean {
+  return typeof value === "object" && value !== null;
 }
 
 function isSet(value: any): boolean {

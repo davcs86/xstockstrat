@@ -51,6 +51,12 @@ const (
 	// IngestServiceQuerySignalsProcedure is the fully-qualified name of the IngestService's
 	// QuerySignals RPC.
 	IngestServiceQuerySignalsProcedure = "/xstockstrat.ingest.v1.IngestService/QuerySignals"
+	// IngestServiceListSignalSourcesProcedure is the fully-qualified name of the IngestService's
+	// ListSignalSources RPC.
+	IngestServiceListSignalSourcesProcedure = "/xstockstrat.ingest.v1.IngestService/ListSignalSources"
+	// IngestServiceManageSignalSourceProcedure is the fully-qualified name of the IngestService's
+	// ManageSignalSource RPC.
+	IngestServiceManageSignalSourceProcedure = "/xstockstrat.ingest.v1.IngestService/ManageSignalSource"
 )
 
 // IngestServiceClient is a client for the xstockstrat.ingest.v1.IngestService service.
@@ -63,6 +69,8 @@ type IngestServiceClient interface {
 	IngestSignal(context.Context, *connect.Request[v1.IngestSignalRequest]) (*connect.Response[v1.IngestSignalResponse], error)
 	// Signal query — returns active signals filtered by source/symbol/direction and time window
 	QuerySignals(context.Context, *connect.Request[v1.QuerySignalsRequest]) (*connect.Response[v1.QuerySignalsResponse], error)
+	ListSignalSources(context.Context, *connect.Request[v1.ListSignalSourcesRequest]) (*connect.Response[v1.ListSignalSourcesResponse], error)
+	ManageSignalSource(context.Context, *connect.Request[v1.ManageSignalSourceRequest]) (*connect.Response[v1.ManageSignalSourceResponse], error)
 }
 
 // NewIngestServiceClient constructs a client for the xstockstrat.ingest.v1.IngestService service.
@@ -112,17 +120,31 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(ingestServiceMethods.ByName("QuerySignals")),
 			connect.WithClientOptions(opts...),
 		),
+		listSignalSources: connect.NewClient[v1.ListSignalSourcesRequest, v1.ListSignalSourcesResponse](
+			httpClient,
+			baseURL+IngestServiceListSignalSourcesProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("ListSignalSources")),
+			connect.WithClientOptions(opts...),
+		),
+		manageSignalSource: connect.NewClient[v1.ManageSignalSourceRequest, v1.ManageSignalSourceResponse](
+			httpClient,
+			baseURL+IngestServiceManageSignalSourceProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("ManageSignalSource")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // ingestServiceClient implements IngestServiceClient.
 type ingestServiceClient struct {
-	triggerBackfill   *connect.Client[v1.TriggerBackfillRequest, v1.TriggerBackfillResponse]
-	getBackfillStatus *connect.Client[v1.GetBackfillStatusRequest, v1.BackfillJob]
-	listBackfillJobs  *connect.Client[v1.ListBackfillJobsRequest, v1.ListBackfillJobsResponse]
-	normalizeRawData  *connect.Client[v1.NormalizeRawDataRequest, v1.NormalizeRawDataResponse]
-	ingestSignal      *connect.Client[v1.IngestSignalRequest, v1.IngestSignalResponse]
-	querySignals      *connect.Client[v1.QuerySignalsRequest, v1.QuerySignalsResponse]
+	triggerBackfill    *connect.Client[v1.TriggerBackfillRequest, v1.TriggerBackfillResponse]
+	getBackfillStatus  *connect.Client[v1.GetBackfillStatusRequest, v1.BackfillJob]
+	listBackfillJobs   *connect.Client[v1.ListBackfillJobsRequest, v1.ListBackfillJobsResponse]
+	normalizeRawData   *connect.Client[v1.NormalizeRawDataRequest, v1.NormalizeRawDataResponse]
+	ingestSignal       *connect.Client[v1.IngestSignalRequest, v1.IngestSignalResponse]
+	querySignals       *connect.Client[v1.QuerySignalsRequest, v1.QuerySignalsResponse]
+	listSignalSources  *connect.Client[v1.ListSignalSourcesRequest, v1.ListSignalSourcesResponse]
+	manageSignalSource *connect.Client[v1.ManageSignalSourceRequest, v1.ManageSignalSourceResponse]
 }
 
 // TriggerBackfill calls xstockstrat.ingest.v1.IngestService.TriggerBackfill.
@@ -155,6 +177,16 @@ func (c *ingestServiceClient) QuerySignals(ctx context.Context, req *connect.Req
 	return c.querySignals.CallUnary(ctx, req)
 }
 
+// ListSignalSources calls xstockstrat.ingest.v1.IngestService.ListSignalSources.
+func (c *ingestServiceClient) ListSignalSources(ctx context.Context, req *connect.Request[v1.ListSignalSourcesRequest]) (*connect.Response[v1.ListSignalSourcesResponse], error) {
+	return c.listSignalSources.CallUnary(ctx, req)
+}
+
+// ManageSignalSource calls xstockstrat.ingest.v1.IngestService.ManageSignalSource.
+func (c *ingestServiceClient) ManageSignalSource(ctx context.Context, req *connect.Request[v1.ManageSignalSourceRequest]) (*connect.Response[v1.ManageSignalSourceResponse], error) {
+	return c.manageSignalSource.CallUnary(ctx, req)
+}
+
 // IngestServiceHandler is an implementation of the xstockstrat.ingest.v1.IngestService service.
 type IngestServiceHandler interface {
 	TriggerBackfill(context.Context, *connect.Request[v1.TriggerBackfillRequest]) (*connect.Response[v1.TriggerBackfillResponse], error)
@@ -165,6 +197,8 @@ type IngestServiceHandler interface {
 	IngestSignal(context.Context, *connect.Request[v1.IngestSignalRequest]) (*connect.Response[v1.IngestSignalResponse], error)
 	// Signal query — returns active signals filtered by source/symbol/direction and time window
 	QuerySignals(context.Context, *connect.Request[v1.QuerySignalsRequest]) (*connect.Response[v1.QuerySignalsResponse], error)
+	ListSignalSources(context.Context, *connect.Request[v1.ListSignalSourcesRequest]) (*connect.Response[v1.ListSignalSourcesResponse], error)
+	ManageSignalSource(context.Context, *connect.Request[v1.ManageSignalSourceRequest]) (*connect.Response[v1.ManageSignalSourceResponse], error)
 }
 
 // NewIngestServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -210,6 +244,18 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(ingestServiceMethods.ByName("QuerySignals")),
 		connect.WithHandlerOptions(opts...),
 	)
+	ingestServiceListSignalSourcesHandler := connect.NewUnaryHandler(
+		IngestServiceListSignalSourcesProcedure,
+		svc.ListSignalSources,
+		connect.WithSchema(ingestServiceMethods.ByName("ListSignalSources")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServiceManageSignalSourceHandler := connect.NewUnaryHandler(
+		IngestServiceManageSignalSourceProcedure,
+		svc.ManageSignalSource,
+		connect.WithSchema(ingestServiceMethods.ByName("ManageSignalSource")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.ingest.v1.IngestService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IngestServiceTriggerBackfillProcedure:
@@ -224,6 +270,10 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceIngestSignalHandler.ServeHTTP(w, r)
 		case IngestServiceQuerySignalsProcedure:
 			ingestServiceQuerySignalsHandler.ServeHTTP(w, r)
+		case IngestServiceListSignalSourcesProcedure:
+			ingestServiceListSignalSourcesHandler.ServeHTTP(w, r)
+		case IngestServiceManageSignalSourceProcedure:
+			ingestServiceManageSignalSourceHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -255,4 +305,12 @@ func (UnimplementedIngestServiceHandler) IngestSignal(context.Context, *connect.
 
 func (UnimplementedIngestServiceHandler) QuerySignals(context.Context, *connect.Request[v1.QuerySignalsRequest]) (*connect.Response[v1.QuerySignalsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.ingest.v1.IngestService.QuerySignals is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) ListSignalSources(context.Context, *connect.Request[v1.ListSignalSourcesRequest]) (*connect.Response[v1.ListSignalSourcesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.ingest.v1.IngestService.ListSignalSources is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) ManageSignalSource(context.Context, *connect.Request[v1.ManageSignalSourceRequest]) (*connect.Response[v1.ManageSignalSourceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.ingest.v1.IngestService.ManageSignalSource is not implemented"))
 }

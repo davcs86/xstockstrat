@@ -95,6 +95,39 @@ export interface QuerySignalsResponse {
     signals: ExternalSignal[];
     page?: PageResponse | undefined;
 }
+/**
+ * SignalSource represents a registered signal source entry.
+ * credentials_ref is intentionally absent — use has_credentials on read.
+ */
+export interface SignalSource {
+    slug: string;
+    displayName: string;
+    sourceType: string;
+    extractorModule: string;
+    active: boolean;
+    hasCredentials: boolean;
+    configJson?: {
+        [key: string]: any;
+    } | undefined;
+}
+export interface ListSignalSourcesRequest {
+    includeInactive: boolean;
+}
+export interface ListSignalSourcesResponse {
+    sources: SignalSource[];
+}
+/**
+ * ManageSignalSourceRequest: operation is "register" | "update" | "deactivate".
+ * credentials_ref is only processed on register/update; ignored on deactivate.
+ */
+export interface ManageSignalSourceRequest {
+    source?: SignalSource | undefined;
+    credentialsRef: string;
+    operation: string;
+}
+export interface ManageSignalSourceResponse {
+    source?: SignalSource | undefined;
+}
 export declare const BackfillJob: MessageFns<BackfillJob>;
 export declare const TriggerBackfillRequest: MessageFns<TriggerBackfillRequest>;
 export declare const TriggerBackfillResponse: MessageFns<TriggerBackfillResponse>;
@@ -108,6 +141,11 @@ export declare const IngestSignalRequest: MessageFns<IngestSignalRequest>;
 export declare const IngestSignalResponse: MessageFns<IngestSignalResponse>;
 export declare const QuerySignalsRequest: MessageFns<QuerySignalsRequest>;
 export declare const QuerySignalsResponse: MessageFns<QuerySignalsResponse>;
+export declare const SignalSource: MessageFns<SignalSource>;
+export declare const ListSignalSourcesRequest: MessageFns<ListSignalSourcesRequest>;
+export declare const ListSignalSourcesResponse: MessageFns<ListSignalSourcesResponse>;
+export declare const ManageSignalSourceRequest: MessageFns<ManageSignalSourceRequest>;
+export declare const ManageSignalSourceResponse: MessageFns<ManageSignalSourceResponse>;
 export type IngestServiceService = typeof IngestServiceService;
 export declare const IngestServiceService: {
     readonly triggerBackfill: {
@@ -166,6 +204,24 @@ export declare const IngestServiceService: {
         readonly responseSerialize: (value: QuerySignalsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => QuerySignalsResponse;
     };
+    readonly listSignalSources: {
+        readonly path: "/xstockstrat.ingest.v1.IngestService/ListSignalSources";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListSignalSourcesRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListSignalSourcesRequest;
+        readonly responseSerialize: (value: ListSignalSourcesResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListSignalSourcesResponse;
+    };
+    readonly manageSignalSource: {
+        readonly path: "/xstockstrat.ingest.v1.IngestService/ManageSignalSource";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ManageSignalSourceRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ManageSignalSourceRequest;
+        readonly responseSerialize: (value: ManageSignalSourceResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ManageSignalSourceResponse;
+    };
 };
 export interface IngestServiceServer extends UntypedServiceImplementation {
     triggerBackfill: handleUnaryCall<TriggerBackfillRequest, TriggerBackfillResponse>;
@@ -176,6 +232,8 @@ export interface IngestServiceServer extends UntypedServiceImplementation {
     ingestSignal: handleUnaryCall<IngestSignalRequest, IngestSignalResponse>;
     /** Signal query — returns active signals filtered by source/symbol/direction and time window */
     querySignals: handleUnaryCall<QuerySignalsRequest, QuerySignalsResponse>;
+    listSignalSources: handleUnaryCall<ListSignalSourcesRequest, ListSignalSourcesResponse>;
+    manageSignalSource: handleUnaryCall<ManageSignalSourceRequest, ManageSignalSourceResponse>;
 }
 export interface IngestServiceClient extends Client {
     triggerBackfill(request: TriggerBackfillRequest, callback: (error: ServiceError | null, response: TriggerBackfillResponse) => void): ClientUnaryCall;
@@ -198,6 +256,12 @@ export interface IngestServiceClient extends Client {
     querySignals(request: QuerySignalsRequest, callback: (error: ServiceError | null, response: QuerySignalsResponse) => void): ClientUnaryCall;
     querySignals(request: QuerySignalsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: QuerySignalsResponse) => void): ClientUnaryCall;
     querySignals(request: QuerySignalsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: QuerySignalsResponse) => void): ClientUnaryCall;
+    listSignalSources(request: ListSignalSourcesRequest, callback: (error: ServiceError | null, response: ListSignalSourcesResponse) => void): ClientUnaryCall;
+    listSignalSources(request: ListSignalSourcesRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListSignalSourcesResponse) => void): ClientUnaryCall;
+    listSignalSources(request: ListSignalSourcesRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListSignalSourcesResponse) => void): ClientUnaryCall;
+    manageSignalSource(request: ManageSignalSourceRequest, callback: (error: ServiceError | null, response: ManageSignalSourceResponse) => void): ClientUnaryCall;
+    manageSignalSource(request: ManageSignalSourceRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ManageSignalSourceResponse) => void): ClientUnaryCall;
+    manageSignalSource(request: ManageSignalSourceRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ManageSignalSourceResponse) => void): ClientUnaryCall;
 }
 export declare const IngestServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): IngestServiceClient;
