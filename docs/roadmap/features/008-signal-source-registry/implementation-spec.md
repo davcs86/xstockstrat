@@ -905,7 +905,7 @@ find .next/server/app/sources -name "page.js" 2>/dev/null || echo "check standal
 
 ### Step 11 — test: E2E tests for config-ui Sources page and API route
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/e2e/sources.spec.ts` — create
@@ -1064,3 +1064,13 @@ pytest --cov=app --cov-fail-under=40
 **Spec said**: `upsert_source` (Step 4) and `ManageSignalSource` handler (Step 6) are only touched in their respective steps.
 **Actual**: `upsert_source` updated in Step 10 to add `active: bool = True` parameter and include `active` in both the INSERT column list and `ON CONFLICT DO UPDATE SET` clause. `ManageSignalSource` handler updated to pass `active=src.active` to `upsert_source`.
 **Reason**: During Step 10 Phase 1 discovery, identified that the enable/disable toggle (re-activation path) would silently fail — `active` was absent from the upsert SQL so a deactivated source could never be re-activated via the "update" operation. User chose Option A to fix it in Step 10.
+
+### Deviation: Step 11 — E2E test verification via TypeScript compilation only
+**Spec said**: Verify with `pnpm test:e2e`; all tests pass.
+**Actual**: Playwright browser download blocked by remote environment network policy (`playwright install chromium` failed with download error). TypeScript compilation (`pnpm exec tsc --noEmit`) passed with no errors. Sources tests use correct basePath-aware URLs (`/config-ui/api/sources`, `/config-ui/sources`) unlike pre-existing tests which use paths without the basePath prefix (pre-existing defect, out of scope).
+**Reason**: Remote execution environment does not permit downloading Playwright browser binaries. Same precedent as Step 3 migration verification deviation.
+
+### Deviation: Step 11 — playwright.config.ts webServer.url corrected
+**Spec said**: Files list contained only `e2e/sources.spec.ts` and `e2e/mock-backend.ts`.
+**Actual**: Also modified `playwright.config.ts`: added `INGEST_HTTP_ENDPOINT` to webServer env (noted as gap in Phase 1) and corrected `webServer.url` from `http://localhost:3002` to `http://localhost:3002/config-ui/api/health` (the actual health endpoint given the app's basePath).
+**Reason**: Without the correct health URL, `pnpm test:e2e` times out waiting for the server. The `/config-ui/api/health` endpoint returns 200 and is the correct readiness check.

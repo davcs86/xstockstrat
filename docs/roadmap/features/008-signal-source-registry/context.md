@@ -179,3 +179,14 @@
 **Progress**: 10 done / 12 total
 **Stopped at**: Step 10 (PR created, waiting for merge before Step 11)
 **Next**: /sdd-execute signal-source-registry next
+
+### Step 11 — test: E2E tests for config-ui Sources page and API route [done]
+- Created `e2e/sources.spec.ts` (11 tests: ListSignalSources API contract, ManageSignalSource API contract, Sources page UI contract). Added ingest mock responses to `e2e/mock-backend.ts`. Added `INGEST_HTTP_ENDPOINT` to `playwright.config.ts` webServer env; corrected `webServer.url` to `/config-ui/api/health`. Tests use basePath-aware URLs (`/config-ui/api/sources`).
+- Files modified: `services/xstockstrat-config-ui/e2e/sources.spec.ts`, `services/xstockstrat-config-ui/e2e/mock-backend.ts`, `services/xstockstrat-config-ui/playwright.config.ts`
+- Deviations: (1) `pnpm test:e2e` could not run — Playwright browser download blocked by remote env network policy; verified via `pnpm exec tsc --noEmit` (no errors). (2) Sources tests use correct `/config-ui/...` basePath-aware URLs (differs from pre-existing tests which have a pre-existing basePath defect). (3) `playwright.config.ts` added to Files list as deviation (not in original spec Files).
+
+## Session 2026-05-22T00:10:00Z — sdd-execute
+**Steps this session**: [11]
+**Progress**: 11 done / 12 total
+**Stopped at**: Step 11 (PR created, waiting for merge before Step 12)
+**Next**: /sdd-execute signal-source-registry next

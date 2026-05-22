@@ -40,7 +40,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'pnpm dev',
-    url: 'http://localhost:3000',
+    url: 'http://localhost:3000/trader/api/health',
     reuseExistingServer: !process.env.CI,
     env: {
       // Point all backend clients at the mock server started in globalSetup

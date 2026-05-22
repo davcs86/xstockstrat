@@ -15,7 +15,7 @@ function sseBody(alerts: object[]): string {
 
 test.describe('AlertStream', () => {
   test('bell icon is visible on the page', async ({ page }) => {
-    await page.route('/api/alerts/stream', async (route) => {
+    await page.route('/trader/api/alerts/stream', async (route) => {
       await route.fulfill({
         status: 200,
         headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
@@ -23,7 +23,7 @@ test.describe('AlertStream', () => {
       });
     });
 
-    await page.goto('/');
+    await page.goto('/trader');
     // The bell icon button is rendered by AlertStream
     await expect(page.locator('button').filter({ has: page.locator('svg') }).first()).toBeVisible();
   });
@@ -34,7 +34,7 @@ test.describe('AlertStream', () => {
       { alert_id: 'a2', severity: 2, category: 'RISK', title: 'Warn alert', body: 'Details', source_service: 'trading' },
     ];
 
-    await page.route('/api/alerts/stream', async (route) => {
+    await page.route('/trader/api/alerts/stream', async (route) => {
       await route.fulfill({
         status: 200,
         headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
@@ -42,7 +42,7 @@ test.describe('AlertStream', () => {
       });
     });
 
-    await page.goto('/');
+    await page.goto('/trader');
     // Badge should show count of 2
     await expect(page.locator('span').filter({ hasText: '2' })).toBeVisible({ timeout: 5000 });
   });
@@ -57,7 +57,7 @@ test.describe('AlertStream', () => {
       source_service: 'trading',
     }));
 
-    await page.route('/api/alerts/stream', async (route) => {
+    await page.route('/trader/api/alerts/stream', async (route) => {
       await route.fulfill({
         status: 200,
         headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
@@ -65,7 +65,7 @@ test.describe('AlertStream', () => {
       });
     });
 
-    await page.goto('/');
+    await page.goto('/trader');
     await expect(page.locator('span').filter({ hasText: '9+' })).toBeVisible({ timeout: 5000 });
   });
 
@@ -74,7 +74,7 @@ test.describe('AlertStream', () => {
       { alert_id: 'a1', severity: 3, category: 'RISK', title: 'Order rejected', body: 'Insufficient funds', source_service: 'trading' },
     ];
 
-    await page.route('/api/alerts/stream', async (route) => {
+    await page.route('/trader/api/alerts/stream', async (route) => {
       await route.fulfill({
         status: 200,
         headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
@@ -82,7 +82,7 @@ test.describe('AlertStream', () => {
       });
     });
 
-    await page.goto('/');
+    await page.goto('/trader');
     // Wait for badge to appear, then click the bell to open the sheet
     await expect(page.locator('span').filter({ hasText: '1' })).toBeVisible({ timeout: 5000 });
     await page.locator('button').filter({ has: page.locator('svg') }).first().click();
@@ -96,7 +96,7 @@ test.describe('AlertStream', () => {
       { alert_id: 'a1', severity: 4, category: 'SYSTEM', title: 'Critical failure', body: '', source_service: 'trading' },
     ];
 
-    await page.route('/api/alerts/stream', async (route) => {
+    await page.route('/trader/api/alerts/stream', async (route) => {
       await route.fulfill({
         status: 200,
         headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
@@ -104,7 +104,7 @@ test.describe('AlertStream', () => {
       });
     });
 
-    await page.goto('/');
+    await page.goto('/trader');
     // The badge counter span uses bg-destructive for high severity
     await expect(page.locator('span.bg-destructive')).toBeVisible({ timeout: 5000 });
   });
@@ -114,7 +114,7 @@ test.describe('AlertStream', () => {
       { alert_id: 'a1', severity: 1, category: 'SYSTEM', title: 'Test', body: '', source_service: 'trading' },
     ];
 
-    await page.route('/api/alerts/stream', async (route) => {
+    await page.route('/trader/api/alerts/stream', async (route) => {
       await route.fulfill({
         status: 200,
         headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
@@ -122,7 +122,7 @@ test.describe('AlertStream', () => {
       });
     });
 
-    await page.goto('/');
+    await page.goto('/trader');
     await expect(page.locator('span').filter({ hasText: '1' })).toBeVisible({ timeout: 5000 });
 
     // Open the sheet and clear

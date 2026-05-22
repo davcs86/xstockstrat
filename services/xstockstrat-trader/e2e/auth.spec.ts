@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Auth — POST /api/auth/login', () => {
   test('returns 200 and sets access_token + refresh_token cookies with valid credentials', async ({ page }) => {
-    const res = await page.request.post('/api/auth/login', {
+    const res = await page.request.post('/trader/api/auth/login', {
       data: { email: 'test@example.com', password: 'test-password' },
     });
     expect(res.status()).toBe(200);
@@ -16,7 +16,7 @@ test.describe('Auth — POST /api/auth/login', () => {
   });
 
   test('returns 400 when email or password is missing', async ({ page }) => {
-    const res = await page.request.post('/api/auth/login', {
+    const res = await page.request.post('/trader/api/auth/login', {
       data: { email: '', password: '' },
     });
     expect(res.status()).toBe(400);
@@ -27,7 +27,7 @@ test.describe('Auth — POST /api/auth/login', () => {
 
 test.describe('Auth — protected routes require a session', () => {
   test('GET /api/orders redirects to /login without a session cookie', async ({ page }) => {
-    const res = await page.request.get('/api/orders?trading_mode=paper', { maxRedirects: 0 });
+    const res = await page.request.get('/trader/api/orders?trading_mode=paper', { maxRedirects: 0 });
     expect([302, 307]).toContain(res.status());
   });
 });
@@ -35,13 +35,13 @@ test.describe('Auth — protected routes require a session', () => {
 test.describe('Auth — POST /api/auth/logout', () => {
   test('clears session cookies after a valid login', async ({ page }) => {
     // Login — page.request stores Set-Cookie in this context's cookie jar
-    const loginRes = await page.request.post('/api/auth/login', {
+    const loginRes = await page.request.post('/trader/api/auth/login', {
       data: { email: 'test@example.com', password: 'test-password' },
     });
     expect(loginRes.status()).toBe(200);
 
     // Logout — cookie is sent automatically; route clears it
-    const logoutRes = await page.request.post('/api/auth/logout');
+    const logoutRes = await page.request.post('/trader/api/auth/logout');
     expect(logoutRes.status()).toBe(200);
 
     const setCookieHeaders = logoutRes

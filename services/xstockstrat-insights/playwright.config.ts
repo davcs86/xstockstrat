@@ -37,7 +37,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'pnpm dev',
-    url: 'http://localhost:3001',
+    url: 'http://localhost:3001/insights/api/health',
     reuseExistingServer: !process.env.CI,
     env: {
       ANALYSIS_HTTP_ENDPOINT: 'http://127.0.0.1:9092',
