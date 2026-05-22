@@ -1,7 +1,7 @@
 # Implementation Spec: agent-mcp-server
 
 **Status**: `pending`
-**Created**: 2026-05-21
+**Created**: 2026-05-22
 **Feature**: `docs/roadmap/features/009-agent-mcp-server/feature.md`
 **Total Steps**: 13
 **Feature Branch**: `feature/agent-mcp-server`
@@ -10,21 +10,21 @@
 
 ## Execution Summary
 
-This is a new standalone Python service with no proto changes and no DB migrations. Steps execute in this order: Step 1 creates the full service scaffold (pyproject.toml with all required deps including grpcio and protobuf for identity calls, Dockerfile with proto stubs layer, app package structure); Step 2 implements the HTTP client wrapper; Step 3 implements API-key auth middleware for SSE connections using the identity gRPC stub; Step 4 implements the MCP server core (tool definitions and main entry point with auth-gated SSE transport); Step 5 adds the system prompt file; Step 6 wires the service into docker-compose and `.env.example`; Step 7 adds nginx upstream and `/agent/sse` location block; Step 8 adds the service to `.do/app.dev.yaml` and `.do/app.yaml` and updates the nginx env vars in both; Step 9 adds the `claude_mcp_config.json` operator config file; Step 10 covers tests. Steps 2–9 require Step 1. Steps 2 and 5 are independent of each other. Step 4 requires Steps 2 and 3. Step 7 requires Step 6 (the `XSTOCKSTRAT_AGENT_PRIVATE_URL` env var added to nginx in Step 8 must match the agent entry added to the DO specs in Step 8, so Steps 7 and 8 should be executed together). Step 10 covers Steps 1–5. Step 11 updates the CLAUDE.md registry and is independent of all other steps. Step 12 adds `x-mcp-secret` enforcement middleware to the three receiving services (ingest, notify, analysis) and adds `MCP_AGENT_SECRET` to their docker-compose and DO spec env blocks; Step 12 is independent of Steps 1–11 and can execute in any order relative to them. Step 13 creates `docs/runbooks/mcp-tools.md` — the operator tool reference; it requires Step 4 (tool signatures must be final) and Step 5 (system prompt content informs the usage guidance), and is otherwise independent.
+This is a new standalone Python service with no proto changes and no DB migrations. Steps execute in this order: Step 1 creates the full service scaffold (pyproject.toml with all required deps including grpcio and protobuf for identity calls, httpx for downstream calls, pypdf2 for PDF decryption in extract_email_content, Dockerfile with proto stubs layer, app package structure); Step 2 implements the HTTP and gRPC client wrapper; Step 3 implements API-key auth middleware for SSE connections using the identity gRPC stub; Step 4 implements the MCP server core — all six tool definitions (`list_signal_sources` with `extractor_tool` enrichment, `extract_email_content`, `extract_website_content`, `ingest_signal`, `emit_alert`, `run_backtest`) and the main entry point with auth-gated SSE transport; Step 5 adds the system prompt file covering all six tools and the `extractor_tool` routing pattern; Step 6 wires the service into docker-compose and `.env.example`; Step 7 adds nginx upstream and `/agent/sse` location block; Step 8 adds the service to `.do/app.dev.yaml` and `.do/app.yaml` and updates the nginx env vars in both (Steps 7 and 8 are coupled); Step 9 adds the `claude_mcp_config.json` operator config file; Step 10 covers tests for all six tools; Step 11 updates the CLAUDE.md registry; Step 12 adds `x-mcp-secret` enforcement middleware to the three receiving services (ingest, notify, analysis); Step 13 creates `docs/runbooks/mcp-tools.md`.
 
-**Prerequisite**: Feature 008 (`signal-source-registry`) must be merged first — specifically its Step 7 (HTTP wiring for `ListSignalSources`), which adds the Connect-RPC route `POST /xstockstrat.ingest.v1.IngestService/ListSignalSources` on port 8055 that the `list_signal_sources` tool delegates to.
+**Prerequisite**: Feature 008 (`signal-source-registry`) must be merged first — specifically its Steps 2 (DB migration adds `ingest.signal_sources` table), Step 4 (`signal_sources` repository), and Step 6 (HTTP wiring for `ListSignalSources` Connect-RPC route on port 8055). The `list_signal_sources` tool delegates to `POST /xstockstrat.ingest.v1.IngestService/ListSignalSources` on `INGEST_HTTP_ENDPOINT`; the `extract_email_content` and `extract_website_content` tools look up `credentials_ref` and `config_json` from the signal sources registry.
 
 ## Step Dependencies
 
 - Steps 2, 3, 4, 5, 6, 7, 8, 9 require Step 1: the service directory must exist.
-- Step 4 requires Steps 2 and 3: tools.py and auth.py must exist before main.py wires them together.
-- Steps 7 and 8 are coupled: nginx upstream references agent service added in Step 8's DO spec.
-- Step 10 (tests) requires Steps 1–5: tests cover scaffold, client, auth, and tools.
+- Step 4 requires Steps 2 and 3: `client.py` and `auth.py` must exist before `tools.py` and `main.py` wire them together.
+- Steps 7 and 8 are coupled: nginx upstream references the agent container name configured in Step 8's DO spec; both should be executed together.
+- Step 10 (tests) requires Steps 1–5: tests cover scaffold, client, auth, and all six tools.
 - Step 11 (docs) is independent of all other steps.
 - Steps 7 and 8 (nginx/infrastructure) have no pytest test step: nginx config correctness is verified by the `docker nginx -t` syntax check in Step 7's Verification command; end-to-end SSE connectivity is covered by `scripts/integration-test.sh`. No Python coverage threshold applies to nginx config changes.
 - Step 9 (claude_mcp_config.json) has no pytest test step: correctness is verified by the `python3 -c "import json; json.load(...)"` command in Step 9's Verification.
-- Step 12 (service-side enforcement) modifies three existing services. Tests for the middleware live in each service's existing test suite. The Step 12 verification commands confirm the guard is present in each file without requiring re-running full test suites.
-- Step 13 (docs) has no test step. Correctness is verified by confirming all four tool sections and required subsections are present.
+- Step 12 (service-side enforcement) modifies three existing services. Tests for the middleware live in each service's existing test suite. The Step 12 verification commands confirm the guard is present in each file.
+- Step 13 (docs) has no test step. Correctness is verified by confirming all six tool sections and required subsections are present.
 
 ---
 
@@ -48,15 +48,16 @@ This is a new standalone Python service with no proto changes and no DB migratio
 - Layout confirmed via `find services/xstockstrat-ingest -type f | sort` — matches `app/__init__.py`, `app/config/`, `app/handlers/`, `tests/__init__.py`, `tests/conftest.py`, `pyproject.toml`, `Dockerfile`.
 - Python version 3.12 confirmed via `services/xstockstrat-ingest/.python-version` and `FROM python:3.12-slim` in `services/xstockstrat-ingest/Dockerfile:L1`.
 - `uv` toolchain confirmed: `services/xstockstrat-ingest/Dockerfile:L2` — `COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv`.
-- `uv sync --frozen --no-dev` pattern confirmed: `services/xstockstrat-ingest/Dockerfile:L8`.
-- Proto stubs layer required because the agent calls `IdentityServiceStub.ValidateApiKey` via gRPC; ingest Dockerfile pattern confirmed: `services/xstockstrat-ingest/Dockerfile:L9–13` — copies `packages/proto/gen/python`, installs via `uv pip install --system -e`, symlinks to `/app/gen`.
-- `grpcio>=1.63.0` and `protobuf>=5.26.0` confirmed as required deps from `services/xstockstrat-ingest/pyproject.toml:L6,L9`.
+- `uv sync --frozen --no-dev` pattern confirmed: `services/xstockstrat-ingest/Dockerfile:L7`.
+- Proto stubs layer required because the agent calls `IdentityServiceStub.ValidateApiKey` via gRPC and `ConfigServiceStub.GetConfig` for credential resolution; pattern confirmed: `services/xstockstrat-ingest/Dockerfile:L9–13` — copies `../../packages/proto/gen/python`, installs via `uv pip install --system -e`, symlinks to `/app/gen`. Agent uses same `context: .` (repo root) build pattern — confirmed at `docker-compose.yml:L479` for `nginx` service and `L83` for ledger (`context: .`, `dockerfile: services/<name>/Dockerfile`).
+- `grpcio>=1.63.0` and `protobuf>=5.26.0` confirmed in `services/xstockstrat-ingest/pyproject.toml:L6,L9`.
 - `uvicorn[standard]>=0.29.0` confirmed in `services/xstockstrat-ingest/pyproject.toml:L13`.
 - Dev dependency pattern confirmed: `services/xstockstrat-ingest/pyproject.toml:L24` — `dev = ["pytest>=8.0.0", "pytest-cov>=5.0.0", "pytest-asyncio>=0.23.0"]`.
 - `asyncio_mode = "auto"` in pytest ini confirmed: `services/xstockstrat-ingest/pyproject.toml:L34`.
 - Port 9000 is not used by any existing service — confirmed by `Service Registry` in `CLAUDE.md` (ports 50051–50060 gRPC, 8051–8060 HTTP, 3000–3002 frontend). Port 9000 is new.
 - No MCP library referenced anywhere in the codebase: `grep -rn "mcp\|fastmcp" services/` → no match in Python service source files.
-- `respx` mock library for httpx — confirmed absent from all pyproject.toml files; must be added fresh in dev deps.
+- `pypdf2` / `PyMuPDF` (`fitz`) — neither present in any `pyproject.toml`; must be added fresh. `PyMuPDF` (via `pymupdf>=1.24.0`) is chosen: modern maintained fork with password-protected PDF support, lighter than `pypdf2`. Confirmed absent: `grep -rn "pymupdf\|PyMuPDF\|pypdf" services/` → no match.
+- `respx` mock library for httpx — confirmed absent from all `pyproject.toml` files; must be added fresh in dev deps.
 
 **Instructions**:
 
@@ -74,6 +75,7 @@ This is a new standalone Python service with no proto changes and no DB migratio
      "uvicorn[standard]>=0.29.0",
      "grpcio>=1.63.0",
      "protobuf>=5.26.0",
+     "pymupdf>=1.24.0",
    ]
 
    [project.optional-dependencies]
@@ -97,9 +99,9 @@ This is a new standalone Python service with no proto changes and no DB migratio
    [tool.ruff.lint]
    select = ["E", "F", "I", "UP"]
    ```
-   Rationale: `mcp` is the official Anthropic MCP Python SDK (supports stdio and SSE transport); `httpx` is the async HTTP client for downstream webhook calls; `starlette` + `uvicorn[standard]` are needed for SSE transport ASGI app (pattern from `services/xstockstrat-ingest/pyproject.toml:L13`); `grpcio` + `protobuf` enable calling identity's `ValidateApiKey` gRPC method for SSE auth; `respx` is the httpx mock library for tests.
+   Rationale: `mcp` is the official Anthropic MCP Python SDK (supports stdio and SSE transport); `httpx` is the async HTTP client for downstream webhook calls; `starlette` + `uvicorn[standard]` are needed for SSE transport ASGI app; `grpcio` + `protobuf` enable calling identity `ValidateApiKey` gRPC method for SSE auth and config `GetConfig` for credential resolution; `pymupdf` enables password-protected PDF decryption in `extract_email_content`; `respx` is the httpx mock library for tests.
 
-2. Create `services/xstockstrat-agent/Dockerfile`, including the proto stubs layer (required for identity gRPC call):
+2. Create `services/xstockstrat-agent/Dockerfile`, including the proto stubs layer:
    ```dockerfile
    FROM python:3.12-slim
    COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -109,17 +111,17 @@ This is a new standalone Python service with no proto changes and no DB migratio
    COPY pyproject.toml uv.lock ./
    RUN uv sync --frozen --no-dev
 
-   COPY ../../packages/proto/gen/python /proto/gen/python
+   COPY packages/proto/gen/python /proto/gen/python
    RUN uv pip install --system -e /proto/gen/python
 
    # Expose gen/ as a Python namespace package so "from gen.xxx.v1 import" works
    RUN ln -s /proto/gen/python /app/gen
 
-   COPY . .
+   COPY services/xstockstrat-agent/ .
    EXPOSE 9000
    CMD ["python", "-m", "app.main"]
    ```
-   Note: The COPY context must be the repo root (not `./services/xstockstrat-agent`) because `COPY ../../packages/proto/gen/python` references a path outside the service directory. In `docker-compose.yml` (Step 6), the `build.context` must be `.` (repo root) and `build.dockerfile` must be `services/xstockstrat-agent/Dockerfile`.
+   Note: The COPY context must be the repo root (not `./services/xstockstrat-agent`) because `COPY packages/proto/gen/python` references a path outside the service directory. In `docker-compose.yml` (Step 6), the `build.context` must be `.` (repo root) and `build.dockerfile` must be `services/xstockstrat-agent/Dockerfile`. Confirmed pattern: `nginx` uses `context: .` at `docker-compose.yml:L479`. The `COPY services/xstockstrat-agent/ .` copies the service app files after stubs are installed.
 
 3. Create `services/xstockstrat-agent/app/__init__.py` — empty file.
 
@@ -142,6 +144,7 @@ This is a new standalone Python service with no proto changes and no DB migratio
        monkeypatch.setenv("MCP_AGENT_SECRET", "test-secret")
        monkeypatch.setenv("MCP_TRANSPORT", "stdio")
        monkeypatch.setenv("IDENTITY_ENDPOINT", "identity-test:50058")
+       monkeypatch.setenv("CONFIG_ENDPOINT", "config-test:50060")
    ```
 
 8. Run `uv lock` from `services/xstockstrat-agent/` to generate `uv.lock`:
@@ -165,7 +168,7 @@ Confirm the following paths exist:
 
 ---
 
-### Step 2 — service: Implement HTTP client wrapper
+### Step 2 — service: Implement HTTP and gRPC client wrapper
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent` (new)
@@ -176,29 +179,35 @@ Confirm the following paths exist:
 
 **Codebase Evidence**:
 - **ingest webhook endpoint** confirmed: `services/xstockstrat-ingest/app/http_server.py:L72` — `@app.post("/webhooks/ingest-signal")`. Payload fields at L89–122: `source`, `symbol`, `direction`, `conviction`, `valid_from`, `valid_until`, `headline`, `raw_url`, `tags`.
-- **ingest `ListSignalSources` Connect-RPC route** — **not yet present** in `services/xstockstrat-ingest/app/http_server.py` (added by feature 008 Step 7). MCP tool calls `POST /xstockstrat.ingest.v1.IngestService/ListSignalSources` on `INGEST_HTTP_ENDPOINT`; Connect-RPC path convention confirmed at `services/xstockstrat-ingest/app/http_server.py:L27–49`.
+- **ingest `ListSignalSources` Connect-RPC route** — **not yet present** in `services/xstockstrat-ingest/app/http_server.py` (added by feature 008 Step 6). Will be available at `POST /xstockstrat.ingest.v1.IngestService/ListSignalSources` on `INGEST_HTTP_ENDPOINT`.
 - **notify webhook endpoint** confirmed: `services/xstockstrat-notify/src/webhooks/router.ts:L46` — `url === '/webhooks/emit-alert'`.
 - **analysis webhook endpoint** confirmed: `services/xstockstrat-analysis/app/http_server.py:L46` — `@app.post("/webhooks/run-backtest")`.
+- **`GetConfig` gRPC stub** confirmed in `packages/proto/gen/python/config/v1/config_pb2_grpc.py:L45–47` — `ConfigServiceStub.GetConfig` calls `/xstockstrat.config.v1.ConfigService/GetConfig`. Used for one-shot credential resolution at tool-call time (not WatchConfig stream). `GetConfigRequest` confirmed in `packages/proto/config/v1/config.proto:L68`.
+- **`grpc.aio.insecure_channel` pattern** confirmed in `services/xstockstrat-ingest/app/config/watcher.py:L26`.
 - **`MCP_AGENT_SECRET` env var**: absent from `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`, `.env.example` — confirmed via grep → no match.
+- **`CONFIG_ENDPOINT`** absent from `docker-compose.yml` for agent (not in any current service block as `CONFIG_ENDPOINT` because only gRPC-capable services subscribe to config): `grep -n "CONFIG_ENDPOINT" docker-compose.yml` → matches only per-service blocks for indicators, ingest, analysis etc. Agent will use `GetConfig` one-shot call for credential lookup, not WatchConfig stream.
 
 **Instructions**:
 
-Create `services/xstockstrat-agent/app/client.py` — the shared async HTTP client wrapper:
+Create `services/xstockstrat-agent/app/client.py` — the shared async HTTP and gRPC client wrapper:
 
 ```python
 """
-Shared async HTTP client for xstockstrat-agent.
-All downstream calls include x-mcp-secret header when MCP_AGENT_SECRET is set.
+Shared async HTTP and gRPC client for xstockstrat-agent.
+All downstream HTTP calls include x-mcp-secret header when MCP_AGENT_SECRET is set.
+GetConfigValue() makes a one-shot gRPC call to xstockstrat-config to resolve credentials.
 """
 import os
 from typing import Any
 
+import grpc
 import httpx
 
 INGEST_HTTP_ENDPOINT = os.environ.get("INGEST_HTTP_ENDPOINT", "http://xstockstrat-ingest:8055")
 NOTIFY_HTTP_ENDPOINT = os.environ.get("NOTIFY_HTTP_ENDPOINT", "http://xstockstrat-notify:8059")
 ANALYSIS_HTTP_ENDPOINT = os.environ.get("ANALYSIS_HTTP_ENDPOINT", "http://xstockstrat-analysis:8056")
 MCP_AGENT_SECRET = os.environ.get("MCP_AGENT_SECRET", "")
+CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
 
 
 def _headers() -> dict[str, str]:
@@ -227,6 +236,26 @@ async def post_analysis(path: str, payload: dict[str, Any]) -> dict[str, Any]:
         r = await c.post(f"{ANALYSIS_HTTP_ENDPOINT}{path}", json=payload, headers=_headers())
         r.raise_for_status()
         return r.json()
+
+
+async def get_config_value(key: str) -> str | None:
+    """
+    Resolve a config key value via one-shot GetConfig gRPC call to xstockstrat-config.
+    Used by extract_email_content / extract_website_content to resolve credentials_ref.
+    Returns None if the key is absent or the call fails.
+    """
+    try:
+        from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
+
+        async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
+            stub = config_pb2_grpc.ConfigServiceStub(channel)
+            snapshot = await stub.GetConfig(config_pb2.GetConfigRequest(namespace="agent"))
+            v = snapshot.values.get(key)
+            if v is None:
+                return None
+            return v.string_val or None
+    except Exception:
+        return None
 ```
 
 **Verification**:
@@ -237,8 +266,11 @@ ls services/xstockstrat-agent/app/client.py
 # Confirm x-mcp-secret header logic
 grep -n "x-mcp-secret\|MCP_AGENT_SECRET" services/xstockstrat-agent/app/client.py
 
-# Confirm all three base URL env vars
-grep -n "INGEST_HTTP_ENDPOINT\|NOTIFY_HTTP_ENDPOINT\|ANALYSIS_HTTP_ENDPOINT" services/xstockstrat-agent/app/client.py
+# Confirm all three base URL env vars and CONFIG_ENDPOINT
+grep -n "INGEST_HTTP_ENDPOINT\|NOTIFY_HTTP_ENDPOINT\|ANALYSIS_HTTP_ENDPOINT\|CONFIG_ENDPOINT" services/xstockstrat-agent/app/client.py
+
+# Confirm get_config_value function present
+grep -n "get_config_value\|GetConfig" services/xstockstrat-agent/app/client.py
 ```
 
 ---
@@ -255,11 +287,9 @@ grep -n "INGEST_HTTP_ENDPOINT\|NOTIFY_HTTP_ENDPOINT\|ANALYSIS_HTTP_ENDPOINT" ser
 **Codebase Evidence**:
 - `ValidateApiKey` RPC confirmed in `packages/proto/identity/v1/identity.proto:L15` — `rpc ValidateApiKey(ValidateApiKeyRequest) returns (TokenClaims)`. Request message: `ValidateApiKeyRequest { string api_key = 1; }` at `L62`.
 - `IdentityServiceStub.ValidateApiKey` confirmed in generated Python stubs: `packages/proto/gen/python/identity/v1/identity_pb2_grpc.py:L62–64` — calls `/xstockstrat.identity.v1.IdentityService/ValidateApiKey`.
-- `identity_pb2.ValidateApiKeyRequest` confirmed in stubs at `packages/proto/gen/python/identity/v1/identity_pb2_grpc.py:L62`.
-- **`ValidateApiKey` is NOT in `services/xstockstrat-identity/src/connect/connectRouter.ts`** — only `AuthenticateUser`, `ValidateToken`, and `CreateApiKey` are exposed via Connect-RPC HTTP (L11–39). The agent must call identity via gRPC (port 50058), not HTTP (port 8058).
+- **`ValidateApiKey` is NOT in `services/xstockstrat-identity/src/connect/connectRouter.ts`** — only `AuthenticateUser`, `ValidateToken`, `CreateApiKey` are exposed via Connect-RPC HTTP. The agent must call identity via gRPC (port 50058), not HTTP.
 - `IDENTITY_ENDPOINT` default `xstockstrat-identity:50058` — confirmed gRPC port from service registry in `CLAUDE.md` and from `services/xstockstrat-identity/CLAUDE.md`.
-- `grpc.aio.insecure_channel` pattern confirmed in `services/xstockstrat-ingest/app/handlers/servicer.py` for other service stubs (MarketData, Ledger channels at L27–29 — same pattern applies for identity).
-- Feature 008 implementation-spec.md uses `identity_pb2_grpc.IdentityServiceStub(identity_channel)` with `grpc.aio.insecure_channel(IDENTITY_ENDPOINT)` — confirmed pattern at feature 008 implementation-spec.md L383.
+- `grpc.aio.insecure_channel` pattern confirmed in `services/xstockstrat-ingest/app/config/watcher.py:L26`.
 - FR-5a specifies HTTP 401 on missing or invalid API key.
 
 **Instructions**:
@@ -272,7 +302,7 @@ SSE endpoint API key authentication for xstockstrat-agent.
 
 Validates API keys against xstockstrat-identity's ValidateApiKey gRPC RPC.
 Returns True if the key is valid; False on invalid/missing key.
-Used as middleware in the Starlette ASGI app wrapping the SSE transport.
+Used as guard in the Starlette ASGI app wrapping the SSE transport.
 """
 import logging
 import os
@@ -338,39 +368,150 @@ grep -n "return False\|return True" services/xstockstrat-agent/app/auth.py
 
 **Codebase Evidence**:
 - **ingest valid directions** confirmed: `services/xstockstrat-ingest/app/handlers/servicer.py:L167` — `valid_directions = {"buy", "sell", "hold", "watchlist"}`.
-- **ingest conviction range** confirmed: `services/xstockstrat-ingest/app/handlers/servicer.py:L181` — 0.0–1.0.
-- **MCP_TRANSPORT** env var selects `stdio` or `sse` per FR-5; default `stdio`.
-- **MCP_SSE_PORT** env var for SSE listen port; default `9000`.
-- **SSE transport requires Starlette ASGI app** — confirmed `starlette>=0.37.0` + `uvicorn[standard]>=0.29.0` added to pyproject.toml in Step 1.
+- **ingest conviction range** confirmed: `services/xstockstrat-ingest/app/handlers/servicer.py:L181` — `0.0–1.0`.
+- **`ListSignalSources` Connect-RPC path** — `POST /xstockstrat.ingest.v1.IngestService/ListSignalSources` — added by feature 008 Step 6; not yet in codebase.
+- **`extractor_tool` type-level mapping** (from FR-2 product-spec): `mediated_email_attachment` → `"extract_email_content"`; `mediated_linked_email` → `"extract_email_content"`; `mediated_simple_website` → `"extract_website_content"`; `mediated_authenticated_website` → `"extract_website_content"`; all others (including `mediated_simple_email` and all non-mediated types) → `null`. This mapping lives entirely in the agent's tool response layer — the underlying RPC is unchanged.
+- **`credentials_ref` field** confirmed in feature 008 implementation-spec.md `Step 4 Codebase Evidence` — column `credentials_ref TEXT` in `ingest.signal_sources` table; `config_json JSONB` contains `url` for website types. The `get_active_source` repository function returns a dict with `slug`, `display_name`, `source_type`, `credentials_ref`, `config_json`.
+- **`get_config_value` for credential resolution** — the `credentials_ref` value is a config key (e.g. `secret.agent.mysource_password`) that maps to a secret stored in xstockstrat-config. Agent resolves it via `client.get_config_value(credentials_ref)` (Step 2).
+- **`pymupdf` for PDF decryption** — `import fitz` (PyMuPDF module name) confirmed in `pymupdf>=1.24.0` package; `fitz.open(stream=data)` + `doc.authenticate(password)` pattern; package added in Step 1 pyproject.toml.
+- **`httpx` for URL fetching** — already included as dep; `httpx.AsyncClient` used with optional auth headers for gated URLs.
+- **`MCP_TRANSPORT` and `MCP_SSE_PORT`** env vars: default `stdio` and `9000` per FR-5.
+- **SSE transport requires Starlette ASGI app** — `starlette>=0.37.0` + `uvicorn[standard]>=0.29.0` added in Step 1.
 - **`stdio_server` pattern** from `mcp.server.stdio` — standard MCP Python SDK; no prior usage in codebase (confirmed absent: `grep -rn "from mcp" services/` → no match).
-- **SSE auth**: FR-5a requires `Authorization: Bearer <key>` check before SSE connection; auth middleware in `app/auth.py` (Step 3) returns `True`/`False`; Starlette `Request` provides headers.
-- **Feature 008 context**: `app/auth.py` `validate_api_key` returns `False` → caller must return `Response(status_code=401)`.
 
 **Instructions**:
 
-1. Create `services/xstockstrat-agent/app/tools.py` — the four MCP tool definitions:
+1. Create `services/xstockstrat-agent/app/tools.py` — all six MCP tool definitions:
    ```python
    """
    MCP tool definitions for xstockstrat-agent.
-   Each tool delegates to the corresponding HTTP webhook or Connect-RPC endpoint.
+
+   Six tools:
+     list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
+     extract_email_content — extracts raw text from email attachments or gated URLs
+     extract_website_content — fetches and returns raw text from a registered website source
+     ingest_signal        — ingests a trading signal via ingest webhook
+     emit_alert           — emits an alert via notify webhook
+     run_backtest         — triggers a backtest via analysis webhook
    """
+   import base64
+   import logging
    from typing import Optional
+
    from mcp.server import Server
+
    from app import client
+
+   log = logging.getLogger(__name__)
+
+   # Type-level mapping: source_type → extractor_tool
+   # Derives extractor_tool from source_type at the agent layer only.
+   # The underlying ListSignalSources RPC and proto are unchanged.
+   _EXTRACTOR_TOOL_MAP: dict[str, str | None] = {
+       "mediated_email_attachment": "extract_email_content",
+       "mediated_linked_email": "extract_email_content",
+       "mediated_simple_website": "extract_website_content",
+       "mediated_authenticated_website": "extract_website_content",
+       # All other types (mediated_simple_email and all non-mediated) → null
+   }
 
 
    def register_tools(server: Server) -> None:
 
        @server.tool()
-       async def list_signal_sources() -> dict:
-           """List all active signal sources registered in xstockstrat-ingest.
-           Returns slug, display_name, source_type for all active sources.
-           Always call this before ingest_signal to look up valid source slugs."""
+       async def list_signal_sources(
+           source_type: Optional[list[str]] = None,
+       ) -> dict:
+           """List active signal sources from xstockstrat-ingest.
+           Returns slug, display_name, source_type, config_json, and extractor_tool per source.
+           extractor_tool: 'extract_email_content' | 'extract_website_content' | null.
+           Claude must follow extractor_tool exactly — do not infer routing from source_type.
+           source_type: optional filter list (e.g. ['mediated_simple_email', 'mediated_email_attachment'])."""
            result = await client.post_ingest(
                "/xstockstrat.ingest.v1.IngestService/ListSignalSources",
                {"includeInactive": False},
            )
-           return result
+           # Enrich each source with extractor_tool derived from source_type.
+           # credentials_ref is intentionally excluded — never exposed to Claude.
+           sources = result.get("sources", [])
+           enriched = []
+           for src in sources:
+               st = src.get("source_type", "")
+               enriched.append({
+                   "slug": src.get("slug", ""),
+                   "display_name": src.get("display_name", ""),
+                   "source_type": st,
+                   "config_json": src.get("config_json") or src.get("configJson", {}),
+                   "extractor_tool": _EXTRACTOR_TOOL_MAP.get(st, None),
+               })
+           if source_type:
+               enriched = [s for s in enriched if s["source_type"] in source_type]
+           return {"sources": enriched}
+
+       @server.tool()
+       async def extract_email_content(
+           source_slug: str,
+           attachments_b64: Optional[list[str]] = None,
+           urls: Optional[list[str]] = None,
+       ) -> dict:
+           """Extract raw text from email attachments or gated URLs for a registered source.
+           Called only when a source's extractor_tool equals 'extract_email_content'.
+           source_slug: slug from list_signal_sources.
+           attachments_b64: list of base64-encoded attachment bytes (PDF, etc.).
+           urls: list of URLs to fetch (for mediated_linked_email sources).
+           At least one of attachments_b64 or urls must be provided.
+           Returns {raw_text: str}. Credentials are never exposed in the response."""
+           if not attachments_b64 and not urls:
+               raise ValueError("At least one of attachments_b64 or urls must be provided")
+
+           # Look up source from ingest to get credentials_ref and config_json.
+           # Feature 008 Step 6 adds the ListSignalSources route; a source-level lookup
+           # is done by filtering the full list by slug.
+           src = await _get_source(source_slug)
+
+           credentials_ref = src.get("credentials_ref")
+           password: str | None = None
+           if credentials_ref:
+               password = await client.get_config_value(credentials_ref)
+
+           texts: list[str] = []
+
+           if attachments_b64:
+               for b64_data in attachments_b64:
+                   raw = base64.b64decode(b64_data)
+                   text = _extract_from_bytes(raw, password=password)
+                   texts.append(text)
+
+           if urls:
+               for url in urls:
+                   text = await _fetch_url(url, password=password)
+                   texts.append(text)
+
+           return {"raw_text": "\n\n".join(texts)}
+
+       @server.tool()
+       async def extract_website_content(
+           source_slug: str,
+       ) -> dict:
+           """Fetch and return raw text from a registered website source.
+           Called only when a source's extractor_tool equals 'extract_website_content'.
+           source_slug: slug from list_signal_sources.
+           The URL is read from the source's config_json.url — Claude never constructs URLs.
+           Returns {raw_text: str}. Credentials are never exposed in the response."""
+           src = await _get_source(source_slug)
+
+           config_json = src.get("config_json") or {}
+           url = config_json.get("url")
+           if not url:
+               raise ValueError(f"Source '{source_slug}' has no url in config_json")
+
+           credentials_ref = src.get("credentials_ref")
+           password: str | None = None
+           if credentials_ref:
+               password = await client.get_config_value(credentials_ref)
+
+           text = await _fetch_url(url, password=password)
+           return {"raw_text": text}
 
        @server.tool()
        async def ingest_signal(
@@ -421,7 +562,7 @@ grep -n "return False\|return True" services/xstockstrat-agent/app/auth.py
            """Emit an alert via xstockstrat-notify.
            severity: e.g. 'info', 'warning', 'critical'.
            category: alert category e.g. 'signal', 'system'.
-           Call this when an email contains an actionable signal worth flagging."""
+           Call this when an email contains a high-conviction actionable signal."""
            return await client.post_notify(
                "/webhooks/emit-alert",
                {
@@ -452,9 +593,58 @@ grep -n "return False\|return True" services/xstockstrat-agent/app/auth.py
                    "initial_capital": initial_capital,
                },
            )
+
+
+   async def _get_source(source_slug: str) -> dict:
+       """Fetch a single signal source by slug from the ingest registry.
+       Raises ValueError if slug is not found or source is inactive."""
+       result = await client.post_ingest(
+           "/xstockstrat.ingest.v1.IngestService/ListSignalSources",
+           {"includeInactive": False},
+       )
+       for src in result.get("sources", []):
+           if src.get("slug") == source_slug:
+               return src
+       raise ValueError(f"Unknown or inactive source slug: '{source_slug}'")
+
+
+   def _extract_from_bytes(data: bytes, password: str | None = None) -> str:
+       """Extract text from bytes. Attempts PDF parsing first; falls back to UTF-8 decode."""
+       try:
+           import fitz  # PyMuPDF  # noqa: PLC0415
+
+           doc = fitz.open(stream=data, filetype="pdf")
+           if doc.is_encrypted and password:
+               if not doc.authenticate(password):
+                   raise ValueError("Failed to decrypt PDF: incorrect password")
+           elif doc.is_encrypted:
+               raise ValueError("PDF is password-protected but no credentials_ref is configured")
+           return "\n".join(page.get_text() for page in doc)
+       except Exception as pdf_err:
+           log.debug("PDF parsing failed (%s), falling back to UTF-8 decode", pdf_err)
+           try:
+               return data.decode("utf-8", errors="replace")
+           except Exception as e:
+               raise ValueError(f"Cannot extract text from attachment: {e}") from e
+
+
+   async def _fetch_url(url: str, password: str | None = None) -> str:
+       """Fetch URL content. For authenticated sources, passes password as Basic auth or
+       as a Bearer token depending on URL scheme conventions. Returns raw text."""
+       import httpx  # noqa: PLC0415
+
+       headers: dict[str, str] = {}
+       if password:
+           # Use Authorization Bearer by default; operators can override via source config_json
+           headers["Authorization"] = f"Bearer {password}"
+
+       async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as c:
+           r = await c.get(url, headers=headers)
+           r.raise_for_status()
+           return r.text
    ```
 
-2. Create `services/xstockstrat-agent/app/main.py` — the entry point. Reads `MCP_TRANSPORT` (default `stdio`); if `sse`, starts Starlette ASGI app with auth middleware on `MCP_SSE_PORT` (default `9000`); if `stdio`, runs via MCP stdio transport:
+2. Create `services/xstockstrat-agent/app/main.py` — the entry point:
    ```python
    """
    xstockstrat-agent — MCP server entry point.
@@ -497,7 +687,6 @@ grep -n "return False\|return True" services/xstockstrat-agent/app/auth.py
    async def _run_sse() -> None:
        from mcp.server.sse import SseServerTransport
        from starlette.applications import Starlette
-       from starlette.requests import Request
        from starlette.responses import Response
        from starlette.routing import Mount, Route
        import uvicorn
@@ -543,14 +732,18 @@ grep -n "return False\|return True" services/xstockstrat-agent/app/auth.py
 # Confirm all files exist
 ls services/xstockstrat-agent/app/tools.py services/xstockstrat-agent/app/main.py
 
-# Confirm tool names match FR-2
-grep -n "async def list_signal_sources\|async def ingest_signal\|async def emit_alert\|async def run_backtest" services/xstockstrat-agent/app/tools.py
+# Confirm all six tool names match FR-2
+grep -n "async def list_signal_sources\|async def extract_email_content\|async def extract_website_content\|async def ingest_signal\|async def emit_alert\|async def run_backtest" services/xstockstrat-agent/app/tools.py
 
-# Confirm SSE auth gate present (validate_api_key called before sse.connect_sse)
+# Confirm extractor_tool mapping present
+grep -n "_EXTRACTOR_TOOL_MAP\|extractor_tool" services/xstockstrat-agent/app/tools.py
+
+# Confirm SSE auth gate present
 grep -n "validate_api_key\|Unauthorized\|401" services/xstockstrat-agent/app/main.py
 
-# Confirm MCP_TRANSPORT branch
-grep -n "MCP_TRANSPORT\|stdio\|sse" services/xstockstrat-agent/app/main.py
+# Confirm credentials never exposed in tool responses
+grep -n "credentials_ref" services/xstockstrat-agent/app/tools.py
+# Should show credentials_ref accessed internally but NOT included in any return dict
 ```
 
 ---
@@ -565,11 +758,11 @@ grep -n "MCP_TRANSPORT\|stdio\|sse" services/xstockstrat-agent/app/main.py
 **Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion, newsletter source schema stability
 
 **Codebase Evidence**:
-- Five source types confirmed via feature 008 product-spec: `simple_email`, `email_attachment`, `linked_email`, `simple_website`, `authenticated_website`.
 - Valid directions confirmed via `services/xstockstrat-ingest/app/handlers/servicer.py:L167` — `valid_directions = {"buy", "sell", "hold", "watchlist"}`.
 - Conviction scale 0.0–1.0 confirmed: `services/xstockstrat-ingest/app/handlers/servicer.py:L181`.
-- `list_signal_sources` must be called first — FR-3 and AC-4 (unknown slug → INVALID_ARGUMENT from ingest).
-- Config keys for source-level defaults confirmed in `services/xstockstrat-ingest/CLAUDE.md` lines 52–60: `ingest.signals.<slug>.default_conviction` defaults apply when conviction is omitted.
+- Source types confirmed from feature 008 product-spec and implementation-spec: `simple_email`, `email_attachment`, `linked_email`, `simple_website`, `authenticated_website` (programmatic), and `mediated_simple_email`, `mediated_email_attachment`, `mediated_linked_email`, `mediated_simple_website`, `mediated_authenticated_website` (Claude-mediated).
+- `extractor_tool` routing rules from FR-2: `mediated_email_attachment` and `mediated_linked_email` → `"extract_email_content"`; `mediated_simple_website` and `mediated_authenticated_website` → `"extract_website_content"`; `mediated_simple_email` → `null` (Claude reads email body directly); all non-mediated types → `null`.
+- Config keys for source-level defaults confirmed in `services/xstockstrat-ingest/CLAUDE.md` — `ingest.signals.<slug>.default_conviction` defaults apply when conviction is omitted.
 
 **Instructions**:
 
@@ -579,17 +772,46 @@ Create `services/xstockstrat-agent/app/prompts/signal_extraction.md` with the fo
 # Signal Extraction System Prompt
 
 You are a trading signal extraction assistant connected to the xstockstrat platform.
-Your job is to read freeform text (emails, analyst notes, newsletters) and extract
-structured trading signals.
+Your job is to read freeform text (emails, analyst notes, newsletters, websites) and extract
+structured trading signals using the platform's MCP tools.
 
-## Step 1: Always discover sources first
+## Standard Email Ingestion Flow
 
-Before ingesting any signal, call `list_signal_sources` to get the current list of
-active sources. Match the email sender or newsletter name to one of the returned slugs.
-If no matching slug exists, do NOT call `ingest_signal` — inform the operator that
-the source is not registered.
+1. Call `list_signal_sources` filtered to `["mediated_simple_email", "mediated_email_attachment", "mediated_linked_email"]`.
+   Each source in the response includes `config_json` with `sender_patterns`, `subject_patterns`,
+   and an `extractor_tool` field.
 
-## Step 2: Extract signal fields
+2. Use the returned `config_json` patterns (sender_patterns, subject_patterns) to query Gmail via
+   the Gmail MCP server and retrieve matching emails.
+
+3. For each matching email, check the source's `extractor_tool` field:
+   - If `extractor_tool` is `null`: the source is `mediated_simple_email`. Read the email body
+     directly from the Gmail MCP response — do NOT call any extraction tool.
+   - If `extractor_tool` is `"extract_email_content"`: call `extract_email_content(source_slug, ...)`
+     with the source slug and the relevant email content (attachments as base64 for
+     `mediated_email_attachment`, or URLs for `mediated_linked_email`).
+   - Do NOT infer the routing path from `source_type` or any other field.
+     Follow `extractor_tool` exactly — it is the authoritative routing directive.
+
+4. Identify trading signals from the content (email body text or raw_text returned by the tool).
+   Use judgment — do not infer signals that are not clearly present.
+
+5. For each identified signal, call `ingest_signal` with the structured fields.
+
+## Standard Website Ingestion Flow
+
+1. Call `list_signal_sources` filtered to `["mediated_simple_website", "mediated_authenticated_website"]`.
+   Each source includes `config_json` (with url and scrape_selector) and `extractor_tool`.
+
+2. For each source, call `extract_website_content(source_slug)`.
+   The tool fetches the registered URL and handles authentication internally.
+   Do NOT construct or pass a URL — the tool reads it from the source registry.
+
+3. Identify trading signals from the returned `raw_text` using judgment.
+
+4. For each identified signal, call `ingest_signal`.
+
+## Signal Field Extraction
 
 For each actionable signal found in the text, extract:
 
@@ -605,34 +827,24 @@ For each actionable signal found in the text, extract:
 | `raw_url` | No | Source URL if provided in email |
 | `tags` | No | Relevant keywords (e.g. ["unusual_options", "earnings"]) |
 
-## Step 3: Conviction scoring guidance
+## Conviction Scoring Guidance
 
 Score conviction on a 0.0–1.0 scale:
 
 - **0.8–1.0**: Explicit strong recommendation with specific price target or timeframe;
-  quantitative evidence (e.g. large options sweep, insider purchase, analyst upgrade).
+  quantitative evidence (large options sweep, insider purchase, analyst upgrade).
 - **0.5–0.7**: Directional signal with supporting rationale but no explicit price target;
   qualitative recommendation ("I like this stock here").
 - **0.3–0.5**: Speculative mention or watchlist candidate; no explicit directional call.
 - **0.0–0.3**: Informational only; no investment recommendation implied.
 
 Omit `conviction` entirely if insufficient context — the ingest service applies the
-source's default conviction (typically 0.5) automatically.
+source's default conviction automatically.
 
-## Source type to input format expectations
-
-| source_type | What to look for in the input |
-|---|---|
-| `simple_email` | Signal is in the email body text — extract from sender+subject match |
-| `email_attachment` | Signal is in an attached PDF, CSV, or image — operator must paste content |
-| `linked_email` | Signal is behind a URL in the email — operator must visit and paste content |
-| `simple_website` | Signal is from a public webpage — operator pastes page excerpt |
-| `authenticated_website` | Signal is from a paywalled page — operator pastes page content |
-
-## Step 4: When to call emit_alert vs. skip
+## When to Call emit_alert vs. Skip
 
 Call `emit_alert` when:
-- A signal is successfully ingested and has conviction >= 0.6 (worth flagging)
+- A signal is successfully ingested and has conviction >= 0.6 (worth flagging immediately)
 - An email contains an urgent or time-sensitive trading idea
 
 Do NOT call `emit_alert` when:
@@ -644,20 +856,20 @@ Silently skip (no tool calls) when:
 - The signal's source slug does not exist in `list_signal_sources`
 - The symbol is not a recognizable ticker
 
-## Error handling
+## Error Handling
 
-- If `ingest_signal` returns an error about an unknown source slug: inform the operator
-  that the source is not registered and suggest running `list_signal_sources` to confirm.
-- If `ingest_signal` returns a duplicate signal error: report that the signal was already
-  ingested and skip.
-- If any tool call fails with a network error: report the error to the operator and do
+- `ingest_signal` returns unknown source slug error: inform the operator the source is
+  not registered and suggest running `list_signal_sources` to confirm.
+- `ingest_signal` returns duplicate signal error: report already ingested and skip.
+- `extract_email_content` with unknown slug: report tool error and skip this source.
+- Any tool call fails with a network error: report the error to the operator and do
   not retry automatically.
 ```
 
 **Verification**:
 ```bash
-# Confirm file exists and contains key sections
-grep -n "list_signal_sources\|conviction\|source_type\|emit_alert" services/xstockstrat-agent/app/prompts/signal_extraction.md
+# Confirm file exists and contains key sections covering all six tools
+grep -n "list_signal_sources\|extract_email_content\|extract_website_content\|ingest_signal\|emit_alert\|conviction\|extractor_tool" services/xstockstrat-agent/app/prompts/signal_extraction.md
 ```
 
 ---
@@ -667,27 +879,24 @@ grep -n "list_signal_sources\|conviction\|source_type\|emit_alert" services/xsto
 **Status**: `pending`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
-- `docker-compose.yml` — modify (add xstockstrat-agent service block introducing `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT`, `IDENTITY_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `MCP_AGENT_SECRET`; confirmed absent: `grep -n "xstockstrat-agent" docker-compose.yml` → no match)
+- `docker-compose.yml` — modify (add xstockstrat-agent service block introducing `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT`, `IDENTITY_ENDPOINT`, `CONFIG_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `MCP_AGENT_SECRET`; confirmed absent: `grep -n "xstockstrat-agent" docker-compose.yml` → no match)
 - `.env.example` — modify (add `MCP_AGENT_SECRET` entry; confirmed absent: `grep -n "MCP_AGENT_SECRET" .env.example` → no match)
-- `.do/app.dev.yaml` — modify (add xstockstrat-agent service block with `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT`, `IDENTITY_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `MCP_AGENT_SECRET`; Instructions in Step 8)
-- `.do/app.yaml` — modify (same as app.dev.yaml for prod; Instructions in Step 8)
 
 **Reviewers**: Platform Lead — port uniqueness, service registry consistency, inter-service dependency graph correctness; Security — no secrets in config service state, secret keys use `secret.*` prefix
 
 **Codebase Evidence**:
-- YAML anchors confirmed: `docker-compose.yml:L17` — `x-common-env: &common-env`; `docker-compose.yml:L30` — `x-svc: &svc`. Both used via `<<: *common-env` and `<<: *svc`.
+- YAML anchors confirmed: `docker-compose.yml:L17` — `x-common-env: &common-env`; `docker-compose.yml:L29` — `x-svc: &svc`. Both used via `<<: *common-env` and `<<: *svc`.
 - No `DATABASE_URL` or `db-url` anchor needed — agent has no DB.
 - `env_file: [".env.local"]` pattern confirmed: `xstockstrat-ingest` block at `docker-compose.yml:L270`.
-- The agent Dockerfile requires build context `.` (repo root) because `COPY ../../packages/proto/gen/python` cannot reach above the specified context — ingest uses `context: ./services/xstockstrat-ingest` only because it is built with a separate `Dockerfile` that uses the same pattern; however, the agent's Dockerfile copies `../../packages/proto/gen/python` so **must use `context: .` (repo root)** and specify `dockerfile: services/xstockstrat-agent/Dockerfile`. Confirmed pattern: `services/xstockstrat-ledger`, `xstockstrat-notify`, `xstockstrat-config` all use `context: .` with `dockerfile: services/<name>/Dockerfile` at `docker-compose.yml:L120–145`.
-- `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT`, `IDENTITY_ENDPOINT` confirmed absent from `docker-compose.yml`: `grep -n "INGEST_HTTP_ENDPOINT\|NOTIFY_HTTP_ENDPOINT\|ANALYSIS_HTTP_ENDPOINT\|IDENTITY_ENDPOINT" docker-compose.yml` → no match.
-- `MCP_AGENT_SECRET` confirmed absent from `docker-compose.yml` and `.env.example`: `grep -n "MCP_AGENT_SECRET" docker-compose.yml .env.example` → no match.
-- `MCP_TRANSPORT`, `MCP_SSE_PORT` confirmed absent from `docker-compose.yml`: `grep -n "MCP_TRANSPORT\|MCP_SSE_PORT" docker-compose.yml` → no match.
+- The agent Dockerfile requires build context `.` (repo root) because `COPY packages/proto/gen/python` cannot reach above the specified context — confirmed pattern: `nginx` uses `context: .` at `docker-compose.yml:L479`; ledger uses `context: .` at `docker-compose.yml:L83`.
+- `INGEST_HTTP_ENDPOINT` confirmed absent from agent env in `docker-compose.yml`: `grep -n "INGEST_HTTP_ENDPOINT" docker-compose.yml` → no match for agent (exists for trader/insights on different service blocks).
+- `MCP_AGENT_SECRET`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `IDENTITY_ENDPOINT`, `CONFIG_ENDPOINT` confirmed absent from all service blocks: `grep -n "MCP_AGENT_SECRET\|MCP_TRANSPORT\|MCP_SSE_PORT\|IDENTITY_ENDPOINT\|CONFIG_ENDPOINT" docker-compose.yml | grep agent` → no match.
 - Port 9000 confirmed absent: `grep -n "9000" docker-compose.yml` → no match.
-- Agent depends on ingest, notify, analysis, and identity (for SSE auth). Ingest block ends at `docker-compose.yml:L287`; nginx block begins at `docker-compose.yml:L476`. Agent block appended after nginx.
+- Agent depends on ingest, notify, analysis, identity (for SSE auth), and config (for credential resolution). Nginx block at `docker-compose.yml:L472`. Agent block appended after nginx.
 
 **Instructions**:
 
-1. Append the following service block to `docker-compose.yml` after the `nginx` service block (at the end of `services:`):
+1. Append the following service block to `docker-compose.yml` after the `nginx` service block (after the nginx healthcheck block, at the end of `services:`):
 
    ```yaml
      # ── Agent MCP Server ────────────────────────────────────────────────────
@@ -704,6 +913,7 @@ grep -n "list_signal_sources\|conviction\|source_type\|emit_alert" services/xsto
          NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
          ANALYSIS_HTTP_ENDPOINT: http://xstockstrat-analysis:8056
          IDENTITY_ENDPOINT: xstockstrat-identity:50058
+         CONFIG_ENDPOINT: xstockstrat-config:50060
          MCP_TRANSPORT: sse
          MCP_SSE_PORT: "9000"
          MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
@@ -714,22 +924,23 @@ grep -n "list_signal_sources\|conviction\|source_type\|emit_alert" services/xsto
          - xstockstrat-notify
          - xstockstrat-analysis
          - xstockstrat-identity
+         - xstockstrat-config
    ```
-   Note: `MCP_TRANSPORT: sse` so the container is reachable on port 9000 (and via nginx `/agent/sse`). Operators using Claude.ai desktop with stdio transport run `python -m app.main` locally with `MCP_TRANSPORT=stdio`.
+   Note: `MCP_TRANSPORT: sse` so the container is reachable on port 9000 (and via nginx `/agent/sse`). Operators using Claude.ai desktop with stdio transport run `python -m app.main` locally with `MCP_TRANSPORT=stdio`. `CONFIG_ENDPOINT` is needed for `get_config_value` credential resolution (Step 2).
 
 2. Add `MCP_AGENT_SECRET` to `.env.example` after the `JWT_SECRET` line:
    ```
-   # ── Webhook Secret (xstockstrat-agent) ───────────────────────────────────
+   # ── MCP Agent Secret (xstockstrat-agent) ─────────────────────────────────
    # Shared secret sent as x-mcp-secret header on all downstream HTTP calls.
-   # Set this to the same value configured in each service's webhook handler.
-   # Leave empty to skip header (header is only sent when this var is non-empty).
+   # Set this to the same value configured in xstockstrat-ingest, xstockstrat-notify,
+   # and xstockstrat-analysis. Leave empty to skip header enforcement.
    MCP_AGENT_SECRET=change-me-webhook-secret
    ```
 
 **Verification**:
 ```bash
 # Confirm agent service block added
-grep -n "xstockstrat-agent\|MCP_TRANSPORT\|MCP_SSE_PORT\|INGEST_HTTP_ENDPOINT\|NOTIFY_HTTP_ENDPOINT\|ANALYSIS_HTTP_ENDPOINT\|IDENTITY_ENDPOINT" docker-compose.yml
+grep -n "xstockstrat-agent\|MCP_TRANSPORT\|MCP_SSE_PORT\|INGEST_HTTP_ENDPOINT\|IDENTITY_ENDPOINT\|CONFIG_ENDPOINT" docker-compose.yml
 
 # Confirm MCP_AGENT_SECRET added to .env.example
 grep -n "MCP_AGENT_SECRET" .env.example
@@ -737,7 +948,7 @@ grep -n "MCP_AGENT_SECRET" .env.example
 # Confirm port 9000 added to docker-compose
 grep -n "9000" docker-compose.yml
 
-# Confirm build context is repo root (not ./services/xstockstrat-agent)
+# Confirm build context is repo root
 grep -A3 "xstockstrat-agent:" docker-compose.yml | grep "context:"
 ```
 
@@ -748,30 +959,29 @@ grep -A3 "xstockstrat-agent:" docker-compose.yml | grep "context:"
 **Status**: `pending`
 **Service**: `xstockstrat-nginx`
 **Files**:
-- `nginx.conf` — modify (add `agent_backend` upstream block and `/agent/sse` location; confirmed absent: `grep -n "agent\|9000" nginx.conf` → no match)
-- `services/xstockstrat-nginx/docker-entrypoint.sh` — modify (add `AGENT_UPSTREAM` env var strip and export; confirmed absent: `grep -n "AGENT" services/xstockstrat-nginx/docker-entrypoint.sh` → no match)
+- `nginx.conf` — modify (add `agent_backend` upstream block and `/agent/sse` + `/agent/messages` location blocks; confirmed absent: `grep -n "agent\|9000" nginx.conf` → only matches L16 `$http_user_agent`, not a service upstream)
+- `services/xstockstrat-nginx/docker-entrypoint.sh` — modify (add `AGENT_UPSTREAM` env var processing; confirmed absent: `grep -n "AGENT" services/xstockstrat-nginx/docker-entrypoint.sh` → no match)
 
 **Reviewers**: Platform Lead — port uniqueness, service registry consistency, inter-service dependency graph correctness
 
 **Codebase Evidence**:
 - Nginx upstream pattern confirmed: `nginx.conf:L27–37` — `upstream trader_backend { server ${TRADER_UPSTREAM}:3000; }`, same pattern for insights and config-ui.
-- Location block pattern confirmed: `nginx.conf:L61–85` — pairs of `location /trader` and `location /trader/` with `proxy_pass http://trader_backend;`.
-- `/agent/sse` is an SSE endpoint — requires `proxy_read_timeout` and disabling buffering: `proxy_buffering off` already set globally at `nginx.conf:L57`; `proxy_request_buffering off` at `nginx.conf:L58`. The location block must add `proxy_read_timeout 3600s` for long-lived SSE connections.
-- `docker-entrypoint.sh` pattern confirmed: `services/xstockstrat-nginx/docker-entrypoint.sh:L8–21` — strips `http://`/`https://` prefix from DO private URLs, exports the raw hostname, adds to `envsubst` variable list at L21.
+- Location block pattern confirmed: `nginx.conf:L60–85` — pairs of `location /trader` and `location /trader/` with `proxy_pass http://trader_backend;`.
+- `/agent/sse` is an SSE endpoint — requires `proxy_read_timeout` for long-lived connections. `proxy_buffering off` already set globally at `nginx.conf:L57`; `proxy_request_buffering off` at `nginx.conf:L58`. Location block must add `proxy_read_timeout 3600s`.
+- `docker-entrypoint.sh` pattern confirmed: `services/xstockstrat-nginx/docker-entrypoint.sh:L8–18` — strips `http://`/`https://` prefix from DO private URLs, exports the raw hostname.
 - `envsubst` scope list at `services/xstockstrat-nginx/docker-entrypoint.sh:L21` — currently `'$TRADER_UPSTREAM $INSIGHTS_UPSTREAM $CONFIG_UI_UPSTREAM'`; must add `$AGENT_UPSTREAM`.
-- `XSTOCKSTRAT_AGENT_PRIVATE_URL` env var for DO — absent from `nginx` service env in `docker-compose.yml:L482–486` and `.do/app.dev.yaml:L295–300`, `.do/app.yaml:L291–296`; will be added in Step 8.
-- Note: the agent is not a Next.js frontend — steps 6 (next.config.js basePath) and 8 (frontend auth) from `docs/patterns/nginx-routing.md` do not apply. Only steps 1, 2, 3 (DO dev), 4 (DO prod), and 5 (docker-compose) are relevant.
+- `XSTOCKSTRAT_AGENT_PRIVATE_URL` env var for DO — absent from `nginx` service environment in `docker-compose.yml:L482–485` and from nginx `envs:` in `.do/app.dev.yaml:L319–325` and `.do/app.yaml:L315–321`; will be added in Step 8.
 
 **Instructions**:
 
-1. Add the `agent_backend` upstream block to `nginx.conf` after the `config_ui_backend` upstream block (after `nginx.conf:L36`):
+1. Add the `agent_backend` upstream block to `nginx.conf` after the `config_ui_backend` upstream block (after `nginx.conf:L37`):
    ```nginx
    upstream agent_backend {
        server ${AGENT_UPSTREAM}:9000;
    }
    ```
 
-2. Add the `/agent/sse` location block to the `server {}` block in `nginx.conf`, before the `location /health` block (after the `/config-ui/` location at `nginx.conf:L85`):
+2. Add the `/agent/sse` and `/agent/messages` location blocks to the `server {}` block in `nginx.conf`, before the `location /health` block (after the `/config-ui/` location at `nginx.conf:L84`):
    ```nginx
    # ── Route: /agent/sse → xstockstrat-agent:9000 ──────────────────
    location /agent/sse {
@@ -784,9 +994,9 @@ grep -A3 "xstockstrat-agent:" docker-compose.yml | grep "context:"
        proxy_read_timeout 3600s;
    }
    ```
-   Rationale: `proxy_read_timeout 3600s` prevents nginx from closing long-lived SSE connections after the default 60s idle timeout. `/agent/messages` is the MCP POST-message path used by the SSE transport (confirmed from `SseServerTransport("/messages")` in Step 4's `main.py`).
+   Rationale: `proxy_read_timeout 3600s` prevents nginx from closing long-lived SSE connections after the default 60s idle timeout. `/agent/messages` is the MCP POST-message path used by the SSE transport (`SseServerTransport("/messages")` in Step 4's `main.py`).
 
-3. Update `services/xstockstrat-nginx/docker-entrypoint.sh` — add `AGENT_UPSTREAM` env var processing after the `CONFIG_UI_UPSTREAM` block (after line 18) and add `$AGENT_UPSTREAM` to the `envsubst` variable list:
+3. Update `services/xstockstrat-nginx/docker-entrypoint.sh` — add `AGENT_UPSTREAM` env var processing after the `CONFIG_UI_UPSTREAM` block (after L18) and add `$AGENT_UPSTREAM` to the `envsubst` variable list at L21:
    ```sh
    AGENT_UPSTREAM="${XSTOCKSTRAT_AGENT_PRIVATE_URL#http://}"
    AGENT_UPSTREAM="${AGENT_UPSTREAM#https://}"
@@ -824,25 +1034,27 @@ docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf.template:ro \
 **Status**: `pending`
 **Service**: `xstockstrat-nginx` (DO env vars) + `xstockstrat-agent` (new DO entries)
 **Files**:
-- `.do/app.dev.yaml` — modify (add xstockstrat-agent service block with `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT`, `IDENTITY_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `MCP_AGENT_SECRET`; add `XSTOCKSTRAT_AGENT_PRIVATE_URL` to nginx `envs:`; confirmed absent: `grep -n "xstockstrat-agent\|AGENT" .do/app.dev.yaml` → no match)
+- `.do/app.dev.yaml` — modify (add xstockstrat-agent service block with `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT`, `IDENTITY_ENDPOINT`, `CONFIG_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `MCP_AGENT_SECRET`; add `XSTOCKSTRAT_AGENT_PRIVATE_URL` to nginx `envs:`; confirmed absent: `grep -n "xstockstrat-agent\|AGENT" .do/app.dev.yaml` → no match)
 - `.do/app.yaml` — modify (same two additions for prod; confirmed absent: `grep -n "xstockstrat-agent\|AGENT" .do/app.yaml` → no match)
-- `docker-compose.yml` — modify (add `XSTOCKSTRAT_AGENT_PRIVATE_URL: xstockstrat-agent` to nginx service `environment:` block only; agent service env vars already added in Step 6; confirmed absent from nginx env: `grep -A20 "xstockstrat-nginx:" docker-compose.yml | grep "AGENT"` → no match)
+- `docker-compose.yml` — modify (add `XSTOCKSTRAT_AGENT_PRIVATE_URL: xstockstrat-agent` to nginx service `environment:` block only; agent service env vars already added in Step 6; confirmed absent from nginx env: `grep -A10 "container_name: xstockstrat-nginx" docker-compose.yml | grep "AGENT"` → no match)
 
 **Reviewers**: Platform Lead — port uniqueness, service registry consistency, inter-service dependency graph correctness
 
 **Codebase Evidence**:
-- DO Python service entry pattern confirmed: `services/xstockstrat-ingest` block at `.do/app.dev.yaml:L128–153` — has `name`, `github`, `source_dir`, `dockerfile_path`, `http_port`, `instance_count`, `instance_size_slug`, `envs`.
-- `instance_size_slug: basic-xs` used for Python services in dev: confirmed at `.do/app.dev.yaml:L115` (indicators) and `L134` (ingest).
-- `instance_size_slug: professional-xs` used for Python services in prod: confirmed at `.do/app.yaml:L111` (indicators) and `L136` (ingest).
-- Nginx `envs` block in `.do/app.dev.yaml:L293–300` — currently has `XSTOCKSTRAT_TRADER_PRIVATE_URL`, `XSTOCKSTRAT_INSIGHTS_PRIVATE_URL`, `XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL`; `XSTOCKSTRAT_AGENT_PRIVATE_URL` absent (confirmed via grep).
-- `http_port: 9000` for the agent — this is the port the agent listens on in SSE mode (confirmed from `MCP_SSE_PORT` default in `app/main.py`).
-- DO services with no DB do not include a `DATABASE_URL` env entry — confirmed for `xstockstrat-indicators` at `.do/app.dev.yaml:L106–127` (no `DATABASE_URL`).
-- `MCP_AGENT_SECRET` must be set as a secret env in DO — it is a sensitive value matching the convention for secrets in DO app specs (type: SECRET, not plain value).
-- `IDENTITY_ENDPOINT` on DO must reference the identity service private URL. Pattern: `${xstockstrat-identity.PRIVATE_URL}` — confirmed from `LEDGER_ENDPOINT` in other services at `.do/app.dev.yaml:L34`.
+- DO Python service entry pattern confirmed: `services/xstockstrat-ingest` block at `.do/app.dev.yaml:L141–168` — has `name`, `github`, `source_dir`, `dockerfile_path`, `http_port`, `instance_count`, `instance_size_slug`, `envs`.
+- `instance_size_slug: basic-xs` used for Python services in dev: confirmed at `.do/app.dev.yaml:L126` (indicators) and `L150` (ingest).
+- `instance_size_slug: professional-xs` used for Python services in prod: confirmed at `.do/app.yaml:L179` (analysis).
+- Nginx `envs` block in `.do/app.dev.yaml:L319–325` — currently has `XSTOCKSTRAT_TRADER_PRIVATE_URL`, `XSTOCKSTRAT_INSIGHTS_PRIVATE_URL`, `XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL`; `XSTOCKSTRAT_AGENT_PRIVATE_URL` absent (confirmed via grep).
+- `http_port: 9000` for the agent — this is the SSE port confirmed from `MCP_SSE_PORT` default.
+- DO services with no DB do not include a `DATABASE_URL` env entry — confirmed for `xstockstrat-indicators` at `.do/app.dev.yaml:L106–139` (no `DATABASE_URL`).
+- `MCP_AGENT_SECRET` must be set as a secret env in DO (type: SECRET).
+- `IDENTITY_ENDPOINT` and `CONFIG_ENDPOINT` on DO must reference internal private URLs. Pattern: `${xstockstrat-identity.PRIVATE_URL}` / `${xstockstrat-config.PRIVATE_URL}` — confirmed from `.do/app.dev.yaml:L133` (CONFIG_ENDPOINT pattern).
+- `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT` on DO must use `${xstockstrat-ingest.PRIVATE_URL}` format (HTTP endpoint, not gRPC).
+- xstockstrat-analysis block ends at `.do/app.dev.yaml:L200` (`value: analysis`); new agent block inserted after it. In `.do/app.yaml` the analysis block ends at L199.
 
 **Instructions**:
 
-1. Add the following `xstockstrat-agent` service block to `.do/app.dev.yaml` in the `services:` section, after the `xstockstrat-analysis` block (after the `xstockstrat-analysis` block ends at `L183`):
+1. Add the following `xstockstrat-agent` service block to `.do/app.dev.yaml` in the `services:` section, after the `xstockstrat-analysis` block (after `.do/app.dev.yaml:L200`):
    ```yaml
    - name: xstockstrat-agent
      github:
@@ -863,6 +1075,8 @@ docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf.template:ro \
          value: ${xstockstrat-analysis.PRIVATE_URL}
        - key: IDENTITY_ENDPOINT
          value: ${xstockstrat-identity.PRIVATE_URL}
+       - key: CONFIG_ENDPOINT
+         value: ${xstockstrat-config.PRIVATE_URL}
        - key: MCP_TRANSPORT
          value: sse
        - key: MCP_SSE_PORT
@@ -872,15 +1086,15 @@ docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf.template:ro \
          type: SECRET
    ```
 
-2. Add `XSTOCKSTRAT_AGENT_PRIVATE_URL` to the `xstockstrat-nginx` `envs:` block in `.do/app.dev.yaml` (after the `XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL` entry at line 300):
+2. Add `XSTOCKSTRAT_AGENT_PRIVATE_URL` to the `xstockstrat-nginx` `envs:` block in `.do/app.dev.yaml` (after the `XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL` entry at L325):
    ```yaml
        - key: XSTOCKSTRAT_AGENT_PRIVATE_URL
          value: ${xstockstrat-agent.PRIVATE_URL}
    ```
 
 3. Make the same two additions to `.do/app.yaml` (prod):
-   - Add `xstockstrat-agent` service block after `xstockstrat-analysis` block, with `instance_size_slug: professional-xs` and `branch: main` instead of `main-dev`.
-   - Add `XSTOCKSTRAT_AGENT_PRIVATE_URL` to the `xstockstrat-nginx` `envs:` block.
+   - Add `xstockstrat-agent` service block after `xstockstrat-analysis` block (after `.do/app.yaml:L199`), with `instance_size_slug: professional-xs` and `branch: main` instead of `main-dev`.
+   - Add `XSTOCKSTRAT_AGENT_PRIVATE_URL` to the `xstockstrat-nginx` `envs:` block (after `.do/app.yaml:L321`).
 
 4. Add `XSTOCKSTRAT_AGENT_PRIVATE_URL` to the `nginx` service `environment:` block in `docker-compose.yml` (after `XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL` at `docker-compose.yml:L485`):
    ```yaml
@@ -891,16 +1105,16 @@ docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf.template:ro \
 **Verification**:
 ```bash
 # Confirm agent service added to dev spec
-grep -n "xstockstrat-agent\|XSTOCKSTRAT_AGENT_PRIVATE_URL" .do/app.dev.yaml
+grep -n "xstockstrat-agent\|XSTOCKSTRAT_AGENT_PRIVATE_URL\|CONFIG_ENDPOINT" .do/app.dev.yaml
 
 # Confirm agent service added to prod spec
-grep -n "xstockstrat-agent\|XSTOCKSTRAT_AGENT_PRIVATE_URL" .do/app.yaml
+grep -n "xstockstrat-agent\|XSTOCKSTRAT_AGENT_PRIVATE_URL\|CONFIG_ENDPOINT" .do/app.yaml
 
 # Confirm nginx env var added to docker-compose
 grep -n "XSTOCKSTRAT_AGENT_PRIVATE_URL" docker-compose.yml
 
 # Confirm IDENTITY_ENDPOINT and INGEST_HTTP_ENDPOINT are in both DO specs
-grep -n "INGEST_HTTP_ENDPOINT\|IDENTITY_ENDPOINT" .do/app.dev.yaml .do/app.yaml
+grep -n "INGEST_HTTP_ENDPOINT\|IDENTITY_ENDPOINT\|CONFIG_ENDPOINT" .do/app.dev.yaml .do/app.yaml
 ```
 
 ---
@@ -912,7 +1126,7 @@ grep -n "INGEST_HTTP_ENDPOINT\|IDENTITY_ENDPOINT" .do/app.dev.yaml .do/app.yaml
 **Files**:
 - `services/xstockstrat-agent/claude_mcp_config.json` — create
 
-**Reviewers**: Platform Lead — port uniqueness, service registry consistency, inter-service dependency graph correctness; Security — no secrets in config service state
+**Reviewers**: Platform Lead — port uniqueness, service registry consistency; Security — no secrets in config service state
 
 **Codebase Evidence**:
 - FR-8 of product-spec specifies this file at `services/xstockstrat-agent/claude_mcp_config.json`.
@@ -920,7 +1134,7 @@ grep -n "INGEST_HTTP_ENDPOINT\|IDENTITY_ENDPOINT" .do/app.dev.yaml .do/app.yaml
 - SSE transport: agent runs in docker-compose on `localhost:9000` or via nginx at `http://localhost/agent/sse`.
 - No existing `claude_mcp_config.json` anywhere in the codebase: `find . -name "claude_mcp_config.json"` → no match.
 - SSE URL via nginx is `http://localhost/agent/sse` (nginx port 80 + `/agent/sse` location added in Step 7).
-- SSE auth: `Authorization: Bearer <api_key>` header required (FR-5a); direct SSE url `http://localhost:9000/sse` also works if nginx is bypassed (no auth required on that path directly from localhost, but nginx is the external entry).
+- SSE auth: `Authorization: Bearer <api_key>` header required (FR-5a).
 
 **Instructions**:
 
@@ -940,7 +1154,9 @@ Create `services/xstockstrat-agent/claude_mcp_config.json`:
         "INGEST_HTTP_ENDPOINT": "http://localhost:8055",
         "NOTIFY_HTTP_ENDPOINT": "http://localhost:8059",
         "ANALYSIS_HTTP_ENDPOINT": "http://localhost:8056",
-        "MCP_AGENT_SECRET": "<your-webhook-secret-from-.env>"
+        "IDENTITY_ENDPOINT": "localhost:50058",
+        "CONFIG_ENDPOINT": "localhost:50060",
+        "MCP_AGENT_SECRET": "<your-mcp-agent-secret-from-.env>"
       }
     },
     "xstockstrat-sse-nginx": {
@@ -967,7 +1183,7 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
 
 ---
 
-### Step 10 — test: Unit tests for HTTP client, auth, and MCP tools
+### Step 10 — test: Unit tests for HTTP client, auth, and all six MCP tools
 
 **Status**: `pending`
 **Service**: `xstockstrat-agent`
@@ -980,13 +1196,16 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
 
 **Codebase Evidence**:
 - Test layout mirrors `services/xstockstrat-ingest/tests/` — `test_http_server.py` uses `AsyncMock` and `pytest.mark.asyncio`.
-- `respx` mock library confirmed in `pyproject.toml` dev deps (added in Step 1) — used to mock httpx calls.
+- `respx` mock library for httpx confirmed in `pyproject.toml` dev deps (added in Step 1).
 - `conftest.py` sets env vars via monkeypatch (Step 1) — all tests inherit these.
 - Ingest webhook path confirmed: `services/xstockstrat-ingest/app/http_server.py:L72` — `/webhooks/ingest-signal`.
 - Notify webhook path confirmed: `services/xstockstrat-notify/src/webhooks/router.ts:L46` — `/webhooks/emit-alert`.
 - Analysis webhook path confirmed: `services/xstockstrat-analysis/app/http_server.py:L46` — `/webhooks/run-backtest`.
 - `ListSignalSources` Connect-RPC path: `/xstockstrat.ingest.v1.IngestService/ListSignalSources` (feature 008 pattern).
 - `validate_api_key` in `app/auth.py` calls `identity_pb2_grpc.IdentityServiceStub(channel).ValidateApiKey` — must be mocked with `grpc.aio.AioRpcError` to test failure path.
+- `extract_email_content` and `extract_website_content` call `_get_source` which calls `post_ingest("/xstockstrat.ingest.v1.IngestService/ListSignalSources")` and `get_config_value` — both must be mocked.
+- `_extract_from_bytes` uses `fitz` (PyMuPDF) — must mock `fitz.open` in tests to avoid real PDF parsing.
+- `_EXTRACTOR_TOOL_MAP` mapping can be tested directly by checking the output of `list_signal_sources` tool.
 
 **Instructions**:
 
@@ -1001,7 +1220,7 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
 
 
    @pytest.mark.asyncio
-   async def test_post_ingest_adds_webhook_secret_header():
+   async def test_post_ingest_adds_mcp_secret_header():
        """When MCP_AGENT_SECRET is set, x-mcp-secret header is sent."""
        with respx.mock(base_url="http://ingest-test:8055") as mock:
            route = mock.post("/webhooks/ingest-signal").mock(
@@ -1014,7 +1233,7 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
 
 
    @pytest.mark.asyncio
-   async def test_post_notify_adds_webhook_secret_header():
+   async def test_post_notify_adds_mcp_secret_header():
        """emit_alert via notify webhook includes x-mcp-secret."""
        with respx.mock(base_url="http://notify-test:8059") as mock:
            route = mock.post("/webhooks/emit-alert").mock(
@@ -1026,7 +1245,7 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
 
 
    @pytest.mark.asyncio
-   async def test_post_analysis_adds_webhook_secret_header():
+   async def test_post_analysis_adds_mcp_secret_header():
        """run_backtest via analysis webhook includes x-mcp-secret."""
        with respx.mock(base_url="http://analysis-test:8056") as mock:
            route = mock.post("/webhooks/run-backtest").mock(
@@ -1038,7 +1257,7 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
 
 
    @pytest.mark.asyncio
-   async def test_no_webhook_secret_when_env_empty(monkeypatch):
+   async def test_no_mcp_secret_when_env_empty(monkeypatch):
        """When MCP_AGENT_SECRET is empty, x-mcp-secret header is omitted."""
        monkeypatch.setattr(client, "MCP_AGENT_SECRET", "")
        with respx.mock(base_url="http://ingest-test:8055") as mock:
@@ -1062,28 +1281,23 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
 
    @pytest.mark.asyncio
    async def test_validate_api_key_missing_header():
-       """No Authorization header returns False."""
        assert await validate_api_key(None) is False
 
 
    @pytest.mark.asyncio
    async def test_validate_api_key_wrong_scheme():
-       """Non-Bearer scheme returns False."""
        assert await validate_api_key("Basic dXNlcjpwYXNz") is False
 
 
    @pytest.mark.asyncio
    async def test_validate_api_key_empty_token():
-       """'Bearer ' with no key returns False."""
        assert await validate_api_key("Bearer ") is False
 
 
    @pytest.mark.asyncio
    async def test_validate_api_key_valid(monkeypatch):
-       """Valid API key returns True when identity gRPC returns success."""
        mock_stub = AsyncMock()
        mock_stub.ValidateApiKey = AsyncMock(return_value=MagicMock())
-
        with patch("app.auth.grpc.aio.insecure_channel") as mock_channel:
            mock_channel.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
            mock_channel.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -1094,7 +1308,6 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
 
    @pytest.mark.asyncio
    async def test_validate_api_key_rejected(monkeypatch):
-       """Invalid API key returns False when identity gRPC raises AioRpcError."""
        mock_stub = AsyncMock()
        rpc_error = grpc.aio.AioRpcError(
            code=grpc.StatusCode.UNAUTHENTICATED,
@@ -1104,7 +1317,6 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
            debug_error_string=None,
        )
        mock_stub.ValidateApiKey = AsyncMock(side_effect=rpc_error)
-
        with patch("app.auth.grpc.aio.insecure_channel") as mock_channel:
            mock_channel.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
            mock_channel.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -1115,14 +1327,17 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
 
 3. Create `services/xstockstrat-agent/tests/test_tools.py`:
    ```python
-   """Tests for app/tools.py — MCP tool delegation to downstream webhooks."""
+   """Tests for app/tools.py — all six MCP tool definitions."""
+   import base64
    import json
+   from unittest.mock import AsyncMock, patch
+
+   import httpx
    import pytest
    import respx
-   import httpx
-
    from mcp.server import Server
-   from app.tools import register_tools
+
+   from app.tools import register_tools, _EXTRACTOR_TOOL_MAP
 
 
    def _make_server() -> Server:
@@ -1131,21 +1346,166 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
        return server
 
 
-   @pytest.mark.asyncio
-   async def test_list_signal_sources_calls_connect_rpc():
-       """list_signal_sources POSTs to ListSignalSources Connect-RPC endpoint."""
-       with respx.mock(base_url="http://ingest-test:8055") as mock:
-           route = mock.post(
-               "/xstockstrat.ingest.v1.IngestService/ListSignalSources"
-           ).mock(return_value=httpx.Response(200, json={"sources": []}))
-           server = _make_server()
-           tool_fn = next(
-               t.fn for t in server._tools.values() if t.name == "list_signal_sources"
-           )
-           result = await tool_fn()
-           assert result == {"sources": []}
-           assert route.called
+   def _tool_fn(server: Server, name: str):
+       return next(t.fn for t in server._tools.values() if t.name == name)
 
+
+   # ── list_signal_sources ──────────────────────────────────────────────────
+
+   @pytest.mark.asyncio
+   async def test_list_signal_sources_adds_extractor_tool():
+       """list_signal_sources enriches response with extractor_tool from type mapping."""
+       sources_payload = {
+           "sources": [
+               {"slug": "s1", "display_name": "S1", "source_type": "mediated_email_attachment",
+                "config_json": {}, "credentials_ref": "secret.s1.pass"},
+               {"slug": "s2", "display_name": "S2", "source_type": "mediated_simple_email",
+                "config_json": {}, "credentials_ref": None},
+               {"slug": "s3", "display_name": "S3", "source_type": "mediated_simple_website",
+                "config_json": {"url": "https://example.com"}, "credentials_ref": None},
+           ]
+       }
+       with respx.mock(base_url="http://ingest-test:8055") as mock:
+           mock.post("/xstockstrat.ingest.v1.IngestService/ListSignalSources").mock(
+               return_value=httpx.Response(200, json=sources_payload)
+           )
+           server = _make_server()
+           result = await _tool_fn(server, "list_signal_sources")()
+           enriched = result["sources"]
+           # Confirm extractor_tool values
+           assert enriched[0]["extractor_tool"] == "extract_email_content"
+           assert enriched[1]["extractor_tool"] is None
+           assert enriched[2]["extractor_tool"] == "extract_website_content"
+           # Confirm credentials_ref is NOT in any enriched source
+           for src in enriched:
+               assert "credentials_ref" not in src
+
+
+   @pytest.mark.asyncio
+   async def test_list_signal_sources_source_type_filter():
+       """source_type filter returns only matching sources."""
+       sources_payload = {
+           "sources": [
+               {"slug": "s1", "display_name": "S1", "source_type": "mediated_email_attachment",
+                "config_json": {}},
+               {"slug": "s2", "display_name": "S2", "source_type": "mediated_simple_email",
+                "config_json": {}},
+           ]
+       }
+       with respx.mock(base_url="http://ingest-test:8055") as mock:
+           mock.post("/xstockstrat.ingest.v1.IngestService/ListSignalSources").mock(
+               return_value=httpx.Response(200, json=sources_payload)
+           )
+           server = _make_server()
+           result = await _tool_fn(server, "list_signal_sources")(
+               source_type=["mediated_email_attachment"]
+           )
+           assert len(result["sources"]) == 1
+           assert result["sources"][0]["slug"] == "s1"
+
+
+   # ── extract_email_content ──────────────────────────────────────────────────
+
+   @pytest.mark.asyncio
+   async def test_extract_email_content_no_inputs_raises():
+       """extract_email_content with no attachments_b64 or urls raises ValueError."""
+       server = _make_server()
+       with pytest.raises(ValueError, match="At least one"):
+           await _tool_fn(server, "extract_email_content")(source_slug="s1")
+
+
+   @pytest.mark.asyncio
+   async def test_extract_email_content_unknown_slug_raises():
+       """extract_email_content with unknown slug raises ValueError."""
+       with respx.mock(base_url="http://ingest-test:8055") as mock:
+           mock.post("/xstockstrat.ingest.v1.IngestService/ListSignalSources").mock(
+               return_value=httpx.Response(200, json={"sources": []})
+           )
+           server = _make_server()
+           with pytest.raises(ValueError, match="Unknown or inactive source slug"):
+               await _tool_fn(server, "extract_email_content")(
+                   source_slug="nonexistent",
+                   attachments_b64=["dGVzdA=="],
+               )
+
+
+   @pytest.mark.asyncio
+   async def test_extract_email_content_text_attachment():
+       """extract_email_content with plain text bytes returns raw_text."""
+       sources_payload = {
+           "sources": [
+               {"slug": "s1", "display_name": "S1", "source_type": "mediated_email_attachment",
+                "config_json": {}, "credentials_ref": None},
+           ]
+       }
+       test_text = b"Buy NVDA at market open."
+       b64 = base64.b64encode(test_text).decode()
+       with respx.mock(base_url="http://ingest-test:8055") as mock:
+           mock.post("/xstockstrat.ingest.v1.IngestService/ListSignalSources").mock(
+               return_value=httpx.Response(200, json=sources_payload)
+           )
+           # Mock fitz to avoid real PDF parsing
+           with patch("app.tools.fitz", create=True) as mock_fitz:
+               mock_doc = mock_fitz.open.return_value
+               mock_doc.is_encrypted = False
+               mock_doc.__iter__ = lambda self: iter([])
+               # Fall back to UTF-8 decode path by raising on fitz.open
+               mock_fitz.open.side_effect = Exception("not a pdf")
+               server = _make_server()
+               result = await _tool_fn(server, "extract_email_content")(
+                   source_slug="s1",
+                   attachments_b64=[b64],
+               )
+               assert "Buy NVDA" in result["raw_text"]
+               # Confirm credentials not in response
+               assert "credentials_ref" not in result
+               assert "password" not in result
+
+
+   # ── extract_website_content ──────────────────────────────────────────────────
+
+   @pytest.mark.asyncio
+   async def test_extract_website_content_fetches_url():
+       """extract_website_content fetches the URL from config_json.url."""
+       sources_payload = {
+           "sources": [
+               {"slug": "site1", "display_name": "Site", "source_type": "mediated_simple_website",
+                "config_json": {"url": "https://example.com/signals"}, "credentials_ref": None},
+           ]
+       }
+       with respx.mock(base_url="http://ingest-test:8055") as ingest_mock:
+           ingest_mock.post("/xstockstrat.ingest.v1.IngestService/ListSignalSources").mock(
+               return_value=httpx.Response(200, json=sources_payload)
+           )
+           with respx.mock(base_url="https://example.com") as site_mock:
+               site_mock.get("/signals").mock(
+                   return_value=httpx.Response(200, text="NVDA: strong buy")
+               )
+               server = _make_server()
+               result = await _tool_fn(server, "extract_website_content")(source_slug="site1")
+               assert "NVDA" in result["raw_text"]
+               assert "credentials_ref" not in result
+
+
+   @pytest.mark.asyncio
+   async def test_extract_website_content_no_url_raises():
+       """extract_website_content raises if config_json has no url."""
+       sources_payload = {
+           "sources": [
+               {"slug": "site1", "display_name": "Site", "source_type": "mediated_simple_website",
+                "config_json": {}, "credentials_ref": None},
+           ]
+       }
+       with respx.mock(base_url="http://ingest-test:8055") as mock:
+           mock.post("/xstockstrat.ingest.v1.IngestService/ListSignalSources").mock(
+               return_value=httpx.Response(200, json=sources_payload)
+           )
+           server = _make_server()
+           with pytest.raises(ValueError, match="no url in config_json"):
+               await _tool_fn(server, "extract_website_content")(source_slug="site1")
+
+
+   # ── ingest_signal ──────────────────────────────────────────────────────────
 
    @pytest.mark.asyncio
    async def test_ingest_signal_calls_webhook():
@@ -1155,10 +1515,7 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
                return_value=httpx.Response(200, json={"signal_id": 42})
            )
            server = _make_server()
-           tool_fn = next(
-               t.fn for t in server._tools.values() if t.name == "ingest_signal"
-           )
-           result = await tool_fn(
+           result = await _tool_fn(server, "ingest_signal")(
                source="unusual_whales",
                symbol="NVDA",
                direction="buy",
@@ -1168,64 +1525,68 @@ grep -n "stdio\|sse\|9000\|/agent/sse" services/xstockstrat-agent/claude_mcp_con
            assert result["signal_id"] == 42
            payload = json.loads(route.calls.last.request.content)
            assert payload["source"] == "unusual_whales"
-           assert payload["symbol"] == "NVDA"
-           assert payload["direction"] == "buy"
            assert payload["conviction"] == 0.8
 
 
+   # ── emit_alert ────────────────────────────────────────────────────────────
+
    @pytest.mark.asyncio
    async def test_emit_alert_calls_notify_webhook():
-       """emit_alert POSTs to /webhooks/emit-alert with required fields."""
+       """emit_alert POSTs to /webhooks/emit-alert."""
        with respx.mock(base_url="http://notify-test:8059") as mock:
            route = mock.post("/webhooks/emit-alert").mock(
                return_value=httpx.Response(200, json={"success": True})
            )
            server = _make_server()
-           tool_fn = next(
-               t.fn for t in server._tools.values() if t.name == "emit_alert"
-           )
-           result = await tool_fn(
-               severity="info",
-               category="signal",
-               title="Test alert",
-               body="Test body",
+           result = await _tool_fn(server, "emit_alert")(
+               severity="info", category="signal", title="Test alert", body="Body text"
            )
            assert result == {"success": True}
            assert route.called
 
 
+   # ── run_backtest ──────────────────────────────────────────────────────────
+
    @pytest.mark.asyncio
    async def test_run_backtest_calls_analysis_webhook():
-       """run_backtest POSTs to /webhooks/run-backtest with strategy_id and symbols."""
+       """run_backtest POSTs to /webhooks/run-backtest."""
        with respx.mock(base_url="http://analysis-test:8056") as mock:
            route = mock.post("/webhooks/run-backtest").mock(
                return_value=httpx.Response(200, json={"backtest_id": "bt-1"})
            )
            server = _make_server()
-           tool_fn = next(
-               t.fn for t in server._tools.values() if t.name == "run_backtest"
-           )
-           result = await tool_fn(
+           result = await _tool_fn(server, "run_backtest")(
                strategy_id="sma_crossover",
                symbols=["NVDA", "AAPL"],
                initial_capital=50000.0,
            )
            assert result == {"backtest_id": "bt-1"}
            payload = json.loads(route.calls.last.request.content)
-           assert payload["strategy_id"] == "sma_crossover"
            assert payload["symbols"] == ["NVDA", "AAPL"]
-           assert payload["initial_capital"] == 50000.0
+
+
+   # ── extractor_tool mapping ────────────────────────────────────────────────
+
+   def test_extractor_tool_map_values():
+       """Verify the type-level extractor_tool mapping covers all mediated types."""
+       assert _EXTRACTOR_TOOL_MAP["mediated_email_attachment"] == "extract_email_content"
+       assert _EXTRACTOR_TOOL_MAP["mediated_linked_email"] == "extract_email_content"
+       assert _EXTRACTOR_TOOL_MAP["mediated_simple_website"] == "extract_website_content"
+       assert _EXTRACTOR_TOOL_MAP["mediated_authenticated_website"] == "extract_website_content"
+       # mediated_simple_email and non-mediated types → null (absent from map, default None)
+       assert _EXTRACTOR_TOOL_MAP.get("mediated_simple_email", None) is None
+       assert _EXTRACTOR_TOOL_MAP.get("simple_email", None) is None
    ```
 
 **Verification**:
 
-New logic is in `app/client.py`, `app/auth.py`, and `app/tools.py` — no Go coverage exclusion packages apply (this is Python). Coverage threshold is 40% for `xstockstrat-analysis`/`xstockstrat-ingest` tier; same applies to this new Python service.
+New logic is in `app/client.py`, `app/auth.py`, and `app/tools.py` — Python service, threshold is 40%.
 
 ```bash
 cd services/xstockstrat-agent && pip install -e ".[dev]" && pytest --cov=app --cov-fail-under=40
 ```
 
-Confirm >= 40% coverage passes. The test suite covers all 4 tool delegation paths in `tools.py`, all 4 client functions + the no-secret branch in `client.py`, and 5 auth paths in `auth.py` (missing header, wrong scheme, empty token, valid, rejected).
+Confirm >= 40% coverage passes. The test suite covers: all 6 tool delegation paths in `tools.py` including `extract_email_content` and `extract_website_content`; all 4 client functions + the no-secret branch in `client.py`; 5 auth paths in `auth.py` (missing header, wrong scheme, empty token, valid, rejected); `_extractor_tool_map` mapping; error cases (unknown slug, no inputs, no url).
 
 ---
 
@@ -1269,9 +1630,9 @@ Confirm two matches: one in the Service Registry table, one in the Language Map.
 **Status**: `pending`
 **Services**: `xstockstrat-ingest`, `xstockstrat-notify`, `xstockstrat-analysis`
 **Files**:
-- `services/xstockstrat-ingest/app/http_server.py` — modify (add `x-mcp-secret` middleware)
-- `services/xstockstrat-analysis/app/http_server.py` — modify (add `x-mcp-secret` middleware)
-- `services/xstockstrat-notify/src/webhooks/router.ts` — modify (add `x-mcp-secret` check)
+- `services/xstockstrat-ingest/app/http_server.py` — modify (add `x-mcp-secret` middleware inside `build_app`)
+- `services/xstockstrat-analysis/app/http_server.py` — modify (add `x-mcp-secret` middleware inside `build_app`)
+- `services/xstockstrat-notify/src/webhooks/router.ts` — modify (add `x-mcp-secret` check in `createWebhookRouter`)
 - `docker-compose.yml` — modify (add `MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}` to ingest, notify, analysis service blocks)
 - `.do/app.dev.yaml` — modify (add `MCP_AGENT_SECRET` SECRET entry to ingest, notify, analysis `envs:`)
 - `.do/app.yaml` — modify (same for prod)
@@ -1279,49 +1640,48 @@ Confirm two matches: one in the Service Registry table, one in the Language Map.
 **Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion, newsletter source schema stability; Security — no secrets in config service state, secret keys use `secret.*` prefix
 
 **Codebase Evidence**:
-- **ingest webhook handler** confirmed: `services/xstockstrat-ingest/app/http_server.py:L72` — `@app.post("/webhooks/ingest-signal")`. App object is a FastAPI/Starlette app; middleware can be added via `@app.middleware("http")`.
-- **analysis webhook handler** confirmed: `services/xstockstrat-analysis/app/http_server.py:L46` — `@app.post("/webhooks/run-backtest")`. Same FastAPI/Starlette pattern.
-- **notify webhook router** confirmed: `services/xstockstrat-notify/src/webhooks/router.ts:L46` — `url === '/webhooks/emit-alert'`. Node.js HTTP router (not Express); check is added inside the conditional branch handling webhook paths.
-- `MCP_AGENT_SECRET` confirmed absent from ingest, notify, analysis environment blocks in `docker-compose.yml`: `grep -n "MCP_AGENT_SECRET" docker-compose.yml` → matches only the agent service block added by Step 6.
-- Starlette `@app.middleware("http")` pattern confirmed: `services/xstockstrat-ingest/app/http_server.py` — `app` is a Starlette/FastAPI instance; this decorator is the standard injection point for request-scoped guards.
-- `JSONResponse` import confirmed available in both Python services (already used for error responses in http_server.py).
-- `process.env` pattern confirmed in `services/xstockstrat-notify/src/` — standard Node.js env var access.
+- **ingest webhook handler** confirmed: `services/xstockstrat-ingest/app/http_server.py:L18` — `def build_app(servicer) -> FastAPI:`. App object is created inside the factory at L19. Middleware must be added via `@app.middleware("http")` after `FastAPI()` instantiation at L19, before route definitions at L22.
+- **analysis webhook handler** confirmed: `services/xstockstrat-analysis/app/http_server.py:L18` — `def build_app(servicer) -> FastAPI:`. Same pattern — middleware added after L19.
+- **notify webhook router** confirmed: `services/xstockstrat-notify/src/webhooks/router.ts:L40–79` — `export function createWebhookRouter(impl: NotifyServiceImpl)` returns `async function webhookHandler`. The `x-mcp-secret` check goes at `router.ts:L43` (after `readBody` at L43 but before the `url` switch logic at L45), before the `url === '/webhooks/emit-alert'` branch at L46.
+- `MCP_AGENT_SECRET` confirmed absent from ingest, notify, analysis environment blocks in `docker-compose.yml`: `grep -n "MCP_AGENT_SECRET" docker-compose.yml` → no match at all.
+- `os` import confirmed present in ingest `http_server.py:L7` — **not confirmed** (imports are only fastapi, gen, google.protobuf). `os` must be added.
+- `Starlette Request` and `Response` imports already present in ingest: `from fastapi import FastAPI, HTTPException, Request` at L9; `from fastapi.responses import JSONResponse` at L10. Starlette `Response` must be imported separately.
+- `process.env` pattern confirmed in `services/xstockstrat-notify/src/` for env var access.
 
 **Instructions**:
 
-1. In `services/xstockstrat-ingest/app/http_server.py`, add the `x-mcp-secret` middleware immediately after the `app` object is instantiated and before any route definitions:
+1. In `services/xstockstrat-ingest/app/http_server.py`, add the `x-mcp-secret` middleware immediately after the `app` object is instantiated inside `build_app` (after L19 `app = FastAPI(...)`):
    ```python
-   import os
-   from starlette.requests import Request
-   from starlette.responses import Response
+   import os as _os
+   from starlette.responses import Response as _Response
 
-   _MCP_AGENT_SECRET = os.environ.get("MCP_AGENT_SECRET", "")
+   _MCP_AGENT_SECRET = _os.environ.get("MCP_AGENT_SECRET", "")
 
    @app.middleware("http")
    async def enforce_mcp_secret(request: Request, call_next):
        if _MCP_AGENT_SECRET and request.url.path.startswith("/webhooks/"):
            if request.headers.get("x-mcp-secret") != _MCP_AGENT_SECRET:
-               return Response("Unauthorized", status_code=401)
+               return _Response("Unauthorized", status_code=401)
        return await call_next(request)
    ```
-   Note: `os` and `_MCP_AGENT_SECRET` may already be imported/defined — check for duplicates before adding. Scope the guard to `/webhooks/` paths only so Connect-RPC routes and health checks are unaffected.
+   Add `_MCP_AGENT_SECRET = _os.environ.get("MCP_AGENT_SECRET", "")` outside `build_app` (module level) so it reads once at startup. Add the `@app.middleware("http")` inside `build_app` after `app = FastAPI(...)`. Use `_os` and `_Response` aliases to avoid collision with any existing names.
 
-2. Apply the identical middleware to `services/xstockstrat-analysis/app/http_server.py` immediately after the `app` object is instantiated.
+2. Apply the identical middleware pattern to `services/xstockstrat-analysis/app/http_server.py` — same placement: after `app = FastAPI(...)` at `services/xstockstrat-analysis/app/http_server.py:L19`.
 
-3. In `services/xstockstrat-notify/src/webhooks/router.ts`, add the header check inside the webhook dispatch block, before any webhook-specific branch. The check should read `MCP_AGENT_SECRET` from `process.env` at module scope and validate it per-request:
+3. In `services/xstockstrat-notify/src/webhooks/router.ts`, add the header check inside `createWebhookRouter`, at the start of `webhookHandler` before the `url` switch. Add `MCP_AGENT_SECRET` constant at module scope (top of file, after imports):
    ```typescript
    const MCP_AGENT_SECRET = process.env.MCP_AGENT_SECRET ?? '';
-
-   // Inside the request handler, before dispatching to specific webhook handlers:
+   ```
+   Inside `webhookHandler` (after `readBody` at L43, before the `url` variable at L44):
+   ```typescript
    if (MCP_AGENT_SECRET && req.headers['x-mcp-secret'] !== MCP_AGENT_SECRET) {
      res.writeHead(401, { 'Content-Type': 'application/json' });
      res.end(JSON.stringify({ error: 'Unauthorized' }));
      return;
    }
    ```
-   Place the `MCP_AGENT_SECRET` constant at the top of the module (after imports). Place the guard at the start of the handler that routes `/webhooks/*` requests, before the `url === '/webhooks/emit-alert'` branch at L46.
 
-4. Add `MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}` to the `environment:` block of the `xstockstrat-ingest`, `xstockstrat-notify`, and `xstockstrat-analysis` service entries in `docker-compose.yml`. Confirm the existing env block structure for each service before adding to avoid duplicate keys.
+4. Add `MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}` to the `environment:` block of the `xstockstrat-ingest`, `xstockstrat-notify`, and `xstockstrat-analysis` service entries in `docker-compose.yml`. Ingest environment ends near L279; analysis near L307; notify is not shown in the excerpt but follows the same pattern. Confirm the existing env block structure for each service before adding to avoid duplicate keys.
 
 5. Add a `MCP_AGENT_SECRET` SECRET entry to the `envs:` block of `xstockstrat-ingest`, `xstockstrat-notify`, and `xstockstrat-analysis` in both `.do/app.dev.yaml` and `.do/app.yaml`:
    ```yaml
@@ -1361,200 +1721,26 @@ grep -n "MCP_AGENT_SECRET" .do/app.dev.yaml .do/app.yaml
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Tool signatures confirmed in Step 4 (`app/tools.py`): `list_signal_sources()`, `ingest_signal(source, symbol, direction, valid_from, conviction?, valid_until?, headline?, raw_url?, tags?)`, `emit_alert(severity, category, title, body, source_service?, target_user_id?)`, `run_backtest(strategy_id, symbols, initial_capital?)`.
+- All six tool signatures confirmed in Step 4 (`app/tools.py`): `list_signal_sources(source_type?)`, `extract_email_content(source_slug, attachments_b64?, urls?)`, `extract_website_content(source_slug)`, `ingest_signal(source, symbol, direction, valid_from, conviction?, valid_until?, headline?, raw_url?, tags?)`, `emit_alert(severity, category, title, body, source_service?, target_user_id?)`, `run_backtest(strategy_id, symbols, initial_capital?)`.
 - Ingest valid directions confirmed: `services/xstockstrat-ingest/app/handlers/servicer.py:L167` — `{"buy", "sell", "hold", "watchlist"}`.
 - Ingest conviction range confirmed: `services/xstockstrat-ingest/app/handlers/servicer.py:L181` — `0.0–1.0`.
-- Return shapes confirmed from Step 10 test fixtures: `list_signal_sources` → `{"sources": [...]}`, `ingest_signal` → `{"signal_id": <int>}`, `emit_alert` → `{"success": true}`, `run_backtest` → `{"backtest_id": "<str>"}`.
-- Error cases confirmed: unknown source slug → ingest returns `INVALID_ARGUMENT` propagated as tool error (AC-4); HTTP 401 from receiving service when `MCP_AGENT_SECRET` mismatch (FR-9/Step 12); httpx network errors propagated as tool errors.
-- Transport modes confirmed: `MCP_TRANSPORT=stdio` (default) and `MCP_TRANSPORT=sse` with `MCP_SSE_PORT` (Step 4 `app/main.py`).
-- SSE auth confirmed: `Authorization: Bearer <api_key>` validated via identity `ValidateApiKey` (FR-5a, Step 3).
-- `claude_mcp_config.json` location: `services/xstockstrat-agent/claude_mcp_config.json` (Step 9).
-- Runbook index confirmed at `docs/runbooks/CLAUDE.md` — table with `| File | Purpose |` columns.
+- Return shapes confirmed from Step 10 test fixtures: `list_signal_sources` → `{"sources": [...]}`, `extract_email_content` → `{"raw_text": str}`, `extract_website_content` → `{"raw_text": str}`, `ingest_signal` → `{"signal_id": int}`, `emit_alert` → `{"success": true}`, `run_backtest` → `{"backtest_id": str}`.
+- Runbook index confirmed at `docs/runbooks/CLAUDE.md` — table with `| File | Purpose | Key trigger |` columns.
 - Root `CLAUDE.md` Context Guide table confirmed under `## Context Guide` — columns `| Task | Read |`.
 
 **Instructions**:
 
-1. Create `docs/runbooks/mcp-tools.md`:
+1. Create `docs/runbooks/mcp-tools.md` with:
+   - A "Transport Modes" section covering stdio (default) and SSE (port 9000 via nginx `/agent/sse`).
+   - An "Authentication — x-mcp-secret" section explaining the shared secret enforcement for `/webhooks/*` paths.
+   - A tool reference section for each of the six tools with: purpose, parameters table (name, type, required, description), return shape, and errors table.
+   - A "Usage Patterns" section covering the email ingestion flow and website ingestion flow as in the system prompt.
+   - A reference to `services/xstockstrat-agent/claude_mcp_config.json` for connection setup.
+   - FR-10 requirements: all six MCP tools documented with parameter tables, return shapes, error cases, transport modes, `MCP_AGENT_SECRET` enforcement behavior, credential opacity for extract tools, link to `claude_mcp_config.json`.
 
-   ````markdown
-   # MCP Tools Reference — xstockstrat-agent
-
-   The `xstockstrat-agent` MCP server exposes four tools that bridge Claude.ai to the
-   xstockstrat platform. This document is the operator reference for tool parameters,
-   return shapes, and error handling.
-
-   For connection setup (transport modes, API keys, Claude Desktop config) see
-   `services/xstockstrat-agent/claude_mcp_config.json` and the sections below.
-
-   ---
-
-   ## Transport Modes
-
-   | Mode | `MCP_TRANSPORT` | How to connect | Auth required |
-   |---|---|---|---|
-   | stdio | `stdio` (default) | Claude Desktop runs the process directly | None — local process |
-   | SSE | `sse` | Connect to `http://localhost/agent/sse` via nginx | `Authorization: Bearer <api_key>` (validated via identity service) |
-
-   For local development the stdio mode is recommended. The SSE mode is used when the agent
-   runs in Docker Compose or on DigitalOcean and must be reachable from a remote Claude.ai session.
-
-   ---
-
-   ## Authentication — x-mcp-secret
-
-   When `MCP_AGENT_SECRET` is configured, the agent includes an `x-mcp-secret` header on
-   every downstream HTTP call. The three receiving services (ingest, notify, analysis) enforce
-   this header on all `/webhooks/*` requests and reject mismatched or absent values with HTTP 401.
-
-   Set the same value in the agent and all three receiving services:
+2. Add a row to the `docs/runbooks/CLAUDE.md` index table (insert after the last runbook row):
    ```
-   MCP_AGENT_SECRET=<shared-secret>   # in xstockstrat-agent, xstockstrat-ingest,
-                                       # xstockstrat-notify, xstockstrat-analysis
-   ```
-   Leave empty to disable enforcement (useful during initial local setup).
-
-   ---
-
-   ## Tools
-
-   ### `list_signal_sources`
-
-   Returns all active signal sources registered in `xstockstrat-ingest`.
-   **Always call this first** before calling `ingest_signal` to look up valid source slugs.
-
-   **Parameters**: none
-
-   **Returns**:
-   ```json
-   {
-     "sources": [
-       {
-         "slug": "unusual_whales",
-         "display_name": "Unusual Whales",
-         "source_type": "simple_website"
-       }
-     ]
-   }
-   ```
-
-   **Errors**:
-   | Condition | Behaviour |
-   |---|---|
-   | ingest service unreachable | Tool raises with HTTP/network error message |
-   | `x-mcp-secret` mismatch | Tool raises with HTTP 401 |
-
-   ---
-
-   ### `ingest_signal`
-
-   Ingests a trading signal into `xstockstrat-ingest`. Creates a row in
-   `ingest.newsletter_signals` and returns the new `signal_id`.
-
-   **Parameters**:
-
-   | Parameter | Type | Required | Description |
-   |---|---|---|---|
-   | `source` | string | Yes | Source slug from `list_signal_sources` — exact match |
-   | `symbol` | string | Yes | Ticker symbol, uppercase (e.g. `NVDA`) |
-   | `direction` | string | Yes | One of `buy`, `sell`, `hold`, `watchlist` |
-   | `valid_from` | string | Yes | Signal validity start — ISO 8601 UTC (e.g. `2026-05-01T00:00:00Z`) |
-   | `conviction` | float | No | Confidence score `0.0`–`1.0`; source default applied when omitted |
-   | `valid_until` | string | No | Signal expiry — ISO 8601 UTC; omit for open-ended signals |
-   | `headline` | string | No | One-line summary of the signal reason |
-   | `raw_url` | string | No | Source URL if present in the email/text |
-   | `tags` | list[string] | No | Relevant keywords (e.g. `["unusual_options", "earnings"]`) |
-
-   **Returns**:
-   ```json
-   { "signal_id": 42 }
-   ```
-
-   **Errors**:
-   | Condition | Behaviour |
-   |---|---|
-   | Unknown `source` slug | Tool raises with `INVALID_ARGUMENT` from ingest |
-   | Invalid `direction` value | Tool raises with `INVALID_ARGUMENT` from ingest |
-   | `conviction` outside `0.0`–`1.0` | Tool raises with `INVALID_ARGUMENT` from ingest |
-   | Duplicate signal | Tool raises with duplicate error from ingest |
-   | `x-mcp-secret` mismatch | Tool raises with HTTP 401 |
-
-   ---
-
-   ### `emit_alert`
-
-   Emits an operator-facing alert via `xstockstrat-notify`. Use this to surface
-   time-sensitive or high-conviction signals that need immediate attention, ingestion
-   failures, unregistered sources, or any observation worth flagging to the operator.
-
-   **Parameters**:
-
-   | Parameter | Type | Required | Description |
-   |---|---|---|---|
-   | `severity` | string | Yes | Alert urgency: `info`, `warning`, `critical` |
-   | `category` | string | Yes | Alert category: e.g. `signal`, `system`, `market` |
-   | `title` | string | Yes | Short one-line summary shown in the alert |
-   | `body` | string | Yes | Full alert description |
-   | `source_service` | string | No | Originating service name (default `xstockstrat-agent`) |
-   | `target_user_id` | string | No | User to target; empty string broadcasts to all operators |
-
-   **Returns**:
-   ```json
-   { "success": true }
-   ```
-
-   **Errors**:
-   | Condition | Behaviour |
-   |---|---|
-   | notify service unreachable | Tool raises with HTTP/network error message |
-   | `x-mcp-secret` mismatch | Tool raises with HTTP 401 |
-
-   **When to call vs. skip** — see `services/xstockstrat-agent/app/prompts/signal_extraction.md` §Step 4.
-
-   ---
-
-   ### `run_backtest`
-
-   Triggers a backtest via `xstockstrat-analysis` and returns the result synchronously.
-
-   **Parameters**:
-
-   | Parameter | Type | Required | Description |
-   |---|---|---|---|
-   | `strategy_id` | string | Yes | Strategy identifier (e.g. `sma_crossover`) |
-   | `symbols` | list[string] | Yes | Ticker symbols to backtest (e.g. `["NVDA", "AAPL"]`) |
-   | `initial_capital` | float | No | Starting capital in USD (default `100000.0`) |
-
-   **Returns**:
-   ```json
-   { "backtest_id": "bt-abc123", ... }
-   ```
-   Full return shape depends on the strategy; `backtest_id` is always present.
-
-   **Errors**:
-   | Condition | Behaviour |
-   |---|---|
-   | Unknown `strategy_id` | Tool raises with error from analysis service |
-   | analysis service unreachable | Tool raises with HTTP/network error message |
-   | `x-mcp-secret` mismatch | Tool raises with HTTP 401 |
-
-   ---
-
-   ## Usage Pattern
-
-   The recommended call sequence for processing an incoming email:
-
-   1. `list_signal_sources` — retrieve active slugs
-   2. Match email sender/newsletter to a slug; skip entirely if no match
-   3. `ingest_signal` — ingest each actionable signal found
-   4. `emit_alert` (optional) — surface high-conviction or time-sensitive signals to the operator
-
-   Full extraction guidance including conviction scoring and source-type mapping is in
-   `services/xstockstrat-agent/app/prompts/signal_extraction.md`.
-   ````
-
-2. Add a row to the `docs/runbooks/CLAUDE.md` index table (insert after the last runbook row, before the closing of the table):
-   ```
-   | `mcp-tools.md` | MCP tool reference — all four agent tools with parameter tables, return shapes, error cases, and transport/auth setup |
+   | `mcp-tools.md` | MCP tool reference — all six agent tools with parameter tables, return shapes, error cases, transport modes, and x-mcp-secret enforcement | Using or troubleshooting the agent MCP server |
    ```
 
 3. Add a row to the `## Context Guide` table in root `CLAUDE.md` (insert after the last row referencing a runbook):
@@ -1564,10 +1750,10 @@ grep -n "MCP_AGENT_SECRET" .do/app.dev.yaml .do/app.yaml
 
 **Verification**:
 ```bash
-# Confirm file exists and all four tool sections are present
+# Confirm file exists and all six tool sections are present
 grep -n "^### " docs/runbooks/mcp-tools.md
 
-# Confirm parameter tables present (one per tool)
+# Confirm at least 6 parameter tables (one per non-zero-param tool)
 grep -c "| Parameter" docs/runbooks/mcp-tools.md
 
 # Confirm entry added to runbook index

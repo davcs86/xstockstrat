@@ -48,6 +48,18 @@
 - Open question resolved: no seeding strategy required; sources are registered on-demand by operators via the config-ui `/sources` page after deployment.
 - Overlap findings: no FAIL-level conflicts with any active concurrent feature.
 
+## Session 2026-05-22T00:00:00Z — sdd-spec (re-run)
+
+- Re-ran implementation spec against current codebase. Status remains implementation-ready. Step count: 11 → 12.
+- Key corrections applied:
+  - Step 3 (migration): CHECK constraint now includes all 10 source_type values — the previous spec omitted all five `mediated_*` types (mediated_simple_email, mediated_email_attachment, mediated_linked_email, mediated_simple_website, mediated_authenticated_website). This is a correctness bug fix aligned with FR-2.
+  - Step 4 (repository): `validate_config_json` now explicitly covers all ten source types including all mediated variants per FR-10. The mediated types share the same config_json structure as their programmatic counterparts.
+  - Step 5 (extractors): Added `noop.py` extractor as a required artifact (FR-6 mandates `app.extractors.noop` for all mediated source types). The previous spec omitted this file.
+  - Step 6 (servicer ManageSignalSource): `credentials_ref` requirement now applies to both `authenticated_website` AND `mediated_authenticated_website` (was only authenticated_website).
+  - Step 9 (config-ui DO yaml): Corrected line number references. IDENTITY_HTTP_ENDPOINT is at L397 in .do/app.dev.yaml and L393 in .do/app.yaml (previous spec said L368).
+  - Step 12 (new): Dedicated test step for noop extractor coverage and dynamic importability of all mediated extractor modules per acceptance criterion 9.
+- Verified codebase findings still accurate: last ingest migration is 001, no repositories/ or extractors/ dirs exist, IDENTITY_ENDPOINT absent from all three deployment files, INGEST_HTTP_ENDPOINT absent from config-ui in all three deployment files.
+
 ## Session 2026-05-21T00:01:00Z — sdd-review impl-spec
 
 - Implementation spec reviewed. 0 failures, 1 advisory warning (Step 2: 12 files — unavoidable for proto-gen).
