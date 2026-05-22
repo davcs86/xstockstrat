@@ -79,3 +79,14 @@
 **Progress**: 2 done / 11 total
 **Stopped at**: Step 2 (PR created, waiting for merge before Step 3)
 **Next**: /sdd-execute signal-source-registry next
+
+### Step 3 — migration: Add signal_sources registry table to ingest schema [done]
+- Created `002_add_signal_sources_registry.up.sql` (signal_sources table with CHECK constraint on source_type, JSONB config_json, active index) and matching `.down.sql`.
+- Files modified: `services/xstockstrat-ingest/migrations/002_add_signal_sources_registry.up.sql`, `002_add_signal_sources_registry.down.sql`
+- Deviations: DATABASE_URL not set; verified by SQL content assertions instead of live db-migrate.sh run. Full detail in Deviation Log.
+
+## Session 2026-05-22T00:02:00Z — sdd-execute
+**Steps this session**: [3]
+**Progress**: 3 done / 11 total
+**Stopped at**: Step 3 (PR created, waiting for merge before Step 4)
+**Next**: /sdd-execute signal-source-registry next
