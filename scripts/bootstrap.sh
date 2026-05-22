@@ -35,6 +35,28 @@ echo ""
 echo "==> Checking required tools..."
 "$REPO_ROOT/scripts/check-prereqs.sh"
 
+# ── 1.5. Check/enforce Node.js version ─────────────────────────────────────
+echo ""
+if command -v node &>/dev/null; then
+  NODE_VERSION=$(node -v | sed 's/v//')
+  NODE_MAJOR=$(echo "$NODE_VERSION" | cut -d. -f1)
+  if [ "$NODE_MAJOR" -ne 22 ]; then
+    echo "⚠️  Node.js version is $NODE_VERSION (expected 22.x)"
+    echo ""
+    echo "   Options:"
+    echo "   1. Install nvm: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash"
+    echo "      Then: nvm use 22"
+    echo "   2. Install Node 22 via Homebrew: brew install node@22"
+    echo ""
+    exit 1
+  else
+    echo "==> Node.js $NODE_VERSION ✓"
+  fi
+else
+  echo "==> Node.js not found — skipping version check."
+  echo "    Install: brew install node@22  or  nvm install 22"
+fi
+
 # ── 2. Generate proto stubs ────────────────────────────────────────────────
 echo ""
 if [ -d "$REPO_ROOT/packages/proto/gen" ] && [ -n "$(ls -A "$REPO_ROOT/packages/proto/gen" 2>/dev/null)" ]; then
