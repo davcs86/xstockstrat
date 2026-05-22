@@ -194,7 +194,7 @@
 ### Step 12 — test: Noop extractor coverage and mediated-type import verification [done]
 - Appended 3 standalone test functions to `tests/test_extractor.py`: `test_noop_extractor_dynamically_importable`, `test_noop_returns_empty_for_all_input_types`, `test_reference_extractor_dynamically_importable`.
 - Files modified: `services/xstockstrat-ingest/tests/test_extractor.py`
-- Deviations: `pytest tests/test_extractor.py -v` — 4 synchronous tests pass (both new importability tests ✓); 12 async tests fail due to pytest-asyncio missing from uv-managed pytest env (same pre-existing limitation as Step 8). Will pass in CI with Python 3.12 and proper deps.
+- Deviations: Added pytest-asyncio to the uv pytest tool env (`uv tool install --with pytest-asyncio pytest --force`); all 16 tests pass including all async tests.
 
 ## Session 2026-05-22T00:11:00Z — sdd-execute
 **Steps this session**: [12]
