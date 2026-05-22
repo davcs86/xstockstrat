@@ -21,7 +21,7 @@ FR-2. The MCP server must expose the following tools:
 | Tool | Implementation | Notes |
 |---|---|---|
 | `list_signal_sources` | Connect-RPC HTTP call to ingest's `ListSignalSources` RPC on port 8055 | Accepts optional `source_type` filter (e.g. `["simple_email","email_attachment","linked_email"]`). Returns slug, display_name, source_type, and full `config_json` per source. Claude uses the patterns in `config_json` (sender_patterns, subject_patterns, url_patterns, etc.) to build Gmail MCP queries. |
-| `extract_email_content` | Implemented directly in the agent service | Accepts `source_slug`, `body_text`, `body_html` (optional), `attachments_b64` (optional list of base64-encoded bytes), `urls` (optional list of strings). Looks up the source's `source_type` and `credentials_ref` from the signal source registry, resolves credentials from the config service if present, performs content extraction (decrypt password-protected PDFs, fetch gated URLs, etc.), and returns `{ raw_text: str }`. Claude reads this raw text and identifies signals — the tool does not parse or structure signals. Credentials are never exposed to Claude. |
+| `extract_email_content` | Implemented directly in the agent service | Only needed when the email contains attachments or URLs that Claude cannot read directly (e.g. password-protected PDFs, gated URLs). For plain email bodies, Claude reads the content returned by the Gmail MCP without calling this tool. Accepts `source_slug` and either `attachments_b64` (list of base64-encoded bytes) or `urls` (list of strings) — at least one must be provided. Looks up the source's `credentials_ref` from the signal source registry, resolves credentials from the config service if present, performs content extraction (decrypt password-protected PDFs, fetch gated URLs, etc.), and returns `{ raw_text: str }`. Claude reads this raw text and identifies signals — the tool does not parse or structure signals. Credentials are never exposed to Claude. |
 | `ingest_signal` | `POST /webhooks/ingest-signal` on `xstockstrat-ingest:8055` | Full ExternalSignal fields; source slug validated by ingest (FR-3 of feature 008). Claude calls this once per signal it identified in the raw text. |
 | `emit_alert` | `POST /webhooks/emit-alert` on `xstockstrat-notify:8059` | severity, category, title, body, source_service, target_user_id |
 | `run_backtest` | `POST /webhooks/run-backtest` on `xstockstrat-analysis:8056` | strategy_id, symbols, initial_capital |
@@ -30,9 +30,9 @@ FR-3. A shared system prompt file must be maintained at `services/xstockstrat-ag
   - The standard email ingestion flow:
     1. Call `list_signal_sources` filtered to email source types to get the registered sources and their matching patterns.
     2. Use the returned `config_json` patterns (sender_patterns, subject_patterns) to query Gmail via the Gmail MCP server and retrieve matching emails.
-    3. For each matching email, call `extract_email_content` with the source slug and the email content (body, attachments, or URLs as appropriate for the source type). The tool handles all credential and decryption logic internally.
-    4. Read the returned raw text and identify trading signals using judgment — do not infer signals that are not clearly present.
-    5. For each identified signal, call `ingest_signal` with the structured fields extracted from the raw text.
+    3. For each matching email, read the email body directly — no tool call required for plain text or HTML bodies. Only call `extract_email_content` when the email contains attachments or URLs that cannot be read directly (e.g. password-protected PDFs, gated URLs). The tool handles credential resolution and decryption internally.
+    4. Identify trading signals from the content (body text or raw text returned by `extract_email_content`) using judgment — do not infer signals that are not clearly present.
+    5. For each identified signal, call `ingest_signal` with the structured fields extracted from the content.
   - How to identify a trading signal in freeform text (tickers, direction, conviction indicators)
   - Conviction scoring guidance (0.0–1.0 scale, what factors increase/decrease it)
   - When to call `emit_alert` vs. silently skip a non-actionable email
@@ -106,7 +106,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 1. `xstockstrat-agent` starts successfully alongside the existing Docker Compose stack with no errors.
 2. `list_signal_sources` with no filter returns all active sources including full `config_json`. With a source_type filter it returns only sources matching those types.
-3. `extract_email_content` called with a valid slug and email body returns `{ raw_text: str }` with no credentials or internal config values exposed in the response.
+3. `extract_email_content` called with a valid slug and attachments or URLs returns `{ raw_text: str }` with no credentials or internal config values exposed in the response. Called with neither attachments nor URLs it returns a tool error.
 4. `extract_email_content` called with a slug whose source has a `credentials_ref` resolves the credential from the config service and uses it during extraction without exposing it in the tool response.
 5. `extract_email_content` called with an unknown slug returns a tool error.
 6. `ingest_signal` called with a valid source slug and required fields creates a row in `ingest.newsletter_signals` and returns a signal_id.
