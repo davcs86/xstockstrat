@@ -101,3 +101,14 @@
 **Progress**: 4 done / 11 total
 **Stopped at**: Step 4 (PR created, waiting for merge before Step 5)
 **Next**: /sdd-execute signal-source-registry next
+
+### Step 5 — service: BaseExtractor abstract class and reference extractor [done]
+- Created `app/extractors/__init__.py` (empty), `app/extractors/base.py` (five input dataclasses, `RawInput` union, `BaseExtractor` ABC with `async def extract`), and `app/extractors/example_simple_email.py` (`ExampleSimpleEmailExtractor` using regex `r'\b(BUY|SELL|HOLD|WATCHLIST)\s+([A-Z]{1,5})\b'`).
+- Files modified: `services/xstockstrat-ingest/app/extractors/__init__.py`, `services/xstockstrat-ingest/app/extractors/base.py`, `services/xstockstrat-ingest/app/extractors/example_simple_email.py`
+- Deviations: none
+
+## Session 2026-05-22T00:04:00Z — sdd-execute
+**Steps this session**: [5]
+**Progress**: 5 done / 11 total
+**Stopped at**: Step 5 (PR created, waiting for merge before Step 6)
+**Next**: /sdd-execute signal-source-registry next
