@@ -1,6 +1,6 @@
 # Implementation Spec: signal-source-registry
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-05-21
 **Updated**: 2026-05-22
 **Feature**: `docs/roadmap/features/008-signal-source-registry/feature.md`
@@ -576,7 +576,7 @@ python3 -c "from app.handlers.servicer import IngestServicer; print('import OK')
 
 ### Step 7 — service: Wire ListSignalSources and ManageSignalSource to HTTP/Connect-RPC server
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/http_server.py` — modify
@@ -651,7 +651,7 @@ print('routes OK')
 
 ### Step 8 — test: Unit tests for signal source registry service code
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_signal_sources.py` — create
@@ -703,7 +703,7 @@ Confirm threshold passes. Coverage report should show `app/repositories/signal_s
 
 ### Step 9 — service: config-ui API route for signal sources
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/app/api/sources/route.ts` — create
@@ -840,7 +840,7 @@ pnpm run build 2>&1 | tail -10
 
 ### Step 10 — service: config-ui Sources page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/app/sources/page.tsx` — create
@@ -905,7 +905,7 @@ find .next/server/app/sources -name "page.js" 2>/dev/null || echo "check standal
 
 ### Step 11 — test: E2E tests for config-ui Sources page and API route
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/e2e/sources.spec.ts` — create
@@ -968,7 +968,7 @@ All tests pass. No coverage threshold applies for Next.js frontends.
 
 ### Step 12 — test: Noop extractor coverage and mediated-type import verification
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_extractor.py` — modify (add noop + mediated type importability tests)
@@ -1049,3 +1049,33 @@ pytest --cov=app --cov-fail-under=40
 **Spec said**: Verify with `./scripts/db-migrate.sh` and `psql "$DATABASE_URL" -c "\d ingest.signal_sources"`.
 **Actual**: `DATABASE_URL` not set in the remote execution environment; live DB not available. Verified by confirming file existence, correct NNN numbering (`002`), SQL content assertions (table definition, CHECK constraint, index, no `CREATE SCHEMA`), and up/down pair present.
 **Reason**: No TimescaleDB running in the CI/remote container. Migration correctness will be verified at deployment time when `db-migrate.sh` runs against the actual database.
+
+### Deviation: Step 8 — noop.py created here instead of Step 5
+**Spec said**: `app/extractors/noop.py` is created in Step 5 (per revised spec after re-run).
+**Actual**: Created in Step 8 alongside test coverage. Step 5 was executed before the spec re-run that added noop.py to its scope.
+**Reason**: The spec was re-run (adding noop.py to Step 5) after Step 5 had already been merged. User chose Option A to create it in Step 8.
+
+### Deviation: Step 8 — validate_config_json updated to cover mediated types
+**Spec said**: `validate_config_json` (Step 4) should cover all 10 source types including mediated variants per FR-10.
+**Actual**: Step 4 was executed before the spec re-run; mediated types were missing. Updated `app/repositories/signal_sources.py` in Step 8 to add all five `mediated_*` variants (share the same validation rules as their non-mediated counterparts).
+**Reason**: Same cause as noop.py deviation above. User chose Option A to fix in Step 8.
+
+### Deviation: Step 10 — upsert_source and servicer updated to support re-activation
+**Spec said**: `upsert_source` (Step 4) and `ManageSignalSource` handler (Step 6) are only touched in their respective steps.
+**Actual**: `upsert_source` updated in Step 10 to add `active: bool = True` parameter and include `active` in both the INSERT column list and `ON CONFLICT DO UPDATE SET` clause. `ManageSignalSource` handler updated to pass `active=src.active` to `upsert_source`.
+**Reason**: During Step 10 Phase 1 discovery, identified that the enable/disable toggle (re-activation path) would silently fail — `active` was absent from the upsert SQL so a deactivated source could never be re-activated via the "update" operation. User chose Option A to fix it in Step 10.
+
+### Deviation: Step 11 — E2E test verification via TypeScript compilation only
+**Spec said**: Verify with `pnpm test:e2e`; all tests pass.
+**Actual**: Playwright browser download blocked by remote environment network policy (`playwright install chromium` failed with download error). TypeScript compilation (`pnpm exec tsc --noEmit`) passed with no errors. Sources tests use correct basePath-aware URLs (`/config-ui/api/sources`, `/config-ui/sources`) unlike pre-existing tests which use paths without the basePath prefix (pre-existing defect, out of scope).
+**Reason**: Remote execution environment does not permit downloading Playwright browser binaries. Same precedent as Step 3 migration verification deviation.
+
+### Deviation: Step 11 — playwright.config.ts webServer.url corrected
+**Spec said**: Files list contained only `e2e/sources.spec.ts` and `e2e/mock-backend.ts`.
+**Actual**: Also modified `playwright.config.ts`: added `INGEST_HTTP_ENDPOINT` to webServer env (noted as gap in Phase 1) and corrected `webServer.url` from `http://localhost:3002` to `http://localhost:3002/config-ui/api/health` (the actual health endpoint given the app's basePath).
+**Reason**: Without the correct health URL, `pnpm test:e2e` times out waiting for the server. The `/config-ui/api/health` endpoint returns 200 and is the correct readiness check.
+
+### Deviation: Step 12 — pytest-asyncio installed into uv tool env to unblock async tests
+**Spec said**: Verify with `pytest tests/test_extractor.py -v`; all noop and dynamic-import tests pass.
+**Actual**: All 16 tests pass after running `uv tool install --with pytest-asyncio pytest --force` to add pytest-asyncio to the uv-managed pytest environment. This also retroactively fixes the same pre-existing limitation from Step 8.
+**Reason**: pytest-asyncio was missing from the uv pytest tool's isolated virtualenv. Fixed by reinstalling the tool with the extra dependency rather than documenting it as a permanent limitation.

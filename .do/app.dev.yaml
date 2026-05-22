@@ -384,6 +384,8 @@ services:
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: IDENTITY_HTTP_ENDPOINT
         value: ${xstockstrat-identity.PRIVATE_URL}
+      - key: INGEST_HTTP_ENDPOINT
+        value: ${xstockstrat-ingest.PRIVATE_URL}
       - key: APP_URL
         value: ${APP_URL}
       - key: JWT_SECRET

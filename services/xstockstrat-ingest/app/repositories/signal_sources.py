@@ -34,17 +34,19 @@ async def upsert_source(
     extractor_module: str,
     credentials_ref: str | None,
     config_json: dict | None,
+    active: bool = True,
 ) -> dict:
     row = await db_pool.fetchrow(
         "INSERT INTO ingest.signal_sources"
-        " (slug, display_name, source_type, extractor_module, credentials_ref, config_json)"
-        " VALUES ($1, $2, $3, $4, $5, $6)"
+        " (slug, display_name, source_type, extractor_module, credentials_ref, config_json, active)"
+        " VALUES ($1, $2, $3, $4, $5, $6, $7)"
         " ON CONFLICT (slug) DO UPDATE SET"
         "   display_name = EXCLUDED.display_name,"
         "   source_type = EXCLUDED.source_type,"
         "   extractor_module = EXCLUDED.extractor_module,"
         "   credentials_ref = EXCLUDED.credentials_ref,"
-        "   config_json = EXCLUDED.config_json"
+        "   config_json = EXCLUDED.config_json,"
+        "   active = EXCLUDED.active"
         " RETURNING *",
         slug,
         display_name,
@@ -52,6 +54,7 @@ async def upsert_source(
         extractor_module,
         credentials_ref,
         config_json,
+        active,
     )
     return dict(row)
 
@@ -67,17 +70,23 @@ async def deactivate_source(db_pool, slug: str) -> dict | None:
 def validate_config_json(source_type: str, config_json: dict | None) -> str | None:
     cfg = config_json or {}
 
-    if source_type in ("simple_email", "email_attachment", "linked_email"):
+    if source_type in (
+        "simple_email", "email_attachment", "linked_email",
+        "mediated_simple_email", "mediated_email_attachment", "mediated_linked_email",
+    ):
         if not cfg.get("sender_patterns"):
             return f"{source_type} requires non-empty sender_patterns in config_json"
         if not cfg.get("subject_patterns"):
             return f"{source_type} requires non-empty subject_patterns in config_json"
-        if source_type == "email_attachment" and not cfg.get("attachment_mime_types"):
-            return "email_attachment requires non-empty attachment_mime_types in config_json"
-        if source_type == "linked_email" and not cfg.get("url_patterns"):
-            return "linked_email requires non-empty url_patterns in config_json"
+        if source_type in ("email_attachment", "mediated_email_attachment") and not cfg.get("attachment_mime_types"):
+            return f"{source_type} requires non-empty attachment_mime_types in config_json"
+        if source_type in ("linked_email", "mediated_linked_email") and not cfg.get("url_patterns"):
+            return f"{source_type} requires non-empty url_patterns in config_json"
 
-    elif source_type in ("simple_website", "authenticated_website"):
+    elif source_type in (
+        "simple_website", "authenticated_website",
+        "mediated_simple_website", "mediated_authenticated_website",
+    ):
         if not cfg.get("url"):
             return f"{source_type} requires non-empty url in config_json"
         if not cfg.get("scrape_selector"):

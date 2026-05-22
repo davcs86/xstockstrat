@@ -25,7 +25,8 @@ def make_servicer() -> IngestServicer:
     cfg = MagicMock()
     marketdata_ch = MagicMock()
     ledger_ch = MagicMock()
-    return IngestServicer(cfg, marketdata_ch, ledger_ch, db_pool=None)
+    identity_ch = MagicMock()
+    return IngestServicer(cfg, marketdata_ch, ledger_ch, db_pool=None, identity_channel=identity_ch)
 
 
 # ---------------------------------------------------------------------------
@@ -409,14 +410,17 @@ class TestIngestSignal:
     async def test_db_error_aborts(self):
         svc = make_servicer()
         svc._db = MagicMock()
-        svc._db.fetchrow = AsyncMock(side_effect=Exception("db failure"))
+        # First fetchrow = registry lookup (returns valid row), second = INSERT raises
+        svc._db.fetchrow = AsyncMock(
+            side_effect=[{"slug": "unusual_whales"}, Exception("db failure")]
+        )
         context = MagicMock()
-        context.abort = MagicMock(side_effect=Exception("aborted"))
+        context.abort = AsyncMock(side_effect=Exception("aborted"))
 
         with pytest.raises(Exception, match="aborted"):
             await svc.IngestSignal(self._make_signal_req(), context)
 
-        context.abort.assert_called_once()
+        context.abort.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_ledger_error_is_swallowed(self):
@@ -557,3 +561,176 @@ class TestConfigWatcherGetters:
         # Event is never set → times out immediately
         with pytest.raises(RuntimeError, match="Timed out"):
             await w.wait_for_snapshot(timeout_seconds=0.01)
+
+
+# ---------------------------------------------------------------------------
+# IngestSignal — registry slug validation (FR-3)
+# ---------------------------------------------------------------------------
+
+
+class TestIngestSignalRegistryValidation:
+    def _make_signal_req(self, source: str = "unusual_whales") -> ingest_pb2.IngestSignalRequest:
+        ts = Timestamp()
+        ts.GetCurrentTime()
+        signal = ingest_pb2.ExternalSignal(
+            source=source, symbol="AAPL", direction="buy", valid_from=ts
+        )
+        return ingest_pb2.IngestSignalRequest(signal=signal)
+
+    @pytest.mark.asyncio
+    async def test_aborts_when_source_not_registered(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        # Registry lookup returns None → unregistered source
+        svc._db.fetchrow = AsyncMock(return_value=None)
+        context = MagicMock()
+        context.abort = AsyncMock(side_effect=Exception("aborted"))
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.IngestSignal(self._make_signal_req(), context)
+
+        context.abort.assert_awaited_once()
+        args = context.abort.call_args[0]
+        import grpc
+        assert args[0] == grpc.StatusCode.INVALID_ARGUMENT
+
+    @pytest.mark.asyncio
+    async def test_proceeds_when_source_registered(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        # First fetchrow = registry lookup (returns slug row), second = INSERT signal
+        svc._db.fetchrow = AsyncMock(
+            side_effect=[{"slug": "unusual_whales"}, {"id": 42}]
+        )
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+
+        resp = await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
+        assert resp.signal_id == 42
+
+
+# ---------------------------------------------------------------------------
+# ManageSignalSource — auth + CRUD paths
+# ---------------------------------------------------------------------------
+
+
+class TestManageSignalSource:
+    @pytest.mark.asyncio
+    async def test_unauthenticated_without_bearer(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        # _validate_admin_token will return False when identity stub is mocked
+        svc._identity = MagicMock()
+        svc._identity.ValidateApiKey = AsyncMock(side_effect=Exception("unauthorized"))
+
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(slug="s", source_type="simple_email"),
+            operation="register",
+        )
+        context = MagicMock()
+        context.invocation_metadata = MagicMock(return_value=[])
+        context.abort = AsyncMock(side_effect=Exception("aborted"))
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageSignalSource(req, context)
+
+        import grpc
+        assert context.abort.call_args[0][0] == grpc.StatusCode.UNAUTHENTICATED
+
+    @pytest.mark.asyncio
+    async def test_register_succeeds_with_admin_token(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        svc._db.fetchrow = AsyncMock(return_value={
+            "slug": "uw", "display_name": "UW", "source_type": "simple_email",
+            "extractor_module": "app.extractors.noop", "credentials_ref": None,
+            "active": True, "config_json": None,
+        })
+        from gen.identity.v1 import identity_pb2
+        svc._identity = MagicMock()
+        svc._identity.ValidateApiKey = AsyncMock(
+            return_value=identity_pb2.TokenClaims(roles=["admin"])
+        )
+
+        from google.protobuf.struct_pb2 import Struct
+        cfg = Struct()
+        cfg.update({"sender_patterns": ["@x.com"], "subject_patterns": ["Alert"]})
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(
+                slug="uw", display_name="UW", source_type="simple_email",
+                extractor_module="app.extractors.noop", config_json=cfg,
+            ),
+            credentials_ref="",
+            operation="register",
+        )
+        context = MagicMock()
+        context.invocation_metadata = MagicMock(
+            return_value=[("authorization", "Bearer test-key")]
+        )
+
+        resp = await svc.ManageSignalSource(req, context)
+        assert resp.source.slug == "uw"
+
+    @pytest.mark.asyncio
+    async def test_deactivate_not_found(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        svc._db.fetchrow = AsyncMock(return_value=None)
+        from gen.identity.v1 import identity_pb2
+        svc._identity = MagicMock()
+        svc._identity.ValidateApiKey = AsyncMock(
+            return_value=identity_pb2.TokenClaims(roles=["admin"])
+        )
+
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(slug="missing"),
+            operation="deactivate",
+        )
+        context = MagicMock()
+        context.invocation_metadata = MagicMock(
+            return_value=[("authorization", "Bearer test-key")]
+        )
+        context.abort = AsyncMock(side_effect=Exception("aborted"))
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageSignalSource(req, context)
+
+        import grpc
+        assert context.abort.call_args[0][0] == grpc.StatusCode.NOT_FOUND
+
+
+# ---------------------------------------------------------------------------
+# ListSignalSources
+# ---------------------------------------------------------------------------
+
+
+class TestListSignalSources:
+    @pytest.mark.asyncio
+    async def test_returns_sources_active_only(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        svc._db.fetch = AsyncMock(return_value=[
+            {"slug": "uw", "display_name": "UW", "source_type": "simple_email",
+             "extractor_module": "app.extractors.noop", "credentials_ref": None,
+             "active": True, "config_json": None, "created_at": None}
+        ])
+
+        req = ingest_pb2.ListSignalSourcesRequest(include_inactive=False)
+        resp = await svc.ListSignalSources(req, context=MagicMock())
+        assert len(resp.sources) == 1
+        assert resp.sources[0].slug == "uw"
+        assert resp.sources[0].has_credentials is False
+
+    @pytest.mark.asyncio
+    async def test_has_credentials_true_when_ref_set(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        svc._db.fetch = AsyncMock(return_value=[
+            {"slug": "aw", "display_name": "AW", "source_type": "authenticated_website",
+             "extractor_module": "app.extractors.noop", "credentials_ref": "secret.aw.token",
+             "active": True, "config_json": None, "created_at": None}
+        ])
+
+        req = ingest_pb2.ListSignalSourcesRequest(include_inactive=False)
+        resp = await svc.ListSignalSources(req, context=MagicMock())
+        assert resp.sources[0].has_credentials is True

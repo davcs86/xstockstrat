@@ -14,7 +14,7 @@ const KNOWN_NAMESPACES = [
 
 test.describe('Namespace dashboard', () => {
   test('renders all 10 namespace cards', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/config-ui');
 
     for (const ns of KNOWN_NAMESPACES) {
       await expect(page.getByText(ns).first()).toBeVisible();
@@ -22,7 +22,7 @@ test.describe('Namespace dashboard', () => {
   });
 
   test('each namespace card links to /<namespace> with env and mode params', async ({ page }) => {
-    await page.goto('/?env=dev&mode=paper');
+    await page.goto('/config-ui?env=dev&mode=paper');
 
     // Click the first namespace card
     await page.getByText('platform').first().click();
@@ -31,7 +31,7 @@ test.describe('Namespace dashboard', () => {
   });
 
   test('env and mode params are preserved when clicking different namespaces', async ({ page }) => {
-    await page.goto('/?env=production&mode=live');
+    await page.goto('/config-ui?env=production&mode=live');
 
     await page.getByText('trading').first().click();
 
@@ -39,12 +39,12 @@ test.describe('Namespace dashboard', () => {
   });
 
   test('"Configuration Namespaces" heading is visible', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/config-ui');
     await expect(page.getByText('Configuration Namespaces')).toBeVisible();
   });
 
   test('namespace cards show "namespace" label text', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/config-ui');
     // Each card has a "namespace" label below the namespace name
     const labels = page.getByText('namespace');
     await expect(labels.first()).toBeVisible();

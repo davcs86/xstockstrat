@@ -76,9 +76,19 @@ APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
 ```
 
+## Running Tests
+
+```bash
+uv sync --extra dev   # install deps (including dev) from uv.lock
+uv run pytest         # run all tests
+uv run pytest --cov=app --cov-fail-under=50  # with coverage
+```
+
+After any change to `pyproject.toml`, run `uv lock` and commit the updated `uv.lock`.
+
 ## Running Locally
 
 ```bash
-pip install -r requirements.txt
-python -m app.main
+uv sync
+uv run python -m app.main
 ```
