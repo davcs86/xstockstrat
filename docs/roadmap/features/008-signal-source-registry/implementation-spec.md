@@ -138,7 +138,7 @@ CI `proto-freshness` job enforces stubs match source; a clean `git diff` after `
 
 ### Step 3 — migration: Add signal_sources registry table to ingest schema
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/002_add_signal_sources_registry.up.sql` — create
@@ -913,3 +913,8 @@ All tests pass. No coverage threshold applies for Next.js frontends.
 **Spec said**: Files section listed only the 12 ingest-specific generated stubs.
 **Actual**: `buf-gen.sh` also updated `*_grpc.pb.go` for analysis, config, identity, indicators, ledger, marketdata, notify, portfolio, and trading services. All 21 changed files were staged and committed.
 **Reason**: The newer `protoc-gen-go-grpc` version (installed fresh via `go install`) produces slightly different output for all services. Generated files must be committed together to keep the repo consistent and pass CI `proto-freshness`. Leaving them uncommitted would cause a stale-stub failure on the next run.
+
+### Deviation: Step 3 — migration: Add signal_sources registry table to ingest schema
+**Spec said**: Verify with `./scripts/db-migrate.sh` and `psql "$DATABASE_URL" -c "\d ingest.signal_sources"`.
+**Actual**: `DATABASE_URL` not set in the remote execution environment; live DB not available. Verified by confirming file existence, correct NNN numbering (`002`), SQL content assertions (table definition, CHECK constraint, index, no `CREATE SCHEMA`), and up/down pair present.
+**Reason**: No TimescaleDB running in the CI/remote container. Migration correctness will be verified at deployment time when `db-migrate.sh` runs against the actual database.
