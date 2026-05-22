@@ -444,6 +444,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 extractor_module=src.extractor_module,
                 credentials_ref=request.credentials_ref or None,
                 config_json=cfg_dict,
+                active=src.active,
             )
         elif op == "deactivate":
             row = await deactivate_source(self._db, src.slug)

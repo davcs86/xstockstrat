@@ -52,6 +52,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/audit" className="px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors">
                 Audit Log
               </Link>
+              <Link href="/sources" className="px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors">
+                Sources
+              </Link>
             </nav>
           </div>
         </header>

@@ -34,17 +34,19 @@ async def upsert_source(
     extractor_module: str,
     credentials_ref: str | None,
     config_json: dict | None,
+    active: bool = True,
 ) -> dict:
     row = await db_pool.fetchrow(
         "INSERT INTO ingest.signal_sources"
-        " (slug, display_name, source_type, extractor_module, credentials_ref, config_json)"
-        " VALUES ($1, $2, $3, $4, $5, $6)"
+        " (slug, display_name, source_type, extractor_module, credentials_ref, config_json, active)"
+        " VALUES ($1, $2, $3, $4, $5, $6, $7)"
         " ON CONFLICT (slug) DO UPDATE SET"
         "   display_name = EXCLUDED.display_name,"
         "   source_type = EXCLUDED.source_type,"
         "   extractor_module = EXCLUDED.extractor_module,"
         "   credentials_ref = EXCLUDED.credentials_ref,"
-        "   config_json = EXCLUDED.config_json"
+        "   config_json = EXCLUDED.config_json,"
+        "   active = EXCLUDED.active"
         " RETURNING *",
         slug,
         display_name,
@@ -52,6 +54,7 @@ async def upsert_source(
         extractor_module,
         credentials_ref,
         config_json,
+        active,
     )
     return dict(row)
 

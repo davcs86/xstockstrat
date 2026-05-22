@@ -168,3 +168,14 @@
 **Progress**: 9 done / 12 total
 **Stopped at**: Step 9 (PR created, waiting for merge before Step 10)
 **Next**: /sdd-execute signal-source-registry next
+
+### Step 10 — service: config-ui Sources page [done]
+- Created `app/sources/page.tsx` (Client Component: table of all sources with enable/disable toggle and edit/register form per source_type; weights from analysis config). Added Sources nav link to `app/layout.tsx`. Fixed gap: added `active` to `upsert_source` SQL (INSERT + ON CONFLICT SET) and passed `src.active` in servicer ManageSignalSource call.
+- Files modified: `services/xstockstrat-config-ui/app/sources/page.tsx`, `services/xstockstrat-config-ui/app/layout.tsx`, `services/xstockstrat-ingest/app/repositories/signal_sources.py`, `services/xstockstrat-ingest/app/handlers/servicer.py`
+- Deviations: upsert_source and ManageSignalSource updated in Step 10 (gap — re-activation toggle requires `active` in upsert SQL; user chose Option A)
+
+## Session 2026-05-22T00:09:00Z — sdd-execute
+**Steps this session**: [10]
+**Progress**: 10 done / 12 total
+**Stopped at**: Step 10 (PR created, waiting for merge before Step 11)
+**Next**: /sdd-execute signal-source-registry next
