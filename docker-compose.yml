@@ -455,6 +455,7 @@ services:
       # Connect-RPC HTTP endpoint for xstockstrat-config
       CONFIG_HTTP_ENDPOINT: http://xstockstrat-config:8060
       IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
+      INGEST_HTTP_ENDPOINT: http://xstockstrat-ingest:8055
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: config-ui
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318

@@ -157,3 +157,14 @@
 **Progress**: 8 done / 12 total
 **Stopped at**: Step 8 (PR created, waiting for merge before Step 9)
 **Next**: /sdd-execute signal-source-registry next
+
+### Step 9 — service: config-ui API route for signal sources [done]
+- Created `app/api/sources/route.ts` with GET (→ ListSignalSources, with includeInactive param) and POST (→ ManageSignalSource, with admin API key forwarding). Added `INGEST_HTTP_ENDPOINT` to config-ui environment block in all three deploy files.
+- Files modified: `services/xstockstrat-config-ui/app/api/sources/route.ts`, `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`
+- Deviations: none
+
+## Session 2026-05-22T00:08:00Z — sdd-execute
+**Steps this session**: [9]
+**Progress**: 9 done / 12 total
+**Stopped at**: Step 9 (PR created, waiting for merge before Step 10)
+**Next**: /sdd-execute signal-source-registry next

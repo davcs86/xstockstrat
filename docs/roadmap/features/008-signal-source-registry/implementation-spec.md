@@ -703,7 +703,7 @@ Confirm threshold passes. Coverage report should show `app/repositories/signal_s
 
 ### Step 9 — service: config-ui API route for signal sources
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/app/api/sources/route.ts` — create
