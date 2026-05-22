@@ -151,6 +151,7 @@ CI `proto-freshness` job enforces stubs match source; a clean `git diff` after `
 - Confirmed last migration file is `001_newsletter_signals.up.sql` via `ls services/xstockstrat-ingest/migrations/ | sort` → `001_newsletter_signals.down.sql`, `001_newsletter_signals.up.sql`. New migration NNN is therefore `002`.
 - Existing `ingest` schema is already created in `001_newsletter_signals.up.sql` L6 (`CREATE SCHEMA IF NOT EXISTS ingest;`) — no need to re-create schema in `002`.
 - Product spec FR-2 defines exactly **ten** `source_type` values: five programmatic (`simple_email`, `email_attachment`, `linked_email`, `simple_website`, `authenticated_website`) and five Claude-mediated (`mediated_simple_email`, `mediated_email_attachment`, `mediated_linked_email`, `mediated_simple_website`, `mediated_authenticated_website`). The CHECK constraint must include all ten values.
+- Product spec SQL at product-spec.md L113–128 is the canonical table definition; the `CREATE SCHEMA` line must be omitted (schema already exists from migration 001).
 
 **Instructions**:
 
