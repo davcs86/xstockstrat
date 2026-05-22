@@ -13,6 +13,16 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-05-22
+
+### Features
+- phase-2-data-layer: `GetPnL` in `xstockstrat-portfolio` always returns `realized_pnl = 0` because the service never queries the ledger for closed-position fills. The root cause is in `xstockstrat-trading`: neither broker engine (`AlpacaClient` nor `IBKRClient`) populates `FilledAvgPrice` in `BrokerOrder`, so `order.filled` ledger events are always emitted with `fill_price = 0.0`. This feature fixes both bugs: the trading service broker/pollFills root cause, and the portfolio service GetPnL ledger-query gap.
+
+### Summary
+2 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-05-16
 
 ### Summary

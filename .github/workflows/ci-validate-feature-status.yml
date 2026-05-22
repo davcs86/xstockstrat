@@ -42,7 +42,7 @@ jobs:
               feature_name=$(basename "$feature_dir")
 
               # Check if status is code-completed
-              status=$(grep "^**Lifecycle Status**:" "$feature_file" | head -1 | cut -d'`' -f2)
+              status=$(sed -n 's/.*\*\*Lifecycle Status\*\*[^`]*`\([^`]*\)`.*/\1/p' "$feature_file" | head -1)
 
               if [ "$status" = "code-completed" ]; then
                 # Check if any commits between PREVIOUS_SHA and CURRENT_SHA match this feature
@@ -62,7 +62,7 @@ jobs:
               echo "Updating feature statuses for ${#PROMOTED_FEATURES[@]} promoted feature(s)..."
 
               TODAY=$(date +%Y-%m-%d)
-              PROMOTION_PR=$(grep "PR #" <<< "$COMMIT_MSG" | sed -E 's/.*\(#([0-9]+)\).*/\1/' | head -1)
+              PROMOTION_PR=$(echo "$COMMIT_MSG" | sed -E 's/.*\(#([0-9]+)\).*/\1/' | head -1)
 
               for feature_dir in "${PROMOTED_FEATURES[@]}"; do
                 feature_md="$feature_dir/feature.md"
@@ -74,19 +74,22 @@ jobs:
                 sed -i "s/\*\*Lifecycle Status\*\*: \`code-completed\`/\*\*Lifecycle Status\*\*: \`launched\`/" "$feature_md"
 
                 # Add Committed to main field (after Lifecycle Status)
-                if ! grep -q "^**Committed to main**:" "$feature_md"; then
-                  sed -i "/^**Lifecycle Status**/a **Committed to main**: $CURRENT_SHA" "$feature_md"
+                if ! grep -q "^\*\*Committed to main\*\*:" "$feature_md"; then
+                  sed -i "/^\*\*Lifecycle Status\*\*/a **Committed to main**: $CURRENT_SHA" "$feature_md"
                 fi
 
                 # Add Launched date field
-                if ! grep -q "^**Launched date**:" "$feature_md"; then
-                  sed -i "/^**Committed to main**/a **Launched date**: $TODAY" "$feature_md"
+                if ! grep -q "^\*\*Launched date\*\*:" "$feature_md"; then
+                  sed -i "/^\*\*Committed to main\*\*/a **Launched date**: $TODAY" "$feature_md"
                 fi
 
-                # Add to status history
+                # Add to status history — insert before the --- that closes Status History section only
                 history_line="| $TODAY | \`code-completed\` → \`launched\` | CI workflow | Promoted via PR #$PROMOTION_PR; committed $CURRENT_SHA |"
-                # Insert before the closing --- of status history
-                sed -i "/^---$/i $history_line" "$feature_md"
+                awk -v line="$history_line" '
+                  /^## Status History/ { in_history=1 }
+                  in_history && /^---$/ && !done { print line; done=1; in_history=0 }
+                  { print }
+                ' "$feature_md" > /tmp/feat_update.md && mv /tmp/feat_update.md "$feature_md"
 
                 # Update context.md with session log
                 {

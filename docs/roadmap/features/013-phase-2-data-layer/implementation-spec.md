@@ -1,6 +1,6 @@
 # Implementation Spec: phase-2-data-layer
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-05-20
 **Feature**: `docs/roadmap/features/013-phase-2-data-layer/feature.md`
 **Total Steps**: 5
@@ -31,7 +31,7 @@ Steps 4–5 are logically independent from Steps 1–3 at implementation time (d
 
 ### Step 1 — broker: extend BrokerOrder struct and update both GetOrder implementations
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/broker.go` — modify
@@ -121,7 +121,7 @@ cd /home/user/xstockstrat-orchestration/services/xstockstrat-trading && GOWORK=o
 
 ### Step 2 — service: propagate FilledAvgPrice in pollFills
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -158,7 +158,7 @@ Build must succeed. The `order.filled` event at `trading.go:514` will now emit a
 
 ### Step 3 — test: unit tests for broker fill price parsing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/alpaca_test.go` — modify (append new test)
@@ -265,7 +265,7 @@ Zero failures.
 
 ### Step 4 — service: fix GetPnL to compute realized P&L from ledger order.filled events
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -484,7 +484,7 @@ Build must succeed with zero errors.
 
 ### Step 5 — test: unit tests for GetPnL realized P&L computation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go` — modify (append new test cases)
