@@ -161,6 +161,8 @@ services:
         value: ${xstockstrat-notify.PRIVATE_URL}
       - key: MARKETDATA_ENDPOINT
         value: ${xstockstrat-marketdata.PRIVATE_URL}
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_URL}
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}

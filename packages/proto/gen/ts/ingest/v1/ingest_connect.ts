@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BackfillJob, GetBackfillStatusRequest, IngestSignalRequest, IngestSignalResponse, ListBackfillJobsRequest, ListBackfillJobsResponse, NormalizeRawDataRequest, NormalizeRawDataResponse, QuerySignalsRequest, QuerySignalsResponse, TriggerBackfillRequest, TriggerBackfillResponse } from "./ingest_pb.js";
+import { BackfillJob, GetBackfillStatusRequest, IngestSignalRequest, IngestSignalResponse, ListBackfillJobsRequest, ListBackfillJobsResponse, ListSignalSourcesRequest, ListSignalSourcesResponse, ManageSignalSourceRequest, ManageSignalSourceResponse, NormalizeRawDataRequest, NormalizeRawDataResponse, QuerySignalsRequest, QuerySignalsResponse, TriggerBackfillRequest, TriggerBackfillResponse } from "./ingest_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -68,6 +68,24 @@ export const IngestService = {
       name: "QuerySignals",
       I: QuerySignalsRequest,
       O: QuerySignalsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.ingest.v1.IngestService.ListSignalSources
+     */
+    listSignalSources: {
+      name: "ListSignalSources",
+      I: ListSignalSourcesRequest,
+      O: ListSignalSourcesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.ingest.v1.IngestService.ManageSignalSource
+     */
+    manageSignalSource: {
+      name: "ManageSignalSource",
+      I: ManageSignalSourceRequest,
+      O: ManageSignalSourceResponse,
       kind: MethodKind.Unary,
     },
   }
