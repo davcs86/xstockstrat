@@ -245,7 +245,7 @@ Full behavioural coverage is in Step 8 (unit tests with asyncpg mock).
 
 ### Step 5 — service: BaseExtractor abstract class and reference extractor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/extractors/__init__.py` — create
