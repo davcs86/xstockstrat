@@ -112,3 +112,14 @@
 **Progress**: 5 done / 11 total
 **Stopped at**: Step 5 (PR created, waiting for merge before Step 6)
 **Next**: /sdd-execute signal-source-registry next
+
+### Step 6 — service: Update IngestSignal validation and add ListSignalSources + ManageSignalSource handlers [done]
+- Added `IDENTITY_ENDPOINT` env var to `main.py` and wired `identity_channel` to `IngestServicer`. Updated `__init__` to accept `identity_channel`, store `IdentityServiceStub`. Added `_validate_admin_token` helper. Inserted FR-3 registry slug check in `IngestSignal` after direction validation. Added `ListSignalSources` and `ManageSignalSource` handler methods. Added `IDENTITY_ENDPOINT` to all three deploy files.
+- Files modified: `services/xstockstrat-ingest/app/main.py`, `services/xstockstrat-ingest/app/handlers/servicer.py`, `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`
+- Deviations: Verification used inline gen namespace setup (matching conftest.py pattern) since `gen` symlink is only present inside Docker container.
+
+## Session 2026-05-22T00:05:00Z — sdd-execute
+**Steps this session**: [6]
+**Progress**: 6 done / 11 total
+**Stopped at**: Step 6 (PR created, waiting for merge before Step 7)
+**Next**: /sdd-execute signal-source-registry next
