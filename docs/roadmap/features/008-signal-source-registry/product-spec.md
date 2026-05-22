@@ -16,7 +16,17 @@ As a platform operator, I want a centralized source registry that defines every 
 
 FR-1. The ingest service must maintain an `ingest.signal_sources` DB table with columns: `slug` (TEXT PRIMARY KEY, lowercase underscore-separated), `display_name` (TEXT), `source_type` (TEXT, constrained to valid enum values), `extractor_module` (TEXT, Python dotted module path), `credentials_ref` (TEXT NULLABLE, references a `secret.*` config key), `active` (BOOLEAN DEFAULT TRUE), `config_json` (JSONB NULLABLE, source-specific config), `created_at` (TIMESTAMPTZ).
 
-FR-2. `source_type` must be constrained to exactly eight values: `simple_email`, `email_attachment`, `linked_email`, `simple_website`, `authenticated_website`, `mediated_email`, `mediated_email_with_attachment`, `mediated_email_with_linked_url`. The `mediated_*` types designate sources whose content extraction is performed by the agent MCP service via Claude — they bypass the programmatic Python extractor pipeline in the ingest service entirely.
+FR-2. `source_type` must be constrained to exactly ten values — five programmatic and five Claude-mediated:
+
+| Programmatic | Claude-mediated |
+|---|---|
+| `simple_email` | `mediated_simple_email` |
+| `email_attachment` | `mediated_email_attachment` |
+| `linked_email` | `mediated_linked_email` |
+| `simple_website` | `mediated_simple_website` |
+| `authenticated_website` | `mediated_authenticated_website` |
+
+The `mediated_*` types designate sources whose content extraction is performed by the agent MCP service via Claude — they bypass the programmatic Python extractor pipeline in the ingest service entirely.
 
 FR-3. The `IngestSignal` RPC must validate that the incoming `source` slug exists in `ingest.signal_sources` with `active = TRUE`. Unknown or inactive slugs must be rejected with `INVALID_ARGUMENT`.
 
@@ -29,7 +39,7 @@ FR-5. A `BaseExtractor` abstract class must be defined at `services/xstockstrat-
   - `SimpleWebsiteInput(url: str, html: str)`
   - `AuthenticatedWebsiteInput(url: str, html: str, credentials: dict)`
 
-FR-6. Each registered source must have a corresponding extractor module at `services/xstockstrat-ingest/app/extractors/<slug>.py` implementing `BaseExtractor`. The module path stored in `extractor_module` must be importable at runtime. Sources with `source_type` of `mediated_email_with_attachment` or `mediated_email_with_linked_url` are exempt from implementing a meaningful extractor — their `extractor_module` must be set to `app.extractors.noop`, a provided no-op extractor that returns an empty list. These sources are processed by the agent MCP service via Claude; the ingest service never invokes their extractor directly.
+FR-6. Each registered source must have a corresponding extractor module at `services/xstockstrat-ingest/app/extractors/<slug>.py` implementing `BaseExtractor`. The module path stored in `extractor_module` must be importable at runtime. All five `mediated_*` source types are exempt from implementing a meaningful extractor — their `extractor_module` must be set to `app.extractors.noop`, a provided no-op extractor that returns an empty list. These sources are processed by the agent MCP service via Claude; the ingest service never invokes their extractor directly.
 
 FR-7. For authenticated sources, credentials must only be stored as a reference to a `secret.*` config key (e.g. `secret.ingest.sources.unusual_whales.api_key`). The registry row must never store credential values. The extractor retrieves the credential value from the config service at extraction time.
 
@@ -43,9 +53,11 @@ FR-10. `config_json` must be validated per `source_type` at registration and upd
   - `linked_email`: `{ sender_patterns: string[], subject_patterns: string[], url_patterns: string[] }`
   - `simple_website`: `{ url: string, scrape_selector: string }`
   - `authenticated_website`: `{ url: string, scrape_selector: string }` (credentials_ref also required for this type per FR-6)
-  - `mediated_email`: `{ sender_patterns: string[], subject_patterns: string[] }` (credentials_ref not applicable — body is read directly by Claude)
-  - `mediated_email_with_attachment`: `{ sender_patterns: string[], subject_patterns: string[], attachment_mime_types: string[] }` (credentials_ref optional — provided when attachment is password-protected)
-  - `mediated_email_with_linked_url`: `{ sender_patterns: string[], subject_patterns: string[], url_patterns: string[] }` (credentials_ref optional — provided when linked URL requires authentication)
+  - `mediated_simple_email`: `{ sender_patterns: string[], subject_patterns: string[] }` (credentials_ref not applicable — body is read directly by Claude)
+  - `mediated_email_attachment`: `{ sender_patterns: string[], subject_patterns: string[], attachment_mime_types: string[] }` (credentials_ref optional — provided when attachment is password-protected)
+  - `mediated_linked_email`: `{ sender_patterns: string[], subject_patterns: string[], url_patterns: string[] }` (credentials_ref optional — provided when linked URL requires authentication)
+  - `mediated_simple_website`: `{ url: string, scrape_selector: string }` (credentials_ref not applicable — page is fetched directly by Claude)
+  - `mediated_authenticated_website`: `{ url: string, scrape_selector: string }` (credentials_ref required — used to authenticate before fetching)
 
 FR-11. A Sources management page must be added to `xstockstrat-config-ui` (port 3002) at route `/sources`. It must:
   - List all registered sources (active and inactive) with slug, display_name, source_type, and active status
@@ -56,13 +68,13 @@ FR-11. A Sources management page must be added to `xstockstrat-config-ui` (port 
 
 FR-12. The source edit form must render fields dynamically based on `source_type`:
   - **All types**: display_name, active toggle
-  - **simple_email / email_attachment / linked_email / mediated_email / mediated_email_with_attachment / mediated_email_with_linked_url**: sender_patterns (multi-value text input), subject_patterns (multi-value text input)
-  - **email_attachment / mediated_email_with_attachment**: additional attachment_mime_types field (multi-value)
-  - **linked_email / mediated_email_with_linked_url**: additional url_patterns field (multi-value)
-  - **simple_website / authenticated_website**: url field, scrape_selector field
-  - **authenticated_website**: credentials_ref field (text input for the `secret.*` key name); a "configured" badge is shown if `has_credentials = true` in the response — the actual value is never displayed
-  - **mediated_email / mediated_email_with_attachment / mediated_email_with_linked_url**: a "Claude-mediated" badge distinguishing these from programmatic extraction types
-  - **mediated_email_with_attachment / mediated_email_with_linked_url**: optional credentials_ref field (same badge behaviour as authenticated_website)
+  - **simple_email / email_attachment / linked_email / mediated_simple_email / mediated_email_attachment / mediated_linked_email**: sender_patterns (multi-value text input), subject_patterns (multi-value text input)
+  - **email_attachment / mediated_email_attachment**: additional attachment_mime_types field (multi-value)
+  - **linked_email / mediated_linked_email**: additional url_patterns field (multi-value)
+  - **simple_website / authenticated_website / mediated_simple_website / mediated_authenticated_website**: url field, scrape_selector field
+  - **authenticated_website / mediated_authenticated_website**: credentials_ref field (text input for the `secret.*` key name); a "configured" badge is shown if `has_credentials = true` in the response — the actual value is never displayed
+  - **mediated_email_attachment / mediated_linked_email**: optional credentials_ref field (same badge behaviour as authenticated_website)
+  - **All mediated_* types**: a "Claude-mediated" badge distinguishing these from programmatic extraction types
   - **All types**: extractor_module field (text input, read-only after registration to prevent accidental breaks); the UI may optionally render the extractor source file content as a read-only code view — not a hard requirement
 
 FR-13. The Sources UI must call `ManageSignalSource` (via Connect-RPC HTTP on port 8055) for all write operations. All writes require a valid admin API key (see FR-14).
@@ -122,8 +134,9 @@ CREATE TABLE IF NOT EXISTS ingest.signal_sources (
     source_type     TEXT NOT NULL CHECK (source_type IN (
                         'simple_email', 'email_attachment', 'linked_email',
                         'simple_website', 'authenticated_website',
-                        'mediated_email', 'mediated_email_with_attachment',
-                        'mediated_email_with_linked_url')),
+                        'mediated_simple_email', 'mediated_email_attachment',
+                        'mediated_linked_email', 'mediated_simple_website',
+                        'mediated_authenticated_website')),
     extractor_module TEXT NOT NULL,
     credentials_ref TEXT,
     active          BOOLEAN NOT NULL DEFAULT TRUE,
@@ -165,4 +178,4 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 ## Open Questions
 
 - [x] What is the seeding strategy for initial sources — migration seed data, or a bootstrap admin call via the UI? **RESOLVED**: No seeding strategy required. Sources are registered on-demand by operators via the `/sources` page in config-ui after deployment. The migration is purely structural.
-- [x] How should Claude-mediated sources be distinguished from programmatic extraction sources in the type system? **RESOLVED**: Two new source types — `mediated_email_with_attachment` and `mediated_email_with_linked_url` — are added to the CHECK constraint. These types signal to the agent service that content extraction is performed by Claude via the MCP path. Their `extractor_module` is set to `app.extractors.noop`; the ingest service never invokes it directly.
+- [x] How should Claude-mediated sources be distinguished from programmatic extraction sources in the type system? **RESOLVED**: Five mediated source types mirror the five programmatic types with a `mediated_` prefix (`mediated_simple_email`, `mediated_email_attachment`, `mediated_linked_email`, `mediated_simple_website`, `mediated_authenticated_website`). All mediated types use `app.extractors.noop`; the ingest service never invokes their extractor directly. The 1:1 mirroring ensures every programmatic source category has a Claude-mediated equivalent and the taxonomy remains consistent as new types are added.
