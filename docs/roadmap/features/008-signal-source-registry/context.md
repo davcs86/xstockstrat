@@ -90,3 +90,14 @@
 **Progress**: 3 done / 11 total
 **Stopped at**: Step 3 (PR created, waiting for merge before Step 4)
 **Next**: /sdd-execute signal-source-registry next
+
+### Step 4 — service: Signal sources repository layer [done]
+- Created `app/repositories/__init__.py` (empty) and `app/repositories/signal_sources.py` with five functions: `get_active_source`, `list_all_sources`, `upsert_source`, `deactivate_source` (all async, asyncpg pool pattern), and `validate_config_json` (sync, enforces FR-10 required fields per source_type).
+- Files modified: `services/xstockstrat-ingest/app/repositories/__init__.py`, `services/xstockstrat-ingest/app/repositories/signal_sources.py`
+- Deviations: none
+
+## Session 2026-05-22T00:03:00Z — sdd-execute
+**Steps this session**: [4]
+**Progress**: 4 done / 11 total
+**Stopped at**: Step 4 (PR created, waiting for merge before Step 5)
+**Next**: /sdd-execute signal-source-registry next
