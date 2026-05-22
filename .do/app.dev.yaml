@@ -24,7 +24,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
-    source_dir: services/xstockstrat-trading
     dockerfile_path: services/xstockstrat-trading/Dockerfile
     http_port: 8051
     instance_count: 1
@@ -57,7 +56,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
-    source_dir: services/xstockstrat-portfolio
     dockerfile_path: services/xstockstrat-portfolio/Dockerfile
     http_port: 8052
     instance_count: 1
@@ -84,7 +82,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
-    source_dir: services/xstockstrat-marketdata
     dockerfile_path: services/xstockstrat-marketdata/Dockerfile
     http_port: 8053
     instance_count: 1
@@ -119,7 +116,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
-    source_dir: services/xstockstrat-indicators
     dockerfile_path: services/xstockstrat-indicators/Dockerfile
     http_port: 8054
     instance_count: 1
@@ -143,7 +139,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
-    source_dir: services/xstockstrat-ingest
     dockerfile_path: services/xstockstrat-ingest/Dockerfile
     http_port: 8055
     instance_count: 1
@@ -174,7 +169,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
-    source_dir: services/xstockstrat-analysis
     dockerfile_path: services/xstockstrat-analysis/Dockerfile
     http_port: 8056
     instance_count: 1
@@ -207,7 +201,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
-    source_dir: services/xstockstrat-ledger
     dockerfile_path: services/xstockstrat-ledger/Dockerfile
     http_port: 8057
     instance_count: 1
@@ -232,7 +225,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
-    source_dir: services/xstockstrat-identity
     dockerfile_path: services/xstockstrat-identity/Dockerfile
     http_port: 8058
     instance_count: 1
@@ -262,7 +254,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
-    source_dir: services/xstockstrat-notify
     dockerfile_path: services/xstockstrat-notify/Dockerfile
     http_port: 8059
     instance_count: 1
@@ -287,7 +278,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
-    source_dir: services/xstockstrat-config
     dockerfile_path: services/xstockstrat-config/Dockerfile
     http_port: 8060
     instance_count: 1
@@ -313,7 +303,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
-    source_dir: services/xstockstrat-nginx
     dockerfile_path: services/xstockstrat-nginx/Dockerfile
     http_port: 80
     instance_count: 1
@@ -331,7 +320,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
-    source_dir: services/xstockstrat-trader
     dockerfile_path: services/xstockstrat-trader/Dockerfile
     instance_count: 1
     instance_size_slug: basic-xs
@@ -357,7 +345,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
-    source_dir: services/xstockstrat-insights
     dockerfile_path: services/xstockstrat-insights/Dockerfile
     instance_count: 1
     instance_size_slug: basic-xs
@@ -389,7 +376,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main-dev
       deploy_on_push: false
-    source_dir: services/xstockstrat-config-ui
     dockerfile_path: services/xstockstrat-config-ui/Dockerfile
     instance_count: 1
     instance_size_slug: basic-xs

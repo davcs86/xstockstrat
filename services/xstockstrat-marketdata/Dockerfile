@@ -1,9 +1,9 @@
 FROM golang:1.25-alpine AS builder
 WORKDIR /app
-COPY ../../packages/proto/gen/go /proto/gen/go
-COPY go.mod go.sum ./
+COPY packages/proto/ ../../packages/proto/
+COPY services/xstockstrat-marketdata/go.mod services/xstockstrat-marketdata/go.sum ./
 RUN go mod download
-COPY . .
+COPY services/xstockstrat-marketdata/ .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o service ./cmd/server
 
 FROM gcr.io/distroless/static-debian12
