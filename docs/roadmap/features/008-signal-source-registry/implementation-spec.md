@@ -199,7 +199,7 @@ psql "$DATABASE_URL" -c "\di ingest.signal_sources_active_idx"
 
 ### Step 4 — service: Signal sources repository layer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/repositories/__init__.py` — create
