@@ -16,6 +16,19 @@ Each entry corresponds to one `main-dev → main` PR merge.
 ## 2026-05-22
 
 ### Features
+- signal-source-registry: Add a DB-backed signal source registry to the ingest service that defines all valid sources, their types (simple_email, email_attachment, linked_email, simple_website, authenticated_website), and per-source Python extractor modules. The registry enforces canonical source slugs across ingest and analysis, and is a prerequisite for the AI agent feature and signal-source-weighting (007).
+
+### Proto Changes
+- ingest/v1/ingest.proto
+
+### Summary
+12 commits, 3 feature merges since last promotion.
+
+---
+
+## 2026-05-22
+
+### Features
 - phase-2-data-layer: `GetPnL` in `xstockstrat-portfolio` always returns `realized_pnl = 0` because the service never queries the ledger for closed-position fills. The root cause is in `xstockstrat-trading`: neither broker engine (`AlpacaClient` nor `IBKRClient`) populates `FilledAvgPrice` in `BrokerOrder`, so `order.filled` ledger events are always emitted with `fill_price = 0.0`. This feature fixes both bugs: the trading service broker/pollFills root cause, and the portfolio service GetPnL ledger-query gap.
 
 ### Summary
