@@ -1,9 +1,9 @@
 # Feature: phase-2-data-layer
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/phase-2-data-layer`
 **Created**: 2026-05-19
-**Last Updated**: 2026-05-20
+**Last Updated**: 2026-05-21
 
 ---
 
@@ -15,6 +15,8 @@
 | 2026-05-20 | `idea` → `draft` | /sdd-story | Product spec generated; scope narrowed to realized_pnl fix only |
 | 2026-05-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 | 2026-05-20 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 2 steps |
+| 2026-05-21 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — BrokerOrder.FilledAvgPrice added; both GetOrder implementations updated |
+| 2026-05-21 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done — trading fill price root cause fixed; portfolio GetPnL ledger query implemented |
 
 ---
 
@@ -41,4 +43,4 @@ _(Snapshot finalized by /sdd-spec 2026-05-20; updated 2026-05-20 for scope expan
 
 ## Next Action
 
-`/sdd-execute phase-2-data-layer` — implementation spec finalized (5 steps); execute Step 1 first.
+All 5 steps complete. Run `/sdd-execute phase-2-data-layer` to open the final integration PR into `main-dev`.
