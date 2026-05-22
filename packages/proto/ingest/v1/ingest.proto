@@ -6,6 +6,7 @@ option go_package = "github.com/xstockstrat/contracts/gen/go/ingest/v1;ingestv1"
 
 import "google/protobuf/timestamp.proto";
 import "common/v1/common.proto";
+import "google/protobuf/struct.proto";
 
 service IngestService {
   rpc TriggerBackfill(TriggerBackfillRequest) returns (TriggerBackfillResponse);
@@ -16,6 +17,8 @@ service IngestService {
   rpc IngestSignal(IngestSignalRequest) returns (IngestSignalResponse);
   // Signal query — returns active signals filtered by source/symbol/direction and time window
   rpc QuerySignals(QuerySignalsRequest) returns (QuerySignalsResponse);
+  rpc ListSignalSources(ListSignalSourcesRequest) returns (ListSignalSourcesResponse);
+  rpc ManageSignalSource(ManageSignalSourceRequest) returns (ManageSignalSourceResponse);
 }
 
 message BackfillJob {
@@ -102,4 +105,36 @@ message QuerySignalsRequest {
 message QuerySignalsResponse {
   repeated ExternalSignal signals = 1;
   xstockstrat.common.v1.PageResponse page = 2;
+}
+
+// SignalSource represents a registered signal source entry.
+// credentials_ref is intentionally absent — use has_credentials on read.
+message SignalSource {
+  string slug              = 1;
+  string display_name      = 2;
+  string source_type       = 3;
+  string extractor_module  = 4;
+  bool   active            = 5;
+  bool   has_credentials   = 6;
+  google.protobuf.Struct config_json = 7;
+}
+
+message ListSignalSourcesRequest {
+  bool include_inactive = 1;
+}
+
+message ListSignalSourcesResponse {
+  repeated SignalSource sources = 1;
+}
+
+// ManageSignalSourceRequest: operation is "register" | "update" | "deactivate".
+// credentials_ref is only processed on register/update; ignored on deactivate.
+message ManageSignalSourceRequest {
+  SignalSource source         = 1;
+  string       credentials_ref = 2;
+  string       operation      = 3;
+}
+
+message ManageSignalSourceResponse {
+  SignalSource source = 1;
 }

@@ -57,3 +57,14 @@
 - Trading domain checks: skipped (non-trading feature).
 - Overlap check: no file, migration, proto, or config key collisions with formula-management-ui (003), phase-2-data-layer (013), or trader-chart-panel (014).
 - Next action updated to: /sdd-execute signal-source-registry.
+
+### Step 1 — proto: Add ListSignalSources and ManageSignalSource to ingest proto [done]
+- Added `import "google/protobuf/struct.proto";`, two new RPCs (`ListSignalSources`, `ManageSignalSource`), and five new messages (`SignalSource`, `ListSignalSourcesRequest`, `ListSignalSourcesResponse`, `ManageSignalSourceRequest`, `ManageSignalSourceResponse`) to `packages/proto/ingest/v1/ingest.proto`.
+- Files modified: `packages/proto/ingest/v1/ingest.proto`
+- Deviations: `buf` not installed; validated with `python3 -m grpc_tools.protoc` (grpcio-tools 1.80.0 installed, libprotoc 31.1). Exit 0, diff is purely additive. Documented as deviation per phase3-deviations.md precedent.
+
+## Session 2026-05-22T00:00:00Z — sdd-execute
+**Steps this session**: [1]
+**Progress**: 1 done / 11 total
+**Stopped at**: Step 1 (PR created, waiting for merge before Step 2)
+**Next**: /sdd-execute signal-source-registry next
