@@ -57,3 +57,69 @@
 - Trading domain checks: skipped (non-trading feature).
 - Overlap check: no file, migration, proto, or config key collisions with formula-management-ui (003), phase-2-data-layer (013), or trader-chart-panel (014).
 - Next action updated to: /sdd-execute signal-source-registry.
+
+### Step 1 — proto: Add ListSignalSources and ManageSignalSource to ingest proto [done]
+- Added `import "google/protobuf/struct.proto";`, two new RPCs (`ListSignalSources`, `ManageSignalSource`), and five new messages (`SignalSource`, `ListSignalSourcesRequest`, `ListSignalSourcesResponse`, `ManageSignalSourceRequest`, `ManageSignalSourceResponse`) to `packages/proto/ingest/v1/ingest.proto`.
+- Files modified: `packages/proto/ingest/v1/ingest.proto`
+- Deviations: `buf` not installed; validated with `python3 -m grpc_tools.protoc` (grpcio-tools 1.80.0 installed, libprotoc 31.1). Exit 0, diff is purely additive. Documented as deviation per phase3-deviations.md precedent.
+
+## Session 2026-05-22T00:00:00Z — sdd-execute
+**Steps this session**: [1]
+**Progress**: 1 done / 11 total
+**Stopped at**: Step 1 (PR created, waiting for merge before Step 2)
+**Next**: /sdd-execute signal-source-registry next
+
+### Step 2 — proto-gen: Regenerate stubs after proto update [done]
+- Ran `./scripts/buf-gen.sh` after installing buf v1.69.0, Go proto plugins, and TS plugins. All stubs regenerated: Python, Go, TypeScript, and compiled JS dist.
+- Files modified: `packages/proto/gen/python/ingest/v1/ingest_pb2.py`, `ingest_pb2_grpc.py`, `gen/go/ingest/v1/ingest.pb.go`, `ingest_grpc.pb.go`, `ingestv1connect/ingest.connect.go`, `gen/ts/ingest/v1/ingest.ts`, `ingest_connect.ts`, `ingest_pb.ts`, `gen/ts/dist/ingest/v1/ingest.js`, `ingest.d.ts`, `ingest_pb.js`, `ingest_pb.d.ts`. Also other service gRPC stubs updated by new protoc-gen-go-grpc version.
+- Deviations: buf/plugins not pre-installed; downloaded and installed before running buf-gen.sh. Full detail in Deviation Log.
+
+## Session 2026-05-22T00:01:00Z — sdd-execute
+**Steps this session**: [2]
+**Progress**: 2 done / 11 total
+**Stopped at**: Step 2 (PR created, waiting for merge before Step 3)
+**Next**: /sdd-execute signal-source-registry next
+
+### Step 3 — migration: Add signal_sources registry table to ingest schema [done]
+- Created `002_add_signal_sources_registry.up.sql` (signal_sources table with CHECK constraint on source_type, JSONB config_json, active index) and matching `.down.sql`.
+- Files modified: `services/xstockstrat-ingest/migrations/002_add_signal_sources_registry.up.sql`, `002_add_signal_sources_registry.down.sql`
+- Deviations: DATABASE_URL not set; verified by SQL content assertions instead of live db-migrate.sh run. Full detail in Deviation Log.
+
+## Session 2026-05-22T00:02:00Z — sdd-execute
+**Steps this session**: [3]
+**Progress**: 3 done / 11 total
+**Stopped at**: Step 3 (PR created, waiting for merge before Step 4)
+**Next**: /sdd-execute signal-source-registry next
+
+### Step 4 — service: Signal sources repository layer [done]
+- Created `app/repositories/__init__.py` (empty) and `app/repositories/signal_sources.py` with five functions: `get_active_source`, `list_all_sources`, `upsert_source`, `deactivate_source` (all async, asyncpg pool pattern), and `validate_config_json` (sync, enforces FR-10 required fields per source_type).
+- Files modified: `services/xstockstrat-ingest/app/repositories/__init__.py`, `services/xstockstrat-ingest/app/repositories/signal_sources.py`
+- Deviations: none
+
+## Session 2026-05-22T00:03:00Z — sdd-execute
+**Steps this session**: [4]
+**Progress**: 4 done / 11 total
+**Stopped at**: Step 4 (PR created, waiting for merge before Step 5)
+**Next**: /sdd-execute signal-source-registry next
+
+### Step 5 — service: BaseExtractor abstract class and reference extractor [done]
+- Created `app/extractors/__init__.py` (empty), `app/extractors/base.py` (five input dataclasses, `RawInput` union, `BaseExtractor` ABC with `async def extract`), and `app/extractors/example_simple_email.py` (`ExampleSimpleEmailExtractor` using regex `r'\b(BUY|SELL|HOLD|WATCHLIST)\s+([A-Z]{1,5})\b'`).
+- Files modified: `services/xstockstrat-ingest/app/extractors/__init__.py`, `services/xstockstrat-ingest/app/extractors/base.py`, `services/xstockstrat-ingest/app/extractors/example_simple_email.py`
+- Deviations: none
+
+## Session 2026-05-22T00:04:00Z — sdd-execute
+**Steps this session**: [5]
+**Progress**: 5 done / 11 total
+**Stopped at**: Step 5 (PR created, waiting for merge before Step 6)
+**Next**: /sdd-execute signal-source-registry next
+
+### Step 6 — service: Update IngestSignal validation and add ListSignalSources + ManageSignalSource handlers [done]
+- Added `IDENTITY_ENDPOINT` env var to `main.py` and wired `identity_channel` to `IngestServicer`. Updated `__init__` to accept `identity_channel`, store `IdentityServiceStub`. Added `_validate_admin_token` helper. Inserted FR-3 registry slug check in `IngestSignal` after direction validation. Added `ListSignalSources` and `ManageSignalSource` handler methods. Added `IDENTITY_ENDPOINT` to all three deploy files.
+- Files modified: `services/xstockstrat-ingest/app/main.py`, `services/xstockstrat-ingest/app/handlers/servicer.py`, `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`
+- Deviations: Verification used inline gen namespace setup (matching conftest.py pattern) since `gen` symlink is only present inside Docker container.
+
+## Session 2026-05-22T00:05:00Z — sdd-execute
+**Steps this session**: [6]
+**Progress**: 6 done / 11 total
+**Stopped at**: Step 6 (PR created, waiting for merge before Step 7)
+**Next**: /sdd-execute signal-source-registry next

@@ -1,6 +1,6 @@
 # Implementation Spec: signal-source-registry
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-21
 **Feature**: `docs/roadmap/features/008-signal-source-registry/feature.md`
 **Total Steps**: 11
@@ -26,7 +26,7 @@ Steps execute in this order: proto changes first (Step 1), then proto-gen (Step 
 
 ### Step 1 — proto: Add ListSignalSources and ManageSignalSource to ingest proto
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
@@ -97,7 +97,7 @@ Both commands must exit 0. `buf lint` confirms naming and style; `buf breaking` 
 
 ### Step 2 — proto-gen: Regenerate stubs after proto update
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/python/ingest/v1/ingest_pb2.py` — modify (regenerated)
@@ -138,7 +138,7 @@ CI `proto-freshness` job enforces stubs match source; a clean `git diff` after `
 
 ### Step 3 — migration: Add signal_sources registry table to ingest schema
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/002_add_signal_sources_registry.up.sql` — create
@@ -199,7 +199,7 @@ psql "$DATABASE_URL" -c "\di ingest.signal_sources_active_idx"
 
 ### Step 4 — service: Signal sources repository layer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/repositories/__init__.py` — create
@@ -245,7 +245,7 @@ Full behavioural coverage is in Step 8 (unit tests with asyncpg mock).
 
 ### Step 5 — service: BaseExtractor abstract class and reference extractor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/extractors/__init__.py` — create
@@ -354,7 +354,7 @@ Both must print their success message without import errors.
 
 ### Step 6 — service: Update IngestSignal validation and add ListSignalSources + ManageSignalSource handlers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -904,4 +904,17 @@ All tests pass. No coverage threshold applies for Next.js frontends.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 2 — proto-gen: Regenerate stubs after proto update
+**Spec said**: Run `./scripts/buf-gen.sh` from the repository root.
+**Actual**: `buf` was not installed in the environment. Downloaded buf v1.69.0 from GitHub releases to `/tmp/buf` and copied to `/usr/local/bin/buf`. Also installed Go plugins (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-connect-go`) via `go install` and TypeScript plugins via `pnpm install` in `packages/proto/gen/ts/`. Then ran `./scripts/buf-gen.sh` successfully — all stubs regenerated, buf lint + breaking passed, tsc compiled cleanly.
+**Reason**: `buf` and Go/TS proto plugins not pre-installed in the remote execution environment. Installation was required before the script could run. This follows the same deviation precedent as phase3-deviations.md.
+
+### Deviation: Step 2 — extra Go gRPC stubs regenerated
+**Spec said**: Files section listed only the 12 ingest-specific generated stubs.
+**Actual**: `buf-gen.sh` also updated `*_grpc.pb.go` for analysis, config, identity, indicators, ledger, marketdata, notify, portfolio, and trading services. All 21 changed files were staged and committed.
+**Reason**: The newer `protoc-gen-go-grpc` version (installed fresh via `go install`) produces slightly different output for all services. Generated files must be committed together to keep the repo consistent and pass CI `proto-freshness`. Leaving them uncommitted would cause a stale-stub failure on the next run.
+
+### Deviation: Step 3 — migration: Add signal_sources registry table to ingest schema
+**Spec said**: Verify with `./scripts/db-migrate.sh` and `psql "$DATABASE_URL" -c "\d ingest.signal_sources"`.
+**Actual**: `DATABASE_URL` not set in the remote execution environment; live DB not available. Verified by confirming file existence, correct NNN numbering (`002`), SQL content assertions (table definition, CHECK constraint, index, no `CREATE SCHEMA`), and up/down pair present.
+**Reason**: No TimescaleDB running in the CI/remote container. Migration correctness will be verified at deployment time when `db-migrate.sh` runs against the actual database.
