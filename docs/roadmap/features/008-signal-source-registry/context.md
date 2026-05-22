@@ -146,3 +146,14 @@
 **Progress**: 7 done / 12 total
 **Stopped at**: Step 7 (PR created, waiting for merge before Step 8)
 **Next**: /sdd-execute signal-source-registry next
+
+### Step 8 — test: Unit tests for signal source registry service code [done]
+- Created `tests/test_signal_sources.py` (validate_config_json all 10 types, get_active_source, list_all_sources, upsert_source, deactivate_source), `tests/test_extractor.py` (ExampleSimpleEmailExtractor + NoopExtractor). Modified `tests/test_ingest_servicer.py` (updated make_servicer with identity_channel, added TestIngestSignalRegistryValidation, TestManageSignalSource, TestListSignalSources). Created `app/extractors/noop.py` (gap from spec re-run timing). Updated `validate_config_json` to cover all 10 source types including mediated variants (gap from spec re-run). Fixed existing `test_db_error_aborts` regression from Step 6 registry lookup. 93 tests pass, 59.5% coverage.
+- Files modified: `tests/test_signal_sources.py`, `tests/test_extractor.py`, `tests/test_ingest_servicer.py`, `app/extractors/noop.py`, `app/repositories/signal_sources.py`
+- Deviations: (1) noop.py created here instead of Step 5 — spec re-run added it after Step 5 executed. (2) validate_config_json updated here to add mediated types — same cause. Both tracked in Deviation Log.
+
+## Session 2026-05-22T00:07:00Z — sdd-execute
+**Steps this session**: [8]
+**Progress**: 8 done / 12 total
+**Stopped at**: Step 8 (PR created, waiting for merge before Step 9)
+**Next**: /sdd-execute signal-source-registry next
