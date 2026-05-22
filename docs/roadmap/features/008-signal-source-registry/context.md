@@ -135,3 +135,14 @@
 **Progress**: 6 done / 11 total
 **Stopped at**: Step 6 (PR created, waiting for merge before Step 7)
 **Next**: /sdd-execute signal-source-registry next
+
+### Step 7 — service: Wire ListSignalSources and ManageSignalSource to HTTP/Connect-RPC server [done]
+- Added two Connect-RPC routes (`ListSignalSources` via `_call`, `ManageSignalSource` via `_call_with_auth`) and the `_call_with_auth` helper + `_AuthContext(_NoopContext)` subclass that exposes the `Authorization` header via `invocation_metadata()`.
+- Files modified: `services/xstockstrat-ingest/app/http_server.py`
+- Deviations: fastapi not installed in environment — installed via pip for import check only. Route verification passed.
+
+## Session 2026-05-22T00:06:00Z — sdd-execute
+**Steps this session**: [7]
+**Progress**: 7 done / 12 total
+**Stopped at**: Step 7 (PR created, waiting for merge before Step 8)
+**Next**: /sdd-execute signal-source-registry next
