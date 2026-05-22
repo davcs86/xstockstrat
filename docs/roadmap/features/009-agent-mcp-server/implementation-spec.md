@@ -23,7 +23,7 @@ This is a new standalone Python service with no proto changes and no DB migratio
 - Step 11 (docs) is independent of all other steps.
 - Steps 7 and 8 (nginx/infrastructure) have no pytest test step: nginx config correctness is verified by the `docker nginx -t` syntax check in Step 7's Verification command; end-to-end SSE connectivity is covered by `scripts/integration-test.sh`. No Python coverage threshold applies to nginx config changes.
 - Step 9 (claude_mcp_config.json) has no pytest test step: correctness is verified by the `python3 -c "import json; json.load(...)"` command in Step 9's Verification.
-- Step 12 (service-side enforcement) modifies three existing services. Tests for the middleware live in each service's existing test suite. The Step 12 verification commands confirm the guard is present in each file.
+- Step 12 (service-side enforcement) modifies three existing services and creates dedicated test files in each. `test_mcp_secret_middleware.py` (ingest, analysis) and `webhookRouter.test.ts` (notify) cover the 401-rejection and pass-through paths for the `x-mcp-secret` guard.
 - Step 13 (docs) has no test step. Correctness is verified by confirming all six tool sections and required subsections are present.
 
 ---
@@ -1636,6 +1636,9 @@ Confirm two matches: one in the Service Registry table, one in the Language Map.
 - `docker-compose.yml` — modify (add `MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}` to ingest, notify, analysis service blocks)
 - `.do/app.dev.yaml` — modify (add `MCP_AGENT_SECRET` SECRET entry to ingest, notify, analysis `envs:`)
 - `.do/app.yaml` — modify (same for prod)
+- `services/xstockstrat-ingest/tests/test_mcp_secret_middleware.py` — create
+- `services/xstockstrat-analysis/tests/test_mcp_secret_middleware.py` — create
+- `services/xstockstrat-notify/src/__tests__/webhookRouter.test.ts` — create
 
 **Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion, newsletter source schema stability; Security — no secrets in config service state, secret keys use `secret.*` prefix
 
@@ -1647,6 +1650,11 @@ Confirm two matches: one in the Service Registry table, one in the Language Map.
 - `os` import confirmed present in ingest `http_server.py:L7` — **not confirmed** (imports are only fastapi, gen, google.protobuf). `os` must be added.
 - `Starlette Request` and `Response` imports already present in ingest: `from fastapi import FastAPI, HTTPException, Request` at L9; `from fastapi.responses import JSONResponse` at L10. Starlette `Response` must be imported separately.
 - `process.env` pattern confirmed in `services/xstockstrat-notify/src/` for env var access.
+- **TestClient pattern** confirmed: `services/xstockstrat-analysis/tests/conftest.py:L27–30` — `from app.http_server import _NoopContext, build_app` then `TestClient` used to verify app behavior. Same pattern applies to both new middleware test files. `starlette.testclient.TestClient` is the standard sync test client for FastAPI apps.
+- **`_MCP_AGENT_SECRET` is a module-level global** in `http_server.py`. Python closures resolve global names at call time (not definition time), so `monkeypatch.setattr(http_server_module, "_MCP_AGENT_SECRET", "test-secret")` correctly controls the middleware guard in tests without a module reload.
+- **Coverage threshold**: `xstockstrat-ingest` and `xstockstrat-analysis` both require `pytest --cov=app --cov-fail-under=40`.
+- **Node.js native test runner** confirmed: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts:L13–14` — `import { describe, it, before } from 'node:test'`. New test file follows the same runner and lazy-import pattern. `createWebhookRouter` is exported from `router.ts:L40`.
+- **`MCP_AGENT_SECRET` captured at module load** in `router.ts` (`const MCP_AGENT_SECRET = process.env.MCP_AGENT_SECRET ?? ''`). Setting `process.env.MCP_AGENT_SECRET` before the module is first imported (i.e., before the lazy `import()` call in `before()`) controls the captured value for tests.
 
 **Instructions**:
 
@@ -1690,6 +1698,196 @@ Confirm two matches: one in the Service Registry table, one in the Language Map.
      type: SECRET
    ```
 
+6. Create `services/xstockstrat-ingest/tests/test_mcp_secret_middleware.py`:
+   ```python
+   """Tests for x-mcp-secret middleware in xstockstrat-ingest http_server."""
+   from unittest.mock import MagicMock
+
+   import pytest
+   from starlette.testclient import TestClient
+
+   from app import http_server
+   from app.http_server import build_app
+
+
+   def _client(secret: str) -> TestClient:
+       """Build a TestClient with the module-level secret patched to `secret`."""
+       http_server._MCP_AGENT_SECRET = secret
+       return TestClient(build_app(MagicMock()), raise_server_exceptions=False)
+
+
+   def test_webhook_rejected_when_header_missing():
+       client = _client("test-secret")
+       resp = client.post("/webhooks/ingest-signal", json={})
+       assert resp.status_code == 401
+
+
+   def test_webhook_rejected_when_header_wrong():
+       client = _client("test-secret")
+       resp = client.post(
+           "/webhooks/ingest-signal", json={}, headers={"x-mcp-secret": "wrong"}
+       )
+       assert resp.status_code == 401
+
+
+   def test_webhook_passes_with_correct_header():
+       """With the correct secret, request reaches the handler (may fail for other reasons)."""
+       client = _client("test-secret")
+       resp = client.post(
+           "/webhooks/ingest-signal", json={}, headers={"x-mcp-secret": "test-secret"}
+       )
+       assert resp.status_code != 401
+
+
+   def test_non_webhook_path_not_gated():
+       """x-mcp-secret is only enforced on /webhooks/* paths."""
+       client = _client("test-secret")
+       resp = client.get("/healthz")
+       assert resp.status_code != 401
+
+
+   def test_enforcement_skipped_when_secret_empty():
+       """When MCP_AGENT_SECRET is empty string, all /webhooks/* requests pass through."""
+       client = _client("")
+       resp = client.post("/webhooks/ingest-signal", json={})
+       assert resp.status_code != 401
+   ```
+
+7. Create `services/xstockstrat-analysis/tests/test_mcp_secret_middleware.py` with the same five tests, adjusting the import to `from app import http_server` and `from app.http_server import build_app` (identical structure — both services use the same FastAPI pattern). Replace the webhook path with `/webhooks/run-backtest`:
+   ```python
+   """Tests for x-mcp-secret middleware in xstockstrat-analysis http_server."""
+   from unittest.mock import MagicMock
+
+   import pytest
+   from starlette.testclient import TestClient
+
+   from app import http_server
+   from app.http_server import build_app
+
+
+   def _client(secret: str) -> TestClient:
+       http_server._MCP_AGENT_SECRET = secret
+       return TestClient(build_app(MagicMock()), raise_server_exceptions=False)
+
+
+   def test_webhook_rejected_when_header_missing():
+       client = _client("test-secret")
+       resp = client.post("/webhooks/run-backtest", json={})
+       assert resp.status_code == 401
+
+
+   def test_webhook_rejected_when_header_wrong():
+       client = _client("test-secret")
+       resp = client.post(
+           "/webhooks/run-backtest", json={}, headers={"x-mcp-secret": "wrong"}
+       )
+       assert resp.status_code == 401
+
+
+   def test_webhook_passes_with_correct_header():
+       client = _client("test-secret")
+       resp = client.post(
+           "/webhooks/run-backtest", json={}, headers={"x-mcp-secret": "test-secret"}
+       )
+       assert resp.status_code != 401
+
+
+   def test_non_webhook_path_not_gated():
+       client = _client("test-secret")
+       resp = client.get("/healthz")
+       assert resp.status_code != 401
+
+
+   def test_enforcement_skipped_when_secret_empty():
+       client = _client("")
+       resp = client.post("/webhooks/run-backtest", json={})
+       assert resp.status_code != 401
+   ```
+
+8. Create `services/xstockstrat-notify/src/__tests__/webhookRouter.test.ts`:
+   ```typescript
+   /**
+    * Tests for x-mcp-secret enforcement in xstockstrat-notify webhookRouter.
+    *
+    * MCP_AGENT_SECRET is captured as a module constant at import time.
+    * Set process.env.MCP_AGENT_SECRET BEFORE the lazy import in before() runs.
+    *
+    * Run: node --experimental-strip-types --test src/__tests__/webhookRouter.test.ts
+    */
+   import { describe, it, before, after } from 'node:test';
+   import assert from 'node:assert/strict';
+
+   // Set secret before module is imported so the constant captures it.
+   process.env['MCP_AGENT_SECRET'] = 'test-secret';
+
+   let createWebhookRouter: any;
+
+   before(async () => {
+     try {
+       // Dynamic import so the env var is already set when the module initialises.
+       const mod = await import('../webhooks/router.js');
+       createWebhookRouter = mod.createWebhookRouter;
+     } catch {
+       // TypeScript strip-only mode — tests will be skipped via early returns.
+     }
+   });
+
+   after(() => {
+     delete process.env['MCP_AGENT_SECRET'];
+   });
+
+   /** Minimal mock HTTP request with no body. */
+   function makeReq(url: string, headers: Record<string, string> = {}): any {
+     return {
+       url,
+       headers,
+       method: 'POST',
+       on(event: string, cb: () => void) {
+         if (event === 'end') setImmediate(cb);
+         return this;
+       },
+     };
+   }
+
+   /** Minimal mock HTTP response that records status code and body. */
+   function makeRes(): any {
+     return {
+       statusCode: 0,
+       body: '',
+       writeHead(code: number) { this.statusCode = code; },
+       end(body = '') { this.body = body; },
+     };
+   }
+
+   describe('webhookRouter x-mcp-secret enforcement', () => {
+     it('returns 401 when MCP_AGENT_SECRET is set and x-mcp-secret header is missing', async () => {
+       if (!createWebhookRouter) return;
+       const handler = createWebhookRouter({} as any);
+       const res = makeRes();
+       await handler(makeReq('/webhooks/emit-alert'), res);
+       assert.equal(res.statusCode, 401);
+     });
+
+     it('returns 401 when x-mcp-secret header is wrong', async () => {
+       if (!createWebhookRouter) return;
+       const handler = createWebhookRouter({} as any);
+       const res = makeRes();
+       await handler(makeReq('/webhooks/emit-alert', { 'x-mcp-secret': 'wrong' }), res);
+       assert.equal(res.statusCode, 401);
+     });
+
+     it('does not return 401 when x-mcp-secret header matches', async () => {
+       if (!createWebhookRouter) return;
+       const handler = createWebhookRouter({} as any);
+       const res = makeRes();
+       await handler(makeReq('/webhooks/emit-alert', { 'x-mcp-secret': 'test-secret' }), res);
+       // Request passes the guard — may fail for other reasons, but not 401.
+       assert.notEqual(res.statusCode, 401);
+     });
+   });
+   ```
+   Note: `MCP_AGENT_SECRET` is read at module import time as a module constant. Setting `process.env.MCP_AGENT_SECRET` at the top of the test file (before the `before()` hook imports the module) is the correct way to control the captured value. Do NOT use `afterEach` to change `process.env.MCP_AGENT_SECRET` between tests in this file — the constant is already captured.
+
 **Verification**:
 ```bash
 # Confirm middleware added to Python services
@@ -1705,6 +1903,20 @@ grep -n "MCP_AGENT_SECRET" docker-compose.yml
 
 # Confirm MCP_AGENT_SECRET added to DO specs for all three receiving services
 grep -n "MCP_AGENT_SECRET" .do/app.dev.yaml .do/app.yaml
+
+# Run ingest middleware tests (threshold must still pass)
+cd services/xstockstrat-ingest
+pytest tests/test_mcp_secret_middleware.py -v
+pytest --cov=app --cov-fail-under=40
+
+# Run analysis middleware tests (threshold must still pass)
+cd services/xstockstrat-analysis
+pytest tests/test_mcp_secret_middleware.py -v
+pytest --cov=app --cov-fail-under=40
+
+# Run notify webhook router tests
+cd services/xstockstrat-notify
+node --experimental-strip-types --test src/__tests__/webhookRouter.test.ts
 ```
 
 ---
