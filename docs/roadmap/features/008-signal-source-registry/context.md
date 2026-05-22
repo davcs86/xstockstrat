@@ -68,3 +68,14 @@
 **Progress**: 1 done / 11 total
 **Stopped at**: Step 1 (PR created, waiting for merge before Step 2)
 **Next**: /sdd-execute signal-source-registry next
+
+### Step 2 — proto-gen: Regenerate stubs after proto update [done]
+- Ran `./scripts/buf-gen.sh` after installing buf v1.69.0, Go proto plugins, and TS plugins. All stubs regenerated: Python, Go, TypeScript, and compiled JS dist.
+- Files modified: `packages/proto/gen/python/ingest/v1/ingest_pb2.py`, `ingest_pb2_grpc.py`, `gen/go/ingest/v1/ingest.pb.go`, `ingest_grpc.pb.go`, `ingestv1connect/ingest.connect.go`, `gen/ts/ingest/v1/ingest.ts`, `ingest_connect.ts`, `ingest_pb.ts`, `gen/ts/dist/ingest/v1/ingest.js`, `ingest.d.ts`, `ingest_pb.js`, `ingest_pb.d.ts`. Also other service gRPC stubs updated by new protoc-gen-go-grpc version.
+- Deviations: buf/plugins not pre-installed; downloaded and installed before running buf-gen.sh. Full detail in Deviation Log.
+
+## Session 2026-05-22T00:01:00Z — sdd-execute
+**Steps this session**: [2]
+**Progress**: 2 done / 11 total
+**Stopped at**: Step 2 (PR created, waiting for merge before Step 3)
+**Next**: /sdd-execute signal-source-registry next
