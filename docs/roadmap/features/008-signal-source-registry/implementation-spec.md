@@ -1,6 +1,6 @@
 # Implementation Spec: signal-source-registry
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-21
 **Feature**: `docs/roadmap/features/008-signal-source-registry/feature.md`
 **Total Steps**: 11
@@ -26,7 +26,7 @@ Steps execute in this order: proto changes first (Step 1), then proto-gen (Step 
 
 ### Step 1 — proto: Add ListSignalSources and ManageSignalSource to ingest proto
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
