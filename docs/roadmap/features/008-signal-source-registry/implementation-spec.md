@@ -840,7 +840,7 @@ pnpm run build 2>&1 | tail -10
 
 ### Step 10 — service: config-ui Sources page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/app/sources/page.tsx` — create
@@ -1059,3 +1059,8 @@ pytest --cov=app --cov-fail-under=40
 **Spec said**: `validate_config_json` (Step 4) should cover all 10 source types including mediated variants per FR-10.
 **Actual**: Step 4 was executed before the spec re-run; mediated types were missing. Updated `app/repositories/signal_sources.py` in Step 8 to add all five `mediated_*` variants (share the same validation rules as their non-mediated counterparts).
 **Reason**: Same cause as noop.py deviation above. User chose Option A to fix in Step 8.
+
+### Deviation: Step 10 — upsert_source and servicer updated to support re-activation
+**Spec said**: `upsert_source` (Step 4) and `ManageSignalSource` handler (Step 6) are only touched in their respective steps.
+**Actual**: `upsert_source` updated in Step 10 to add `active: bool = True` parameter and include `active` in both the INSERT column list and `ON CONFLICT DO UPDATE SET` clause. `ManageSignalSource` handler updated to pass `active=src.active` to `upsert_source`.
+**Reason**: During Step 10 Phase 1 discovery, identified that the enable/disable toggle (re-activation path) would silently fail — `active` was absent from the upsert SQL so a deactivated source could never be re-activated via the "update" operation. User chose Option A to fix it in Step 10.
