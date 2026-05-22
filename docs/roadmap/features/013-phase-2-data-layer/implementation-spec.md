@@ -1,6 +1,6 @@
 # Implementation Spec: phase-2-data-layer
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-05-20
 **Feature**: `docs/roadmap/features/013-phase-2-data-layer/feature.md`
 **Total Steps**: 5
@@ -484,7 +484,7 @@ Build must succeed with zero errors.
 
 ### Step 5 — test: unit tests for GetPnL realized P&L computation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go` — modify (append new test cases)

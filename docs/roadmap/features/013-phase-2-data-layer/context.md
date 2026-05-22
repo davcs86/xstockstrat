@@ -187,7 +187,7 @@ The existing portfolio subscriber (`portfolio_service.go:88`) already filters on
 **Steps this session**: [1]
 **Progress**: 1 done / 5 total
 **Stopped at**: Step 1 (PR created, awaiting merge)
-**Next**: /sdd-execute phase-2-data-layer next
+**Next**: /sdd-execute phase-2-data-layer next (step-5 PR + integration PR)
 
 ### Step 1 — broker: extend BrokerOrder struct and update both GetOrder implementations [done]
 - Added `FilledAvgPrice float64` to `BrokerOrder` in broker.go. Updated Alpaca `GetOrder` to parse `filled_avg_price` string via `strconv.ParseFloat`; updated IBKR `GetOrder` to add `avgPrice float64` to inline response struct and propagate to return value.
@@ -197,6 +197,11 @@ The existing portfolio subscriber (`portfolio_service.go:88`) already filters on
 ### Step 2 — service: propagate FilledAvgPrice in pollFills [done]
 - Replaced stale comment at trading.go:502 with `order.FilledAvgPrice = brokerOrder.FilledAvgPrice`. The `order.filled` event at L514 now emits the actual fill price from the broker instead of always 0.0.
 - Files modified: `services/xstockstrat-trading/internal/service/trading.go`
+- Deviations: none
+
+### Step 5 — test: unit tests for GetPnL realized P&L computation [done]
+- Added `computeRealizedPnL` helper and 6 tests to portfolio_helpers_test.go. All pass: NoFills, ClosedLong, ClosedShort, MultipleOrders, MixedOpenAndClosed, PartiallyFilledCanceled. Full suite with -race clean.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go`
 - Deviations: none
 
 ### Step 4 — service: fix GetPnL to compute realized P&L from ledger order.filled events [done]
