@@ -1,6 +1,8 @@
 # Feature: signal-source-registry
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: c84aef67e8ee726451f0a1ecce8a477656cd0141
+**Launched date**: 2026-05-23
 **Development Branch**: `feature/signal-source-registry`
 **Created**: 2026-05-16
 **Last Updated**: 2026-05-22
@@ -18,6 +20,7 @@
 | 2026-05-22 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete |
 | 2026-05-22 | `in-progress` → `code-completed` | /sdd-execute | Step 12 complete — all 12 steps done |
 
+| 2026-05-23 | `code-completed` → `launched` | CI workflow | Promoted via PR #307; committed c84aef67e8ee726451f0a1ecce8a477656cd0141 |
 ---
 
 ## Artifacts

@@ -201,3 +201,10 @@
 **Progress**: 12 done / 12 total
 **Stopped at**: Step 12 (all steps complete)
 **Next**: Create integration PR — /sdd-execute signal-source-registry (ALL-DONE PATH)
+
+## Session 2026-05-23 (CI: feature status automation)
+
+- Promotion PR #307 merged to main
+- Feature promoted and committed: c84aef67e8ee726451f0a1ecce8a477656cd0141
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-05-23
