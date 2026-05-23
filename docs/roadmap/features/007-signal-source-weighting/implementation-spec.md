@@ -151,19 +151,18 @@ ls services/xstockstrat-config/migrations/003_analysis_signal_source_weights.{up
    In `RunBacktest` at `servicer.py:L48`, after the existing `commission` and `slippage` reads (lines 50–51), add:
 
    ```python
-   import json as _json
    _weights_raw = self._cfg.get_str("analysis.signals.source_weights", default="{}")
    try:
        source_weights = {
            k: max(0.0, min(1.0, float(v)))
-           for k, v in _json.loads(_weights_raw).items()
+           for k, v in json.loads(_weights_raw).items()
        } if _weights_raw else {}
    except (ValueError, TypeError):
        log.warning("analysis.signals.source_weights is not valid JSON — using empty weights")
        source_weights = {}
    ```
 
-   Move the `import json` to the module-level imports at the top of the file (alongside the existing `import logging`, `import math`, etc.) rather than using a local alias.
+   Add `import json` to the module-level imports at the top of the file (alongside the existing `import logging`, `import math`, etc.).
 
 3. **Thread `source_weights` through `_backtest_symbol`**
 
