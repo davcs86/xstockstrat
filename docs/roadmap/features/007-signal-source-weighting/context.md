@@ -21,6 +21,13 @@
 - Open question resolved: weights bounded to [0.0, 1.0], clamped at read time; FR-5 and AC-3 updated accordingly
 - Backlog idea 016-config-ui-weight-validation created for deferred client-side validation
 
+## Session 2026-05-23T00:00:02Z — sdd-execute
+
+### Step 3 — docs: Document `analysis.signals.source_weights` in analysis CLAUDE.md [done]
+- Appended new row to the Config Keys Consumed table in `services/xstockstrat-analysis/CLAUDE.md` after `analysis.scoring.win_rate_weight`, documenting type, default, and clamping behaviour.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none
+
 ## Session 2026-05-23T00:00:01Z — sdd-execute
 
 ### Step 2 — service: Apply per-source weight multiplier in `_compute_signal_score` [done]

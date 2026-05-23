@@ -220,7 +220,7 @@ grep -n "^import json" services/xstockstrat-analysis/app/handlers/servicer.py
 
 ### Step 3 — docs: Document `analysis.signals.source_weights` in analysis CLAUDE.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
