@@ -77,10 +77,50 @@ func orderTypeToIBKR(t string) string {
 	}
 }
 
+// resolveConid looks up the IBKR contract ID for a stock symbol via
+// GET /iserver/secdef/search?symbol=<sym>&types=STK. IBKR requires a conid
+// on every order submission — it cannot be inferred from the ticker alone.
+func (c *IBKRClient) resolveConid(ctx context.Context, symbol string) (int64, error) {
+	endpoint := fmt.Sprintf("%s/iserver/secdef/search", c.baseURL)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return 0, fmt.Errorf("ibkr resolveConid: build request: %w", err)
+	}
+	q := httpReq.URL.Query()
+	q.Set("symbol", symbol)
+	q.Set("types", "STK")
+	httpReq.URL.RawQuery = q.Encode()
+	httpReq.Header.Set("Authorization", c.signRequest(http.MethodGet, endpoint))
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return 0, fmt.Errorf("ibkr resolveConid: http: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("ibkr resolveConid: status %d: %s", resp.StatusCode, respBody)
+	}
+
+	var results []struct {
+		Conid int64 `json:"conid"`
+	}
+	if err := json.Unmarshal(respBody, &results); err != nil || len(results) == 0 {
+		return 0, fmt.Errorf("ibkr resolveConid: no contract found for symbol %q", symbol)
+	}
+	return results[0].Conid, nil
+}
+
 // SubmitOrder places an order via POST /v1/api/iserver/account/{accountID}/orders.
 func (c *IBKRClient) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrder, error) {
+	conid, err := c.resolveConid(ctx, req.Symbol)
+	if err != nil {
+		return nil, fmt.Errorf("ibkr SubmitOrder: %w", err)
+	}
+
 	body := map[string]interface{}{
-		"conid":     0, // conid must be resolved by caller; placeholder for now
+		"conid":     conid,
 		"orderType": orderTypeToIBKR(req.OrderType),
 		"side":      strings.ToUpper(req.Side),
 		"quantity":  req.Qty,
