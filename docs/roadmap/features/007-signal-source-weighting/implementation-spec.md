@@ -254,6 +254,7 @@ grep -n "source_weights" services/xstockstrat-analysis/CLAUDE.md
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_helpers.py` — modify
+- `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
 
 **Reviewers**: `xstockstrat-analysis` owner — Backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
