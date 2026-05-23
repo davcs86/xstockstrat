@@ -29,7 +29,7 @@ unit tests for the weighted scoring logic.
 
 ### Step 1 — config: Seed `analysis.signals.source_weights` config key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/003_analysis_signal_source_weights.up.sql` — create

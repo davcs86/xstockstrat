@@ -1,6 +1,6 @@
 # Feature: signal-source-weighting
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/signal-source-weighting`
 **Created**: 2026-05-16
 **Last Updated**: 2026-05-23
@@ -14,6 +14,7 @@
 | 2026-05-16 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-23 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 | 2026-05-23 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps |
+| 2026-05-23 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — config migration created |
 
 ---
 
