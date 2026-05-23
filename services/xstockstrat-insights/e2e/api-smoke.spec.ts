@@ -48,7 +48,7 @@ test.describe('GET /api/analysis/strategies — InsightsDashboard data contract'
    */
   test('response is wrapped in a { strategies: [] } object', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/api/analysis/strategies');
+    const res = await page.request.get('/insights/api/analysis/strategies');
     expect(res.status()).toBe(200);
 
     const body = await res.json();
@@ -59,7 +59,7 @@ test.describe('GET /api/analysis/strategies — InsightsDashboard data contract'
 
   test('each strategy has strategyId used as the navigation key', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/api/analysis/strategies');
+    const res = await page.request.get('/insights/api/analysis/strategies');
     const { strategies } = await res.json();
 
     expect(strategies.length).toBeGreaterThan(0);
@@ -73,7 +73,7 @@ test.describe('GET /api/analysis/strategies — InsightsDashboard data contract'
 
   test('overallScore is a decimal in [0, 1] — component multiplies by 100 for display', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/api/analysis/strategies');
+    const res = await page.request.get('/insights/api/analysis/strategies');
     const { strategies } = await res.json();
 
     for (const s of strategies) {
@@ -89,7 +89,7 @@ test.describe('GET /api/analysis/strategies — InsightsDashboard data contract'
 
   test('rating (when present) is a single uppercase letter A–D', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/api/analysis/strategies');
+    const res = await page.request.get('/insights/api/analysis/strategies');
     const { strategies } = await res.json();
 
     for (const s of strategies) {
@@ -104,7 +104,7 @@ test.describe('GET /api/analysis/strategies — InsightsDashboard data contract'
 
   test('strategies with overallScore ≥ 0.8 are categorised as high-score', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/api/analysis/strategies');
+    const res = await page.request.get('/insights/api/analysis/strategies');
     const { strategies } = await res.json();
 
     const highScore = strategies.filter((s: { overallScore?: number }) =>
@@ -122,7 +122,7 @@ test.describe('GET /api/analysis/strategies — InsightsDashboard data contract'
 
   test('chart data can be derived: strategyId.slice(0, 8) and overallScore * 100', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/api/analysis/strategies');
+    const res = await page.request.get('/insights/api/analysis/strategies');
     const { strategies } = await res.json();
 
     // chartData() function in page.tsx:

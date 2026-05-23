@@ -75,7 +75,7 @@ Next.js   → xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
 | Language / Tool | Version | Notes |
 |---|---|---|
 | Go | 1.25 | `go.work` workspace file at repo root; use `GOWORK=off` for per-service builds |
-| Python | 3.12 | Dependencies managed by `uv` / `pip install -e ".[dev]"` per service |
+| Python | 3.12 | Dependencies managed by `uv`; run `uv sync --extra dev` to install, `uv lock` after any `pyproject.toml` change |
 | Node.js | 22 | All Node/Next services |
 | pnpm | 9.15.0 | Workspace manager (`pnpm-workspace.yaml`); `npm install -g pnpm@9.15.0` |
 | buf | latest | Proto toolchain; installed by `scripts/bootstrap.sh` |
@@ -83,6 +83,8 @@ Next.js   → xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
 | golangci-lint | v2.5.0 | Go lint; run via `golangci-lint-action@v6` |
 | ruff | latest | Python lint + format |
 | Playwright | — | E2E tests for all three Next.js frontends |
+
+**Python uv lock rule**: After any change to a Python service's `pyproject.toml` (adding, removing, or updating a dependency), run `uv lock` inside that service directory and commit the updated `uv.lock` in the same PR. Never leave `uv.lock` out of sync with `pyproject.toml` — `uv lock --check` enforces this in CI.
 
 **Important Go build note**: CI runs all Go jobs with `GOWORK=off`. When running Go commands locally for a single service (e.g., `go test`, `go mod download`), set `GOWORK=off` or `cd services/<service>` and rely on the local `go.mod`.
 
@@ -113,6 +115,8 @@ To change a language or tool version:
 ## Proto Contract Governance
 
 All `.proto` changes require a PR to this repo first. `buf lint` + `buf breaking` run on every CI PR. Run `./scripts/buf-gen.sh` before committing (CI `proto-freshness` job enforces this).
+
+**Prefer enums over strings** for any field whose value set is closed and deployment-time-defined (e.g. status codes, operation verbs, fixed categories). Use `string` only when values are open/runtime-extensible (registered by operators at runtime) or when old clients silently dropping unknown enum values would be lossy. Every enum must have a zero-value `<NAME>_UNSPECIFIED = 0` sentinel.
 
 For breaking-change workflow, BSR publishing, and approval requirements → `docs/runbooks/proto-versioning.md`.
 

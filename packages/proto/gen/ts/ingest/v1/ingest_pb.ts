@@ -5,16 +5,16 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse, TimeRange } from "../../common/v1/common_pb";
 import { file_common_v1_common } from "../../common/v1/common_pb";
-import type { Message } from "@bufbuild/protobuf";
+import type { JsonObject, Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file ingest/v1/ingest.proto.
  */
 export const file_ingest_v1_ingest: GenFile = /*@__PURE__*/
-  fileDesc("ChZpbmdlc3QvdjEvaW5nZXN0LnByb3RvEhV4c3RvY2tzdHJhdC5pbmdlc3QudjEixgIKC0JhY2tmaWxsSm9iEg4KBmpvYl9pZBgBIAEoCRIPCgdzeW1ib2xzGAIgAygJEhEKCXRpbWVmcmFtZRgDIAEoCRIvCgVyYW5nZRgEIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USNQoGc3RhdHVzGAUgASgOMiUueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkJhY2tmaWxsU3RhdHVzEhYKDmJhcnNfcHJvY2Vzc2VkGAYgASgDEhIKCmJhcnNfdG90YWwYByABKAMSLgoKc3RhcnRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMY29tcGxldGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBINCgVlcnJvchgKIAEoCSKAAQoWVHJpZ2dlckJhY2tmaWxsUmVxdWVzdBIPCgdzeW1ib2xzGAEgAygJEhEKCXRpbWVmcmFtZRgCIAEoCRIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USEQoJb3ZlcndyaXRlGAQgASgIImAKF1RyaWdnZXJCYWNrZmlsbFJlc3BvbnNlEg4KBmpvYl9pZBgBIAEoCRI1CgZzdGF0dXMYAiABKA4yJS54c3RvY2tzdHJhdC5pbmdlc3QudjEuQmFja2ZpbGxTdGF0dXMiKgoYR2V0QmFja2ZpbGxTdGF0dXNSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCSKJAQoXTGlzdEJhY2tmaWxsSm9ic1JlcXVlc3QSPAoNc3RhdHVzX2ZpbHRlchgBIAEoDjIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5CYWNrZmlsbFN0YXR1cxIwCgRwYWdlGAIgASgLMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0In8KGExpc3RCYWNrZmlsbEpvYnNSZXNwb25zZRIwCgRqb2JzGAEgAygLMiIueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkJhY2tmaWxsSm9iEjEKBHBhZ2UYAiABKAsyIy54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlc3BvbnNlIksKF05vcm1hbGl6ZVJhd0RhdGFSZXF1ZXN0Eg4KBnNvdXJjZRgBIAEoCRIQCghyYXdfZGF0YRgCIAEoDBIOCgZmb3JtYXQYAyABKAkiQwoYTm9ybWFsaXplUmF3RGF0YVJlc3BvbnNlEhcKD3Jvd3Nfbm9ybWFsaXplZBgBIAEoAxIOCgZlcnJvcnMYAiADKAki6QEKDkV4dGVybmFsU2lnbmFsEg4KBnNvdXJjZRgBIAEoCRIOCgZzeW1ib2wYAiABKAkSEQoJZGlyZWN0aW9uGAMgASgJEhIKCmNvbnZpY3Rpb24YBCABKAESLgoKdmFsaWRfZnJvbRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLwoLdmFsaWRfdW50aWwYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhAKCGhlYWRsaW5lGAcgASgJEg8KB3Jhd191cmwYCCABKAkSDAoEdGFncxgJIAMoCSJMChNJbmdlc3RTaWduYWxSZXF1ZXN0EjUKBnNpZ25hbBgBIAEoCzIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5FeHRlcm5hbFNpZ25hbCIpChRJbmdlc3RTaWduYWxSZXNwb25zZRIRCglzaWduYWxfaWQYASABKAMiswEKE1F1ZXJ5U2lnbmFsc1JlcXVlc3QSDgoGc291cmNlGAEgASgJEg4KBnN5bWJvbBgCIAEoCRIRCglkaXJlY3Rpb24YAyABKAkSNwoNYWN0aXZlX3dpbmRvdxgEIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USMAoEcGFnZRgFIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdCKBAQoUUXVlcnlTaWduYWxzUmVzcG9uc2USNgoHc2lnbmFscxgBIAMoCzIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5FeHRlcm5hbFNpZ25hbBIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSrCAQoOQmFja2ZpbGxTdGF0dXMSHwobQkFDS0ZJTExfU1RBVFVTX1VOU1BFQ0lGSUVEEAASGgoWQkFDS0ZJTExfU1RBVFVTX1FVRVVFRBABEhsKF0JBQ0tGSUxMX1NUQVRVU19SVU5OSU5HEAISHQoZQkFDS0ZJTExfU1RBVFVTX0NPTVBMRVRFRBADEhoKFkJBQ0tGSUxMX1NUQVRVU19GQUlMRUQQBBIbChdCQUNLRklMTF9TVEFUVVNfUEFSVElBTBAFMqcFCg1Jbmdlc3RTZXJ2aWNlEnAKD1RyaWdnZXJCYWNrZmlsbBItLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5UcmlnZ2VyQmFja2ZpbGxSZXF1ZXN0Gi4ueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlRyaWdnZXJCYWNrZmlsbFJlc3BvbnNlEmgKEUdldEJhY2tmaWxsU3RhdHVzEi8ueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkdldEJhY2tmaWxsU3RhdHVzUmVxdWVzdBoiLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5CYWNrZmlsbEpvYhJzChBMaXN0QmFja2ZpbGxKb2JzEi4ueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkxpc3RCYWNrZmlsbEpvYnNSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkxpc3RCYWNrZmlsbEpvYnNSZXNwb25zZRJzChBOb3JtYWxpemVSYXdEYXRhEi4ueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLk5vcm1hbGl6ZVJhd0RhdGFSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLk5vcm1hbGl6ZVJhd0RhdGFSZXNwb25zZRJnCgxJbmdlc3RTaWduYWwSKi54c3RvY2tzdHJhdC5pbmdlc3QudjEuSW5nZXN0U2lnbmFsUmVxdWVzdBorLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5Jbmdlc3RTaWduYWxSZXNwb25zZRJnCgxRdWVyeVNpZ25hbHMSKi54c3RvY2tzdHJhdC5pbmdlc3QudjEuUXVlcnlTaWduYWxzUmVxdWVzdBorLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5RdWVyeVNpZ25hbHNSZXNwb25zZUI8WjpnaXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vaW5nZXN0L3YxO2luZ2VzdHYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_common_v1_common]);
+  fileDesc("ChZpbmdlc3QvdjEvaW5nZXN0LnByb3RvEhV4c3RvY2tzdHJhdC5pbmdlc3QudjEixgIKC0JhY2tmaWxsSm9iEg4KBmpvYl9pZBgBIAEoCRIPCgdzeW1ib2xzGAIgAygJEhEKCXRpbWVmcmFtZRgDIAEoCRIvCgVyYW5nZRgEIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USNQoGc3RhdHVzGAUgASgOMiUueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkJhY2tmaWxsU3RhdHVzEhYKDmJhcnNfcHJvY2Vzc2VkGAYgASgDEhIKCmJhcnNfdG90YWwYByABKAMSLgoKc3RhcnRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMY29tcGxldGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBINCgVlcnJvchgKIAEoCSKAAQoWVHJpZ2dlckJhY2tmaWxsUmVxdWVzdBIPCgdzeW1ib2xzGAEgAygJEhEKCXRpbWVmcmFtZRgCIAEoCRIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USEQoJb3ZlcndyaXRlGAQgASgIImAKF1RyaWdnZXJCYWNrZmlsbFJlc3BvbnNlEg4KBmpvYl9pZBgBIAEoCRI1CgZzdGF0dXMYAiABKA4yJS54c3RvY2tzdHJhdC5pbmdlc3QudjEuQmFja2ZpbGxTdGF0dXMiKgoYR2V0QmFja2ZpbGxTdGF0dXNSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCSKJAQoXTGlzdEJhY2tmaWxsSm9ic1JlcXVlc3QSPAoNc3RhdHVzX2ZpbHRlchgBIAEoDjIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5CYWNrZmlsbFN0YXR1cxIwCgRwYWdlGAIgASgLMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0In8KGExpc3RCYWNrZmlsbEpvYnNSZXNwb25zZRIwCgRqb2JzGAEgAygLMiIueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkJhY2tmaWxsSm9iEjEKBHBhZ2UYAiABKAsyIy54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlc3BvbnNlIksKF05vcm1hbGl6ZVJhd0RhdGFSZXF1ZXN0Eg4KBnNvdXJjZRgBIAEoCRIQCghyYXdfZGF0YRgCIAEoDBIOCgZmb3JtYXQYAyABKAkiQwoYTm9ybWFsaXplUmF3RGF0YVJlc3BvbnNlEhcKD3Jvd3Nfbm9ybWFsaXplZBgBIAEoAxIOCgZlcnJvcnMYAiADKAki6QEKDkV4dGVybmFsU2lnbmFsEg4KBnNvdXJjZRgBIAEoCRIOCgZzeW1ib2wYAiABKAkSEQoJZGlyZWN0aW9uGAMgASgJEhIKCmNvbnZpY3Rpb24YBCABKAESLgoKdmFsaWRfZnJvbRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLwoLdmFsaWRfdW50aWwYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhAKCGhlYWRsaW5lGAcgASgJEg8KB3Jhd191cmwYCCABKAkSDAoEdGFncxgJIAMoCSJMChNJbmdlc3RTaWduYWxSZXF1ZXN0EjUKBnNpZ25hbBgBIAEoCzIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5FeHRlcm5hbFNpZ25hbCIpChRJbmdlc3RTaWduYWxSZXNwb25zZRIRCglzaWduYWxfaWQYASABKAMiswEKE1F1ZXJ5U2lnbmFsc1JlcXVlc3QSDgoGc291cmNlGAEgASgJEg4KBnN5bWJvbBgCIAEoCRIRCglkaXJlY3Rpb24YAyABKAkSNwoNYWN0aXZlX3dpbmRvdxgEIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USMAoEcGFnZRgFIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdCKBAQoUUXVlcnlTaWduYWxzUmVzcG9uc2USNgoHc2lnbmFscxgBIAMoCzIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5FeHRlcm5hbFNpZ25hbBIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSK4AQoMU2lnbmFsU291cmNlEgwKBHNsdWcYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEhMKC3NvdXJjZV90eXBlGAMgASgJEhgKEGV4dHJhY3Rvcl9tb2R1bGUYBCABKAkSDgoGYWN0aXZlGAUgASgIEhcKD2hhc19jcmVkZW50aWFscxgGIAEoCBIsCgtjb25maWdfanNvbhgHIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiNAoYTGlzdFNpZ25hbFNvdXJjZXNSZXF1ZXN0EhgKEGluY2x1ZGVfaW5hY3RpdmUYASABKAgiUQoZTGlzdFNpZ25hbFNvdXJjZXNSZXNwb25zZRI0Cgdzb3VyY2VzGAEgAygLMiMueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlNpZ25hbFNvdXJjZSJ8ChlNYW5hZ2VTaWduYWxTb3VyY2VSZXF1ZXN0EjMKBnNvdXJjZRgBIAEoCzIjLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5TaWduYWxTb3VyY2USFwoPY3JlZGVudGlhbHNfcmVmGAIgASgJEhEKCW9wZXJhdGlvbhgDIAEoCSJRChpNYW5hZ2VTaWduYWxTb3VyY2VSZXNwb25zZRIzCgZzb3VyY2UYASABKAsyIy54c3RvY2tzdHJhdC5pbmdlc3QudjEuU2lnbmFsU291cmNlKsIBCg5CYWNrZmlsbFN0YXR1cxIfChtCQUNLRklMTF9TVEFUVVNfVU5TUEVDSUZJRUQQABIaChZCQUNLRklMTF9TVEFUVVNfUVVFVUVEEAESGwoXQkFDS0ZJTExfU1RBVFVTX1JVTk5JTkcQAhIdChlCQUNLRklMTF9TVEFUVVNfQ09NUExFVEVEEAMSGgoWQkFDS0ZJTExfU1RBVFVTX0ZBSUxFRBAEEhsKF0JBQ0tGSUxMX1NUQVRVU19QQVJUSUFMEAUymgcKDUluZ2VzdFNlcnZpY2UScAoPVHJpZ2dlckJhY2tmaWxsEi0ueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlRyaWdnZXJCYWNrZmlsbFJlcXVlc3QaLi54c3RvY2tzdHJhdC5pbmdlc3QudjEuVHJpZ2dlckJhY2tmaWxsUmVzcG9uc2USaAoRR2V0QmFja2ZpbGxTdGF0dXMSLy54c3RvY2tzdHJhdC5pbmdlc3QudjEuR2V0QmFja2ZpbGxTdGF0dXNSZXF1ZXN0GiIueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkJhY2tmaWxsSm9iEnMKEExpc3RCYWNrZmlsbEpvYnMSLi54c3RvY2tzdHJhdC5pbmdlc3QudjEuTGlzdEJhY2tmaWxsSm9ic1JlcXVlc3QaLy54c3RvY2tzdHJhdC5pbmdlc3QudjEuTGlzdEJhY2tmaWxsSm9ic1Jlc3BvbnNlEnMKEE5vcm1hbGl6ZVJhd0RhdGESLi54c3RvY2tzdHJhdC5pbmdlc3QudjEuTm9ybWFsaXplUmF3RGF0YVJlcXVlc3QaLy54c3RvY2tzdHJhdC5pbmdlc3QudjEuTm9ybWFsaXplUmF3RGF0YVJlc3BvbnNlEmcKDEluZ2VzdFNpZ25hbBIqLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5Jbmdlc3RTaWduYWxSZXF1ZXN0GisueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkluZ2VzdFNpZ25hbFJlc3BvbnNlEmcKDFF1ZXJ5U2lnbmFscxIqLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5RdWVyeVNpZ25hbHNSZXF1ZXN0GisueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlF1ZXJ5U2lnbmFsc1Jlc3BvbnNlEnYKEUxpc3RTaWduYWxTb3VyY2VzEi8ueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkxpc3RTaWduYWxTb3VyY2VzUmVxdWVzdBowLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5MaXN0U2lnbmFsU291cmNlc1Jlc3BvbnNlEnkKEk1hbmFnZVNpZ25hbFNvdXJjZRIwLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5NYW5hZ2VTaWduYWxTb3VyY2VSZXF1ZXN0GjEueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLk1hbmFnZVNpZ25hbFNvdXJjZVJlc3BvbnNlQjxaOmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9pbmdlc3QvdjE7aW5nZXN0djFiBnByb3RvMw", [file_google_protobuf_timestamp, file_common_v1_common, file_google_protobuf_struct]);
 
 /**
  * @generated from message xstockstrat.ingest.v1.BackfillJob
@@ -415,6 +415,137 @@ export const QuerySignalsResponseSchema: GenMessage<QuerySignalsResponse> = /*@_
   messageDesc(file_ingest_v1_ingest, 12);
 
 /**
+ * SignalSource represents a registered signal source entry.
+ * credentials_ref is intentionally absent — use has_credentials on read.
+ *
+ * @generated from message xstockstrat.ingest.v1.SignalSource
+ */
+export type SignalSource = Message<"xstockstrat.ingest.v1.SignalSource"> & {
+  /**
+   * @generated from field: string slug = 1;
+   */
+  slug: string;
+
+  /**
+   * @generated from field: string display_name = 2;
+   */
+  displayName: string;
+
+  /**
+   * @generated from field: string source_type = 3;
+   */
+  sourceType: string;
+
+  /**
+   * @generated from field: string extractor_module = 4;
+   */
+  extractorModule: string;
+
+  /**
+   * @generated from field: bool active = 5;
+   */
+  active: boolean;
+
+  /**
+   * @generated from field: bool has_credentials = 6;
+   */
+  hasCredentials: boolean;
+
+  /**
+   * @generated from field: google.protobuf.Struct config_json = 7;
+   */
+  configJson?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.ingest.v1.SignalSource.
+ * Use `create(SignalSourceSchema)` to create a new message.
+ */
+export const SignalSourceSchema: GenMessage<SignalSource> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 13);
+
+/**
+ * @generated from message xstockstrat.ingest.v1.ListSignalSourcesRequest
+ */
+export type ListSignalSourcesRequest = Message<"xstockstrat.ingest.v1.ListSignalSourcesRequest"> & {
+  /**
+   * @generated from field: bool include_inactive = 1;
+   */
+  includeInactive: boolean;
+};
+
+/**
+ * Describes the message xstockstrat.ingest.v1.ListSignalSourcesRequest.
+ * Use `create(ListSignalSourcesRequestSchema)` to create a new message.
+ */
+export const ListSignalSourcesRequestSchema: GenMessage<ListSignalSourcesRequest> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 14);
+
+/**
+ * @generated from message xstockstrat.ingest.v1.ListSignalSourcesResponse
+ */
+export type ListSignalSourcesResponse = Message<"xstockstrat.ingest.v1.ListSignalSourcesResponse"> & {
+  /**
+   * @generated from field: repeated xstockstrat.ingest.v1.SignalSource sources = 1;
+   */
+  sources: SignalSource[];
+};
+
+/**
+ * Describes the message xstockstrat.ingest.v1.ListSignalSourcesResponse.
+ * Use `create(ListSignalSourcesResponseSchema)` to create a new message.
+ */
+export const ListSignalSourcesResponseSchema: GenMessage<ListSignalSourcesResponse> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 15);
+
+/**
+ * ManageSignalSourceRequest: operation is "register" | "update" | "deactivate".
+ * credentials_ref is only processed on register/update; ignored on deactivate.
+ *
+ * @generated from message xstockstrat.ingest.v1.ManageSignalSourceRequest
+ */
+export type ManageSignalSourceRequest = Message<"xstockstrat.ingest.v1.ManageSignalSourceRequest"> & {
+  /**
+   * @generated from field: xstockstrat.ingest.v1.SignalSource source = 1;
+   */
+  source?: SignalSource | undefined;
+
+  /**
+   * @generated from field: string credentials_ref = 2;
+   */
+  credentialsRef: string;
+
+  /**
+   * @generated from field: string operation = 3;
+   */
+  operation: string;
+};
+
+/**
+ * Describes the message xstockstrat.ingest.v1.ManageSignalSourceRequest.
+ * Use `create(ManageSignalSourceRequestSchema)` to create a new message.
+ */
+export const ManageSignalSourceRequestSchema: GenMessage<ManageSignalSourceRequest> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 16);
+
+/**
+ * @generated from message xstockstrat.ingest.v1.ManageSignalSourceResponse
+ */
+export type ManageSignalSourceResponse = Message<"xstockstrat.ingest.v1.ManageSignalSourceResponse"> & {
+  /**
+   * @generated from field: xstockstrat.ingest.v1.SignalSource source = 1;
+   */
+  source?: SignalSource | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.ingest.v1.ManageSignalSourceResponse.
+ * Use `create(ManageSignalSourceResponseSchema)` to create a new message.
+ */
+export const ManageSignalSourceResponseSchema: GenMessage<ManageSignalSourceResponse> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 17);
+
+/**
  * @generated from enum xstockstrat.ingest.v1.BackfillStatus
  */
 export enum BackfillStatus {
@@ -510,6 +641,22 @@ export const IngestService: GenService<{
     methodKind: "unary";
     input: typeof QuerySignalsRequestSchema;
     output: typeof QuerySignalsResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.ingest.v1.IngestService.ListSignalSources
+   */
+  listSignalSources: {
+    methodKind: "unary";
+    input: typeof ListSignalSourcesRequestSchema;
+    output: typeof ListSignalSourcesResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.ingest.v1.IngestService.ManageSignalSource
+   */
+  manageSignalSource: {
+    methodKind: "unary";
+    input: typeof ManageSignalSourceRequestSchema;
+    output: typeof ManageSignalSourceResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_ingest_v1_ingest, 0);

@@ -1,7 +1,7 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse, TimeRange } from "../../common/v1/common_pb";
-import type { Message } from "@bufbuild/protobuf";
+import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
  * Describes the file ingest/v1/ingest.proto.
  */
@@ -335,6 +335,114 @@ export type QuerySignalsResponse = Message<"xstockstrat.ingest.v1.QuerySignalsRe
  */
 export declare const QuerySignalsResponseSchema: GenMessage<QuerySignalsResponse>;
 /**
+ * SignalSource represents a registered signal source entry.
+ * credentials_ref is intentionally absent — use has_credentials on read.
+ *
+ * @generated from message xstockstrat.ingest.v1.SignalSource
+ */
+export type SignalSource = Message<"xstockstrat.ingest.v1.SignalSource"> & {
+    /**
+     * @generated from field: string slug = 1;
+     */
+    slug: string;
+    /**
+     * @generated from field: string display_name = 2;
+     */
+    displayName: string;
+    /**
+     * @generated from field: string source_type = 3;
+     */
+    sourceType: string;
+    /**
+     * @generated from field: string extractor_module = 4;
+     */
+    extractorModule: string;
+    /**
+     * @generated from field: bool active = 5;
+     */
+    active: boolean;
+    /**
+     * @generated from field: bool has_credentials = 6;
+     */
+    hasCredentials: boolean;
+    /**
+     * @generated from field: google.protobuf.Struct config_json = 7;
+     */
+    configJson?: JsonObject | undefined;
+};
+/**
+ * Describes the message xstockstrat.ingest.v1.SignalSource.
+ * Use `create(SignalSourceSchema)` to create a new message.
+ */
+export declare const SignalSourceSchema: GenMessage<SignalSource>;
+/**
+ * @generated from message xstockstrat.ingest.v1.ListSignalSourcesRequest
+ */
+export type ListSignalSourcesRequest = Message<"xstockstrat.ingest.v1.ListSignalSourcesRequest"> & {
+    /**
+     * @generated from field: bool include_inactive = 1;
+     */
+    includeInactive: boolean;
+};
+/**
+ * Describes the message xstockstrat.ingest.v1.ListSignalSourcesRequest.
+ * Use `create(ListSignalSourcesRequestSchema)` to create a new message.
+ */
+export declare const ListSignalSourcesRequestSchema: GenMessage<ListSignalSourcesRequest>;
+/**
+ * @generated from message xstockstrat.ingest.v1.ListSignalSourcesResponse
+ */
+export type ListSignalSourcesResponse = Message<"xstockstrat.ingest.v1.ListSignalSourcesResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.ingest.v1.SignalSource sources = 1;
+     */
+    sources: SignalSource[];
+};
+/**
+ * Describes the message xstockstrat.ingest.v1.ListSignalSourcesResponse.
+ * Use `create(ListSignalSourcesResponseSchema)` to create a new message.
+ */
+export declare const ListSignalSourcesResponseSchema: GenMessage<ListSignalSourcesResponse>;
+/**
+ * ManageSignalSourceRequest: operation is "register" | "update" | "deactivate".
+ * credentials_ref is only processed on register/update; ignored on deactivate.
+ *
+ * @generated from message xstockstrat.ingest.v1.ManageSignalSourceRequest
+ */
+export type ManageSignalSourceRequest = Message<"xstockstrat.ingest.v1.ManageSignalSourceRequest"> & {
+    /**
+     * @generated from field: xstockstrat.ingest.v1.SignalSource source = 1;
+     */
+    source?: SignalSource | undefined;
+    /**
+     * @generated from field: string credentials_ref = 2;
+     */
+    credentialsRef: string;
+    /**
+     * @generated from field: string operation = 3;
+     */
+    operation: string;
+};
+/**
+ * Describes the message xstockstrat.ingest.v1.ManageSignalSourceRequest.
+ * Use `create(ManageSignalSourceRequestSchema)` to create a new message.
+ */
+export declare const ManageSignalSourceRequestSchema: GenMessage<ManageSignalSourceRequest>;
+/**
+ * @generated from message xstockstrat.ingest.v1.ManageSignalSourceResponse
+ */
+export type ManageSignalSourceResponse = Message<"xstockstrat.ingest.v1.ManageSignalSourceResponse"> & {
+    /**
+     * @generated from field: xstockstrat.ingest.v1.SignalSource source = 1;
+     */
+    source?: SignalSource | undefined;
+};
+/**
+ * Describes the message xstockstrat.ingest.v1.ManageSignalSourceResponse.
+ * Use `create(ManageSignalSourceResponseSchema)` to create a new message.
+ */
+export declare const ManageSignalSourceResponseSchema: GenMessage<ManageSignalSourceResponse>;
+/**
  * @generated from enum xstockstrat.ingest.v1.BackfillStatus
  */
 export declare enum BackfillStatus {
@@ -422,5 +530,21 @@ export declare const IngestService: GenService<{
         methodKind: "unary";
         input: typeof QuerySignalsRequestSchema;
         output: typeof QuerySignalsResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.ingest.v1.IngestService.ListSignalSources
+     */
+    listSignalSources: {
+        methodKind: "unary";
+        input: typeof ListSignalSourcesRequestSchema;
+        output: typeof ListSignalSourcesResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.ingest.v1.IngestService.ManageSignalSource
+     */
+    manageSignalSource: {
+        methodKind: "unary";
+        input: typeof ManageSignalSourceRequestSchema;
+        output: typeof ManageSignalSourceResponseSchema;
     };
 }>;

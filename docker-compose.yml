@@ -157,7 +157,7 @@ services:
       HTTP_PORT: "8058"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - copy .env.example to .env (run: openssl rand -hex 32)}
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required - copy .env.example to .env (run: openssl rand -hex 32)}"
       SERVICE_NAME: identity
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
@@ -206,8 +206,8 @@ services:
   xstockstrat-marketdata:
     <<: *svc
     build:
-      context: ./services/xstockstrat-marketdata
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/xstockstrat-marketdata/Dockerfile
     container_name: xstockstrat-marketdata
     env_file: [".env.local"]
     environment:
@@ -240,8 +240,8 @@ services:
   xstockstrat-indicators:
     <<: *svc
     build:
-      context: ./services/xstockstrat-indicators
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/xstockstrat-indicators/Dockerfile
     container_name: xstockstrat-indicators
     env_file: [".env.local"]
     environment:
@@ -264,8 +264,8 @@ services:
   xstockstrat-ingest:
     <<: *svc
     build:
-      context: ./services/xstockstrat-ingest
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/xstockstrat-ingest/Dockerfile
     container_name: xstockstrat-ingest
     env_file: [".env.local"]
     environment:
@@ -275,6 +275,7 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       SERVICE_NAME: ingest
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
@@ -290,8 +291,8 @@ services:
   xstockstrat-analysis:
     <<: *svc
     build:
-      context: ./services/xstockstrat-analysis
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/xstockstrat-analysis/Dockerfile
     container_name: xstockstrat-analysis
     env_file: [".env.local"]
     environment:
@@ -324,8 +325,8 @@ services:
   xstockstrat-portfolio:
     <<: *svc
     build:
-      context: ./services/xstockstrat-portfolio
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/xstockstrat-portfolio/Dockerfile
     container_name: xstockstrat-portfolio
     env_file: [".env.local"]
     environment:
@@ -355,8 +356,8 @@ services:
   xstockstrat-trading:
     <<: *svc
     build:
-      context: ./services/xstockstrat-trading
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/xstockstrat-trading/Dockerfile
     container_name: xstockstrat-trading
     env_file: [".env.local"]
     environment:
@@ -454,6 +455,7 @@ services:
       # Connect-RPC HTTP endpoint for xstockstrat-config
       CONFIG_HTTP_ENDPOINT: http://xstockstrat-config:8060
       IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
+      INGEST_HTTP_ENDPOINT: http://xstockstrat-ingest:8055
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: config-ui
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318

@@ -1,16 +1,17 @@
 # Implementation Spec: signal-source-registry
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-05-21
+**Updated**: 2026-05-22
 **Feature**: `docs/roadmap/features/008-signal-source-registry/feature.md`
-**Total Steps**: 11
+**Total Steps**: 12
 **Feature Branch**: `feature/signal-source-registry`
 
 ---
 
 ## Execution Summary
 
-Steps execute in this order: proto changes first (Step 1), then proto-gen (Step 2), then the ingest DB migration (Step 3), then the ingest service changes split into three logical groups — the source registry layer (Step 4), extractor base + reference example (Step 5), updated IngestSignal + new RPCs in the servicer (Step 6), and HTTP/Connect-RPC wiring for the two new RPCs (Step 7) — followed by tests for the ingest service (Step 8), then the config-ui API route (Step 9), config-ui Sources page (Step 10), and a config-ui E2E test step (Step 11). The proto-gen step must follow the proto step. All ingest service steps depend on the proto-gen step completing (generated stubs must exist). The config-ui steps depend on the proto step only for the new message types that appear in the Connect-RPC call shape.
+Steps execute in this order: proto changes first (Step 1), then proto-gen (Step 2), then the ingest DB migration (Step 3), then the ingest service changes split into four logical groups — the source registry layer (Step 4), extractor base + noop + reference example (Step 5), updated IngestSignal + new RPCs in the servicer (Step 6), and HTTP/Connect-RPC wiring for the two new RPCs (Step 7) — followed by tests for the ingest service (Step 8), then the config-ui API route (Step 9), config-ui Sources page (Step 10), a config-ui E2E test step (Step 11), and a noop extractor test step (Step 12) covering FR-6. The proto-gen step must follow the proto step. All ingest service steps depend on the proto-gen step completing (generated stubs must exist). The config-ui steps depend on the proto step only for the new message types that appear in the Connect-RPC call shape.
 
 ## Step Dependencies
 
@@ -21,12 +22,13 @@ Steps execute in this order: proto changes first (Step 1), then proto-gen (Step 
 - Step 8 requires Steps 4–7: test coverage spans all new service code.
 - Steps 9 and 10 require Step 1: the config-ui calls `ManageSignalSource` and `ListSignalSources` RPCs; their message shapes must be defined.
 - Step 11 requires Steps 9 and 10: E2E tests exercise the finished API route and page.
+- Step 12 requires Step 5: noop extractor tests cover the module created in Step 5.
 
 ---
 
 ### Step 1 — proto: Add ListSignalSources and ManageSignalSource to ingest proto
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
@@ -34,22 +36,21 @@ Steps execute in this order: proto changes first (Step 1), then proto-gen (Step 
 **Reviewers**: Proto Reviewer — field number uniqueness, no breaking changes without deprecation, `buf lint` passes; `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion, newsletter source schema stability
 
 **Codebase Evidence**:
-- Confirmed existing service block ends at `rpc QuerySignals` with field numbers 1–2 on `QuerySignalsResponse` via Read at L10–19 of `packages/proto/ingest/v1/ingest.proto`.
-- `ExternalSignal` currently uses field numbers 1–9 (L79–89). New `SignalSource` message must not reuse any of these numbers.
-- `google/protobuf/struct.proto` is already imported in `packages/proto/config/v1/config.proto` (L8) and `packages/proto/analysis/v1/analysis.proto` (L8) — confirmed safe import pattern.
-- Last field numbers across existing ingest messages: `QuerySignalsResponse` uses 1 and 2. New message field numbers start at 1 (own namespace).
+- Confirmed via Read of `packages/proto/ingest/v1/ingest.proto`: existing service block has 6 RPCs ending at `QuerySignals` (L18). `QuerySignalsResponse` uses field numbers 1–2 (L102–105). `ExternalSignal` uses field numbers 1–9 (L79–89). New `SignalSource` message uses its own namespace starting at 1 — no conflict.
+- `google/protobuf/struct.proto` import pattern confirmed in `packages/proto/config/v1/config.proto` L8 and `packages/proto/analysis/v1/analysis.proto` L8 — safe to add to ingest proto.
+- Current imports in `packages/proto/ingest/v1/ingest.proto`: `google/protobuf/timestamp.proto` (L7) and `common/v1/common.proto` (L8). New `struct.proto` import goes after these.
 
 **Instructions**:
 
-1. Add `import "google/protobuf/struct.proto";` to the imports section immediately after `import "common/v1/common.proto";` — this mirrors the pattern in `config/v1/config.proto` L8.
+1. Add `import "google/protobuf/struct.proto";` after `import "common/v1/common.proto";` at L8 — this mirrors the pattern in `config/v1/config.proto` L8.
 
-2. Add two new RPCs to `IngestService` (after `QuerySignals`):
+2. Add two new RPCs to `IngestService` after `QuerySignals` (currently ending at L18):
    ```proto
    rpc ListSignalSources(ListSignalSourcesRequest) returns (ListSignalSourcesResponse);
    rpc ManageSignalSource(ManageSignalSourceRequest) returns (ManageSignalSourceResponse);
    ```
 
-3. Add the following new messages after `QuerySignalsResponse`. Assign these field numbers (all new messages start from 1 — no conflict with existing messages):
+3. Add the following new messages after `QuerySignalsResponse` (currently at L102–105). All new messages start field numbers from 1 (own namespace, no conflict with existing messages):
 
    ```proto
    // SignalSource represents a registered signal source entry.
@@ -97,7 +98,7 @@ Both commands must exit 0. `buf lint` confirms naming and style; `buf breaking` 
 
 ### Step 2 — proto-gen: Regenerate stubs after proto update
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/python/ingest/v1/ingest_pb2.py` — modify (regenerated)
@@ -117,7 +118,7 @@ Both commands must exit 0. `buf lint` confirms naming and style; `buf breaking` 
 
 **Codebase Evidence**:
 - `./scripts/buf-gen.sh` is the authoritative codegen script per `CLAUDE.md` §Generating Proto Stubs. No further evidence needed — this is a mechanical step.
-- Phase 3 deviation note: if `buf` is unavailable, use `python3 -m grpc_tools.protoc` as documented in `docs/roadmap/phase3-deviations.md`.
+- Phase 3 deviation note (`docs/roadmap/phase3-deviations.md` §3B): if `buf` is unavailable, use `python3 -m grpc_tools.protoc` as documented there.
 
 **Instructions**:
 
@@ -138,7 +139,7 @@ CI `proto-freshness` job enforces stubs match source; a clean `git diff` after `
 
 ### Step 3 — migration: Add signal_sources registry table to ingest schema
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/002_add_signal_sources_registry.up.sql` — create
@@ -149,7 +150,8 @@ CI `proto-freshness` job enforces stubs match source; a clean `git diff` after `
 **Codebase Evidence**:
 - Confirmed last migration file is `001_newsletter_signals.up.sql` via `ls services/xstockstrat-ingest/migrations/ | sort` → `001_newsletter_signals.down.sql`, `001_newsletter_signals.up.sql`. New migration NNN is therefore `002`.
 - Existing `ingest` schema is already created in `001_newsletter_signals.up.sql` L6 (`CREATE SCHEMA IF NOT EXISTS ingest;`) — no need to re-create schema in `002`.
-- Product spec SQL (product-spec.md L113–128) is the authoritative definition; use it verbatim. The `CREATE SCHEMA` line must be omitted (schema already exists from migration 001).
+- Product spec FR-2 defines exactly **ten** `source_type` values: five programmatic (`simple_email`, `email_attachment`, `linked_email`, `simple_website`, `authenticated_website`) and five Claude-mediated (`mediated_simple_email`, `mediated_email_attachment`, `mediated_linked_email`, `mediated_simple_website`, `mediated_authenticated_website`). The CHECK constraint must include all ten values.
+- Product spec SQL at product-spec.md L113–128 is the canonical table definition; the `CREATE SCHEMA` line must be omitted (schema already exists from migration 001).
 
 **Instructions**:
 
@@ -159,13 +161,17 @@ Create `services/xstockstrat-ingest/migrations/002_add_signal_sources_registry.u
 -- 002_add_signal_sources_registry.up.sql
 -- Adds the ingest.signal_sources registry table.
 -- The ingest schema was created in migration 001 — no CREATE SCHEMA needed.
+-- source_type includes all ten valid values: five programmatic and five mediated_*.
 
 CREATE TABLE IF NOT EXISTS ingest.signal_sources (
     slug             TEXT PRIMARY KEY,
     display_name     TEXT NOT NULL,
     source_type      TEXT NOT NULL CHECK (source_type IN (
                          'simple_email', 'email_attachment', 'linked_email',
-                         'simple_website', 'authenticated_website')),
+                         'simple_website', 'authenticated_website',
+                         'mediated_simple_email', 'mediated_email_attachment',
+                         'mediated_linked_email', 'mediated_simple_website',
+                         'mediated_authenticated_website')),
     extractor_module TEXT NOT NULL,
     credentials_ref  TEXT,
     active           BOOLEAN NOT NULL DEFAULT TRUE,
@@ -199,7 +205,7 @@ psql "$DATABASE_URL" -c "\di ingest.signal_sources_active_idx"
 
 ### Step 4 — service: Signal sources repository layer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/repositories/__init__.py` — create
@@ -210,7 +216,7 @@ psql "$DATABASE_URL" -c "\di ingest.signal_sources_active_idx"
 **Codebase Evidence**:
 - No `app/repositories/` directory exists — confirmed via `find services/xstockstrat-ingest -type f | sort` → no match. Must be created from scratch; no existing pattern available in the codebase for this service.
 - DB pool usage pattern: `await self._db.fetchrow(...)` and `await self._db.fetch(...)` confirmed in `services/xstockstrat-ingest/app/handlers/servicer.py` at L183 and L300. New repository functions follow the same `asyncpg` pool pattern.
-- Config validation per source_type is specified in FR-10 (product-spec.md L40–45).
+- Config validation per source_type is specified in FR-10 (product-spec.md L40–61) for all ten source types (five programmatic + five mediated).
 
 **Instructions**:
 
@@ -226,12 +232,12 @@ psql "$DATABASE_URL" -c "\di ingest.signal_sources_active_idx"
 
    - `async def deactivate_source(db_pool, slug: str) -> dict | None` — executes `UPDATE ingest.signal_sources SET active = FALSE WHERE slug = $1 RETURNING *`; returns the updated row or `None` if slug not found.
 
-3. Add a `validate_config_json(source_type: str, config_json: dict | None) -> str | None` helper (sync, returns an error string or `None` if valid) that enforces the required fields per FR-10:
-   - `simple_email`: requires non-empty `sender_patterns` list and non-empty `subject_patterns` list in `config_json`.
-   - `email_attachment`: same as `simple_email` plus non-empty `attachment_mime_types`.
-   - `linked_email`: same as `simple_email` plus non-empty `url_patterns`.
-   - `simple_website`: requires `url` (non-empty string) and `scrape_selector` (non-empty string).
-   - `authenticated_website`: requires `url` and `scrape_selector`.
+3. Add a `validate_config_json(source_type: str, config_json: dict | None) -> str | None` helper (sync, returns an error string or `None` if valid) that enforces the required fields per FR-10 for all ten source types:
+   - `simple_email` and `mediated_simple_email`: requires non-empty `sender_patterns` list and non-empty `subject_patterns` list in `config_json`.
+   - `email_attachment` and `mediated_email_attachment`: same as `simple_email` plus non-empty `attachment_mime_types`.
+   - `linked_email` and `mediated_linked_email`: same as `simple_email` plus non-empty `url_patterns`.
+   - `simple_website`, `authenticated_website`, `mediated_simple_website`, and `mediated_authenticated_website`: requires `url` (non-empty string) and `scrape_selector` (non-empty string).
+   - For `authenticated_website` and `mediated_authenticated_website` with missing `credentials_ref`: that check is done at the RPC level in Step 6 (not here — `validate_config_json` only validates `config_json` fields, not `credentials_ref`).
    - Returns `None` if validation passes.
 
 **Verification**:
@@ -243,13 +249,14 @@ Full behavioural coverage is in Step 8 (unit tests with asyncpg mock).
 
 ---
 
-### Step 5 — service: BaseExtractor abstract class and reference extractor
+### Step 5 — service: BaseExtractor abstract class, noop extractor, and reference extractor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/extractors/__init__.py` — create
 - `services/xstockstrat-ingest/app/extractors/base.py` — create
+- `services/xstockstrat-ingest/app/extractors/noop.py` — create
 - `services/xstockstrat-ingest/app/extractors/example_simple_email.py` — create
 
 **Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion, newsletter source schema stability
@@ -257,7 +264,7 @@ Full behavioural coverage is in Step 8 (unit tests with asyncpg mock).
 **Codebase Evidence**:
 - No `app/extractors/` directory exists — confirmed via `find services/xstockstrat-ingest -type f | sort` → no match. Must be created from scratch; no existing pattern available.
 - FR-5 defines the exact `RawInput` union type and `BaseExtractor` method signature.
-- FR-6 requires a `BaseExtractor` subclass at `app/extractors/<slug>.py` with `extractor_module` set to the Python dotted import path.
+- FR-6 requires a `BaseExtractor` subclass at `app/extractors/<slug>.py`. All five `mediated_*` source types must use `extractor_module = "app.extractors.noop"` — the ingest service never invokes their extractor directly.
 - Acceptance criterion 10 (product-spec.md L152) requires a reference extractor covered by unit tests.
 
 **Instructions**:
@@ -314,7 +321,26 @@ Full behavioural coverage is in Step 8 (unit tests with asyncpg mock).
            ...
    ```
 
-3. Create `services/xstockstrat-ingest/app/extractors/example_simple_email.py`:
+3. Create `services/xstockstrat-ingest/app/extractors/noop.py`:
+   ```python
+   """No-op extractor for mediated_* source types.
+   extractor_module: app.extractors.noop
+
+   All five mediated_* source types (mediated_simple_email, mediated_email_attachment,
+   mediated_linked_email, mediated_simple_website, mediated_authenticated_website) use
+   this extractor. The ingest service never invokes it directly — extraction for these
+   sources is performed by the agent MCP service via Claude.
+   """
+   from app.extractors.base import BaseExtractor, RawInput
+
+
+   class NoopExtractor(BaseExtractor):
+       async def extract(self, raw: RawInput) -> list[dict]:
+           """Return empty list — mediated sources are processed by the agent, not ingest."""
+           return []
+   ```
+
+4. Create `services/xstockstrat-ingest/app/extractors/example_simple_email.py`:
    ```python
    """Reference extractor for source_type=simple_email.
    extractor_module: app.extractors.example_simple_email
@@ -346,15 +372,16 @@ Full behavioural coverage is in Step 8 (unit tests with asyncpg mock).
 ```bash
 cd services/xstockstrat-ingest
 python3 -c "from app.extractors.base import BaseExtractor, SimpleEmailInput; print('import OK')"
+python3 -c "from app.extractors.noop import NoopExtractor; print('noop import OK')"
 python3 -c "from app.extractors.example_simple_email import ExampleSimpleEmailExtractor; print('extractor import OK')"
 ```
-Both must print their success message without import errors.
+All three must print their success message without import errors.
 
 ---
 
 ### Step 6 — service: Update IngestSignal validation and add ListSignalSources + ManageSignalSource handlers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -367,11 +394,14 @@ Both must print their success message without import errors.
 
 **Codebase Evidence**:
 - `IngestServicer.__init__` at `services/xstockstrat-ingest/app/handlers/servicer.py` L22–30 accepts `config_watcher`, `marketdata_channel`, `ledger_channel`, `db_pool`. A new `identity_channel` parameter must be added.
-- `IngestSignal` source validation currently starts at L160–165 checking for empty `source`, `symbol`, `direction`. The registry check (FR-3) must be inserted after the existing field-presence check.
+- `IngestSignal` source validation currently at L161–172: checks for empty `source`, `symbol`, `direction` (L161–165), then validates `direction` against valid set (L167–172). The registry check (FR-3) inserts after L172.
+- `QuerySignals` ends at L346. New `ListSignalSources` and `ManageSignalSource` methods go after it.
 - `ValidateApiKey` RPC confirmed in `packages/proto/identity/v1/identity.proto` L15 — takes `ValidateApiKeyRequest { string api_key = 1; }` and returns `TokenClaims { repeated string roles = 3; }`. Admin gate checks for `"admin"` in roles.
-- `IDENTITY_ENDPOINT` is not currently read in `services/xstockstrat-ingest/app/main.py` — confirmed absent via grep. It must be added.
-- `IDENTITY_HTTP_ENDPOINT` is present in `docker-compose.yml` for `xstockstrat-trader` (L404), `xstockstrat-insights` (L433), and `xstockstrat-config-ui` (L456). Absent from `xstockstrat-ingest` section (L271–287) — must be added.
-- `IDENTITY_HTTP_ENDPOINT` absent from `xstockstrat-ingest` in `.do/app.dev.yaml` (L138–153) and `.do/app.yaml` (L138–153) — confirmed absent via grep.
+- `LEDGER_ENDPOINT` read at `services/xstockstrat-ingest/app/main.py` L36. `IDENTITY_ENDPOINT` is absent from main.py — confirmed via grep. Must be added after L36.
+- `ledger_channel` created at L67; servicer constructed at L69–74. `identity_channel` is added after L67.
+- `IDENTITY_ENDPOINT` absent from `xstockstrat-ingest` environment block in `docker-compose.yml` (L271–287) — confirmed absent via grep.
+- `IDENTITY_ENDPOINT` absent from `xstockstrat-ingest` envs block in `.do/app.dev.yaml` (L141–168) and `.do/app.yaml` (L141–168) — confirmed absent via grep.
+- `invocation_metadata()` is already called in servicer.py at L44 and L153 — this method is available on real gRPC contexts. The `_NoopContext` in `http_server.py` does not have it; the `_AuthContext` in Step 7 supplies it for HTTP routes.
 
 **Instructions**:
 
@@ -380,18 +410,21 @@ Both must print their success message without import errors.
      ```python
      IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50058")
      ```
-   - In `serve()`, create a channel: `identity_channel = grpc.aio.insecure_channel(IDENTITY_ENDPOINT)` (add after `ledger_channel` at L67).
-   - Pass `identity_channel=identity_channel` to `IngestServicer(...)` constructor call at L69.
+   - In `serve()`, create a channel after `ledger_channel` at L67:
+     ```python
+     identity_channel = grpc.aio.insecure_channel(IDENTITY_ENDPOINT)
+     ```
+   - Pass `identity_channel=identity_channel` to the `IngestServicer(...)` constructor call at L69.
 
 2. **`app/handlers/servicer.py`** — update `IngestServicer`:
 
    a. Add import at top: `from gen.identity.v1 import identity_pb2, identity_pb2_grpc`
-   
+
    b. Add import: `from app.repositories.signal_sources import get_active_source, list_all_sources, upsert_source, deactivate_source, validate_config_json`
-   
-   c. Update `__init__` signature to accept `identity_channel` parameter and store `self._identity = identity_pb2_grpc.IdentityServiceStub(identity_channel)`.
-   
-   d. **`IngestSignal`**: after the existing direction-validation check (currently at L168–173), insert a registry slug check:
+
+   c. Update `__init__` signature (currently L23–24) to accept `identity_channel` parameter and store `self._identity = identity_pb2_grpc.IdentityServiceStub(identity_channel)`.
+
+   d. **`IngestSignal`**: after the existing direction-validation check ending at L172, insert a registry slug check:
       ```python
       source_row = await self._db.fetchrow(
           "SELECT slug FROM ingest.signal_sources WHERE slug = $1 AND active = TRUE",
@@ -404,9 +437,9 @@ Both must print their success message without import errors.
           )
           return
       ```
-      This implements FR-3. The placement is after direction validation and before the DB INSERT.
-   
-   e. **Add `_validate_admin_token` helper** (private async method):
+      This implements FR-3. Placement is after direction validation and before the DB INSERT at L183.
+
+   e. **Add `_validate_admin_token` helper** (private async method, after `__init__`):
       ```python
       async def _validate_admin_token(self, context) -> bool:
           """Returns True if Authorization header contains a valid admin API key."""
@@ -423,8 +456,8 @@ Both must print their success message without import errors.
           except Exception:
               return False
       ```
-   
-   f. **Add `ListSignalSources`** handler method (after `QuerySignals` at L347):
+
+   f. **Add `ListSignalSources`** handler method after `QuerySignals` (which ends at L346):
       ```python
       async def ListSignalSources(self, request, context):
           if self._db is None:
@@ -450,8 +483,8 @@ Both must print their success message without import errors.
               ))
           return ingest_pb2.ListSignalSourcesResponse(sources=sources)
       ```
-   
-   g. **Add `ManageSignalSource`** handler method:
+
+   g. **Add `ManageSignalSource`** handler method after `ListSignalSources`:
       ```python
       async def ManageSignalSource(self, request, context):
           if self._db is None:
@@ -464,20 +497,19 @@ Both must print their success message without import errors.
           op = request.operation
           src = request.source
           if op in ("register", "update"):
-              # Validate authenticated_website requires credentials_ref
-              if src.source_type == "authenticated_website" and not request.credentials_ref:
+              # authenticated_website and mediated_authenticated_website require credentials_ref
+              if src.source_type in ("authenticated_website", "mediated_authenticated_website") \
+                      and not request.credentials_ref:
                   await context.abort(
                       grpc.StatusCode.INVALID_ARGUMENT,
-                      "authenticated_website source requires credentials_ref"
+                      f"{src.source_type} source requires credentials_ref"
                   )
                   return
-              # Validate config_json per source_type
               cfg_dict = dict(src.config_json) if src.config_json else None
               err = validate_config_json(src.source_type, cfg_dict)
               if err:
                   await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
                   return
-              import json
               row = await upsert_source(
                   self._db,
                   slug=src.slug,
@@ -498,6 +530,7 @@ Both must print their success message without import errors.
                   f"unknown operation '{op}': must be register, update, or deactivate"
               )
               return
+          import json
           from google.protobuf.struct_pb2 import Struct
           cfg_out = Struct()
           if row["config_json"]:
@@ -515,26 +548,27 @@ Both must print their success message without import errors.
           return ingest_pb2.ManageSignalSourceResponse(source=result)
       ```
 
-3. **`docker-compose.yml`** — add `IDENTITY_ENDPOINT` to `xstockstrat-ingest` `environment:` block (currently L271–279), after `LEDGER_ENDPOINT`:
+3. **`docker-compose.yml`** — add `IDENTITY_ENDPOINT` to `xstockstrat-ingest` `environment:` block at L271–279, after `LEDGER_ENDPOINT` at L277:
    ```yaml
    IDENTITY_ENDPOINT: xstockstrat-identity:50058
    ```
    Confirmed absent: `grep -n "IDENTITY_ENDPOINT" docker-compose.yml` → no match in ingest block.
 
-4. **`.do/app.dev.yaml`** — add to `xstockstrat-ingest` `envs:` block (currently L138–153), after the `MARKETDATA_ENDPOINT` key:
+4. **`.do/app.dev.yaml`** — add to `xstockstrat-ingest` `envs:` block (L151–168), after the `MARKETDATA_ENDPOINT` entry:
    ```yaml
    - key: IDENTITY_ENDPOINT
      value: ${xstockstrat-identity.PRIVATE_URL}
    ```
-   Confirmed absent: `grep -n "IDENTITY_ENDPOINT" .do/app.dev.yaml` → no match in ingest block.
+   Confirmed absent: `grep -n "IDENTITY_ENDPOINT" .do/app.dev.yaml` → no match.
 
-5. **`.do/app.yaml`** — same addition as step 4, to the `xstockstrat-ingest` `envs:` block (L138–153).
-   Confirmed absent: `grep -n "IDENTITY_ENDPOINT" .do/app.yaml` → no match in ingest block.
+5. **`.do/app.yaml`** — same addition to `xstockstrat-ingest` `envs:` block (L151–168), after the `MARKETDATA_ENDPOINT` entry.
+   Confirmed absent: `grep -n "IDENTITY_ENDPOINT" .do/app.yaml` → no match.
 
 **Verification**:
 ```bash
 grep -n "IDENTITY_ENDPOINT" docker-compose.yml .do/app.dev.yaml .do/app.yaml
 # Must show a match in the xstockstrat-ingest section of all three files
+cd services/xstockstrat-ingest
 python3 -c "from app.handlers.servicer import IngestServicer; print('import OK')" 2>&1
 ```
 
@@ -542,7 +576,7 @@ python3 -c "from app.handlers.servicer import IngestServicer; print('import OK')
 
 ### Step 7 — service: Wire ListSignalSources and ManageSignalSource to HTTP/Connect-RPC server
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/http_server.py` — modify
@@ -550,13 +584,14 @@ python3 -c "from app.handlers.servicer import IngestServicer; print('import OK')
 **Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion, newsletter source schema stability
 
 **Codebase Evidence**:
-- `build_app()` in `services/xstockstrat-ingest/app/http_server.py` follows the pattern at L27–49: one `@app.post(...)` route per RPC, using `_call(request, ReqClass, servicer.Method)` for Connect-RPC compatible dispatch.
-- `ListBackfillJobs` at L35: `@app.post("/xstockstrat.ingest.v1.IngestService/ListBackfillJobs")` — exact URL pattern to follow.
-- `ManageSignalSource` requires `Authorization` header propagation. The `_call` helper at L127–137 passes a `_NoopContext` which does not support `invocation_metadata()`. A custom context wrapper must pass the Authorization header through. The existing `_NoopContext.abort()` pattern (L141–143) must be preserved.
+- `build_app()` in `services/xstockstrat-ingest/app/http_server.py` L18–124: one `@app.post(...)` route per RPC, using `_call(request, ReqClass, servicer.Method)` helper at L127–137.
+- `QuerySignals` route at L47–49: `@app.post("/xstockstrat.ingest.v1.IngestService/QuerySignals")` — exact URL pattern to follow.
+- `_call` helper at L127–137 creates `_NoopContext()` which has `abort()` (L141–143) and `send_initial_metadata()` (L144–146) but no `invocation_metadata()`. A custom `_AuthContext` subclass must add `invocation_metadata()` to pass the Authorization header for `ManageSignalSource`.
+- `_NoopContext.abort()` at L141–143 raises `HTTPException(status_code=400, detail=details)` — `_AuthContext` inherits this behavior.
 
 **Instructions**:
 
-1. After the `QuerySignals` route at L48–49, add:
+1. After the `QuerySignals` route at L47–49, add:
    ```python
    @app.post("/xstockstrat.ingest.v1.IngestService/ListSignalSources")
    async def list_signal_sources(request: Request):
@@ -567,7 +602,7 @@ python3 -c "from app.handlers.servicer import IngestServicer; print('import OK')
        return await _call_with_auth(request, ingest_pb2.ManageSignalSourceRequest, servicer.ManageSignalSource)
    ```
 
-2. Add a `_call_with_auth` helper (after the existing `_call` helper at L127) that creates a context carrying the `Authorization` header from the incoming HTTP request:
+2. Add a `_call_with_auth` helper after the existing `_call` helper at L127:
    ```python
    async def _call_with_auth(request: Request, req_cls, handler_fn):
        """Like _call but passes Authorization header via context metadata."""
@@ -616,7 +651,7 @@ print('routes OK')
 
 ### Step 8 — test: Unit tests for signal source registry service code
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_signal_sources.py` — create
@@ -626,31 +661,34 @@ print('routes OK')
 **Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion, newsletter source schema stability
 
 **Codebase Evidence**:
-- Existing test pattern: `tests/test_ingest_servicer.py` uses `MagicMock` + `AsyncMock` for `db_pool`, with `svc._db = MagicMock()` set directly. Same approach applies to new test file.
+- Existing test pattern in `tests/test_ingest_servicer.py`: `MagicMock` + `AsyncMock` for `db_pool`, with `svc._db = MagicMock()` set directly (L387–388). Same approach applies to new test file.
 - `conftest.py` at L1–34 wires `gen/` path — all new test files inherit this setup automatically.
-- `make_servicer()` helper at `test_ingest_servicer.py` L23–28 constructs a servicer with `db_pool=None`. A new variant with `db_pool=MagicMock()` and `identity_channel=MagicMock()` is needed for registry tests.
+- `make_servicer()` helper at `test_ingest_servicer.py` L23–28 constructs a servicer with `db_pool=None` and three MagicMock channels. A new variant with `db_pool=MagicMock()` and `identity_channel=MagicMock()` is needed for registry tests in Step 6 code paths.
 - Coverage threshold for `xstockstrat-ingest` is 40% (`pytest --cov=app --cov-fail-under=40`).
 
 **Instructions**:
 
 1. **`tests/test_signal_sources.py`** — unit-test `app/repositories/signal_sources.py`:
-   - Test `validate_config_json` sync helper: verify each `source_type` passes with valid config and fails with missing required fields.
+   - Test `validate_config_json` sync helper: verify each `source_type` (all ten) passes with valid config and fails with missing required fields. Include at least one test for each of the three pattern groups: email types (sender/subject), attachment types (+ mime_types), website types (url/scrape_selector), and one mediated variant per group.
    - Test `get_active_source` with an `AsyncMock` db_pool returning a row vs `None`.
    - Test `list_all_sources` with `include_inactive=True` vs `False`.
    - Test `upsert_source` — confirm the asyncpg `fetchrow` is called with the correct INSERT...ON CONFLICT SQL.
    - Test `deactivate_source` — confirm returns `None` when `fetchrow` returns `None`.
 
-2. **`tests/test_extractor.py`** — unit-test `app/extractors/example_simple_email.py`:
+2. **`tests/test_extractor.py`** — unit-test `app/extractors/example_simple_email.py` and `app/extractors/noop.py`:
    - Test `ExampleSimpleEmailExtractor.extract()` with a `SimpleEmailInput` containing "BUY AAPL" → returns `[{"direction": "buy", "symbol": "AAPL", ...}]`.
    - Test with no matching patterns → returns `[]`.
    - Test with `EmailAttachmentInput` (wrong type) → returns `[]`.
    - Test importability: `from app.extractors.base import BaseExtractor; from app.extractors.example_simple_email import ExampleSimpleEmailExtractor; assert issubclass(ExampleSimpleEmailExtractor, BaseExtractor)`.
+   - Test `NoopExtractor.extract()` with any input → always returns `[]`.
+   - Test `NoopExtractor` is a subclass of `BaseExtractor`.
 
 3. **`tests/test_ingest_servicer.py`** — add a `TestIngestSignalRegistryValidation` class:
-   - Test that `IngestSignal` returns `INVALID_ARGUMENT` when the source slug is unknown (mock `self._db.fetchrow` to return `None` for the registry lookup and a valid row for the insert — the abort should be called before reaching the insert).
-   - Test that `IngestSignal` proceeds normally when registry lookup returns a valid row (mock `fetchrow` to return `{"slug": "unusual_whales"}` on the first call, then `{"id": 42}` on the second call).
+   - Update `make_servicer()` (or add a new `make_servicer_with_db()`) to pass `identity_channel=MagicMock()`.
+   - Test that `IngestSignal` returns `INVALID_ARGUMENT` when the source slug is unknown (mock `self._db.fetchrow` to return `None` for the registry lookup — the abort should be called before reaching the INSERT).
+   - Test that `IngestSignal` proceeds normally when registry lookup returns a valid row (mock first `fetchrow` call to return `{"slug": "unusual_whales"}`, second to return `{"id": 42}`).
    - Add a test for `ManageSignalSource` with missing auth returning `UNAUTHENTICATED`.
-   - Add a test for `ManageSignalSource` `operation="register"` with valid data.
+   - Add a test for `ManageSignalSource` `operation="register"` with valid data and mocked `_validate_admin_token` returning `True`.
    - Add a test for `ManageSignalSource` `operation="deactivate"` with unknown slug returns `NOT_FOUND`.
    - Add a test for `ListSignalSources` with `include_inactive=False`.
 
@@ -659,13 +697,13 @@ print('routes OK')
 cd services/xstockstrat-ingest
 pytest --cov=app --cov-fail-under=40
 ```
-Confirm threshold passes. Coverage report should show `app/repositories/signal_sources.py`, `app/extractors/base.py`, and `app/extractors/example_simple_email.py` with meaningful line coverage.
+Confirm threshold passes. Coverage report should show `app/repositories/signal_sources.py`, `app/extractors/base.py`, `app/extractors/noop.py`, and `app/extractors/example_simple_email.py` with meaningful line coverage.
 
 ---
 
 ### Step 9 — service: config-ui API route for signal sources
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/app/api/sources/route.ts` — create
@@ -676,10 +714,10 @@ Confirm threshold passes. Coverage report should show `app/repositories/signal_s
 **Reviewers**: `xstockstrat-config-ui` owner — config mutation safety, environment scope correctness, no secret values rendered in UI
 
 **Codebase Evidence**:
-- Pattern for Connect-RPC calls from Next.js route handlers: `app/api/config/route.ts` at L13–19 defines a `rpc()` helper using raw `fetch` to `${CONFIG_HTTP_ENDPOINT}/ServiceName/MethodName` with `Content-Type: application/connect+json`. Same pattern applies here for `INGEST_HTTP_ENDPOINT`.
+- Pattern for Connect-RPC calls from Next.js route handlers confirmed in `app/api/config/route.ts` L13–19: `rpc()` helper uses raw `fetch` to `${ENDPOINT}/PackageName/MethodName` with `Content-Type: application/connect+json`. Same pattern applies here using `INGEST_HTTP_ENDPOINT`.
 - Auth propagation pattern: `getSessionFromRequest`, `rolesToAccessScope`, `generateTraceId` imported from `@/app/lib/auth` at `app/api/config/route.ts` L8. Same imports required in the sources route.
-- `INGEST_HTTP_ENDPOINT` is absent from `docker-compose.yml` `xstockstrat-config-ui` section (L452–458) — confirmed via grep.
-- `INGEST_HTTP_ENDPOINT` is absent from `xstockstrat-config-ui` in `.do/app.dev.yaml` (L356–374) and `.do/app.yaml` (L352–370) — confirmed via grep.
+- `INGEST_HTTP_ENDPOINT` absent from `docker-compose.yml` `xstockstrat-config-ui` environment block (L452–470) — confirmed via grep.
+- `INGEST_HTTP_ENDPOINT` absent from `xstockstrat-config-ui` envs block in `.do/app.dev.yaml` (L394–405) and `.do/app.yaml` (L390–401) — confirmed absent via grep. `IDENTITY_HTTP_ENDPOINT` is the last key in each block (L397 in dev yaml, L393 in prod yaml).
 
 **Instructions**:
 
@@ -777,16 +815,16 @@ Confirm threshold passes. Coverage report should show `app/repositories/signal_s
    ```yaml
    INGEST_HTTP_ENDPOINT: http://xstockstrat-ingest:8055
    ```
-   Confirmed absent: `grep -n "INGEST_HTTP_ENDPOINT" docker-compose.yml` → no match.
+   Confirmed absent: `grep -n "INGEST_HTTP_ENDPOINT" docker-compose.yml` → no match in config-ui block.
 
-3. **`.do/app.dev.yaml`** — add to `xstockstrat-config-ui` `envs:` block after `IDENTITY_HTTP_ENDPOINT` at L368:
+3. **`.do/app.dev.yaml`** — add to `xstockstrat-config-ui` `envs:` block after `IDENTITY_HTTP_ENDPOINT` at L397:
    ```yaml
    - key: INGEST_HTTP_ENDPOINT
      value: ${xstockstrat-ingest.PRIVATE_URL}
    ```
    Confirmed absent: `grep -n "INGEST_HTTP_ENDPOINT" .do/app.dev.yaml` → no match.
 
-4. **`.do/app.yaml`** — same addition after `IDENTITY_HTTP_ENDPOINT` at L364.
+4. **`.do/app.yaml`** — same addition after `IDENTITY_HTTP_ENDPOINT` at L393.
    Confirmed absent: `grep -n "INGEST_HTTP_ENDPOINT" .do/app.yaml` → no match.
 
 **Verification**:
@@ -802,7 +840,7 @@ pnpm run build 2>&1 | tail -10
 
 ### Step 10 — service: config-ui Sources page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/app/sources/page.tsx` — create
@@ -811,13 +849,13 @@ pnpm run build 2>&1 | tail -10
 **Reviewers**: `xstockstrat-config-ui` owner — config mutation safety, environment scope correctness, no secret values rendered in UI
 
 **Codebase Evidence**:
-- `app/[namespace]/page.tsx` is a Client Component (`'use client'`) using `useState`/`useEffect`/`fetch` to call `/api/config` and render a table with inline edit. The `/sources` page follows the same pattern calling `/api/sources`.
-- `app/layout.tsx` nav section at L48–55 has a `<nav>` with `Link` elements for Namespaces and Audit Log. A "Sources" link must be added here.
-- UI component library confirmed available: `Badge`, `Button`, `Card`/`CardContent`, `Input`, `Table`/`TableHeader`/`TableBody`/`TableRow`/`TableHead`/`TableCell` at `services/xstockstrat-config-ui/components/ui/`.
-- `Select` component exists at `components/ui/select.tsx` for the source_type field in the creation form.
-- FR-11 and FR-12 define the required field set per source_type.
+- `app/[namespace]/page.tsx` is a Client Component (`'use client'` at L6) using `useState`/`useEffect`/`fetch` to call `/api/config` and render a table. Pattern confirmed at L1–6. The `/sources` page follows the same pattern calling `/api/sources`.
+- UI component library confirmed available via `find services/xstockstrat-config-ui/components/ui -type f | sort`: `Badge`, `Button`, `Card`/`CardContent`, `Input`, `Table`/`TableHeader`/`TableBody`/`TableRow`/`TableHead`/`TableCell`, `Select`.
+- `app/layout.tsx` in-app nav at L48–55: `<nav>` with `Link` elements for "Namespaces" (L49–51) and "Audit Log" (L52–54). A "Sources" link is added after the "Audit Log" link.
+- FR-11 and FR-12 define the required field set per source_type (ten types, including all five `mediated_*` variants).
 - FR-15 specifies reading `analysis.signals.source_weights` from the config API (`GET /api/config?namespace=analysis`) for the read-only weight field.
-- Acceptance criterion 13 (product-spec.md L155): `credentials_ref` field must be cleared on load (never pre-populated from the response).
+- Acceptance criterion 13 (product-spec.md L155): `credentials_ref` field must be cleared on load (never populated from the response).
+- `credentials_ref` never appears in `SignalSource` response — `hasCredentials` (bool) is the read-side indicator per proto definition confirmed in Step 1.
 
 **Instructions**:
 
@@ -829,23 +867,25 @@ pnpm run build 2>&1 | tail -10
 
    c. Render a table listing all sources with columns: Slug, Display Name, Source Type, Active (badge), Weight (read-only, from `source_weights`), Actions.
 
-   d. Each row has an enable/disable toggle button that calls `POST /api/sources` with body `{ source: { slug }, operation: "deactivate" }` (when active=true) or `operation: "update"` with `active: true` set back (when active=false). After the call, re-fetch the list.
+   d. Each row has an enable/disable toggle button that calls `POST /api/sources` with body `{ source: { slug }, operation: "deactivate" }` (when active=true) or `{ source: { slug, active: true }, operation: "update" }` (when active=false). After the call, re-fetch the list.
 
    e. Each row has an Edit button that opens an inline form (or expands the row) with the structured fields per source_type (FR-12):
       - All types: `display_name` (text input), `active` (checkbox)
-      - `simple_email` / `email_attachment` / `linked_email`: `sender_patterns` (multi-line or comma-separated text input), `subject_patterns`
-      - `email_attachment`: additional `attachment_mime_types`
-      - `linked_email`: additional `url_patterns`
-      - `simple_website` / `authenticated_website`: `url` (text input), `scrape_selector` (text input)
-      - `authenticated_website`: `credentials_ref` (text input for the `secret.*` key name); show a "configured" badge if `hasCredentials = true` — the value is never pre-filled
-      - All types: `extractor_module` (text input, read-only after first save — use `disabled` prop)
+      - `simple_email` / `mediated_simple_email` / `email_attachment` / `mediated_email_attachment` / `linked_email` / `mediated_linked_email`: `sender_patterns` (comma-separated text input), `subject_patterns`
+      - `email_attachment` / `mediated_email_attachment`: additional `attachment_mime_types`
+      - `linked_email` / `mediated_linked_email`: additional `url_patterns`
+      - `simple_website` / `authenticated_website` / `mediated_simple_website` / `mediated_authenticated_website`: `url` (text input), `scrape_selector` (text input)
+      - `authenticated_website` / `mediated_authenticated_website`: `credentials_ref` (text input for the `secret.*` key name); show a "configured" Badge if `hasCredentials = true` — the value is never pre-filled
+      - `mediated_email_attachment` / `mediated_linked_email`: optional `credentials_ref` field (same badge behaviour as above)
+      - All types: `extractor_module` (text input, `disabled` after first save to prevent accidental breaks)
+      - All `mediated_*` types: show a "Claude-mediated" Badge
       - Save calls `POST /api/sources` with `operation: "update"` for existing sources.
 
-   f. A "Register New Source" button opens a creation form (same fields as edit, plus source_type selector, plus extractor_module editable). On submit calls `POST /api/sources` with `operation: "register"`.
+   f. A "Register New Source" button opens a creation form (same fields as edit, plus source_type selector, plus `extractor_module` editable). On submit calls `POST /api/sources` with `operation: "register"`.
 
    g. The `credentials_ref` field value is always cleared when opening the edit form (never populated from the response, per acceptance criterion 13).
 
-2. **`app/layout.tsx`** — add a "Sources" link to the in-app nav at L48–55, after the "Audit Log" link:
+2. **`app/layout.tsx`** — add a "Sources" link to the in-app nav at L48–55, after the "Audit Log" link at L52–54:
    ```tsx
    <Link href="/sources" className="px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors">
      Sources
@@ -865,7 +905,7 @@ find .next/server/app/sources -name "page.js" 2>/dev/null || echo "check standal
 
 ### Step 11 — test: E2E tests for config-ui Sources page and API route
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/e2e/sources.spec.ts` — create
@@ -874,24 +914,48 @@ find .next/server/app/sources -name "page.js" 2>/dev/null || echo "check standal
 **Reviewers**: `xstockstrat-config-ui` owner — config mutation safety, environment scope correctness, no secret values rendered in UI
 
 **Codebase Evidence**:
-- `e2e/api-smoke.spec.ts` at L22–38 defines the `addAuthCookie` helper using `SignJWT` from `jose`. New test file imports and reuses the same helper pattern.
-- `e2e/mock-backend.ts` implements the mock Connect-RPC backend for `api-smoke.spec.ts` — it must be extended with mock endpoints for `ListSignalSources` and `ManageSignalSource`.
+- `e2e/api-smoke.spec.ts` L22–38: `addAuthCookie` helper using `SignJWT` from `jose`. New test file imports and reuses the same helper pattern.
+- `e2e/mock-backend.ts` L48–51: `RESPONSES` dict maps HTTP path to response body. `startMockBackend()` at L55–88 reads from `RESPONSES` for every POST. Extend by adding two new keys for the ingest endpoints.
 - `e2e/global-setup.ts` starts the mock backend server before tests — no changes needed there.
-- E2E tests for a frontend: no coverage threshold — use `pnpm test:e2e` as verification command (per spec skill rule for Next.js services).
+- E2E tests for a Next.js frontend: no coverage threshold — `pnpm test:e2e` is the verification command.
+- Mock backend serves on port 9093 (confirmed at `e2e/mock-backend.ts` L13). The ingest endpoints added to `RESPONSES` will be served on the same port. `INGEST_HTTP_ENDPOINT` in the Playwright test environment must point to `http://localhost:9093`.
 
 **Instructions**:
 
-1. **`e2e/mock-backend.ts`** — add mock handlers for the two new ingest endpoints:
-   - `POST /xstockstrat.ingest.v1.IngestService/ListSignalSources` → return `{ sources: [{ slug: "example_simple_email", displayName: "Example Simple Email", sourceType: "simple_email", extractorModule: "app.extractors.example_simple_email", active: true, hasCredentials: false, configJson: { senderPatterns: ["noreply@example.com"], subjectPatterns: ["Signal:"] } }] }`.
-   - `POST /xstockstrat.ingest.v1.IngestService/ManageSignalSource` → return `{ source: { ...request body source fields, active: true, hasCredentials: false, configJson: {} } }` (echo the request source back).
+1. **`e2e/mock-backend.ts`** — add mock handlers for the two new ingest endpoints by adding two entries to the `RESPONSES` object (after the existing identity entries):
+   ```typescript
+   RESPONSES['/xstockstrat.ingest.v1.IngestService/ListSignalSources'] = {
+     sources: [{
+       slug: 'example_simple_email',
+       displayName: 'Example Simple Email',
+       sourceType: 'simple_email',
+       extractorModule: 'app.extractors.example_simple_email',
+       active: true,
+       hasCredentials: false,
+       configJson: { senderPatterns: ['noreply@example.com'], subjectPatterns: ['Signal:'] },
+     }],
+   };
+   RESPONSES['/xstockstrat.ingest.v1.IngestService/ManageSignalSource'] = {
+     source: {
+       slug: 'example_simple_email',
+       displayName: 'Example Simple Email',
+       sourceType: 'simple_email',
+       extractorModule: 'app.extractors.example_simple_email',
+       active: true,
+       hasCredentials: false,
+       configJson: {},
+     },
+   };
+   ```
+   Note: the mock backend serves all endpoints on the same port (9093). Configure `INGEST_HTTP_ENDPOINT=http://localhost:9093` in `playwright.config.ts` env block.
 
 2. **`e2e/sources.spec.ts`** — create tests following the `api-smoke.spec.ts` style:
-   - Test `GET /api/sources` returns `{ sources: [] }` shape (array).
+   - Test `GET /api/sources` returns a response with a `sources` array (or empty object if mock returns `{}`).
    - Test `GET /api/sources?include_inactive=true` returns 200.
    - Test that each source in the response has fields: `slug`, `displayName`, `sourceType`, `active`, `hasCredentials` — but NOT `credentialsRef`.
    - Test `POST /api/sources` with a valid `ManageSignalSource` body returns 200.
-   - Test that the `/sources` page loads without error (navigate to `http://localhost:3002/sources` and assert the "Sources" heading or table is visible).
-   - Test that the Sources page does not render a `credentials_ref` value (no element with that text content visible).
+   - Test that the `/sources` page loads without error (navigate to `http://localhost:3002/sources` and assert the page title or a table element is visible).
+   - Test that the Sources page does not render a `credentials_ref` text value (confirm no element contains that literal string as a value).
 
 **Verification**:
 ```bash
@@ -902,6 +966,116 @@ All tests pass. No coverage threshold applies for Next.js frontends.
 
 ---
 
+### Step 12 — test: Noop extractor coverage and mediated-type import verification
+
+**Status**: `done`
+**Service**: `xstockstrat-ingest`
+**Files**:
+- `services/xstockstrat-ingest/tests/test_extractor.py` — modify (add noop + mediated type importability tests)
+
+**Reviewers**: `xstockstrat-ingest` owner — signal normalization correctness, idempotent ingestion, newsletter source schema stability
+
+**Codebase Evidence**:
+- FR-6 requires that all five `mediated_*` source types use `extractor_module = "app.extractors.noop"` and that this module is importable at runtime.
+- `app/extractors/noop.py` is created in Step 5 with `NoopExtractor(BaseExtractor)` class.
+- Acceptance criterion 9 (product-spec.md L151): "A reference extractor (e.g. `extractors.example_simple_email`) is included and covered by unit tests." Acceptance criterion 9 also states: "each registered source's `extractor_module` can be dynamically imported without error." The noop extractor is the canonical module for all mediated types.
+
+**Instructions**:
+
+Add the following tests to `services/xstockstrat-ingest/tests/test_extractor.py` (this file is created in Step 8 — Step 12 extends it):
+
+1. Test dynamic importability of `app.extractors.noop`:
+   ```python
+   def test_noop_extractor_dynamically_importable():
+       import importlib
+       module = importlib.import_module("app.extractors.noop")
+       assert hasattr(module, "NoopExtractor")
+   ```
+
+2. Test that `NoopExtractor` returns an empty list for all five `RawInput` input types:
+   ```python
+   @pytest.mark.asyncio
+   async def test_noop_returns_empty_for_all_input_types():
+       from app.extractors.noop import NoopExtractor
+       from app.extractors.base import (
+           SimpleEmailInput, EmailAttachmentInput, LinkedEmailInput,
+           SimpleWebsiteInput, AuthenticatedWebsiteInput,
+       )
+       extractor = NoopExtractor()
+       inputs = [
+           SimpleEmailInput(body_text="BUY AAPL", body_html=""),
+           EmailAttachmentInput(body_text="", body_html="", attachments=[b"data"]),
+           LinkedEmailInput(body_text="", body_html="", urls=["https://example.com"]),
+           SimpleWebsiteInput(url="https://example.com", html="<p>text</p>"),
+           AuthenticatedWebsiteInput(url="https://example.com", html="", credentials={"token": "abc"}),
+       ]
+       for inp in inputs:
+           result = await extractor.extract(inp)
+           assert result == [], f"expected [] for {type(inp).__name__}, got {result}"
+   ```
+
+3. Test that `app.extractors.example_simple_email` is also dynamically importable:
+   ```python
+   def test_reference_extractor_dynamically_importable():
+       import importlib
+       module = importlib.import_module("app.extractors.example_simple_email")
+       assert hasattr(module, "ExampleSimpleEmailExtractor")
+   ```
+
+**Verification**:
+```bash
+cd services/xstockstrat-ingest
+pytest tests/test_extractor.py -v
+# All noop and dynamic-import tests pass
+pytest --cov=app --cov-fail-under=40
+# Overall threshold still passes
+```
+
+---
+
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 2 — proto-gen: Regenerate stubs after proto update
+**Spec said**: Run `./scripts/buf-gen.sh` from the repository root.
+**Actual**: `buf` was not installed in the environment. Downloaded buf v1.69.0 from GitHub releases to `/tmp/buf` and copied to `/usr/local/bin/buf`. Also installed Go plugins (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-connect-go`) via `go install` and TypeScript plugins via `pnpm install` in `packages/proto/gen/ts/`. Then ran `./scripts/buf-gen.sh` successfully — all stubs regenerated, buf lint + breaking passed, tsc compiled cleanly.
+**Reason**: `buf` and Go/TS proto plugins not pre-installed in the remote execution environment. Installation was required before the script could run. This follows the same deviation precedent as phase3-deviations.md.
+
+### Deviation: Step 2 — extra Go gRPC stubs regenerated
+**Spec said**: Files section listed only the 12 ingest-specific generated stubs.
+**Actual**: `buf-gen.sh` also updated `*_grpc.pb.go` for analysis, config, identity, indicators, ledger, marketdata, notify, portfolio, and trading services. All 21 changed files were staged and committed.
+**Reason**: The newer `protoc-gen-go-grpc` version (installed fresh via `go install`) produces slightly different output for all services. Generated files must be committed together to keep the repo consistent and pass CI `proto-freshness`. Leaving them uncommitted would cause a stale-stub failure on the next run.
+
+### Deviation: Step 3 — migration: Add signal_sources registry table to ingest schema
+**Spec said**: Verify with `./scripts/db-migrate.sh` and `psql "$DATABASE_URL" -c "\d ingest.signal_sources"`.
+**Actual**: `DATABASE_URL` not set in the remote execution environment; live DB not available. Verified by confirming file existence, correct NNN numbering (`002`), SQL content assertions (table definition, CHECK constraint, index, no `CREATE SCHEMA`), and up/down pair present.
+**Reason**: No TimescaleDB running in the CI/remote container. Migration correctness will be verified at deployment time when `db-migrate.sh` runs against the actual database.
+
+### Deviation: Step 8 — noop.py created here instead of Step 5
+**Spec said**: `app/extractors/noop.py` is created in Step 5 (per revised spec after re-run).
+**Actual**: Created in Step 8 alongside test coverage. Step 5 was executed before the spec re-run that added noop.py to its scope.
+**Reason**: The spec was re-run (adding noop.py to Step 5) after Step 5 had already been merged. User chose Option A to create it in Step 8.
+
+### Deviation: Step 8 — validate_config_json updated to cover mediated types
+**Spec said**: `validate_config_json` (Step 4) should cover all 10 source types including mediated variants per FR-10.
+**Actual**: Step 4 was executed before the spec re-run; mediated types were missing. Updated `app/repositories/signal_sources.py` in Step 8 to add all five `mediated_*` variants (share the same validation rules as their non-mediated counterparts).
+**Reason**: Same cause as noop.py deviation above. User chose Option A to fix in Step 8.
+
+### Deviation: Step 10 — upsert_source and servicer updated to support re-activation
+**Spec said**: `upsert_source` (Step 4) and `ManageSignalSource` handler (Step 6) are only touched in their respective steps.
+**Actual**: `upsert_source` updated in Step 10 to add `active: bool = True` parameter and include `active` in both the INSERT column list and `ON CONFLICT DO UPDATE SET` clause. `ManageSignalSource` handler updated to pass `active=src.active` to `upsert_source`.
+**Reason**: During Step 10 Phase 1 discovery, identified that the enable/disable toggle (re-activation path) would silently fail — `active` was absent from the upsert SQL so a deactivated source could never be re-activated via the "update" operation. User chose Option A to fix it in Step 10.
+
+### Deviation: Step 11 — E2E test verification via TypeScript compilation only
+**Spec said**: Verify with `pnpm test:e2e`; all tests pass.
+**Actual**: Playwright browser download blocked by remote environment network policy (`playwright install chromium` failed with download error). TypeScript compilation (`pnpm exec tsc --noEmit`) passed with no errors. Sources tests use correct basePath-aware URLs (`/config-ui/api/sources`, `/config-ui/sources`) unlike pre-existing tests which use paths without the basePath prefix (pre-existing defect, out of scope).
+**Reason**: Remote execution environment does not permit downloading Playwright browser binaries. Same precedent as Step 3 migration verification deviation.
+
+### Deviation: Step 11 — playwright.config.ts webServer.url corrected
+**Spec said**: Files list contained only `e2e/sources.spec.ts` and `e2e/mock-backend.ts`.
+**Actual**: Also modified `playwright.config.ts`: added `INGEST_HTTP_ENDPOINT` to webServer env (noted as gap in Phase 1) and corrected `webServer.url` from `http://localhost:3002` to `http://localhost:3002/config-ui/api/health` (the actual health endpoint given the app's basePath).
+**Reason**: Without the correct health URL, `pnpm test:e2e` times out waiting for the server. The `/config-ui/api/health` endpoint returns 200 and is the correct readiness check.
+
+### Deviation: Step 12 — pytest-asyncio installed into uv tool env to unblock async tests
+**Spec said**: Verify with `pytest tests/test_extractor.py -v`; all noop and dynamic-import tests pass.
+**Actual**: All 16 tests pass after running `uv tool install --with pytest-asyncio pytest --force` to add pytest-asyncio to the uv-managed pytest environment. This also retroactively fixes the same pre-existing limitation from Step 8.
+**Reason**: pytest-asyncio was missing from the uv pytest tool's isolated virtualenv. Fixed by reinstalling the tool with the extra dependency rather than documenting it as a permanent limitation.

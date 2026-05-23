@@ -9,25 +9,56 @@ import uuid
 from datetime import UTC
 
 import grpc
+from gen.identity.v1 import identity_pb2, identity_pb2_grpc
 from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc
 from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
 from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
+from app.repositories.signal_sources import (
+    deactivate_source,
+    get_active_source,
+    list_all_sources,
+    upsert_source,
+    validate_config_json,
+)
 
 log = logging.getLogger(__name__)
 
 
 class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
     def __init__(
-        self, config_watcher: ConfigWatcher, marketdata_channel, ledger_channel, db_pool=None
-    ):  # noqa: E501
+        self,
+        config_watcher: ConfigWatcher,
+        marketdata_channel,
+        ledger_channel,
+        db_pool=None,
+        identity_channel=None,
+    ):
         self._cfg = config_watcher
         self._marketdata = marketdata_pb2_grpc.MarketDataServiceStub(marketdata_channel)
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
+        self._identity = identity_pb2_grpc.IdentityServiceStub(identity_channel) if identity_channel else None
         self._db = db_pool
         self._jobs: dict[str, ingest_pb2.BackfillJob] = {}
+
+    async def _validate_admin_token(self, context) -> bool:
+        """Returns True if Authorization header contains a valid admin API key."""
+        if self._identity is None:
+            return False
+        metadata = dict(context.invocation_metadata())
+        auth = metadata.get("authorization", "")
+        if not auth.startswith("Bearer "):
+            return False
+        api_key = auth[len("Bearer "):]
+        try:
+            claims = await self._identity.ValidateApiKey(
+                identity_pb2.ValidateApiKeyRequest(api_key=api_key)
+            )
+            return "admin" in claims.roles
+        except Exception:
+            return False
 
     async def TriggerBackfill(self, request, context):
         job_id = str(uuid.uuid4())
@@ -168,6 +199,18 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if signal.direction not in valid_directions:
             await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT, f"direction must be one of {valid_directions}"
+            )
+            return
+
+        # FR-3: source slug must be registered and active
+        source_row = await self._db.fetchrow(
+            "SELECT slug FROM ingest.signal_sources WHERE slug = $1 AND active = TRUE",
+            signal.source,
+        )
+        if source_row is None:
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                f"source slug '{signal.source}' is not a registered active source",
             )
             return
 
@@ -344,3 +387,91 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             signals=signals,
             page=common_pb2.PageResponse(next_page_token=next_token, total_count=len(signals)),
         )
+
+    async def ListSignalSources(self, request, context):
+        if self._db is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
+            return
+        rows = await list_all_sources(self._db, include_inactive=request.include_inactive)
+        import json
+        from google.protobuf.struct_pb2 import Struct
+        sources = []
+        for row in rows:
+            cfg = Struct()
+            if row["config_json"]:
+                cfg.update(
+                    row["config_json"] if isinstance(row["config_json"], dict)
+                    else json.loads(row["config_json"])
+                )
+            sources.append(ingest_pb2.SignalSource(
+                slug=row["slug"],
+                display_name=row["display_name"],
+                source_type=row["source_type"],
+                extractor_module=row["extractor_module"],
+                active=row["active"],
+                has_credentials=(row["credentials_ref"] is not None),
+                config_json=cfg,
+            ))
+        return ingest_pb2.ListSignalSourcesResponse(sources=sources)
+
+    async def ManageSignalSource(self, request, context):
+        if self._db is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
+            return
+        is_admin = await self._validate_admin_token(context)
+        if not is_admin:
+            await context.abort(grpc.StatusCode.UNAUTHENTICATED, "admin API key required")
+            return
+        op = request.operation
+        src = request.source
+        if op in ("register", "update"):
+            if src.source_type == "authenticated_website" and not request.credentials_ref:
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    "authenticated_website source requires credentials_ref",
+                )
+                return
+            cfg_dict = dict(src.config_json) if src.config_json else None
+            err = validate_config_json(src.source_type, cfg_dict)
+            if err:
+                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
+                return
+            row = await upsert_source(
+                self._db,
+                slug=src.slug,
+                display_name=src.display_name,
+                source_type=src.source_type,
+                extractor_module=src.extractor_module,
+                credentials_ref=request.credentials_ref or None,
+                config_json=cfg_dict,
+                active=src.active,
+            )
+        elif op == "deactivate":
+            row = await deactivate_source(self._db, src.slug)
+            if row is None:
+                await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
+                return
+        else:
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                f"unknown operation '{op}': must be register, update, or deactivate",
+            )
+            return
+        import json
+        from google.protobuf.struct_pb2 import Struct
+        cfg_out = Struct()
+        if row["config_json"]:
+            cfg_out.update(
+                row["config_json"] if isinstance(row["config_json"], dict)
+                else json.loads(str(row["config_json"]))
+            )
+        result = ingest_pb2.SignalSource(
+            slug=row["slug"],
+            display_name=row["display_name"],
+            source_type=row["source_type"],
+            extractor_module=row["extractor_module"],
+            active=row["active"],
+            has_credentials=(row["credentials_ref"] is not None),
+            config_json=cfg_out,
+        )
+        return ingest_pb2.ManageSignalSourceResponse(source=result)

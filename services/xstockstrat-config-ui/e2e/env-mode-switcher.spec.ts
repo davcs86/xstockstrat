@@ -10,7 +10,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('EnvModeSwitcher', () => {
   test('ENV "dev" button is active by default', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/config-ui');
     // Active env button has bg-primary/10 and text-primary classes
     const devBtn = page.getByRole('link', { name: 'dev' }).first();
     await expect(devBtn).toBeVisible();
@@ -19,7 +19,7 @@ test.describe('EnvModeSwitcher', () => {
   });
 
   test('clicking "production" updates URL to ?env=production', async ({ page }) => {
-    await page.goto('/?env=dev&mode=paper');
+    await page.goto('/config-ui?env=dev&mode=paper');
 
     await page.getByRole('link', { name: 'production' }).click();
 
@@ -28,7 +28,7 @@ test.describe('EnvModeSwitcher', () => {
   });
 
   test('clicking "live" mode updates URL to ?mode=live', async ({ page }) => {
-    await page.goto('/?env=dev&mode=paper');
+    await page.goto('/config-ui?env=dev&mode=paper');
 
     await page.getByRole('link', { name: 'live' }).click();
 
@@ -37,7 +37,7 @@ test.describe('EnvModeSwitcher', () => {
   });
 
   test('clicking "paper" mode from live restores ?mode=paper', async ({ page }) => {
-    await page.goto('/?env=dev&mode=live');
+    await page.goto('/config-ui?env=dev&mode=live');
 
     await page.getByRole('link', { name: 'paper' }).click();
 
@@ -45,14 +45,14 @@ test.describe('EnvModeSwitcher', () => {
   });
 
   test('both ENV and MODE rows are visible', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/config-ui');
 
     await expect(page.getByText('ENV:')).toBeVisible();
     await expect(page.getByText('MODE:')).toBeVisible();
   });
 
   test('all four switcher options are rendered', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/config-ui');
 
     await expect(page.getByRole('link', { name: 'dev' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'production' })).toBeVisible();

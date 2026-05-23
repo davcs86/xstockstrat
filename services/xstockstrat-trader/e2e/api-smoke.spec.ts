@@ -49,7 +49,7 @@ test.describe('GET /api/orders — OrderBook data contract', () => {
    */
   test('returns orders array with all UI-required fields', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/api/orders?trading_mode=paper');
+    const res = await page.request.get('/trader/api/orders?trading_mode=paper');
     expect(res.status()).toBe(200);
 
     const body = await res.json();
@@ -87,7 +87,7 @@ test.describe('POST /api/orders — OrderForm success path', () => {
    */
   test('returns order_id and status used in the success message', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.post('/api/orders', {
+    const res = await page.request.post('/trader/api/orders', {
       data: {
         symbol: 'AAPL',
         side: 'buy',
@@ -114,7 +114,7 @@ test.describe('POST /api/orders — OrderForm success path', () => {
   test('returns error field when order placement fails', async ({ page }) => {
     await addAuthCookie(page);
     // Send an invalid payload (missing required fields) to trigger a 500
-    const res = await page.request.post('/api/orders', {
+    const res = await page.request.post('/trader/api/orders', {
       data: { symbol: '', qty: -1 },
     });
     // Route handler catches errors and returns JSON { error: ... } with status 500
@@ -140,7 +140,7 @@ test.describe('GET /api/portfolio — PortfolioSummary data contract', () => {
    */
   test('returns all numeric fields required by PortfolioSummary', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/api/portfolio?trading_mode=paper');
+    const res = await page.request.get('/trader/api/portfolio?trading_mode=paper');
     expect(res.status()).toBe(200);
 
     const body = await res.json();
@@ -168,7 +168,7 @@ test.describe('GET /api/portfolio — PortfolioSummary data contract', () => {
 
   test('positions array contains symbol and unrealized_pnl', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/api/portfolio?trading_mode=paper');
+    const res = await page.request.get('/trader/api/portfolio?trading_mode=paper');
     const body = await res.json();
 
     expect(Array.isArray(body.positions)).toBe(true);

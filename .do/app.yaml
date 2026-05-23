@@ -24,7 +24,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main
       deploy_on_push: false
-    source_dir: services/xstockstrat-trading
     dockerfile_path: services/xstockstrat-trading/Dockerfile
     http_port: 8051
     instance_count: 1
@@ -57,7 +56,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main
       deploy_on_push: false
-    source_dir: services/xstockstrat-portfolio
     dockerfile_path: services/xstockstrat-portfolio/Dockerfile
     http_port: 8052
     instance_count: 1
@@ -84,7 +82,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main
       deploy_on_push: false
-    source_dir: services/xstockstrat-marketdata
     dockerfile_path: services/xstockstrat-marketdata/Dockerfile
     http_port: 8053
     instance_count: 1
@@ -119,7 +116,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main
       deploy_on_push: false
-    source_dir: services/xstockstrat-indicators
     dockerfile_path: services/xstockstrat-indicators/Dockerfile
     http_port: 8054
     instance_count: 1
@@ -143,7 +139,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main
       deploy_on_push: false
-    source_dir: services/xstockstrat-ingest
     dockerfile_path: services/xstockstrat-ingest/Dockerfile
     http_port: 8055
     instance_count: 1
@@ -161,6 +156,8 @@ services:
         value: ${xstockstrat-notify.PRIVATE_URL}
       - key: MARKETDATA_ENDPOINT
         value: ${xstockstrat-marketdata.PRIVATE_URL}
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_URL}
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
@@ -172,7 +169,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main
       deploy_on_push: false
-    source_dir: services/xstockstrat-analysis
     dockerfile_path: services/xstockstrat-analysis/Dockerfile
     http_port: 8056
     instance_count: 1
@@ -307,7 +303,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main
       deploy_on_push: false
-    source_dir: services/xstockstrat-nginx
     dockerfile_path: services/xstockstrat-nginx/Dockerfile
     http_port: 80
     instance_count: 1
@@ -325,7 +320,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main
       deploy_on_push: false
-    source_dir: services/xstockstrat-trader
     dockerfile_path: services/xstockstrat-trader/Dockerfile
     instance_count: 1
     instance_size_slug: professional-xs
@@ -351,7 +345,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main
       deploy_on_push: false
-    source_dir: services/xstockstrat-insights
     dockerfile_path: services/xstockstrat-insights/Dockerfile
     instance_count: 1
     instance_size_slug: professional-xs
@@ -383,7 +376,6 @@ services:
       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
       branch: main
       deploy_on_push: false
-    source_dir: services/xstockstrat-config-ui
     dockerfile_path: services/xstockstrat-config-ui/Dockerfile
     instance_count: 1
     instance_size_slug: professional-xs
@@ -392,6 +384,8 @@ services:
         value: ${xstockstrat-config.PRIVATE_URL}
       - key: IDENTITY_HTTP_ENDPOINT
         value: ${xstockstrat-identity.PRIVATE_URL}
+      - key: INGEST_HTTP_ENDPOINT
+        value: ${xstockstrat-ingest.PRIVATE_URL}
       - key: APP_URL
         value: ${APP_URL}
       - key: JWT_SECRET
