@@ -15,10 +15,10 @@ As a platform operator, I want to assign a reliability weight to each signal sou
 ## Functional Requirements
 
 FR-1. The analysis service must apply a per-source multiplier to each signal's conviction before accumulating buy/sell totals in `_compute_signal_score()`.
-FR-2. Source weights must be read from the config service using the key `analysis.signals.source_weights` as a JSON object mapping source name to float multiplier (e.g. `{"goldman": 1.5, "citron": 0.8}`).
+FR-2. Source weights must be read from the config service using the key `analysis.signals.source_weights` as a JSON object mapping source name to float in `[0.0, 1.0]` (e.g. `{"goldman": 1.0, "citron": 0.5}`).
 FR-3. If a source is not present in the weights map, its effective multiplier must default to `1.0` (neutral — existing behaviour unchanged).
 FR-4. Weights must be read via the existing WatchConfig stream so changes apply to the next backtest run without a service restart.
-FR-5. The weighted conviction must remain clamped or handled such that the final `signal_score` stays in the `0.0–1.0` range.
+FR-5. Weight values must be clamped to `[0.0, 1.0]` at read time — any value below `0.0` is treated as `0.0` and any value above `1.0` is treated as `1.0`. The final `signal_score` must also remain in the `[0.0, 1.0]` range.
 FR-6. The new config key must be documented in the analysis service's `CLAUDE.md` under "Config Keys".
 
 ## Out of Scope
@@ -27,6 +27,7 @@ FR-6. The new config key must be documented in the analysis service's `CLAUDE.md
 - Per-symbol or per-timeframe weight overrides.
 - Retroactive re-scoring of completed backtests already stored in memory.
 - Any changes to the ingest service or the `ExternalSignal` proto schema.
+- Client-side validation of `[0.0, 1.0]` weight bounds in `xstockstrat-config-ui` — the config-ui generic editor accepts the JSON string as-is; clamping is enforced server-side in the analysis service (FR-5). See backlog idea `016-config-ui-weight-validation`.
 
 ## Affected Services
 
@@ -57,12 +58,13 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Acceptance Criteria
 
-1. A backtest run with `source_weights={"source_a": 2.0, "source_b": 0.5}` produces a different `signal_score` per bar than the same run with no weights, when both sources have active signals on that bar.
+1. A backtest run with `source_weights={"source_a": 1.0, "source_b": 0.5}` produces a different `signal_score` per bar than the same run with no weights, when both sources have active signals on that bar.
 2. A source absent from `source_weights` behaves identically to the current implementation (multiplier = 1.0).
-3. The `signal_score` output of `_compute_signal_score()` remains in `[0.0, 1.0]` under all weight combinations.
+3. The `signal_score` output of `_compute_signal_score()` remains in `[0.0, 1.0]` under all weight combinations, including when weights are at their extremes (`0.0` and `1.0`).
 4. Changing `analysis.signals.source_weights` via the config service takes effect on the next `RunBacktest` call without restarting the analysis service.
 5. The config key is documented in `services/xstockstrat-analysis/CLAUDE.md` under "Config Keys".
 
 ## Open Questions
 
-- [ ] Should weight values be bounded (e.g. max 10.0) to prevent a single source from dominating completely, or is that left to operator discretion?
+- [x] Should weight values be bounded to prevent a single source from dominating completely, or is that left to operator discretion?
+  **RESOLVED**: Weights are bounded to `[0.0, 1.0]`. Values outside this range are clamped at read time (see FR-5). A weight of `1.0` gives a source full influence; `0.0` silences it entirely.
