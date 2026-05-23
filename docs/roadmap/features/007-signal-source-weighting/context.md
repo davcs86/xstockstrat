@@ -21,6 +21,13 @@
 - Open question resolved: weights bounded to [0.0, 1.0], clamped at read time; FR-5 and AC-3 updated accordingly
 - Backlog idea 016-config-ui-weight-validation created for deferred client-side validation
 
+## Session 2026-05-23T00:00:01Z — sdd-execute
+
+### Step 2 — service: Apply per-source weight multiplier in `_compute_signal_score` [done]
+- Added `import json` at module level; read `analysis.signals.source_weights` via `get_str` in `RunBacktest` with JSON parse + clamp; threaded `source_weights` through `_backtest_symbol` signature and call site; extended `_compute_signal_score` signature with `source_weights: dict | None = None` and applied `weight = max(0.0, min(1.0, ...))` multiplier in the inner loop.
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: none
+
 ## Session 2026-05-23T00:00:00Z — sdd-execute
 
 ### Step 1 — config: Seed `analysis.signals.source_weights` config key [done]
