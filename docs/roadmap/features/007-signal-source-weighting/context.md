@@ -21,6 +21,13 @@
 - Open question resolved: weights bounded to [0.0, 1.0], clamped at read time; FR-5 and AC-3 updated accordingly
 - Backlog idea 016-config-ui-weight-validation created for deferred client-side validation
 
+## Session 2026-05-23T00:00:00Z — sdd-execute
+
+### Step 1 — config: Seed `analysis.signals.source_weights` config key [done]
+- Created up/down migration pair `003_analysis_signal_source_weights` in `services/xstockstrat-config/migrations/`. Inserts two rows (dev + production, trading_mode='all') with value_type='string', value_data='{}'. ON CONFLICT DO NOTHING guard ensures idempotency.
+- Files modified: `services/xstockstrat-config/migrations/003_analysis_signal_source_weights.up.sql`, `services/xstockstrat-config/migrations/003_analysis_signal_source_weights.down.sql`
+- Deviations: none
+
 ## Session 2026-05-23T00:00:00Z — sdd-spec
 
 - Generated implementation-spec.md with 4 steps. Status → implementation-ready.
