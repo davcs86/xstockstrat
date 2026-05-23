@@ -27,6 +27,7 @@ FR-6. The new config key must be documented in the analysis service's `CLAUDE.md
 - Per-symbol or per-timeframe weight overrides.
 - Retroactive re-scoring of completed backtests already stored in memory.
 - Any changes to the ingest service or the `ExternalSignal` proto schema.
+- Client-side validation of `[0.0, 1.0]` weight bounds in `xstockstrat-config-ui` — the config-ui generic editor accepts the JSON string as-is; clamping is enforced server-side in the analysis service (FR-5). See backlog idea `016-config-ui-weight-validation`.
 
 ## Affected Services
 
