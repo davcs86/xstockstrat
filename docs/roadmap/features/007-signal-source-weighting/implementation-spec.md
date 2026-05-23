@@ -91,7 +91,7 @@ ls services/xstockstrat-config/migrations/003_analysis_signal_source_weights.{up
 
 ### Step 2 — service: Apply per-source weight multiplier in `_compute_signal_score`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
