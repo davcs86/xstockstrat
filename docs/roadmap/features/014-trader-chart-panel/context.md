@@ -41,7 +41,7 @@
   - Step 4 lightweight-charts API uncertainty: already self-documented in the code note — no change needed.
 - wire-fe-auth (012, code-completed) overlap on `e2e/mock-backend.ts` and `playwright.config.ts` noted but deferred per user instruction; build Step 5 on top of merged 012 or rebase those two files before opening the final PR.
 
-## Session 2026-05-24T00:00:00Z — sdd-execute
+## Session 2026-05-24T00:00:00Z — sdd-execute (Step 1)
 
 **Steps this session**: [1]
 **Progress**: 1 done / 5 total
@@ -51,4 +51,16 @@
 ### Step 1 — service: Add `lightweight-charts` dependency [done]
 - Added `"lightweight-charts": "^4.2.0"` to `dependencies` in `package.json`, alphabetically between `lucide-react` and `next`. Ran `pnpm install` from repo root; installed version `4.2.3`.
 - Files modified: `services/xstockstrat-trader/package.json`, `pnpm-lock.yaml`
+- Deviations: none
+
+## Session 2026-05-24T01:00:00Z — sdd-execute (Step 2)
+
+**Steps this session**: [2]
+**Progress**: 2 done / 5 total
+**Stopped at**: Step 2 (complete — PR created for review)
+**Next**: /sdd-execute trader-chart-panel next
+
+### Step 2 — service: Add `/api/chart` Next.js route handler [done]
+- Created `src/app/api/chart/route.ts` with GET (GetBars proxy) and POST (ListAssets proxy). Auth guard on both handlers. Build passed; `/api/chart` appears as a dynamic route in Next.js build output.
+- Files modified: `services/xstockstrat-trader/src/app/api/chart/route.ts`
 - Deviations: none

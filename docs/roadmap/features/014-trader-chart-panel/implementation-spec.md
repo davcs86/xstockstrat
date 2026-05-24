@@ -50,7 +50,7 @@ cd services/xstockstrat-trader && grep '"lightweight-charts"' package.json
 
 ### Step 2 — service: Add `/api/chart` Next.js route handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/app/api/chart/route.ts` — create
