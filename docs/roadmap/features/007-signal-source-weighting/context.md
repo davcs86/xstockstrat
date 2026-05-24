@@ -61,3 +61,10 @@
   - Config service stores JSON payloads as `value_type='string'`; `buildConfigValue` returns `string_val` for both `'string'` and unknown types (confirmed at `configServiceImpl.ts:L248`); analysis watcher reads via `get_str()` then `json.loads()`
   - `xstockstrat-config-ui/app/sources/page.tsx:L164` already references `analysis.signals.source_weights` key name — confirms the key name is correct
   - `make_servicer()` in `test_analysis_servicer.py` mocks `get_float` but not `get_str`; Step 4 adds the missing `get_str` mock to prevent `json.loads(MagicMock())` TypeError in existing `TestRunBacktest` tests
+
+## Session 2026-05-24 (CI: feature status automation)
+
+- Promotion PR #321 merged to main
+- Feature promoted and committed: 75c8866a31dc4cce892192f7e4ce469add7345e1
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-05-24

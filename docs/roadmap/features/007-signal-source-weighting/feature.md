@@ -1,6 +1,8 @@
 # Feature: signal-source-weighting
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 75c8866a31dc4cce892192f7e4ce469add7345e1
+**Launched date**: 2026-05-24
 **Development Branch**: `feature/signal-source-weighting`
 **Created**: 2026-05-16
 **Last Updated**: 2026-05-24
@@ -17,6 +19,7 @@
 | 2026-05-23 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — config migration created |
 | 2026-05-24 | `in-progress` → `code-completed` | /sdd-execute | All 4 steps complete |
 
+| 2026-05-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #321; committed 75c8866a31dc4cce892192f7e4ce469add7345e1 |
 ---
 
 ## Artifacts
