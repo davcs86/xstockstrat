@@ -109,3 +109,18 @@
   - `services/xstockstrat-notify/src/webhooks/router.ts` webhook guard goes after `readBody` at L43, before `url` variable at L44 (inside `createWebhookRouter` function's `webhookHandler`).
   - `credentials_ref` from feature 008's `ingest.signal_sources` table must never be exposed in any tool response — confirmed by stripping it in `list_signal_sources` enrichment loop and not including it in `extract_email_content`/`extract_website_content` return values.
   - `xstockstrat-agent` service directory does NOT yet exist — confirmed `ls services/xstockstrat-agent` → NOT FOUND. All 13 steps remain pending.
+
+### Step 1 — service: Scaffold xstockstrat-agent service directory [done]
+- Created pyproject.toml with mcp>=1.0.0, httpx, anyio, starlette, uvicorn, grpcio>=1.80.0, protobuf>=5.26.0, pymupdf>=1.24.0; dev deps include respx for httpx mocking.
+- Created Dockerfile with python:3.12-slim base, uv toolchain, proto stubs layer, EXPOSE 9000.
+- Created empty package init files: app/__init__.py, app/config/__init__.py, app/prompts/__init__.py, tests/__init__.py.
+- Created tests/conftest.py with autouse fixture setting all required env vars.
+- Ran uv lock — resolved 49 packages, uv.lock committed.
+- Files modified: `services/xstockstrat-agent/pyproject.toml`, `services/xstockstrat-agent/Dockerfile`, `services/xstockstrat-agent/uv.lock`, `services/xstockstrat-agent/app/__init__.py`, `services/xstockstrat-agent/app/config/__init__.py`, `services/xstockstrat-agent/app/prompts/__init__.py`, `services/xstockstrat-agent/tests/__init__.py`, `services/xstockstrat-agent/tests/conftest.py`
+- Deviations: grpcio>=1.80.0 used instead of spec's >=1.63.0 (matches ingest reference service, operator approved Option A)
+
+## Session 2026-05-24T00:00:00Z — sdd-execute (Step 1)
+**Steps this session**: [1]
+**Progress**: 1 done / 13 total
+**Stopped at**: Step 1 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next

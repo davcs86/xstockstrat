@@ -1,6 +1,6 @@
 # Implementation Spec: agent-mcp-server
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-22
 **Feature**: `docs/roadmap/features/009-agent-mcp-server/feature.md`
 **Total Steps**: 13
@@ -30,7 +30,7 @@ This is a new standalone Python service with no proto changes and no DB migratio
 
 ### Step 1 — service: Scaffold xstockstrat-agent service directory
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
 - `services/xstockstrat-agent/pyproject.toml` — create
@@ -1979,4 +1979,7 @@ grep -n "mcp-tools" CLAUDE.md
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 1 — Scaffold xstockstrat-agent service directory
+**Spec said**: `grpcio>=1.63.0` in pyproject.toml
+**Actual**: `grpcio>=1.80.0`
+**Reason**: The reference service (xstockstrat-ingest) uses `grpcio>=1.80.0`. Using a consistent lower bound avoids potential version conflicts across the Python workspace. Option A selected by operator.
