@@ -244,7 +244,7 @@ grep -n "xstockstrat-marketdata" docker-compose.yml | grep -A0 "depends_on\|MARK
 
 ### Step 4 — service: Create `ChartPanel` component and mount on trading dashboard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/components/ChartPanel.tsx` — create
@@ -667,4 +667,6 @@ cd services/xstockstrat-trader && pnpm test:e2e
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 4 — ChartPanel timeframes and chart API
+**Spec said**: Timeframes `['1m', '5m', '15m', '1h', '1d']`; `chart.addSeries(CandlestickSeries, options)` (v5 API); polling interval 30 000 ms for all intraday.
+**Actual**: Timeframes changed to `['10Min', '30Min', '1Hour', '1Day', '1Week', '1Month']` (user request; Alpaca-native strings confirmed via integration-test.sh). `chart.addCandlestickSeries(options)` used instead (installed version is v4.2.3, which does not export `CandlestickSeries`; that export is v5-only). Per-timeframe poll intervals: 10Min→120s, 30Min→300s, 1Hour→900s; 1Day/1Week/1Month no auto-poll. Pre/after-market toggle omitted — backlogged as feature `017-premarket-aftermarket-session-toggle`.

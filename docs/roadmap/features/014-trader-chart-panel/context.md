@@ -77,6 +77,11 @@
 - Files modified: `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`
 - Deviations: none
 
+### Step 4 — service: Create `ChartPanel` component and mount on trading dashboard [done]
+- Created `ChartPanel.tsx` with 6 timeframes (10Min/30Min/1Hour/1Day/1Week/1Month), per-timeframe polling, symbol selector, bar-count selector, and lightweight-charts candlestick. Mounted full-width below the 3-column grid in `page.tsx`. Build passed.
+- Files modified: `services/xstockstrat-trader/src/components/ChartPanel.tsx`, `services/xstockstrat-trader/src/app/page.tsx`
+- Deviations: timeframes changed to Alpaca-native strings (user request + format verified via integration-test.sh); `addCandlestickSeries` used instead of `addSeries(CandlestickSeries)` — v4.2.3 does not export `CandlestickSeries` (v5 API); per-timeframe poll intervals; pre/after-market toggle omitted → feature 017.
+
 ## Open Items
 
 ### Pre/After-Market Session Toggle (raised during Step 4 plan)
