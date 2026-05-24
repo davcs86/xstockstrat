@@ -403,6 +403,7 @@ services:
       PORTFOLIO_HTTP_ENDPOINT: http://xstockstrat-portfolio:8052
       NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
       IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
+      MARKETDATA_HTTP_ENDPOINT: http://xstockstrat-marketdata:8053
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: trader
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
@@ -413,6 +414,7 @@ services:
       - xstockstrat-portfolio
       - xstockstrat-notify
       - xstockstrat-identity
+      - xstockstrat-marketdata
 
   # ── Insights Frontend ───────────────────────────────────────────────────
   xstockstrat-insights:
