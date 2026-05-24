@@ -65,14 +65,23 @@
 - Files modified: `services/xstockstrat-trader/src/app/api/chart/route.ts`
 - Deviations: none
 
-## Session 2026-05-24T02:00:00Z — sdd-execute (Step 3)
+## Session 2026-05-24T03:00:00Z — sdd-execute (Steps 3 + 4)
 
-**Steps this session**: [3]
-**Progress**: 3 done / 5 total
-**Stopped at**: Step 3 (complete — PR created for review)
+**Steps this session**: [3, 4]
+**Progress**: 4 done / 5 total
+**Stopped at**: Step 4 (complete — PR created for review)
 **Next**: /sdd-execute trader-chart-panel next
 
 ### Step 3 — service: Wire `MARKETDATA_HTTP_ENDPOINT` in deployment configs [done]
 - Added `MARKETDATA_HTTP_ENDPOINT` to `xstockstrat-trader` env block in all three deployment files and `xstockstrat-marketdata` to trader's `depends_on` in docker-compose.yml.
 - Files modified: `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`
 - Deviations: none
+
+## Open Items
+
+### Pre/After-Market Session Toggle (raised during Step 4 plan)
+- User requested a session toggle on intraday timeframes.
+- `GetBarsRequest` proto has no `session`/`extended_hours` field; backend cannot filter by session.
+- Decision: backlogged as feature idea `017-premarket-aftermarket-session-toggle`.
+- Created `docs/roadmap/features/017-premarket-aftermarket-session-toggle/feature.md` (status: `idea`).
+- Step 4 ChartPanel built without the session toggle; it can be added when the proto field is implemented.
