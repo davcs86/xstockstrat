@@ -82,6 +82,18 @@
 - Files modified: `services/xstockstrat-trader/src/components/ChartPanel.tsx`, `services/xstockstrat-trader/src/app/page.tsx`
 - Deviations: timeframes changed to Alpaca-native strings (user request + format verified via integration-test.sh); `addCandlestickSeries` used instead of `addSeries(CandlestickSeries)` — v4.2.3 does not export `CandlestickSeries` (v5 API); per-timeframe poll intervals; pre/after-market toggle omitted → feature 017.
 
+## Session 2026-05-24T04:00:00Z — sdd-execute (Step 5)
+
+**Steps this session**: [5]
+**Progress**: 5 done / 5 total
+**Stopped at**: Step 5 (complete — all steps done, feature code-completed)
+**Next**: Open integration PR `feature/trader-chart-panel` → `main-dev`
+
+### Step 5 — test: E2E coverage for `/api/chart` route and `ChartPanel` [done]
+- Added `GetBars` and `ListAssets` entries to RESPONSES map in `e2e/mock-backend.ts`. Added `MARKETDATA_HTTP_ENDPOINT: 'http://127.0.0.1:9091'` to `playwright.config.ts` webServer.env. Created `e2e/chart-panel.spec.ts` covering: GET /api/chart bars shape + 400 + 401, POST /api/chart symbols, ChartPanel card visible + 6 timeframe buttons (10m/30m/1h/1d/1w/1mo) + bar count selector + canvas render.
+- Files modified: `services/xstockstrat-trader/e2e/mock-backend.ts`, `services/xstockstrat-trader/playwright.config.ts`, `services/xstockstrat-trader/e2e/chart-panel.spec.ts` (created)
+- Deviations: `playwright.config.ts` also needed `MARKETDATA_HTTP_ENDPOINT` (not in original spec — added alongside mock-backend.ts update). Build verified clean after changes.
+
 ## Open Items
 
 ### Pre/After-Market Session Toggle (raised during Step 4 plan)

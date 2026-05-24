@@ -1,6 +1,6 @@
 # Feature: trader-chart-panel
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/trader-chart-panel`
 **Created**: 2026-05-20
 **Last Updated**: 2026-05-24
@@ -15,6 +15,7 @@
 | 2026-05-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning: 012-wire-fe-auth also modifies xstockstrat-trader — advisory merge order) |
 | 2026-05-20 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-05-24 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — lightweight-charts dependency added |
+| 2026-05-24 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done |
 
 ---
 
@@ -44,4 +45,4 @@ _(Snapshot finalized by /sdd-spec 2026-05-20 — all 5 steps assign this reviewe
 
 ## Next Action
 
-`/sdd-review trader-chart-panel impl-spec` — validate implementation spec, then `/sdd-execute trader-chart-panel`
+Open integration PR: `feature/trader-chart-panel` → `main-dev`
