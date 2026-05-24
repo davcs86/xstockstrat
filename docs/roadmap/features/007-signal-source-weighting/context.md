@@ -42,6 +42,16 @@
 - Files modified: `services/xstockstrat-config/migrations/003_analysis_signal_source_weights.up.sql`, `services/xstockstrat-config/migrations/003_analysis_signal_source_weights.down.sql`
 - Deviations: none
 
+## Session 2026-05-24T00:00:00Z — sdd-execute
+
+### Step 4 — test: Unit tests for weighted `_compute_signal_score` and config read path [done]
+- Added `cfg.get_str = MagicMock(side_effect=lambda key, default="": default)` to `make_servicer()` in `tests/test_analysis_servicer.py` to cover new JSON config read path without TypeError.
+- Appended `TestComputeSignalScoreWithWeights` class (8 tests) to `tests/test_analysis_helpers.py` covering: weight=1.0 identity, weight=0.0 silence, reduced influence, missing-source default=1.0, clamp above 1.0, clamp below 0.0, score always in [0.0,1.0], mixed weighted sources.
+- All 61 tests pass; coverage 46.94% (threshold 40%).
+- **Deviation**: grpcio version mismatch blocked pytest. `uv.lock` in all 3 Python services pinned grpcio 1.78.0 but generated stubs require >=1.80.0. Bumped `grpcio>=1.63.0` → `>=1.80.0` (and grpcio-reflection, grpcio-tools) in `pyproject.toml` for `xstockstrat-analysis`, `xstockstrat-indicators`, `xstockstrat-ingest`; regenerated all three `uv.lock` files.
+- Files modified: `services/xstockstrat-analysis/tests/test_analysis_helpers.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py`, `services/xstockstrat-analysis/pyproject.toml`, `services/xstockstrat-analysis/uv.lock`, `services/xstockstrat-indicators/pyproject.toml`, `services/xstockstrat-indicators/uv.lock`, `services/xstockstrat-ingest/pyproject.toml`, `services/xstockstrat-ingest/uv.lock`
+- Feature status → `code-completed`
+
 ## Session 2026-05-23T00:00:00Z — sdd-spec
 
 - Generated implementation-spec.md with 4 steps. Status → implementation-ready.
