@@ -31,6 +31,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "jose": "^5.0.0",
+    "lightweight-charts": "^4.2.0",
     "lucide-react": "^0.460.0",
     "next": "^15.5.15",
     "react": "^18.3.1",

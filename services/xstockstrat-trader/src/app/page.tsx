@@ -7,6 +7,7 @@ import { PortfolioPanel } from '@/components/PortfolioPanel';
 import { AlertStream } from '@/components/AlertStream';
 import { AccountSelector } from '@/components/AccountSelector';
 import { Button } from '@/components/ui/button';
+import { ChartPanel } from '@/components/ChartPanel';
 
 export type TradingMode = 'paper' | 'live';
 
@@ -37,6 +38,7 @@ export default function TradingDashboard() {
             <OrderBook mode={mode} />
           </div>
         </div>
+        <ChartPanel />
       </div>
     </AppShell>
   );
