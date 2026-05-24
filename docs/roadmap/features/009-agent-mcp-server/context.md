@@ -124,3 +124,16 @@
 **Progress**: 1 done / 13 total
 **Stopped at**: Step 1 (STEP COMMIT + PR — awaiting merge before next step)
 **Next**: /sdd-execute agent-mcp-server next
+
+### Step 2 — service: Implement HTTP and gRPC client wrapper [done]
+- Created app/client.py with post_ingest, post_notify, post_analysis (httpx, 30s timeout, raise_for_status) and get_config_value (one-shot GetConfig gRPC call, returns None on any error).
+- _headers() injects x-mcp-secret when MCP_AGENT_SECRET is set; omits header when empty.
+- All four env vars (INGEST_HTTP_ENDPOINT, NOTIFY_HTTP_ENDPOINT, ANALYSIS_HTTP_ENDPOINT, CONFIG_ENDPOINT) read at module level with correct defaults.
+- Files modified: `services/xstockstrat-agent/app/client.py`
+- Deviations: none
+
+## Session 2026-05-24T00:01:00Z — sdd-execute (Step 2)
+**Steps this session**: [2]
+**Progress**: 2 done / 13 total
+**Stopped at**: Step 2 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next

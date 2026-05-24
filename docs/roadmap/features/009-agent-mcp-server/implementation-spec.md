@@ -170,7 +170,7 @@ Confirm the following paths exist:
 
 ### Step 2 — service: Implement HTTP and gRPC client wrapper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — create
