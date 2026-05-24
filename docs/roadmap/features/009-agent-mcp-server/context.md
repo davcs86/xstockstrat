@@ -149,3 +149,18 @@
 **Progress**: 3 done / 13 total
 **Stopped at**: Step 3 (STEP COMMIT + PR — awaiting merge before next step)
 **Next**: /sdd-execute agent-mcp-server next
+
+### Step 4 — service: Implement MCP server tools and main entry point [done]
+- Created app/tools.py with register_tools() containing all six @server.tool() definitions and _EXTRACTOR_TOOL_MAP.
+- credentials_ref resolved via get_config_value() and used as password internally; never included in any return value.
+- _extract_from_bytes() attempts fitz/PyMuPDF PDF parse first, falls back to UTF-8 decode.
+- _fetch_url() uses Bearer auth header when password is set.
+- Created app/main.py with stdio and SSE transports; SSE guarded by validate_api_key() returning HTTP 401.
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/main.py`
+- Deviations: none
+
+## Session 2026-05-24T00:03:00Z — sdd-execute (Step 4)
+**Steps this session**: [4]
+**Progress**: 4 done / 13 total
+**Stopped at**: Step 4 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next

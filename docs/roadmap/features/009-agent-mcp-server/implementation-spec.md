@@ -358,7 +358,7 @@ grep -n "return False\|return True" services/xstockstrat-agent/app/auth.py
 
 ### Step 4 — service: Implement MCP server tools and main entry point
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — create
