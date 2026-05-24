@@ -64,3 +64,15 @@
 - Created `src/app/api/chart/route.ts` with GET (GetBars proxy) and POST (ListAssets proxy). Auth guard on both handlers. Build passed; `/api/chart` appears as a dynamic route in Next.js build output.
 - Files modified: `services/xstockstrat-trader/src/app/api/chart/route.ts`
 - Deviations: none
+
+## Session 2026-05-24T02:00:00Z — sdd-execute (Step 3)
+
+**Steps this session**: [3]
+**Progress**: 3 done / 5 total
+**Stopped at**: Step 3 (complete — PR created for review)
+**Next**: /sdd-execute trader-chart-panel next
+
+### Step 3 — service: Wire `MARKETDATA_HTTP_ENDPOINT` in deployment configs [done]
+- Added `MARKETDATA_HTTP_ENDPOINT` to `xstockstrat-trader` env block in all three deployment files and `xstockstrat-marketdata` to trader's `depends_on` in docker-compose.yml.
+- Files modified: `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`
+- Deviations: none

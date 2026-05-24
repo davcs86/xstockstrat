@@ -187,7 +187,7 @@ cd services/xstockstrat-trader && pnpm build
 
 ### Step 3 — service: Wire `MARKETDATA_HTTP_ENDPOINT` in deployment configs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `docker-compose.yml` — modify
