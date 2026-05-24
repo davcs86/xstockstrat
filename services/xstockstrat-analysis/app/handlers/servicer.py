@@ -10,6 +10,7 @@ RunBacktest implements a real SMA crossover engine that:
 ScoreStrategy grades backtests using Sharpe ratio, max drawdown, and win rate.
 """
 
+import json
 import logging
 import math
 import uuid
@@ -49,6 +50,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         backtest_id = str(uuid.uuid4())
         commission = self._cfg.get_float("analysis.backtest.default_commission_pct", 0.001)
         slippage = self._cfg.get_float("analysis.backtest.default_slippage_pct", 0.0005)
+        _weights_raw = self._cfg.get_str("analysis.signals.source_weights", default="{}")
+        try:
+            source_weights = {
+                k: max(0.0, min(1.0, float(v)))
+                for k, v in json.loads(_weights_raw).items()
+            } if _weights_raw else {}
+        except (ValueError, TypeError):
+            log.warning("analysis.signals.source_weights is not valid JSON — using empty weights")
+            source_weights = {}
 
         log.info(
             "running backtest id=%s strategy=%s symbols=%s",
@@ -116,6 +126,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     initial_equity=equity,
                     commission=commission,
                     slippage=slippage,
+                    source_weights=source_weights,
                     propagation_meta=propagation_meta,
                 )
                 all_trades.extend(trades)
@@ -186,6 +197,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         initial_equity,
         commission,
         slippage,
+        source_weights,
         propagation_meta=(),
     ):
         """Run SMA crossover backtest for a single symbol.
@@ -294,7 +306,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 tech_signal = 0.0
 
             # Signal score from newsletter signals active on this bar's date
-            signal_score = _compute_signal_score(signals_map, bar, signal_sources)
+            signal_score = _compute_signal_score(signals_map, bar, signal_sources, source_weights=source_weights)
 
             # Combined conviction
             if signal_weight > 0 and signals_map:
@@ -491,7 +503,7 @@ def _unwrap_value(v):
     return None
 
 
-def _compute_signal_score(signals_map: dict, bar, signal_sources: list) -> float:
+def _compute_signal_score(signals_map: dict, bar, signal_sources: list, source_weights: dict | None = None) -> float:
     """Return a 0.0–1.0 signal score from active newsletter signals for this bar."""
     if not signals_map or not signal_sources:
         return 0.5
@@ -502,6 +514,7 @@ def _compute_signal_score(signals_map: dict, bar, signal_sources: list) -> float
     count = 0
 
     for source in signal_sources:
+        weight = max(0.0, min(1.0, (source_weights or {}).get(source, 1.0)))
         for sig in signals_map.get(source, []):
             valid_from = sig.valid_from.ToDatetime() if sig.valid_from.seconds > 0 else None
             valid_until = sig.valid_until.ToDatetime() if sig.valid_until.seconds > 0 else None
@@ -511,9 +524,9 @@ def _compute_signal_score(signals_map: dict, bar, signal_sources: list) -> float
                 continue
             conviction = sig.conviction if sig.conviction > 0 else 0.5
             if sig.direction == "buy":
-                buy_conviction += conviction
+                buy_conviction += conviction * weight
             elif sig.direction == "sell":
-                sell_conviction += conviction
+                sell_conviction += conviction * weight
             count += 1
 
     if count == 0:
