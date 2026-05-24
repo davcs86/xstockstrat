@@ -277,7 +277,7 @@ grep -n "get_config_value\|GetConfig" services/xstockstrat-agent/app/client.py
 
 ### Step 3 — service: Implement SSE API-key auth middleware
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
 - `services/xstockstrat-agent/app/auth.py` — create
