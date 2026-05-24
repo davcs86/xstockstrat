@@ -137,3 +137,15 @@
 **Progress**: 2 done / 13 total
 **Stopped at**: Step 2 (STEP COMMIT + PR — awaiting merge before next step)
 **Next**: /sdd-execute agent-mcp-server next
+
+### Step 3 — service: Implement SSE API-key auth middleware [done]
+- Created app/auth.py with validate_api_key() — parses Bearer token, calls IdentityServiceStub.ValidateApiKey via grpc.aio, returns True/False, never raises.
+- AioRpcError logged at INFO; unexpected errors logged at ERROR — both return False.
+- Files modified: `services/xstockstrat-agent/app/auth.py`
+- Deviations: none
+
+## Session 2026-05-24T00:02:00Z — sdd-execute (Step 3)
+**Steps this session**: [3]
+**Progress**: 3 done / 13 total
+**Stopped at**: Step 3 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next
