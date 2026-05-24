@@ -332,6 +332,8 @@ services:
         value: ${xstockstrat-notify.PRIVATE_URL}
       - key: IDENTITY_HTTP_ENDPOINT
         value: ${xstockstrat-identity.PRIVATE_URL}
+      - key: MARKETDATA_HTTP_ENDPOINT
+        value: ${xstockstrat-marketdata.PRIVATE_URL}
       - key: APP_URL
         value: ${APP_URL}
       - key: JWT_SECRET

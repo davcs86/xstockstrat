@@ -1,0 +1,103 @@
+name: Cleanup merged claude/* branches
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run — list branches that would be deleted, but do not delete"
+        type: boolean
+        default: true
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Delete claude/* branches whose PRs are all closed or merged
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          echo "Repository: $REPO"
+          echo "Dry run:    $DRY_RUN"
+          echo
+
+          mapfile -t branches < <(
+            gh api "repos/$REPO/branches" --paginate -q '.[].name' \
+              | grep '^claude/' \
+              | sort -u
+          )
+
+          if [ "${#branches[@]}" -eq 0 ]; then
+            echo "No claude/* branches found."
+            exit 0
+          fi
+
+          echo "Found ${#branches[@]} claude/* branch(es)."
+          echo
+
+          deleted=0
+          skipped_open=0
+          skipped_no_pr=0
+          failed=0
+
+          for branch in "${branches[@]}"; do
+            prs_json=$(gh pr list \
+              --repo "$REPO" \
+              --head "$branch" \
+              --state all \
+              --json state,number,url \
+              --limit 100)
+
+            pr_count=$(jq 'length' <<<"$prs_json")
+
+            if [ "$pr_count" -eq 0 ]; then
+              echo "KEEP   $branch — no PR found"
+              skipped_no_pr=$((skipped_no_pr + 1))
+              continue
+            fi
+
+            open_count=$(jq '[.[] | select(.state == "OPEN")] | length' <<<"$prs_json")
+
+            if [ "$open_count" -gt 0 ]; then
+              open_urls=$(jq -r '[.[] | select(.state == "OPEN") | .url] | join(", ")' <<<"$prs_json")
+              echo "KEEP   $branch — open PR(s): $open_urls"
+              skipped_open=$((skipped_open + 1))
+              continue
+            fi
+
+            pr_urls=$(jq -r '[.[] | .url] | join(", ")' <<<"$prs_json")
+
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "DRY    $branch — would delete (closed/merged PR(s): $pr_urls)"
+              deleted=$((deleted + 1))
+              continue
+            fi
+
+            echo "DELETE $branch — closed/merged PR(s): $pr_urls"
+            if gh api -X DELETE "repos/$REPO/git/refs/heads/$branch" --silent; then
+              deleted=$((deleted + 1))
+            else
+              echo "::warning::Failed to delete $branch"
+              failed=$((failed + 1))
+            fi
+          done
+
+          echo
+          echo "Summary:"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "  Would delete:    $deleted"
+          else
+            echo "  Deleted:         $deleted"
+          fi
+          echo "  Kept (open PR):  $skipped_open"
+          echo "  Kept (no PR):    $skipped_no_pr"
+          if [ "$failed" -gt 0 ]; then
+            echo "  Failed:          $failed"
+            exit 1
+          fi
