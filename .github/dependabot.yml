@@ -1,0 +1,73 @@
+version: 2
+
+# This file exists so Dependabot SECURITY-update PRs target main-dev instead
+# of the default branch (main). Without it, security PRs land on main and
+# violate the branch strategy in CLAUDE.md ("All claude/* branches must be
+# based on main-dev, not main"; promotions main-dev → main are the only
+# permitted source of changes on main).
+#
+# `open-pull-requests-limit: 0` disables ROUTINE version-update PRs for every
+# ecosystem; security updates ignore that limit, so we still receive them,
+# they just land on main-dev where CI gates them and the next /promote
+# carries them to main.
+
+updates:
+  # Node.js workspace (pnpm) — root lockfile manages all Node/Next services
+  - package-ecosystem: npm
+    directory: /
+    target-branch: main-dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  # Python services (pip ecosystem covers uv lockfiles)
+  - package-ecosystem: pip
+    directory: /services/xstockstrat-indicators
+    target-branch: main-dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: pip
+    directory: /services/xstockstrat-ingest
+    target-branch: main-dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: pip
+    directory: /services/xstockstrat-analysis
+    target-branch: main-dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  # Go services
+  - package-ecosystem: gomod
+    directory: /services/xstockstrat-trading
+    target-branch: main-dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: gomod
+    directory: /services/xstockstrat-marketdata
+    target-branch: main-dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: gomod
+    directory: /services/xstockstrat-portfolio
+    target-branch: main-dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: main-dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
