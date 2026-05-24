@@ -1,6 +1,6 @@
 # Implementation Spec: signal-source-weighting
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-05-23
 **Feature**: `docs/roadmap/features/007-signal-source-weighting/feature.md`
 **Total Steps**: 4
@@ -29,7 +29,7 @@ unit tests for the weighted scoring logic.
 
 ### Step 1 — config: Seed `analysis.signals.source_weights` config key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/003_analysis_signal_source_weights.up.sql` — create
@@ -91,7 +91,7 @@ ls services/xstockstrat-config/migrations/003_analysis_signal_source_weights.{up
 
 ### Step 2 — service: Apply per-source weight multiplier in `_compute_signal_score`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -220,7 +220,7 @@ grep -n "^import json" services/xstockstrat-analysis/app/handlers/servicer.py
 
 ### Step 3 — docs: Document `analysis.signals.source_weights` in analysis CLAUDE.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -249,7 +249,7 @@ grep -n "source_weights" services/xstockstrat-analysis/CLAUDE.md
 
 ### Step 4 — test: Unit tests for weighted `_compute_signal_score` and config read path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_helpers.py` — modify
@@ -382,4 +382,16 @@ Confirm: all new tests pass, existing tests still pass, coverage threshold ≥ 4
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 4 deviation — grpcio version bump (all 3 Python services)
+
+**Cause**: pytest import of generated proto stubs (`analysis_pb2_grpc.py`) raised `RuntimeError: The grpc package installed is at version 1.78.0, but the generated code depends on grpcio>=1.80.0`. The `uv.lock` files for all three Python services (`xstockstrat-analysis`, `xstockstrat-indicators`, `xstockstrat-ingest`) pinned grpcio at 1.78.0.
+
+**Fix applied**: Bumped `grpcio>=1.63.0` → `>=1.80.0` (also `grpcio-reflection` and `grpcio-tools`) in `pyproject.toml` for all three services; regenerated each service's `uv.lock` via `uv lock`. No API changes; this is a minimum-version constraint update only.
+
+**Files outside original Step 4 scope**:
+- `services/xstockstrat-analysis/pyproject.toml`
+- `services/xstockstrat-analysis/uv.lock`
+- `services/xstockstrat-indicators/pyproject.toml`
+- `services/xstockstrat-indicators/uv.lock`
+- `services/xstockstrat-ingest/pyproject.toml`
+- `services/xstockstrat-ingest/uv.lock`
