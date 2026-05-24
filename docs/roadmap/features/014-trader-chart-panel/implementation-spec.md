@@ -1,6 +1,6 @@
 # Implementation Spec: trader-chart-panel
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-20
 **Feature**: `docs/roadmap/features/014-trader-chart-panel/feature.md`
 **Total Steps**: 5
@@ -480,7 +480,7 @@ cd services/xstockstrat-trader && pnpm build
 
 ### Step 5 — test: E2E coverage for `/api/chart` route and `ChartPanel`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/e2e/chart-panel.spec.ts` — create
