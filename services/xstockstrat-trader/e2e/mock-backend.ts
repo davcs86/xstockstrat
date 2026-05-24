@@ -122,6 +122,44 @@ let RESPONSES: Record<string, object> = {
       },
     ],
   },
+  '/xstockstrat.marketdata.v1.MarketDataService/GetBars': {
+    bars: [
+      {
+        symbol: 'AAPL',
+        time: { seconds: 1716422400, nanos: 0 },
+        open: 188.0,
+        high: 190.5,
+        low: 187.2,
+        close: 189.8,
+        volume: 45000000,
+        vwap: 189.1,
+        trade_count: 120000,
+        timeframe: '1Day',
+        source: 'alpaca',
+      },
+      {
+        symbol: 'AAPL',
+        time: { seconds: 1716508800, nanos: 0 },
+        open: 189.8,
+        high: 192.0,
+        low: 188.5,
+        close: 191.5,
+        volume: 38000000,
+        vwap: 190.5,
+        trade_count: 98000,
+        timeframe: '1Day',
+        source: 'alpaca',
+      },
+    ],
+    page: { next_page_token: '', total_count: 2 },
+  },
+  '/xstockstrat.marketdata.v1.MarketDataService/ListAssets': {
+    assets: [
+      { symbol: 'AAPL', exchange: 'NASDAQ', asset_class: 'us_equity' },
+      { symbol: 'MSFT', exchange: 'NASDAQ', asset_class: 'us_equity' },
+      { symbol: 'TSLA', exchange: 'NASDAQ', asset_class: 'us_equity' },
+    ],
+  },
 };
 
 let server: http.Server | null = null;
