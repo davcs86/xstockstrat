@@ -750,7 +750,7 @@ grep -n "credentials_ref" services/xstockstrat-agent/app/tools.py
 
 ### Step 5 — service: Add system prompt file
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
 - `services/xstockstrat-agent/app/prompts/signal_extraction.md` — create

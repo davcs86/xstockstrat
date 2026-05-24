@@ -164,3 +164,15 @@
 **Progress**: 4 done / 13 total
 **Stopped at**: Step 4 (STEP COMMIT + PR — awaiting merge before next step)
 **Next**: /sdd-execute agent-mcp-server next
+
+### Step 5 — service: Add system prompt file [done]
+- Created app/prompts/signal_extraction.md covering both email and website ingestion flows, signal field extraction table, conviction scoring guidance, emit_alert vs skip rules, and error handling for all six tools.
+- extractor_tool routing is the authoritative directive — doc explicitly forbids inferring from source_type.
+- Files modified: `services/xstockstrat-agent/app/prompts/signal_extraction.md`
+- Deviations: none
+
+## Session 2026-05-24T00:04:00Z — sdd-execute (Step 5)
+**Steps this session**: [5]
+**Progress**: 5 done / 13 total
+**Stopped at**: Step 5 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next
