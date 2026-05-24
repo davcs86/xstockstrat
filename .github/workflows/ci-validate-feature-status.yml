@@ -118,3 +118,59 @@ jobs:
           else
             echo "ℹ Skipping: Not a promotion PR merge (no 'release: promote' in commit message)"
           fi
+
+      - name: Delete orphan feature branches
+        run: |
+          set -e
+
+          echo "=== Orphan Feature Branch Cleanup ==="
+
+          # List all remote feature/* and feature-steps/* branches
+          REMOTE_BRANCHES=$(git ls-remote --heads origin 'refs/heads/feature/*' 'refs/heads/feature-steps/*' \
+            | awk '{print $2}' | sed 's|refs/heads/||')
+
+          if [ -z "$REMOTE_BRANCHES" ]; then
+            echo "ℹ No remote feature/* or feature-steps/* branches found"
+            exit 0
+          fi
+
+          DELETED=0
+          SKIPPED=0
+
+          while IFS= read -r branch; do
+            [ -z "$branch" ] && continue
+
+            # Derive feature directory slug from branch name
+            if [[ "$branch" == feature-steps/* ]]; then
+              # feature-steps/<NNN-slug>-step-<N>  →  strip prefix and trailing -step-N
+              slug=$(echo "$branch" | sed 's|feature-steps/||' | sed 's/-step-[0-9]*$//')
+            else
+              # feature/<NNN-slug>  →  strip prefix
+              slug=$(echo "$branch" | sed 's|feature/||')
+            fi
+
+            feature_md="docs/roadmap/features/$slug/feature.md"
+
+            if [ ! -f "$feature_md" ]; then
+              echo "  ⚠ $branch: no feature.md at $feature_md — skipping"
+              SKIPPED=$((SKIPPED + 1))
+              continue
+            fi
+
+            status=$(sed -n 's/.*\*\*Lifecycle Status\*\*[^`]*`\([^`]*\)`.*/\1/p' "$feature_md" | head -1)
+
+            case "$status" in
+              launched|rolled-back|demoted/canceled)
+                echo "  → Deleting orphan: $branch (status: $status)"
+                git push origin --delete "$branch"
+                DELETED=$((DELETED + 1))
+                ;;
+              *)
+                echo "  ✓ Keeping: $branch (status: $status)"
+                SKIPPED=$((SKIPPED + 1))
+                ;;
+            esac
+          done <<< "$REMOTE_BRANCHES"
+
+          echo ""
+          echo "✓ Cleanup complete: $DELETED deleted, $SKIPPED skipped"
