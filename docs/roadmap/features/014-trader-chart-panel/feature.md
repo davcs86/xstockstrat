@@ -1,6 +1,8 @@
 # Feature: trader-chart-panel
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: e991fcb52eeda41985c6403983a2b20cb6f9a04b
+**Launched date**: 2026-05-24
 **Development Branch**: `feature/trader-chart-panel`
 **Created**: 2026-05-20
 **Last Updated**: 2026-05-24
@@ -17,6 +19,7 @@
 | 2026-05-24 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — lightweight-charts dependency added |
 | 2026-05-24 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done |
 
+| 2026-05-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #341; committed e991fcb52eeda41985c6403983a2b20cb6f9a04b |
 ---
 
 ## Artifacts
