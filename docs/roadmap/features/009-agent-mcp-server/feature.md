@@ -1,9 +1,9 @@
 # Feature: agent-mcp-server
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/agent-mcp-server`
 **Created**: 2026-05-16
-**Last Updated**: 2026-05-22 (regenerated)
+**Last Updated**: 2026-05-24
 
 ---
 
@@ -16,6 +16,7 @@
 | 2026-05-21 | `implementation-ready` → `spec-ready` | scope change | Nginx routing + DO app spec + identity auth added; impl-spec requires regeneration |
 | 2026-05-21 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec regenerated with 11 steps (added nginx, DO spec, identity SSE auth) |
 | 2026-05-22 | `implementation-ready` → `implementation-ready` | /sdd-spec (re-run) | Implementation spec regenerated with 13 steps — added extract_email_content and extract_website_content tools, extractor_tool enrichment, CONFIG_ENDPOINT for credential resolution, pymupdf dep |
+| 2026-05-24 | `implementation-ready` → `in-progress` | /sdd-execute Step 1 | Service scaffold created — pyproject.toml, Dockerfile, uv.lock, app package structure |
 
 ---
 
