@@ -23,7 +23,7 @@ All work is confined to `xstockstrat-trader`. Steps execute in strict order: add
 
 ### Step 1 — service: Add `lightweight-charts` dependency
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/package.json` — modify
