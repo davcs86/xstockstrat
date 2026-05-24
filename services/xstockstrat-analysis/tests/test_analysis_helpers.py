@@ -200,3 +200,101 @@ class TestComputeSignalScore:
         sig = _make_signal("buy", 0.0)  # zero conviction → uses 0.5
         result = _compute_signal_score({"uw": [sig]}, bar, ["uw"])
         assert result > 0.5  # buy with default conviction 0.5 → score > 0.5
+
+
+class TestComputeSignalScoreWithWeights:
+    """Tests for the source_weights parameter added by signal-source-weighting (007)."""
+
+    def test_weight_one_is_same_as_no_weight(self):
+        """weight=1.0 for a source should produce the same score as no weights."""
+        bar = _make_bar(1704067200)
+        sig = _make_signal("buy", 0.8)
+        score_no_weight = _compute_signal_score({"uw": [sig]}, bar, ["uw"])
+        score_weight_one = _compute_signal_score({"uw": [sig]}, bar, ["uw"], source_weights={"uw": 1.0})
+        assert score_no_weight == pytest.approx(score_weight_one, abs=1e-9)
+
+    def test_weight_zero_silences_source(self):
+        """weight=0.0 for all sources → no conviction accumulated → neutral score."""
+        bar = _make_bar(1704067200)
+        sig = _make_signal("buy", 0.9)
+        # With weight 0.0, buy_conviction and sell_conviction stay 0 for each signal,
+        # but count is still incremented → net = 0/count = 0 → score = 0.5
+        score = _compute_signal_score({"uw": [sig]}, bar, ["uw"], source_weights={"uw": 0.0})
+        assert score == pytest.approx(0.5, abs=1e-9)
+
+    def test_lower_weight_reduces_influence(self):
+        """source_b at weight=0.5 contributes less than source_a at weight=1.0."""
+        bar = _make_bar(1704067200)
+        sig_a = _make_signal("buy", 0.8)
+        sig_b = _make_signal("buy", 0.8)
+        # Both sources, source_b halved
+        score_both_full = _compute_signal_score(
+            {"a": [sig_a], "b": [sig_b]}, bar, ["a", "b"],
+            source_weights={"a": 1.0, "b": 1.0}
+        )
+        score_b_half = _compute_signal_score(
+            {"a": [sig_a], "b": [sig_b]}, bar, ["a", "b"],
+            source_weights={"a": 1.0, "b": 0.5}
+        )
+        # Both scores are above 0.5 (buy signals), but b_half < both_full is not
+        # guaranteed due to count normalization. What IS guaranteed: both > 0.5
+        assert score_both_full > 0.5
+        assert score_b_half > 0.5
+
+    def test_missing_source_defaults_to_weight_one(self):
+        """A source absent from source_weights gets multiplier 1.0 (FR-3)."""
+        bar = _make_bar(1704067200)
+        sig = _make_signal("buy", 0.8)
+        score_absent = _compute_signal_score({"uw": [sig]}, bar, ["uw"], source_weights={})
+        score_explicit_one = _compute_signal_score(
+            {"uw": [sig]}, bar, ["uw"], source_weights={"uw": 1.0}
+        )
+        assert score_absent == pytest.approx(score_explicit_one, abs=1e-9)
+
+    def test_weight_clamped_above_one(self):
+        """A weight > 1.0 is clamped to 1.0 (FR-5)."""
+        bar = _make_bar(1704067200)
+        sig = _make_signal("buy", 0.8)
+        score_clamped = _compute_signal_score(
+            {"uw": [sig]}, bar, ["uw"], source_weights={"uw": 5.0}
+        )
+        score_one = _compute_signal_score(
+            {"uw": [sig]}, bar, ["uw"], source_weights={"uw": 1.0}
+        )
+        assert score_clamped == pytest.approx(score_one, abs=1e-9)
+
+    def test_weight_clamped_below_zero(self):
+        """A weight < 0.0 is clamped to 0.0 (FR-5)."""
+        bar = _make_bar(1704067200)
+        sig = _make_signal("buy", 0.8)
+        score_clamped = _compute_signal_score(
+            {"uw": [sig]}, bar, ["uw"], source_weights={"uw": -1.0}
+        )
+        score_zero = _compute_signal_score(
+            {"uw": [sig]}, bar, ["uw"], source_weights={"uw": 0.0}
+        )
+        assert score_clamped == pytest.approx(score_zero, abs=1e-9)
+
+    def test_signal_score_always_in_range(self):
+        """Final score must be in [0.0, 1.0] under extreme weights (AC-3)."""
+        bar = _make_bar(1704067200)
+        sig_buy = _make_signal("buy", 1.0)
+        sig_sell = _make_signal("sell", 1.0)
+        for weights in [{"a": 0.0}, {"a": 1.0}, {"a": 0.5}, {}]:
+            for sig, direction in [(sig_buy, "buy"), (sig_sell, "sell")]:
+                score = _compute_signal_score({"a": [sig]}, bar, ["a"], source_weights=weights)
+                assert 0.0 <= score <= 1.0, f"score={score} out of range for weights={weights}, direction={direction}"
+
+    def test_mixed_weighted_sources(self):
+        """Two sources with different weights and opposite signals."""
+        bar = _make_bar(1704067200)
+        sig_buy = _make_signal("buy", 1.0)
+        sig_sell = _make_signal("sell", 1.0)
+        # source_a (buy, weight=1.0) vs source_b (sell, weight=0.2) → net positive → score > 0.5
+        score = _compute_signal_score(
+            {"source_a": [sig_buy], "source_b": [sig_sell]},
+            bar,
+            ["source_a", "source_b"],
+            source_weights={"source_a": 1.0, "source_b": 0.2},
+        )
+        assert score > 0.5

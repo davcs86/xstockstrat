@@ -22,6 +22,7 @@ def make_servicer() -> AnalysisServicer:
     cfg = MagicMock()
     # Make get_float return the default argument (mirrors real watcher behaviour)
     cfg.get_float = MagicMock(side_effect=lambda key, default=0.0: default)
+    cfg.get_str = MagicMock(side_effect=lambda key, default="": default)
     return AnalysisServicer(
         cfg,
         marketdata_channel=MagicMock(),
