@@ -21,7 +21,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      matched: ${{ steps.build-matched.outputs.matched }}
+      matched: ${{ steps.filter.outputs.changes }}
     steps:
       - uses: actions/checkout@v6
 
@@ -30,6 +30,9 @@ jobs:
         with:
           # Each filter name is referenced verbatim by downstream `if:` gates.
           # Service filter names MUST match the matrix.service values exactly.
+          # paths-filter@v3 emits a default `changes` output: a JSON array of
+          # filter names that matched. That array is what downstream jobs read
+          # via needs.changes.outputs.matched — no extra jq step required.
           filters: |
             ci:
               - '.github/workflows/ci.yml'
@@ -56,6 +59,7 @@ jobs:
             xstockstrat-trader:     ['services/xstockstrat-trader/**']
             xstockstrat-insights:   ['services/xstockstrat-insights/**']
             xstockstrat-config-ui:  ['services/xstockstrat-config-ui/**']
+            xstockstrat-nginx:      ['services/xstockstrat-nginx/**', 'nginx.conf']
             dockerfiles:
               - '**/Dockerfile*'
               - '.hadolint.yaml'
@@ -66,53 +70,12 @@ jobs:
               - '**/CLAUDE.md'
               - '.markdownlint.yaml'
 
-      - name: Build matched filters JSON
-        id: build-matched
+      - name: Print matched filters
         run: |
-          matched=$(jq -n \
-            --argjson ci '${{ steps.filter.outputs.ci }}' \
-            --argjson proto '${{ steps.filter.outputs.proto }}' \
-            --argjson go_shared '${{ steps.filter.outputs.go-shared }}' \
-            --argjson node_shared '${{ steps.filter.outputs.node-shared }}' \
-            --argjson xstockstrat_trading '${{ steps.filter.outputs.xstockstrat-trading }}' \
-            --argjson xstockstrat_marketdata '${{ steps.filter.outputs.xstockstrat-marketdata }}' \
-            --argjson xstockstrat_portfolio '${{ steps.filter.outputs.xstockstrat-portfolio }}' \
-            --argjson xstockstrat_indicators '${{ steps.filter.outputs.xstockstrat-indicators }}' \
-            --argjson xstockstrat_ingest '${{ steps.filter.outputs.xstockstrat-ingest }}' \
-            --argjson xstockstrat_analysis '${{ steps.filter.outputs.xstockstrat-analysis }}' \
-            --argjson xstockstrat_config '${{ steps.filter.outputs.xstockstrat-config }}' \
-            --argjson xstockstrat_ledger '${{ steps.filter.outputs.xstockstrat-ledger }}' \
-            --argjson xstockstrat_identity '${{ steps.filter.outputs.xstockstrat-identity }}' \
-            --argjson xstockstrat_notify '${{ steps.filter.outputs.xstockstrat-notify }}' \
-            --argjson xstockstrat_trader '${{ steps.filter.outputs.xstockstrat-trader }}' \
-            --argjson xstockstrat_insights '${{ steps.filter.outputs.xstockstrat-insights }}' \
-            --argjson xstockstrat_config_ui '${{ steps.filter.outputs.xstockstrat-config-ui }}' \
-            --argjson dockerfiles '${{ steps.filter.outputs.dockerfiles }}' \
-            --argjson scripts '${{ steps.filter.outputs.scripts }}' \
-            --argjson claude_md '${{ steps.filter.outputs.claude-md }}' \
-            '[
-              if $ci then "ci" else empty end,
-              if $proto then "proto" else empty end,
-              if $go_shared then "go-shared" else empty end,
-              if $node_shared then "node-shared" else empty end,
-              if $xstockstrat_trading then "xstockstrat-trading" else empty end,
-              if $xstockstrat_marketdata then "xstockstrat-marketdata" else empty end,
-              if $xstockstrat_portfolio then "xstockstrat-portfolio" else empty end,
-              if $xstockstrat_indicators then "xstockstrat-indicators" else empty end,
-              if $xstockstrat_ingest then "xstockstrat-ingest" else empty end,
-              if $xstockstrat_analysis then "xstockstrat-analysis" else empty end,
-              if $xstockstrat_config then "xstockstrat-config" else empty end,
-              if $xstockstrat_ledger then "xstockstrat-ledger" else empty end,
-              if $xstockstrat_identity then "xstockstrat-identity" else empty end,
-              if $xstockstrat_notify then "xstockstrat-notify" else empty end,
-              if $xstockstrat_trader then "xstockstrat-trader" else empty end,
-              if $xstockstrat_insights then "xstockstrat-insights" else empty end,
-              if $xstockstrat_config_ui then "xstockstrat-config-ui" else empty end,
-              if $dockerfiles then "dockerfiles" else empty end,
-              if $scripts then "scripts" else empty end,
-              if $claude_md then "claude-md" else empty end
-            ]')
-          echo "matched=$(echo "$matched" | jq -c .)" >> "$GITHUB_OUTPUT"
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref:   ${{ github.ref }}"
+          echo "SHA:   ${{ github.sha }}"
+          echo "Matched filters: ${{ steps.filter.outputs.changes }}"
 
   proto-lint:
     name: Proto lint and breaking check
