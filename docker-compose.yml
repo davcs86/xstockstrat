@@ -392,8 +392,8 @@ services:
   xstockstrat-trader:
     <<: *svc
     build:
-      context: ./services/xstockstrat-trader
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/xstockstrat-trader/Dockerfile
     container_name: xstockstrat-trader
     env_file: [".env.local", ".env.fe.local"]
     environment:
@@ -418,8 +418,8 @@ services:
   xstockstrat-insights:
     <<: *svc
     build:
-      context: ./services/xstockstrat-insights
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/xstockstrat-insights/Dockerfile
     container_name: xstockstrat-insights
     env_file: [".env.local", ".env.fe.local"]
     environment:
@@ -446,8 +446,8 @@ services:
   xstockstrat-config-ui:
     <<: *svc
     build:
-      context: ./services/xstockstrat-config-ui
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/xstockstrat-config-ui/Dockerfile
     container_name: xstockstrat-config-ui
     env_file: [".env.local", ".env.fe.local"]
     environment:

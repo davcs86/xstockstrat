@@ -15,6 +15,13 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ## 2026-05-24
 
+### Summary
+2 commits, 2 feature merges since last promotion.
+
+---
+
+## 2026-05-24
+
 ### Features
 - signal-source-weighting: Add per-source reliability weights to the signal aggregation in the analysis service so that higher-trust sources (e.g. Goldman) have proportionally more influence on the combined conviction score than low-quality newsletters. Weights are configurable via the config service without code changes.
 
