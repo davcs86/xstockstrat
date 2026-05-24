@@ -7,6 +7,16 @@ on:
       - main-dev
       - main
 
+# dorny/paths-filter@v3 calls GET /repos/:owner/:repo/pulls/:number/files on
+# pull_request events. Dependabot-triggered runs get a read-only GITHUB_TOKEN
+# whose default does NOT include pull-requests:read, so the API call fails,
+# the `changes` job errors out, and every downstream needs:changes job is
+# skipped — surfacing as "no jobs were run". Granting these scopes
+# explicitly keeps the path filter working for Dependabot PRs.
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   changes:
     name: Detect changed paths
@@ -443,7 +453,7 @@ jobs:
         with:
           node-version: "22"
           cache: 'pnpm'
-          cache-dependency-path: services/${{ matrix.service }}/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: install dependencies
         run: pnpm install --frozen-lockfile
