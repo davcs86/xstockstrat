@@ -11,11 +11,14 @@ Six tools:
 """
 import base64
 import logging
+import os
 from typing import Optional
 
 from mcp.server import Server
 
 from app import client
+
+_ALERT_THRESHOLD = float(os.environ.get("MCP_ALERT_THRESHOLD", "0.6"))
 
 log = logging.getLogger(__name__)
 
@@ -162,7 +165,7 @@ def register_tools(server: Server) -> None:
             payload["tags"] = tags
         result = await client.post_ingest("/webhooks/ingest-signal", payload)
         # Auto-emit alert for high-conviction signals — deterministic rule, not model-driven.
-        if conviction is not None and conviction >= 0.6:
+        if conviction is not None and conviction >= _ALERT_THRESHOLD:
             try:
                 alert_title = headline if headline else f"{direction.upper()} {symbol} via {source}"
                 alert_body = f"Signal ingested: {direction} {symbol} (conviction {conviction:.2f})"

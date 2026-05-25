@@ -183,3 +183,10 @@
 - Modified signal_extraction.md: removed "When to Call emit_alert vs. Skip" section; replaced with "Alerting" note explaining auto-emit and when to use emit_alert directly.
 - Recorded in Deviation Log (Steps 4+5 entry).
 - Changes pushed onto feature-steps/agent-mcp-server-step-5 branch (updates open PR #343).
+
+## Session 2026-05-25T00:00:00Z — review feedback (PR #343)
+- Operator comment: hardcoded 0.6 threshold should be configurable.
+- Added `_ALERT_THRESHOLD = float(os.environ.get("MCP_ALERT_THRESHOLD", "0.6"))` at module level in tools.py.
+- Replaced hardcoded 0.6 with `_ALERT_THRESHOLD` in ingest_signal auto-emit check.
+- Updated signal_extraction.md to reference MCP_ALERT_THRESHOLD env var.
+- MCP_ALERT_THRESHOLD will be added to docker-compose.yml and .env.example in Step 6.
