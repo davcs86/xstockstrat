@@ -164,3 +164,38 @@
 **Progress**: 4 done / 13 total
 **Stopped at**: Step 4 (STEP COMMIT + PR — awaiting merge before next step)
 **Next**: /sdd-execute agent-mcp-server next
+
+### Step 5 — service: Add system prompt file [done]
+- Created app/prompts/signal_extraction.md covering both email and website ingestion flows, signal field extraction table, conviction scoring guidance, emit_alert vs skip rules, and error handling for all six tools.
+- extractor_tool routing is the authoritative directive — doc explicitly forbids inferring from source_type.
+- Files modified: `services/xstockstrat-agent/app/prompts/signal_extraction.md`
+- Deviations: none
+
+## Session 2026-05-24T00:04:00Z — sdd-execute (Step 5)
+**Steps this session**: [5]
+**Progress**: 5 done / 13 total
+**Stopped at**: Step 5 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next
+
+## Session 2026-05-24T00:05:00Z — design correction (Steps 4+5)
+- Operator raised: conviction-threshold alerting should be deterministic code, not model-driven.
+- Modified tools.py: ingest_signal now auto-calls post_notify when conviction >= 0.6. Alert failure is caught/logged; signal result still returned.
+- Modified signal_extraction.md: removed "When to Call emit_alert vs. Skip" section; replaced with "Alerting" note explaining auto-emit and when to use emit_alert directly.
+- Recorded in Deviation Log (Steps 4+5 entry).
+- Changes pushed onto feature-steps/agent-mcp-server-step-5 branch (updates open PR #343).
+
+## Session 2026-05-25T00:00:00Z — review feedback (PR #343)
+- Operator comment: hardcoded 0.6 threshold should be configurable.
+- Added `_ALERT_THRESHOLD = float(os.environ.get("MCP_ALERT_THRESHOLD", "0.6"))` at module level in tools.py.
+- Replaced hardcoded 0.6 with `_ALERT_THRESHOLD` in ingest_signal auto-emit check.
+- Updated signal_extraction.md to reference MCP_ALERT_THRESHOLD env var.
+- MCP_ALERT_THRESHOLD will be added to docker-compose.yml and .env.example in Step 6.
+
+## Session 2026-05-25T00:10:00Z — review feedback follow-up (PR #343, config-service threshold)
+- Operator clarified: threshold should come from xstockstrat-config service, not env var.
+- Removed `_ALERT_THRESHOLD` env-var constant and `os` import from tools.py.
+- Added `_ALERT_THRESHOLD_DEFAULT = 0.6` and `_ALERT_THRESHOLD_CONFIG_KEY = "xstockstrat-agent.signal.alert_threshold"` constants.
+- ingest_signal now calls `client.get_config_value(_ALERT_THRESHOLD_CONFIG_KEY)` on each ingest; parses float with 0.6 fallback.
+- Updated signal_extraction.md Alerting section to reference config key instead of env var.
+- Config key `xstockstrat-agent.signal.alert_threshold` must be seeded in Step 6.
+- Deviation recorded in impl-spec Deviation Log.
