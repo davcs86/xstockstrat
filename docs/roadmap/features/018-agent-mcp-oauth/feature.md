@@ -1,6 +1,6 @@
 # Feature: agent-mcp-oauth
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/agent-mcp-oauth`
 **Created**: 2026-05-25
 **Last Updated**: 2026-05-25
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-25 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-05-25 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning) |
 
 ---
 
@@ -42,4 +43,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review agent-mcp-oauth product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec agent-mcp-oauth` — generate implementation spec from the approved product spec

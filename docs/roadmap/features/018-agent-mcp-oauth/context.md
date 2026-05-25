@@ -14,3 +14,11 @@
 - OAuth 2.0 is a meaningful separate feature — kept out of 009 scope deliberately.
 - Key design decision: use PKCE (S256) Authorization Code flow; access token IS the xstockstrat API key (no separate token store); in-memory code store (safe at instance_count: 1).
 - Open question: identity login UI may be needed for the redirect flow — to be resolved at /sdd-spec time.
+
+## Session 2026-05-25 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: FR-9 flow description slightly ambiguous — "authorization code" from identity is not the same token as the OAuth code the agent issues to the client. impl-spec should clarify that identity redirects to an agent callback URL (e.g. `/oauth/callback`) with a short-lived identity credential; agent then issues the OAuth code to the client's redirect_uri.
+- Overlap findings: none (formula-management-ui is the only active concurrent feature; touches xstockstrat-indicators and xstockstrat-insights — no overlap).
+- OQ-1 resolved: minimal server-rendered GET /login form in xstockstrat-identity scoped into this feature (FR-9). Unified login page deferred to follow-up feature 019-unified-login-page.
+- OQ-2 resolved: module-level singleton dict for authorization code store. Safe for instance_count: 1.
