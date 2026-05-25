@@ -35,6 +35,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | First-time DigitalOcean setup | `docs/setup/digitalocean.md` |
 | OTel / Grafana Cloud wiring | `docs/setup/grafana-cloud.md` |
 | Feature workflow (branch, PR, promote) | `docs/runbooks/feature-workflow.md` |
+| Using or troubleshooting the agent MCP tools | `docs/runbooks/mcp-tools.md` |
 
 ---
 
