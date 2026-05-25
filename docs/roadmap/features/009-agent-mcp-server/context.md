@@ -235,3 +235,33 @@
 
 - Created services/xstockstrat-agent/claude_mcp_config.json with three transport modes: xstockstrat-stdio (recommended for Claude Desktop), xstockstrat-sse-nginx (via nginx /agent/sse), xstockstrat-sse-direct (direct to port 9000, bypasses auth).
 - JSON validity confirmed.
+
+## Session 2026-05-25T02:00:00Z — sdd-execute (Steps 10–13, code-completed)
+**Steps this session**: [10, 11, 12, 13]
+**Progress**: 13 done / 13 total — all steps complete
+**Stopped at**: Integration PR to main-dev
+
+### Step 10 — Unit tests
+- Fixed Server→FastMCP in tools.py and main.py: lowlevel Server lacks .tool() decorator; FastMCP._mcp_server.run() used for stdio/SSE transports.
+- Added _setup_gen_path() to conftest.py (mirrors ingest pattern) so proto stubs resolve in tests.
+- Patched module-level client vars in conftest fixture (setattr) since they are read at import time.
+- 20 tests, 66% coverage: auth (5), client (4), tools (11).
+
+### Step 11 — CLAUDE.md registry
+- Added xstockstrat-agent row to Service Registry table (Python, port 9000 SSE).
+- Updated Language Map Python line.
+
+### Step 12 — x-mcp-secret enforcement
+- Added @app.middleware("http") enforce_mcp_secret to ingest and analysis http_server.py.
+- Added MCP_AGENT_SECRET constant + header check to notify router.ts (after readBody, before url routing).
+- Added MCP_AGENT_SECRET to docker-compose.yml for ingest, notify, analysis.
+- Added MCP_AGENT_SECRET SECRET entry to .do/app.dev.yaml and .do/app.yaml for all three services.
+- Added httpx to ingest and analysis dev deps (required by starlette.testclient). 10 Python tests pass.
+
+### Step 13 — docs/runbooks/mcp-tools.md
+- Created full MCP tool reference with parameter tables, return shapes, error tables, transport modes, usage patterns, config key reference.
+- Updated docs/runbooks/CLAUDE.md index and root CLAUDE.md Context Guide.
+
+### Deviations this session
+- Server→FastMCP: not called out in spec, but necessary fix (lowlevel Server has no .tool() decorator).
+- conftest.py gen path setup added: spec only mentioned respx mock pattern from ingest; gen path was required to import app.auth (imports identity protobuf stubs).
