@@ -1,6 +1,6 @@
 # Feature: agent-mcp-oauth
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/agent-mcp-oauth`
 **Created**: 2026-05-25
 **Last Updated**: 2026-05-25
@@ -13,13 +13,14 @@
 |---|---|---|---|
 | 2026-05-25 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-25 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning) |
+| 2026-05-25 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec agent-mcp-oauth`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -30,17 +31,13 @@ Adds OAuth 2.0 Authorization Code flow endpoints to `xstockstrat-agent` so that 
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
-
 | Role | Review Focus |
 |---|---|
-| Platform Lead | Port uniqueness, service registry consistency, inter-service dependency graph correctness |
-| Security | No secrets in config service state, JWT claims minimal, API key scoping correct, OAuth redirect URI validation |
-| `xstockstrat-identity` owner | JWT expiry and rotation, API key scoping, secret store integration |
 | `xstockstrat-agent` owner | Auth flow correctness, backward compatibility with query-param and Bearer header auth |
+| Security | No secrets in config service state, JWT claims minimal, API key scoping correct, OAuth redirect URI validation |
+| `xstockstrat-config` owner | Config key naming (`<service>.<category>.<key>`), environment/trading_mode scoping, WatchConfig stream stability |
+| Platform Lead | Port uniqueness, service registry consistency, inter-service dependency graph correctness |
 
 ## Next Action
 
-`/sdd-spec agent-mcp-oauth` — generate implementation spec from the approved product spec
+`/sdd-review agent-mcp-oauth impl-spec` — validate implementation spec, then `/sdd-execute agent-mcp-oauth`
