@@ -28,7 +28,7 @@ FR-6. The `claude_mcp_config.json` `xstockstrat-sse-nginx` entry is updated to d
 
 FR-7. The OAuth `client_id` is a configurable value (config key `agent.oauth.client_id`); the default is `xstockstrat-agent`. Redirect URIs are validated against a configurable allowlist (`agent.oauth.allowed_redirect_uris`).
 
-FR-8. Authorization codes are short-lived (60 seconds), single-use, stored in-memory, and bound to the PKCE challenge. No database is required.
+FR-8. Authorization codes are short-lived (60 seconds), single-use, and bound to the PKCE challenge. They are stored in a module-level singleton dict (process-scoped, no database required). Safe for `instance_count: 1`; a Redis-backed store would be required if the agent were scaled beyond one instance.
 
 ## Out of Scope
 
@@ -56,7 +56,7 @@ New keys to register in `xstockstrat-config` (namespace `agent`):
 
 ## Database Changes
 
-- [x] No schema changes — authorization codes stored in-memory with TTL.
+- [x] No schema changes — authorization codes stored in a module-level singleton dict (process-scoped, safe for instance_count: 1).
 
 ## Feature Workflow Notes
 
@@ -76,4 +76,4 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 ## Open Questions
 
 - [ ] Does `xstockstrat-identity` need a UI login page to complete the OAuth redirect, or can the operator pre-authenticate and provide a code directly? (Affects whether a login form is in scope for this feature or a follow-up.)
-- [ ] Should the in-memory code store be replaced with a Redis/DB store if the agent runs with `instance_count > 1` on DO? (Currently instance_count: 1, so in-memory is safe.)
+- [x] Should the in-memory code store be replaced with a Redis/DB store if the agent runs with `instance_count > 1` on DO? **Resolved**: Use a module-level singleton dict. Safe for current instance_count: 1. Redis/DB store deferred to a future scaling feature if instance_count ever increases.
