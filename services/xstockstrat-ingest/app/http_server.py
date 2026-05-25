@@ -5,18 +5,29 @@ Exposes IngestService methods via HTTP POST (JSON encoding) and webhooks.
 """
 
 import logging
+import os as _os
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from gen.ingest.v1 import ingest_pb2
 from google.protobuf import json_format
 from google.protobuf.message import DecodeError
+from starlette.responses import Response as _Response
 
 log = logging.getLogger(__name__)
+
+_MCP_AGENT_SECRET = _os.environ.get("MCP_AGENT_SECRET", "")
 
 
 def build_app(servicer) -> FastAPI:
     app = FastAPI(title="xstockstrat-ingest HTTP", docs_url=None, redoc_url=None)
+
+    @app.middleware("http")
+    async def enforce_mcp_secret(request: Request, call_next):
+        if _MCP_AGENT_SECRET and request.url.path.startswith("/webhooks/"):
+            if request.headers.get("x-mcp-secret") != _MCP_AGENT_SECRET:
+                return _Response("Unauthorized", status_code=401)
+        return await call_next(request)
 
     # ── Health ────────────────────────────────────────────────────────────────
     @app.get("/healthz")

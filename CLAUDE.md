@@ -35,6 +35,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | First-time DigitalOcean setup | `docs/setup/digitalocean.md` |
 | OTel / Grafana Cloud wiring | `docs/setup/grafana-cloud.md` |
 | Feature workflow (branch, PR, promote) | `docs/runbooks/feature-workflow.md` |
+| Using or troubleshooting the agent MCP tools | `docs/runbooks/mcp-tools.md` |
 
 ---
 
@@ -56,6 +57,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | xstockstrat-insights | Next.js | Analytics/insights dashboard | — | 3001 |
 | xstockstrat-config-ui | Next.js | Config management UI | — | 3002 |
 | xstockstrat-nginx | Nginx | HTTP reverse proxy, unified frontend ingress | — | 80 |
+| xstockstrat-agent | Python | MCP server — AI agent tools for signal ingestion, alerting, backtesting | — | 9000 (SSE) |
 
 ---
 
@@ -63,7 +65,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 
 ```
 Go        → xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata
-Python    → xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis
+Python    → xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis, xstockstrat-agent
 Node.js   → xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, xstockstrat-config
 Next.js   → xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
 ```
