@@ -226,3 +226,12 @@
 - .do/app.yaml: same additions with professional-xs, branch: main.
 - docs/setup/digitalocean.md: added MCP_AGENT_SECRET secret section with doctl commands; removed stale N8N_WEBHOOK_SECRET section (feature-011 removed n8n).
 - Deviation: source_dir omitted — nginx precedent confirms DO uses repo root when source_dir absent with dockerfile_path set.
+
+## Session 2026-05-25T01:15:00Z — sdd-execute (Step 9)
+**Steps this session**: [9]
+**Progress**: 9 done / 13 total
+**Stopped at**: Step 9 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next
+
+- Created services/xstockstrat-agent/claude_mcp_config.json with three transport modes: xstockstrat-stdio (recommended for Claude Desktop), xstockstrat-sse-nginx (via nginx /agent/sse), xstockstrat-sse-direct (direct to port 9000, bypasses auth).
+- JSON validity confirmed.

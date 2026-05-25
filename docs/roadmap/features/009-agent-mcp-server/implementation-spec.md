@@ -1121,7 +1121,7 @@ grep -n "INGEST_HTTP_ENDPOINT\|IDENTITY_ENDPOINT\|CONFIG_ENDPOINT" .do/app.dev.y
 
 ### Step 9 — service: Add claude_mcp_config.json operator config file
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
 - `services/xstockstrat-agent/claude_mcp_config.json` — create
