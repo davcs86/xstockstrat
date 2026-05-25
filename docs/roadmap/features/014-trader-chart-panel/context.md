@@ -102,3 +102,10 @@
 - Decision: backlogged as feature idea `017-premarket-aftermarket-session-toggle`.
 - Created `docs/roadmap/features/017-premarket-aftermarket-session-toggle/feature.md` (status: `idea`).
 - Step 4 ChartPanel built without the session toggle; it can be added when the proto field is implemented.
+
+## Session 2026-05-24 (CI: feature status automation)
+
+- Promotion PR #341 merged to main
+- Feature promoted and committed: e991fcb52eeda41985c6403983a2b20cb6f9a04b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-05-24

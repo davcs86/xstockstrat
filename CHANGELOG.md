@@ -19,6 +19,16 @@ Each entry corresponds to one `main-dev → main` PR merge.
 - trader-chart-panel: Add an OHLCV candlestick chart panel to the `xstockstrat-trader` UI. The chart polls `GetBars` on a configurable interval (no streaming required given 5m minimum timeframe) and supports a symbol selector and timeframe switcher (1m, 5m, 15m, 1h, 1d). Backend RPCs, service logic, and DB layer are fully implemented — only the frontend component is missing.
 
 ### Summary
+5 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-05-24
+
+### Features
+- trader-chart-panel: Add an OHLCV candlestick chart panel to the `xstockstrat-trader` UI. The chart polls `GetBars` on a configurable interval (no streaming required given 5m minimum timeframe) and supports a symbol selector and timeframe switcher (1m, 5m, 15m, 1h, 1d). Backend RPCs, service logic, and DB layer are fully implemented — only the frontend component is missing.
+
+### Summary
 2 commits, -1 feature merges since last promotion.
 
 ---
