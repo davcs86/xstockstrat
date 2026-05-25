@@ -15,6 +15,13 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ## 2026-05-25
 
+### Summary
+0 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-05-25
+
 ### Features
 - agent-mcp-server: Phase 1 of the AI agent service: a new Python MCP server (`xstockstrat-agent`) that exposes platform capabilities as MCP tools, enabling an operator to manually trigger AI-assisted signal extraction workflows from Claude.ai with no scheduler or automation infrastructure. Prerequisite: signal-source-registry (008).
 
