@@ -70,15 +70,13 @@ Score conviction on a 0.0–1.0 scale:
 Omit `conviction` entirely if insufficient context — the ingest service applies the
 source's default conviction automatically.
 
-## When to Call emit_alert vs. Skip
+## Alerting
 
-Call `emit_alert` when:
-- A signal is successfully ingested and has conviction >= 0.6 (worth flagging immediately)
-- An email contains an urgent or time-sensitive trading idea
+`ingest_signal` automatically emits an alert via xstockstrat-notify when `conviction >= 0.6`.
+You do not need to call `emit_alert` after ingesting a signal.
 
-Do NOT call `emit_alert` when:
-- The email is informational, a newsletter digest, or market recap with no specific call
-- conviction is below 0.3
+Use `emit_alert` directly only for system-level notifications not tied to a specific signal
+(e.g. reporting a processing error, flagging a source that returned unexpected content).
 
 Silently skip (no tool calls) when:
 - The text contains no identifiable trading signal

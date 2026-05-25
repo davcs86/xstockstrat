@@ -176,3 +176,10 @@
 **Progress**: 5 done / 13 total
 **Stopped at**: Step 5 (STEP COMMIT + PR — awaiting merge before next step)
 **Next**: /sdd-execute agent-mcp-server next
+
+## Session 2026-05-24T00:05:00Z — design correction (Steps 4+5)
+- Operator raised: conviction-threshold alerting should be deterministic code, not model-driven.
+- Modified tools.py: ingest_signal now auto-calls post_notify when conviction >= 0.6. Alert failure is caught/logged; signal result still returned.
+- Modified signal_extraction.md: removed "When to Call emit_alert vs. Skip" section; replaced with "Alerting" note explaining auto-emit and when to use emit_alert directly.
+- Recorded in Deviation Log (Steps 4+5 entry).
+- Changes pushed onto feature-steps/agent-mcp-server-step-5 branch (updates open PR #343).

@@ -160,7 +160,28 @@ def register_tools(server: Server) -> None:
             payload["raw_url"] = raw_url
         if tags is not None:
             payload["tags"] = tags
-        return await client.post_ingest("/webhooks/ingest-signal", payload)
+        result = await client.post_ingest("/webhooks/ingest-signal", payload)
+        # Auto-emit alert for high-conviction signals — deterministic rule, not model-driven.
+        if conviction is not None and conviction >= 0.6:
+            try:
+                alert_title = headline if headline else f"{direction.upper()} {symbol} via {source}"
+                alert_body = f"Signal ingested: {direction} {symbol} (conviction {conviction:.2f})"
+                if valid_until:
+                    alert_body += f", valid until {valid_until}"
+                await client.post_notify(
+                    "/webhooks/emit-alert",
+                    {
+                        "severity": "info",
+                        "category": "signal",
+                        "title": alert_title,
+                        "body": alert_body,
+                        "source_service": "xstockstrat-agent",
+                        "target_user_id": "",
+                    },
+                )
+            except Exception as e:
+                log.warning("Auto-alert failed after ingest_signal (signal already ingested): %s", e)
+        return result
 
     @server.tool()
     async def emit_alert(
@@ -174,7 +195,7 @@ def register_tools(server: Server) -> None:
         """Emit an alert via xstockstrat-notify.
         severity: e.g. 'info', 'warning', 'critical'.
         category: alert category e.g. 'signal', 'system'.
-        Call this when an email contains a high-conviction actionable signal."""
+        Use for system-level alerts or alerts not tied to a specific ingested signal."""
         return await client.post_notify(
             "/webhooks/emit-alert",
             {

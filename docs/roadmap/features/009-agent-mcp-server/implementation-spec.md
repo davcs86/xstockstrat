@@ -1983,3 +1983,8 @@ grep -n "mcp-tools" CLAUDE.md
 **Spec said**: `grpcio>=1.63.0` in pyproject.toml
 **Actual**: `grpcio>=1.80.0`
 **Reason**: The reference service (xstockstrat-ingest) uses `grpcio>=1.80.0`. Using a consistent lower bound avoids potential version conflicts across the Python workspace. Option A selected by operator.
+
+### Deviation: Steps 4+5 — Auto-emit alert inside ingest_signal
+**Spec said**: System prompt instructs Claude to call `emit_alert` after `ingest_signal` when conviction >= 0.6.
+**Actual**: `ingest_signal` tool auto-calls `client.post_notify` when `conviction >= 0.6`. Alert failure is caught and logged as a warning (signal already ingested, alert is secondary). System prompt updated to remove Claude-driven alert guidance; `emit_alert` tool docstring updated to "system-level alerts not tied to a specific ingested signal."
+**Reason**: Conviction-threshold alerting is a deterministic platform rule, not a model judgment call. Moving it into the tool eliminates non-determinism and removes a class of model errors (forgetting to emit, emitting incorrectly). Operator approved Option A.
