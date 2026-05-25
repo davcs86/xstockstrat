@@ -5,8 +5,10 @@ Transport is selected via MCP_TRANSPORT env var:
   stdio  (default) -- for Claude.ai desktop MCP integration
   sse              -- for remote MCP connections on MCP_SSE_PORT (default 9000)
 
-SSE transport requires Authorization: Bearer <api_key> header validated against
-xstockstrat-identity ValidateApiKey gRPC RPC. Missing or invalid keys return HTTP 401.
+SSE transport requires a valid API key, accepted via either:
+  - Authorization: Bearer <api_key> header, or
+  - ?api_key=<api_key> query parameter (for clients that cannot set headers, e.g. Claude Desktop)
+Key is validated against xstockstrat-identity ValidateApiKey gRPC RPC. Returns HTTP 401 on failure.
 """
 import logging
 import os
@@ -49,8 +51,16 @@ async def _run_sse() -> None:
     sse = SseServerTransport("/messages")
 
     async def handle_sse(scope, receive, send):
+        from urllib.parse import parse_qs  # noqa: PLC0415
         headers = dict(scope.get("headers", []))
         auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
+        # Fall back to ?api_key= query param for clients that cannot set custom headers
+        # (e.g. Claude Desktop SSE, which does not support Authorization headers).
+        if not auth_header:
+            qs = parse_qs(scope.get("query_string", b"").decode())
+            raw_key = (qs.get("api_key") or [""])[0]
+            if raw_key:
+                auth_header = f"Bearer {raw_key}"
         if not await validate_api_key(auth_header):
             response = Response("Unauthorized", status_code=401)
             await response(scope, receive, send)

@@ -18,13 +18,12 @@
       }
     },
     "xstockstrat-sse-nginx": {
-      "_mode": "SSE via nginx (port 80) -- requires API key auth via Authorization header",
-      "_note": "Claude Desktop and Claude.ai do not currently support custom headers for SSE connections. Use xstockstrat-stdio or xstockstrat-sse-direct for local development.",
-      "url": "http://localhost/agent/sse"
+      "_mode": "SSE via nginx (port 80) -- API key passed as ?api_key= query parameter",
+      "url": "http://localhost/agent/sse?api_key=<your-api-key>"
     },
     "xstockstrat-sse-direct": {
-      "_mode": "SSE direct to agent container -- bypasses nginx auth gate (local dev only)",
-      "url": "http://localhost:9000/sse"
+      "_mode": "SSE direct to agent container -- bypasses nginx; API key as ?api_key= query parameter",
+      "url": "http://localhost:9000/sse?api_key=<your-api-key>"
     }
   }
 }
