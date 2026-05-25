@@ -72,7 +72,7 @@ source's default conviction automatically.
 
 ## Alerting
 
-`ingest_signal` automatically emits an alert via xstockstrat-notify when conviction meets the configured threshold (`MCP_ALERT_THRESHOLD`, default 0.6).
+`ingest_signal` automatically emits an alert via xstockstrat-notify when conviction meets the configured threshold (config key `xstockstrat-agent.signal.alert_threshold`, default 0.6).
 You do not need to call `emit_alert` after ingesting a signal.
 
 Use `emit_alert` directly only for system-level notifications not tied to a specific signal

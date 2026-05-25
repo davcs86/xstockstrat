@@ -1988,3 +1988,8 @@ grep -n "mcp-tools" CLAUDE.md
 **Spec said**: System prompt instructs Claude to call `emit_alert` after `ingest_signal` when conviction >= 0.6.
 **Actual**: `ingest_signal` tool auto-calls `client.post_notify` when `conviction >= 0.6`. Alert failure is caught and logged as a warning (signal already ingested, alert is secondary). System prompt updated to remove Claude-driven alert guidance; `emit_alert` tool docstring updated to "system-level alerts not tied to a specific ingested signal."
 **Reason**: Conviction-threshold alerting is a deterministic platform rule, not a model judgment call. Moving it into the tool eliminates non-determinism and removes a class of model errors (forgetting to emit, emitting incorrectly). Operator approved Option A.
+
+### Deviation: Steps 4+5 — Alert threshold sourced from config service
+**Spec said**: `MCP_ALERT_THRESHOLD` env var controls the auto-emit conviction threshold.
+**Actual**: `ingest_signal` calls `client.get_config_value("xstockstrat-agent.signal.alert_threshold")` on each ingest and parses the returned string as a float, with 0.6 as fallback if the key is absent or unparseable. The `_ALERT_THRESHOLD_CONFIG_KEY` module constant holds the key name. `os` import removed from `tools.py`.
+**Reason**: Operator requested threshold be configurable via xstockstrat-config (config service) rather than an env var, to enable live updates without container restarts. Config key must be registered in xstockstrat-config's seed data (Step 6).

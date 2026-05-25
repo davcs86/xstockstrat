@@ -190,3 +190,12 @@
 - Replaced hardcoded 0.6 with `_ALERT_THRESHOLD` in ingest_signal auto-emit check.
 - Updated signal_extraction.md to reference MCP_ALERT_THRESHOLD env var.
 - MCP_ALERT_THRESHOLD will be added to docker-compose.yml and .env.example in Step 6.
+
+## Session 2026-05-25T00:10:00Z — review feedback follow-up (PR #343, config-service threshold)
+- Operator clarified: threshold should come from xstockstrat-config service, not env var.
+- Removed `_ALERT_THRESHOLD` env-var constant and `os` import from tools.py.
+- Added `_ALERT_THRESHOLD_DEFAULT = 0.6` and `_ALERT_THRESHOLD_CONFIG_KEY = "xstockstrat-agent.signal.alert_threshold"` constants.
+- ingest_signal now calls `client.get_config_value(_ALERT_THRESHOLD_CONFIG_KEY)` on each ingest; parses float with 0.6 fallback.
+- Updated signal_extraction.md Alerting section to reference config key instead of env var.
+- Config key `xstockstrat-agent.signal.alert_threshold` must be seeded in Step 6.
+- Deviation recorded in impl-spec Deviation Log.
