@@ -188,6 +188,7 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       SERVICE_NAME: notify
+      MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50059:50059"
@@ -278,6 +279,7 @@ services:
       IDENTITY_ENDPOINT: xstockstrat-identity:50058
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       SERVICE_NAME: ingest
+      MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50055:50055"
@@ -305,6 +307,7 @@ services:
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       SERVICE_NAME: analysis
+      MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50056:50056"

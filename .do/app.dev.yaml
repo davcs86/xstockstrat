@@ -163,6 +163,9 @@ services:
         value: ${db.DATABASE_URL}
       - key: SERVICE_NAME
         value: ingest
+      - key: MCP_AGENT_SECRET
+        scope: RUN_TIME
+        type: SECRET
 
   - name: xstockstrat-analysis
     github:
@@ -193,6 +196,9 @@ services:
         value: ${db.DATABASE_URL}
       - key: SERVICE_NAME
         value: analysis
+      - key: MCP_AGENT_SECRET
+        scope: RUN_TIME
+        type: SECRET
 
   - name: xstockstrat-agent
     github:
@@ -300,6 +306,9 @@ services:
         value: ${db.DATABASE_URL}
       - key: SERVICE_NAME
         value: notify
+      - key: MCP_AGENT_SECRET
+        scope: RUN_TIME
+        type: SECRET
 
   - name: xstockstrat-config
     github:
