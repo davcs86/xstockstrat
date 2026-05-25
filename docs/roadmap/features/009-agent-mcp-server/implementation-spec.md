@@ -956,7 +956,7 @@ grep -A3 "xstockstrat-agent:" docker-compose.yml | grep "context:"
 
 ### Step 7 — service: Add nginx upstream and /agent/sse location block
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-nginx`
 **Files**:
 - `nginx.conf` — modify (add `agent_backend` upstream block and `/agent/sse` + `/agent/messages` location blocks; confirmed absent: `grep -n "agent\|9000" nginx.conf` → only matches L16 `$http_user_agent`, not a service upstream)
@@ -1031,7 +1031,7 @@ docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf.template:ro \
 
 ### Step 8 — service: Add xstockstrat-agent to DO app specs and nginx env vars
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-nginx` (DO env vars) + `xstockstrat-agent` (new DO entries)
 **Files**:
 - `.do/app.dev.yaml` — modify (add xstockstrat-agent service block with `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT`, `IDENTITY_ENDPOINT`, `CONFIG_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `MCP_AGENT_SECRET`; add `XSTOCKSTRAT_AGENT_PRIVATE_URL` to nginx `envs:`; confirmed absent: `grep -n "xstockstrat-agent\|AGENT" .do/app.dev.yaml` → no match)
@@ -1998,3 +1998,13 @@ grep -n "mcp-tools" CLAUDE.md
 **Spec said**: Step 6 only covers docker-compose.yml and .env.example.
 **Actual**: Two additional changes made: (1) `_ALERT_THRESHOLD_CONFIG_KEY` corrected from `"xstockstrat-agent.signal.alert_threshold"` to `"signal.alert_threshold"` — `get_config_value` calls `GetConfig(namespace="agent")` and looks up `snapshot.values.get(key)`, so the key must be the bare key within the "agent" namespace, not a dotted full-path name. (2) New migration `services/xstockstrat-config/migrations/004_agent_config.up.sql` seeds `('agent', 'signal.alert_threshold', 'float', '0.6', ...)` for dev and production environments, matching the pattern in migration 003.
 **Reason**: Without the key fix the config lookup always returns None and the fallback 0.6 is always used, defeating the purpose of config-service-driven threshold. Migration required to register the key in the DB.
+
+### Deviation: Steps 7+8 — source_dir omitted from DO app spec for agent
+**Spec said**: Add `source_dir: services/xstockstrat-agent` to the agent block in both DO app specs.
+**Actual**: `source_dir` omitted entirely. `dockerfile_path: services/xstockstrat-agent/Dockerfile` retained.
+**Reason**: DO App Platform uses the repo root as build context when no `source_dir` is specified and a `dockerfile_path` is given — confirmed by examining the nginx service in the same spec, which also has no `source_dir` and uses `COPY nginx.conf` (repo-root path) in its Dockerfile. Setting `source_dir: services/xstockstrat-agent` would restrict the build context to that subdirectory, making `COPY packages/proto/gen/python` fail.
+
+### Deviation: Steps 7+8 — digitalocean.md updated; stale n8n secret removed
+**Spec said**: Steps 7+8 cover nginx.conf, docker-entrypoint.sh, docker-compose.yml nginx env, and DO app spec files only.
+**Actual**: Also updated `docs/setup/digitalocean.md`: added `MCP_AGENT_SECRET` section to Step 7 (Set Secret Environment Variables); removed stale `n8n webhook secret` section (removed by feature-011).
+**Reason**: MCP_AGENT_SECRET is a deploy-time secret that operators must set in DO — adding it to the setup doc at the same time as the DO app spec changes keeps the operator runbook in sync. The n8n section was dead text.

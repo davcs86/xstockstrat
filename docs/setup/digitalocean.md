@@ -261,15 +261,25 @@ openssl rand -base64 48
 
 Set as `JWT_SECRET` on both apps (can use the same secret or separate ones per environment).
 
-### n8n webhook secret
-Set on all services that have webhook handlers (trading, marketdata, config, indicators, ingest, notify, ledger, identity, analysis, portfolio).
+### MCP agent secret
+Set on: `xstockstrat-agent`
 
 ```bash
 # Generate:
 openssl rand -hex 32
 ```
 
-Set as `N8N_WEBHOOK_SECRET`. Both dev and prod n8n workflows must use the matching value.
+Set as `MCP_AGENT_SECRET` on both apps. The same value must be configured in
+`xstockstrat-ingest`, `xstockstrat-notify`, and `xstockstrat-analysis` once Step 12
+(x-mcp-secret enforcement) is deployed. Leave empty to skip header enforcement.
+
+```bash
+doctl apps update $DO_DEV_APP_ID \
+  --set-env MCP_AGENT_SECRET=<your-secret>
+
+doctl apps update $DO_PROD_APP_ID \
+  --set-env MCP_AGENT_SECRET=<your-secret>
+```
 
 ### OpenTelemetry (Grafana Cloud)
 Set on all 13 services (or as app-level vars):
