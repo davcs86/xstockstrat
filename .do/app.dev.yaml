@@ -194,6 +194,34 @@ services:
       - key: SERVICE_NAME
         value: analysis
 
+  - name: xstockstrat-agent
+    github:
+      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      branch: main-dev
+      deploy_on_push: false
+    dockerfile_path: services/xstockstrat-agent/Dockerfile
+    http_port: 9000
+    instance_count: 1
+    instance_size_slug: basic-xs
+    envs:
+      - key: INGEST_HTTP_ENDPOINT
+        value: ${xstockstrat-ingest.PRIVATE_URL}
+      - key: NOTIFY_HTTP_ENDPOINT
+        value: ${xstockstrat-notify.PRIVATE_URL}
+      - key: ANALYSIS_HTTP_ENDPOINT
+        value: ${xstockstrat-analysis.PRIVATE_URL}
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_URL}
+      - key: CONFIG_ENDPOINT
+        value: ${xstockstrat-config.PRIVATE_URL}
+      - key: MCP_TRANSPORT
+        value: sse
+      - key: MCP_SSE_PORT
+        value: "9000"
+      - key: MCP_AGENT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+
   # ── Node.js services ───────────────────────────────────────────────────────
 
   - name: xstockstrat-ledger
@@ -314,6 +342,8 @@ services:
         value: ${xstockstrat-insights.PRIVATE_URL}
       - key: XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL
         value: ${xstockstrat-config-ui.PRIVATE_URL}
+      - key: XSTOCKSTRAT_AGENT_PRIVATE_URL
+        value: ${xstockstrat-agent.PRIVATE_URL}
 
   - name: xstockstrat-trader
     github:

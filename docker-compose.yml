@@ -487,6 +487,7 @@ services:
       - XSTOCKSTRAT_TRADER_PRIVATE_URL=xstockstrat-trader
       - XSTOCKSTRAT_INSIGHTS_PRIVATE_URL=xstockstrat-insights
       - XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL=xstockstrat-config-ui
+      - XSTOCKSTRAT_AGENT_PRIVATE_URL=xstockstrat-agent
     ports:
       - "80:80"
     depends_on:

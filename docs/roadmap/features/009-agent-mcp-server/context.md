@@ -212,3 +212,17 @@
 - Added migration 004_agent_config.up.sql seeding ('agent', 'signal.alert_threshold', 'float', '0.6') for dev + production.
 - Added migration 004_agent_config.down.sql.
 - Deviations recorded in impl-spec Deviation Log.
+
+## Session 2026-05-25T01:00:00Z — sdd-execute (Steps 7+8, coupled)
+**Steps this session**: [7, 8]
+**Progress**: 8 done / 13 total
+**Stopped at**: Step 8 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next
+
+- nginx.conf: added agent_backend upstream (port 9000) after config_ui_backend; added /agent/sse and /agent/messages location blocks with proxy_read_timeout 3600s.
+- docker-entrypoint.sh: added AGENT_UPSTREAM env var processing; added $AGENT_UPSTREAM to envsubst call.
+- docker-compose.yml: added XSTOCKSTRAT_AGENT_PRIVATE_URL=xstockstrat-agent to nginx environment block.
+- .do/app.dev.yaml: added xstockstrat-agent service block (basic-xs, branch: main-dev); added XSTOCKSTRAT_AGENT_PRIVATE_URL to nginx envs. No source_dir (would break repo-root build context).
+- .do/app.yaml: same additions with professional-xs, branch: main.
+- docs/setup/digitalocean.md: added MCP_AGENT_SECRET secret section with doctl commands; removed stale N8N_WEBHOOK_SECRET section (feature-011 removed n8n).
+- Deviation: source_dir omitted — nginx precedent confirms DO uses repo root when source_dir absent with dockerfile_path set.
