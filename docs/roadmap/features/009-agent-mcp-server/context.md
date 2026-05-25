@@ -109,3 +109,159 @@
   - `services/xstockstrat-notify/src/webhooks/router.ts` webhook guard goes after `readBody` at L43, before `url` variable at L44 (inside `createWebhookRouter` function's `webhookHandler`).
   - `credentials_ref` from feature 008's `ingest.signal_sources` table must never be exposed in any tool response — confirmed by stripping it in `list_signal_sources` enrichment loop and not including it in `extract_email_content`/`extract_website_content` return values.
   - `xstockstrat-agent` service directory does NOT yet exist — confirmed `ls services/xstockstrat-agent` → NOT FOUND. All 13 steps remain pending.
+
+### Step 1 — service: Scaffold xstockstrat-agent service directory [done]
+- Created pyproject.toml with mcp>=1.0.0, httpx, anyio, starlette, uvicorn, grpcio>=1.80.0, protobuf>=5.26.0, pymupdf>=1.24.0; dev deps include respx for httpx mocking.
+- Created Dockerfile with python:3.12-slim base, uv toolchain, proto stubs layer, EXPOSE 9000.
+- Created empty package init files: app/__init__.py, app/config/__init__.py, app/prompts/__init__.py, tests/__init__.py.
+- Created tests/conftest.py with autouse fixture setting all required env vars.
+- Ran uv lock — resolved 49 packages, uv.lock committed.
+- Files modified: `services/xstockstrat-agent/pyproject.toml`, `services/xstockstrat-agent/Dockerfile`, `services/xstockstrat-agent/uv.lock`, `services/xstockstrat-agent/app/__init__.py`, `services/xstockstrat-agent/app/config/__init__.py`, `services/xstockstrat-agent/app/prompts/__init__.py`, `services/xstockstrat-agent/tests/__init__.py`, `services/xstockstrat-agent/tests/conftest.py`
+- Deviations: grpcio>=1.80.0 used instead of spec's >=1.63.0 (matches ingest reference service, operator approved Option A)
+
+## Session 2026-05-24T00:00:00Z — sdd-execute (Step 1)
+**Steps this session**: [1]
+**Progress**: 1 done / 13 total
+**Stopped at**: Step 1 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next
+
+### Step 2 — service: Implement HTTP and gRPC client wrapper [done]
+- Created app/client.py with post_ingest, post_notify, post_analysis (httpx, 30s timeout, raise_for_status) and get_config_value (one-shot GetConfig gRPC call, returns None on any error).
+- _headers() injects x-mcp-secret when MCP_AGENT_SECRET is set; omits header when empty.
+- All four env vars (INGEST_HTTP_ENDPOINT, NOTIFY_HTTP_ENDPOINT, ANALYSIS_HTTP_ENDPOINT, CONFIG_ENDPOINT) read at module level with correct defaults.
+- Files modified: `services/xstockstrat-agent/app/client.py`
+- Deviations: none
+
+## Session 2026-05-24T00:01:00Z — sdd-execute (Step 2)
+**Steps this session**: [2]
+**Progress**: 2 done / 13 total
+**Stopped at**: Step 2 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next
+
+### Step 3 — service: Implement SSE API-key auth middleware [done]
+- Created app/auth.py with validate_api_key() — parses Bearer token, calls IdentityServiceStub.ValidateApiKey via grpc.aio, returns True/False, never raises.
+- AioRpcError logged at INFO; unexpected errors logged at ERROR — both return False.
+- Files modified: `services/xstockstrat-agent/app/auth.py`
+- Deviations: none
+
+## Session 2026-05-24T00:02:00Z — sdd-execute (Step 3)
+**Steps this session**: [3]
+**Progress**: 3 done / 13 total
+**Stopped at**: Step 3 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next
+
+### Step 4 — service: Implement MCP server tools and main entry point [done]
+- Created app/tools.py with register_tools() containing all six @server.tool() definitions and _EXTRACTOR_TOOL_MAP.
+- credentials_ref resolved via get_config_value() and used as password internally; never included in any return value.
+- _extract_from_bytes() attempts fitz/PyMuPDF PDF parse first, falls back to UTF-8 decode.
+- _fetch_url() uses Bearer auth header when password is set.
+- Created app/main.py with stdio and SSE transports; SSE guarded by validate_api_key() returning HTTP 401.
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/main.py`
+- Deviations: none
+
+## Session 2026-05-24T00:03:00Z — sdd-execute (Step 4)
+**Steps this session**: [4]
+**Progress**: 4 done / 13 total
+**Stopped at**: Step 4 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next
+
+### Step 5 — service: Add system prompt file [done]
+- Created app/prompts/signal_extraction.md covering both email and website ingestion flows, signal field extraction table, conviction scoring guidance, emit_alert vs skip rules, and error handling for all six tools.
+- extractor_tool routing is the authoritative directive — doc explicitly forbids inferring from source_type.
+- Files modified: `services/xstockstrat-agent/app/prompts/signal_extraction.md`
+- Deviations: none
+
+## Session 2026-05-24T00:04:00Z — sdd-execute (Step 5)
+**Steps this session**: [5]
+**Progress**: 5 done / 13 total
+**Stopped at**: Step 5 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next
+
+## Session 2026-05-24T00:05:00Z — design correction (Steps 4+5)
+- Operator raised: conviction-threshold alerting should be deterministic code, not model-driven.
+- Modified tools.py: ingest_signal now auto-calls post_notify when conviction >= 0.6. Alert failure is caught/logged; signal result still returned.
+- Modified signal_extraction.md: removed "When to Call emit_alert vs. Skip" section; replaced with "Alerting" note explaining auto-emit and when to use emit_alert directly.
+- Recorded in Deviation Log (Steps 4+5 entry).
+- Changes pushed onto feature-steps/agent-mcp-server-step-5 branch (updates open PR #343).
+
+## Session 2026-05-25T00:00:00Z — review feedback (PR #343)
+- Operator comment: hardcoded 0.6 threshold should be configurable.
+- Added `_ALERT_THRESHOLD = float(os.environ.get("MCP_ALERT_THRESHOLD", "0.6"))` at module level in tools.py.
+- Replaced hardcoded 0.6 with `_ALERT_THRESHOLD` in ingest_signal auto-emit check.
+- Updated signal_extraction.md to reference MCP_ALERT_THRESHOLD env var.
+- MCP_ALERT_THRESHOLD will be added to docker-compose.yml and .env.example in Step 6.
+
+## Session 2026-05-25T00:10:00Z — review feedback follow-up (PR #343, config-service threshold)
+- Operator clarified: threshold should come from xstockstrat-config service, not env var.
+- Removed `_ALERT_THRESHOLD` env-var constant and `os` import from tools.py.
+- Added `_ALERT_THRESHOLD_DEFAULT = 0.6` and `_ALERT_THRESHOLD_CONFIG_KEY = "xstockstrat-agent.signal.alert_threshold"` constants.
+- ingest_signal now calls `client.get_config_value(_ALERT_THRESHOLD_CONFIG_KEY)` on each ingest; parses float with 0.6 fallback.
+- Updated signal_extraction.md Alerting section to reference config key instead of env var.
+- Config key `xstockstrat-agent.signal.alert_threshold` must be seeded in Step 6.
+- Deviation recorded in impl-spec Deviation Log.
+
+## Session 2026-05-25T00:40:00Z — sdd-execute (Step 6)
+**Steps this session**: [6]
+**Progress**: 6 done / 13 total
+**Stopped at**: Step 6 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next
+
+- Added xstockstrat-agent service block to docker-compose.yml (after nginx, build context: ., port 9000, depends_on: ingest/notify/analysis/identity/config).
+- Added MCP_AGENT_SECRET entry to .env.example after JWT_SECRET.
+- Fixed _ALERT_THRESHOLD_CONFIG_KEY: was "xstockstrat-agent.signal.alert_threshold", now "signal.alert_threshold" (get_config_value uses namespace="agent"; key arg is bare key within that namespace).
+- Added migration 004_agent_config.up.sql seeding ('agent', 'signal.alert_threshold', 'float', '0.6') for dev + production.
+- Added migration 004_agent_config.down.sql.
+- Deviations recorded in impl-spec Deviation Log.
+
+## Session 2026-05-25T01:00:00Z — sdd-execute (Steps 7+8, coupled)
+**Steps this session**: [7, 8]
+**Progress**: 8 done / 13 total
+**Stopped at**: Step 8 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next
+
+- nginx.conf: added agent_backend upstream (port 9000) after config_ui_backend; added /agent/sse and /agent/messages location blocks with proxy_read_timeout 3600s.
+- docker-entrypoint.sh: added AGENT_UPSTREAM env var processing; added $AGENT_UPSTREAM to envsubst call.
+- docker-compose.yml: added XSTOCKSTRAT_AGENT_PRIVATE_URL=xstockstrat-agent to nginx environment block.
+- .do/app.dev.yaml: added xstockstrat-agent service block (basic-xs, branch: main-dev); added XSTOCKSTRAT_AGENT_PRIVATE_URL to nginx envs. No source_dir (would break repo-root build context).
+- .do/app.yaml: same additions with professional-xs, branch: main.
+- docs/setup/digitalocean.md: added MCP_AGENT_SECRET secret section with doctl commands; removed stale N8N_WEBHOOK_SECRET section (feature-011 removed n8n).
+- Deviation: source_dir omitted — nginx precedent confirms DO uses repo root when source_dir absent with dockerfile_path set.
+
+## Session 2026-05-25T01:15:00Z — sdd-execute (Step 9)
+**Steps this session**: [9]
+**Progress**: 9 done / 13 total
+**Stopped at**: Step 9 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next
+
+- Created services/xstockstrat-agent/claude_mcp_config.json with three transport modes: xstockstrat-stdio (recommended for Claude Desktop), xstockstrat-sse-nginx (via nginx /agent/sse), xstockstrat-sse-direct (direct to port 9000, bypasses auth).
+- JSON validity confirmed.
+
+## Session 2026-05-25T02:00:00Z — sdd-execute (Steps 10–13, code-completed)
+**Steps this session**: [10, 11, 12, 13]
+**Progress**: 13 done / 13 total — all steps complete
+**Stopped at**: Integration PR to main-dev
+
+### Step 10 — Unit tests
+- Fixed Server→FastMCP in tools.py and main.py: lowlevel Server lacks .tool() decorator; FastMCP._mcp_server.run() used for stdio/SSE transports.
+- Added _setup_gen_path() to conftest.py (mirrors ingest pattern) so proto stubs resolve in tests.
+- Patched module-level client vars in conftest fixture (setattr) since they are read at import time.
+- 20 tests, 66% coverage: auth (5), client (4), tools (11).
+
+### Step 11 — CLAUDE.md registry
+- Added xstockstrat-agent row to Service Registry table (Python, port 9000 SSE).
+- Updated Language Map Python line.
+
+### Step 12 — x-mcp-secret enforcement
+- Added @app.middleware("http") enforce_mcp_secret to ingest and analysis http_server.py.
+- Added MCP_AGENT_SECRET constant + header check to notify router.ts (after readBody, before url routing).
+- Added MCP_AGENT_SECRET to docker-compose.yml for ingest, notify, analysis.
+- Added MCP_AGENT_SECRET SECRET entry to .do/app.dev.yaml and .do/app.yaml for all three services.
+- Added httpx to ingest and analysis dev deps (required by starlette.testclient). 10 Python tests pass.
+
+### Step 13 — docs/runbooks/mcp-tools.md
+- Created full MCP tool reference with parameter tables, return shapes, error tables, transport modes, usage patterns, config key reference.
+- Updated docs/runbooks/CLAUDE.md index and root CLAUDE.md Context Guide.
+
+### Deviations this session
+- Server→FastMCP: not called out in spec, but necessary fix (lowlevel Server has no .tool() decorator).
+- conftest.py gen path setup added: spec only mentioned respx mock pattern from ingest; gen path was required to import app.auth (imports identity protobuf stubs).

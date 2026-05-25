@@ -3,6 +3,7 @@ import { NotifyServiceImpl } from '../grpc/notifyServiceImpl';
 import { getLogger } from '../services/logger';
 
 const log = getLogger('notify:webhooks');
+const MCP_AGENT_SECRET = process.env.MCP_AGENT_SECRET ?? '';
 
 async function readBody(req: http.IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -41,6 +42,11 @@ export function createWebhookRouter(impl: NotifyServiceImpl) {
   return async function webhookHandler(req: http.IncomingMessage, res: http.ServerResponse) {
     try {
       const body = await readBody(req);
+      if (MCP_AGENT_SECRET && req.headers['x-mcp-secret'] !== MCP_AGENT_SECRET) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized' }));
+        return;
+      }
       const url = req.url ?? '';
 
       if (url === '/webhooks/emit-alert') {

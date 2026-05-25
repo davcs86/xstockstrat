@@ -1,6 +1,6 @@
 # Implementation Spec: agent-mcp-server
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-22
 **Feature**: `docs/roadmap/features/009-agent-mcp-server/feature.md`
 **Total Steps**: 13
@@ -30,7 +30,7 @@ This is a new standalone Python service with no proto changes and no DB migratio
 
 ### Step 1 — service: Scaffold xstockstrat-agent service directory
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
 - `services/xstockstrat-agent/pyproject.toml` — create
@@ -170,7 +170,7 @@ Confirm the following paths exist:
 
 ### Step 2 — service: Implement HTTP and gRPC client wrapper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — create
@@ -277,7 +277,7 @@ grep -n "get_config_value\|GetConfig" services/xstockstrat-agent/app/client.py
 
 ### Step 3 — service: Implement SSE API-key auth middleware
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
 - `services/xstockstrat-agent/app/auth.py` — create
@@ -358,7 +358,7 @@ grep -n "return False\|return True" services/xstockstrat-agent/app/auth.py
 
 ### Step 4 — service: Implement MCP server tools and main entry point
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — create
@@ -750,7 +750,7 @@ grep -n "credentials_ref" services/xstockstrat-agent/app/tools.py
 
 ### Step 5 — service: Add system prompt file
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
 - `services/xstockstrat-agent/app/prompts/signal_extraction.md` — create
@@ -876,7 +876,7 @@ grep -n "list_signal_sources\|extract_email_content\|extract_website_content\|in
 
 ### Step 6 — service: Wire xstockstrat-agent into docker-compose and .env.example
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
 - `docker-compose.yml` — modify (add xstockstrat-agent service block introducing `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT`, `IDENTITY_ENDPOINT`, `CONFIG_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `MCP_AGENT_SECRET`; confirmed absent: `grep -n "xstockstrat-agent" docker-compose.yml` → no match)
@@ -956,7 +956,7 @@ grep -A3 "xstockstrat-agent:" docker-compose.yml | grep "context:"
 
 ### Step 7 — service: Add nginx upstream and /agent/sse location block
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-nginx`
 **Files**:
 - `nginx.conf` — modify (add `agent_backend` upstream block and `/agent/sse` + `/agent/messages` location blocks; confirmed absent: `grep -n "agent\|9000" nginx.conf` → only matches L16 `$http_user_agent`, not a service upstream)
@@ -1031,7 +1031,7 @@ docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf.template:ro \
 
 ### Step 8 — service: Add xstockstrat-agent to DO app specs and nginx env vars
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-nginx` (DO env vars) + `xstockstrat-agent` (new DO entries)
 **Files**:
 - `.do/app.dev.yaml` — modify (add xstockstrat-agent service block with `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT`, `IDENTITY_ENDPOINT`, `CONFIG_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `MCP_AGENT_SECRET`; add `XSTOCKSTRAT_AGENT_PRIVATE_URL` to nginx `envs:`; confirmed absent: `grep -n "xstockstrat-agent\|AGENT" .do/app.dev.yaml` → no match)
@@ -1121,7 +1121,7 @@ grep -n "INGEST_HTTP_ENDPOINT\|IDENTITY_ENDPOINT\|CONFIG_ENDPOINT" .do/app.dev.y
 
 ### Step 9 — service: Add claude_mcp_config.json operator config file
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
 - `services/xstockstrat-agent/claude_mcp_config.json` — create
@@ -1979,4 +1979,32 @@ grep -n "mcp-tools" CLAUDE.md
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 1 — Scaffold xstockstrat-agent service directory
+**Spec said**: `grpcio>=1.63.0` in pyproject.toml
+**Actual**: `grpcio>=1.80.0`
+**Reason**: The reference service (xstockstrat-ingest) uses `grpcio>=1.80.0`. Using a consistent lower bound avoids potential version conflicts across the Python workspace. Option A selected by operator.
+
+### Deviation: Steps 4+5 — Auto-emit alert inside ingest_signal
+**Spec said**: System prompt instructs Claude to call `emit_alert` after `ingest_signal` when conviction >= 0.6.
+**Actual**: `ingest_signal` tool auto-calls `client.post_notify` when `conviction >= 0.6`. Alert failure is caught and logged as a warning (signal already ingested, alert is secondary). System prompt updated to remove Claude-driven alert guidance; `emit_alert` tool docstring updated to "system-level alerts not tied to a specific ingested signal."
+**Reason**: Conviction-threshold alerting is a deterministic platform rule, not a model judgment call. Moving it into the tool eliminates non-determinism and removes a class of model errors (forgetting to emit, emitting incorrectly). Operator approved Option A.
+
+### Deviation: Steps 4+5 — Alert threshold sourced from config service
+**Spec said**: `MCP_ALERT_THRESHOLD` env var controls the auto-emit conviction threshold.
+**Actual**: `ingest_signal` calls `client.get_config_value("xstockstrat-agent.signal.alert_threshold")` on each ingest and parses the returned string as a float, with 0.6 as fallback if the key is absent or unparseable. The `_ALERT_THRESHOLD_CONFIG_KEY` module constant holds the key name. `os` import removed from `tools.py`.
+**Reason**: Operator requested threshold be configurable via xstockstrat-config (config service) rather than an env var, to enable live updates without container restarts. Config key must be registered in xstockstrat-config's seed data (Step 6).
+
+### Deviation: Step 6 — Config key lookup key corrected and migration added
+**Spec said**: Step 6 only covers docker-compose.yml and .env.example.
+**Actual**: Two additional changes made: (1) `_ALERT_THRESHOLD_CONFIG_KEY` corrected from `"xstockstrat-agent.signal.alert_threshold"` to `"signal.alert_threshold"` — `get_config_value` calls `GetConfig(namespace="agent")` and looks up `snapshot.values.get(key)`, so the key must be the bare key within the "agent" namespace, not a dotted full-path name. (2) New migration `services/xstockstrat-config/migrations/004_agent_config.up.sql` seeds `('agent', 'signal.alert_threshold', 'float', '0.6', ...)` for dev and production environments, matching the pattern in migration 003.
+**Reason**: Without the key fix the config lookup always returns None and the fallback 0.6 is always used, defeating the purpose of config-service-driven threshold. Migration required to register the key in the DB.
+
+### Deviation: Steps 7+8 — source_dir omitted from DO app spec for agent
+**Spec said**: Add `source_dir: services/xstockstrat-agent` to the agent block in both DO app specs.
+**Actual**: `source_dir` omitted entirely. `dockerfile_path: services/xstockstrat-agent/Dockerfile` retained.
+**Reason**: DO App Platform uses the repo root as build context when no `source_dir` is specified and a `dockerfile_path` is given — confirmed by examining the nginx service in the same spec, which also has no `source_dir` and uses `COPY nginx.conf` (repo-root path) in its Dockerfile. Setting `source_dir: services/xstockstrat-agent` would restrict the build context to that subdirectory, making `COPY packages/proto/gen/python` fail.
+
+### Deviation: Steps 7+8 — digitalocean.md updated; stale n8n secret removed
+**Spec said**: Steps 7+8 cover nginx.conf, docker-entrypoint.sh, docker-compose.yml nginx env, and DO app spec files only.
+**Actual**: Also updated `docs/setup/digitalocean.md`: added `MCP_AGENT_SECRET` section to Step 7 (Set Secret Environment Variables); removed stale `n8n webhook secret` section (removed by feature-011).
+**Reason**: MCP_AGENT_SECRET is a deploy-time secret that operators must set in DO — adding it to the setup doc at the same time as the DO app spec changes keeps the operator runbook in sync. The n8n section was dead text.

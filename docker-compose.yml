@@ -188,6 +188,7 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       SERVICE_NAME: notify
+      MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50059:50059"
@@ -278,6 +279,7 @@ services:
       IDENTITY_ENDPOINT: xstockstrat-identity:50058
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       SERVICE_NAME: ingest
+      MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50055:50055"
@@ -305,6 +307,7 @@ services:
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       SERVICE_NAME: analysis
+      MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50056:50056"
@@ -487,6 +490,7 @@ services:
       - XSTOCKSTRAT_TRADER_PRIVATE_URL=xstockstrat-trader
       - XSTOCKSTRAT_INSIGHTS_PRIVATE_URL=xstockstrat-insights
       - XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL=xstockstrat-config-ui
+      - XSTOCKSTRAT_AGENT_PRIVATE_URL=xstockstrat-agent
     ports:
       - "80:80"
     depends_on:
@@ -499,3 +503,30 @@ services:
       timeout: 3s
       start_period: 5s
       retries: 3
+
+  # ── Agent MCP Server ────────────────────────────────────────────────────
+  xstockstrat-agent:
+    <<: *svc
+    build:
+      context: .
+      dockerfile: services/xstockstrat-agent/Dockerfile
+    container_name: xstockstrat-agent
+    env_file: [".env.local"]
+    environment:
+      <<: *common-env
+      INGEST_HTTP_ENDPOINT: http://xstockstrat-ingest:8055
+      NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
+      ANALYSIS_HTTP_ENDPOINT: http://xstockstrat-analysis:8056
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      MCP_TRANSPORT: sse
+      MCP_SSE_PORT: "9000"
+      MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
+    ports:
+      - "9000:9000"
+    depends_on:
+      - xstockstrat-ingest
+      - xstockstrat-notify
+      - xstockstrat-analysis
+      - xstockstrat-identity
+      - xstockstrat-config

@@ -1,0 +1,29 @@
+{
+  "_comment": "xstockstrat-agent MCP configuration for Claude.ai / Claude Desktop.",
+  "_usage": "Paste the relevant block into your Claude Desktop config or Claude.ai MCP settings.",
+  "mcpServers": {
+    "xstockstrat-stdio": {
+      "_mode": "stdio -- run locally outside Docker (recommended for Claude Desktop)",
+      "command": "python",
+      "args": ["-m", "app.main"],
+      "cwd": "<absolute-path-to>/services/xstockstrat-agent",
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "INGEST_HTTP_ENDPOINT": "http://localhost:8055",
+        "NOTIFY_HTTP_ENDPOINT": "http://localhost:8059",
+        "ANALYSIS_HTTP_ENDPOINT": "http://localhost:8056",
+        "IDENTITY_ENDPOINT": "localhost:50058",
+        "CONFIG_ENDPOINT": "localhost:50060",
+        "MCP_AGENT_SECRET": "<your-mcp-agent-secret-from-.env>"
+      }
+    },
+    "xstockstrat-sse-nginx": {
+      "_mode": "SSE via nginx (port 80) -- API key passed as ?api_key= query parameter",
+      "url": "http://localhost/agent/sse?api_key=<your-api-key>"
+    },
+    "xstockstrat-sse-direct": {
+      "_mode": "SSE direct to agent container -- bypasses nginx; API key as ?api_key= query parameter",
+      "url": "http://localhost:9000/sse?api_key=<your-api-key>"
+    }
+  }
+}
