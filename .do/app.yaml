@@ -39,8 +39,6 @@ services:
         value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
-      - key: MARKETDATA_ENDPOINT
-        value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
       - key: PORTFOLIO_ENDPOINT
         value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
       - key: INDICATORS_ENDPOINT
