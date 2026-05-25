@@ -13,7 +13,7 @@ Key is validated against xstockstrat-identity ValidateApiKey gRPC RPC. Returns H
 import logging
 import os
 
-from mcp.server import Server
+from mcp.server import FastMCP
 from mcp.server.stdio import stdio_server
 
 from app.tools import register_tools
@@ -25,8 +25,8 @@ MCP_TRANSPORT = os.environ.get("MCP_TRANSPORT", "stdio")
 MCP_SSE_PORT = int(os.environ.get("MCP_SSE_PORT", "9000"))
 
 
-def create_server() -> Server:
-    server = Server("xstockstrat-agent")
+def create_server() -> FastMCP:
+    server = FastMCP("xstockstrat-agent")
     register_tools(server)
     return server
 
@@ -35,7 +35,9 @@ async def _run_stdio() -> None:
     server = create_server()
     log.info("xstockstrat-agent starting (transport=stdio)")
     async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+        await server._mcp_server.run(
+            read_stream, write_stream, server._mcp_server.create_initialization_options()
+        )
 
 
 async def _run_sse() -> None:
@@ -66,7 +68,9 @@ async def _run_sse() -> None:
             await response(scope, receive, send)
             return
         async with sse.connect_sse(scope, receive, send) as streams:
-            await server.run(streams[0], streams[1], server.create_initialization_options())
+            await server._mcp_server.run(
+                streams[0], streams[1], server._mcp_server.create_initialization_options()
+            )
 
     starlette_app = Starlette(
         routes=[

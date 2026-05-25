@@ -13,7 +13,7 @@ import base64
 import logging
 from typing import Optional
 
-from mcp.server import Server
+from mcp.server import FastMCP
 
 from app import client
 
@@ -34,7 +34,7 @@ _EXTRACTOR_TOOL_MAP: dict[str, str | None] = {
 }
 
 
-def register_tools(server: Server) -> None:
+def register_tools(server: FastMCP) -> None:
 
     @server.tool()
     async def list_signal_sources(
