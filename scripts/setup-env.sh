@@ -186,6 +186,43 @@ else
   fi
 fi
 
+# ── MCP Agent Secret ───────────────────────────────────────────────────────────
+section "MCP Agent Secret (xstockstrat-agent)"
+
+info "Shared secret sent as x-mcp-secret header on all downstream HTTP calls from"
+info "xstockstrat-agent to xstockstrat-ingest, xstockstrat-notify, and xstockstrat-analysis."
+info "Leave empty to disable header enforcement (SSE API-key auth is still active)."
+info ""
+
+if [ "$USE_DEFAULTS" = true ]; then
+  MCP_AGENT_SECRET=$(generate_jwt_secret)
+  info "Generated MCP_AGENT_SECRET (non-interactive mode)"
+else
+  echo "Would you like to:"
+  echo "  1) Generate a secure random secret automatically"
+  echo "  2) Provide your own"
+  echo "  3) Skip (leave empty — header enforcement disabled)"
+  echo ""
+  echo -n "  → "
+  read -r choice
+
+  case "$choice" in
+    1)
+      MCP_AGENT_SECRET=$(generate_jwt_secret)
+      ok "Generated secure MCP_AGENT_SECRET"
+      ;;
+    3)
+      MCP_AGENT_SECRET=""
+      warn "MCP_AGENT_SECRET left empty — x-mcp-secret header will not be sent."
+      ;;
+    *)
+      prompt_value MCP_AGENT_SECRET "" \
+        "Your MCP agent secret (must match value set in ingest, notify, and analysis)." \
+        true
+      ;;
+  esac
+fi
+
 # ── OpenTelemetry (Optional) ───────────────────────────────────────────────────
 section "OpenTelemetry / Grafana Cloud (Optional)"
 
@@ -244,6 +281,16 @@ echo "JWT_SECRET='$JWT_SECRET'" >> "$ENV_FILE"
 
 cat >> "$ENV_FILE" << 'EOF'
 
+# ── MCP Agent Secret (xstockstrat-agent) ───────────────────────────────
+# Shared secret sent as x-mcp-secret header to ingest, notify, and analysis.
+# Leave empty to disable header enforcement.
+EOF
+
+[ -n "$MCP_AGENT_SECRET" ] && echo "MCP_AGENT_SECRET='$MCP_AGENT_SECRET'" >> "$ENV_FILE" \
+  || echo "MCP_AGENT_SECRET=''" >> "$ENV_FILE"
+
+cat >> "$ENV_FILE" << 'EOF'
+
 # ── OpenTelemetry (Optional) ────────────────────────────────────────────
 # Leave empty to disable. Enable for Grafana Cloud observability.
 EOF
@@ -285,6 +332,11 @@ echo "✓ POSTGRES_PASSWORD     (database — local dev only)"
 echo "✓ ALPACA_API_KEY        (market data feed)"
 echo "✓ ALPACA_API_SECRET     (market data feed)"
 echo "✓ JWT_SECRET            (authentication tokens)"
+if [ -n "$MCP_AGENT_SECRET" ]; then
+  echo "✓ MCP_AGENT_SECRET      (MCP agent downstream auth)"
+else
+  echo "- MCP_AGENT_SECRET      (empty — header enforcement disabled)"
+fi
 if [ -n "$OTEL_EXPORTER_OTLP_ENDPOINT" ]; then
   echo "✓ OTEL_EXPORTER_OTLP_ENDPOINT (observability — optional)"
 fi
