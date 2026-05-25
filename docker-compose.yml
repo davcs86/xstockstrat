@@ -499,3 +499,30 @@ services:
       timeout: 3s
       start_period: 5s
       retries: 3
+
+  # ── Agent MCP Server ────────────────────────────────────────────────────
+  xstockstrat-agent:
+    <<: *svc
+    build:
+      context: .
+      dockerfile: services/xstockstrat-agent/Dockerfile
+    container_name: xstockstrat-agent
+    env_file: [".env.local"]
+    environment:
+      <<: *common-env
+      INGEST_HTTP_ENDPOINT: http://xstockstrat-ingest:8055
+      NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
+      ANALYSIS_HTTP_ENDPOINT: http://xstockstrat-analysis:8056
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      MCP_TRANSPORT: sse
+      MCP_SSE_PORT: "9000"
+      MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
+    ports:
+      - "9000:9000"
+    depends_on:
+      - xstockstrat-ingest
+      - xstockstrat-notify
+      - xstockstrat-analysis
+      - xstockstrat-identity
+      - xstockstrat-config

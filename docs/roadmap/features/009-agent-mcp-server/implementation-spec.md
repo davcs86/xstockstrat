@@ -876,7 +876,7 @@ grep -n "list_signal_sources\|extract_email_content\|extract_website_content\|in
 
 ### Step 6 — service: Wire xstockstrat-agent into docker-compose and .env.example
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` (new)
 **Files**:
 - `docker-compose.yml` — modify (add xstockstrat-agent service block introducing `INGEST_HTTP_ENDPOINT`, `NOTIFY_HTTP_ENDPOINT`, `ANALYSIS_HTTP_ENDPOINT`, `IDENTITY_ENDPOINT`, `CONFIG_ENDPOINT`, `MCP_TRANSPORT`, `MCP_SSE_PORT`, `MCP_AGENT_SECRET`; confirmed absent: `grep -n "xstockstrat-agent" docker-compose.yml` → no match)
@@ -1993,3 +1993,8 @@ grep -n "mcp-tools" CLAUDE.md
 **Spec said**: `MCP_ALERT_THRESHOLD` env var controls the auto-emit conviction threshold.
 **Actual**: `ingest_signal` calls `client.get_config_value("xstockstrat-agent.signal.alert_threshold")` on each ingest and parses the returned string as a float, with 0.6 as fallback if the key is absent or unparseable. The `_ALERT_THRESHOLD_CONFIG_KEY` module constant holds the key name. `os` import removed from `tools.py`.
 **Reason**: Operator requested threshold be configurable via xstockstrat-config (config service) rather than an env var, to enable live updates without container restarts. Config key must be registered in xstockstrat-config's seed data (Step 6).
+
+### Deviation: Step 6 — Config key lookup key corrected and migration added
+**Spec said**: Step 6 only covers docker-compose.yml and .env.example.
+**Actual**: Two additional changes made: (1) `_ALERT_THRESHOLD_CONFIG_KEY` corrected from `"xstockstrat-agent.signal.alert_threshold"` to `"signal.alert_threshold"` — `get_config_value` calls `GetConfig(namespace="agent")` and looks up `snapshot.values.get(key)`, so the key must be the bare key within the "agent" namespace, not a dotted full-path name. (2) New migration `services/xstockstrat-config/migrations/004_agent_config.up.sql` seeds `('agent', 'signal.alert_threshold', 'float', '0.6', ...)` for dev and production environments, matching the pattern in migration 003.
+**Reason**: Without the key fix the config lookup always returns None and the fallback 0.6 is always used, defeating the purpose of config-service-driven threshold. Migration required to register the key in the DB.

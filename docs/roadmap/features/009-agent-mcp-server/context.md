@@ -199,3 +199,16 @@
 - Updated signal_extraction.md Alerting section to reference config key instead of env var.
 - Config key `xstockstrat-agent.signal.alert_threshold` must be seeded in Step 6.
 - Deviation recorded in impl-spec Deviation Log.
+
+## Session 2026-05-25T00:40:00Z — sdd-execute (Step 6)
+**Steps this session**: [6]
+**Progress**: 6 done / 13 total
+**Stopped at**: Step 6 (STEP COMMIT + PR — awaiting merge before next step)
+**Next**: /sdd-execute agent-mcp-server next
+
+- Added xstockstrat-agent service block to docker-compose.yml (after nginx, build context: ., port 9000, depends_on: ingest/notify/analysis/identity/config).
+- Added MCP_AGENT_SECRET entry to .env.example after JWT_SECRET.
+- Fixed _ALERT_THRESHOLD_CONFIG_KEY: was "xstockstrat-agent.signal.alert_threshold", now "signal.alert_threshold" (get_config_value uses namespace="agent"; key arg is bare key within that namespace).
+- Added migration 004_agent_config.up.sql seeding ('agent', 'signal.alert_threshold', 'float', '0.6') for dev + production.
+- Added migration 004_agent_config.down.sql.
+- Deviations recorded in impl-spec Deviation Log.

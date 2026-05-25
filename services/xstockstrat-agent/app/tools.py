@@ -18,7 +18,7 @@ from mcp.server import Server
 from app import client
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
-_ALERT_THRESHOLD_CONFIG_KEY = "xstockstrat-agent.signal.alert_threshold"
+_ALERT_THRESHOLD_CONFIG_KEY = "signal.alert_threshold"
 
 log = logging.getLogger(__name__)
 
