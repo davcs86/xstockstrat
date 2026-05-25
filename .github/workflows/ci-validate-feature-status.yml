@@ -149,10 +149,14 @@ jobs:
               slug=$(echo "$branch" | sed 's|feature/||')
             fi
 
-            feature_md="docs/roadmap/features/$slug/feature.md"
+            # Directories are named NNN-<slug>; try glob match first
+            feature_md=$(ls "docs/roadmap/features/"*"-${slug}/feature.md" 2>/dev/null | head -1)
+            if [ -z "$feature_md" ]; then
+              feature_md="docs/roadmap/features/$slug/feature.md"
+            fi
 
             if [ ! -f "$feature_md" ]; then
-              echo "  ⚠ $branch: no feature.md at $feature_md — skipping"
+              echo "  ⚠ $branch: no feature.md for slug '$slug' — skipping"
               SKIPPED=$((SKIPPED + 1))
               continue
             fi

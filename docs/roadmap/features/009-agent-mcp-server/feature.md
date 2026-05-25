@@ -1,6 +1,8 @@
 # Feature: agent-mcp-server
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 16bc098f11328c718fa567c97cf48670b95332da
+**Launched date**: 2026-05-25
 **Development Branch**: `feature/agent-mcp-server`
 **Created**: 2026-05-16
 **Last Updated**: 2026-05-25
@@ -19,6 +21,7 @@
 | 2026-05-24 | `implementation-ready` → `in-progress` | /sdd-execute Step 1 | Service scaffold created — pyproject.toml, Dockerfile, uv.lock, app package structure |
 | 2026-05-25 | `in-progress` → `code-completed` | /sdd-execute Step 13 | All 13 steps complete; integration PR opened to main-dev |
 
+| 2026-05-25 | `code-completed` → `launched` | CI workflow | Promoted via PR #352; committed 16bc098f11328c718fa567c97cf48670b95332da |
 ---
 
 ## Artifacts
