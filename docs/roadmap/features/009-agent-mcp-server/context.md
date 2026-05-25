@@ -265,3 +265,10 @@
 ### Deviations this session
 - Server→FastMCP: not called out in spec, but necessary fix (lowlevel Server has no .tool() decorator).
 - conftest.py gen path setup added: spec only mentioned respx mock pattern from ingest; gen path was required to import app.auth (imports identity protobuf stubs).
+
+## Session 2026-05-25 (CI: feature status automation)
+
+- Promotion PR #352 merged to main
+- Feature promoted and committed: 16bc098f11328c718fa567c97cf48670b95332da
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-05-25
