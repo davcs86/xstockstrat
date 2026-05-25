@@ -1,3 +1,7 @@
+# App name:   xstockstrat-dev
+# DO project: set DO_DEV_PROJECT_ID in GitHub Secrets → Actions
+#             doctl projects list   ← find your project UUID
+#             doctl apps list       ← find DO_DEV_APP_ID after first deploy
 name: xstockstrat-dev
 region: nyc
 

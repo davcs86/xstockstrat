@@ -28,5 +28,6 @@ jobs:
     secrets:
       DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       DO_APP_ID: ${{ secrets.DO_DEV_APP_ID }}
+      DO_PROJECT_ID: ${{ secrets.DO_DEV_PROJECT_ID }}
     with:
       app_spec: .do/app.dev.yaml
