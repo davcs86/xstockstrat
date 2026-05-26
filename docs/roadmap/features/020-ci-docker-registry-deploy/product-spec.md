@@ -20,7 +20,7 @@ As a platform engineer, I want Docker images to be built in GitHub Actions CI wi
 ## Functional Requirements
 
 FR-1. CI builds a Docker image for each of the 14 platform services on every push to `main-dev` and `main`.
-FR-2. Images are tagged with the commit SHA (e.g. `ghcr.io/org/repo/xstockstrat-ledger:abc1234`) and a `latest-dev` / `latest` floating tag per branch.
+FR-2. Images are pushed to DOCR and tagged with the commit SHA (e.g. `registry.digitalocean.com/<registry>/xstockstrat-ledger:abc1234`) and a `latest-dev` / `latest` floating tag per branch.
 FR-3. GitHub Actions layer cache (`cache-from: type=gha, cache-to: type=gha,mode=max`) is applied to all Docker builds to avoid redundant `pnpm install` / `go mod download` / `pip install` layers.
 FR-4. On PRs, CI builds all changed-service images (using the existing `changes` filter job) but does **not** push — build failure blocks the PR merge.
 FR-5. The deploy workflows (`deploy-dev.yml`, `deploy-prod.yml`) inject the commit SHA as the image tag into the app spec before calling `doctl apps update`.
@@ -90,12 +90,9 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 8. The deploy workflow substitutes `YOUR_GITHUB_ORG` in the app spec and calls `doctl apps update` — no SHA injection needed because app specs reference floating `latest-dev`/`latest` tags.
 9. The `db-migrator` PRE_DEPLOY job continues to run and apply migrations successfully after the migration.
 
-## Open Questions
-
-- [ ] **Registry choice**: DOCR (DigitalOcean Container Registry, native DO auth, ~$5-20/month) vs GitHub Container Registry (ghcr.io, free for the repo's package quota, requires credential wiring in DO). DOCR is strongly preferred for zero-config DO integration.
-
 ## Resolved Decisions
 
+- **Registry**: DOCR (DigitalOcean Container Registry). Native DO App Platform auth (zero credential wiring on DO side). CI authenticates via `digitalocean/action-doctl@v2` + `doctl registry login` using `DIGITALOCEAN_ACCESS_TOKEN` — the same secret already present in the repo for `doctl apps update` in the deploy workflows. No new secrets required.
 - **Stale image handling** → per-service floating `latest-dev`/`latest` tags (FR-9). CI only rebuilds changed services; unchanged services retain their previous floating tag. App specs reference floating tags so no stale SHA problem arises.
 - **Build matrix strategy** → build only changed services using the existing `changes` filter job, both on PRs and on push. Shared-file changes (`pnpm-lock.yaml`, `go.work`, `pnpm-workspace.yaml`, `packages/proto/**`) must trigger all services of the affected language group.
 - **Local dev with registry** → dual `build:` + `image:` in `docker-compose.yml` (FR-7). `docker compose build` builds locally; `docker compose pull` fetches CI image. Both produce an image usable by `docker compose up` (AC-7).
