@@ -46,7 +46,7 @@ Parse its output to build a per-phase skip map:
 | P5 (create prod app) | An app sourced from `main` branch exists in `doctl apps list` |
 | P6 (set DO secrets) | Ask the user: "Have you already set Alpaca/JWT secrets on both DO apps? (y/n)" |
 | P7 (attach DB) | `doctl apps get $DEV_APP_ID` output contains a `db` component |
-| P8 (GitHub secrets) | `gh secret list` shows all four: `DIGITALOCEAN_ACCESS_TOKEN`, `DO_DEV_APP_ID`, `DO_PROD_APP_ID`, `BUF_TOKEN` |
+| P8 (GitHub secrets) | `gh secret list` shows all six: `DIGITALOCEAN_ACCESS_TOKEN`, `DO_DEV_APP_ID`, `DO_PROD_APP_ID`, `DO_DEV_PROJECT_ID`, `DO_PROD_PROJECT_ID`, `BUF_TOKEN` |
 | P9 (verify) | Never skipped — always run |
 
 Print a checklist before starting any phase:
@@ -60,6 +60,8 @@ P4 →  create dev app
 ```
 
 Capture any App IDs found in `doctl apps list` output now and keep them in working context for later phases.
+
+Also capture any existing Project IDs from `doctl projects list` that match `xstockstrat-staging` and `xstockstrat-production` — store as `DEV_PROJECT_ID` and `PROD_PROJECT_ID` if found. These will be used in P4/P5 (skipping project creation if already present) and stored as GitHub Secrets in P8.
 
 ---
 
@@ -148,14 +150,37 @@ Ask the user to confirm they have completed the GitHub authorization before proc
 
 1. Ask the user for their GitHub org name (e.g. `davcs86`). Store as `GH_ORG`.
 
-2. Substitute the org placeholder and create the app — pipe directly, no temp file:
+2. Create (or locate) the dev DO project — reuse `DEV_PROJECT_ID` from P0 if already captured:
+
+```bash
+DEV_PROJECT_ID=$(doctl projects list --format ID,Name --no-header \
+  | awk '/xstockstrat-staging/ {print $1}')
+
+if [ -z "$DEV_PROJECT_ID" ]; then
+  DEV_PROJECT_ID=$(doctl projects create \
+    --name xstockstrat-staging \
+    --purpose "xstockstrat development environment" \
+    --format ID --no-header)
+fi
+echo "Dev Project ID: $DEV_PROJECT_ID"
+```
+
+Display the project ID prominently:
+
+```
+Dev Project ID: <id>   ← copy this — you will need it in Phase 8
+```
+
+Store as `DEV_PROJECT_ID` in working context.
+
+3. Substitute the org placeholder and create the app — pipe directly, no temp file:
 
 ```bash
 sed "s|YOUR_GITHUB_ORG|${GH_ORG}|g" "$REPO_ROOT/.do/app.dev.yaml" \
   | doctl apps create --spec /dev/stdin
 ```
 
-3. Capture the App ID from the output. Display it prominently:
+4. Capture the App ID from the output. Display it prominently:
 
 ```
 Dev App ID: <id>   ← copy this — you will need it in Phase 8
@@ -163,7 +188,14 @@ Dev App ID: <id>   ← copy this — you will need it in Phase 8
 
 Store as `DEV_APP_ID` in working context.
 
-4. Verify:
+5. Assign the app to the dev project:
+
+```bash
+doctl projects resources assign "$DEV_PROJECT_ID" \
+  --resource "do:app:$DEV_APP_ID"
+```
+
+6. Verify:
 
 ```bash
 doctl apps list | grep xstockstrat
@@ -177,20 +209,50 @@ doctl apps list | grep xstockstrat
 
 1. Use the same `GH_ORG` captured in P4 (or re-ask if jumping directly to this phase).
 
-2. Create the prod app:
+2. Create (or locate) the prod DO project — reuse `PROD_PROJECT_ID` from P0 if already captured:
+
+```bash
+PROD_PROJECT_ID=$(doctl projects list --format ID,Name --no-header \
+  | awk '/xstockstrat-production/ {print $1}')
+
+if [ -z "$PROD_PROJECT_ID" ]; then
+  PROD_PROJECT_ID=$(doctl projects create \
+    --name xstockstrat-production \
+    --purpose "xstockstrat production environment" \
+    --format ID --no-header)
+fi
+echo "Prod Project ID: $PROD_PROJECT_ID"
+```
+
+Display the project ID prominently:
+
+```
+Prod Project ID: <id>   ← copy this — you will need it in Phase 8
+```
+
+Store as `PROD_PROJECT_ID` in working context.
+
+3. Create the prod app:
 
 ```bash
 sed "s|YOUR_GITHUB_ORG|${GH_ORG}|g" "$REPO_ROOT/.do/app.yaml" \
   | doctl apps create --spec /dev/stdin
 ```
 
-3. Capture and display the Prod App ID:
+4. Capture and display the Prod App ID:
 
 ```
 Prod App ID: <id>   ← copy this — you will need it in Phase 8
 ```
 
 Store as `PROD_APP_ID` in working context.
+
+5. Assign the app to the prod project:
+
+```bash
+doctl projects resources assign "$PROD_PROJECT_ID" \
+  --resource "do:app:$PROD_APP_ID"
+```
 
 ---
 
@@ -283,7 +345,7 @@ This step requires the DO console — `doctl` cannot attach a managed database t
 
 Walk the user through (repeat for both dev and prod apps):
 
-1. DO Console → **Apps** → select `xstockstrat-dev` (or `xstockstrat-prod`)
+1. DO Console → **Apps** → select `xstockstrat-staging` (or `xstockstrat-production`)
 2. **Settings** → **App-Level Environment Variables** — note the `${db.DATABASE_URL}` placeholder is already in the spec
 3. **Components** → select any component → **Attach Database**
 4. Choose `xstockstrat-db` → set component name to exactly **`db`** (required — `${db.DATABASE_URL}` injection depends on this name)
@@ -299,10 +361,11 @@ doctl apps get "$DEV_APP_ID" --output json | grep -i "database"
 
 ## P8 — Configure GitHub Actions Secrets
 
-**Skip if**: `gh secret list` shows all four required secrets.
+**Skip if**: `gh secret list` shows all six required secrets.
 
 By this point you have in working context:
 - `DEV_APP_ID` and `PROD_APP_ID` — from P4/P5
+- `DEV_PROJECT_ID` and `PROD_PROJECT_ID` — from P4/P5
 - `DO_TOKEN` — from P6
 
 Ask the user for:
@@ -315,6 +378,8 @@ Apply all secrets:
 gh secret set DIGITALOCEAN_ACCESS_TOKEN --body "$DO_TOKEN"
 gh secret set DO_DEV_APP_ID             --body "$DEV_APP_ID"
 gh secret set DO_PROD_APP_ID            --body "$PROD_APP_ID"
+gh secret set DO_DEV_PROJECT_ID         --body "$DEV_PROJECT_ID"
+gh secret set DO_PROD_PROJECT_ID        --body "$PROD_PROJECT_ID"
 gh secret set BUF_TOKEN                 --body "$BUF_TOKEN"
 ```
 
@@ -330,7 +395,7 @@ Verify each command exits 0. Then confirm:
 gh secret list
 ```
 
-All four required secrets should appear.
+All six required secrets should appear.
 
 ---
 
@@ -362,11 +427,11 @@ Setup complete!
   ✓ doctl authenticated
   ✓ Managed PostgreSQL created (xstockstrat-db) with TimescaleDB enabled
   ✓ GitHub connected to DigitalOcean
-  ✓ Dev app created  (App ID: <DEV_APP_ID>)
-  ✓ Prod app created (App ID: <PROD_APP_ID>)
+  ✓ Dev app created  (App ID: <DEV_APP_ID>, Project ID: <DEV_PROJECT_ID>)
+  ✓ Prod app created (App ID: <PROD_APP_ID>, Project ID: <PROD_PROJECT_ID>)
   ✓ Secrets applied to both apps
   ✓ Database attached to both apps
-  ✓ GitHub Actions secrets configured (4 required)
+  ✓ GitHub Actions secrets configured (6 required: DIGITALOCEAN_ACCESS_TOKEN, DO_DEV_APP_ID, DO_PROD_APP_ID, DO_DEV_PROJECT_ID, DO_PROD_PROJECT_ID, BUF_TOKEN)
   ✓ First deployment verified
 
 Next steps:

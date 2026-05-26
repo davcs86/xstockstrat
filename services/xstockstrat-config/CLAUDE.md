@@ -6,6 +6,9 @@ Node.js gRPC + Connect-RPC service that is the **central configuration authority
 ## Language
 Node.js 20 + TypeScript
 
+## Docker Build Pattern
+Backend pattern — see `docs/patterns/docker-build.md` for the base stage, proto stub timing, and `pnpm deploy` approach.
+
 ## Ports
 
 | Port | Protocol | Usage |

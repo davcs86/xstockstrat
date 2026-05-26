@@ -8,6 +8,9 @@ Next.js 14 analytics and insights dashboard. Displays strategy backtests, perfor
 ## Language
 TypeScript / Next.js 14 (App Router)
 
+## Docker Build Pattern
+Frontend pattern — see `docs/patterns/docker-build.md` for the base + deps + builder + runner stages, `--filter` usage, and `.next/standalone` optimization.
+
 ## Dev Port
 `3001`
 
