@@ -333,7 +333,7 @@ grep -n "YOUR_REGISTRY_NAME\|YOUR_IMAGE_TAG" .do/app.dev.yaml .do/app.yaml
 
 ### Step 4 — service: Add image field to docker-compose.yml service entries
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docker-compose.yml`
 **Files**:
 - `docker-compose.yml` — modify
