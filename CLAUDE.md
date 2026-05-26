@@ -147,7 +147,7 @@ All inter-service connection env vars follow these patterns. **Never invent new 
 |---|---|---|---|
 | `<SERVICE>_ENDPOINT` | `host:port` (no protocol) | gRPC connections | `IDENTITY_ENDPOINT=xstockstrat-identity:50058` |
 | `<SERVICE>_HTTP_ENDPOINT` | `http://host:port` (full URL) | HTTP Connect-RPC + webhook calls | `INGEST_HTTP_ENDPOINT=http://xstockstrat-ingest:8055` |
-| `XSTOCKSTRAT_<SERVICE>_PRIVATE_URL` | bare hostname on DO, container name in Compose | **nginx container only** — `envsubst` upstream resolution | `XSTOCKSTRAT_AGENT_PRIVATE_URL=xstockstrat-agent` |
+| `XSTOCKSTRAT_<SERVICE>_PRIVATE_URL` | `PRIVATE_DOMAIN` on DO (e.g. `svc.internal`), bare container name in Compose | **nginx container only** — `envsubst` upstream resolution; entrypoint strips `http://` prefix just in case, but the nginx template already appends `:PORT` so `PRIVATE_URL` (which includes the port) must not be used here | `XSTOCKSTRAT_AGENT_PRIVATE_URL=xstockstrat-agent` |
 
 **Rules:**
 - No `XSTOCKSTRAT_` prefix except for nginx `PRIVATE_URL` vars.
