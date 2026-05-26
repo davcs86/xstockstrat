@@ -53,13 +53,15 @@ No service application code, proto contracts, database migrations, or config key
 
 1. Add a new `docker-build` job to `.github/workflows/ci.yml`, immediately after the `dockerfile-lint` job (L519 is the end of `dockerfile-lint`).
 
-2. The job runs on every push to `main-dev` or `main` AND on pull_request when any `dockerfile_path` (`**/Dockerfile*`) or CI file changes. Follow the same `if:` guard pattern used by `dockerfile-lint` (L508–L510) but add a push-branch condition so images are only pushed on `main-dev`/`main` pushes:
+2. The job runs on every push to `main-dev` or `main` (all 15 services, unconditionally — FR-1) AND on pull_request when any Dockerfile or CI file changes (path-filtered). The `if:` short-circuits on push so all matrix entries always run; path filtering only applies to PRs:
 
    ```yaml
    docker-build:
      name: Docker build and push (${{ matrix.service }})
      needs: changes
      if: >-
+       (github.event_name == 'push' &&
+         (github.ref == 'refs/heads/main-dev' || github.ref == 'refs/heads/main')) ||
        contains(fromJson(needs.changes.outputs.matched), 'dockerfiles') ||
        contains(fromJson(needs.changes.outputs.matched), 'ci') ||
        contains(fromJson(needs.changes.outputs.matched), matrix.service)
@@ -354,6 +356,7 @@ grep -n "YOUR_REGISTRY_NAME\|YOUR_IMAGE_TAG" .do/app.dev.yaml .do/app.yaml
 **Service**: `docker-compose.yml`
 **Files**:
 - `docker-compose.yml` — modify
+- `.env.example` — modify (add DO_REGISTRY_NAME)
 
 **Reviewers**: Platform Lead — cross-service CI/CD architecture, port assignments, inter-service consistency; this change restructures the entire build pipeline for all 14 services
 
