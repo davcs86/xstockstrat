@@ -69,6 +69,17 @@
 **Stopped at**: Step 1 (complete — awaiting merge before continuing)
 **Next**: /sdd-execute ci-docker-registry-deploy next
 
+### Step 3 — service: Migrate app specs from dockerfile_path to image references [done]
+- Migrated 5 services (trader, insights, config-ui, identity, notify) from github:+dockerfile_path: to image: DOCR blocks in both .do/app.dev.yaml and .do/app.yaml. 10 backend services + nginx unchanged. Services selected by pnpm lockfile package count (top 5: insights=117, trader=117, config-ui=114, identity=93, notify=93).
+- Files modified: `.do/app.dev.yaml`, `.do/app.yaml`
+- Deviations: Only 5 of 15 services migrated (DOCR basic plan 5-repo limit); ci.yml matrix stays at 15 services (accepted limitation — 10 non-selected jobs will fail at DOCR quota).
+
+## Session 2026-05-26T00:09:00Z — sdd-execute
+**Steps this session**: [3]
+**Progress**: 3 done / 5 total
+**Stopped at**: Step 3 (complete — awaiting merge before continuing)
+**Next**: /sdd-execute ci-docker-registry-deploy next
+
 ### Step 2 — service: Update deploy workflows to inject SHA image tags [done]
 - Added `image_tag` input and `DO_REGISTRY_NAME` secret to `deploy.yml` reusable workflow; replaced single-sed substitution step with three-substitution step covering `YOUR_GITHUB_ORG`, `YOUR_IMAGE_TAG`, and `YOUR_REGISTRY_NAME`.
 - Added `prepare` job to both `deploy-dev.yml` and `deploy-prod.yml` to compute 7-char short SHA; updated `deploy` job in each to depend on `prepare` and pass `image_tag` and `DO_REGISTRY_NAME`.

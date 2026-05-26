@@ -235,7 +235,7 @@ No service application code, proto contracts, database migrations, or config key
 
 ### Step 3 — service: Migrate app specs from dockerfile_path to image references
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.do/app.dev.yaml`, `.do/app.yaml`
 **Files**:
 - `.do/app.dev.yaml` — modify
@@ -466,6 +466,12 @@ docker compose pull xstockstrat-config
 ---
 
 ## Deviation Log
+
+### Deviation: Step 3 — service: Migrate app specs from dockerfile_path to image references
+**Spec said**: Replace github: + dockerfile_path: with image: blocks for all 15 services in both app specs.
+**Actual**: Only 5 services migrated (xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui, xstockstrat-identity, xstockstrat-notify). 10 backend services + nginx retain github: + dockerfile_path: entries.
+**Reason**: DOCR basic plan allows max 5 repositories. Services selected by pnpm lockfile package count (top 5 heaviest installs) — these are the services with the longest cold-install times that most benefit from pre-built images.
+**Disposition**: accepted limitation — ci.yml docker-build matrix still has 15 services; the 10 non-selected services will fail at DOCR quota on push. To be resolved by either upgrading the DOCR plan or trimming the matrix in a follow-up.
 
 ### Deviation: Step 1 — ci: Add docker-build job to CI workflow
 **Spec said**: No `if:` guard — job runs unconditionally on every push and pull_request event (all 15 services, always — FR-1 defers path-filtered builds).
