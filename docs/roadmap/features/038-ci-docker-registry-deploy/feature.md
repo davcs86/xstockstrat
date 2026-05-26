@@ -1,6 +1,6 @@
 # Feature: ci-docker-registry-deploy
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/ci-docker-registry-deploy`
 **Created**: 2026-05-26
 **Last Updated**: 2026-05-26
@@ -15,6 +15,7 @@
 | 2026-05-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 | 2026-05-26 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-05-26 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — docker-build job added to ci.yml |
+| 2026-05-26 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done — open integration PR to main-dev |
 
 ---
 

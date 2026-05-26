@@ -53,6 +53,20 @@
 - Trading domain checks: skipped (non-trading feature).
 - Step ordering: no test steps needed (CI workflow — no service coverage threshold applies).
 
+### Step 5 — docs: Update DigitalOcean setup guide [done]
+- Added Step 4.5 (Create a DOCR Container Registry) between Steps 4 and 5 with `doctl registry create` command, plan-limit note, and DO App Platform native auth explanation.
+- Updated Step 5 and Step 6 with prerequisites noting CI must push images before `doctl apps create`.
+- Updated Step 9 secrets table to add `DO_REGISTRY_NAME` row (used by ci docker-build, deploy-dev, deploy-prod).
+- Added two troubleshooting entries: "Deploy fails with image not found" and "`docker compose pull` fails with unauthorized".
+- Files modified: `docs/setup/digitalocean.md`
+- Deviations: none
+
+## Session 2026-05-26T00:11:00Z — sdd-execute
+**Steps this session**: [5]
+**Progress**: 5 done / 5 total
+**Status**: `code-completed` — all steps done; open integration PR `feature/ci-docker-registry-deploy` → `main-dev`
+**Merge order gate**: 038 must merge before 003 and 018 (both touch docker-compose.yml and .do/ files) — confirmed from merge-order.md
+
 ### Step 4 — service: Add image field to docker-compose.yml [done]
 - Added `image:` field alongside `build:` block for all 15 app services in `docker-compose.yml`. Image format: `registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/<service>:latest-dev`. db-migrator excluded per FR-8.
 - Added `DO_REGISTRY_NAME=xstockstrat` to `.env.example` with usage comment; added `DO_REGISTRY_NAME` to GitHub Secrets table in `.env.example`.
