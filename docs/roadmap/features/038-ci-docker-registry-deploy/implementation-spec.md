@@ -419,7 +419,7 @@ docker compose pull xstockstrat-config
 
 ### Step 5 — docs: Update DigitalOcean setup guide for registry and new secrets
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/setup/digitalocean.md`
 **Files**:
 - `docs/setup/digitalocean.md` — modify
