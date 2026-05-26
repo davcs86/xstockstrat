@@ -1,4 +1,8 @@
-name: xstockstrat-prod
+# App name:   xstockstrat-production
+# DO project: set DO_PROD_PROJECT_ID in GitHub Secrets → Actions
+#             doctl projects list   ← find your project UUID
+#             doctl apps list       ← find DO_PROD_APP_ID after first deploy
+name: xstockstrat-production
 region: nyc
 
 # Global environment variables — inherited by all services, workers, and jobs.
@@ -34,17 +38,15 @@ services:
       - key: CONNECT_PORT
         value: "8051"
       - key: CONFIG_ENDPOINT
-        value: ${xstockstrat-config.PRIVATE_URL}
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
-        value: ${xstockstrat-ledger.PRIVATE_URL}
+        value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: NOTIFY_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: MARKETDATA_ENDPOINT
-        value: ${xstockstrat-marketdata.PRIVATE_URL}
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: PORTFOLIO_ENDPOINT
-        value: ${xstockstrat-portfolio.PRIVATE_URL}
+        value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
       - key: INDICATORS_ENDPOINT
-        value: ${xstockstrat-indicators.PRIVATE_URL}
+        value: ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
@@ -66,11 +68,11 @@ services:
       - key: CONNECT_PORT
         value: "8052"
       - key: CONFIG_ENDPOINT
-        value: ${xstockstrat-config.PRIVATE_URL}
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
-        value: ${xstockstrat-ledger.PRIVATE_URL}
+        value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: NOTIFY_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
@@ -92,11 +94,11 @@ services:
       - key: CONNECT_PORT
         value: "8053"
       - key: CONFIG_ENDPOINT
-        value: ${xstockstrat-config.PRIVATE_URL}
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
-        value: ${xstockstrat-ledger.PRIVATE_URL}
+        value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: NOTIFY_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
@@ -126,11 +128,11 @@ services:
       - key: CONNECT_PORT
         value: "8054"
       - key: CONFIG_ENDPOINT
-        value: ${xstockstrat-config.PRIVATE_URL}
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
-        value: ${xstockstrat-ledger.PRIVATE_URL}
+        value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: NOTIFY_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: SERVICE_NAME
         value: indicators
 
@@ -149,15 +151,15 @@ services:
       - key: CONNECT_PORT
         value: "8055"
       - key: CONFIG_ENDPOINT
-        value: ${xstockstrat-config.PRIVATE_URL}
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
-        value: ${xstockstrat-ledger.PRIVATE_URL}
+        value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: NOTIFY_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: MARKETDATA_ENDPOINT
-        value: ${xstockstrat-marketdata.PRIVATE_URL}
+        value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
       - key: IDENTITY_ENDPOINT
-        value: ${xstockstrat-identity.PRIVATE_URL}
+        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
@@ -182,15 +184,15 @@ services:
       - key: CONNECT_PORT
         value: "8056"
       - key: CONFIG_ENDPOINT
-        value: ${xstockstrat-config.PRIVATE_URL}
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
-        value: ${xstockstrat-ledger.PRIVATE_URL}
+        value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: NOTIFY_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: MARKETDATA_ENDPOINT
-        value: ${xstockstrat-marketdata.PRIVATE_URL}
+        value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
       - key: INDICATORS_ENDPOINT
-        value: ${xstockstrat-indicators.PRIVATE_URL}
+        value: ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
@@ -217,9 +219,9 @@ services:
       - key: ANALYSIS_HTTP_ENDPOINT
         value: ${xstockstrat-analysis.PRIVATE_URL}
       - key: IDENTITY_ENDPOINT
-        value: ${xstockstrat-identity.PRIVATE_URL}
+        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: CONFIG_ENDPOINT
-        value: ${xstockstrat-config.PRIVATE_URL}
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: MCP_TRANSPORT
         value: sse
       - key: MCP_SSE_PORT
@@ -245,9 +247,9 @@ services:
       - key: CONNECT_PORT
         value: "8057"
       - key: CONFIG_ENDPOINT
-        value: ${xstockstrat-config.PRIVATE_URL}
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: NOTIFY_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
@@ -269,11 +271,11 @@ services:
       - key: CONNECT_PORT
         value: "8058"
       - key: CONFIG_ENDPOINT
-        value: ${xstockstrat-config.PRIVATE_URL}
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
-        value: ${xstockstrat-ledger.PRIVATE_URL}
+        value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: NOTIFY_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
@@ -298,9 +300,9 @@ services:
       - key: CONNECT_PORT
         value: "8059"
       - key: CONFIG_ENDPOINT
-        value: ${xstockstrat-config.PRIVATE_URL}
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
-        value: ${xstockstrat-ledger.PRIVATE_URL}
+        value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
@@ -346,13 +348,13 @@ services:
     instance_size_slug: basic-xs
     envs:
       - key: XSTOCKSTRAT_TRADER_PRIVATE_URL
-        value: ${xstockstrat-trader.PRIVATE_URL}
+        value: ${xstockstrat-trader.PRIVATE_DOMAIN}
       - key: XSTOCKSTRAT_INSIGHTS_PRIVATE_URL
-        value: ${xstockstrat-insights.PRIVATE_URL}
+        value: ${xstockstrat-insights.PRIVATE_DOMAIN}
       - key: XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL
-        value: ${xstockstrat-config-ui.PRIVATE_URL}
+        value: ${xstockstrat-config-ui.PRIVATE_DOMAIN}
       - key: XSTOCKSTRAT_AGENT_PRIVATE_URL
-        value: ${xstockstrat-agent.PRIVATE_URL}
+        value: ${xstockstrat-agent.PRIVATE_DOMAIN}
 
   - name: xstockstrat-trader
     github:
@@ -360,6 +362,7 @@ services:
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-trader/Dockerfile
+    http_port: 3000
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -387,6 +390,7 @@ services:
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-insights/Dockerfile
+    http_port: 3001
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -418,6 +422,7 @@ services:
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-config-ui/Dockerfile
+    http_port: 3002
     instance_count: 1
     instance_size_slug: professional-xs
     envs:

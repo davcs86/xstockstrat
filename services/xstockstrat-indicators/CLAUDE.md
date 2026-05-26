@@ -8,6 +8,9 @@ Python gRPC service providing two capabilities:
 ## Language
 Python 3.12 (asyncio, grpc.aio)
 
+## Docker Build Pattern
+Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
+
 ## Ports
 
 | Protocol | Port | Purpose |

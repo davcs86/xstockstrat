@@ -6,6 +6,9 @@ Next.js 14 frontend for trading execution and order management. Uses the App Rou
 ## Language
 TypeScript / Next.js 14 (App Router)
 
+## Docker Build Pattern
+Frontend pattern — see `docs/patterns/docker-build.md` for the base + deps + builder + runner stages, `--filter` usage, and `.next/standalone` optimization.
+
 ## Dev Port
 `3000`
 

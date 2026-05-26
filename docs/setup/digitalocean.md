@@ -24,14 +24,44 @@ This runbook walks through creating and configuring the DigitalOcean infrastruct
 
 | Resource | Purpose |
 |---|---|
-| App Platform (dev) | Hosts all 13 services; paper trading; deploys from `main-dev` |
-| App Platform (prod) | Hosts all 13 services; live trading; deploys from `main` |
+| App Platform (staging) | Hosts all 13 services; paper trading; deploys from `main-dev` |
+| App Platform (production) | Hosts all 13 services; live trading; deploys from `main` |
 | Managed PostgreSQL 15 | Shared TimescaleDB database for all services with persistent data |
 | GitHub Actions | CI/CD; auto-deploys on push to `main-dev` or `main` via `doctl` |
 
 Architecture spec files:
-- `.do/app.dev.yaml` — dev app definition (paper trading, `basic-xs` instances)
-- `.do/app.yaml` — prod app definition (live trading, `professional-xs` / `professional-s` instances)
+- `.do/app.dev.yaml` — staging app definition (paper trading, `basic-xs` instances)
+- `.do/app.yaml` — production app definition (live trading, `professional-xs` / `professional-s` instances)
+
+---
+
+## Key Identifiers
+
+Two separate IDs are needed for each environment. They serve different purposes and come from different places.
+
+| Identifier | What it is | How it's created | Where it's used |
+|---|---|---|---|
+| **App ID** (`DO_DEV_APP_ID`, `DO_PROD_APP_ID`) | Identifies a specific App Platform application — the deployed unit containing all services, workers, and jobs defined in the app spec | Returned by `doctl apps create` | `doctl apps update`, `doctl apps list-deployments`, `doctl apps logs` — everything that interacts with the running app |
+| **Project ID** (`DO_DEV_PROJECT_ID`, `DO_PROD_PROJECT_ID`) | Identifies a DO Project — an organizational folder that groups resources across any DO product (apps, databases, droplets, etc.) for billing and console grouping | Returned by `doctl projects create` | `doctl projects resources assign` — to place the app into a project; has no effect on how the app runs |
+
+The relationship looks like this:
+
+```
+DO Project (xstockstrat-staging)        ← identified by DO_DEV_PROJECT_ID
+  └── App (xstockstrat-staging)         ← identified by DO_DEV_APP_ID
+        ├── service: xstockstrat-trading
+        ├── service: xstockstrat-config
+        ├── ...
+        └── database: db
+```
+
+**Important:** the DO app spec (`app.yaml`) has no `project_id` field — DO does not support setting project membership in the spec YAML. Project assignment is always a separate CLI call after the app exists:
+
+```bash
+doctl projects resources assign "$PROJECT_ID" --resource "do:app:$APP_ID"
+```
+
+The deploy workflow (`.github/workflows/deploy.yml`) runs this step automatically on every deploy using the `DO_DEV_PROJECT_ID` / `DO_PROD_PROJECT_ID` GitHub secrets.
 
 ---
 
@@ -315,15 +345,19 @@ doctl apps update $DO_PROD_APP_ID --spec .do/app.yaml
 
 ## Step 9 — Configure GitHub Actions Secrets
 
-The CI/CD workflows need four repository secrets. Go to:
+The CI/CD workflows need six repository secrets. Go to:
 **GitHub → repository → Settings → Secrets and variables → Actions → New repository secret**
 
 | Secret Name | Value | Used by |
 |---|---|---|
 | `DIGITALOCEAN_ACCESS_TOKEN` | The PAT created in Step 2 | deploy-dev, deploy-prod |
-| `DO_DEV_APP_ID` | App ID of the dev app (from Step 5) | deploy-dev |
-| `DO_PROD_APP_ID` | App ID of the prod app (from Step 6) | deploy-prod |
+| `DO_DEV_APP_ID` | App ID of the staging app (from Step 5) | deploy-dev |
+| `DO_PROD_APP_ID` | App ID of the production app (from Step 6) | deploy-prod |
+| `DO_DEV_PROJECT_ID` | Project ID of the staging DO project (from Step 5) | deploy-dev — assigns app to project on every deploy |
+| `DO_PROD_PROJECT_ID` | Project ID of the production DO project (from Step 6) | deploy-prod — assigns app to project on every deploy |
 | `BUF_TOKEN` | Buf Schema Registry token (see below) | deploy-dev, deploy-prod |
+
+See [Key Identifiers](#key-identifiers) above for the difference between App ID and Project ID.
 
 `GITHUB_TOKEN` is automatically provided by GitHub Actions — no setup needed.
 
@@ -439,8 +473,8 @@ Run `CREATE EXTENSION IF NOT EXISTS timescaledb;` on the managed database before
 
 | Git Branch | App | Trading Mode | Alpaca Endpoint |
 |---|---|---|---|
-| `main-dev` | xstockstrat-dev | paper | paper-api.alpaca.markets |
-| `main` | xstockstrat-prod | live | api.alpaca.markets |
+| `main-dev` | xstockstrat-staging | paper | paper-api.alpaca.markets |
+| `main` | xstockstrat-production | live | api.alpaca.markets |
 | `feature/*` | none (CI tests only) | — | — |
 
 Never push directly to `main-dev` or `main` — always use PRs. See `docs/runbooks/feature-workflow.md`.

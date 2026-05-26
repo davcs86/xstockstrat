@@ -8,6 +8,9 @@ As of Phase 3, ingest owns a database schema (`ingest`) and is no longer statele
 ## Language
 Python 3.12 (asyncio, grpc.aio)
 
+## Docker Build Pattern
+Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
+
 ## Ports
 
 | Protocol | Port | Purpose |
