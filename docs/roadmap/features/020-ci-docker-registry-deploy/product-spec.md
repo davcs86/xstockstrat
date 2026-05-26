@@ -19,15 +19,15 @@ As a platform engineer, I want Docker images to be built in GitHub Actions CI wi
 
 ## Functional Requirements
 
-FR-1. CI builds a Docker image for each of the 14 platform services on every push to `main-dev` and `main`.
+FR-1. CI builds a Docker image for all 14 platform services on every push to `main-dev` and `main`. Path-filtered builds (changed services only) are deferred until the `changes` filter job is working correctly; full matrix builds are used in the interim.
 FR-2. Images are pushed to DOCR and tagged with the commit SHA (e.g. `registry.digitalocean.com/<registry>/xstockstrat-ledger:abc1234`) and a `latest-dev` / `latest` floating tag per branch.
 FR-3. GitHub Actions layer cache (`cache-from: type=gha, cache-to: type=gha,mode=max`) is applied to all Docker builds to avoid redundant `pnpm install` / `go mod download` / `pip install` layers.
 FR-4. On PRs, CI builds all changed-service images (using the existing `changes` filter job) but does **not** push — build failure blocks the PR merge.
-FR-5. The deploy workflows (`deploy-dev.yml`, `deploy-prod.yml`) inject the commit SHA as the image tag into the app spec before calling `doctl apps update`.
+FR-5. The deploy workflows (`deploy-dev.yml`, `deploy-prod.yml`) inject the commit SHA as the image tag for each service into the app spec before calling `doctl apps update`. This ensures every deployment is pinned to an immutable, auditable image digest.
 FR-6. `.do/app.yaml` and `.do/app.dev.yaml` are migrated from `dockerfile_path` to `image:` references for all 14 services.
 FR-7. Each service entry in `docker-compose.yml` gets both `build:` (existing Dockerfile path) and `image:` (registry `latest-dev`/`latest` tag). This means `docker compose build` builds locally and tags the result with the registry image name, while `docker compose pull` fetches the CI-built image — both commands produce an image usable by `docker compose up` without rebuilding.
 FR-8. The `db-migrator` PRE_DEPLOY job in both app specs is unaffected (it is a `job` kind, not a `service`, and does not use a custom image; it may continue using `dockerfile_path` or a script runner image).
-FR-9. CI uses **per-service floating tags** (`latest-dev` on `main-dev` push, `latest` on `main` push) in addition to the immutable `<sha>` tag. The app specs reference the floating tags — no SHA injection required in the deploy workflow. The SHA tag is retained for audit and rollback.
+FR-9. CI pushes two tags per image: the immutable commit SHA tag (used by the deploy workflow in app specs) and a floating `latest-dev` / `latest` tag (used by `docker compose pull` for local development). App specs always reference the SHA tag — floating tags are a local dev convenience only.
 
 ## Out of Scope
 
@@ -87,12 +87,12 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 5. Pushing to `main` triggers a DO prod deployment from the registry within 5 minutes.
 6. Running `docker compose build` locally still works without any registry credentials — it builds from Dockerfiles and tags the result with the registry image name.
 7. Running `docker compose pull` fetches all 14 CI-built images from the registry, allowing `docker compose up -d` with no local build required.
-8. The deploy workflow substitutes `YOUR_GITHUB_ORG` in the app spec and calls `doctl apps update` — no SHA injection needed because app specs reference floating `latest-dev`/`latest` tags.
+8. The deploy workflow substitutes `YOUR_GITHUB_ORG` and the commit SHA into the app spec and calls `doctl apps update` — each service's `image.tag` in the spec is pinned to the exact SHA of the triggering commit.
 9. The `db-migrator` PRE_DEPLOY job continues to run and apply migrations successfully after the migration.
 
 ## Resolved Decisions
 
 - **Registry**: DOCR (DigitalOcean Container Registry). Native DO App Platform auth (zero credential wiring on DO side). CI authenticates via `digitalocean/action-doctl@v2` + `doctl registry login` using `DIGITALOCEAN_ACCESS_TOKEN` — the same secret already present in the repo for `doctl apps update` in the deploy workflows. No new secrets required.
-- **Stale image handling** → per-service floating `latest-dev`/`latest` tags (FR-9). CI only rebuilds changed services; unchanged services retain their previous floating tag. App specs reference floating tags so no stale SHA problem arises.
-- **Build matrix strategy** → build only changed services using the existing `changes` filter job, both on PRs and on push. Shared-file changes (`pnpm-lock.yaml`, `go.work`, `pnpm-workspace.yaml`, `packages/proto/**`) must trigger all services of the affected language group.
+- **Deployment tagging** → SHA-pinned (industry standard). App specs always reference the immutable commit SHA tag. Floating `latest-dev`/`latest` tags are also pushed as a local dev convenience for `docker compose pull` but are never used in DO deployments (FR-9).
+- **Build matrix strategy** → build all 14 services on every push (interim). Path-filtered builds deferred until the `changes` filter job is fixed (FR-1).
 - **Local dev with registry** → dual `build:` + `image:` in `docker-compose.yml` (FR-7). `docker compose build` builds locally; `docker compose pull` fetches CI image. Both produce an image usable by `docker compose up` (AC-7).
