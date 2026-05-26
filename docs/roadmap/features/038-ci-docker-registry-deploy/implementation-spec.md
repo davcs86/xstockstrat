@@ -155,7 +155,7 @@ No service application code, proto contracts, database migrations, or config key
 
 ### Step 2 — service: Update deploy workflows to inject SHA image tags
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows/deploy.yml`, `.github/workflows/deploy-dev.yml`, `.github/workflows/deploy-prod.yml`
 **Files**:
 - `.github/workflows/deploy.yml` — modify

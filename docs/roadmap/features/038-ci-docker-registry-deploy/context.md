@@ -68,3 +68,15 @@
 **Progress**: 1 done / 5 total
 **Stopped at**: Step 1 (complete — awaiting merge before continuing)
 **Next**: /sdd-execute ci-docker-registry-deploy next
+
+### Step 2 — service: Update deploy workflows to inject SHA image tags [done]
+- Added `image_tag` input and `DO_REGISTRY_NAME` secret to `deploy.yml` reusable workflow; replaced single-sed substitution step with three-substitution step covering `YOUR_GITHUB_ORG`, `YOUR_IMAGE_TAG`, and `YOUR_REGISTRY_NAME`.
+- Added `prepare` job to both `deploy-dev.yml` and `deploy-prod.yml` to compute 7-char short SHA; updated `deploy` job in each to depend on `prepare` and pass `image_tag` and `DO_REGISTRY_NAME`.
+- Files modified: `.github/workflows/deploy.yml`, `.github/workflows/deploy-dev.yml`, `.github/workflows/deploy-prod.yml`
+- Deviations: none
+
+## Session 2026-05-26T00:08:00Z — sdd-execute
+**Steps this session**: [2]
+**Progress**: 2 done / 5 total
+**Stopped at**: Step 2 (complete — awaiting merge before continuing)
+**Next**: /sdd-execute ci-docker-registry-deploy next

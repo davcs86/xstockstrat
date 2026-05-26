@@ -6,6 +6,14 @@ on:
       - main
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      short_sha: ${{ steps.sha.outputs.short_sha }}
+    steps:
+      - id: sha
+        run: echo "short_sha=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
   buf-push:
     name: Publish proto definitions to BSR
     runs-on: ubuntu-latest
@@ -23,10 +31,13 @@ jobs:
 
   deploy:
     name: Deploy to prod
+    needs: [prepare]
     uses: ./.github/workflows/deploy.yml
     secrets:
       DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       DO_APP_ID: ${{ secrets.DO_PROD_APP_ID }}
       DO_PROJECT_ID: ${{ secrets.DO_PROD_PROJECT_ID }}
+      DO_REGISTRY_NAME: ${{ secrets.DO_REGISTRY_NAME }}
     with:
       app_spec: .do/app.yaml
+      image_tag: ${{ needs.prepare.outputs.short_sha }}
