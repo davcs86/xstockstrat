@@ -10,7 +10,7 @@
 
 ## Execution Summary
 
-The migration has four logical phases executed in order. First, the CI `docker-build` job matrix is added to `.github/workflows/ci.yml` — this is the core deliverable that builds and pushes images. Second, the reusable deploy workflow and the two deploy callers are updated so that on push to `main-dev` or `main` the deploy substitutes the commit SHA into the image tag before calling `doctl apps update`. Third, both DO App Platform spec files (`app.dev.yaml`, `app.yaml`) are migrated from `dockerfile_path` to `image:` references for all 14 services (plus `xstockstrat-agent`, which is present in the app specs but absent from the product spec's 14-service list — see Step Dependencies note). Finally, `docker-compose.yml` is updated to add an `image:` field alongside each service's existing `build:` block, enabling `docker compose pull` as a local dev shortcut.
+The migration has four logical phases executed in order. First, the CI `docker-build` job matrix is added to `.github/workflows/ci.yml` — this is the core deliverable that builds and pushes images. Second, the reusable deploy workflow and the two deploy callers are updated so that on push to `main-dev` or `main` the deploy substitutes the commit SHA into the image tag before calling `doctl apps update`. Third, both DO App Platform spec files (`app.dev.yaml`, `app.yaml`) are migrated from `dockerfile_path` to `image:` references for all 15 services (`xstockstrat-agent` is present in the app specs but absent from the product spec's 14-service list — see Step Dependencies note). Finally, `docker-compose.yml` is updated to add an `image:` field alongside each service's existing `build:` block, enabling `docker compose pull` as a local dev shortcut.
 
 No service application code, proto contracts, database migrations, or config keys change in this feature.
 
@@ -25,7 +25,7 @@ No service application code, proto contracts, database migrations, or config key
 
 ---
 
-### Step 1 — service: Add docker-build job to CI workflow
+### Step 1 — ci: Add docker-build job to CI workflow
 
 **Status**: `pending`
 **Service**: `.github/workflows/ci.yml`
@@ -53,16 +53,12 @@ No service application code, proto contracts, database migrations, or config key
 
 1. Add a new `docker-build` job to `.github/workflows/ci.yml`, immediately after the `dockerfile-lint` job (L519 is the end of `dockerfile-lint`).
 
-2. The job runs on every push to `main-dev` or `main` AND on pull_request when any `dockerfile_path` (`**/Dockerfile*`) or CI file changes. Follow the same `if:` guard pattern used by `dockerfile-lint` (L508–L510) but add a push-branch condition so images are only pushed on `main-dev`/`main` pushes:
+2. The job runs unconditionally on every push and pull_request (all 15 services, always — FR-1 defers path-filtered builds). No `if:` guard. The job depends on `changes` only for ordering, not for filtering its output:
 
    ```yaml
    docker-build:
      name: Docker build and push (${{ matrix.service }})
      needs: changes
-     if: >-
-       contains(fromJson(needs.changes.outputs.matched), 'dockerfiles') ||
-       contains(fromJson(needs.changes.outputs.matched), 'ci') ||
-       contains(fromJson(needs.changes.outputs.matched), matrix.service)
      runs-on: ubuntu-latest
      strategy:
        fail-fast: false
@@ -110,7 +106,7 @@ No service application code, proto contracts, database migrations, or config key
            token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
        - name: Log in to DOCR
-         run: doctl registry login --expiry-seconds 600
+         run: doctl registry login --expiry-seconds 3600
 
        - name: Determine push flag and tags
          id: tags
@@ -184,11 +180,11 @@ No service application code, proto contracts, database migrations, or config key
 
 **Instructions**:
 
-1. In `.github/workflows/deploy.yml`, add two new `inputs` to the `workflow_call` block:
-   - `image_tag` — type: string, required: true — the short SHA (e.g. `abc1234`) to pin into the app spec
-   - `registry_name` — type: string, required: true — the DOCR registry slug (e.g. `xstockstrat`)
+1. In `.github/workflows/deploy.yml`, update the `workflow_call` block:
+   - Add one new `input`: `image_tag` — type: string, required: true — the short SHA (e.g. `abc1234`) to inject into the `YOUR_IMAGE_TAG` placeholder in the app spec
+   - Add one new `secret`: `DO_REGISTRY_NAME` — the DOCR registry slug (alongside the existing `DIGITALOCEAN_ACCESS_TOKEN`, `DO_APP_ID`, `DO_PROJECT_ID` secrets)
 
-2. In `.github/workflows/deploy.yml`, extend the "Substitute GitHub org in app spec" step to also substitute `YOUR_IMAGE_TAG` and `YOUR_REGISTRY_NAME` placeholders (which will be added to the app specs in Step 3):
+2. In `.github/workflows/deploy.yml`, replace the "Substitute GitHub org in app spec" step with:
 
    ```yaml
    - name: Substitute app spec placeholders
@@ -196,20 +192,11 @@ No service application code, proto contracts, database migrations, or config key
        sed \
          -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \
          -e "s|YOUR_IMAGE_TAG|${{ inputs.image_tag }}|g" \
-         -e "s|YOUR_REGISTRY_NAME|${{ inputs.registry_name }}|g" \
+         -e "s|YOUR_REGISTRY_NAME|${{ secrets.DO_REGISTRY_NAME }}|g" \
          ${{ inputs.app_spec }} > /tmp/app_spec_substituted.yaml
    ```
 
-3. In `.github/workflows/deploy-dev.yml`, pass the new inputs when calling the reusable workflow:
-
-   ```yaml
-   with:
-     app_spec: .do/app.dev.yaml
-     image_tag: ${{ github.sha && github.sha[:7] }}
-     registry_name: ${{ secrets.DO_REGISTRY_NAME }}
-   ```
-
-   Because `github.sha[:7]` slice syntax is not supported in GitHub Actions `with:` expressions, use a preceding step to set an output:
+3. In `.github/workflows/deploy-dev.yml`, add a `prepare` job to compute the short SHA, then update the `deploy` job to depend on it and pass the new input and secret:
 
    ```yaml
    jobs:
@@ -230,22 +217,18 @@ No service application code, proto contracts, database migrations, or config key
          DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
          DO_APP_ID: ${{ secrets.DO_DEV_APP_ID }}
          DO_PROJECT_ID: ${{ secrets.DO_DEV_PROJECT_ID }}
+         DO_REGISTRY_NAME: ${{ secrets.DO_REGISTRY_NAME }}
        with:
          app_spec: .do/app.dev.yaml
          image_tag: ${{ needs.prepare.outputs.short_sha }}
-         registry_name: ${{ secrets.DO_REGISTRY_NAME }}
    ```
 
-   Note: `secrets.DO_REGISTRY_NAME` cannot be passed as a `with:` input because GitHub Actions does not allow secrets in `with:`. Pass it as a secret through the `secrets:` block — and add `DO_REGISTRY_NAME` as a new `secrets:` input in `deploy.yml`'s `workflow_call` block, replacing the `inputs.registry_name` approach:
-
-   **Revised approach**: Add `DO_REGISTRY_NAME` as a new secret in the `workflow_call` `secrets:` block of `deploy.yml` (alongside `DIGITALOCEAN_ACCESS_TOKEN`, `DO_APP_ID`, `DO_PROJECT_ID`). Reference it as `${{ secrets.DO_REGISTRY_NAME }}` in the substitution step. Both `deploy-dev.yml` and `deploy-prod.yml` pass it through the `secrets:` block.
-
-4. In `.github/workflows/deploy-prod.yml`, make the equivalent changes (use `prepare` job for short SHA, pass `DO_REGISTRY_NAME` as a secret through the `secrets:` block).
+4. In `.github/workflows/deploy-prod.yml`, make the equivalent changes: add a `prepare` job for the short SHA, add `DO_REGISTRY_NAME` to the `secrets:` block, and add `image_tag` to the `with:` block.
 
 5. `DO_REGISTRY_NAME` must be added as a GitHub Actions repository secret (value: the DOCR registry slug — documented in Step 5).
 
 **Verification**:
-- After merging: push to `main-dev` triggers the deploy workflow. In the DO App Platform console, the `xstockstrat-staging` app's service components should show `image.tag: <short-sha>` (7 chars) in their configuration.
+- After merging: push to `main-dev` triggers the deploy workflow. In the DO App Platform console, the dev app's service components should show `image.tag: <short-sha>` (7 chars) in their configuration.
 - Bash check: `grep "YOUR_IMAGE_TAG\|YOUR_REGISTRY_NAME" /tmp/app_spec_substituted.yaml` → should return no matches after substitution runs.
 
 ---
@@ -343,7 +326,7 @@ grep -n "registry_type: DOCR" .do/app.dev.yaml .do/app.yaml
 
 # Confirm placeholders are in place
 grep -n "YOUR_REGISTRY_NAME\|YOUR_IMAGE_TAG" .do/app.dev.yaml .do/app.yaml
-# Expected: 30 matches each (15 per file × 2 fields)
+# Expected: 30 per file, 60 total (15 services × 2 fields × 2 files)
 ```
 
 ---
@@ -354,6 +337,7 @@ grep -n "YOUR_REGISTRY_NAME\|YOUR_IMAGE_TAG" .do/app.dev.yaml .do/app.yaml
 **Service**: `docker-compose.yml`
 **Files**:
 - `docker-compose.yml` — modify
+- `.env.example` — modify (add DO_REGISTRY_NAME)
 
 **Reviewers**: Platform Lead — cross-service CI/CD architecture, port assignments, inter-service consistency; this change restructures the entire build pipeline for all 14 services
 
@@ -464,7 +448,7 @@ docker compose pull xstockstrat-config
    - Note that the registry slug (e.g. `xstockstrat`) becomes the value of `DO_REGISTRY_NAME` in GitHub Secrets
    - Note that DO App Platform pulls from DOCR with zero additional credential configuration (native DO auth)
 
-2. Update the GitHub Actions Secrets table in Step 9 to add two new secrets:
+2. Update the GitHub Actions Secrets table in Step 9 to add one new secret:
    ```markdown
    | `DO_REGISTRY_NAME` | The DOCR registry slug (e.g. `xstockstrat`) | docker-build (CI), deploy-dev, deploy-prod |
    ```

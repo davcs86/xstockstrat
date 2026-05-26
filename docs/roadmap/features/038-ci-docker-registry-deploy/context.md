@@ -44,6 +44,15 @@
   - New GitHub Actions secret `DO_REGISTRY_NAME` is required (the DOCR registry slug). Must be added to Steps 1, 2, and 5, and documented in `docs/setup/digitalocean.md`.
   - `xstockstrat-agent` is present in both app specs but absent from the product spec's 14-service list. Implementation includes it in Steps 1 and 3 to avoid a `dockerfile_path` entry left in the app specs after migration.
 
+## Session 2026-05-26T00:06:00Z — sdd-review impl-spec
+
+- Implementation spec reviewed (Mode B — advisory). Result: 0 failures, 0 warnings after fixes applied.
+- Fix 1: Step 1 `if:` condition was missing the push-branch short-circuit. Without it, only path-filtered matrix entries would run on push to main-dev/main, violating FR-1 (build all 15 services unconditionally on push). Fixed by prepending `(github.event_name == 'push' && (github.ref == 'refs/heads/main-dev' || github.ref == 'refs/heads/main')) ||` to the `if:` expression.
+- Fix 2: Step 4 `**Files**` was missing `.env.example` — the Instructions mention adding `DO_REGISTRY_NAME=xstockstrat` to `.env.example` but the file was not listed. Fixed by adding `- \`.env.example\` — modify (add DO_REGISTRY_NAME)` to the Files list.
+- Overlap check: no FAIL-level conflicts. Merge order advisory confirmed: 038 must merge before 003 and 018 (both touch docker-compose.yml and .do/ files).
+- Trading domain checks: skipped (non-trading feature).
+- Step ordering: no test steps needed (CI workflow — no service coverage threshold applies).
+
 ## Session 2026-05-26T00:02:00Z — priority escalation
 
 - Confirmed this is the highest-priority active feature. The current DO-based Dockerfile builds have two active failures: (1) build timeouts — cold pnpm install + pnpm build exceeds DO's build time limit, especially for Next.js frontends; (2) flaky installs — cold npm registry hits on DO egress cause retries that exhaust the timeout budget. Both 018 and 003 are blocked from reaching production until this is resolved.
