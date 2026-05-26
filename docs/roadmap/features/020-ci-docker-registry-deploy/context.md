@@ -20,6 +20,13 @@
 - Resolved local dev workflow: dual `build:` + `image:` in docker-compose.yml. `docker compose pull` fetches CI image; `docker compose build` builds locally. Both usable by `docker compose up`.
 - One open question remains: registry choice (DOCR vs ghcr.io).
 
+## Session 2026-05-26T00:04:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: (1) Affected Services mixes file paths with service names — advisory; (2) 003 and 018 both modify docker-compose.yml/.do/ files — 020 must merge before both.
+- Two spec failures resolved before approval: FR-5/FR-9 contradiction fixed by aligning to industry standard SHA-pinned deploys; FR-1 updated to build all 14 services (changes filter deferred).
+- Overlap findings: no FAIL-level conflicts; merge order advisory noted.
+
 ## Session 2026-05-26T00:03:00Z — registry decision
 
 - Registry choice resolved: DOCR. `DIGITALOCEAN_ACCESS_TOKEN` already exists in repo secrets (used by deploy workflows). CI uses `digitalocean/action-doctl@v2` + `doctl registry login` — no new secrets. DO App Platform pulls from DOCR with zero additional credential configuration.

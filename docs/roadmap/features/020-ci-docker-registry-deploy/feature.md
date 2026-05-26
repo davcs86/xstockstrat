@@ -1,6 +1,6 @@
 # Feature: ci-docker-registry-deploy
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/ci-docker-registry-deploy`
 **Created**: 2026-05-26
 **Last Updated**: 2026-05-26
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-05-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 
 ---
 
@@ -39,4 +40,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review ci-docker-registry-deploy product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec ci-docker-registry-deploy` — generate implementation spec from the approved product spec
