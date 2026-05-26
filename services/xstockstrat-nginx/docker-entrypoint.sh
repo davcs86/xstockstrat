@@ -3,8 +3,10 @@
 # Substitutes DO private service URLs into nginx.conf using envsubst, then starts nginx.
 set -e
 
-# Strip protocol prefix from DO PRIVATE_URL values (e.g. "http://svc.internal" -> "svc.internal")
-# In docker-compose these are plain container names (no prefix to strip).
+# XSTOCKSTRAT_*_PRIVATE_URL vars hold bare hostnames (from PRIVATE_DOMAIN on DO, container names
+# in Compose). The nginx template appends :PORT itself, so PRIVATE_URL must NOT be used — it
+# includes the port and would produce double ports (e.g. svc:3000:3000). Strip any accidental
+# protocol prefix defensively.
 TRADER_UPSTREAM="${XSTOCKSTRAT_TRADER_PRIVATE_URL#http://}"
 TRADER_UPSTREAM="${TRADER_UPSTREAM#https://}"
 export TRADER_UPSTREAM
