@@ -22,3 +22,21 @@
 - Overlap findings: none (formula-management-ui is the only active concurrent feature; touches xstockstrat-indicators and xstockstrat-insights — no overlap).
 - OQ-1 resolved: minimal server-rendered GET /login form in xstockstrat-identity scoped into this feature (FR-9). Unified login page deferred to follow-up feature 019-unified-login-page.
 - OQ-2 resolved: module-level singleton dict for authorization code store. Safe for instance_count: 1.
+
+## Session 2026-05-25T00:00:00Z — sdd-spec
+
+- Generated implementation-spec.md with 7 steps. Status → implementation-ready.
+- Key codebase findings:
+  - `xstockstrat-identity` has NO login form/OAuth UI: `src/index.ts` serves only Connect-RPC
+    and `/health`. The agent's `GET /oauth/authorize` must serve its own minimal HTML login form
+    and POST to identity's `AuthenticateUser` Connect-RPC HTTP endpoint (port 8058).
+  - `IDENTITY_HTTP_ENDPOINT` is absent from the agent's environment in `docker-compose.yml`
+    (lines 515–524) and both DO spec files — must be added as a new env var in Step 2.
+  - `AuthCode` dataclass needs an `api_key` field: the API key returned by `CreateApiKey` in the
+    authorize POST handler must be stored in the code store and retrieved in the token endpoint
+    (avoids a second identity round-trip at token exchange time).
+  - nginx `agent_backend` upstream already exists (line 39); new OAuth paths added as two
+    location blocks: `= /.well-known/oauth-authorization-server` at root and
+    `/agent/oauth/` proxied to agent's `/oauth/`.
+  - `AGENT_PUBLIC_URL` is a new env var needed in the metadata document to build absolute
+    `authorization_endpoint` and `token_endpoint` URLs.
