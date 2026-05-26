@@ -100,6 +100,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-config/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-config:latest-dev
     container_name: xstockstrat-config
     env_file: [".env.local"]
     environment:
@@ -123,6 +124,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-ledger/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-ledger:latest-dev
     container_name: xstockstrat-ledger
     env_file: [".env.local"]
     environment:
@@ -149,6 +151,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-identity/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-identity:latest-dev
     container_name: xstockstrat-identity
     env_file: [".env.local"]
     environment:
@@ -179,6 +182,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-notify/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-notify:latest-dev
     container_name: xstockstrat-notify
     env_file: [".env.local"]
     environment:
@@ -209,6 +213,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-marketdata/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-marketdata:latest-dev
     container_name: xstockstrat-marketdata
     env_file: [".env.local"]
     environment:
@@ -243,6 +248,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-indicators/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-indicators:latest-dev
     container_name: xstockstrat-indicators
     env_file: [".env.local"]
     environment:
@@ -267,6 +273,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-ingest/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-ingest:latest-dev
     container_name: xstockstrat-ingest
     env_file: [".env.local"]
     environment:
@@ -295,6 +302,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-analysis/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-analysis:latest-dev
     container_name: xstockstrat-analysis
     env_file: [".env.local"]
     environment:
@@ -330,6 +338,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-portfolio/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-portfolio:latest-dev
     container_name: xstockstrat-portfolio
     env_file: [".env.local"]
     environment:
@@ -361,6 +370,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-trading/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-trading:latest-dev
     container_name: xstockstrat-trading
     env_file: [".env.local"]
     environment:
@@ -397,6 +407,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-trader/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-trader:latest-dev
     container_name: xstockstrat-trader
     env_file: [".env.local", ".env.fe.local"]
     environment:
@@ -425,6 +436,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-insights/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-insights:latest-dev
     container_name: xstockstrat-insights
     env_file: [".env.local", ".env.fe.local"]
     environment:
@@ -453,6 +465,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-config-ui/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-config-ui:latest-dev
     container_name: xstockstrat-config-ui
     env_file: [".env.local", ".env.fe.local"]
     environment:
@@ -485,6 +498,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-nginx/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-nginx:latest-dev
     container_name: xstockstrat-nginx
     environment:
       - XSTOCKSTRAT_TRADER_PRIVATE_URL=xstockstrat-trader
@@ -510,6 +524,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-agent/Dockerfile
+    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-agent:latest-dev
     container_name: xstockstrat-agent
     env_file: [".env.local"]
     environment:
