@@ -348,13 +348,13 @@ services:
     instance_size_slug: basic-xs
     envs:
       - key: XSTOCKSTRAT_TRADER_PRIVATE_URL
-        value: ${xstockstrat-trader.PRIVATE_DOMAIN}
+        value: ${xstockstrat-trader.PRIVATE_URL}
       - key: XSTOCKSTRAT_INSIGHTS_PRIVATE_URL
-        value: ${xstockstrat-insights.PRIVATE_DOMAIN}
+        value: ${xstockstrat-insights.PRIVATE_URL}
       - key: XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL
-        value: ${xstockstrat-config-ui.PRIVATE_DOMAIN}
+        value: ${xstockstrat-config-ui.PRIVATE_URL}
       - key: XSTOCKSTRAT_AGENT_PRIVATE_URL
-        value: ${xstockstrat-agent.PRIVATE_DOMAIN}
+        value: ${xstockstrat-agent.PRIVATE_URL}
 
   - name: xstockstrat-trader
     github:
