@@ -2,7 +2,7 @@
 name: digitalocean-setup
 description: Interactive DigitalOcean App Platform first-time setup — doctl auth, managed DB, dev/prod apps, secrets, GitHub Actions wiring, and deployment verification.
 argument-hint: [step-number 1–9]
-allowed-tools: Read Edit Bash(doctl *) Bash(gh *) Bash(openssl *) Bash(git *) Bash(sed *) Bash(grep *) Bash(awk *) Bash(cat *) Bash(bash *) Bash(command -v *) Bash(python3 *) Bash(./scripts/do-setup-check.sh)
+allowed-tools: Read Edit Bash(doctl *) Bash(gh *) Bash(openssl *) Bash(git *) Bash(sed *) Bash(grep *) Bash(awk *) Bash(cat *) Bash(bash *) Bash(command -v *) Bash(python3 *) Bash(./scripts/do-setup-check.sh) Bash(uname *) Bash(brew *) Bash(snap *) Bash(apt-get *) Bash(apt *) Bash(curl *) Bash(tar *) Bash(chmod *) Bash(sudo apt*) Bash(sudo snap*) Bash(sudo chmod*) Bash(sudo dd*) Bash(sudo tee*) Bash(sudo apt-get*) Bash(which *)
 effort: medium
 ---
 
@@ -27,7 +27,190 @@ Store as `REPO_ROOT`. All subsequent file reads and command invocations use this
 
 ---
 
-## P0 — Detect Current State
+## P0 — Prerequisites & Detect Current State
+
+P0 has two sub-steps that always run: **P0a** installs and authenticates the required CLI tools; **P0b** runs the state inspector and builds the phase skip map.
+
+### P0a — Install & Authenticate CLI Tools
+
+#### Detect platform
+
+```bash
+OS=$(uname -s)   # Darwin = macOS, Linux = Linux
+```
+
+#### doctl
+
+1. Check if installed:
+
+```bash
+command -v doctl
+```
+
+2. **If missing**, install based on platform:
+
+- **macOS:**
+
+  ```bash
+  brew install doctl
+  ```
+
+- **Linux — try snap first:**
+
+  ```bash
+  sudo snap install doctl
+  ```
+
+  If `snap` is not available (`command -v snap` fails), fall back to direct binary download. Find the latest release tag, then:
+
+  ```bash
+  DOCTL_VERSION=$(curl -fsSL https://api.github.com/repos/digitalocean/doctl/releases/latest \
+    | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+  curl -fsSL "https://github.com/digitalocean/doctl/releases/download/v${DOCTL_VERSION}/doctl-${DOCTL_VERSION}-linux-amd64.tar.gz" \
+    | tar -xz
+  sudo mv doctl /usr/local/bin/
+  ```
+
+  If the download produces a zero-byte file or the network request fails, stop and display:
+
+  ```
+  ✗ Could not install doctl automatically — network access to GitHub releases appears blocked.
+    Please install doctl manually on your local machine:
+      macOS: brew install doctl
+      Linux: https://docs.digitalocean.com/reference/doctl/how-to/install/
+    Then re-run /digitalocean-setup.
+  ```
+
+  Do not proceed until `command -v doctl` succeeds.
+
+3. Verify installation:
+
+```bash
+doctl version
+```
+
+4. **Check authentication:**
+
+```bash
+doctl auth list 2>/dev/null | grep -q "(current)"
+```
+
+5. **If not authenticated**, prompt:
+
+> "Paste your DigitalOcean Personal Access Token (Read + Write scopes). You can create one at https://cloud.digitalocean.com/account/api/tokens"
+
+Then authenticate non-interactively using the token the user provides:
+
+```bash
+doctl auth init --access-token "$DO_TOKEN"
+```
+
+Store the token as `DO_TOKEN` in working context — it will be reused in P6 and P8.
+
+6. Verify authentication:
+
+```bash
+doctl auth list
+```
+
+Confirm a context is marked `(current)` before continuing. If authentication fails, display the error and halt.
+
+---
+
+#### gh (GitHub CLI)
+
+1. Check if installed:
+
+```bash
+command -v gh
+```
+
+2. **If missing**, install based on platform:
+
+- **macOS:**
+
+  ```bash
+  brew install gh
+  ```
+
+- **Linux — try apt first (official GitHub CLI apt repo):**
+
+  ```bash
+  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+  sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+  sudo apt-get update && sudo apt-get install gh -y
+  ```
+
+  If apt fails or is unavailable, fall back to direct binary download:
+
+  ```bash
+  GH_VERSION=$(curl -fsSL https://api.github.com/repos/cli/cli/releases/latest \
+    | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+  curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
+    | tar -xz
+  sudo mv "gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/
+  ```
+
+  If the download fails or produces a zero-byte file, stop and display:
+
+  ```
+  ✗ Could not install gh automatically — network access to GitHub releases appears blocked.
+    Please install the GitHub CLI manually on your local machine:
+      macOS: brew install gh
+      Linux: https://github.com/cli/cli/blob/trunk/docs/install_linux.md
+    Then re-run /digitalocean-setup.
+  ```
+
+  Do not proceed until `command -v gh` succeeds.
+
+3. Verify installation:
+
+```bash
+gh --version
+```
+
+4. **Check authentication:**
+
+```bash
+gh auth status 2>/dev/null
+```
+
+5. **If not authenticated**, run the interactive login flow:
+
+```bash
+gh auth login
+```
+
+Select **GitHub.com** → **HTTPS** → **Login with a web browser** (or token if browser is unavailable). Wait for the user to complete the flow.
+
+6. Verify authentication:
+
+```bash
+gh auth status
+```
+
+Confirm output includes `Logged in to github.com`. If it fails, display the error and halt.
+
+---
+
+#### P0a summary
+
+Print a tool readiness checklist before moving to P0b:
+
+```
+Tool prerequisites:
+  ✓ doctl X.Y.Z — authenticated (context: <name>)
+  ✓ gh X.Y.Z    — authenticated (github.com as <username>)
+```
+
+If either tool is missing or unauthenticated after the install/auth attempts, halt with a clear message and do not proceed to P0b.
+
+---
+
+### P0b — Detect Current State
 
 Run the state inspector:
 
@@ -65,29 +248,27 @@ Also capture any existing Project IDs from `doctl projects list` that match `xst
 
 ---
 
-## P1 — Install & Authenticate doctl
+## P1 — Verify doctl Authentication
 
-**Skip if**: `doctl auth list` shows `(current)`.
+**Skip if**: `doctl auth list` shows `(current)` (P0a already handled this).
 
-1. Check if `doctl` is installed:
+> P0a installs and authenticates `doctl` automatically. P1 only runs if a step argument was passed directly (skipping P0) and `doctl` is not yet authenticated.
 
-```bash
-command -v doctl
-```
-
-2. If missing, show install command:
-   - macOS: `brew install doctl`
-   - Linux: `sudo snap install doctl`
-
-3. Authenticate:
+1. Confirm `doctl` is installed:
 
 ```bash
-doctl auth init
+command -v doctl || { echo "doctl not found — run /digitalocean-setup with no argument to install it."; exit 1; }
 ```
 
-Prompt the user: "Paste your DigitalOcean Personal Access Token (Read + Write scopes). You can create one at https://cloud.digitalocean.com/account/api/tokens"
+2. If not authenticated, prompt for the DigitalOcean Personal Access Token (Read + Write scopes) and authenticate:
 
-4. Verify:
+```bash
+doctl auth init --access-token "$DO_TOKEN"
+```
+
+Store the token as `DO_TOKEN` in working context.
+
+3. Verify:
 
 ```bash
 doctl auth list
