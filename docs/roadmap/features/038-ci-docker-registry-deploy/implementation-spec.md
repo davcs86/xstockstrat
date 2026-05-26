@@ -53,18 +53,12 @@ No service application code, proto contracts, database migrations, or config key
 
 1. Add a new `docker-build` job to `.github/workflows/ci.yml`, immediately after the `dockerfile-lint` job (L519 is the end of `dockerfile-lint`).
 
-2. The job runs on every push to `main-dev` or `main` (all 15 services, unconditionally — FR-1) AND on pull_request when any Dockerfile or CI file changes (path-filtered). The `if:` short-circuits on push so all matrix entries always run; path filtering only applies to PRs:
+2. The job runs unconditionally on every push and pull_request (all 15 services, always — FR-1 defers path-filtered builds). No `if:` guard. The job depends on `changes` only for ordering, not for filtering its output:
 
    ```yaml
    docker-build:
      name: Docker build and push (${{ matrix.service }})
      needs: changes
-     if: >-
-       (github.event_name == 'push' &&
-         (github.ref == 'refs/heads/main-dev' || github.ref == 'refs/heads/main')) ||
-       contains(fromJson(needs.changes.outputs.matched), 'dockerfiles') ||
-       contains(fromJson(needs.changes.outputs.matched), 'ci') ||
-       contains(fromJson(needs.changes.outputs.matched), matrix.service)
      runs-on: ubuntu-latest
      strategy:
        fail-fast: false
