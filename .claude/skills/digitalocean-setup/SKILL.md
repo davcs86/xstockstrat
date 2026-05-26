@@ -61,7 +61,7 @@ P4 →  create dev app
 
 Capture any App IDs found in `doctl apps list` output now and keep them in working context for later phases.
 
-Also capture any existing Project IDs from `doctl projects list` that match `xstockstrat-dev` and `xstockstrat-prod` — store as `DEV_PROJECT_ID` and `PROD_PROJECT_ID` if found. These will be used in P4/P5 (skipping project creation if already present) and stored as GitHub Secrets in P8.
+Also capture any existing Project IDs from `doctl projects list` that match `xstockstrat-staging` and `xstockstrat-production` — store as `DEV_PROJECT_ID` and `PROD_PROJECT_ID` if found. These will be used in P4/P5 (skipping project creation if already present) and stored as GitHub Secrets in P8.
 
 ---
 
@@ -154,11 +154,11 @@ Ask the user to confirm they have completed the GitHub authorization before proc
 
 ```bash
 DEV_PROJECT_ID=$(doctl projects list --format ID,Name --no-header \
-  | awk '/xstockstrat-dev/ {print $1}')
+  | awk '/xstockstrat-staging/ {print $1}')
 
 if [ -z "$DEV_PROJECT_ID" ]; then
   DEV_PROJECT_ID=$(doctl projects create \
-    --name xstockstrat-dev \
+    --name xstockstrat-staging \
     --purpose "xstockstrat development environment" \
     --format ID --no-header)
 fi
@@ -213,11 +213,11 @@ doctl apps list | grep xstockstrat
 
 ```bash
 PROD_PROJECT_ID=$(doctl projects list --format ID,Name --no-header \
-  | awk '/xstockstrat-prod/ {print $1}')
+  | awk '/xstockstrat-production/ {print $1}')
 
 if [ -z "$PROD_PROJECT_ID" ]; then
   PROD_PROJECT_ID=$(doctl projects create \
-    --name xstockstrat-prod \
+    --name xstockstrat-production \
     --purpose "xstockstrat production environment" \
     --format ID --no-header)
 fi
@@ -345,7 +345,7 @@ This step requires the DO console — `doctl` cannot attach a managed database t
 
 Walk the user through (repeat for both dev and prod apps):
 
-1. DO Console → **Apps** → select `xstockstrat-dev` (or `xstockstrat-prod`)
+1. DO Console → **Apps** → select `xstockstrat-staging` (or `xstockstrat-production`)
 2. **Settings** → **App-Level Environment Variables** — note the `${db.DATABASE_URL}` placeholder is already in the spec
 3. **Components** → select any component → **Attach Database**
 4. Choose `xstockstrat-db` → set component name to exactly **`db`** (required — `${db.DATABASE_URL}` injection depends on this name)

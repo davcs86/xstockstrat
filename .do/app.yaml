@@ -1,8 +1,8 @@
-# App name:   xstockstrat-prod
+# App name:   xstockstrat-production
 # DO project: set DO_PROD_PROJECT_ID in GitHub Secrets → Actions
 #             doctl projects list   ← find your project UUID
 #             doctl apps list       ← find DO_PROD_APP_ID after first deploy
-name: xstockstrat-prod
+name: xstockstrat-production
 region: nyc
 
 # Global environment variables — inherited by all services, workers, and jobs.
