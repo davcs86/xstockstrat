@@ -257,11 +257,11 @@ services:
         value: ledger
 
   - name: xstockstrat-identity
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
-      branch: main
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-identity/Dockerfile
+    image:
+      registry_type: DOCR
+      registry: YOUR_REGISTRY_NAME
+      repository: xstockstrat-identity
+      tag: YOUR_IMAGE_TAG
     http_port: 8058
     instance_count: 1
     instance_size_slug: professional-xs
@@ -286,11 +286,11 @@ services:
         value: identity
 
   - name: xstockstrat-notify
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
-      branch: main
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-notify/Dockerfile
+    image:
+      registry_type: DOCR
+      registry: YOUR_REGISTRY_NAME
+      repository: xstockstrat-notify
+      tag: YOUR_IMAGE_TAG
     http_port: 8059
     instance_count: 1
     instance_size_slug: professional-xs
@@ -357,11 +357,11 @@ services:
         value: ${xstockstrat-agent.PRIVATE_DOMAIN}
 
   - name: xstockstrat-trader
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
-      branch: main
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-trader/Dockerfile
+    image:
+      registry_type: DOCR
+      registry: YOUR_REGISTRY_NAME
+      repository: xstockstrat-trader
+      tag: YOUR_IMAGE_TAG
     http_port: 3000
     instance_count: 1
     instance_size_slug: professional-xs
@@ -385,11 +385,11 @@ services:
         value: trader
 
   - name: xstockstrat-insights
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
-      branch: main
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-insights/Dockerfile
+    image:
+      registry_type: DOCR
+      registry: YOUR_REGISTRY_NAME
+      repository: xstockstrat-insights
+      tag: YOUR_IMAGE_TAG
     http_port: 3001
     instance_count: 1
     instance_size_slug: professional-xs
@@ -417,11 +417,11 @@ services:
         value: insights
 
   - name: xstockstrat-config-ui
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
-      branch: main
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-config-ui/Dockerfile
+    image:
+      registry_type: DOCR
+      registry: YOUR_REGISTRY_NAME
+      repository: xstockstrat-config-ui
+      tag: YOUR_IMAGE_TAG
     http_port: 3002
     instance_count: 1
     instance_size_slug: professional-xs
