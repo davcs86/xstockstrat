@@ -1,6 +1,6 @@
 # Feature: ci-docker-registry-deploy
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/ci-docker-registry-deploy`
 **Created**: 2026-05-26
 **Last Updated**: 2026-05-26
@@ -13,13 +13,14 @@
 |---|---|---|---|
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
+| 2026-05-26 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec ci-docker-registry-deploy`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -30,9 +31,7 @@ Move Docker image builds from DigitalOcean's infrastructure into GitHub Actions 
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized by /sdd-spec — re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
@@ -40,4 +39,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec ci-docker-registry-deploy` — generate implementation spec from the approved product spec
+`/sdd-review ci-docker-registry-deploy impl-spec` — validate implementation spec, then `/sdd-execute ci-docker-registry-deploy`
