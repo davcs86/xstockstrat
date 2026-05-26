@@ -1,8 +1,8 @@
 # Context: ci-docker-registry-deploy
 
-**Feature**: `docs/roadmap/features/020-ci-docker-registry-deploy/feature.md`
-**Product Spec**: `docs/roadmap/features/020-ci-docker-registry-deploy/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/020-ci-docker-registry-deploy/implementation-spec.md`
+**Feature**: `docs/roadmap/features/038-ci-docker-registry-deploy/feature.md`
+**Product Spec**: `docs/roadmap/features/038-ci-docker-registry-deploy/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/038-ci-docker-registry-deploy/implementation-spec.md`
 
 ---
 

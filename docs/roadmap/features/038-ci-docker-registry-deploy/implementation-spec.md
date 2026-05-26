@@ -2,7 +2,7 @@
 
 **Status**: `pending`
 **Created**: 2026-05-26
-**Feature**: `docs/roadmap/features/020-ci-docker-registry-deploy/feature.md`
+**Feature**: `docs/roadmap/features/038-ci-docker-registry-deploy/feature.md`
 **Total Steps**: 5
 **Feature Branch**: `feature/ci-docker-registry-deploy`
 
