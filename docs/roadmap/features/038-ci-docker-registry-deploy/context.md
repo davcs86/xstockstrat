@@ -57,3 +57,14 @@
 
 - Confirmed this is the highest-priority active feature. The current DO-based Dockerfile builds have two active failures: (1) build timeouts — cold pnpm install + pnpm build exceeds DO's build time limit, especially for Next.js frontends; (2) flaky installs — cold npm registry hits on DO egress cause retries that exhaust the timeout budget. Both 018 and 003 are blocked from reaching production until this is resolved.
 - Problem Statement in product-spec.md updated to document both failure modes explicitly.
+
+### Step 1 — ci: Add docker-build job to CI workflow [done]
+- Inserted `docker-build` job in `.github/workflows/ci.yml` after `dockerfile-lint` (L519), before `shell-lint` (L520). 15-service matrix, push=true always, tags with short SHA + floating tag.
+- Files modified: `.github/workflows/ci.yml`
+- Deviations: Job restricted to push events on main-dev/main only (no PR builds) — user-requested change from spec's unconditional trigger.
+
+## Session 2026-05-26T00:07:00Z — sdd-execute
+**Steps this session**: [1]
+**Progress**: 1 done / 5 total
+**Stopped at**: Step 1 (complete — awaiting merge before continuing)
+**Next**: /sdd-execute ci-docker-registry-deploy next

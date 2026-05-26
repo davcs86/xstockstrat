@@ -1,6 +1,6 @@
 # Implementation Spec: ci-docker-registry-deploy
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-26
 **Feature**: `docs/roadmap/features/038-ci-docker-registry-deploy/feature.md`
 **Total Steps**: 5
@@ -27,7 +27,7 @@ No service application code, proto contracts, database migrations, or config key
 
 ### Step 1 — ci: Add docker-build job to CI workflow
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows/ci.yml`
 **Files**:
 - `.github/workflows/ci.yml` — modify
@@ -467,4 +467,7 @@ docker compose pull xstockstrat-config
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 1 — ci: Add docker-build job to CI workflow
+**Spec said**: No `if:` guard — job runs unconditionally on every push and pull_request event (all 15 services, always — FR-1 defers path-filtered builds).
+**Actual**: Job has an `if:` guard restricting execution to `push` events on `refs/heads/main-dev` or `refs/heads/main` only. PR builds are excluded.
+**Reason**: User explicitly requested push-to-main/main-dev-only trigger. PR builds are not needed since the purpose is to push images to DOCR for deployment, which only happens on protected branches.
