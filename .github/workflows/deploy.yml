@@ -12,6 +12,10 @@ on:
         required: true
       DO_APP_ID:
         required: true
+      DO_PROJECT_ID:
+        required: false  # Set DO_DEV_PROJECT_ID / DO_PROD_PROJECT_ID in GitHub Secrets.
+                         # Find your project ID: doctl projects list
+                         # Without this the app lands in the account's default project.
 
 jobs:
   deploy:
@@ -28,6 +32,18 @@ jobs:
 
       - name: Deploy to DigitalOcean App Platform
         run: doctl apps update ${{ secrets.DO_APP_ID }} --spec /tmp/app_spec_substituted.yaml
+
+      - name: Assign app to DO project
+        env:
+          DO_PROJECT_ID: ${{ secrets.DO_PROJECT_ID }}
+        run: |
+          if [ -n "$DO_PROJECT_ID" ]; then
+            echo "Assigning app to project $DO_PROJECT_ID ..."
+            doctl projects resources assign "$DO_PROJECT_ID" \
+              --resource "do:app:${{ secrets.DO_APP_ID }}"
+          else
+            echo "DO_PROJECT_ID not set — app stays in default project."
+          fi
 
       - name: Wait for deployment
         run: |

@@ -3,11 +3,10 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /workspace
 
 # Copy workspace root manifests (dep layer caching)
-COPY pnpm-workspace.yaml package.json ./
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/proto/gen/ts/package.json ./packages/proto/gen/ts/
 COPY services/xstockstrat-ledger/package.json ./services/xstockstrat-ledger/
-# Install all workspace deps (uses root pnpm-lock.yaml when present)
-RUN pnpm install --no-frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 # Copy source and compile proto stubs first
 COPY packages/proto/gen/ts/ ./packages/proto/gen/ts/
