@@ -6,7 +6,12 @@
 
 ## Problem Statement
 
-`pnpm build` (and all Docker image builds) currently run inside DigitalOcean's infrastructure when App Platform reads `dockerfile_path` and builds each service's Dockerfile on deploy. This means build failures are discovered during deployment (~10-15 min after merge), every deploy incurs a full cold `pnpm install + pnpm build` with no layer caching, and build logs are split across GitHub Actions (lint/test) and the DO dashboard (actual build).
+`pnpm build` (and all Docker image builds) currently run inside DigitalOcean's infrastructure when App Platform reads `dockerfile_path` and builds each service's Dockerfile on deploy. This is causing two active deployment failures:
+
+1. **Build timeouts**: DO App Platform enforces a hard build time limit. A cold workspace `pnpm install` + proto compile + `pnpm build` across multi-stage Dockerfiles (especially Next.js frontends) regularly exceeds it, causing the deploy to fail with no code change.
+2. **Flaky installs**: Every DO deploy runs `pnpm install` cold against the npm registry. When DO's egress is congested or registry requests are slow, installs hit retry limits and exhaust the remaining timeout budget. The `npm config set fetch-retries 5` in all Node Dockerfiles is a band-aid that does not fully mitigate this.
+
+The result is that production and dev deployments are unreliable independent of whether the application code is correct. Moving builds to GitHub Actions CI eliminates both root causes: the GHA layer cache (`type=gha`) means `pnpm install` is skipped on repeat builds (no cold npm installs on DO), and GitHub Actions has no meaningful build time ceiling.
 
 ## User Story
 
