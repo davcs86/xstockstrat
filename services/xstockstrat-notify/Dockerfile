@@ -1,15 +1,22 @@
-FROM node:22-alpine AS builder
+FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+# Configure npm to retry failed requests and use longer timeouts
+RUN npm config set fetch-timeout 120000 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-retries 5
+
+FROM base AS builder
 WORKDIR /workspace
 
-# Copy workspace root manifests (dep layer caching)
+# Copy workspace root manifests and proto stubs (dep layer caching)
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
-COPY packages/proto/gen/ts/package.json ./packages/proto/gen/ts/
+COPY packages/proto/gen/ts/ ./packages/proto/gen/ts/
 COPY services/xstockstrat-notify/package.json ./services/xstockstrat-notify/
+# Install all workspace deps
 RUN pnpm install --frozen-lockfile
 
-# Copy source and compile proto stubs first
-COPY packages/proto/gen/ts/ ./packages/proto/gen/ts/
+# Compile proto stubs
 RUN pnpm --filter @xstockstrat/proto run build
 
 # Build service

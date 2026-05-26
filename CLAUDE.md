@@ -21,6 +21,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | Building or modifying a Next.js frontend | `docs/patterns/frontend-auth.md` |
 | Adding nginx routing for a new frontend | `docs/patterns/nginx-routing.md` |
 | Adding a new backend service (any language) | `docs/patterns/header-propagation.md` |
+| Docker build patterns (Node.js, Next.js, Python, Go) | `docs/patterns/docker-build.md` |
 | Syncing git subtrees to/from service repos | `docs/patterns/git-subtree.md` |
 | Config key naming, scoping, startup wiring | `docs/patterns/config-governance.md` |
 | DB schema map, migration tooling, run order | `docs/patterns/database.md` |
@@ -211,6 +212,41 @@ Run `./scripts/buf-gen.sh` — generates TypeScript, Python, and Go stubs and co
 ## Repository Bootstrap
 
 First time: `./scripts/localenv-setup.sh` (builds proto-gen container, generates stubs via Docker — no Go/Python/Node required on host). Then: `./scripts/bootstrap.sh` (installs deps, starts TimescaleDB, runs migrations). Re-run `./scripts/buf-gen.sh` after proto changes; `./scripts/db-migrate.sh` for pending migrations.
+
+---
+
+## Dockerfile Update Workflow
+
+When modifying a service's `Dockerfile`, update the complete chain:
+
+1. **Update the Dockerfile** (`services/xstockstrat-<service>/Dockerfile`)
+   - Follow the pattern for your language: `docs/patterns/docker-build.md`
+   - Test locally: `docker compose build --no-cache xstockstrat-<service>`
+
+2. **Update the service's CLAUDE.md** (`services/xstockstrat-<service>/CLAUDE.md`)
+   - Verify or add the "Docker Build Pattern" section
+   - Ensure it references `docs/patterns/docker-build.md` with language-specific guidance
+   - Update any port numbers, env vars, or CMD/ENTRYPOINT if changed
+
+3. **Update `docs/patterns/docker-build.md`** (only if pattern changed)
+   - If you're introducing a new pattern or fixing an existing one, document it here
+   - Update templates, size comparisons, key points
+   - Add cross-references if the pattern affects other parts of the system
+
+4. **Test before committing**
+   - `docker compose build --no-cache` — rebuilds all services
+   - `docker compose up -d` — verify the service starts and health checks pass
+   - No changes to `.do/app.yaml` or `.do/app.dev.yaml` needed — they reference Dockerfiles by path, not content
+
+5. **Commit as a single PR**
+   - All three files (Dockerfile, service CLAUDE.md, docs pattern) in one commit
+   - Commit message: "Update <service> Dockerfile and documentation" (or "Update Docker patterns" if pattern-wide)
+   - CI validates: Docker builds, lint checks, and documentation links
+
+**Common updates:**
+- **Base image version bump** (Node 22 → 23, Python 3.12 → 3.13, etc.) → update the Dockerfile + version table in root CLAUDE.md + all affected service Dockerfiles
+- **Lock file tooling change** (pnpm@9 → pnpm@10) → update root CLAUDE.md version table + all Node service Dockerfiles + all Node service lock files
+- **Dependency strategy change** (e.g., switching from `--no-frozen-lockfile` to `--frozen-lockfile`) → update Dockerfile + service CLAUDE.md + `docs/patterns/docker-build.md`
 
 ---
 

@@ -6,6 +6,9 @@ Node.js gRPC service implementing an **append-only event store**. Every service 
 ## Language
 Node.js 20 + TypeScript
 
+## Docker Build Pattern
+Backend pattern — see `docs/patterns/docker-build.md` for the base stage, proto stub timing, and `pnpm deploy` approach.
+
 ## Ports
 
 | Protocol | Port | Purpose |

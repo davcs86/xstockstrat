@@ -8,6 +8,9 @@ Go gRPC service that tracks open positions, portfolio equity, and P&L. Maintains
 ## Language
 Go 1.22
 
+## Docker Build Pattern
+Go pattern — see `docs/patterns/docker-build.md` for multi-stage builder, static binary compilation (`CGO_ENABLED=0`), and distroless final images.
+
 ## Ports
 
 | Protocol | Port | Purpose |
