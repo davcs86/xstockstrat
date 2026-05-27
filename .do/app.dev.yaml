@@ -279,7 +279,7 @@ services:
       registry_type: DOCR
       registry: YOUR_REGISTRY_NAME
       repository: xstockstrat-identity
-      tag: YOUR_IMAGE_TAG
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 8058
     instance_count: 1
@@ -309,7 +309,7 @@ services:
       registry_type: DOCR
       registry: YOUR_REGISTRY_NAME
       repository: xstockstrat-notify
-      tag: YOUR_IMAGE_TAG
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 8059
     instance_count: 1
@@ -382,7 +382,7 @@ services:
       registry_type: DOCR
       registry: YOUR_REGISTRY_NAME
       repository: xstockstrat-trader
-      tag: YOUR_IMAGE_TAG
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 3000
     instance_count: 1
@@ -411,7 +411,7 @@ services:
       registry_type: DOCR
       registry: YOUR_REGISTRY_NAME
       repository: xstockstrat-insights
-      tag: YOUR_IMAGE_TAG
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 3001
     instance_count: 1
@@ -444,7 +444,7 @@ services:
       registry_type: DOCR
       registry: YOUR_REGISTRY_NAME
       repository: xstockstrat-config-ui
-      tag: YOUR_IMAGE_TAG
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 3002
     instance_count: 1
