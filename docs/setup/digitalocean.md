@@ -26,7 +26,7 @@ This runbook walks through creating and configuring the DigitalOcean infrastruct
 |---|---|
 | App Platform (staging) | Hosts all 13 services; paper trading; deploys from `main-dev` |
 | App Platform (production) | Hosts all 13 services; live trading; deploys from `main` |
-| Managed PostgreSQL 15 | Shared TimescaleDB database for all services with persistent data |
+| Managed PostgreSQL 15 (×2) | Separate TimescaleDB clusters for staging (`xstockstrat-db-dev`) and production (`xstockstrat-db-prod`) |
 | GitHub Actions | CI/CD; auto-deploys on push to `main-dev` or `main` via `doctl` |
 
 Architecture spec files:
@@ -120,43 +120,56 @@ Authenticate with a Personal Access Token (PAT):
 
 ---
 
-## Step 3 — Create the Managed PostgreSQL Database
+## Step 3 — Create the Managed PostgreSQL Databases
 
-All services that persist data share one managed PostgreSQL 15 database. TimescaleDB is the required extension.
+Staging and production each require their **own** managed PostgreSQL 15 cluster. They must never share a cluster — staging migrations and paper-trading data must be isolated from production.
 
-### 3a. Create the database cluster
+| Environment | Cluster name | App spec reference |
+|---|---|---|
+| Staging (dev) | `xstockstrat-db-dev` | `.do/app.dev.yaml` (`cluster_name: xstockstrat-db-dev`) |
+| Production | `xstockstrat-db-prod` | `.do/app.yaml` (`cluster_name: xstockstrat-db-prod`) |
 
-Via console: **Databases → Create Database**
+### 3a. Create both database clusters
+
+Via console: **Databases → Create Database** (repeat twice)
 
 ```
 Engine:  PostgreSQL 15
 Region:  NYC1 (matches app.yaml region: nyc)
-Plan:    Basic (for dev) or Production (for prod)
-Name:    xstockstrat-db
+Name:    xstockstrat-db-dev   ← staging
+Name:    xstockstrat-db-prod  ← production
+Plan:    Basic for dev, Production for prod
 ```
 
 Or via doctl:
 
 ```bash
-doctl databases create xstockstrat-db \
+# Staging cluster
+doctl databases create xstockstrat-db-dev \
   --engine pg \
   --version 15 \
   --region nyc1 \
   --size db-s-1vcpu-1gb \
   --num-nodes 1
+
+# Production cluster
+doctl databases create xstockstrat-db-prod \
+  --engine pg \
+  --version 15 \
+  --region nyc1 \
+  --size db-s-2vcpu-4gb \
+  --num-nodes 2
 ```
 
-Wait for the cluster to become **online** (3–5 minutes).
+Wait for each cluster to become **online** (3–5 minutes).
 
-### 3b. Enable the TimescaleDB extension
+### 3b. Enable the TimescaleDB extension on both clusters
 
-Connect to the database using the connection string from the console (**Databases → xstockstrat-db → Connection Details**):
+Repeat for each cluster using its connection string from **Databases → \<cluster\> → Connection Details**:
 
 ```bash
 psql "<connection-string>"
 ```
-
-Then run:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS timescaledb;
@@ -166,15 +179,15 @@ SELECT extname, extversion FROM pg_extension WHERE extname = 'timescaledb';
 
 > **Important:** The TimescaleDB extension must be enabled **before** running `scripts/db-migrate.sh`. All hypertable creation in the migrations depends on this extension.
 
-### 3c. Note the connection string
+### 3c. Note the connection strings
 
-The connection string looks like:
+Each connection string looks like:
 
 ```
 postgresql://doadmin:<password>@<host>:25060/defaultdb?sslmode=require
 ```
 
-It is referenced in the app specs as `${db.DATABASE_URL}`. DigitalOcean injects it automatically when you attach the database to the app (Step 5).
+They are referenced in the app specs as `${db.DATABASE_URL}`. DigitalOcean injects the correct string per app once the cluster is attached (Step 8).
 
 ---
 
@@ -349,22 +362,30 @@ See `docs/setup/grafana-cloud.md` for how to obtain these values.
 
 ---
 
-## Step 8 — Attach the Database to the App
+## Step 8 — Attach the Databases to the Apps
 
-DigitalOcean must link the managed database to the app so that `${db.DATABASE_URL}` resolves correctly.
+Each app must be linked to its **own** managed cluster. Never attach the same cluster to both apps — staging and production data must be isolated.
 
-Via console:
+| App | Cluster to attach |
+|---|---|
+| `xstockstrat-staging` | `xstockstrat-db-dev` |
+| `xstockstrat-production` | `xstockstrat-db-prod` |
 
-1. **Apps → xstockstrat-prod (or dev) → Settings → Database**
-2. Click **Attach Database**
-3. Select **xstockstrat-db** (your managed cluster)
-4. Component name must be `db` (matches the YAML spec: `databases: - name: db`)
+The app specs already declare `cluster_name` for each environment (`.do/app.dev.yaml` → `xstockstrat-db-dev`, `.do/app.yaml` → `xstockstrat-db-prod`), so `doctl apps update` will wire the correct cluster automatically once the clusters exist.
 
-Via doctl (alternative — the create spec should handle this automatically if the DB is in the same project):
+Via doctl:
 
 ```bash
+doctl apps update $DO_DEV_APP_ID  --spec .do/app.dev.yaml
 doctl apps update $DO_PROD_APP_ID --spec .do/app.yaml
 ```
+
+Via console (if the spec-based attach fails):
+
+1. **Apps → \<app\> → Settings → Database**
+2. Click **Attach Database**
+3. Select the correct cluster (`xstockstrat-db-dev` for staging, `xstockstrat-db-prod` for production)
+4. Component name must be `db` (matches the YAML spec: `databases: - name: db`)
 
 ---
 
