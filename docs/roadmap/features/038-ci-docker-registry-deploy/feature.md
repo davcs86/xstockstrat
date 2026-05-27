@@ -1,6 +1,8 @@
 # Feature: ci-docker-registry-deploy
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 790d855782d7581455619911aa86fdaf627376b4
+**Launched date**: 2026-05-27
 **Development Branch**: `feature/ci-docker-registry-deploy`
 **Created**: 2026-05-26
 **Last Updated**: 2026-05-26
@@ -17,6 +19,7 @@
 | 2026-05-26 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — docker-build job added to ci.yml |
 | 2026-05-26 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done — open integration PR to main-dev |
 
+| 2026-05-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #375; committed 790d855782d7581455619911aa86fdaf627376b4 |
 ---
 
 ## Artifacts
