@@ -5,6 +5,16 @@
 name: xstockstrat-production
 region: nyc
 
+# Route all public traffic through the nginx reverse proxy.
+# All backend services use internal_ports (no public routes).
+ingress:
+  rules:
+    - component:
+        name: xstockstrat-nginx
+      match:
+        path:
+          prefix: /
+
 # Global environment variables — inherited by all services, workers, and jobs.
 # Component-level envs override these when the same key is set.
 envs:
@@ -29,7 +39,8 @@ services:
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-trading/Dockerfile
-    http_port: 8051
+    internal_ports:
+      - 8051
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -59,7 +70,8 @@ services:
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-portfolio/Dockerfile
-    http_port: 8052
+    internal_ports:
+      - 8052
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -85,7 +97,8 @@ services:
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-marketdata/Dockerfile
-    http_port: 8053
+    internal_ports:
+      - 8053
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -119,7 +132,8 @@ services:
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-indicators/Dockerfile
-    http_port: 8054
+    internal_ports:
+      - 8054
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -142,7 +156,8 @@ services:
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-ingest/Dockerfile
-    http_port: 8055
+    internal_ports:
+      - 8055
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -175,7 +190,8 @@ services:
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-analysis/Dockerfile
-    http_port: 8056
+    internal_ports:
+      - 8056
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -208,7 +224,8 @@ services:
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-agent/Dockerfile
-    http_port: 9000
+    internal_ports:
+      - 9000
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -238,7 +255,8 @@ services:
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-ledger/Dockerfile
-    http_port: 8057
+    internal_ports:
+      - 8057
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -262,7 +280,8 @@ services:
       registry: YOUR_REGISTRY_NAME
       repository: xstockstrat-identity
       tag: YOUR_IMAGE_TAG
-    http_port: 8058
+    internal_ports:
+      - 8058
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -291,7 +310,8 @@ services:
       registry: YOUR_REGISTRY_NAME
       repository: xstockstrat-notify
       tag: YOUR_IMAGE_TAG
-    http_port: 8059
+    internal_ports:
+      - 8059
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -318,7 +338,8 @@ services:
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-config/Dockerfile
-    http_port: 8060
+    internal_ports:
+      - 8060
     instance_count: 1
     # professional-s: extra headroom for WatchConfig streaming RPC (above 60s idle timeout)
     instance_size_slug: professional-s
@@ -362,7 +383,8 @@ services:
       registry: YOUR_REGISTRY_NAME
       repository: xstockstrat-trader
       tag: YOUR_IMAGE_TAG
-    http_port: 3000
+    internal_ports:
+      - 3000
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -390,7 +412,8 @@ services:
       registry: YOUR_REGISTRY_NAME
       repository: xstockstrat-insights
       tag: YOUR_IMAGE_TAG
-    http_port: 3001
+    internal_ports:
+      - 3001
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -422,7 +445,8 @@ services:
       registry: YOUR_REGISTRY_NAME
       repository: xstockstrat-config-ui
       tag: YOUR_IMAGE_TAG
-    http_port: 3002
+    internal_ports:
+      - 3002
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -459,6 +483,7 @@ jobs:
 
 databases:
   - name: db
+    cluster_name: xstockstrat-db
     engine: PG
     version: "15"
     production: true
