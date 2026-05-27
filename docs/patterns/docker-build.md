@@ -8,7 +8,7 @@ This guide documents the four optimized Dockerfile patterns used across the xsto
 |---|---|---|---|
 | [Node.js Backend](#nodejs-backend-pattern) | Node.js | ledger, identity, notify, config | gRPC services with `pnpm deploy` |
 | [Next.js Frontend](#nextjs-frontend-pattern) | Next.js | trader, insights, config-ui | Web apps with `.next/standalone` |
-| [Python](#python-pattern) | Python | indicators, ingest, analysis | gRPC services with `uv` |
+| [Python](#python-pattern) | Python | indicators, ingest, analysis, agent | gRPC services with `uv` |
 | [Go](#go-pattern) | Go | trading, portfolio, marketdata | gRPC services with distroless |
 
 ---
@@ -111,9 +111,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=30XX
 COPY --from=builder /workspace/services/xstockstrat-<service>/.next/standalone ./
-COPY --from=builder /workspace/services/xstockstrat-<service>/.next/static ./.next/static
+COPY --from=builder /workspace/services/xstockstrat-<service>/.next/static ./services/xstockstrat-<service>/.next/static
 EXPOSE 30XX
-CMD ["node", "server.js"]
+CMD ["node", "services/xstockstrat-<service>/server.js"]
 ```
 
 ### Key Points
@@ -124,7 +124,8 @@ CMD ["node", "server.js"]
 4. **Workspace structure preserved in builder**: `COPY --from=deps /workspace ./` copies the full workspace including the root `node_modules/.pnpm/` virtual store AND service-specific `node_modules/`. pnpm places service binaries (e.g. `next`) in the service's own `node_modules/.bin/`, not the root — keeping the workspace context intact is required for `next build` to resolve correctly.
 5. **`pnpm --filter <service> run build`**: Runs `next build` from the workspace root with the correct service `node_modules/.bin` in PATH
 6. **Standalone output path**: Build output lands at `/workspace/services/<service>/.next/` — runner copies from there
-7. **Final `runner` stage**: Only production runtime, no source or build artifacts
+7. **`server.js` subdirectory**: pnpm workspace causes Next.js to mirror the full repo path inside `standalone/` — `server.js` lands at `standalone/services/xstockstrat-<service>/server.js`, **not** at the standalone root. The CMD and static COPY must use this subdirectory path (see Gotcha below).
+8. **Final `runner` stage**: Only production runtime, no source or build artifacts
 
 ### Size Comparison
 
@@ -137,7 +138,7 @@ After .next/standalone: ~80MB (90% reduction)
 
 ## Python Pattern
 
-**Services:** xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis
+**Services:** xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis, xstockstrat-agent
 
 **Characteristics:**
 - Single-stage Dockerfile (no builder needed — Python doesn't require separate build phase)
@@ -151,20 +152,20 @@ After .next/standalone: ~80MB (90% reduction)
 ```dockerfile
 FROM python:3.12-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-ENV UV_SYSTEM_PYTHON=1
 
 WORKDIR /app
 COPY services/xstockstrat-<service>/pyproject.toml services/xstockstrat-<service>/uv.lock ./
 RUN uv sync --frozen --no-dev
 
 COPY packages/proto/gen/python /proto/gen/python
-RUN uv pip install --system -e /proto/gen/python
+RUN uv pip install -e /proto/gen/python
 
 # Expose gen/ as a Python namespace package so "from gen.xxx.v1 import" works
 RUN ln -s /proto/gen/python /app/gen
 
 COPY services/xstockstrat-<service>/ .
 EXPOSE 50XXX 8XXX
+ENV PATH="/app/.venv/bin:$PATH"
 CMD ["python", "-m", "app.main"]
 ```
 
@@ -172,9 +173,9 @@ CMD ["python", "-m", "app.main"]
 
 1. **`python:3.12-slim`**: Lean base image (no dev tools, no pip)
 2. **Copy uv binary**: `COPY --from=ghcr.io/astral-sh/uv:latest` installs uv once at build time
-3. **`UV_SYSTEM_PYTHON=1`**: Use the system Python 3.12 (no venv creation)
-4. **`uv sync --frozen --no-dev`**: Install from lock file, strip dev deps for smaller image
-5. **Proto as editable**: `uv pip install --system -e /proto/gen/python` allows "from gen.xxx.v1 import" in source
+3. **`uv sync --frozen --no-dev`**: Creates `.venv` at `/app/.venv` and installs all `pyproject.toml` deps (including grpcio) from lock file, stripping dev deps
+4. **`uv pip install -e /proto/gen/python`**: Installs proto stubs as an editable package into the same `.venv` — no `--system` flag
+5. **`ENV PATH="/app/.venv/bin:$PATH"`**: Makes the venv `python` the default so `CMD ["python", ...]` uses the venv that has all deps (see Gotcha below)
 6. **Namespace symlink**: `ln -s /proto/gen/python /app/gen` exposes proto stubs to the app
 7. **Single stage**: No separate build phase needed — Python is interpreted
 
@@ -263,6 +264,63 @@ COPY packages/proto/gen/ts/ ./packages/proto/gen/ts/  # Too late!
 
 ---
 
+## Critical Gotcha: Python uv Venv vs System Python
+
+**Problem:** `uv sync` always creates a `.venv` virtual environment at the working directory. `UV_SYSTEM_PYTHON=1` only affects `uv pip` commands — it has no effect on `uv sync`. Without activating the venv, `CMD ["python", ...]` resolves to the bare system Python, which has none of the installed packages.
+
+**Error:**
+```
+ModuleNotFoundError: No module named 'grpc'
+```
+(or any other package from `pyproject.toml`)
+
+**Solution:** Do **not** set `UV_SYSTEM_PYTHON=1`. Install the proto stub into the venv (no `--system`), and add `ENV PATH` to activate the venv before CMD:
+
+```dockerfile
+# ✅ CORRECT — proto lands in .venv, CMD uses venv python
+RUN uv sync --frozen --no-dev
+RUN uv pip install -e /proto/gen/python
+ENV PATH="/app/.venv/bin:$PATH"
+CMD ["python", "-m", "app.main"]
+
+# ❌ WRONG — uv sync ignores UV_SYSTEM_PYTHON; CMD uses system python (no packages)
+ENV UV_SYSTEM_PYTHON=1
+RUN uv sync --frozen --no-dev
+RUN uv pip install --system -e /proto/gen/python
+CMD ["python", "-m", "app.main"]
+```
+
+---
+
+## Critical Gotcha: Next.js Standalone server.js Path in pnpm Workspace
+
+**Problem:** In a pnpm workspace, Next.js mirrors the full repository path inside the standalone output directory. `server.js` is placed at `standalone/services/xstockstrat-<service>/server.js`, **not** at the standalone root. `CMD ["node", "server.js"]` from `WORKDIR /app` fails because `/app/server.js` doesn't exist.
+
+**Error:**
+```
+Error: Cannot find module '/app/server.js'
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+```
+
+**Solution:** Use the full subdirectory path in both CMD and the static COPY:
+
+```dockerfile
+# ✅ CORRECT — server.js and .next/ found at their actual location
+COPY --from=builder /workspace/services/xstockstrat-<service>/.next/standalone ./
+COPY --from=builder /workspace/services/xstockstrat-<service>/.next/static ./services/xstockstrat-<service>/.next/static
+CMD ["node", "services/xstockstrat-<service>/server.js"]
+
+# ❌ WRONG — server.js doesn't exist at /app/server.js; static files at wrong path
+COPY --from=builder /workspace/services/xstockstrat-<service>/.next/standalone ./
+COPY --from=builder /workspace/services/xstockstrat-<service>/.next/static ./.next/static
+CMD ["node", "server.js"]
+```
+
+This behavior is consistent across Next.js 14 and 15 when building in a pnpm workspace.
+
+---
+
 ## Dependency Installation Flags & Strategies
 
 | Tool | Flag/Strategy | Pattern | Reason |
@@ -324,7 +382,7 @@ Use the **Node.js Backend Pattern**:
 ### Next.js Frontend
 Use the **Next.js Frontend Pattern**:
 1. Create `services/xstockstrat-<service>/Dockerfile` from the template above
-2. Replace `xstockstrat-<service>` placeholder
+2. Replace `xstockstrat-<service>` placeholder **in all three places**: the builder COPY, the static COPY dest, and the CMD
 3. Set `PORT` env var and EXPOSE to correct port (30XX)
 4. Ensure `pnpm-lock.yaml` is committed (enforced by CI)
 5. Reference `docs/patterns/docker-build.md` in service CLAUDE.md

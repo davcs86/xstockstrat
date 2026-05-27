@@ -63,6 +63,9 @@ services:
         value: ${xstockstrat.DATABASE_URL}
       - key: SERVICE_NAME
         value: trading
+      - key: BROKER_ACCOUNTS_ENCRYPTION_KEY
+        scope: RUN_TIME
+        type: SECRET
 
   - name: xstockstrat-portfolio
     github:
