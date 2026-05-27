@@ -39,12 +39,5 @@ SELECT create_hypertable(
     if_not_exists => TRUE
 );
 
-ALTER TABLE portfolio.snapshots SET (
-    timescaledb.compress,
-    timescaledb.compress_segmentby = 'portfolio_id'
-);
-SELECT add_compression_policy('portfolio.snapshots', INTERVAL '7 days');
-SELECT add_retention_policy('portfolio.snapshots', INTERVAL '3 years');
-
 CREATE INDEX IF NOT EXISTS idx_snapshots_user_time
     ON portfolio.snapshots (user_id, snapshot_time DESC);

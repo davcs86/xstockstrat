@@ -27,16 +27,6 @@ SELECT create_hypertable(
     if_not_exists => TRUE
 );
 
--- Compress chunks older than 7 days
-ALTER TABLE marketdata.ohlcv SET (
-    timescaledb.compress,
-    timescaledb.compress_segmentby = 'symbol,timeframe'
-);
-SELECT add_compression_policy('marketdata.ohlcv', INTERVAL '7 days');
-
--- Retention: keep 5 years of data
-SELECT add_retention_policy('marketdata.ohlcv', INTERVAL '5 years');
-
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_ohlcv_symbol_time
     ON marketdata.ohlcv (symbol, time DESC);
@@ -63,13 +53,6 @@ SELECT create_hypertable(
     if_not_exists => TRUE
 );
 
-ALTER TABLE marketdata.quotes SET (
-    timescaledb.compress,
-    timescaledb.compress_segmentby = 'symbol'
-);
-SELECT add_compression_policy('marketdata.quotes', INTERVAL '24 hours');
-SELECT add_retention_policy('marketdata.quotes', INTERVAL '90 days');
-
 CREATE INDEX IF NOT EXISTS idx_quotes_symbol_time
     ON marketdata.quotes (symbol, time DESC);
 
@@ -90,9 +73,3 @@ WHERE timeframe = '1m'
 GROUP BY bucket, symbol
 WITH NO DATA;
 
-SELECT add_continuous_aggregate_policy(
-    'marketdata.ohlcv_1h',
-    start_offset  => INTERVAL '3 hours',
-    end_offset    => INTERVAL '5 minutes',
-    schedule_interval => INTERVAL '5 minutes'
-);
