@@ -85,6 +85,21 @@ echo "==> Enabling TimescaleDB extension..."
 psql "$DB_URL" -c "CREATE EXTENSION IF NOT EXISTS timescaledb;" --quiet
 echo ""
 
+echo "==> Creating schemas (idempotent)..."
+psql "$DB_URL" --quiet << 'SQL'
+CREATE SCHEMA IF NOT EXISTS config;
+CREATE SCHEMA IF NOT EXISTS ledger;
+CREATE SCHEMA IF NOT EXISTS identity;
+CREATE SCHEMA IF NOT EXISTS marketdata;
+CREATE SCHEMA IF NOT EXISTS trading;
+CREATE SCHEMA IF NOT EXISTS portfolio;
+CREATE SCHEMA IF NOT EXISTS notify;
+CREATE SCHEMA IF NOT EXISTS ingest;
+CREATE SCHEMA IF NOT EXISTS indicators;
+CREATE SCHEMA IF NOT EXISTS analysis;
+SQL
+echo ""
+
 echo "==> Running migrations (command: $COMMAND, dependency order)..."
 echo ""
 
