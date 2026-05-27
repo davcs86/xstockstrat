@@ -25,17 +25,20 @@ DB_URL="${DATABASE_URL}"
 COMMAND="${1:-up}"
 
 # Build a DATABASE_URL with schema-scoped migration tracking.
-# Each service's schema_migrations table lives inside its own schema.
+# Tracking table lives in public schema with a service-specific name.
+# search_path is intentionally omitted: golang-migrate checks that the
+# search_path schema exists before running any migrations, but each
+# service's 001 migration is responsible for CREATE SCHEMA — using
+# search_path causes a chicken-and-egg "no schema" failure on fresh DBs.
+# Migration SQL files already use explicit schema names (e.g. config.table).
 service_db_url() {
   local schema="$1"
-  # Strip any existing query string and append migration params
   local base="${DB_URL%%\?*}"
   local qs="${DB_URL#*\?}"
-  # If DB_URL had no query string, qs == DB_URL (no '?' found)
   if [ "$qs" = "$DB_URL" ]; then
     qs=""
   fi
-  local extra="x-migrations-table=schema_migrations&search_path=${schema}"
+  local extra="x-migrations-table=${schema}_schema_migrations"
   if [ -n "$qs" ]; then
     echo "${base}?${qs}&${extra}"
   else
