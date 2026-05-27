@@ -40,13 +40,14 @@ services:
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-trading/Dockerfile
     internal_ports:
+      - 50051
       - 8051
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50051"
-      - key: CONNECT_PORT
+      - key: HTTP_PORT
         value: "8051"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
@@ -74,13 +75,14 @@ services:
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-portfolio/Dockerfile
     internal_ports:
+      - 50052
       - 8052
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50052"
-      - key: CONNECT_PORT
+      - key: HTTP_PORT
         value: "8052"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
@@ -101,13 +103,14 @@ services:
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-marketdata/Dockerfile
     internal_ports:
+      - 50053
       - 8053
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50053"
-      - key: CONNECT_PORT
+      - key: HTTP_PORT
         value: "8053"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
@@ -136,13 +139,14 @@ services:
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-indicators/Dockerfile
     internal_ports:
+      - 50054
       - 8054
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50054"
-      - key: CONNECT_PORT
+      - key: HTTP_PORT
         value: "8054"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
@@ -160,13 +164,14 @@ services:
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-ingest/Dockerfile
     internal_ports:
+      - 50055
       - 8055
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50055"
-      - key: CONNECT_PORT
+      - key: HTTP_PORT
         value: "8055"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
@@ -194,13 +199,14 @@ services:
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-analysis/Dockerfile
     internal_ports:
+      - 50056
       - 8056
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50056"
-      - key: CONNECT_PORT
+      - key: HTTP_PORT
         value: "8056"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
@@ -259,13 +265,14 @@ services:
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-ledger/Dockerfile
     internal_ports:
+      - 50057
       - 8057
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50057"
-      - key: CONNECT_PORT
+      - key: HTTP_PORT
         value: "8057"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
@@ -284,13 +291,14 @@ services:
       repository: xstockstrat-identity
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
+      - 50058
       - 8058
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50058"
-      - key: CONNECT_PORT
+      - key: HTTP_PORT
         value: "8058"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
@@ -314,13 +322,14 @@ services:
       repository: xstockstrat-notify
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
+      - 50059
       - 8059
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50059"
-      - key: CONNECT_PORT
+      - key: HTTP_PORT
         value: "8059"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
@@ -342,6 +351,7 @@ services:
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-config/Dockerfile
     internal_ports:
+      - 50060
       - 8060
     instance_count: 1
     # professional-s: extra headroom for WatchConfig streaming RPC (above 60s idle timeout)
@@ -349,7 +359,7 @@ services:
     envs:
       - key: GRPC_PORT
         value: "50060"
-      - key: CONNECT_PORT
+      - key: HTTP_PORT
         value: "8060"
       - key: DATABASE_URL
         scope: RUN_TIME
