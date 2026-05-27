@@ -101,17 +101,17 @@ COPY services/xstockstrat-<service>/package.json ./services/xstockstrat-<service
 RUN pnpm install --frozen-lockfile --filter xstockstrat-<service>
 
 FROM base AS builder
-WORKDIR /app
-COPY --from=deps /workspace/node_modules ./node_modules
-COPY services/xstockstrat-<service>/ .
-RUN pnpm run build
+WORKDIR /workspace
+COPY --from=deps /workspace ./
+COPY services/xstockstrat-<service>/ ./services/xstockstrat-<service>/
+RUN pnpm --filter xstockstrat-<service> run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=30XX
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /workspace/services/xstockstrat-<service>/.next/standalone ./
+COPY --from=builder /workspace/services/xstockstrat-<service>/.next/static ./.next/static
 EXPOSE 30XX
 CMD ["node", "server.js"]
 ```
@@ -121,9 +121,10 @@ CMD ["node", "server.js"]
 1. **Shared `base` stage**: Reduces redundant pnpm setup
 2. **Proto stubs early**: Copied in `deps` stage before any pnpm install
 3. **`--filter <service>`**: Only installs dependencies for the specific Next.js app (faster than full workspace install)
-4. **Separate `builder` stage**: Rebuilds only when source changes, reuses cached `deps` when possible
-5. **Standalone output**: Uses `.next/standalone` and `.next/static` — the minimal Next.js runtime
-6. **Final `runner` stage**: Only production runtime, no source or build artifacts
+4. **Workspace structure preserved in builder**: `COPY --from=deps /workspace ./` copies the full workspace including the root `node_modules/.pnpm/` virtual store AND service-specific `node_modules/`. pnpm places service binaries (e.g. `next`) in the service's own `node_modules/.bin/`, not the root — keeping the workspace context intact is required for `next build` to resolve correctly.
+5. **`pnpm --filter <service> run build`**: Runs `next build` from the workspace root with the correct service `node_modules/.bin` in PATH
+6. **Standalone output path**: Build output lands at `/workspace/services/<service>/.next/` — runner copies from there
+7. **Final `runner` stage**: Only production runtime, no source or build artifacts
 
 ### Size Comparison
 
