@@ -1,6 +1,6 @@
 # Implementation Spec: ci-docker-registry-deploy
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-05-26
 **Feature**: `docs/roadmap/features/038-ci-docker-registry-deploy/feature.md`
 **Total Steps**: 5
@@ -27,7 +27,7 @@ No service application code, proto contracts, database migrations, or config key
 
 ### Step 1 — ci: Add docker-build job to CI workflow
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows/ci.yml`
 **Files**:
 - `.github/workflows/ci.yml` — modify
@@ -155,7 +155,7 @@ No service application code, proto contracts, database migrations, or config key
 
 ### Step 2 — service: Update deploy workflows to inject SHA image tags
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows/deploy.yml`, `.github/workflows/deploy-dev.yml`, `.github/workflows/deploy-prod.yml`
 **Files**:
 - `.github/workflows/deploy.yml` — modify
@@ -235,7 +235,7 @@ No service application code, proto contracts, database migrations, or config key
 
 ### Step 3 — service: Migrate app specs from dockerfile_path to image references
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.do/app.dev.yaml`, `.do/app.yaml`
 **Files**:
 - `.do/app.dev.yaml` — modify
@@ -333,7 +333,7 @@ grep -n "YOUR_REGISTRY_NAME\|YOUR_IMAGE_TAG" .do/app.dev.yaml .do/app.yaml
 
 ### Step 4 — service: Add image field to docker-compose.yml service entries
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docker-compose.yml`
 **Files**:
 - `docker-compose.yml` — modify
@@ -419,7 +419,7 @@ docker compose pull xstockstrat-config
 
 ### Step 5 — docs: Update DigitalOcean setup guide for registry and new secrets
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/setup/digitalocean.md`
 **Files**:
 - `docs/setup/digitalocean.md` — modify
@@ -467,4 +467,13 @@ docker compose pull xstockstrat-config
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 3 — service: Migrate app specs from dockerfile_path to image references
+**Spec said**: Replace github: + dockerfile_path: with image: blocks for all 15 services in both app specs.
+**Actual**: Only 5 services migrated (xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui, xstockstrat-identity, xstockstrat-notify). 10 backend services + nginx retain github: + dockerfile_path: entries.
+**Reason**: DOCR basic plan allows max 5 repositories. Services selected by pnpm lockfile package count (top 5 heaviest installs) — these are the services with the longest cold-install times that most benefit from pre-built images.
+**Disposition**: accepted limitation — ci.yml docker-build matrix still has 15 services; the 10 non-selected services will fail at DOCR quota on push. To be resolved by either upgrading the DOCR plan or trimming the matrix in a follow-up.
+
+### Deviation: Step 1 — ci: Add docker-build job to CI workflow
+**Spec said**: No `if:` guard — job runs unconditionally on every push and pull_request event (all 15 services, always — FR-1 defers path-filtered builds).
+**Actual**: Job has an `if:` guard restricting execution to `push` events on `refs/heads/main-dev` or `refs/heads/main` only. PR builds are excluded.
+**Reason**: User explicitly requested push-to-main/main-dev-only trigger. PR builds are not needed since the purpose is to push images to DOCR for deployment, which only happens on protected branches.

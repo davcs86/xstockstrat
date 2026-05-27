@@ -51,6 +51,33 @@ If `**Lifecycle Status**` in `feature.md` is `spec-ready` or any later status:
 
 Only continue if the user confirms `yes`.
 
+### A1b. Demoted-duplicate detection
+
+Find all features that were previously demoted or canceled with a single grep — no per-file reads:
+
+```bash
+find docs/roadmap/features -mindepth 2 -maxdepth 2 -name "feature.md" \
+  | xargs grep -El '`(demoted|canceled)`' 2>/dev/null
+```
+
+Exclude `$FEATURE_DIR/feature.md` from results. For each remaining path, derive the slug from
+its directory name (strip the `NNN-` prefix) — no file read needed.
+
+If any demoted/canceled slugs are found:
+> "Previously demoted or canceled features: `<slug1>`, `<slug2>`, … Is this feature a
+> re-attempt of any of them? Reply with the slug, or `no`."
+
+- If the user names a slug (or `yes` when only one candidate exists):
+  > "Duplicate of demoted feature `<slug>` noted. Skip the full review and advance directly
+  > to `spec-ready`? (yes / no)"
+  - **yes** → skip A2, A3, A3b, A4; go directly to A6 PASS, recording
+    `"Reactivated as duplicate of demoted feature \`<slug>\`"` in `feature.md` status history
+    and `context.md`.
+  - **no** → continue normal review from A2.
+- If the user says `no` (not a duplicate): continue normal review from A2.
+
+If no demoted/canceled features exist: skip this check silently, continue to A2.
+
 ### A2. Read inputs
 
 - Read `PRODUCT_SPEC`. If absent: stop — "No product-spec.md found. Run /sdd-story $ARGUMENTS[0] first."
@@ -106,19 +133,18 @@ WARNs are advisory.
 
 ### A4. Parallel feature overlap check
 
-Discover all other currently active features:
+Find active concurrent features with a single grep — no per-file reads of feature.md:
 
 ```bash
-find docs/roadmap/features -mindepth 2 -name "feature.md" | sort
+find docs/roadmap/features -mindepth 2 -maxdepth 2 -name "feature.md" \
+  | xargs grep -El '`(spec-ready|implementation-ready|in-progress|code-completed)`' 2>/dev/null
 ```
 
-For each `feature.md` found (excluding the current feature — match by `$FEATURE_DIR`):
-Derive the other feature's slug by stripping the `NNN-` prefix from its directory name
-(e.g. `001-add-ikbr-account-support` → `add-ikbr-account-support`).
-- Read it and check `**Lifecycle Status**`.
-- If status is `spec-ready`, `implementation-ready`, `in-progress`, or `code-completed`:
-  this is an active concurrent feature. Extract only the overlap-relevant fields from its
-  `product-spec.md` using targeted grep — do not load the full file:
+Exclude `$FEATURE_DIR/feature.md` from results. For each remaining path, derive the other
+feature's slug from its directory name (strip `NNN-` prefix) — no read of feature.md needed.
+
+For each active concurrent feature, extract only the overlap-relevant fields from its
+`product-spec.md` using targeted grep — do not load the full file:
   ```bash
   # Affected services:
   grep -E '^- `xstockstrat-[^`]+`' <other-feature-dir>/product-spec.md
@@ -289,7 +315,17 @@ If matches found, apply the checks below. All findings are advisory (Mode B neve
 
 ### B4. Parallel feature overlap check (impl-spec level)
 
-Discover features in `implementation-ready` or `in-progress` status (same bash command as A4).
+Find features in `implementation-ready` or `in-progress` status with a single grep — no
+per-file reads of feature.md:
+
+```bash
+find docs/roadmap/features -mindepth 2 -maxdepth 2 -name "feature.md" \
+  | xargs grep -El '`(implementation-ready|in-progress)`' 2>/dev/null
+```
+
+Exclude `$FEATURE_DIR/feature.md` from results. Derive each slug from its directory name
+(strip `NNN-` prefix) — no read of feature.md needed.
+
 For each, extract only the overlap-relevant fields from its `implementation-spec.md` using
 targeted grep — do not load the full file:
 ```bash

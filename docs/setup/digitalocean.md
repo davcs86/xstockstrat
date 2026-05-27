@@ -190,11 +190,34 @@ You do not need to complete the app creation wizard — cancel after authorizati
 
 ---
 
+## Step 4.5 — Create a DOCR Container Registry
+
+The app specs reference pre-built Docker images stored in DigitalOcean Container Registry (DOCR). The CI `docker-build` job pushes images on every push to `main-dev` or `main`; App Platform pulls them with zero additional credential configuration (native DO authentication).
+
+Create the registry once — it is shared by both dev and prod apps:
+
+```bash
+doctl registry create xstockstrat --region nyc1 --subscription-tier basic
+```
+
+> **Note:** The registry slug (e.g. `xstockstrat`) is the value you will set as `DO_REGISTRY_NAME` in GitHub Actions secrets (Step 9). Retrieve it at any time with:
+> ```bash
+> doctl registry get
+> ```
+
+**Basic plan limit:** The DOCR basic plan allows up to 5 repositories. The current migration covers the 5 heaviest-install services (trader, insights, config-ui, identity, notify). If you upgrade to a higher-tier plan, additional services in the CI matrix will push automatically — update the app specs to reference those images.
+
+**App Platform auth:** DO App Platform pulls from DOCR using the same API token that manages the app — no separate registry credential is needed in the app spec or via `doctl apps update`.
+
+---
+
 ## Step 5 — Create the Dev App (Paper Trading)
 
 The dev app deploys from `main-dev`, runs all services in `TRADING_MODE=paper`, and uses cheaper `basic-xs` instances.
 
-The app spec contains `YOUR_GITHUB_ORG` as a placeholder. Substitute it with your GitHub username or organization name before creating:
+> **Prerequisite:** Push to `main-dev` first and wait for the CI `docker-build` job to complete before running `doctl apps create`. The app spec references DOCR images by commit SHA; the first deploy will fail if no images have been pushed yet.
+
+The app spec contains `YOUR_GITHUB_ORG`, `YOUR_IMAGE_TAG`, and `YOUR_REGISTRY_NAME` as placeholders. In normal CI-driven deploys these are substituted automatically by the deploy workflow. For the initial manual creation, substitute only `YOUR_GITHUB_ORG` — the CI workflow handles the image tag on subsequent deploys:
 
 ```bash
 sed "s|YOUR_GITHUB_ORG|<your-github-org>|g" .do/app.dev.yaml > /tmp/app.dev.yaml
@@ -231,6 +254,8 @@ Inter-service routing uses DigitalOcean private networking: `${xstockstrat-confi
 ## Step 6 — Create the Prod App (Live Trading)
 
 The prod app deploys from `main`, runs all services in `TRADING_MODE=live`, and uses `professional-xs` instances (higher throughput, above 60s idle timeout).
+
+> **Prerequisite:** Ensure CI has pushed images to DOCR from the `main` branch before creating the prod app (`doctl registry repository list-tags` confirms this). The first CI push happens automatically when `main-dev` is promoted via the `/promote` workflow.
 
 Substitute `YOUR_GITHUB_ORG` before creating:
 
@@ -350,7 +375,8 @@ The CI/CD workflows need six repository secrets. Go to:
 
 | Secret Name | Value | Used by |
 |---|---|---|
-| `DIGITALOCEAN_ACCESS_TOKEN` | The PAT created in Step 2 | deploy-dev, deploy-prod |
+| `DIGITALOCEAN_ACCESS_TOKEN` | The PAT created in Step 2 | ci (docker-build), deploy-dev, deploy-prod |
+| `DO_REGISTRY_NAME` | DOCR registry slug (e.g. `xstockstrat`) — from Step 4.5 (`doctl registry get → Name`) | ci (docker-build), deploy-dev, deploy-prod |
 | `DO_DEV_APP_ID` | App ID of the staging app (from Step 5) | deploy-dev |
 | `DO_PROD_APP_ID` | App ID of the production app (from Step 6) | deploy-prod |
 | `DO_DEV_PROJECT_ID` | Project ID of the staging DO project (from Step 5) | deploy-dev — assigns app to project on every deploy |
@@ -466,6 +492,19 @@ Check that `ALPACA_API_KEY` and `ALPACA_API_SECRET` are set on the correct servi
 
 ### TimescaleDB extension not found
 Run `CREATE EXTENSION IF NOT EXISTS timescaledb;` on the managed database before running migrations. See Step 3b.
+
+### Deploy fails with "image not found" or "repository does not exist"
+The `docker-build` CI job has not yet pushed images for this commit SHA. Push to `main-dev` (or `main`) and wait for the CI `docker-build` job to complete before retrying the deploy. Confirm images exist with:
+```bash
+doctl registry repository list-tags <DO_REGISTRY_NAME>/xstockstrat-identity
+```
+
+### `docker compose pull` fails with "unauthorized"
+The local Docker daemon is not authenticated with DOCR. Run:
+```bash
+doctl registry login
+```
+This writes temporary credentials (valid 1 hour) to your Docker config. Re-run `docker compose pull` after authenticating.
 
 ---
 
