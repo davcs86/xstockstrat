@@ -42,7 +42,9 @@ jobs:
             ${{ inputs.app_spec }} > /tmp/app_spec_substituted.yaml
 
       - name: Deploy to DigitalOcean App Platform
-        run: doctl apps update ${{ secrets.DO_APP_ID }} --spec /tmp/app_spec_substituted.yaml
+        # --update-sources forces DO to re-evaluate the branch and build from the
+        # current HEAD instead of the pinned commit stored from the last deploy.
+        run: doctl apps update ${{ secrets.DO_APP_ID }} --spec /tmp/app_spec_substituted.yaml --update-sources
 
       - name: Assign app to DO project
         env:
