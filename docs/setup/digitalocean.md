@@ -347,6 +347,26 @@ doctl apps update $DO_PROD_APP_ID \
   --set-env MCP_AGENT_SECRET=<your-secret>
 ```
 
+### Broker accounts encryption key
+Set on: `xstockstrat-trading`
+
+AES-256 key for encrypting broker credentials stored in the `broker_accounts` table. Must be a hex-encoded 32-byte value (64 hex characters).
+
+```bash
+# Generate — use different keys for dev and prod:
+openssl rand -hex 32
+```
+
+```bash
+doctl apps update $DO_DEV_APP_ID \
+  --set-env BROKER_ACCOUNTS_ENCRYPTION_KEY=<generated-dev-key>
+
+doctl apps update $DO_PROD_APP_ID \
+  --set-env BROKER_ACCOUNTS_ENCRYPTION_KEY=<generated-prod-key>
+```
+
+Required when the `broker_accounts` table is in use. Rotating this key requires re-encrypting all existing rows — do not change it after accounts have been stored.
+
 ### OpenTelemetry (Grafana Cloud)
 Set on all 13 services (or as app-level vars):
 
