@@ -485,6 +485,6 @@ databases:
   - name: db
     engine: PG
     version: "15"
-    production: false
+    production: true
     cluster_name: xstockstrat
     db_name: xstockstrat-staging
