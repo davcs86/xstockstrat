@@ -64,8 +64,8 @@ migrate_service() {
   case "$COMMAND" in
     up)
       # If a previous run failed mid-migration the state table is marked dirty.
-      # Force-reset to 0 so the updated migration re-runs from scratch.
-      # All 001 migrations use IF NOT EXISTS / if_not_exists => TRUE so re-running is safe.
+      # Force to version 0 (schema baseline) so migrate up re-runs from scratch.
+      # All migrations use IF NOT EXISTS / if_not_exists => TRUE so re-running is safe.
       if migrate -path "$dir" -database "$url" version 2>&1 | grep -q "dirty"; then
         echo "  [dirty] force-resetting $svc to version 0"
         migrate -path "$dir" -database "$url" force 0
