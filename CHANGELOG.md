@@ -13,6 +13,16 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-05-27
+
+### Features
+- ci-docker-registry-deploy: Move Docker image builds from DigitalOcean's infrastructure into GitHub Actions CI, push images to a container registry, and configure DO App Platform to deploy pre-built images. This surfaces build failures at PR time rather than during deployment and eliminates cold `pnpm install + pnpm build` runs on DO for every deploy.
+
+### Summary
+2 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-05-26
 
 ### Summary
