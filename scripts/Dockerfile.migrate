@@ -8,7 +8,8 @@ RUN curl -fsSL \
     "https://github.com/golang-migrate/migrate/releases/download/v${MIGRATE_VERSION}/migrate.linux-amd64.tar.gz" \
     | tar xz -C /usr/local/bin migrate
 
-COPY . /repo
+COPY scripts/db-migrate.sh /repo/scripts/db-migrate.sh
+COPY services /repo/services
 WORKDIR /repo
 
 ENTRYPOINT ["/repo/scripts/db-migrate.sh"]
