@@ -28,9 +28,18 @@ async function main() {
   log.info('Config snapshot received');
 
   // TimescaleDB connection pool
+  const sslDisabled = databaseUrl.includes('sslmode=disable');
+  let dbUrl = databaseUrl;
+  if (!sslDisabled) {
+    try {
+      const u = new URL(databaseUrl);
+      u.searchParams.delete('sslmode');
+      dbUrl = u.toString();
+    } catch { /* keep original if URL parsing fails */ }
+  }
   const pool = new Pool({
-    connectionString: databaseUrl,
-    ssl: databaseUrl.includes('sslmode=disable') ? false : { rejectUnauthorized: false },
+    connectionString: dbUrl,
+    ssl: sslDisabled ? false : { rejectUnauthorized: false },
   });
   await pool.query('SELECT 1'); // verify connectivity
   log.info('Database connected');

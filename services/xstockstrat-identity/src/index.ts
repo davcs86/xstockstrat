@@ -25,9 +25,18 @@ async function main() {
   await configWatcher.waitForSnapshot(10_000);
   log.info('Config snapshot received');
 
+  const sslDisabled = databaseUrl.includes('sslmode=disable');
+  let dbUrl = databaseUrl;
+  if (!sslDisabled) {
+    try {
+      const u = new URL(databaseUrl);
+      u.searchParams.delete('sslmode');
+      dbUrl = u.toString();
+    } catch { /* keep original if URL parsing fails */ }
+  }
   const pool = new Pool({
-    connectionString: databaseUrl,
-    ssl: databaseUrl.includes('sslmode=disable') ? false : { rejectUnauthorized: false },
+    connectionString: dbUrl,
+    ssl: sslDisabled ? false : { rejectUnauthorized: false },
   });
 
   const identityImpl = new IdentityServiceImpl(pool, configWatcher);
