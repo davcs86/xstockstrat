@@ -35,9 +35,13 @@ async function main() {
       dbUrl = u.toString();
     } catch { /* keep original if URL parsing fails */ }
   }
+  const caCert = process.env.DATABASE_CA_CERT;
   const pool = new Pool({
     connectionString: dbUrl,
-    ssl: sslDisabled ? false : { rejectUnauthorized: false },
+    ssl: sslDisabled ? false : {
+      rejectUnauthorized: !!caCert,
+      ...(caCert ? { ca: caCert } : {}),
+    },
   });
 
   const notifyImpl = new NotifyServiceImpl(pool, configWatcher);
