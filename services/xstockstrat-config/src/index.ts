@@ -23,7 +23,10 @@ async function main() {
   // It is the config source of truth. All other services subscribe to it.
   log.info('xstockstrat-config is the config source — no self-subscription');
 
-  const pool = new Pool({ connectionString: databaseUrl });
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    ssl: databaseUrl.includes('sslmode=disable') ? false : { rejectUnauthorized: false },
+  });
   await pool.query('SELECT 1');
   log.info('Database connected');
 

@@ -26,7 +26,10 @@ async function main() {
   await configWatcher.waitForSnapshot(10_000);
   log.info('Config snapshot received');
 
-  const pool = new Pool({ connectionString: databaseUrl });
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    ssl: databaseUrl.includes('sslmode=disable') ? false : { rejectUnauthorized: false },
+  });
 
   const notifyImpl = new NotifyServiceImpl(pool, configWatcher);
 

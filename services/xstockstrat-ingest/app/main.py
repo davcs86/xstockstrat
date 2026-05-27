@@ -13,6 +13,7 @@ import asyncio
 import logging
 import os
 import signal
+import ssl as _ssl
 
 import asyncpg
 import grpc
@@ -61,7 +62,12 @@ async def serve():
     log.info("config snapshot received")
 
     # Open asyncpg connection pool for signal persistence
-    db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
+    _ssl_ctx: "_ssl.SSLContext | None" = None
+    if "sslmode=disable" not in DATABASE_URL:
+        _ssl_ctx = _ssl.create_default_context()
+        _ssl_ctx.check_hostname = False
+        _ssl_ctx.verify_mode = _ssl.CERT_NONE
+    db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10, ssl=_ssl_ctx)
     log.info("database pool established")
 
     marketdata_channel = grpc.aio.insecure_channel(MARKETDATA_ENDPOINT)
