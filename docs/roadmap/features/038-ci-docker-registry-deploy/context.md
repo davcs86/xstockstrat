@@ -117,3 +117,10 @@
 **Progress**: 2 done / 5 total
 **Stopped at**: Step 2 (complete — awaiting merge before continuing)
 **Next**: /sdd-execute ci-docker-registry-deploy next
+
+## Session 2026-05-27 (CI: feature status automation)
+
+- Promotion PR #375 merged to main
+- Feature promoted and committed: 790d855782d7581455619911aa86fdaf627376b4
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-05-27
