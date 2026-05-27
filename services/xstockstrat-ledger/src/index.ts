@@ -28,7 +28,10 @@ async function main() {
   log.info('Config snapshot received');
 
   // TimescaleDB connection pool
-  const pool = new Pool({ connectionString: databaseUrl });
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    ssl: databaseUrl.includes('sslmode=disable') ? false : { rejectUnauthorized: false },
+  });
   await pool.query('SELECT 1'); // verify connectivity
   log.info('Database connected');
 
