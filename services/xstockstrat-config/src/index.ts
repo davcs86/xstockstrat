@@ -23,9 +23,22 @@ async function main() {
   // It is the config source of truth. All other services subscribe to it.
   log.info('xstockstrat-config is the config source — no self-subscription');
 
+  const sslDisabled = databaseUrl.includes('sslmode=disable');
+  let dbUrl = databaseUrl;
+  if (!sslDisabled) {
+    try {
+      const u = new URL(databaseUrl);
+      u.searchParams.delete('sslmode');
+      dbUrl = u.toString();
+    } catch { /* keep original if URL parsing fails */ }
+  }
+  const caCert = process.env.DATABASE_CA_CERT;
   const pool = new Pool({
-    connectionString: databaseUrl,
-    ssl: databaseUrl.includes('sslmode=disable') ? false : { rejectUnauthorized: false },
+    connectionString: dbUrl,
+    ssl: sslDisabled ? false : {
+      rejectUnauthorized: !!caCert,
+      ...(caCert ? { ca: caCert } : {}),
+    },
   });
   await pool.query('SELECT 1');
   log.info('Database connected');
