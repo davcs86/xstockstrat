@@ -57,19 +57,4 @@ CREATE INDEX IF NOT EXISTS idx_quotes_symbol_time
     ON marketdata.quotes (symbol, time DESC);
 
 
--- ── Continuous aggregates — 1-hour OHLCV from 1-min bars ─────────────────
-CREATE MATERIALIZED VIEW IF NOT EXISTS marketdata.ohlcv_1h
-WITH (timescaledb.continuous) AS
-SELECT
-    time_bucket('1 hour', time) AS bucket,
-    symbol,
-    FIRST(open,  time) AS open,
-    MAX(high)         AS high,
-    MIN(low)          AS low,
-    LAST(close,  time) AS close,
-    SUM(volume)       AS volume
-FROM marketdata.ohlcv
-WHERE timeframe = '1m'
-GROUP BY bucket, symbol
-WITH NO DATA;
 
