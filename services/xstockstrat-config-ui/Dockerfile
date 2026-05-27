@@ -14,16 +14,16 @@ COPY services/xstockstrat-config-ui/package.json ./services/xstockstrat-config-u
 RUN pnpm install --frozen-lockfile --filter xstockstrat-config-ui
 
 FROM base AS builder
-WORKDIR /app
-COPY --from=deps /workspace/node_modules ./node_modules
-COPY services/xstockstrat-config-ui/ .
-RUN pnpm run build
+WORKDIR /workspace
+COPY --from=deps /workspace ./
+COPY services/xstockstrat-config-ui/ ./services/xstockstrat-config-ui/
+RUN pnpm --filter xstockstrat-config-ui run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3002
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /workspace/services/xstockstrat-config-ui/.next/standalone ./
+COPY --from=builder /workspace/services/xstockstrat-config-ui/.next/static ./.next/static
 EXPOSE 3002
 CMD ["node", "server.js"]
