@@ -26,7 +26,7 @@ This runbook walks through creating and configuring the DigitalOcean infrastruct
 |---|---|
 | App Platform (staging) | Hosts all 13 services; paper trading; deploys from `main-dev` |
 | App Platform (production) | Hosts all 13 services; live trading; deploys from `main` |
-| Managed PostgreSQL 15 (×2) | Separate TimescaleDB clusters for staging (`xstockstrat-db-dev`) and production (`xstockstrat-db-prod`) |
+| Managed PostgreSQL 15 (×2) | Separate TimescaleDB clusters for staging (`xstockstrat-db-staging`) and production (`xstockstrat-db-production`) |
 | GitHub Actions | CI/CD; auto-deploys on push to `main-dev` or `main` via `doctl` |
 
 Architecture spec files:
@@ -126,8 +126,8 @@ Staging and production each require their **own** managed PostgreSQL 15 cluster.
 
 | Environment | Cluster name | App spec reference |
 |---|---|---|
-| Staging (dev) | `xstockstrat-db-dev` | `.do/app.dev.yaml` (`cluster_name: xstockstrat-db-dev`) |
-| Production | `xstockstrat-db-prod` | `.do/app.yaml` (`cluster_name: xstockstrat-db-prod`) |
+| Staging (dev) | `xstockstrat-db-staging` | `.do/app.dev.yaml` (`cluster_name: xstockstrat-db-staging`) |
+| Production | `xstockstrat-db-production` | `.do/app.yaml` (`cluster_name: xstockstrat-db-production`) |
 
 ### 3a. Create both database clusters
 
@@ -136,8 +136,8 @@ Via console: **Databases → Create Database** (repeat twice)
 ```
 Engine:  PostgreSQL 15
 Region:  NYC1 (matches app.yaml region: nyc)
-Name:    xstockstrat-db-dev   ← staging
-Name:    xstockstrat-db-prod  ← production
+Name:    xstockstrat-db-staging   ← staging
+Name:    xstockstrat-db-production  ← production
 Plan:    Basic for dev, Production for prod
 ```
 
@@ -145,7 +145,7 @@ Or via doctl:
 
 ```bash
 # Staging cluster
-doctl databases create xstockstrat-db-dev \
+doctl databases create xstockstrat-db-staging \
   --engine pg \
   --version 15 \
   --region nyc1 \
@@ -153,7 +153,7 @@ doctl databases create xstockstrat-db-dev \
   --num-nodes 1
 
 # Production cluster
-doctl databases create xstockstrat-db-prod \
+doctl databases create xstockstrat-db-production \
   --engine pg \
   --version 15 \
   --region nyc1 \
@@ -368,10 +368,10 @@ Each app must be linked to its **own** managed cluster. Never attach the same cl
 
 | App | Cluster to attach |
 |---|---|
-| `xstockstrat-staging` | `xstockstrat-db-dev` |
-| `xstockstrat-production` | `xstockstrat-db-prod` |
+| `xstockstrat-staging` | `xstockstrat-db-staging` |
+| `xstockstrat-production` | `xstockstrat-db-production` |
 
-The app specs already declare `cluster_name` for each environment (`.do/app.dev.yaml` → `xstockstrat-db-dev`, `.do/app.yaml` → `xstockstrat-db-prod`), so `doctl apps update` will wire the correct cluster automatically once the clusters exist.
+The app specs already declare `cluster_name` for each environment (`.do/app.dev.yaml` → `xstockstrat-db-staging`, `.do/app.yaml` → `xstockstrat-db-production`), so `doctl apps update` will wire the correct cluster automatically once the clusters exist.
 
 Via doctl:
 
@@ -384,7 +384,7 @@ Via console (if the spec-based attach fails):
 
 1. **Apps → \<app\> → Settings → Database**
 2. Click **Attach Database**
-3. Select the correct cluster (`xstockstrat-db-dev` for staging, `xstockstrat-db-prod` for production)
+3. Select the correct cluster (`xstockstrat-db-staging` for staging, `xstockstrat-db-production` for production)
 4. Component name must be `db` (matches the YAML spec: `databases: - name: db`)
 
 ---

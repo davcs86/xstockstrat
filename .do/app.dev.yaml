@@ -486,4 +486,4 @@ databases:
     engine: PG
     version: "15"
     production: false
-    cluster_name: xstockstrat-db-dev
+    cluster_name: xstockstrat-db-staging
