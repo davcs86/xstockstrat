@@ -54,7 +54,7 @@ migrate_service() {
   # Pre-create the schema so golang-migrate can write its schema_migrations state
   # table before migration 001 runs. Without this, search_path=<schema> fails on
   # a fresh database because the schema doesn't exist yet.
-  psql "$DB_URL" -c "CREATE SCHEMA IF NOT EXISTS ${schema};" --quiet
+  psql "$DB_URL" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS ${schema};"
   local url
   url="$(service_db_url "$schema")"
   echo "  → $svc (schema: $schema)"
@@ -86,11 +86,11 @@ migrate_service() {
 }
 
 echo "==> Enabling TimescaleDB extension..."
-psql "$DB_URL" -c "CREATE EXTENSION IF NOT EXISTS timescaledb;" --quiet
+psql "$DB_URL" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
 echo ""
 
 echo "==> Creating schemas (idempotent)..."
-psql "$DB_URL" --quiet << 'SQL'
+psql "$DB_URL" -v ON_ERROR_STOP=1 << 'SQL'
 CREATE SCHEMA IF NOT EXISTS config;
 CREATE SCHEMA IF NOT EXISTS ledger;
 CREATE SCHEMA IF NOT EXISTS identity;
@@ -141,7 +141,7 @@ echo ""
 
 if [ "$COMMAND" = "up" ]; then
   echo "==> Verifying TimescaleDB hypertables..."
-  psql "$DB_URL" -t -c "
+  psql "$DB_URL" -v ON_ERROR_STOP=1 -t -c "
   SELECT hypertable_schema || '.' || hypertable_name AS hypertable
   FROM timescaledb_information.hypertables
   ORDER BY 1;
