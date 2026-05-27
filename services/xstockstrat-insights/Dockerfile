@@ -14,16 +14,16 @@ COPY services/xstockstrat-insights/package.json ./services/xstockstrat-insights/
 RUN pnpm install --frozen-lockfile --filter xstockstrat-insights
 
 FROM base AS builder
-WORKDIR /app
-COPY --from=deps /workspace/node_modules ./node_modules
-COPY services/xstockstrat-insights/ .
-RUN pnpm run build
+WORKDIR /workspace
+COPY --from=deps /workspace ./
+COPY services/xstockstrat-insights/ ./services/xstockstrat-insights/
+RUN pnpm --filter xstockstrat-insights run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /workspace/services/xstockstrat-insights/.next/standalone ./
+COPY --from=builder /workspace/services/xstockstrat-insights/.next/static ./.next/static
 EXPOSE 3001
 CMD ["node", "server.js"]

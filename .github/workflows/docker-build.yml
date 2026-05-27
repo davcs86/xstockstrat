@@ -1,0 +1,109 @@
+name: Docker build and push (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: 'Short SHA tag for images'
+        required: true
+        type: string
+      latest_tag:
+        description: 'Floating tag (latest-dev or latest)'
+        required: true
+        type: string
+    secrets:
+      DIGITALOCEAN_ACCESS_TOKEN:
+        required: true
+      DO_REGISTRY_NAME:
+        required: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.service }})${{ matrix.push && ' + push' || '' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Build-only — DO builds these from source via github: in the app spec,
+          # so they don't consume a DOCR repository slot.
+          - service: xstockstrat-trading
+            dockerfile: services/xstockstrat-trading/Dockerfile
+            push: false
+          - service: xstockstrat-portfolio
+            dockerfile: services/xstockstrat-portfolio/Dockerfile
+            push: false
+          - service: xstockstrat-marketdata
+            dockerfile: services/xstockstrat-marketdata/Dockerfile
+            push: false
+          - service: xstockstrat-indicators
+            dockerfile: services/xstockstrat-indicators/Dockerfile
+            push: false
+          - service: xstockstrat-ingest
+            dockerfile: services/xstockstrat-ingest/Dockerfile
+            push: false
+          - service: xstockstrat-analysis
+            dockerfile: services/xstockstrat-analysis/Dockerfile
+            push: false
+          - service: xstockstrat-agent
+            dockerfile: services/xstockstrat-agent/Dockerfile
+            push: false
+          - service: xstockstrat-ledger
+            dockerfile: services/xstockstrat-ledger/Dockerfile
+            push: false
+          - service: xstockstrat-config
+            dockerfile: services/xstockstrat-config/Dockerfile
+            push: false
+          - service: xstockstrat-nginx
+            dockerfile: services/xstockstrat-nginx/Dockerfile
+            push: false
+          # Build + push — referenced as image: in app specs, must exist in DOCR.
+          - service: xstockstrat-identity
+            dockerfile: services/xstockstrat-identity/Dockerfile
+            push: true
+          - service: xstockstrat-notify
+            dockerfile: services/xstockstrat-notify/Dockerfile
+            push: true
+          - service: xstockstrat-trader
+            dockerfile: services/xstockstrat-trader/Dockerfile
+            push: true
+          - service: xstockstrat-insights
+            dockerfile: services/xstockstrat-insights/Dockerfile
+            push: true
+          - service: xstockstrat-config-ui
+            dockerfile: services/xstockstrat-config-ui/Dockerfile
+            push: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install doctl
+        if: ${{ matrix.push }}
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Log in to DOCR
+        if: ${{ matrix.push }}
+        run: doctl registry login --expiry-seconds 3600
+
+      - name: Compute image tags
+        id: tags
+        if: ${{ matrix.push }}
+        run: |
+          REGISTRY="registry.digitalocean.com"
+          REPO="${REGISTRY}/${{ secrets.DO_REGISTRY_NAME }}/${{ matrix.service }}"
+          echo "tags=${REPO}:${{ inputs.image_tag }},${REPO}:${{ inputs.latest_tag }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: ${{ matrix.push }}
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          platforms: linux/amd64

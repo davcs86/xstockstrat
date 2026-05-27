@@ -36,14 +36,14 @@ force_version() {
 }
 
 echo "Seeding migration versions..."
-force_version xstockstrat-config     config     2
+force_version xstockstrat-config     config     4
 force_version xstockstrat-ledger     ledger     1
 force_version xstockstrat-identity   identity   2
 force_version xstockstrat-marketdata marketdata 1
-force_version xstockstrat-trading    trading    1
-force_version xstockstrat-portfolio  portfolio  2
+force_version xstockstrat-trading    trading    3
+force_version xstockstrat-portfolio  portfolio  3
 force_version xstockstrat-notify     notify     1
-force_version xstockstrat-ingest     ingest     1
+force_version xstockstrat-ingest     ingest     2
 echo "Done. Run ./scripts/db-migrate.sh version to verify."
 ```
 

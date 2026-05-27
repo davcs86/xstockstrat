@@ -51,6 +51,10 @@ migrate_service() {
     echo "  [skip] $svc — no migrations dir"
     return
   fi
+  # Pre-create the schema so golang-migrate can write its schema_migrations state
+  # table before migration 001 runs. Without this, search_path=<schema> fails on
+  # a fresh database because the schema doesn't exist yet.
+  psql "$DB_URL" -c "CREATE SCHEMA IF NOT EXISTS ${schema};" --quiet
   local url
   url="$(service_db_url "$schema")"
   echo "  → $svc (schema: $schema)"
@@ -83,6 +87,21 @@ migrate_service() {
 
 echo "==> Enabling TimescaleDB extension..."
 psql "$DB_URL" -c "CREATE EXTENSION IF NOT EXISTS timescaledb;" --quiet
+echo ""
+
+echo "==> Creating schemas (idempotent)..."
+psql "$DB_URL" --quiet << 'SQL'
+CREATE SCHEMA IF NOT EXISTS config;
+CREATE SCHEMA IF NOT EXISTS ledger;
+CREATE SCHEMA IF NOT EXISTS identity;
+CREATE SCHEMA IF NOT EXISTS marketdata;
+CREATE SCHEMA IF NOT EXISTS trading;
+CREATE SCHEMA IF NOT EXISTS portfolio;
+CREATE SCHEMA IF NOT EXISTS notify;
+CREATE SCHEMA IF NOT EXISTS ingest;
+CREATE SCHEMA IF NOT EXISTS indicators;
+CREATE SCHEMA IF NOT EXISTS analysis;
+SQL
 echo ""
 
 echo "==> Running migrations (command: $COMMAND, dependency order)..."
