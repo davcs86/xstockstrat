@@ -53,7 +53,67 @@
 - Trading domain checks: skipped (non-trading feature).
 - Step ordering: no test steps needed (CI workflow — no service coverage threshold applies).
 
+### Step 5 — docs: Update DigitalOcean setup guide [done]
+- Added Step 4.5 (Create a DOCR Container Registry) between Steps 4 and 5 with `doctl registry create` command, plan-limit note, and DO App Platform native auth explanation.
+- Updated Step 5 and Step 6 with prerequisites noting CI must push images before `doctl apps create`.
+- Updated Step 9 secrets table to add `DO_REGISTRY_NAME` row (used by ci docker-build, deploy-dev, deploy-prod).
+- Added two troubleshooting entries: "Deploy fails with image not found" and "`docker compose pull` fails with unauthorized".
+- Files modified: `docs/setup/digitalocean.md`
+- Deviations: none
+
+## Session 2026-05-26T00:11:00Z — sdd-execute
+**Steps this session**: [5]
+**Progress**: 5 done / 5 total
+**Status**: `code-completed` — all steps done; open integration PR `feature/ci-docker-registry-deploy` → `main-dev`
+**Merge order gate**: 038 must merge before 003 and 018 (both touch docker-compose.yml and .do/ files) — confirmed from merge-order.md
+
+### Step 4 — service: Add image field to docker-compose.yml [done]
+- Added `image:` field alongside `build:` block for all 15 app services in `docker-compose.yml`. Image format: `registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/<service>:latest-dev`. db-migrator excluded per FR-8.
+- Added `DO_REGISTRY_NAME=xstockstrat` to `.env.example` with usage comment; added `DO_REGISTRY_NAME` to GitHub Secrets table in `.env.example`.
+- Files modified: `docker-compose.yml`, `.env.example`
+- Deviations: none
+
+## Session 2026-05-26T00:10:00Z — sdd-execute
+**Steps this session**: [4]
+**Progress**: 4 done / 5 total
+**Stopped at**: Step 4 (complete — awaiting merge before continuing)
+**Next**: /sdd-execute ci-docker-registry-deploy next
+
 ## Session 2026-05-26T00:02:00Z — priority escalation
 
 - Confirmed this is the highest-priority active feature. The current DO-based Dockerfile builds have two active failures: (1) build timeouts — cold pnpm install + pnpm build exceeds DO's build time limit, especially for Next.js frontends; (2) flaky installs — cold npm registry hits on DO egress cause retries that exhaust the timeout budget. Both 018 and 003 are blocked from reaching production until this is resolved.
 - Problem Statement in product-spec.md updated to document both failure modes explicitly.
+
+### Step 1 — ci: Add docker-build job to CI workflow [done]
+- Inserted `docker-build` job in `.github/workflows/ci.yml` after `dockerfile-lint` (L519), before `shell-lint` (L520). 15-service matrix, push=true always, tags with short SHA + floating tag.
+- Files modified: `.github/workflows/ci.yml`
+- Deviations: Job restricted to push events on main-dev/main only (no PR builds) — user-requested change from spec's unconditional trigger.
+
+## Session 2026-05-26T00:07:00Z — sdd-execute
+**Steps this session**: [1]
+**Progress**: 1 done / 5 total
+**Stopped at**: Step 1 (complete — awaiting merge before continuing)
+**Next**: /sdd-execute ci-docker-registry-deploy next
+
+### Step 3 — service: Migrate app specs from dockerfile_path to image references [done]
+- Migrated 5 services (trader, insights, config-ui, identity, notify) from github:+dockerfile_path: to image: DOCR blocks in both .do/app.dev.yaml and .do/app.yaml. 10 backend services + nginx unchanged. Services selected by pnpm lockfile package count (top 5: insights=117, trader=117, config-ui=114, identity=93, notify=93).
+- Files modified: `.do/app.dev.yaml`, `.do/app.yaml`
+- Deviations: Only 5 of 15 services migrated (DOCR basic plan 5-repo limit); ci.yml matrix stays at 15 services (accepted limitation — 10 non-selected jobs will fail at DOCR quota).
+
+## Session 2026-05-26T00:09:00Z — sdd-execute
+**Steps this session**: [3]
+**Progress**: 3 done / 5 total
+**Stopped at**: Step 3 (complete — awaiting merge before continuing)
+**Next**: /sdd-execute ci-docker-registry-deploy next
+
+### Step 2 — service: Update deploy workflows to inject SHA image tags [done]
+- Added `image_tag` input and `DO_REGISTRY_NAME` secret to `deploy.yml` reusable workflow; replaced single-sed substitution step with three-substitution step covering `YOUR_GITHUB_ORG`, `YOUR_IMAGE_TAG`, and `YOUR_REGISTRY_NAME`.
+- Added `prepare` job to both `deploy-dev.yml` and `deploy-prod.yml` to compute 7-char short SHA; updated `deploy` job in each to depend on `prepare` and pass `image_tag` and `DO_REGISTRY_NAME`.
+- Files modified: `.github/workflows/deploy.yml`, `.github/workflows/deploy-dev.yml`, `.github/workflows/deploy-prod.yml`
+- Deviations: none
+
+## Session 2026-05-26T00:08:00Z — sdd-execute
+**Steps this session**: [2]
+**Progress**: 2 done / 5 total
+**Stopped at**: Step 2 (complete — awaiting merge before continuing)
+**Next**: /sdd-execute ci-docker-registry-deploy next

@@ -1,7 +1,7 @@
 ---
 name: digitalocean-setup
 description: Interactive DigitalOcean App Platform first-time setup — doctl auth, managed DB, dev/prod apps, secrets, GitHub Actions wiring, and deployment verification.
-argument-hint: [step-number 1–9]
+argument-hint: [step-number 1–9 or 4.5 for DOCR registry]
 allowed-tools: Read Edit Bash(doctl *) Bash(gh *) Bash(openssl *) Bash(git *) Bash(sed *) Bash(grep *) Bash(awk *) Bash(cat *) Bash(bash *) Bash(command -v *) Bash(python3 *) Bash(./scripts/do-setup-check.sh) Bash(uname *) Bash(brew *) Bash(snap *) Bash(apt-get *) Bash(apt *) Bash(curl *) Bash(tar *) Bash(chmod *) Bash(sudo apt*) Bash(sudo snap*) Bash(sudo chmod*) Bash(sudo dd*) Bash(sudo tee*) Bash(sudo apt-get*) Bash(which *)
 effort: medium
 ---
@@ -226,10 +226,11 @@ Parse its output to build a per-phase skip map:
 | P2 (create DB) | `doctl databases list` output contains `xstockstrat` |
 | P3 (connect GitHub) | At least one DO app exists (implies GitHub OAuth was completed) |
 | P4 (create dev app) | An app sourced from `main-dev` branch exists in `doctl apps list` |
+| P4.5 (create DOCR registry) | `doctl registry get` succeeds (registry already exists) |
 | P5 (create prod app) | An app sourced from `main` branch exists in `doctl apps list` |
 | P6 (set DO secrets) | Ask the user: "Have you already set Alpaca/JWT secrets on both DO apps? (y/n)" |
 | P7 (attach DB) | `doctl apps get $DEV_APP_ID` output contains a `db` component |
-| P8 (GitHub secrets) | `gh secret list` shows all six: `DIGITALOCEAN_ACCESS_TOKEN`, `DO_DEV_APP_ID`, `DO_PROD_APP_ID`, `DO_DEV_PROJECT_ID`, `DO_PROD_PROJECT_ID`, `BUF_TOKEN` |
+| P8 (GitHub secrets) | `gh secret list` shows all seven: `DIGITALOCEAN_ACCESS_TOKEN`, `DO_REGISTRY_NAME`, `DO_DEV_APP_ID`, `DO_PROD_APP_ID`, `DO_DEV_PROJECT_ID`, `DO_PROD_PROJECT_ID`, `BUF_TOKEN` |
 | P9 (verify) | Never skipped — always run |
 
 Print a checklist before starting any phase:
@@ -354,10 +355,14 @@ Dev Project ID: <id>   ← copy this — you will need it in Phase 8
 
 Store as `DEV_PROJECT_ID` in working context.
 
-3. Substitute the org placeholder and create the app — pipe directly, no temp file:
+3. Substitute all placeholders and create the app — pipe directly, no temp file. Use `latest-dev` as the initial image tag; the CI deploy workflow will replace it with the real commit SHA on the first push:
 
 ```bash
-sed "s|YOUR_GITHUB_ORG|${GH_ORG}|g" "$REPO_ROOT/.do/app.dev.yaml" \
+sed \
+  -e "s|YOUR_GITHUB_ORG|${GH_ORG}|g" \
+  -e "s|YOUR_REGISTRY_NAME|${REGISTRY_NAME}|g" \
+  -e "s|YOUR_IMAGE_TAG|latest-dev|g" \
+  "$REPO_ROOT/.do/app.dev.yaml" \
   | doctl apps create --spec /dev/stdin
 ```
 
@@ -381,6 +386,42 @@ doctl projects resources assign "$DEV_PROJECT_ID" \
 ```bash
 doctl apps list | grep xstockstrat
 ```
+
+---
+
+## P4.5 — Create DOCR Container Registry
+
+**Skip if**: `doctl registry get` exits 0 (a registry is already configured). If it exists, capture the slug:
+
+```bash
+REGISTRY_NAME=$(doctl registry get --format Name --no-header)
+```
+
+Store as `REGISTRY_NAME` in working context and skip the rest of P4.5.
+
+1. Ask the user for the desired registry slug (default: `xstockstrat`). Store as `REGISTRY_NAME`.
+
+2. Create the registry:
+
+```bash
+doctl registry create "$REGISTRY_NAME" --region nyc1 --subscription-tier basic
+```
+
+3. Verify:
+
+```bash
+doctl registry get
+```
+
+Display the registry slug prominently:
+
+```
+Registry slug: <slug>   ← this becomes the DO_REGISTRY_NAME GitHub secret in P8
+```
+
+> **Note:** The DOCR basic plan allows up to 5 repositories. The current app specs have 5 services configured to pull from DOCR (trader, insights, config-ui, identity, notify). If you upgrade to a higher-tier plan, additional services in the CI matrix will push automatically.
+
+> **Note:** The CI `docker-build` job pushes images on every push to `main-dev` or `main`. App Platform pulls images using the same DO API token — no additional credential configuration is needed. The first deploy of the image-based services will fail if the CI job has not yet run; push to `main-dev` after P8 to seed the registry before creating or deploying the apps.
 
 ---
 
@@ -413,10 +454,14 @@ Prod Project ID: <id>   ← copy this — you will need it in Phase 8
 
 Store as `PROD_PROJECT_ID` in working context.
 
-3. Create the prod app:
+3. Create the prod app — substitute all placeholders. Use `latest` as the initial image tag; CI replaces it with the real SHA on every push to `main`:
 
 ```bash
-sed "s|YOUR_GITHUB_ORG|${GH_ORG}|g" "$REPO_ROOT/.do/app.yaml" \
+sed \
+  -e "s|YOUR_GITHUB_ORG|${GH_ORG}|g" \
+  -e "s|YOUR_REGISTRY_NAME|${REGISTRY_NAME}|g" \
+  -e "s|YOUR_IMAGE_TAG|latest|g" \
+  "$REPO_ROOT/.do/app.yaml" \
   | doctl apps create --spec /dev/stdin
 ```
 
@@ -478,7 +523,9 @@ python3 << PYEOF | doctl apps update "$DEV_APP_ID" --spec /dev/stdin
 import re, os
 
 content = open('$REPO_ROOT/.do/app.dev.yaml').read()
-content = content.replace('YOUR_GITHUB_ORG', os.environ['GH_ORG'])
+content = content.replace('YOUR_GITHUB_ORG',    os.environ['GH_ORG'])
+content = content.replace('YOUR_REGISTRY_NAME', os.environ['REGISTRY_NAME'])
+content = content.replace('YOUR_IMAGE_TAG',     'latest-dev')
 
 # Inject value: "" vars (ALPACA, JWT) — match existing empty-value pattern
 for key, val in [
@@ -512,7 +559,7 @@ print(content)
 PYEOF
 ```
 
-Repeat for the prod app using `PROD_ALPACA_KEY` / `PROD_ALPACA_SECRET` and `$PROD_APP_ID` (same `OTEL_ENDPOINT` / `OTEL_HEADERS` — same Grafana Cloud stack).
+Repeat for the prod app using `PROD_ALPACA_KEY` / `PROD_ALPACA_SECRET` and `$PROD_APP_ID` (same `OTEL_ENDPOINT` / `OTEL_HEADERS` — same Grafana Cloud stack). In the prod Python block, replace `'latest-dev'` with `'latest'` and `app.dev.yaml` with `app.yaml`.
 
 Verify each `doctl apps update` exits 0 before proceeding.
 
@@ -542,12 +589,19 @@ doctl apps get "$DEV_APP_ID" --output json | grep -i "database"
 
 ## P8 — Configure GitHub Actions Secrets
 
-**Skip if**: `gh secret list` shows all six required secrets.
+**Skip if**: `gh secret list` shows all seven required secrets.
 
 By this point you have in working context:
 - `DEV_APP_ID` and `PROD_APP_ID` — from P4/P5
 - `DEV_PROJECT_ID` and `PROD_PROJECT_ID` — from P4/P5
 - `DO_TOKEN` — from P6
+- `REGISTRY_NAME` — from P4.5 (the DOCR registry slug, e.g. `xstockstrat`)
+
+If `REGISTRY_NAME` is not in working context (e.g., step was skipped), retrieve it:
+
+```bash
+REGISTRY_NAME=$(doctl registry get --format Name --no-header)
+```
 
 Ask the user for:
 - `BUF_TOKEN` — from buf.build → Settings → Tokens (needed for Buf Schema Registry pushes)
@@ -557,6 +611,7 @@ Apply all secrets:
 
 ```bash
 gh secret set DIGITALOCEAN_ACCESS_TOKEN --body "$DO_TOKEN"
+gh secret set DO_REGISTRY_NAME          --body "$REGISTRY_NAME"
 gh secret set DO_DEV_APP_ID             --body "$DEV_APP_ID"
 gh secret set DO_PROD_APP_ID            --body "$PROD_APP_ID"
 gh secret set DO_DEV_PROJECT_ID         --body "$DEV_PROJECT_ID"
@@ -576,7 +631,7 @@ Verify each command exits 0. Then confirm:
 gh secret list
 ```
 
-All six required secrets should appear.
+All seven required secrets should appear.
 
 ---
 
@@ -608,11 +663,12 @@ Setup complete!
   ✓ doctl authenticated
   ✓ Managed PostgreSQL created (xstockstrat-db) with TimescaleDB enabled
   ✓ GitHub connected to DigitalOcean
+  ✓ DOCR registry created (<REGISTRY_NAME>) — basic plan, 5 repos
   ✓ Dev app created  (App ID: <DEV_APP_ID>, Project ID: <DEV_PROJECT_ID>)
   ✓ Prod app created (App ID: <PROD_APP_ID>, Project ID: <PROD_PROJECT_ID>)
   ✓ Secrets applied to both apps
   ✓ Database attached to both apps
-  ✓ GitHub Actions secrets configured (6 required: DIGITALOCEAN_ACCESS_TOKEN, DO_DEV_APP_ID, DO_PROD_APP_ID, DO_DEV_PROJECT_ID, DO_PROD_PROJECT_ID, BUF_TOKEN)
+  ✓ GitHub Actions secrets configured (7 required: DIGITALOCEAN_ACCESS_TOKEN, DO_REGISTRY_NAME, DO_DEV_APP_ID, DO_PROD_APP_ID, DO_DEV_PROJECT_ID, DO_PROD_PROJECT_ID, BUF_TOKEN)
   ✓ First deployment verified
 
 Next steps:

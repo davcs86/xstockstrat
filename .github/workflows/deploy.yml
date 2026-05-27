@@ -7,6 +7,10 @@ on:
         description: 'Path to the DO app spec file'
         required: true
         type: string
+      image_tag:
+        description: 'Short SHA to inject as YOUR_IMAGE_TAG in the app spec'
+        required: true
+        type: string
     secrets:
       DIGITALOCEAN_ACCESS_TOKEN:
         required: true
@@ -16,6 +20,8 @@ on:
         required: false  # Set DO_DEV_PROJECT_ID / DO_PROD_PROJECT_ID in GitHub Secrets.
                          # Find your project ID: doctl projects list
                          # Without this the app lands in the account's default project.
+      DO_REGISTRY_NAME:
+        required: true
 
 jobs:
   deploy:
@@ -27,8 +33,13 @@ jobs:
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
-      - name: Substitute GitHub org in app spec
-        run: sed "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" ${{ inputs.app_spec }} > /tmp/app_spec_substituted.yaml
+      - name: Substitute app spec placeholders
+        run: |
+          sed \
+            -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \
+            -e "s|YOUR_IMAGE_TAG|${{ inputs.image_tag }}|g" \
+            -e "s|YOUR_REGISTRY_NAME|${{ secrets.DO_REGISTRY_NAME }}|g" \
+            ${{ inputs.app_spec }} > /tmp/app_spec_substituted.yaml
 
       - name: Deploy to DigitalOcean App Platform
         run: doctl apps update ${{ secrets.DO_APP_ID }} --spec /tmp/app_spec_substituted.yaml
