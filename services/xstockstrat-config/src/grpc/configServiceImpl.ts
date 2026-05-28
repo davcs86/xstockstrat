@@ -76,12 +76,12 @@ export class ConfigServiceImpl {
       this.snapshots.set(k, {
         namespace: entry.namespace,
         version: Date.now().toString(),
-        updated_at: { seconds: Math.floor(Date.now() / 1000) },
+        updatedAt: new Date(),
         values: entry.values,
-        update_type: 1, // SNAPSHOT
-        changed_keys: [],
+        updateType: 1, // SNAPSHOT
+        changedKeys: [],
         environment: entry.environment,
-        trading_mode: entry.trading_mode,
+        tradingMode: entry.trading_mode,
       });
     }
   }
@@ -101,12 +101,12 @@ export class ConfigServiceImpl {
     this.snapshots.set(snapKey(namespace, env, mode), {
       namespace,
       version: Date.now().toString(),
-      updated_at: { seconds: Math.floor(Date.now() / 1000) },
+      updatedAt: new Date(),
       values,
-      update_type: 2, // DELTA
-      changed_keys: Object.keys(values),
+      updateType: 2, // DELTA
+      changedKeys: Object.keys(values),
       environment: env,
-      trading_mode: mode,
+      tradingMode: mode,
     });
   }
 
@@ -145,14 +145,14 @@ export class ConfigServiceImpl {
     const snap = this.snapshots.get(k) ?? {
       namespace: req.namespace,
       version: '0',
-      updated_at: { seconds: Math.floor(Date.now() / 1000) },
+      updatedAt: new Date(),
       values: {},
-      update_type: 1,
-      changed_keys: [],
+      updateType: 1,
+      changedKeys: [],
       environment: env,
-      trading_mode: mode,
+      tradingMode: mode,
     };
-    call.write({ ...snap, update_type: 1 }); // SNAPSHOT
+    call.write({ ...snap, updateType: 1 }); // SNAPSHOT
 
     this.subscribers.set(subId, {
       namespace: req.namespace,
@@ -181,10 +181,10 @@ export class ConfigServiceImpl {
         namespace: call.request.namespace,
         version: '0',
         values: {},
-        update_type: 1,
-        changed_keys: [],
+        updateType: 1,
+        changedKeys: [],
         environment: env,
-        trading_mode: mode,
+        tradingMode: mode,
       });
       return;
     }
@@ -210,7 +210,7 @@ export class ConfigServiceImpl {
         JSON.stringify({ namespace, key, environment: env, trading_mode: mode }),
       ]);
       const version = Date.now().toString();
-      callback(null, { version, updated_at: { seconds: Math.floor(Date.now() / 1000) } });
+      callback(null, { version, updatedAt: new Date() });
     } catch (err: any) {
       callback({ code: 13, message: err.message });
     }
