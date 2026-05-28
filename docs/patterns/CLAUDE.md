@@ -4,7 +4,8 @@ Reusable implementation patterns for new services. Each file is a self-contained
 
 | File | Read when |
 |---|---|
-| `frontend-auth.md` | Creating or modifying a Next.js frontend service |
+| `frontend-auth.md` | Creating or modifying a Next.js frontend service — auth + Connect-RPC client + Edge-runtime safety |
+| `nextjs-frontends.md` | Anything else Next.js in a frontend — basePath, Suspense fallbacks, Radix hydration, middleware matcher, app icons |
 | `nginx-routing.md` | Adding a new frontend to the nginx reverse proxy |
 | `header-propagation.md` | Adding a new backend service (Go, Python, or Node.js) |
 | `git-subtree.md` | Syncing a service to/from its individual GitHub repo |
