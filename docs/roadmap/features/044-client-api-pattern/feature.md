@@ -1,0 +1,43 @@
+# Feature: client-api-pattern
+
+**Lifecycle Status**: `spec-ready`
+**Development Branch**: `feature/client-api-pattern`
+**Created**: 2026-05-28
+**Last Updated**: 2026-05-28
+
+---
+
+## Status History
+
+| Date | Status | Updated by | Note |
+|---|---|---|---|
+| 2026-05-28 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-05-28 | `draft` → `spec-ready` | /sdd-review | Product spec approved (11 overlap warnings — advisory only) |
+
+---
+
+## Artifacts
+
+- [Product Spec](product-spec.md) — requirements and governance
+- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec client-api-pattern`_
+- [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Summary
+
+Standardise client-side API calls across all three Next.js frontends (xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui) by migrating from SWR to TanStack Query v5 + normy, replacing `{} as any` service-descriptor placeholders with generated `@xstockstrat/proto` types, and wrapping all data fetching in named typed hooks — eliminating `any` from request/response boundaries and replacing manual cache invalidation with normy's automatic entity propagation.
+
+## Reviewers
+
+_(Snapshot from docs/runbooks/reviewer-registry.md — re-run /sdd-spec if registry changes.)_
+
+| Role | Review Focus |
+|---|---|
+| xstockstrat-trader service owner | Trading UI correctness, Connect-RPC call safety, no direct DB access from frontend |
+| xstockstrat-insights service owner | Analytics display accuracy, SSE polling resilience, read-only access pattern |
+| xstockstrat-config-ui service owner | Config mutation safety, environment scope correctness, no secret values rendered in UI |
+
+## Next Action
+
+`/sdd-spec client-api-pattern` — generate implementation spec from the approved product spec
