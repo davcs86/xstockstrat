@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ConnectError } from '@connectrpc/connect';
 import { identityClient } from '@/lib/connectClients';
 import { setSessionCookies } from '@/lib/auth';
 

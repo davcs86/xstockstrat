@@ -77,30 +77,40 @@ const IdentityServiceDef = {
 } as const;
 
 // ── Exported clients ───────────────────────────────────────────────────────
+// We cast AnalysisServiceDef etc. to `any` for createClient(), which loses
+// the per-method `kind` narrowing TypeScript needs to pick the unary
+// overload. Cast each exported client to an UntypedClient so call sites
+// can pass `(input)` or `(input, options)` without TS routing them to the
+// streaming overload (which expects an AsyncIterable input).
+type UntypedClient = Record<
+  string,
+  (input?: unknown, options?: { headers?: Headers }) => Promise<unknown>
+>;
+
 export const analysisClient = createClient(
   AnalysisServiceDef as any,
   makeTransport(ANALYSIS_BASE_URL),
-);
+) as unknown as UntypedClient;
 
 export const marketDataClient = createClient(
   MarketDataServiceDef as any,
   makeTransport(MARKETDATA_BASE_URL),
-);
+) as unknown as UntypedClient;
 
 export const portfolioClient = createClient(
   PortfolioServiceDef as any,
   makeTransport(PORTFOLIO_BASE_URL),
-);
+) as unknown as UntypedClient;
 
 export const tradingClient = createClient(
   TradingServiceDef as any,
   makeTransport(TRADING_BASE_URL),
-);
+) as unknown as UntypedClient;
 
 export const identityClient = createClient(
   IdentityServiceDef as any,
   makeTransport(IDENTITY_BASE_URL),
-);
+) as unknown as UntypedClient;
 
 // ── Connect-Code → HTTP status helper ──────────────────────────────────────
 // Shared by every route that catches ConnectError so upstream failures
