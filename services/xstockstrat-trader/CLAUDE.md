@@ -59,8 +59,9 @@ This ensures the order book and portfolio summary only show data for the selecte
 | Route | Description |
 |---|---|
 | `/` | Trading dashboard — mode toggle, order form, order book, portfolio summary, alerts |
-| `/orders/[id]` | Order detail view |
-| `/positions` | Full positions list with P&L breakdown |
+| `/login` | Login form |
+
+> Order detail (`/orders/[id]`) and a dedicated positions view (`/positions`) are not yet implemented; the order book and portfolio summary on `/` are the source of truth for now. Add a row here when those pages land.
 
 ## Environment Variables
 

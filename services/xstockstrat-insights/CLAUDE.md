@@ -52,8 +52,9 @@ Browser (React Client Components)
 | `/` | Overview dashboard — strategy scores, recent alerts |
 | `/strategies` | Strategy list with scores and backtest summaries |
 | `/strategies/[id]` | Detailed backtest results, trade history, P&L chart |
-| `/indicators` | Indicator builder — select symbol, timeframe, indicator, parameters |
-| `/market/[symbol]` | Historical OHLCV candlestick chart with overlay indicators |
+| `/login` | Login form |
+
+> `/indicators` (indicator builder) and `/market/[symbol]` (OHLCV candlestick view) are planned but not yet implemented. The `indicators` and `marketdata` Connect-RPC endpoints listed under **Dependencies** are wired but unused by any page today; add a row here when the pages land.
 
 ## Environment Variables
 
