@@ -1,25 +1,17 @@
 import { NextResponse } from 'next/server';
-
-const TRADING_BASE_URL =
-  process.env.TRADING_HTTP_ENDPOINT ?? 'http://xstockstrat-trading:8051';
+import { ConnectError } from '@connectrpc/connect';
+import { connectCodeToHttp, tradingClient } from '@/lib/connectClients';
 
 // DELETE /api/accounts/[id] — calls DeregisterBrokerAccount
-export async function DELETE(
-  _: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    await fetch(
-      `${TRADING_BASE_URL}/xstockstrat.trading.v1.TradingService/DeregisterBrokerAccount`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/connect+json' },
-        body: JSON.stringify({ account_id: id }),
-      },
-    );
+    await tradingClient.deregisterBrokerAccount({ accountId: id });
     return NextResponse.json({ ok: true });
-  } catch (err: unknown) {
+  } catch (err) {
+    if (err instanceof ConnectError) {
+      return NextResponse.json({ error: err.rawMessage }, { status: connectCodeToHttp(err.code) });
+    }
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }
 }

@@ -1,37 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ConnectError } from '@connectrpc/connect';
-import { connectCodeToHttp, portfolioClient } from '@/lib/connectClients';
+import { connectCodeToHttp, tradingClient } from '@/lib/connectClients';
 import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/lib/auth';
 
-function toTradingModeEnum(mode?: string | null): number {
-  if (mode === 'live') return 2;
-  if (mode === 'paper') return 1;
-  return 0;
-}
-
-export async function GET(req: NextRequest) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const claims = await getSessionFromRequest(req);
   if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!params.id) {
+    return NextResponse.json({ error: 'order id is required' }, { status: 400 });
   }
   const headers = new Headers({
     'x-user-id': claims.user_id,
     'x-access-scope': String(rolesToAccessScope(claims.roles)),
     'x-trace-id': req.headers.get('x-trace-id') ?? generateTraceId(),
   });
-  const { searchParams } = new URL(req.url);
-  const tradingMode = toTradingModeEnum(searchParams.get('trading_mode'));
-  const accountId = searchParams.get('account_id') ?? '';
   try {
-    const portfolio = await portfolioClient.getPortfolio(
-      {
-        userId: claims.user_id,
-        ...(tradingMode !== 0 && { tradingMode }),
-        ...(accountId && { accountId }),
-      },
-      { headers },
-    );
-    return NextResponse.json(portfolio);
+    const order = await tradingClient.getOrder({ orderId: params.id }, { headers });
+    return NextResponse.json(order);
   } catch (err) {
     if (err instanceof ConnectError) {
       return NextResponse.json({ error: err.rawMessage }, { status: connectCodeToHttp(err.code) });
