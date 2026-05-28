@@ -5,26 +5,26 @@
  * POST /api/sources                               → ManageSignalSource
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { ConnectError } from '@connectrpc/connect';
+import { connectCodeToHttp, ingestClient } from '@/app/lib/connectClients';
 import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/app/lib/auth';
 
-const INGEST_HTTP_ENDPOINT =
-  process.env.INGEST_HTTP_ENDPOINT ?? 'http://xstockstrat-ingest:8055';
-
-async function rpc(
-  method: string,
-  body: object,
-  propagationHeaders: Record<string, string>,
-  authHeader?: string,
-): Promise<Response> {
-  return fetch(`${INGEST_HTTP_ENDPOINT}/${method}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/connect+json',
-      ...(authHeader ? { Authorization: authHeader } : {}),
-      ...propagationHeaders,
-    },
-    body: JSON.stringify(body),
+function propagationHeaders(
+  req: NextRequest,
+  claims: { user_id: string; roles: string[] },
+): Headers {
+  return new Headers({
+    'x-user-id': claims.user_id,
+    'x-access-scope': String(rolesToAccessScope(claims.roles)),
+    'x-trace-id': req.headers.get('x-trace-id') ?? generateTraceId(),
   });
+}
+
+function errorResponse(err: unknown): NextResponse {
+  if (err instanceof ConnectError) {
+    return NextResponse.json({ error: err.rawMessage }, { status: connectCodeToHttp(err.code) });
+  }
+  return NextResponse.json({ error: (err as Error).message }, { status: 500 });
 }
 
 export async function GET(req: NextRequest) {
@@ -32,24 +32,17 @@ export async function GET(req: NextRequest) {
   if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const propagationHeaders = {
-    'x-user-id': claims.user_id,
-    'x-access-scope': String(rolesToAccessScope(claims.roles)),
-    'x-trace-id': req.headers.get('x-trace-id') ?? generateTraceId(),
-  };
   const { searchParams } = new URL(req.url);
   const includeInactive = searchParams.get('include_inactive') === 'true';
 
   try {
-    const res = await rpc(
-      'xstockstrat.ingest.v1.IngestService/ListSignalSources',
+    const response = await ingestClient.listSignalSources(
       { includeInactive },
-      propagationHeaders,
+      { headers: propagationHeaders(req, claims) },
     );
-    const response = await res.json();
     return NextResponse.json(response);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return errorResponse(err);
   }
 }
 
@@ -58,29 +51,21 @@ export async function POST(req: NextRequest) {
   if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const propagationHeaders = {
-    'x-user-id': claims.user_id,
-    'x-access-scope': String(rolesToAccessScope(claims.roles)),
-    'x-trace-id': req.headers.get('x-trace-id') ?? generateTraceId(),
-  };
-  // The Authorization header carries the admin API key for ManageSignalSource auth.
-  // config-ui operators must have an admin API key configured in their session or env.
-  const authHeader = req.headers.get('x-admin-api-key')
-    ? `Bearer ${req.headers.get('x-admin-api-key')}`
-    : req.headers.get('Authorization') ?? '';
+  // ManageSignalSource requires an admin API key in addition to the session.
+  // config-ui operators must include `x-admin-api-key` or `Authorization` on
+  // their request; we forward it as `Authorization: Bearer <key>` to ingest.
+  const adminKey = req.headers.get('x-admin-api-key');
+  const authHeader = adminKey ? `Bearer ${adminKey}` : req.headers.get('Authorization') ?? '';
+
+  const headers = propagationHeaders(req, claims);
+  if (authHeader) headers.set('Authorization', authHeader);
 
   const body = await req.json();
 
   try {
-    const res = await rpc(
-      'xstockstrat.ingest.v1.IngestService/ManageSignalSource',
-      body,
-      propagationHeaders,
-      authHeader,
-    );
-    const response = await res.json();
+    const response = await ingestClient.manageSignalSource(body, { headers });
     return NextResponse.json(response);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return errorResponse(err);
   }
 }

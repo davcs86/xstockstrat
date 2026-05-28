@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { identityClient } from '@/app/lib/connectClients';
 import { setSessionCookies } from '@/app/lib/auth';
-
-const IDENTITY_ENDPOINT =
-  process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058';
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
@@ -10,22 +8,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'email and password are required' }, { status: 400 });
   }
   try {
-    const res = await fetch(
-      `${IDENTITY_ENDPOINT}/xstockstrat.identity.v1.IdentityService/AuthenticateUser`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/connect+json' },
-        body: JSON.stringify({ email: body.email, password: body.password }),
-      }
-    );
-    if (!res.ok) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
-    }
-    const data = await res.json();
+    const data = (await identityClient.authenticateUser({
+      email: body.email,
+      password: body.password,
+    })) as any;
     const response = NextResponse.json({ ok: true });
-    setSessionCookies(response, data.access_token, data.refresh_token);
+    setSessionCookies(
+      response,
+      data.access_token ?? data.accessToken,
+      data.refresh_token ?? data.refreshToken,
+    );
     return response;
-  } catch {
-    return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
+  } catch (err) {
+    // Preserve the original opaque-failure behaviour: any upstream failure renders as 401.
+    void err;
+    return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
   }
 }
