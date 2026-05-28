@@ -1,8 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Code, ConnectError } from '@connectrpc/connect';
+import { tradingClient } from '@/lib/connectClients';
 import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/lib/auth';
 
-const TRADING_BASE_URL =
-  process.env.TRADING_HTTP_ENDPOINT ?? 'http://xstockstrat-trading:8051';
+// Map Connect-RPC codes to HTTP status. Connect-Node sets these on
+// ConnectError when an upstream returns a non-OK status.
+function connectCodeToHttp(code: Code): number {
+  switch (code) {
+    case Code.InvalidArgument:
+    case Code.FailedPrecondition:
+    case Code.OutOfRange:
+      return 400;
+    case Code.Unauthenticated:
+      return 401;
+    case Code.PermissionDenied:
+      return 403;
+    case Code.NotFound:
+      return 404;
+    case Code.AlreadyExists:
+    case Code.Aborted:
+      return 409;
+    case Code.ResourceExhausted:
+      return 429;
+    case Code.Unimplemented:
+      return 501;
+    case Code.Unavailable:
+      return 503;
+    case Code.DeadlineExceeded:
+      return 504;
+    default:
+      return 500;
+  }
+}
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const claims = await getSessionFromRequest(req);
@@ -12,28 +41,18 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (!params.id) {
     return NextResponse.json({ error: 'order id is required' }, { status: 400 });
   }
-  const accessScope = String(rolesToAccessScope(claims.roles));
-  const traceId = req.headers.get('x-trace-id') ?? generateTraceId();
+  const headers = new Headers({
+    'x-user-id': claims.user_id,
+    'x-access-scope': String(rolesToAccessScope(claims.roles)),
+    'x-trace-id': req.headers.get('x-trace-id') ?? generateTraceId(),
+  });
   try {
-    const res = await fetch(
-      `${TRADING_BASE_URL}/xstockstrat.trading.v1.TradingService/GetOrder`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/connect+json',
-          'x-user-id': claims.user_id,
-          'x-access-scope': accessScope,
-          'x-trace-id': traceId,
-        },
-        body: JSON.stringify({ orderId: params.id }),
-      },
-    );
-    const order = await res.json();
-    if (!res.ok) {
-      return NextResponse.json(order, { status: res.status });
-    }
+    const order = await tradingClient.getOrder({ orderId: params.id }, { headers });
     return NextResponse.json(order);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    if (err instanceof ConnectError) {
+      return NextResponse.json({ error: err.rawMessage }, { status: connectCodeToHttp(err.code) });
+    }
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }
 }
