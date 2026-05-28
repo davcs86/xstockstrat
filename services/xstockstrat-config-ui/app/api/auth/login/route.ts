@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ConnectError, Code } from '@connectrpc/connect';
+import { identityClient } from '@/app/lib/connectClients';
 import { setSessionCookies } from '@/app/lib/auth';
-
-const IDENTITY_ENDPOINT =
-  process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058';
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
@@ -10,29 +9,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'email and password are required' }, { status: 400 });
   }
   try {
-    const res = await fetch(
-      `${IDENTITY_ENDPOINT}/xstockstrat.identity.v1.IdentityService/AuthenticateUser`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1' },
-        body: JSON.stringify({ email: body.email, password: body.password }),
-      }
-    );
-    if (res.status === 401) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
-    }
-    if (!res.ok) {
-      console.error('[login] identity service returned', res.status);
-      return NextResponse.json(
-        { error: 'Authentication service unavailable. Please try again.' },
-        { status: 503 },
-      );
-    }
-    const data = await res.json();
+    const data = await identityClient.authenticateUser({
+      email: body.email,
+      password: body.password,
+    });
+    const tokens = data as any;
     const response = NextResponse.json({ ok: true });
-    setSessionCookies(response, data.accessToken, data.refreshToken);
+    setSessionCookies(
+      response,
+      tokens.accessToken,
+      tokens.refreshToken,
+    );
     return response;
   } catch (err) {
+    if (err instanceof ConnectError && err.code === Code.Unauthenticated) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    }
+    // Service unavailable — don't leak internal error detail to the browser.
     console.error('[login] identity service error:', err);
     return NextResponse.json(
       { error: 'Authentication service unavailable. Please try again.' },

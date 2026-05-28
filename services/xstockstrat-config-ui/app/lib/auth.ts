@@ -11,9 +11,6 @@ export interface JwtClaims {
 
 export const ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS = 60;
 
-const IDENTITY_ENDPOINT =
-  process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058';
-
 export async function verifyAccessToken(token: string): Promise<JwtClaims | null> {
   try {
     const secret = process.env.JWT_SECRET;
@@ -31,44 +28,12 @@ export async function getSessionFromRequest(req: NextRequest): Promise<JwtClaims
   return verifyAccessToken(token);
 }
 
-export async function refreshSession(
-  refreshToken: string
-): Promise<{ accessToken: string; refreshToken: string; claims: JwtClaims } | null> {
-  try {
-    const res = await fetch(
-      `${IDENTITY_ENDPOINT}/xstockstrat.identity.v1.IdentityService/RefreshToken`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1' },
-        body: JSON.stringify({ refreshToken }),
-      }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    return {
-      accessToken: data.accessToken,
-      refreshToken: data.refreshToken,
-      claims: data.claims,
-    };
-  } catch {
-    return null;
-  }
-}
-
-export async function revokeToken(token: string): Promise<void> {
-  try {
-    await fetch(
-      `${IDENTITY_ENDPOINT}/xstockstrat.identity.v1.IdentityService/RevokeToken`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1' },
-        body: JSON.stringify({ token }),
-      }
-    );
-  } catch {
-    // best-effort revocation
-  }
-}
+// refreshSession / revokeToken live in `identity.ts` — they import the
+// Node-only Connect client and must not be reachable from middleware,
+// which Next.js bundles for the Edge runtime. The typed identityClient
+// handles the Connect-Protocol-Version header and camelCase wire format
+// automatically; we no longer need the raw-fetch implementations that
+// PR #415 patched on main-dev.
 
 export function setSessionCookies(
   res: NextResponse,
