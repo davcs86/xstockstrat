@@ -2,6 +2,14 @@
 
 A walkthrough of how 15 services build, test, and ship: GitHub Actions for CI, Docker Compose for local development, and DigitalOcean App Platform for dev and prod deploys.
 
+## Companion documents
+
+| If you want… | Read |
+|---|---|
+| The narrative of how features get from idea to production | `sdd-flow.pdf` |
+| Every lifecycle status and the live backlog snapshot | `sdd-lifecycle.pdf` |
+| What the platform does end-user-facing + 20-feature active backlog | `product-features.pdf` |
+
 ---
 
 ## Video Outline (the spine)
@@ -358,6 +366,8 @@ End-to-end time from empty DO account to live dev deploy: **~45 minutes** with `
 ## Outro
 
 All infrastructure config — CI workflows, compose file, DO specs, migrations, secret-scanning rules — is checked into this repo. Nothing depends on a private wiki or a `~/.config` file. Pull the repo, run the setup skills, and you have the same dev + prod environment.
+
+The infrastructure itself is also a feature in the backlog. `038-ci-docker-registry-deploy` (launched) is what introduced the DOCR + GitHub Actions build pipeline described above. `033-phase7-observability` (draft) will activate the OTel SDK already stubbed into every service. See `product-features.pdf` § "What's Next" or browse `docs/roadmap/features/` directly.
 
 **Repository:** `github.com/davcs86/xstockstrat`
 **Setup runbooks:** `docs/setup/`

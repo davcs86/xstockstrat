@@ -2,6 +2,14 @@
 
 A 1–3 minute walkthrough of how every feature in the xstockstrat platform is built — from a one-line user story to production deploy — using AI agents under explicit human gates.
 
+## Companion documents
+
+| If you want… | Read |
+|---|---|
+| Every status and transition in detail, plus a live backlog snapshot | `sdd-lifecycle.pdf` |
+| What the launched features actually do + the 20-feature active backlog grouped by theme | `product-features.pdf` |
+| CI + Docker Compose + DigitalOcean pipeline | `infra-ci.pdf` |
+
 ---
 
 ## Video Outline (the spine)
@@ -175,6 +183,8 @@ The non-reusable pieces — what's specific to xstockstrat — are the reviewer 
 ## Outro
 
 Every feature in this repo was built this way. Open `docs/roadmap/features/` and read any `context.md` to see the actual session-by-session history of agents writing code under human gates.
+
+At the time of writing: **14 features launched, 12 in draft awaiting review, 6 raw ideas, 2 implementation-ready for the next `/sdd-execute` session, 9 demoted with their rationale preserved.** The loop is running, not theoretical. See `product-features.pdf` § "What's Next: The Live Backlog" for the active queue grouped by theme, or `sdd-lifecycle.pdf` for the full state machine including what `demoted/canceled` means and why it stays on disk.
 
 **Repo:** `github.com/davcs86/xstockstrat`
 **Pattern docs:** `docs/runbooks/feature-workflow.md`

@@ -4,6 +4,14 @@ Companion reference to `sdd-flow.pdf`. Where the flow document covers the five p
 
 This is the structure that lets a new agent session — or a new human contributor — reconstruct exactly where a feature stands without reading any conversation history.
 
+## Companion documents
+
+| If you want… | Read |
+|---|---|
+| The narrative version of the SDD loop | `sdd-flow.pdf` |
+| What the launched features actually do, plus the live backlog grouped by theme | `product-features.pdf` |
+| CI + Docker Compose + DigitalOcean pipeline | `infra-ci.pdf` |
+
 ---
 
 ## Quick Map
@@ -266,6 +274,35 @@ Drop into any feature directory and you can reconstruct the full state without a
 | `context.md` | Every session log entry, append-only. Decisions made, deviations from the spec, files modified, what the next session should do. |
 
 The lifecycle status on `feature.md` is the index. Everything else flows from there.
+
+---
+
+## The Live Backlog as Evidence
+
+At the time of writing, `docs/roadmap/features/` contains **43 numbered directories**. Their status distribution is the proof that the lifecycle described above is not aspirational — it is the actual operating model:
+
+| Status | Count | Examples |
+|---|---|---|
+| `launched` | 14 | `001-add-ikbr-account-support`, `004-make-repo-public-secure`, `009-agent-mcp-server`, `038-ci-docker-registry-deploy` |
+| `implementation-ready` | 2 | `003-formula-management-ui`, `018-agent-mcp-oauth` |
+| `draft` | 12 | `022-signal-time-decay`, `023-position-sizing-engine`, `030-stop-loss-bracket-orders`, `032-walk-forward-backtesting`, `043-user-management-ui` |
+| `idea` | 6 | `016-config-ui-weight-validation`, `019-unified-login-page`, `039-timescaledb-compression`, `041-upgrade-nextjs15` |
+| `demoted/canceled` | 9 | `024-ml-price-prediction`, `026-social-copy-trading`, `034-options-trading-support`, `037-multi-broker-smart-routing` |
+
+A few properties worth noting:
+
+1. **`launched` features are auditable.** Each has a `**Committed to main**: <SHA>` and `**Launched date**` field set by CI. Running `git log <SHA>` shows exactly the merge commit that shipped the feature. No private project tracker required.
+
+2. **`demoted/canceled` features are kept, not deleted.** This is the unusual choice. Most roadmaps quietly drop rejected ideas. Keeping them means:
+   - A future agent's `/sdd-review` can detect overlap with a previously-rejected concept and warn before re-spec'ing the same dead-end.
+   - The reasoning for each rejection is preserved in `context.md` for future re-evaluation when conditions change (e.g., a demoted "options trading" might be revived after a regulatory change).
+   - Reviewing the rejected list is a useful sanity check on the project's scope discipline.
+
+3. **The gap between `draft` (12) and `implementation-ready` (2) is intentional.** The `/sdd-spec` step is expensive — it runs a `general-purpose` sub-agent at `high` effort. Features sit in `draft` until there's enough confidence the product spec is right to justify spending planner cycles on the implementation spec. The 12 `draft` features are the prioritization queue.
+
+4. **There are two `020-*` directories.** `020-notify-external-fanout` and `020-order-snapshots-pnl-patterns`. NNN collisions happen when two `/sdd-story` runs race; the lifecycle is unaffected because slugs are unique. Resolving the collision is a cosmetic cleanup at promotion time.
+
+5. **Browse `product-features.pdf` § "What's Next: The Live Backlog"** for the active 20 grouped by theme (trading safety, strategy quality, agent surface, notifications, infrastructure) with one-line summaries of each.
 
 ---
 

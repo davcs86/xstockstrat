@@ -17,7 +17,21 @@ A 3–5 minute product walkthrough: what the platform does, how the services com
 | 3:20 – 3:50 | **MCP agent.** External AI agents (Claude Desktop, others) talk to the platform over a Model Context Protocol server. Ingest signals, trigger backtests, query alerts. | Claude Desktop calling the MCP tool to fetch portfolio P&L. |
 | 3:50 – 4:20 | **Observability.** OpenTelemetry → Grafana Cloud. Distributed traces across all 15 services. Toggleable via `OTEL_ENABLED`. | Grafana dashboard with trace waterfalls. |
 | 4:20 – 4:50 | **Safety properties.** Trading mode is set at the deploy spec, not config — dev cannot accidentally trade live. Append-only ledger. `buf breaking` blocks contract regressions. | Side-by-side `.do/app.yaml` vs `.do/app.dev.yaml` showing `TRADING_MODE` divergence. |
-| 4:50 – 5:00 | **Outro.** Built with agentic SDD. Open source. Link to repo. | Title card + GitHub URL. |
+| 4:50 – 5:00 | **Outro.** 14 features shipped, 20 in the active backlog, every one a public artifact under `docs/roadmap/features/`. Built with agentic SDD. | Backlog status counts, title card + GitHub URL. |
+
+---
+
+## Companion documents
+
+This walkthrough focuses on **what the platform does today**. Three sibling PDFs cover adjacent angles:
+
+| If you want… | Read |
+|---|---|
+| How features get from "idea" to production | `sdd-flow.pdf` — 1–3 min narrative of the SDD loop |
+| Every status and transition in the lifecycle | `sdd-lifecycle.pdf` — the state-machine reference, with the live backlog snapshot |
+| How CI, Docker Compose, and DigitalOcean fit together | `infra-ci.pdf` — the deploy pipeline tour |
+
+Cross-references to specific sections of these companions appear inline throughout.
 
 ---
 
@@ -240,6 +254,70 @@ What makes this deployable to production with real money:
 Every feature in this repo — from the proto contracts to the Next.js dashboards to the CI workflows — was built through an agentic Spec-Driven Development loop. Open `docs/roadmap/features/` and browse any feature's `context.md` to see the session-by-session record of agents writing code under human gates.
 
 This is not a curated public release of a privately-built codebase. It is the actual codebase, with the actual agent-collaborative history.
+
+For the loop end-to-end → see `sdd-flow.pdf`. For every status and transition in the lifecycle → see `sdd-lifecycle.pdf`.
+
+---
+
+## Section 13 — What's Next: The Live Backlog
+
+Browse `docs/roadmap/features/` and you'll find 43 numbered directories. They are not a curated roadmap document — they are the **actual queue**, with live lifecycle statuses that the SDD machinery updates on every promotion:
+
+| Status | Count | What it means |
+|---|---|---|
+| `launched` | 14 | Live in production. `**Committed to main**` SHA and launch date on each `feature.md`. |
+| `implementation-ready` | 2 | Numbered, grep-cited implementation spec is written. Ready for `/sdd-execute`. |
+| `draft` | 12 | Product spec written. Awaiting `/sdd-review product-spec` to advance to `spec-ready`. |
+| `idea` | 6 | Stub `feature.md` with a one-line story. No spec yet. |
+| `demoted/canceled` | 9 | Decided against — kept on disk as a record of "we considered this and didn't do it." |
+
+That `demoted/canceled` column is the unusual one. Most roadmaps quietly delete rejected ideas. This one keeps them — because *not* doing something is just as much a decision as doing it, and a future agent reviewing a new idea can look at the rejected list to detect overlap (`/sdd-review` does exactly this).
+
+### Themes in the active backlog
+
+The 20 features in `draft`, `idea`, and `implementation-ready` group into a handful of themes:
+
+**Trading safety and risk control**
+
+- `023-position-sizing-engine` — risk-adjusted order quantity from account equity, ATR-based stop distance, signal confidence, and portfolio concentration. Replaces externally-specified quantities and makes real-capital trading safe.
+- `030-stop-loss-bracket-orders` — automatic stop-loss and take-profit bracket orders submitted at the broker (IBKR/Alpaca) when a position opens. Protects open positions without requiring platform uptime.
+- `017-premarket-aftermarket-session-toggle` — extend the trading window into extended-hours sessions.
+
+**Strategy quality and overfitting detection**
+
+- `022-signal-time-decay` — exponential confidence decay so signals lose weight as they age. Prevents stale market intelligence from influencing trades after the news is already priced in.
+- `029-signal-performance-attribution` — joins ledger fill events to ingest signal records to produce per-source win rate, average return, and realized P&L. Lets signal source weights be tuned with real evidence instead of intuition.
+- `032-walk-forward-backtesting` — rolling in-sample optimization and out-of-sample test windows. Reports per-window out-of-sample Sharpe so overfitting shows up *before* any live capital commitment.
+- `031-strategy-performance-dashboard` — dedicated insights panel showing cumulative equity curve, max drawdown, rolling Sharpe, win rate, and average hold time. The quantitative basis for the paper-to-live decision.
+
+**Indicator and signal surface**
+
+- `003-formula-management-ui` — persist user-authored indicator formulas to TimescaleDB, scoped to the owning user, with a full CRUD UI inside `xstockstrat-insights`. Today formulas live in code; this makes the indicator engine self-service.
+- `016-config-ui-weight-validation` — input validation for signal-source weights in the config UI.
+
+**Agent surface (Phase 2 of the MCP work)**
+
+- `010-agent-scheduler` — scheduled runner inside `xstockstrat-agent` that fetches unread emails via the Gmail API at market open, hands them to Claude via the Anthropic SDK with tool use, and ingests the extracted signals. Reuses the tool implementations validated by `009-agent-mcp-server`.
+- `018-agent-mcp-oauth` — OAuth 2.0 Authorization Code endpoints so Claude.ai's remote MCP "Connect apps" integration can authenticate without sharing raw API keys. Delegates identity verification to `xstockstrat-identity`.
+
+**Notifications, audit, and access**
+
+- `020-notify-external-fanout` — fan platform alerts out to Slack and/or email (SendGrid) in addition to the Connect-RPC stream. Time-sensitive notifications reach traders who aren't viewing the UI.
+- `021-ledger-event-export` — streaming export endpoint that produces CSV/JSON of all ledger events (fills, signals, P&L, config changes) for a date range. Enables tax reporting, manual strategy review, and audit compliance.
+- `043-user-management-ui` — admin RPCs on `xstockstrat-identity` plus a user-management section in `xstockstrat-config-ui` for creating users, updating passwords, assigning roles, and deactivating accounts.
+- `019-unified-login-page` — single login experience across the three frontends.
+
+**Infrastructure and observability**
+
+- `033-phase7-observability` — completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, delivers service health, latency, and signal pipeline throughput dashboards. Operational visibility *before* live capital is at risk.
+- `039-timescaledb-compression` and `040-timescaledb-retention` — TimescaleDB-native compression and retention policies for OHLCV hypertables.
+- `041-upgrade-nextjs15` — Next.js 14 → 15 across the three frontends.
+
+### How to read the backlog
+
+Run `/sdd-status` for a live tabular view. Or browse the directory directly: every `feature.md` opens with a Lifecycle Status line, a status history table, and a one-paragraph Summary. The full implementation plan lives in `implementation-spec.md` once `/sdd-spec` has been run.
+
+For the mechanics of how a `draft` becomes a `launched` → see `sdd-lifecycle.pdf`. For the narrative version of the same loop → see `sdd-flow.pdf`.
 
 ---
 
