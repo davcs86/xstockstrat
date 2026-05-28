@@ -25,7 +25,7 @@
 
 ## Summary
 
-Standardise client-side API calls across all three Next.js frontends (xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui) by replacing manual `{} as any` service-descriptor placeholders and untyped SWR fetchers with a shared, heavily-typed SWR-based hook layer that eliminates `any` from request/response boundaries.
+Standardise client-side API calls across all three Next.js frontends (xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui) by migrating from SWR to TanStack Query v5 + normy, replacing `{} as any` service-descriptor placeholders with generated `@xstockstrat/proto` types, and wrapping all data fetching in named typed hooks — eliminating `any` from request/response boundaries and replacing manual cache invalidation with normy's automatic entity propagation.
 
 ## Reviewers
 
