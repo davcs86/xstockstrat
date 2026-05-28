@@ -39,15 +39,15 @@ export async function refreshSession(
       `${IDENTITY_ENDPOINT}/xstockstrat.identity.v1.IdentityService/RefreshToken`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/connect+json' },
-        body: JSON.stringify({ refresh_token: refreshToken }),
+        headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1' },
+        body: JSON.stringify({ refreshToken }),
       }
     );
     if (!res.ok) return null;
     const data = await res.json();
     return {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken,
       claims: data.claims,
     };
   } catch {
@@ -61,7 +61,7 @@ export async function revokeToken(token: string): Promise<void> {
       `${IDENTITY_ENDPOINT}/xstockstrat.identity.v1.IdentityService/RevokeToken`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/connect+json' },
+        headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1' },
         body: JSON.stringify({ token }),
       }
     );
