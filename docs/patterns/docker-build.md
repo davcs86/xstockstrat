@@ -559,6 +559,27 @@ x-hc-defaults: &hc-defaults
 | `xstockstrat-portfolio` | ❌ (Go distroless) | config, ledger via `service_healthy` |
 | `xstockstrat-trading` | ❌ (Go distroless) | config, ledger, notify, indicators via `service_healthy` |
 
+### Which Deps Belong in `WAIT_FOR`
+
+**Rule: only probe services the container calls synchronously during `main()` init — not services it calls reactively during normal operation.**
+
+| Startup-time dep (probe it) | Why |
+|---|---|
+| `xstockstrat-config:50060` | Every service opens a `WatchConfig` gRPC stream before its own server starts. Connection-refused here aborts startup. |
+| `xstockstrat-ledger:50057` | Most services write a startup lifecycle event (`service.started`) early in `main()`. |
+| `xstockstrat-identity:50058` | Services that validate inbound tokens at init (e.g. ingest webhook auth wiring). |
+| `xstockstrat-indicators:50054` | analysis calls `ComputeIndicator` immediately when a backtest is triggered, making indicators a hard dependency of analysis's serving path — but since analysis doesn't call it in `main()` init, this is borderline. It's included to avoid cascading restarts during fresh-stack startup. |
+
+| Operational dep (do NOT probe) | Why |
+|---|---|
+| `xstockstrat-notify:50059` | Alerts are emitted reactively (sandbox breach, backfill failure, etc.), never in `main()` init. A transient notify failure should produce a logged error, not block startup. |
+| `xstockstrat-marketdata:50053` | Queried on-demand; never called at init. |
+| `xstockstrat-ingest:50055` | Same — signal queries happen per-request. |
+
+**Decision rationale (2026-05-28):** Probing operational deps at startup would make boot order stricter than the application actually requires, increase cold-start time, and create cascading failures (if notify is slow, everything that lists it in WAIT_FOR stalls). The correct failure mode for a missing operational dep is a per-call error with application-level retry, not a startup timeout.
+
+If a new service's `main()` calls an endpoint before returning (e.g. a one-time seed fetch, a schema sync, a token pre-warm), add that endpoint to `WAIT_FOR`. If the call only happens after the service is serving RPCs, leave it out.
+
 ### Adding a New Service
 
 1. **Node.js / Python**: Add the entrypoint lines to the Dockerfile's final stage (after copying service files):
@@ -569,5 +590,5 @@ x-hc-defaults: &hc-defaults
    ENTRYPOINT ["/docker-entrypoint.sh"]
    CMD ["<your start command>"]
    ```
-2. **docker-compose.yml**: Add `healthcheck` block (using the appropriate probe method for the language), add `WAIT_FOR` env var, and upgrade `depends_on` conditions to `service_healthy`.
+2. **docker-compose.yml**: Add `healthcheck` block (using the appropriate probe method for the language), add `WAIT_FOR` env var with only startup-time deps (see table above), and upgrade `depends_on` conditions to `service_healthy`.
 3. **`.do/app.dev.yaml` / `.do/app.yaml`**: Add a `WAIT_FOR` entry to the service's `envs:` list using `${svc.PRIVATE_DOMAIN}:PORT` syntax.
