@@ -30,7 +30,10 @@ export async function getSessionFromRequest(req: NextRequest): Promise<JwtClaims
 
 // refreshSession / revokeToken live in `identity.ts` — they import the
 // Node-only Connect client and must not be reachable from middleware,
-// which Next.js bundles for the Edge runtime.
+// which Next.js bundles for the Edge runtime. The typed identityClient
+// handles the Connect-Protocol-Version header and camelCase wire format
+// automatically; we no longer need the raw-fetch implementations that
+// PR #415 patched on main-dev.
 
 export function setSessionCookies(
   res: NextResponse,

@@ -14,7 +14,12 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IDENTITY_DIR="$REPO_ROOT/services/xstockstrat-identity"
+# Inside the Docker container (script at /app/scripts/) node_modules live at /app
+if [ -d "$REPO_ROOT/node_modules/bcrypt" ]; then
+  IDENTITY_DIR="$REPO_ROOT"
+else
+  IDENTITY_DIR="$REPO_ROOT/services/xstockstrat-identity"
+fi
 BCRYPT_ROUNDS=10
 
 # ── Helpers ────────────────────────────────────────────────────────────────

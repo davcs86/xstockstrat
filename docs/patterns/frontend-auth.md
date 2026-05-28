@@ -202,17 +202,30 @@ export function connectCodeToHttp(code: Code): number {
 
 ### `/api/auth/login` is the exception
 
-It runs **before** the user has a session, so it does not propagate `x-user-id` / `x-access-scope` / `x-trace-id`. It still uses the typed `identityClient.authenticateUser(...)` and intentionally maps **every** upstream error to a generic 401 to avoid leaking which step failed:
+It runs **before** the user has a session, so it does not propagate `x-user-id` / `x-access-scope` / `x-trace-id`. It uses the typed `identityClient.authenticateUser(...)` and **must distinguish credential failures from service failures**:
 
 ```ts
+import { ConnectError, Code } from '@connectrpc/connect';
+
 try {
   const data = await identityClient.authenticateUser({ email, password }) as any;
-  // …setSessionCookies, return ok
+  const response = NextResponse.json({ ok: true });
+  setSessionCookies(response, data.accessToken, data.refreshToken);
+  return response;
 } catch (err) {
-  void err;  // opaque on purpose
-  return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+  if (err instanceof ConnectError && err.code === Code.Unauthenticated) {
+    return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+  }
+  // Service failure — log internally, return generic 503 (not 401)
+  console.error('[login] identity service error:', err);
+  return NextResponse.json(
+    { error: 'Authentication service unavailable. Please try again.' },
+    { status: 503 },
+  );
 }
 ```
+
+**Why not a catch-all 401?** Mapping every error to 401 "Invalid credentials" masks service-level failures (identity down, JWT_SECRET not set, network error). On DigitalOcean, the first symptom of a missing `JWT_SECRET` was users being shown "Invalid credentials" even with correct passwords — the real cause was a 503 from the identity service that got swallowed. `Code.Unauthenticated` is the only code the identity service returns for a bad password; anything else is a service-level problem that should surface as 503.
 
 ### Auth gate on every authenticated API route
 
@@ -258,4 +271,5 @@ Middleware only catches **browser navigations**, not direct `curl` calls. The `/
 5. Every new API route under `/api/*` calls `getSessionFromRequest` + 401-on-null before touching a backend.
 6. Every outbound call uses the typed Connect client with `Headers` propagation and `connectCodeToHttp` on `ConnectError`.
 7. Follow `docs/patterns/nginx-routing.md` for the nginx upstream and location.
-8. **Run `pnpm --filter <new-service> build` locally before opening a PR.** The Edge-runtime trap is invisible in source review — only a build catches it.
+8. In `app/login/page.tsx`, use the full basePath-prefixed path in the login `fetch`: `fetch('/mybasepath/api/auth/login', ...)`. A bare `fetch('/api/auth/login')` resolves from the document root, hits nginx with no matching route, and silently returns HTML — see `docs/patterns/nextjs-frontends.md` §1.
+9. **Run `pnpm --filter <new-service> build` locally before opening a PR.** The Edge-runtime trap is invisible in source review — only a build catches it.
