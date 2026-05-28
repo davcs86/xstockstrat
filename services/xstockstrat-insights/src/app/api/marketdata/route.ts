@@ -1,35 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Code, ConnectError } from '@connectrpc/connect';
-import { marketDataClient } from '@/lib/connectClients';
+import { ConnectError } from '@connectrpc/connect';
+import { connectCodeToHttp, marketDataClient } from '@/lib/connectClients';
 import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/lib/auth';
-
-function connectCodeToHttp(code: Code): number {
-  switch (code) {
-    case Code.InvalidArgument:
-    case Code.FailedPrecondition:
-    case Code.OutOfRange:
-      return 400;
-    case Code.Unauthenticated:
-      return 401;
-    case Code.PermissionDenied:
-      return 403;
-    case Code.NotFound:
-      return 404;
-    case Code.AlreadyExists:
-    case Code.Aborted:
-      return 409;
-    case Code.ResourceExhausted:
-      return 429;
-    case Code.Unimplemented:
-      return 501;
-    case Code.Unavailable:
-      return 503;
-    case Code.DeadlineExceeded:
-      return 504;
-    default:
-      return 500;
-  }
-}
 
 // GET /api/marketdata?symbol=AAPL&timeframe=1Day&limit=200
 // Returns { bars: [{time, open, high, low, close, volume}] } for lightweight-charts.
