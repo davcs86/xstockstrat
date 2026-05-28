@@ -1,6 +1,6 @@
 # Feature: client-api-pattern
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/client-api-pattern`
 **Created**: 2026-05-28
 **Last Updated**: 2026-05-28
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-28 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-05-28 | `draft` → `spec-ready` | /sdd-review | Product spec approved (11 overlap warnings — advisory only) |
 
 ---
 
@@ -39,4 +40,4 @@ _(Snapshot from docs/runbooks/reviewer-registry.md — re-run /sdd-spec if regis
 
 ## Next Action
 
-`/sdd-review client-api-pattern product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec client-api-pattern` — generate implementation spec from the approved product spec

@@ -45,3 +45,15 @@
   useQuery/useMutation; FR-10 adds config-ui useEffect migration; AC-5 updated grep pattern;
   AC-7 adds SWR removal check; all open questions resolved.
 - feature.md summary updated to reflect library decision.
+
+## Session 2026-05-28T00:03:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: none (spec criteria all passed).
+- Overlap findings (advisory — no merge-order entries required):
+  - broker-accounts-ui, trader-chart-panel, signal-source-registry,
+    formula-management-ui add components with data fetching; recommend
+    client-api-pattern merges before all four to enforce the hook pattern.
+  - make-repo-public-secure, do-nginx-integration, ci-docker-registry-deploy,
+    frontend-reverse-proxy, fix-grafana-otel-variables, wire-fe-auth,
+    add-ikbr-account-support: orthogonal changes, low conflict risk.
