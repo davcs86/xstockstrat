@@ -580,6 +580,7 @@ x-hc-defaults: &hc-defaults
 
 If a new service's `main()` calls an endpoint before returning (e.g. a one-time seed fetch, a schema sync, a token pre-warm), add that endpoint to `WAIT_FOR`. If the call only happens after the service is serving RPCs, leave it out.
 
+
 ### Adding a New Service
 
 1. **Node.js / Python**: Add the entrypoint lines to the Dockerfile's final stage (after copying service files):

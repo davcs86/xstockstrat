@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 # wait-for-deps.sh — probe TCP endpoints before starting a service.
 #
 # Usage:
@@ -8,8 +8,8 @@
 # Env vars:
 #   WAIT_FOR      Space-separated HOST:PORT list (alternative to positional args).
 #                 Positional HOST:PORT args take precedence if provided.
-#   WAIT_TIMEOUT  Seconds before giving up per endpoint (default: 60).
-#   WAIT_INTERVAL Seconds between retry attempts (default: 2).
+#   WAIT_TIMEOUT  Seconds before giving up per endpoint (default: 150).
+#   WAIT_INTERVAL Seconds between retry attempts (default: 15).
 #
 # Examples:
 #   ./scripts/wait-for-deps.sh xstockstrat-config:50060
@@ -19,18 +19,17 @@ set -e
 
 TIMEOUT=${WAIT_TIMEOUT:-150}
 INTERVAL=${WAIT_INTERVAL:-15}
-HOSTS=()
-CMD=()
+WAIT_ARGS=""
 
+# Parse positional HOST:PORT args; stop at -- and leave remaining as CMD
 while [ $# -gt 0 ]; do
   case "$1" in
     --)
       shift
-      CMD=("$@")
       break
       ;;
     *:*)
-      HOSTS+=("$1")
+      WAIT_ARGS="${WAIT_ARGS} $1"
       shift
       ;;
     *)
@@ -41,11 +40,11 @@ while [ $# -gt 0 ]; do
 done
 
 # Fall back to WAIT_FOR env var when no positional HOST:PORT args given
-if [ ${#HOSTS[@]} -eq 0 ] && [ -n "${WAIT_FOR:-}" ]; then
-  read -r -a HOSTS <<< "$WAIT_FOR"
+if [ -z "$WAIT_ARGS" ] && [ -n "${WAIT_FOR:-}" ]; then
+  WAIT_ARGS="$WAIT_FOR"
 fi
 
-if [ ${#HOSTS[@]} -eq 0 ]; then
+if [ -z "$WAIT_ARGS" ]; then
   printf 'Usage: %s HOST:PORT [HOST:PORT ...] [-- COMMAND [ARGS...]]\n' "$0" >&2
   printf 'Or set WAIT_FOR="HOST:PORT HOST:PORT ..."\n' >&2
   exit 1
@@ -60,7 +59,7 @@ probe() {
   else
     # bash built-in /dev/tcp — no external tools needed (bash 3.2+)
     # Used on: python:3.12-slim (Debian) where nc is not installed by default
-    ( echo >/dev/tcp/"$host"/"$port" ) >/dev/null 2>&1
+    bash -c "echo >/dev/tcp/$host/$port" >/dev/null 2>&1
   fi
 }
 
@@ -82,10 +81,12 @@ wait_for() {
   printf '[wait-for-deps] %s is ready (%ss elapsed)\n' "$addr" "$elapsed"
 }
 
-for addr in "${HOSTS[@]}"; do
+# Word-split is intentional here — WAIT_ARGS is a space-separated list
+# shellcheck disable=SC2086
+for addr in $WAIT_ARGS; do
   wait_for "$addr"
 done
 
-if [ ${#CMD[@]} -gt 0 ]; then
-  exec "${CMD[@]}"
+if [ $# -gt 0 ]; then
+  exec "$@"
 fi
