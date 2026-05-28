@@ -1,6 +1,5 @@
 import { jwtVerify } from 'jose';
 import type { NextRequest, NextResponse } from 'next/server';
-import { identityClient } from '@/lib/connectClients';
 
 export interface JwtClaims {
   user_id: string;
@@ -29,28 +28,9 @@ export async function getSessionFromRequest(req: NextRequest): Promise<JwtClaims
   return verifyAccessToken(token);
 }
 
-export async function refreshSession(
-  refreshToken: string
-): Promise<{ accessToken: string; refreshToken: string; claims: JwtClaims } | null> {
-  try {
-    const data = (await identityClient.refreshToken({ refreshToken })) as any;
-    return {
-      accessToken: data.access_token ?? data.accessToken,
-      refreshToken: data.refresh_token ?? data.refreshToken,
-      claims: data.claims,
-    };
-  } catch {
-    return null;
-  }
-}
-
-export async function revokeToken(token: string): Promise<void> {
-  try {
-    await identityClient.revokeToken({ token });
-  } catch {
-    // best-effort revocation
-  }
-}
+// refreshSession / revokeToken live in `identity.ts` — they import the
+// Node-only Connect client and must not be reachable from middleware,
+// which Next.js bundles for the Edge runtime.
 
 export function setSessionCookies(
   res: NextResponse,
