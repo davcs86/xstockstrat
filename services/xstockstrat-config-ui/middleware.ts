@@ -31,7 +31,7 @@ export async function middleware(req: NextRequest) {
 
   // Refresh near-expiry tokens via internal API route
   if (claims.expires_at - Math.floor(Date.now() / 1000) < ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS) {
-    const refreshUrl = new URL('/api/auth/refresh', req.url);
+    const refreshUrl = new URL(`${req.nextUrl.basePath}/api/auth/refresh`, req.url);
     const refreshRes = await fetch(refreshUrl, {
       method: 'POST',
       headers: { cookie: req.headers.get('cookie') ?? '' },

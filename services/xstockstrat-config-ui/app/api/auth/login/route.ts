@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
       `${IDENTITY_ENDPOINT}/xstockstrat.identity.v1.IdentityService/AuthenticateUser`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/connect+json' },
+        headers: { 'Content-Type': 'application/connect+json', 'Connect-Protocol-Version': '1' },
         body: JSON.stringify({ email: body.email, password: body.password }),
       }
     );
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     }
     const data = await res.json();
     const response = NextResponse.json({ ok: true });
-    setSessionCookies(response, data.access_token, data.refresh_token);
+    setSessionCookies(response, data.accessToken, data.refreshToken);
     return response;
   } catch {
     return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
