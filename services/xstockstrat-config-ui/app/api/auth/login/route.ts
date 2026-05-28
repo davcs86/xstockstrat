@@ -18,14 +18,25 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({ email: body.email, password: body.password }),
       }
     );
-    if (!res.ok) {
+    if (res.status === 401) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    }
+    if (!res.ok) {
+      console.error('[login] identity service returned', res.status);
+      return NextResponse.json(
+        { error: 'Authentication service unavailable. Please try again.' },
+        { status: 503 },
+      );
     }
     const data = await res.json();
     const response = NextResponse.json({ ok: true });
     setSessionCookies(response, data.accessToken, data.refreshToken);
     return response;
-  } catch {
-    return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
+  } catch (err) {
+    console.error('[login] identity service error:', err);
+    return NextResponse.json(
+      { error: 'Authentication service unavailable. Please try again.' },
+      { status: 503 },
+    );
   }
 }

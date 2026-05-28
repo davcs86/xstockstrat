@@ -397,6 +397,7 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sd
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
 | DB migration script | `scripts/db-migrate.sh` |
+| User management script | `scripts/manage-users.sh` — also at `/app/scripts/manage-users.sh` inside the identity container |
 | Proto gen script | `scripts/buf-gen.sh` |
 | Subtree sync script | `scripts/subtree-sync.sh` |
 | Integration tests | `scripts/integration-test.sh` |
