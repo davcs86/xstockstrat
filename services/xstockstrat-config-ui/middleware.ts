@@ -7,7 +7,10 @@ import {
 } from '@/app/lib/auth';
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/auth/login|api/health|health).*)'],
+  matcher: [
+    '/',
+    '/((?!_next/static|_next/image|favicon.ico|api/auth/login|api/health|health).+)',
+  ],
 };
 
 export async function middleware(req: NextRequest) {
