@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/bootstrap.sh
-# Sets up local development environment for xstockstrat-orchestration.
+# Sets up local development environment for xstockstrat.
 # Hard requirement: docker (with daemon running). Services run in Docker.
 # Optional: go/python3/node/pnpm — if present, host deps are installed for local test/lint runs.
 # Run once after cloning: ./scripts/bootstrap.sh
@@ -10,7 +10,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "======================================================"
-echo " xstockstrat-orchestration Bootstrap"
+echo " xstockstrat Bootstrap"
 echo "======================================================"
 
 # ── 0. Setup .env if needed (local dev only, skip in CI) ──────────────────

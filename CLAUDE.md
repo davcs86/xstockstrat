@@ -1,14 +1,14 @@
-# xstockstrat-orchestration — Root CLAUDE.md
+# xstockstrat — Root CLAUDE.md
 
 ## Project Overview
 
-**xstockstrat-orchestration** is the spine repository for the xstockstrat platform — a hybrid multi-repo stock strategy system built on the **Spine pattern**. This repo owns:
+**xstockstrat** (Cross Stock Strategies) is a monorepo stock strategy platform built on the **Spine pattern**. The root owns:
 - `packages/proto/` — single source of truth for all gRPC/Protobuf contracts
 - `docs/` — runbooks, setup guides, and implementation roadmap
 - `scripts/` — codegen, bootstrap, and CI helpers
 - Root-level config governance documentation (this file)
 
-All service repos are siblings under `services/`. They consume generated code from `packages/proto/` and coordinate via Connect-RPC (HTTP/1.1 + HTTP/2 with protobuf). Internal service-to-service calls use gRPC ports; browser/external clients use HTTP Connect-RPC ports.
+All services live as siblings under `services/`. They consume generated code from `packages/proto/` and coordinate via Connect-RPC (HTTP/1.1 + HTTP/2 with protobuf). Internal service-to-service calls use gRPC ports; browser/external clients use HTTP Connect-RPC ports.
 
 ---
 
@@ -24,7 +24,6 @@ This file covers always-needed platform conventions. For larger reference sectio
 | Adding a new backend service (any language) | `docs/patterns/header-propagation.md` |
 | Docker build patterns (Node.js, Next.js, Python, Go) | `docs/patterns/docker-build.md` |
 | Service healthchecks, `WAIT_FOR` entrypoint, `depends_on` conditions | `docs/patterns/docker-build.md` |
-| Syncing git subtrees to/from service repos | `docs/patterns/git-subtree.md` |
 | Config key naming, scoping, startup wiring | `docs/patterns/config-governance.md` |
 | Config service startup readiness (90s timeout, healthcheck, per-language) | `docs/patterns/config-startup.md` |
 | DB schema map, migration tooling, run order | `docs/patterns/database.md` |
@@ -295,14 +294,6 @@ Every backend service **must** propagate `x-user-id`, `x-access-scope`, and `x-t
 
 ---
 
-## Git Subtree Workflow
-
-`services/<name>/` directories are linked to individual GitHub repos via `git subtree`. Push: `./scripts/subtree-sync.sh push <service>`. Pull: `./scripts/subtree-sync.sh pull <service>`. Always pull before editing if someone may have pushed directly to a service repo.
-
-**Full workflow, initial setup, and rules** → read `docs/patterns/git-subtree.md`.
-
----
-
 ## Branch Strategy
 
 | Branch | Purpose |
@@ -392,13 +383,11 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sd
 | Frontend auth pattern | `docs/patterns/frontend-auth.md` — required for all Next.js services |
 | Backend propagation pattern | `docs/patterns/header-propagation.md` — required for all backend services |
 | Nginx routing pattern | `docs/patterns/nginx-routing.md` — required when adding a new frontend |
-| Git subtree workflow | `docs/patterns/git-subtree.md` |
 | Local env setup script | `scripts/localenv-setup.sh` |
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
 | DB migration script | `scripts/db-migrate.sh` |
 | Proto gen script | `scripts/buf-gen.sh` |
-| Subtree sync script | `scripts/subtree-sync.sh` |
 | Integration tests | `scripts/integration-test.sh` |
 | CI workflow | `.github/workflows/ci.yml` |
 | Dev deploy workflow | `.github/workflows/deploy-dev.yml` |

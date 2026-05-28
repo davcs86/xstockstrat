@@ -1,4 +1,4 @@
-# xstockstrat-orchestration — Local Development Docker Compose
+# xstockstrat — Local Development Docker Compose
 # Usage: docker compose up -d
 
 networks:

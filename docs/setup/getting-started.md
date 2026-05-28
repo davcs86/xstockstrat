@@ -37,8 +37,8 @@ Both tracks end in the same place: all 13 services running locally via Docker Co
 ### Step 1 — Clone
 
 ```bash
-git clone https://github.com/<your-org>/xstockstrat-orchestration.git
-cd xstockstrat-orchestration
+git clone https://github.com/<your-org>/xstockstrat.git
+cd xstockstrat
 ```
 
 ### Step 2 — Environment file (Interactive Setup)
@@ -193,15 +193,14 @@ cd services/xstockstrat-config-ui  && pnpm run lint && pnpm exec playwright test
 
 ### Architecture Overview
 
-**xstockstrat** is a stock strategy platform with real-time data ingestion, indicator computation, backtesting, order execution, and a live trading UI. The backend is 10 gRPC services; the frontend is 3 Next.js apps.
+**xstockstrat** (Cross Stock Strategies) is a stock strategy platform with real-time data ingestion, indicator computation, backtesting, order execution, and a live trading UI. The backend is 10 gRPC services; the frontend is 3 Next.js apps.
 
-**This repo is the Spine.** It does not contain runtime service code. It owns:
+**This repo is the Spine.** It owns:
 
 - `packages/proto/` — all `.proto` files and generated stubs (Go, Python, TypeScript)
 - `docs/` — runbooks, setup guides, and this roadmap
 - `scripts/` — bootstrap, codegen, and migration helpers
-
-Each service lives in `services/xstockstrat-<name>/` as a git subtree linked to its own GitHub repo. The Spine is the authoritative source; service repos are mirrors.
+- `services/xstockstrat-<name>/` — each service as a sibling directory under `services/`
 
 ### Why Proto-First?
 
