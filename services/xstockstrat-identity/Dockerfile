@@ -32,7 +32,8 @@ ENV NODE_ENV=production
 COPY --from=builder /deploy ./
 COPY scripts/wait-for-deps.sh /usr/local/bin/wait-for-deps.sh
 COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/wait-for-deps.sh /docker-entrypoint.sh
+COPY scripts/manage-users.sh /app/scripts/manage-users.sh
+RUN chmod +x /usr/local/bin/wait-for-deps.sh /docker-entrypoint.sh /app/scripts/manage-users.sh
 EXPOSE 50058 8058
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["node", "dist/index.js"]
