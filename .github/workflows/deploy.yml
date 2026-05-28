@@ -24,6 +24,8 @@ on:
         required: true
       BROKER_ACCOUNTS_ENCRYPTION_KEY:
         required: true
+        # Callers pass DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY or PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY
+        # from GitHub Secrets into this unified parameter.
 
 jobs:
   deploy:
@@ -48,7 +50,9 @@ jobs:
             python3 -c "
           import os, sys
           content = sys.stdin.read()
-          content = content.replace('YOUR_BROKER_ACCOUNTS_ENCRYPTION_KEY', os.environ['BROKER_ACCOUNTS_ENCRYPTION_KEY'])
+          key = os.environ['BROKER_ACCOUNTS_ENCRYPTION_KEY']
+          content = content.replace('YOUR_DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY', key)
+          content = content.replace('YOUR_PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY', key)
           sys.stdout.write(content)
           " > /tmp/app_spec_substituted.yaml
 
