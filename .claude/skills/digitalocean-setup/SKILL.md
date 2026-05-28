@@ -494,10 +494,11 @@ doctl projects resources assign "$PROD_PROJECT_ID" \
 
 ```bash
 JWT_SECRET=$(openssl rand -base64 48)
-BROKER_ACCOUNTS_ENCRYPTION_KEY=$(openssl rand -hex 32)
+DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY=$(openssl rand -hex 32)
+PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY=$(openssl rand -hex 32)
 ```
 
-Display both generated values so the user can record them externally. Note that dev and prod should use **different** `BROKER_ACCOUNTS_ENCRYPTION_KEY` values — rotating the key after broker accounts have been stored requires re-encrypting all existing rows.
+Display all three generated values so the user can record them externally. Dev and prod use **different** `BROKER_ACCOUNTS_ENCRYPTION_KEY` values — rotating the key after broker accounts have been stored requires re-encrypting all existing rows.
 
 **Ask the user for:**
 - `DEV_ALPACA_KEY` — paper trading API key from alpaca.markets (see `docs/setup/alpaca.md`)
@@ -527,13 +528,13 @@ content = open('$REPO_ROOT/.do/app.dev.yaml').read()
 content = content.replace('YOUR_GITHUB_ORG',    os.environ['GH_ORG'])
 content = content.replace('YOUR_REGISTRY_NAME', os.environ['REGISTRY_NAME'])
 content = content.replace('YOUR_IMAGE_TAG',     'latest-dev')
+content = content.replace('YOUR_DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY', os.environ['DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY'])
 
 # Inject value: "" vars (ALPACA, JWT) — match existing empty-value pattern
 for key, val in [
-    ('ALPACA_API_KEY',                  os.environ['DEV_ALPACA_KEY']),
-    ('ALPACA_API_SECRET',               os.environ['DEV_ALPACA_SECRET']),
-    ('JWT_SECRET',                      os.environ['JWT_SECRET']),
-    ('BROKER_ACCOUNTS_ENCRYPTION_KEY',  os.environ['BROKER_ACCOUNTS_ENCRYPTION_KEY']),
+    ('ALPACA_API_KEY',    os.environ['DEV_ALPACA_KEY']),
+    ('ALPACA_API_SECRET', os.environ['DEV_ALPACA_SECRET']),
+    ('JWT_SECRET',        os.environ['JWT_SECRET']),
 ]:
     content = re.sub(
         r'(key: ' + key + r'\n(?:.*\n)*?.*?value: )""',
@@ -561,15 +562,11 @@ print(content)
 PYEOF
 ```
 
-Repeat for the prod app using `PROD_ALPACA_KEY` / `PROD_ALPACA_SECRET` and `$PROD_APP_ID` (same `OTEL_ENDPOINT` / `OTEL_HEADERS` — same Grafana Cloud stack). In the prod Python block, replace `'latest-dev'` with `'latest'` and `app.dev.yaml` with `app.yaml`.
+Repeat for the prod app using `PROD_ALPACA_KEY` / `PROD_ALPACA_SECRET` and `$PROD_APP_ID` (same `OTEL_ENDPOINT` / `OTEL_HEADERS` — same Grafana Cloud stack). In the prod Python block, replace `'latest-dev'` with `'latest'`, `app.dev.yaml` with `app.yaml`, and replace the placeholder substitution line with:
 
-**Important:** For the prod block, replace `BROKER_ACCOUNTS_ENCRYPTION_KEY` with a **separate** generated value — never reuse the dev key in production. Generate a dedicated prod key:
-
-```bash
-PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY=$(openssl rand -hex 32)
+```python
+content = content.replace('YOUR_PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY', os.environ['PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY'])
 ```
-
-Display it so the user can record it. In the prod Python injection loop, use `os.environ['PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY']` for the `BROKER_ACCOUNTS_ENCRYPTION_KEY` entry.
 
 Verify each `doctl apps update` exits 0 before proceeding.
 
@@ -599,7 +596,7 @@ doctl apps get "$DEV_APP_ID" --output json | grep -i "database"
 
 ## P8 — Configure GitHub Actions Secrets
 
-**Skip if**: `gh secret list` shows all seven required secrets.
+**Skip if**: `gh secret list` shows all nine required secrets.
 
 By this point you have in working context:
 - `DEV_APP_ID` and `PROD_APP_ID` — from P4/P5
@@ -620,13 +617,15 @@ Ask the user for:
 Apply all secrets:
 
 ```bash
-gh secret set DIGITALOCEAN_ACCESS_TOKEN --body "$DO_TOKEN"
-gh secret set DO_REGISTRY_NAME          --body "$REGISTRY_NAME"
-gh secret set DO_DEV_APP_ID             --body "$DEV_APP_ID"
-gh secret set DO_PROD_APP_ID            --body "$PROD_APP_ID"
-gh secret set DO_DEV_PROJECT_ID         --body "$DEV_PROJECT_ID"
-gh secret set DO_PROD_PROJECT_ID        --body "$PROD_PROJECT_ID"
-gh secret set BUF_TOKEN                 --body "$BUF_TOKEN"
+gh secret set DIGITALOCEAN_ACCESS_TOKEN          --body "$DO_TOKEN"
+gh secret set DO_REGISTRY_NAME                   --body "$REGISTRY_NAME"
+gh secret set DO_DEV_APP_ID                      --body "$DEV_APP_ID"
+gh secret set DO_PROD_APP_ID                     --body "$PROD_APP_ID"
+gh secret set DO_DEV_PROJECT_ID                  --body "$DEV_PROJECT_ID"
+gh secret set DO_PROD_PROJECT_ID                 --body "$PROD_PROJECT_ID"
+gh secret set BUF_TOKEN                          --body "$BUF_TOKEN"
+gh secret set DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY  --body "$DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY"
+gh secret set PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY --body "$PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY"
 ```
 
 If `GH_PAT_SCAN` was provided:
@@ -678,7 +677,7 @@ Setup complete!
   ✓ Prod app created (App ID: <PROD_APP_ID>, Project ID: <PROD_PROJECT_ID>)
   ✓ Secrets applied to both apps
   ✓ Database attached to both apps
-  ✓ GitHub Actions secrets configured (7 required: DIGITALOCEAN_ACCESS_TOKEN, DO_REGISTRY_NAME, DO_DEV_APP_ID, DO_PROD_APP_ID, DO_DEV_PROJECT_ID, DO_PROD_PROJECT_ID, BUF_TOKEN)
+  ✓ GitHub Actions secrets configured (9 required: DIGITALOCEAN_ACCESS_TOKEN, DO_REGISTRY_NAME, DO_DEV_APP_ID, DO_PROD_APP_ID, DO_DEV_PROJECT_ID, DO_PROD_PROJECT_ID, BUF_TOKEN, DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY, PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY)
   ✓ First deployment verified
 
 Next steps:

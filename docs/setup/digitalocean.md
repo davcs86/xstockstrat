@@ -352,18 +352,15 @@ Set on: `xstockstrat-trading`
 
 AES-256 key for encrypting broker credentials stored in the `broker_accounts` table. Must be a hex-encoded 32-byte value (64 hex characters).
 
-```bash
-# Generate — use different keys for dev and prod:
-openssl rand -hex 32
-```
+This key is injected at deploy time via GitHub Actions secrets (not via `doctl apps update --set-env`) because `doctl apps update --spec` resets DO UI-set secrets to empty on each deploy. Store separate values for dev and prod.
 
 ```bash
-doctl apps update $DO_DEV_APP_ID \
-  --set-env BROKER_ACCOUNTS_ENCRYPTION_KEY=<generated-dev-key>
-
-doctl apps update $DO_PROD_APP_ID \
-  --set-env BROKER_ACCOUNTS_ENCRYPTION_KEY=<generated-prod-key>
+# Generate — use different values for dev and prod:
+openssl rand -hex 32   # → DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY
+openssl rand -hex 32   # → PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY
 ```
+
+Add both as GitHub Actions secrets (see Step 9). The deploy workflows substitute them into the app spec at deploy time via the `YOUR_DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY` / `YOUR_PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY` placeholders.
 
 Required when the `broker_accounts` table is in use. Rotating this key requires re-encrypting all existing rows — do not change it after accounts have been stored.
 
@@ -422,6 +419,8 @@ The CI/CD workflows need six repository secrets. Go to:
 | `DO_DEV_PROJECT_ID` | Project ID of the staging DO project (from Step 5) | deploy-dev — assigns app to project on every deploy |
 | `DO_PROD_PROJECT_ID` | Project ID of the production DO project (from Step 6) | deploy-prod — assigns app to project on every deploy |
 | `BUF_TOKEN` | Buf Schema Registry token (see below) | deploy-dev, deploy-prod |
+| `DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY` | 64-char hex AES-256 key for staging (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
+| `PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY` | 64-char hex AES-256 key for production (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
 
 See [Key Identifiers](#key-identifiers) above for the difference between App ID and Project ID.
 
