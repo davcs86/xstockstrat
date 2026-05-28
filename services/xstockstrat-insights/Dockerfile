@@ -24,6 +24,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 COPY --from=builder /workspace/services/xstockstrat-insights/.next/standalone ./
-COPY --from=builder /workspace/services/xstockstrat-insights/.next/static ./.next/static
+COPY --from=builder /workspace/services/xstockstrat-insights/.next/static ./services/xstockstrat-insights/.next/static
 EXPOSE 3001
-CMD ["node", "server.js"]
+CMD ["node", "services/xstockstrat-insights/server.js"]

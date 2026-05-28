@@ -1,5 +1,3 @@
-version: '3.9'
-
 # xstockstrat-orchestration — Local Development Docker Compose
 # Usage: docker compose up -d
 
@@ -30,6 +28,16 @@ x-svc: &svc
   networks:
     - xstockstrat
   restart: unless-stopped
+
+# &hc-defaults  Common healthcheck timing merged into per-service healthcheck blocks.
+#               Node.js (Alpine): test uses nc -z (busybox nc supports -z flag).
+#               Python (Debian slim): test uses bash /dev/tcp (no nc in base image).
+#               Go (distroless): no healthcheck — distroless has no shell or nc.
+x-hc-defaults: &hc-defaults
+  interval: 5s
+  timeout: 3s
+  retries: 12
+  start_period: 5s
 
 services:
 
@@ -112,13 +120,17 @@ services:
     ports:
       - "50060:50060"
       - "8060:8060"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8060/health"]
+      interval: 5s
+      timeout: 3s
+      start_period: 15s
+      retries: 5
     depends_on:
       timescaledb:
         condition: service_healthy
       db-migrator:
         condition: service_completed_successfully
-
-  # ── Ledger Service ──────────────────────────────────────────────────────
   xstockstrat-ledger:
     <<: *svc
     build:
@@ -132,18 +144,22 @@ services:
       GRPC_PORT: "50057"
       HTTP_PORT: "8057"
       CONFIG_ENDPOINT: xstockstrat-config:50060
+      WAIT_FOR: "xstockstrat-config:50060"
       SERVICE_NAME: ledger
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50057:50057"
       - "8057:8057"
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD", "nc", "-z", "localhost", "50057"]
     depends_on:
       timescaledb:
         condition: service_healthy
       db-migrator:
         condition: service_completed_successfully
       xstockstrat-config:
-        condition: service_started
+        condition: service_healthy
 
   # ── Identity Service ────────────────────────────────────────────────────
   xstockstrat-identity:
@@ -160,21 +176,25 @@ services:
       HTTP_PORT: "8058"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required - copy .env.example to .env (run: openssl rand -hex 32)}"
       SERVICE_NAME: identity
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50058:50058"
       - "8058:8058"
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD", "nc", "-z", "localhost", "50058"]
     depends_on:
       timescaledb:
         condition: service_healthy
       db-migrator:
         condition: service_completed_successfully
       xstockstrat-config:
-        condition: service_started
+        condition: service_healthy
       xstockstrat-ledger:
-        condition: service_started
+        condition: service_healthy
 
   # ── Notify Service ──────────────────────────────────────────────────────
   xstockstrat-notify:
@@ -191,21 +211,25 @@ services:
       HTTP_PORT: "8059"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
+      WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       SERVICE_NAME: notify
       MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50059:50059"
       - "8059:8059"
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD", "nc", "-z", "localhost", "50059"]
     depends_on:
       timescaledb:
         condition: service_healthy
       db-migrator:
         condition: service_completed_successfully
       xstockstrat-config:
-        condition: service_started
+        condition: service_healthy
       xstockstrat-ledger:
-        condition: service_started
+        condition: service_healthy
 
   # ── MarketData Service (sole Alpaca integration point) ──────────────────
   xstockstrat-marketdata:
@@ -236,11 +260,11 @@ services:
       db-migrator:
         condition: service_completed_successfully
       xstockstrat-config:
-        condition: service_started
+        condition: service_healthy
       xstockstrat-ledger:
-        condition: service_started
+        condition: service_healthy
       xstockstrat-notify:
-        condition: service_started
+        condition: service_healthy
 
   # ── Indicators Service ──────────────────────────────────────────────────
   xstockstrat-indicators:
@@ -258,14 +282,20 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       SERVICE_NAME: indicators
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50054:50054"
       - "8054:8054"
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/50054"]
     depends_on:
-      - xstockstrat-config
-      - xstockstrat-ledger
+      xstockstrat-config:
+        condition: service_healthy
+      xstockstrat-ledger:
+        condition: service_healthy
 
   # ── Ingest Service ──────────────────────────────────────────────────────
   xstockstrat-ingest:
@@ -285,16 +315,25 @@ services:
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       IDENTITY_ENDPOINT: xstockstrat-identity:50058
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-identity:50058"
       SERVICE_NAME: ingest
       MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50055:50055"
       - "8055:8055"
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/50055"]
     depends_on:
-      - xstockstrat-config
-      - xstockstrat-marketdata
-      - xstockstrat-ledger
+      xstockstrat-config:
+        condition: service_healthy
+      xstockstrat-ledger:
+        condition: service_healthy
+      xstockstrat-identity:
+        condition: service_healthy
+      xstockstrat-marketdata:
+        condition: service_started
 
   # ── Analysis Service ────────────────────────────────────────────────────
   xstockstrat-analysis:
@@ -314,22 +353,26 @@ services:
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-indicators:50054"
       SERVICE_NAME: analysis
       MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50056:50056"
       - "8056:8056"
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/50056"]
     depends_on:
       db-migrator:
         condition: service_completed_successfully
       xstockstrat-config:
-        condition: service_started
-      xstockstrat-marketdata:
-        condition: service_started
-      xstockstrat-indicators:
-        condition: service_started
+        condition: service_healthy
       xstockstrat-ledger:
+        condition: service_healthy
+      xstockstrat-indicators:
+        condition: service_healthy
+      xstockstrat-marketdata:
         condition: service_started
 
   # ── Portfolio Service ───────────────────────────────────────────────────
@@ -358,9 +401,9 @@ services:
       db-migrator:
         condition: service_completed_successfully
       xstockstrat-config:
-        condition: service_started
+        condition: service_healthy
       xstockstrat-ledger:
-        condition: service_started
+        condition: service_healthy
       xstockstrat-marketdata:
         condition: service_started
 
@@ -391,14 +434,14 @@ services:
       db-migrator:
         condition: service_completed_successfully
       xstockstrat-config:
-        condition: service_started
+        condition: service_healthy
       xstockstrat-ledger:
-        condition: service_started
-      xstockstrat-portfolio:
-        condition: service_started
+        condition: service_healthy
       xstockstrat-notify:
-        condition: service_started
+        condition: service_healthy
       xstockstrat-indicators:
+        condition: service_healthy
+      xstockstrat-portfolio:
         condition: service_started
 
   # ── Trader Frontend ─────────────────────────────────────────────────────
@@ -485,9 +528,9 @@ services:
       db-migrator:
         condition: service_completed_successfully
       xstockstrat-config:
-        condition: service_started
+        condition: service_healthy
       xstockstrat-identity:
-        condition: service_started
+        condition: service_healthy
 
   # ── Reverse Proxy ───────────────────────────────────────────────────────
   # Single public entry point that routes /trader, /insights, /config-ui to
@@ -534,14 +577,23 @@ services:
       ANALYSIS_HTTP_ENDPOINT: http://xstockstrat-analysis:8056
       IDENTITY_ENDPOINT: xstockstrat-identity:50058
       CONFIG_ENDPOINT: xstockstrat-config:50060
+      WAIT_FOR: "xstockstrat-config:50060 xstockstrat-identity:50058"
       MCP_TRANSPORT: sse
       MCP_SSE_PORT: "9000"
       MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
     ports:
       - "9000:9000"
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9000"]
     depends_on:
-      - xstockstrat-ingest
-      - xstockstrat-notify
-      - xstockstrat-analysis
-      - xstockstrat-identity
-      - xstockstrat-config
+      xstockstrat-config:
+        condition: service_healthy
+      xstockstrat-identity:
+        condition: service_healthy
+      xstockstrat-ingest:
+        condition: service_healthy
+      xstockstrat-notify:
+        condition: service_healthy
+      xstockstrat-analysis:
+        condition: service_healthy

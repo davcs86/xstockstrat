@@ -3,7 +3,9 @@ package config
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -62,11 +64,13 @@ func getEnvBool(key string, fallback bool) bool {
 
 // Watcher subscribes to xstockstrat-config WatchConfig stream.
 type Watcher struct {
-	namespace  string
-	conn       *grpc.ClientConn
-	client     configv1.ConfigServiceClient
-	snapshot   *configv1.ConfigSnapshot
-	snapshotCh chan struct{}
+	namespace string
+	client    configv1.ConfigServiceClient
+
+	mu       sync.RWMutex
+	snapshot map[string]*configv1.ConfigValue
+	ready    chan struct{}
+	once     sync.Once
 }
 
 func NewWatcher(endpoint, namespace string) (*Watcher, error) {
@@ -75,55 +79,72 @@ func NewWatcher(endpoint, namespace string) (*Watcher, error) {
 		return nil, fmt.Errorf("dial config service: %w", err)
 	}
 	w := &Watcher{
-		namespace:  namespace,
-		conn:       conn,
-		client:     configv1.NewConfigServiceClient(conn),
-		snapshotCh: make(chan struct{}),
+		namespace: namespace,
+		client:    configv1.NewConfigServiceClient(conn),
+		ready:     make(chan struct{}),
+		snapshot:  make(map[string]*configv1.ConfigValue),
 	}
-	go w.watch()
+	go w.watchLoop()
 	return w, nil
 }
 
-func (w *Watcher) watch() {
+func (w *Watcher) watchLoop() {
+	backoff := 2 * time.Second
 	for {
-		stream, err := w.client.WatchConfig(context.Background(), &configv1.WatchConfigRequest{
-			Namespace: w.namespace,
-		})
+		if err := w.stream(); err != nil {
+			slog.Warn("config watcher stream error, reconnecting", "error", err, "backoff", backoff)
+			time.Sleep(backoff)
+			if backoff < 30*time.Second {
+				backoff *= 2
+			}
+		}
+	}
+}
+
+func (w *Watcher) stream() error {
+	req := &configv1.WatchConfigRequest{
+		Namespace: w.namespace,
+		ClientId:  fmt.Sprintf("go-trading-%d", os.Getpid()),
+	}
+	stream, err := w.client.WatchConfig(context.Background(), req)
+	if err != nil {
+		return fmt.Errorf("WatchConfig: %w", err)
+	}
+	for {
+		snap, err := stream.Recv()
 		if err != nil {
-			time.Sleep(2 * time.Second)
-			continue
+			return fmt.Errorf("stream.Recv: %w", err)
 		}
-		for {
-			snap, err := stream.Recv()
-			if err != nil {
-				break
-			}
-			w.snapshot = snap
-			select {
-			case w.snapshotCh <- struct{}{}:
-			default:
+		w.mu.Lock()
+		if snap.UpdateType == configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_SNAPSHOT ||
+			snap.UpdateType == configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_RELOAD {
+			w.snapshot = snap.Values
+		} else {
+			for k, v := range snap.Values {
+				w.snapshot[k] = v
 			}
 		}
-		time.Sleep(2 * time.Second)
+		w.mu.Unlock()
+		w.once.Do(func() { close(w.ready) })
+		slog.Debug("config snapshot received", "namespace", w.namespace, "update_type", snap.UpdateType)
 	}
 }
 
 func (w *Watcher) WaitForSnapshot(ctx context.Context) error {
 	select {
-	case <-w.snapshotCh:
+	case <-w.ready:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(10 * time.Second):
-		return fmt.Errorf("config snapshot timeout")
+		return fmt.Errorf("config snapshot timeout: %w", ctx.Err())
+	case <-time.After(90 * time.Second):
+		return fmt.Errorf("config snapshot timeout: 90s elapsed")
 	}
 }
 
 func (w *Watcher) GetString(key, def string) string {
-	if w.snapshot == nil {
-		return def
-	}
-	v, ok := w.snapshot.Values[key]
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	v, ok := w.snapshot[key]
 	if !ok {
 		return def
 	}
@@ -131,10 +152,9 @@ func (w *Watcher) GetString(key, def string) string {
 }
 
 func (w *Watcher) GetInt(key string, def int64) int64 {
-	if w.snapshot == nil {
-		return def
-	}
-	v, ok := w.snapshot.Values[key]
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	v, ok := w.snapshot[key]
 	if !ok {
 		return def
 	}
@@ -142,10 +162,9 @@ func (w *Watcher) GetInt(key string, def int64) int64 {
 }
 
 func (w *Watcher) GetBool(key string, def bool) bool {
-	if w.snapshot == nil {
-		return def
-	}
-	v, ok := w.snapshot.Values[key]
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	v, ok := w.snapshot[key]
 	if !ok {
 		return def
 	}
@@ -153,10 +172,9 @@ func (w *Watcher) GetBool(key string, def bool) bool {
 }
 
 func (w *Watcher) GetFloat(key string, def float64) float64 {
-	if w.snapshot == nil {
-		return def
-	}
-	v, ok := w.snapshot.Values[key]
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	v, ok := w.snapshot[key]
 	if !ok {
 		return def
 	}

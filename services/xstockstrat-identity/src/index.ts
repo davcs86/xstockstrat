@@ -22,10 +22,26 @@ async function main() {
   const databaseUrl = process.env.DATABASE_URL ?? '';
 
   const configWatcher = new ConfigWatcher(configEndpoint, 'identity');
-  await configWatcher.waitForSnapshot(10_000);
+  await configWatcher.waitForSnapshot(90_000);
   log.info('Config snapshot received');
 
-  const pool = new Pool({ connectionString: databaseUrl });
+  const sslDisabled = databaseUrl.includes('sslmode=disable');
+  let dbUrl = databaseUrl;
+  if (!sslDisabled) {
+    try {
+      const u = new URL(databaseUrl);
+      u.searchParams.delete('sslmode');
+      dbUrl = u.toString();
+    } catch { /* keep original if URL parsing fails */ }
+  }
+  const caCert = process.env.DATABASE_CA_CERT;
+  const pool = new Pool({
+    connectionString: dbUrl,
+    ssl: sslDisabled ? false : {
+      rejectUnauthorized: !!caCert,
+      ...(caCert ? { ca: caCert } : {}),
+    },
+  });
 
   const identityImpl = new IdentityServiceImpl(pool, configWatcher);
 

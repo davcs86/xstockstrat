@@ -31,16 +31,6 @@ SELECT create_hypertable(
     if_not_exists => TRUE
 );
 
--- Compression: compress chunks older than 3 days
-ALTER TABLE ledger.events SET (
-    timescaledb.compress,
-    timescaledb.compress_segmentby = 'source_service,event_type'
-);
-SELECT add_compression_policy('ledger.events', INTERVAL '3 days');
-
--- Retention: keep 2 years
-SELECT add_retention_policy('ledger.events', INTERVAL '2 years');
-
 -- Indexes for common query patterns
 CREATE INDEX IF NOT EXISTS idx_events_stream_key
     ON ledger.events (stream_key, recorded_at DESC);

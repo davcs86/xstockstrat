@@ -45,10 +45,6 @@ processors:
     send_batch_size: 1000
     send_batch_max_size: 2000
 
-  # Resource attributes are derived at runtime by each service's telemetry init module.
-  # No collector-level overrides needed.
-  resource:
-    attributes: []
 
 exporters:
   # Grafana Cloud OTLP gateway — handles logs, metrics, and traces in one endpoint.
@@ -78,15 +74,15 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
+      processors: [memory_limiter, batch]
       exporters: [otlphttp/grafana, debug]
 
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
+      processors: [memory_limiter, batch]
       exporters: [otlphttp/grafana, debug]
 
     logs:
       receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
+      processors: [memory_limiter, batch]
       exporters: [otlphttp/grafana, debug]

@@ -57,7 +57,7 @@ async def serve():
     # Subscribe to config before accepting traffic
     log.info("connecting to config service at %s", CONFIG_ENDPOINT)
     config_watcher = ConfigWatcher(endpoint=CONFIG_ENDPOINT, namespace="indicators")
-    await config_watcher.wait_for_snapshot(timeout_seconds=10)
+    await config_watcher.wait_for_snapshot(timeout_seconds=90)
     log.info("config snapshot received")
 
     servicer = IndicatorsServicer(config_watcher=config_watcher)

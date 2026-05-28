@@ -20,8 +20,9 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 
 Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8057`.
 
-- Router: `src/connect/connectRouter.ts` — exposes `AppendEvent`, `QueryEvents` via `connectNodeAdapter`
-- Entry: `src/index.ts` — HTTP server with CORS headers mounts the Connect router
+- Implementation: `src/connect/ledgerServiceConnect.ts` — `ServiceImpl<typeof LedgerService>` with typed `HandlerContext`; exposes `AppendEvent`, `QueryEvents`, `GetEvent` (unary) and `StreamEvents` (server-streaming async generator)
+- Router: `src/connect/connectRouter.ts` — thin wiring: `router.service(LedgerService, createLedgerServiceConnectImpl(impl))`
+- Entry: `src/index.ts` — HTTP server with CORS headers mounts the Connect router via `connectNodeAdapter`
 - Callers (frontends, agent) use HTTP `8057`; internal services use gRPC `50057`
 
 ## Critical Invariants

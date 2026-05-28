@@ -20,9 +20,9 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 
 Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8059`.
 
-- Router: `src/connect/connectRouter.ts` — exposes `EmitAlert`, `AcknowledgeAlert` via `connectNodeAdapter`
-- Entry: `src/index.ts` — HTTP server with CORS headers mounts the Connect router
-- Note: `StreamAlerts` (server-streaming) remains gRPC-only on port `50059`; frontends poll via SSE proxied through Next.js API routes
+- Implementation: `src/connect/notifyServiceConnect.ts` — `ServiceImpl<typeof NotifyService>` with typed `HandlerContext`; exposes `EmitAlert`, `AcknowledgeAlert`, `ListAlerts` (unary) and `StreamAlerts` (server-streaming async generator bridging the in-process fan-out model)
+- Router: `src/connect/connectRouter.ts` — thin wiring: `router.service(NotifyService, createNotifyServiceConnectImpl(impl))`
+- Entry: `src/index.ts` — HTTP server with CORS headers mounts the Connect router via `connectNodeAdapter`
 - Callers (frontends, agent) use HTTP `8059`; internal services use gRPC `50059`
 
 ## Key Design
