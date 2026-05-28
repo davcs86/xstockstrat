@@ -201,6 +201,44 @@ This was the pattern used for #406 (depends on #409) and #411 (depends on #409).
 
 ---
 
+## 9. Next 15 dynamic route handlers — `params` is a Promise
+
+Next.js 15 made the second argument to dynamic route handlers async. The signature changed from:
+
+```ts
+// ❌ Next 14 — sync params, fails to build under Next 15
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const order = await tradingClient.getOrder({ orderId: params.id }, { headers });
+}
+```
+
+to:
+
+```ts
+// ✅ Next 15 — Promise params
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const order = await tradingClient.getOrder({ orderId: id }, { headers });
+}
+```
+
+**Bug avoided** ([PR #413](https://github.com/davcs86/xstockstrat-orchestration/pull/413), originally introduced by [#406](https://github.com/davcs86/xstockstrat-orchestration/pull/406) before the Next 15 upgrade landed). The compile error looks like:
+
+```
+Type error: Route "src/app/api/orders/[id]/route.ts" has an invalid "GET" export:
+  Type "{ params: { id: string; }; }" is not a valid type for the function's second argument.
+```
+
+The rule applies to every dynamic segment — `[id]`, `[symbol]`, `[namespace]`, `[...slug]`. All other trader/insights/config-ui routes already use the `Promise<{...}>` shape; new code must match.
+
+---
+
+## 10. The typed Connect client needs the `UntypedClient` cast
+
+This belongs to `frontend-auth.md` because it's part of `connectClients.ts`, but every Next.js API route inherits it: when calling a typed Connect client without a second `{ headers }` argument, TypeScript routes the call to the streaming overload (whose input is `AsyncIterable<...>`) and fails to compile. Either pass `{ headers }` on every call, or — what we do — cast each exported client to `UntypedClient` so arity no longer drives overload selection. See `docs/patterns/frontend-auth.md` § *Why every export is cast to `UntypedClient`* for the full snippet and the PR #413 background.
+
+---
+
 ## File / route summary table
 
 | File | Runtime | Purpose |

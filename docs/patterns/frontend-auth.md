@@ -120,18 +120,20 @@ import { ConnectError } from '@connectrpc/connect';
 import { connectCodeToHttp, tradingClient } from '@/lib/connectClients';
 import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/lib/auth';
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+// Next 15 — params is a Promise. See nextjs-frontends.md §9.
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const claims = await getSessionFromRequest(req);
   if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const { id } = await params;
   const headers = new Headers({
     'x-user-id':      claims.user_id,
     'x-access-scope': String(rolesToAccessScope(claims.roles)),
     'x-trace-id':     req.headers.get('x-trace-id') ?? generateTraceId(),
   });
   try {
-    const order = await tradingClient.getOrder({ orderId: params.id }, { headers });
+    const order = await tradingClient.getOrder({ orderId: id }, { headers });
     return NextResponse.json(order);
   } catch (err) {
     if (err instanceof ConnectError) {
@@ -148,7 +150,35 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 - Method definitions use `I: {} as any, O: {} as any` (untyped — we don't generate proto stubs in TS).
 - One transport per base URL: `createConnectTransport({ baseUrl, httpVersion: '1.1' })`.
 - Export one client per service: `tradingClient`, `portfolioClient`, `marketDataClient`, `identityClient`, …
-- Export the shared helper:
+- **Cast every exported client to `UntypedClient`** (see below).
+- Export the shared `connectCodeToHttp` helper.
+
+### Why every export is cast to `UntypedClient`
+
+Passing `SomeServiceDef as any` to `createClient` discards the per-method `kind` (Unary / ServerStreaming / …). Without that narrowing, TypeScript picks **whichever overload matches first** for a method call — and the streaming overload (whose first arg is `AsyncIterable<PartialMessage<...>>`) often wins. Unary calls then fail to compile:
+
+```
+Type error: Object literal may only specify known properties, and 'accountId' does not exist in
+type 'AsyncIterable<PartialMessage<Message<unknown>>>'.
+```
+
+PR #413 fixed this for trader and insights by casting each exported client to a minimal record type:
+
+```ts
+type UntypedClient = Record<
+  string,
+  (input?: unknown, options?: { headers?: Headers }) => Promise<unknown>
+>;
+
+export const tradingClient = createClient(
+  TradingServiceDef as any,
+  makeTransport(TRADING_BASE_URL),
+) as unknown as UntypedClient;
+```
+
+With the cast, every call site is unambiguous regardless of arity — `client.method(input)` and `client.method(input, { headers })` both resolve to the same `(input?, options?) => Promise<unknown>` signature. Callers `as any`-cast the returned `unknown` to read fields (`(data as any).accounts`), which is the same trade-off as the descriptor's untyped I/O.
+
+### The `connectCodeToHttp` helper
 
 ```ts
 export function connectCodeToHttp(code: Code): number {
