@@ -25,17 +25,20 @@ DB_URL="${DATABASE_URL}"
 COMMAND="${1:-up}"
 
 # Build a DATABASE_URL with schema-scoped migration tracking.
-# Each service's schema_migrations table lives inside its own schema.
+# Tracking table lives in public schema with a service-specific name.
+# search_path is intentionally omitted: golang-migrate checks that the
+# search_path schema exists before running any migrations, but each
+# service's 001 migration is responsible for CREATE SCHEMA — using
+# search_path causes a chicken-and-egg "no schema" failure on fresh DBs.
+# Migration SQL files already use explicit schema names (e.g. config.table).
 service_db_url() {
   local schema="$1"
-  # Strip any existing query string and append migration params
   local base="${DB_URL%%\?*}"
   local qs="${DB_URL#*\?}"
-  # If DB_URL had no query string, qs == DB_URL (no '?' found)
   if [ "$qs" = "$DB_URL" ]; then
     qs=""
   fi
-  local extra="x-migrations-table=schema_migrations&search_path=${schema}"
+  local extra="x-migrations-table=${schema}_schema_migrations"
   if [ -n "$qs" ]; then
     echo "${base}?${qs}&${extra}"
   else
@@ -54,12 +57,19 @@ migrate_service() {
   # Pre-create the schema so golang-migrate can write its schema_migrations state
   # table before migration 001 runs. Without this, search_path=<schema> fails on
   # a fresh database because the schema doesn't exist yet.
-  psql "$DB_URL" -c "CREATE SCHEMA IF NOT EXISTS ${schema};" --quiet
+  psql "$DB_URL" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS ${schema};"
   local url
   url="$(service_db_url "$schema")"
   echo "  → $svc (schema: $schema)"
   case "$COMMAND" in
     up)
+      # If a previous run failed mid-migration the state table is marked dirty.
+      # Force to version 0 (schema baseline) so migrate up re-runs from scratch.
+      # All migrations use IF NOT EXISTS / if_not_exists => TRUE so re-running is safe.
+      if migrate -path "$dir" -database "$url" version 2>&1 | grep -q "dirty"; then
+        echo "  [dirty] force-resetting $svc to version 0"
+        migrate -path "$dir" -database "$url" force 0
+      fi
       migrate -path "$dir" -database "$url" up
       ;;
     version)
@@ -86,11 +96,11 @@ migrate_service() {
 }
 
 echo "==> Enabling TimescaleDB extension..."
-psql "$DB_URL" -c "CREATE EXTENSION IF NOT EXISTS timescaledb;" --quiet
+psql "$DB_URL" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
 echo ""
 
 echo "==> Creating schemas (idempotent)..."
-psql "$DB_URL" --quiet << 'SQL'
+psql "$DB_URL" -v ON_ERROR_STOP=1 << 'SQL'
 CREATE SCHEMA IF NOT EXISTS config;
 CREATE SCHEMA IF NOT EXISTS ledger;
 CREATE SCHEMA IF NOT EXISTS identity;
@@ -141,7 +151,7 @@ echo ""
 
 if [ "$COMMAND" = "up" ]; then
   echo "==> Verifying TimescaleDB hypertables..."
-  psql "$DB_URL" -t -c "
+  psql "$DB_URL" -v ON_ERROR_STOP=1 -t -c "
   SELECT hypertable_schema || '.' || hypertable_name AS hypertable
   FROM timescaledb_information.hypertables
   ORDER BY 1;

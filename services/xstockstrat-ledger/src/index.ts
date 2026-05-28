@@ -24,11 +24,27 @@ async function main() {
   // Subscribe to config before accepting traffic
   log.info(`Connecting to config service at ${configEndpoint}`);
   const configWatcher = new ConfigWatcher(configEndpoint, 'ledger');
-  await configWatcher.waitForSnapshot(10_000);
+  await configWatcher.waitForSnapshot(90_000);
   log.info('Config snapshot received');
 
   // TimescaleDB connection pool
-  const pool = new Pool({ connectionString: databaseUrl });
+  const sslDisabled = databaseUrl.includes('sslmode=disable');
+  let dbUrl = databaseUrl;
+  if (!sslDisabled) {
+    try {
+      const u = new URL(databaseUrl);
+      u.searchParams.delete('sslmode');
+      dbUrl = u.toString();
+    } catch { /* keep original if URL parsing fails */ }
+  }
+  const caCert = process.env.DATABASE_CA_CERT;
+  const pool = new Pool({
+    connectionString: dbUrl,
+    ssl: sslDisabled ? false : {
+      rejectUnauthorized: !!caCert,
+      ...(caCert ? { ca: caCert } : {}),
+    },
+  });
   await pool.query('SELECT 1'); // verify connectivity
   log.info('Database connected');
 

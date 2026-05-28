@@ -24,6 +24,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3002
 COPY --from=builder /workspace/services/xstockstrat-config-ui/.next/standalone ./
-COPY --from=builder /workspace/services/xstockstrat-config-ui/.next/static ./.next/static
+COPY --from=builder /workspace/services/xstockstrat-config-ui/.next/static ./services/xstockstrat-config-ui/.next/static
 EXPOSE 3002
-CMD ["node", "server.js"]
+CMD ["node", "services/xstockstrat-config-ui/server.js"]

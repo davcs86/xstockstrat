@@ -22,8 +22,10 @@ This file covers always-needed platform conventions. For larger reference sectio
 | Adding nginx routing for a new frontend | `docs/patterns/nginx-routing.md` |
 | Adding a new backend service (any language) | `docs/patterns/header-propagation.md` |
 | Docker build patterns (Node.js, Next.js, Python, Go) | `docs/patterns/docker-build.md` |
+| Service healthchecks, `WAIT_FOR` entrypoint, `depends_on` conditions | `docs/patterns/docker-build.md` |
 | Syncing git subtrees to/from service repos | `docs/patterns/git-subtree.md` |
 | Config key naming, scoping, startup wiring | `docs/patterns/config-governance.md` |
+| Config service startup readiness (90s timeout, healthcheck, per-language) | `docs/patterns/config-startup.md` |
 | DB schema map, migration tooling, run order | `docs/patterns/database.md` |
 | OTel setup, env vars, per-language modules | `docs/patterns/observability.md` |
 | CI job matrix, coverage thresholds, deploys | `docs/patterns/ci-overview.md` |

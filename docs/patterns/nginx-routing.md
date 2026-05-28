@@ -33,9 +33,10 @@ When a new Next.js frontend (e.g. `xstockstrat-newui` on port `3003`) needs to b
    }
    ```
    ```nginx
-   location /newui/ {
-       proxy_pass http://newui_backend/;
-       # copy the proxy_set_header lines from an existing location block
+   # Prefix match covers /newui, /newui/, and all sub-paths.
+   # No trailing slash on proxy_pass: Next.js receives the full URI (required for basePath=/newui).
+   location /newui {
+       proxy_pass http://newui_backend;
    }
    ```
 
