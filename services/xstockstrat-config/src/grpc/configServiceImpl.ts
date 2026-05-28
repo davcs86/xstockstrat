@@ -13,22 +13,24 @@ type ModeStr = 'paper' | 'live' | 'all';
 const ENV_MAP: Record<number, EnvStr> = { 0: 'dev', 1: 'dev', 2: 'production' };
 const MODE_MAP: Record<number, ModeStr> = { 0: 'all', 1: 'paper', 2: 'live' };
 
-// Convert the internal snake_case snapshot representation to a ts-proto-compatible
-// object that ConfigSnapshot.encode() can serialize correctly. The internal store
-// uses snake_case keys and plain string enum values; ts-proto expects camelCase keys
-// and the enum string constants (e.g. ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT).
+// Convert the internal snapshot representation to a ts-proto-compatible object that
+// ConfigSnapshot.encode() can serialize correctly. Handles both legacy snake_case fields
+// (update_type, changed_keys, trading_mode) and the camelCase fields used in current
+// storage (updateType, changedKeys, tradingMode). ts-proto expects camelCase keys and
+// the enum string constants (e.g. ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT).
 function toProtoSnapPayload(snap: any, overrideUpdateType?: ConfigUpdateType): any {
   const env = snap.environment === 'production'
     ? Environment.ENVIRONMENT_PRODUCTION
     : Environment.ENVIRONMENT_DEV;
 
-  const mode = snap.trading_mode === 'live'
+  const modeStr = snap.trading_mode ?? snap.tradingMode;
+  const mode = modeStr === 'live'
     ? TradingMode.TRADING_MODE_LIVE
-    : snap.trading_mode === 'paper'
+    : modeStr === 'paper'
     ? TradingMode.TRADING_MODE_PAPER
     : TradingMode.TRADING_MODE_UNSPECIFIED;
 
-  const rawType = snap.update_type ?? 1;
+  const rawType = snap.update_type ?? snap.updateType ?? 1;
   const updateType = overrideUpdateType ?? (
     rawType === 2 ? ConfigUpdateType.CONFIG_UPDATE_TYPE_DELTA :
     rawType === 3 ? ConfigUpdateType.CONFIG_UPDATE_TYPE_RELOAD :
@@ -122,12 +124,12 @@ export class ConfigServiceImpl {
       this.snapshots.set(k, {
         namespace: entry.namespace,
         version: Date.now().toString(),
-        updated_at: { seconds: Math.floor(Date.now() / 1000) },
+        updatedAt: new Date(),
         values: entry.values,
-        update_type: 1, // SNAPSHOT
-        changed_keys: [],
+        updateType: 1, // SNAPSHOT
+        changedKeys: [],
         environment: entry.environment,
-        trading_mode: entry.trading_mode,
+        tradingMode: entry.trading_mode,
       });
     }
   }
@@ -147,12 +149,12 @@ export class ConfigServiceImpl {
     this.snapshots.set(snapKey(namespace, env, mode), {
       namespace,
       version: Date.now().toString(),
-      updated_at: { seconds: Math.floor(Date.now() / 1000) },
+      updatedAt: new Date(),
       values,
-      update_type: 2, // DELTA
-      changed_keys: Object.keys(values),
+      updateType: 2, // DELTA
+      changedKeys: Object.keys(values),
       environment: env,
-      trading_mode: mode,
+      tradingMode: mode,
     });
   }
 
@@ -202,11 +204,12 @@ export class ConfigServiceImpl {
     const snap = this.snapshots.get(k) ?? {
       namespace: req.namespace,
       version: '0',
+      updatedAt: new Date(),
       values: {},
-      update_type: 1,
-      changed_keys: [],
+      updateType: 1,
+      changedKeys: [],
       environment: env,
-      trading_mode: mode,
+      tradingMode: mode,
     };
     call.write(toProtoSnapPayload(snap, ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT));
 
@@ -229,10 +232,10 @@ export class ConfigServiceImpl {
         namespace: call.request.namespace,
         version: '0',
         values: {},
-        update_type: 1,
-        changed_keys: [],
+        updateType: 1,
+        changedKeys: [],
         environment: env,
-        trading_mode: mode,
+        tradingMode: mode,
       }));
       return;
     }
@@ -258,7 +261,7 @@ export class ConfigServiceImpl {
         JSON.stringify({ namespace, key, environment: env, trading_mode: mode }),
       ]);
       const version = Date.now().toString();
-      callback(null, { version, updated_at: { seconds: Math.floor(Date.now() / 1000) } });
+      callback(null, { version, updatedAt: new Date() });
     } catch (err: any) {
       callback({ code: 13, message: err.message });
     }
