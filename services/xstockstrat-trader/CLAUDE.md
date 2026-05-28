@@ -60,7 +60,8 @@ This ensures the order book and portfolio summary only show data for the selecte
 |---|---|
 | `/` | Trading dashboard — mode toggle, order form, order book, portfolio summary, alerts |
 | `/orders/[id]` | Order detail view |
-| `/positions` | Full positions list with P&L breakdown |
+| `/positions` | Full positions list — qty, avg entry, current price, market value, unrealized P&L |
+| `/login` | Login form |
 
 ## Environment Variables
 

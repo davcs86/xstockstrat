@@ -11,6 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 type OrderSide = 'buy' | 'sell';
 type OrderType = 'market' | 'limit' | 'stop' | 'stop_limit';
 
+const ORDER_TYPE_LABEL: Record<OrderType, string> = {
+  market: 'Market',
+  limit: 'Limit',
+  stop: 'Stop',
+  stop_limit: 'Stop Limit',
+};
+
 interface OrderFormProps {
   mode: TradingMode;
 }
@@ -94,7 +101,7 @@ export function OrderForm({ mode }: OrderFormProps) {
 
           <Select value={orderType} onValueChange={(v) => setOrderType(v as OrderType)}>
             <SelectTrigger>
-              <SelectValue placeholder="Order type" />
+              <SelectValue placeholder="Order type">{ORDER_TYPE_LABEL[orderType]}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="market">Market</SelectItem>
