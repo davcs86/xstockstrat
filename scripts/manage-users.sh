@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # scripts/manage-users.sh
 # Manage identity service users: reset passwords and create new users.
 #
@@ -11,9 +11,9 @@
 # Requires psql and node (with identity service node_modules installed).
 # DATABASE_URL must be set, or POSTGRES_PASSWORD in .env will be used.
 
-set -euo pipefail
+set -eu
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # Inside the Docker container (script at /app/scripts/) node_modules live at /app
 if [ -d "$REPO_ROOT/node_modules/bcrypt" ]; then
   IDENTITY_DIR="$REPO_ROOT"
