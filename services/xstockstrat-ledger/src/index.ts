@@ -24,7 +24,7 @@ async function main() {
   // Subscribe to config before accepting traffic
   log.info(`Connecting to config service at ${configEndpoint}`);
   const configWatcher = new ConfigWatcher(configEndpoint, 'ledger');
-  await configWatcher.waitForSnapshot(10_000);
+  await configWatcher.waitForSnapshot(90_000);
   log.info('Config snapshot received');
 
   // TimescaleDB connection pool

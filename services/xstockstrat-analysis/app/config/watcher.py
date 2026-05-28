@@ -48,7 +48,7 @@ class ConfigWatcher:
                 log.warning("config stream error: %s, reconnecting in 2s", e)
                 await asyncio.sleep(2)
 
-    async def wait_for_snapshot(self, timeout_seconds: float = 10.0):
+    async def wait_for_snapshot(self, timeout_seconds: float = 90.0):
         try:
             await asyncio.wait_for(self._snapshot_event.wait(), timeout=timeout_seconds)
         except TimeoutError:

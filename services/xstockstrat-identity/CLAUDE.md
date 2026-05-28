@@ -20,8 +20,9 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 
 Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8058`.
 
-- Router: `src/connect/connectRouter.ts` — exposes `AuthenticateUser`, `ValidateToken`, `CreateApiKey` via `connectNodeAdapter`
-- Entry: `src/index.ts` — HTTP server with CORS headers mounts the Connect router
+- Implementation: `src/connect/identityServiceConnect.ts` — `ServiceImpl<typeof IdentityService>` with typed `HandlerContext`; exposes all eight methods: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`, `CreateApiKey`, `ValidateApiKey`, `ListApiKeys`, `RevokeApiKey`
+- Router: `src/connect/connectRouter.ts` — thin wiring: `router.service(IdentityService, createIdentityServiceConnectImpl(impl))`
+- Entry: `src/index.ts` — HTTP server with CORS headers mounts the Connect router via `connectNodeAdapter`
 - Callers (frontends, agent) use HTTP `8058`; internal services use gRPC `50058`
 
 ## Dependencies

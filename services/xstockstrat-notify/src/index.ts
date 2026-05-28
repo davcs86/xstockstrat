@@ -23,7 +23,7 @@ async function main() {
   const databaseUrl = process.env.DATABASE_URL ?? '';
 
   const configWatcher = new ConfigWatcher(configEndpoint, 'notify');
-  await configWatcher.waitForSnapshot(10_000);
+  await configWatcher.waitForSnapshot(90_000);
   log.info('Config snapshot received');
 
   const sslDisabled = databaseUrl.includes('sslmode=disable');

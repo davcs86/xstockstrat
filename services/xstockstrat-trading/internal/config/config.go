@@ -114,8 +114,8 @@ func (w *Watcher) WaitForSnapshot(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(10 * time.Second):
-		return fmt.Errorf("config snapshot timeout")
+	case <-time.After(90 * time.Second):
+		return fmt.Errorf("config snapshot timeout: 90s elapsed")
 	}
 }
 
