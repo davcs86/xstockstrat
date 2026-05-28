@@ -52,8 +52,9 @@ Browser (React Client Components)
 | `/` | Overview dashboard — strategy scores, recent alerts |
 | `/strategies` | Strategy list with scores and backtest summaries |
 | `/strategies/[id]` | Detailed backtest results, trade history, P&L chart |
-| `/indicators` | Indicator builder — select symbol, timeframe, indicator, parameters |
-| `/market/[symbol]` | Historical OHLCV candlestick chart with overlay indicators |
+| `/market/[symbol]` | Historical OHLCV candlestick chart — timeframe switcher, last/change |
+| `/indicators` | Indicator builder — reserved for feature `003-formula-management-ui` |
+| `/login` | Login form |
 
 ## Environment Variables
 
