@@ -16,8 +16,8 @@ export async function POST(req: NextRequest) {
     const response = NextResponse.json({ ok: true });
     setSessionCookies(
       response,
-      tokens.access_token ?? tokens.accessToken,
-      tokens.refresh_token ?? tokens.refreshToken,
+      tokens.accessToken,
+      tokens.refreshToken,
     );
     return response;
   } catch (err) {
