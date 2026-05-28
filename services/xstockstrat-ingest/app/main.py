@@ -58,7 +58,7 @@ async def serve():
     init_telemetry()
 
     cfg_watcher = ConfigWatcher(endpoint=CONFIG_ENDPOINT, namespace="ingest")
-    await cfg_watcher.wait_for_snapshot(timeout_seconds=10)
+    await cfg_watcher.wait_for_snapshot(timeout_seconds=90)
     log.info("config snapshot received")
 
     # Open asyncpg connection pool for signal persistence

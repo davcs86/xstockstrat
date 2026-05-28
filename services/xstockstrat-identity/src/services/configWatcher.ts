@@ -68,7 +68,7 @@ export class ConfigWatcher extends EventEmitter {
     });
   }
 
-  async waitForSnapshot(timeoutMs = 10_000): Promise<void> {
+  async waitForSnapshot(timeoutMs = 90_000): Promise<void> {
     return Promise.race([
       this.snapshotPromise,
       new Promise<void>((_, reject) =>
