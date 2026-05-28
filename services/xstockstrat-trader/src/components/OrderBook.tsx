@@ -55,8 +55,12 @@ export function OrderBook({ mode }: { mode: TradingMode }) {
               </TableHeader>
               <TableBody>
                 {data.orders.map((order: any) => (
-                  <TableRow key={order.order_id}>
-                    <TableCell className="font-mono font-semibold">{order.symbol}</TableCell>
+                  <TableRow key={order.order_id} className="cursor-pointer hover:bg-accent/40">
+                    <TableCell className="font-mono font-semibold">
+                      <Link href={`/orders/${order.order_id}`} className="hover:underline">
+                        {order.symbol}
+                      </Link>
+                    </TableCell>
                     <TableCell>
                       <Badge variant={order.side === 'ORDER_SIDE_BUY' ? 'buy' : 'sell'}>
                         {order.side === 'ORDER_SIDE_BUY' ? 'BUY' : 'SELL'}
