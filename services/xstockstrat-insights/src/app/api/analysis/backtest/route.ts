@@ -6,44 +6,38 @@
  * Returns: BacktestResult
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { ConnectError } from '@connectrpc/connect';
+import { analysisClient, connectCodeToHttp } from '@/lib/connectClients';
 import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/lib/auth';
-
-const ANALYSIS_BASE_URL =
-  process.env.ANALYSIS_HTTP_ENDPOINT ?? 'http://xstockstrat-analysis:8056';
 
 export async function POST(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
   if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const accessScope = String(rolesToAccessScope(claims.roles));
-  const traceId = req.headers.get('x-trace-id') ?? generateTraceId();
+  const headers = new Headers({
+    'x-user-id': claims.user_id,
+    'x-access-scope': String(rolesToAccessScope(claims.roles)),
+    'x-trace-id': req.headers.get('x-trace-id') ?? generateTraceId(),
+  });
   try {
     const body = await req.json();
     const { strategy_id, symbol, start, end, initial_capital = 100000 } = body;
 
-    const res = await fetch(
-      `${ANALYSIS_BASE_URL}/xstockstrat.analysis.v1.AnalysisService/RunBacktest`,
+    const result = await analysisClient.runBacktest(
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/connect+json',
-          'x-user-id': claims.user_id,
-          'x-access-scope': accessScope,
-          'x-trace-id': traceId,
-        },
-        body: JSON.stringify({
-          strategyId: strategy_id,
-          symbols: symbol ? [symbol] : [],
-          initialCapital: initial_capital,
-          range: start && end ? { startTime: start, endTime: end } : undefined,
-        }),
+        strategyId: strategy_id,
+        symbols: symbol ? [symbol] : [],
+        initialCapital: initial_capital,
+        range: start && end ? { startTime: start, endTime: end } : undefined,
       },
+      { headers },
     );
-
-    const result = await res.json();
     return NextResponse.json(result);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    if (err instanceof ConnectError) {
+      return NextResponse.json({ error: err.rawMessage }, { status: connectCodeToHttp(err.code) });
+    }
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }
 }
