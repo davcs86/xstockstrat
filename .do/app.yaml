@@ -154,6 +154,8 @@ services:
         value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
+      - key: WAIT_FOR
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: SERVICE_NAME
         value: indicators
 
@@ -183,6 +185,8 @@ services:
         value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
       - key: IDENTITY_ENDPOINT
         value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
+      - key: WAIT_FOR
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057 ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}
@@ -218,6 +222,8 @@ services:
         value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
       - key: INDICATORS_ENDPOINT
         value: ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
+      - key: WAIT_FOR
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057 ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}
@@ -248,6 +254,8 @@ services:
         value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
+      - key: WAIT_FOR
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: MCP_TRANSPORT
         value: sse
       - key: MCP_SSE_PORT
@@ -278,6 +286,8 @@ services:
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
+      - key: WAIT_FOR
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}
@@ -309,6 +319,8 @@ services:
         value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
+      - key: WAIT_FOR
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}
@@ -341,6 +353,8 @@ services:
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
         value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
+      - key: WAIT_FOR
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}

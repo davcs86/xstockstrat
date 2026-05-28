@@ -13,3 +13,4 @@ Reusable implementation patterns for new services. Each file is a self-contained
 | `database.md` | Adding or modifying DB schemas and migrations |
 | `observability.md` | Wiring OTel into a service or configuring Grafana Cloud |
 | `ci-overview.md` | Debugging CI failures, checking coverage thresholds, understanding deploys |
+| `docker-build.md` | Docker build patterns, service healthchecks, `WAIT_FOR` entrypoint, `depends_on` conditions |

@@ -466,3 +466,108 @@ Examples:
 - **Docker builds**: All services build during `docker compose build` and in `git push` to GitHub Actions
 - **Digital Ocean**: DO App Platform reads `.do/app.yaml` and `.do/app.dev.yaml`, builds images using the Dockerfiles in the repo
 - **Layer caching**: Docker layer cache is effective only when lock files match the build context exactly
+
+---
+
+## Service Readiness and Healthchecks
+
+### The Problem
+
+`condition: service_started` (the docker-compose default) only waits for the container process to start — it does not wait for the service to bind its TCP port. Services that call `WatchConfig()` or `LedgerWrite()` at startup can hit connection-refused errors during the race window between container start and port binding.
+
+The fix is two-layered:
+- **Local dev** (`docker-compose.yml`): proper `healthcheck` blocks + `condition: service_healthy`
+- **DO App Platform** (`.do/app.yaml`, `.do/app.dev.yaml`): `WAIT_FOR` env var read by `scripts/docker-entrypoint.sh` at container startup (DO has no `depends_on`)
+
+### `scripts/wait-for-deps.sh`
+
+Standalone TCP probe script. Bash 3.2-compatible (macOS + Linux).
+
+```bash
+# Usage
+./scripts/wait-for-deps.sh HOST:PORT [HOST:PORT ...] [-- COMMAND [ARGS...]]
+
+# Examples
+./scripts/wait-for-deps.sh xstockstrat-config:50060
+./scripts/wait-for-deps.sh localhost:50060 localhost:50057 -- echo "both ready"
+
+# Env vars
+WAIT_TIMEOUT=60    # seconds before giving up per endpoint (default 60)
+WAIT_INTERVAL=2    # seconds between retries (default 2)
+WAIT_FOR="localhost:50060 localhost:50057"  # alternative to positional args
+```
+
+Probe strategy by environment:
+| Image | Tool | Notes |
+|---|---|---|
+| Alpine (Node.js) | `nc -z` | Busybox nc — supports `-z` |
+| Debian slim (Python) | bash `/dev/tcp` | No `nc` in base image |
+| macOS host | `nc -z` | BSD nc — supports `-z` |
+| Distroless (Go) | Not supported | No shell or nc; rely on upstream healthchecks |
+
+### `scripts/docker-entrypoint.sh`
+
+Generic container entrypoint used by all Node.js and Python services. Reads `WAIT_FOR` (space-separated `HOST:PORT` list), probes all endpoints, then `exec`s the CMD.
+
+```sh
+# Set WAIT_FOR in docker-compose.yml or the DO app spec per service:
+WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
+```
+
+When `WAIT_FOR` is unset or empty, it skips probing and starts immediately. This makes it safe to use as a universal entrypoint — services that have no deps to probe behave identically to before.
+
+### Docker Compose Healthcheck Patterns
+
+**Node.js / Alpine** — busybox `nc -z`:
+```yaml
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD", "nc", "-z", "localhost", "50057"]
+```
+
+**Python / Debian slim** — bash `/dev/tcp` (no `nc` in base image):
+```yaml
+    healthcheck:
+      <<: *hc-defaults
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/50054"]
+```
+
+**Go / distroless** — no healthcheck possible. These services depend on upstream Node.js/Python services that do have healthchecks, so `condition: service_healthy` on their upstream deps enforces readiness transitively.
+
+The shared timing anchor in `docker-compose.yml`:
+```yaml
+x-hc-defaults: &hc-defaults
+  interval: 5s
+  timeout: 3s
+  retries: 12      # up to 60s total before marking unhealthy
+  start_period: 5s
+```
+
+### `depends_on` Condition Summary
+
+| Service | Has healthcheck | Upstream deps use `service_healthy` |
+|---|---|---|
+| `xstockstrat-config` | ✅ (Node.js, port 50060) | timescaledb |
+| `xstockstrat-ledger` | ✅ (Node.js, port 50057) | config |
+| `xstockstrat-identity` | ✅ (Node.js, port 50058) | config, ledger |
+| `xstockstrat-notify` | ✅ (Node.js, port 50059) | config, ledger |
+| `xstockstrat-indicators` | ✅ (Python, port 50054) | config, ledger |
+| `xstockstrat-ingest` | ✅ (Python, port 50055) | config, ledger, identity |
+| `xstockstrat-analysis` | ✅ (Python, port 50056) | config, ledger, indicators |
+| `xstockstrat-agent` | ✅ (Python, port 9000) | config, identity, ingest, notify, analysis |
+| `xstockstrat-marketdata` | ❌ (Go distroless) | config, ledger, notify via `service_healthy` |
+| `xstockstrat-portfolio` | ❌ (Go distroless) | config, ledger via `service_healthy` |
+| `xstockstrat-trading` | ❌ (Go distroless) | config, ledger, notify, indicators via `service_healthy` |
+
+### Adding a New Service
+
+1. **Node.js / Python**: Add the entrypoint lines to the Dockerfile's final stage (after copying service files):
+   ```dockerfile
+   COPY scripts/wait-for-deps.sh /usr/local/bin/wait-for-deps.sh
+   COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
+   RUN chmod +x /usr/local/bin/wait-for-deps.sh /docker-entrypoint.sh
+   ENTRYPOINT ["/docker-entrypoint.sh"]
+   CMD ["<your start command>"]
+   ```
+2. **docker-compose.yml**: Add `healthcheck` block (using the appropriate probe method for the language), add `WAIT_FOR` env var, and upgrade `depends_on` conditions to `service_healthy`.
+3. **`.do/app.dev.yaml` / `.do/app.yaml`**: Add a `WAIT_FOR` entry to the service's `envs:` list using `${svc.PRIVATE_DOMAIN}:PORT` syntax.
