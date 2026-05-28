@@ -12,7 +12,11 @@ RUN uv pip install -e /proto/gen/python
 RUN ln -s /proto/gen/python /app/gen
 
 COPY services/xstockstrat-indicators/ .
+COPY scripts/wait-for-deps.sh /usr/local/bin/wait-for-deps.sh
+COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/wait-for-deps.sh /docker-entrypoint.sh
 EXPOSE 50054
 EXPOSE 8054
 ENV PATH="/app/.venv/bin:$PATH"
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["python", "-m", "app.main"]
