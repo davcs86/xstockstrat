@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ConnectError, Code } from '@connectrpc/connect';
 import { identityClient } from '@/lib/connectClients';
 import { setSessionCookies } from '@/lib/auth';
 
@@ -21,9 +22,15 @@ export async function POST(req: NextRequest) {
     );
     return response;
   } catch (err) {
-    // Preserve the original behaviour: any upstream failure renders as 401.
-    // ConnectError detail is intentionally not surfaced to the client.
-    void err;
-    return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    if (err instanceof ConnectError && err.code === Code.Unauthenticated) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    }
+    // Service unavailable — don't leak internal error detail to the browser.
+    console.error('[login] identity service error:', err);
+    return NextResponse.json(
+      { error: 'Authentication service unavailable. Please try again.' },
+      { status: 503 },
+    );
   }
 }
+
