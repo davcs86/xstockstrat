@@ -68,7 +68,7 @@ function EnvModeSwitcher({ env, mode }: { env: string; mode: string }) {
       <span className="text-muted-foreground font-medium">ENV:</span>
       <div className="flex gap-1">
         {['dev', 'production'].map((e) => (
-          <a
+          <Link
             key={e}
             href={`/?env=${e}&mode=${mode}`}
             className={cn(
@@ -79,13 +79,13 @@ function EnvModeSwitcher({ env, mode }: { env: string; mode: string }) {
             )}
           >
             {e}
-          </a>
+          </Link>
         ))}
       </div>
       <span className="text-muted-foreground font-medium ml-1">MODE:</span>
       <div className="flex gap-1">
         {['paper', 'live'].map((m) => (
-          <a
+          <Link
             key={m}
             href={`/?env=${env}&mode=${m}`}
             className={cn(
@@ -98,7 +98,7 @@ function EnvModeSwitcher({ env, mode }: { env: string; mode: string }) {
             )}
           >
             {m}
-          </a>
+          </Link>
         ))}
       </div>
     </div>
