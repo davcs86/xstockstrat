@@ -17,8 +17,8 @@
 #   WAIT_FOR="localhost:50060 localhost:50057" ./scripts/wait-for-deps.sh
 set -e
 
-TIMEOUT=${WAIT_TIMEOUT:-60}
-INTERVAL=${WAIT_INTERVAL:-2}
+TIMEOUT=${WAIT_TIMEOUT:-150}
+INTERVAL=${WAIT_INTERVAL:-15}
 HOSTS=()
 CMD=()
 
