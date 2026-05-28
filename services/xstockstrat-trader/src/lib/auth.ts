@@ -1,5 +1,6 @@
 import { jwtVerify } from 'jose';
 import type { NextRequest, NextResponse } from 'next/server';
+import { identityClient } from '@/lib/connectClients';
 
 export interface JwtClaims {
   user_id: string;
@@ -10,9 +11,6 @@ export interface JwtClaims {
 }
 
 export const ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS = 60;
-
-const IDENTITY_ENDPOINT =
-  process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058';
 
 export async function verifyAccessToken(token: string): Promise<JwtClaims | null> {
   try {
@@ -35,19 +33,10 @@ export async function refreshSession(
   refreshToken: string
 ): Promise<{ accessToken: string; refreshToken: string; claims: JwtClaims } | null> {
   try {
-    const res = await fetch(
-      `${IDENTITY_ENDPOINT}/xstockstrat.identity.v1.IdentityService/RefreshToken`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/connect+json' },
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
+    const data = (await identityClient.refreshToken({ refreshToken })) as any;
     return {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
+      accessToken: data.access_token ?? data.accessToken,
+      refreshToken: data.refresh_token ?? data.refreshToken,
       claims: data.claims,
     };
   } catch {
@@ -57,14 +46,7 @@ export async function refreshSession(
 
 export async function revokeToken(token: string): Promise<void> {
   try {
-    await fetch(
-      `${IDENTITY_ENDPOINT}/xstockstrat.identity.v1.IdentityService/RevokeToken`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/connect+json' },
-        body: JSON.stringify({ token }),
-      }
-    );
+    await identityClient.revokeToken({ token });
   } catch {
     // best-effort revocation
   }

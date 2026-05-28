@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ConnectError } from '@connectrpc/connect';
+import { connectCodeToHttp, tradingClient } from '@/lib/connectClients';
 import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/lib/auth';
-
-const TRADING_BASE_URL =
-  process.env.TRADING_HTTP_ENDPOINT ?? 'http://xstockstrat-trading:8051';
 
 // Maps UI trading mode string to proto TradingMode enum value.
 // TRADING_MODE_UNSPECIFIED=0, TRADING_MODE_PAPER=1, TRADING_MODE_LIVE=2
@@ -12,12 +11,19 @@ function toTradingModeEnum(mode?: string | null): number {
   return 0;
 }
 
-async function rpc(method: string, body: object, propagationHeaders: Record<string, string>): Promise<Response> {
-  return fetch(`${TRADING_BASE_URL}/${method}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/connect+json', ...propagationHeaders },
-    body: JSON.stringify(body),
+function propagationHeaders(req: NextRequest, claims: { user_id: string; roles: string[] }): Headers {
+  return new Headers({
+    'x-user-id': claims.user_id,
+    'x-access-scope': String(rolesToAccessScope(claims.roles)),
+    'x-trace-id': req.headers.get('x-trace-id') ?? generateTraceId(),
   });
+}
+
+function errorResponse(err: unknown): NextResponse {
+  if (err instanceof ConnectError) {
+    return NextResponse.json({ error: err.rawMessage }, { status: connectCodeToHttp(err.code) });
+  }
+  return NextResponse.json({ error: (err as Error).message }, { status: 500 });
 }
 
 export async function POST(req: NextRequest) {
@@ -25,38 +31,34 @@ export async function POST(req: NextRequest) {
   if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const accessScope = String(rolesToAccessScope(claims.roles));
-  const traceId = req.headers.get('x-trace-id') ?? generateTraceId();
-  const propagationHeaders = {
-    'x-user-id': claims.user_id,
-    'x-access-scope': accessScope,
-    'x-trace-id': traceId,
-  };
   try {
     const body = await req.json();
     if (!body.symbol) {
       return NextResponse.json({ error: 'symbol is required' }, { status: 400 });
     }
-    const res = await rpc('xstockstrat.trading.v1.TradingService/PlaceOrder', {
-      symbol: body.symbol,
-      side: body.side === 'buy' ? 1 : 2,
-      orderType: { market: 1, limit: 2, stop: 3, stop_limit: 4 }[body.order_type as string] ?? 1,
-      qty: body.qty,
-      limitPrice: body.limit_price ?? 0,
-      stopPrice: body.stop_price ?? 0,
-      timeInForce: body.time_in_force ?? 'day',
-      strategyId: body.strategy_id ?? '',
-      userId: claims.user_id,
-      tradingMode: toTradingModeEnum(body.trading_mode),
-    }, propagationHeaders);
-    const order = await res.json();
+    const order = await tradingClient.placeOrder(
+      {
+        symbol: body.symbol,
+        side: body.side === 'buy' ? 1 : 2,
+        orderType: { market: 1, limit: 2, stop: 3, stop_limit: 4 }[body.order_type as string] ?? 1,
+        qty: body.qty,
+        limitPrice: body.limit_price ?? 0,
+        stopPrice: body.stop_price ?? 0,
+        timeInForce: body.time_in_force ?? 'day',
+        strategyId: body.strategy_id ?? '',
+        userId: claims.user_id,
+        tradingMode: toTradingModeEnum(body.trading_mode),
+      },
+      { headers: propagationHeaders(req, claims) },
+    );
+    const o = order as any;
     return NextResponse.json({
-      order_id: order.order_id ?? order.orderId,
-      status: order.status,
-      trading_mode: order.trading_mode ?? order.tradingMode,
+      order_id: o.order_id ?? o.orderId,
+      status: o.status,
+      trading_mode: o.trading_mode ?? o.tradingMode,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return errorResponse(err);
   }
 }
 
@@ -65,26 +67,21 @@ export async function GET(req: NextRequest) {
   if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const accessScope = String(rolesToAccessScope(claims.roles));
-  const traceId = req.headers.get('x-trace-id') ?? generateTraceId();
-  const propagationHeaders = {
-    'x-user-id': claims.user_id,
-    'x-access-scope': accessScope,
-    'x-trace-id': traceId,
-  };
   const { searchParams } = new URL(req.url);
   const tradingMode = toTradingModeEnum(searchParams.get('trading_mode'));
   const accountId = searchParams.get('account_id') ?? '';
   try {
-    const res = await rpc('xstockstrat.trading.v1.TradingService/ListOrders', {
-      userId: claims.user_id,
-      page: { pageSize: 50 },
-      ...(tradingMode !== 0 && { tradingMode }),
-      ...(accountId && { accountId }),
-    }, propagationHeaders);
-    const result = await res.json();
+    const result = await tradingClient.listOrders(
+      {
+        userId: claims.user_id,
+        page: { pageSize: 50 },
+        ...(tradingMode !== 0 && { tradingMode }),
+        ...(accountId && { accountId }),
+      },
+      { headers: propagationHeaders(req, claims) },
+    );
     return NextResponse.json(result);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return errorResponse(err);
   }
 }
