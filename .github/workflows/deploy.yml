@@ -22,6 +22,8 @@ on:
                          # Without this the app lands in the account's default project.
       DO_REGISTRY_NAME:
         required: true
+      BROKER_ACCOUNTS_ENCRYPTION_KEY:
+        required: true
 
 jobs:
   deploy:
@@ -34,12 +36,21 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
       - name: Substitute app spec placeholders
+        env:
+          BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.BROKER_ACCOUNTS_ENCRYPTION_KEY }}
         run: |
           sed \
             -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \
             -e "s|YOUR_IMAGE_TAG|${{ inputs.image_tag }}|g" \
             -e "s|YOUR_REGISTRY_NAME|${{ secrets.DO_REGISTRY_NAME }}|g" \
-            ${{ inputs.app_spec }} > /tmp/app_spec_substituted.yaml
+            ${{ inputs.app_spec }} \
+          | BROKER_ACCOUNTS_ENCRYPTION_KEY="$BROKER_ACCOUNTS_ENCRYPTION_KEY" \
+            python3 -c "
+          import os, sys
+          content = sys.stdin.read()
+          content = content.replace('YOUR_BROKER_ACCOUNTS_ENCRYPTION_KEY', os.environ['BROKER_ACCOUNTS_ENCRYPTION_KEY'])
+          sys.stdout.write(content)
+          " > /tmp/app_spec_substituted.yaml
 
       - name: Deploy to DigitalOcean App Platform
         # --update-sources forces DO to re-evaluate the branch and build from the
