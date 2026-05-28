@@ -50,20 +50,9 @@ async function main() {
   const grpcServer = new grpc.Server();
   grpcServer.addService(createConfigServiceDefinition(), configImpl as unknown as grpc.UntypedServiceImplementation);
 
-  grpcServer.bindAsync(
-    `0.0.0.0:${grpcPort}`,
-    grpc.ServerCredentials.createInsecure(),
-    (err, port) => {
-      if (err) {
-        log.error('Failed to bind gRPC', { error: err.message });
-        process.exit(1);
-      }
-      grpcServer.start();
-      log.info(`Config gRPC service listening on port ${port}`);
-    }
-  );
-
   // ── Connect-RPC HTTP server (browser + external clients, port 8060) ────
+  // Built here but only started after gRPC is bound, so the Docker health check
+  // (which probes port 8060) cannot pass before port 50060 is ready.
   const connectHandler = connectNodeAdapter({ routes: createConnectRouter(configImpl) });
   const httpServer = http.createServer((req, res) => {
     // Add CORS headers for browser clients
@@ -83,9 +72,25 @@ async function main() {
     propagationStore.run(extractFromHttpRequest(req), () => connectHandler(req, res));
   });
 
-  httpServer.listen(parseInt(httpPort, 10), () => {
-    log.info(`Config Connect-RPC HTTP service listening on port ${httpPort}`);
-  });
+  grpcServer.bindAsync(
+    `0.0.0.0:${grpcPort}`,
+    grpc.ServerCredentials.createInsecure(),
+    (err, port) => {
+      if (err) {
+        log.error('Failed to bind gRPC', { error: err.message });
+        process.exit(1);
+      }
+      grpcServer.start();
+      log.info(`Config gRPC service listening on port ${port}`);
+
+      // Start HTTP only after gRPC is accepting connections so that
+      // service_healthy (which probes /health on 8060) cannot trigger
+      // dependent-service startup before port 50060 is ready.
+      httpServer.listen(parseInt(httpPort, 10), () => {
+        log.info(`Config Connect-RPC HTTP service listening on port ${httpPort}`);
+      });
+    }
+  );
 
   const shutdown = () => {
     log.info('Shutting down config service...');

@@ -1,5 +1,7 @@
 import { Pool } from 'pg';
 import { getLogger } from '../services/logger';
+import { ConfigUpdateType } from '@xstockstrat/proto/config/v1/config';
+import { Environment, TradingMode } from '@xstockstrat/proto/common/v1/common';
 
 const log = getLogger('config:impl');
 
@@ -10,6 +12,52 @@ type ModeStr = 'paper' | 'live' | 'all';
 // Proto enum values (wire numbers from generated stubs)
 const ENV_MAP: Record<number, EnvStr> = { 0: 'dev', 1: 'dev', 2: 'production' };
 const MODE_MAP: Record<number, ModeStr> = { 0: 'all', 1: 'paper', 2: 'live' };
+
+// Convert the internal snapshot representation to a ts-proto-compatible object that
+// ConfigSnapshot.encode() can serialize correctly. Handles both legacy snake_case fields
+// (update_type, changed_keys, trading_mode) and the camelCase fields used in current
+// storage (updateType, changedKeys, tradingMode). ts-proto expects camelCase keys and
+// the enum string constants (e.g. ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT).
+function toProtoSnapPayload(snap: any, overrideUpdateType?: ConfigUpdateType): any {
+  const env = snap.environment === 'production'
+    ? Environment.ENVIRONMENT_PRODUCTION
+    : Environment.ENVIRONMENT_DEV;
+
+  const modeStr = snap.trading_mode ?? snap.tradingMode;
+  const mode = modeStr === 'live'
+    ? TradingMode.TRADING_MODE_LIVE
+    : modeStr === 'paper'
+    ? TradingMode.TRADING_MODE_PAPER
+    : TradingMode.TRADING_MODE_UNSPECIFIED;
+
+  const rawType = snap.update_type ?? snap.updateType ?? 1;
+  const updateType = overrideUpdateType ?? (
+    rawType === 2 ? ConfigUpdateType.CONFIG_UPDATE_TYPE_DELTA :
+    rawType === 3 ? ConfigUpdateType.CONFIG_UPDATE_TYPE_RELOAD :
+    ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT
+  );
+
+  // Convert snake_case ConfigValue fields to the camelCase fields ts-proto encodes.
+  const values: Record<string, any> = {};
+  for (const [k, v] of Object.entries(snap.values ?? {})) {
+    const cv = v as any;
+    if (cv.string_val !== undefined) values[k] = { stringVal: cv.string_val };
+    else if (cv.int_val !== undefined) values[k] = { intVal: cv.int_val };
+    else if (cv.float_val !== undefined) values[k] = { floatVal: cv.float_val };
+    else if (cv.bool_val !== undefined) values[k] = { boolVal: cv.bool_val };
+    else values[k] = cv;
+  }
+
+  return {
+    namespace: snap.namespace,
+    version: snap.version,
+    values,
+    updateType,
+    changedKeys: snap.changed_keys ?? snap.changedKeys ?? [],
+    environment: env,
+    tradingMode: mode,
+  };
+}
 
 function resolveEnv(v: number | undefined): EnvStr {
   return ENV_MAP[v ?? 0] ?? 'dev';
@@ -113,11 +161,12 @@ export class ConfigServiceImpl {
   private broadcastToSubscribers(namespace: string, env: EnvStr, mode: ModeStr) {
     const snap = this.snapshots.get(snapKey(namespace, env, mode));
     if (!snap) return;
+    const payload = toProtoSnapPayload(snap);
     let count = 0;
     for (const [id, sub] of this.subscribers) {
       if (sub.namespace === namespace && sub.environment === env && sub.trading_mode === mode) {
         try {
-          sub.call.write(snap);
+          sub.call.write(payload);
           count++;
         } catch (err) {
           log.warn('Failed to write to subscriber', { clientId: sub.clientId });
@@ -141,6 +190,16 @@ export class ConfigServiceImpl {
 
     log.info('New WatchConfig subscriber', { namespace: req.namespace, clientId: req.client_id, env, mode });
 
+    // Register lifecycle handlers BEFORE the initial write so that any error
+    // emitted during serialization has a listener and does not crash the process.
+    call.on('cancelled', () => {
+      log.info('Subscriber disconnected', { subId });
+      this.subscribers.delete(subId);
+    });
+    call.on('error', () => {
+      this.subscribers.delete(subId);
+    });
+
     const k = snapKey(req.namespace, env, mode);
     const snap = this.snapshots.get(k) ?? {
       namespace: req.namespace,
@@ -152,7 +211,7 @@ export class ConfigServiceImpl {
       environment: env,
       tradingMode: mode,
     };
-    call.write({ ...snap, updateType: 1 }); // SNAPSHOT
+    call.write(toProtoSnapPayload(snap, ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT));
 
     this.subscribers.set(subId, {
       namespace: req.namespace,
@@ -162,14 +221,6 @@ export class ConfigServiceImpl {
       call,
       lastVersion: snap.version,
     });
-
-    call.on('cancelled', () => {
-      log.info('Subscriber disconnected', { subId });
-      this.subscribers.delete(subId);
-    });
-    call.on('error', () => {
-      this.subscribers.delete(subId);
-    });
   }
 
   async getConfig(call: any, callback: any) {
@@ -177,7 +228,7 @@ export class ConfigServiceImpl {
     const mode = resolveMode(call.request.trading_mode);
     const snap = this.snapshots.get(snapKey(call.request.namespace, env, mode));
     if (!snap) {
-      callback(null, {
+      callback(null, toProtoSnapPayload({
         namespace: call.request.namespace,
         version: '0',
         values: {},
@@ -185,10 +236,10 @@ export class ConfigServiceImpl {
         changedKeys: [],
         environment: env,
         tradingMode: mode,
-      });
+      }));
       return;
     }
-    callback(null, snap);
+    callback(null, toProtoSnapPayload(snap));
   }
 
   async setConfig(call: any, callback: any) {
