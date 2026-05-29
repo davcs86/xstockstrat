@@ -18,7 +18,7 @@ import { IdentityServiceImpl } from '../grpc/identityServiceImpl';
 // wraps it as Code.Internal, so callers can never distinguish e.g.
 // Unauthenticated from an actual internal error.
 const GRPC_TO_CONNECT: Record<number, Code> = {
-  0: Code.Ok,              1: Code.Canceled,          2: Code.Unknown,
+  1: Code.Canceled,          2: Code.Unknown,
   3: Code.InvalidArgument, 4: Code.DeadlineExceeded,  5: Code.NotFound,
   6: Code.AlreadyExists,   7: Code.PermissionDenied,  8: Code.ResourceExhausted,
   9: Code.FailedPrecondition, 10: Code.Aborted,        11: Code.OutOfRange,
