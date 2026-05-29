@@ -28,9 +28,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Build + push to GHCR — DO builds these from source via github: in the
-          # app spec so they don't consume a DOCR slot; GHCR makes them pullable
-          # for local dev without DO credentials.
+          # Build + push to GHCR — DO pulls these pre-built images from GHCR in
+          # the app spec; public repo means no registry_credentials needed.
           - service: xstockstrat-trading
             dockerfile: services/xstockstrat-trading/Dockerfile
             push: false
