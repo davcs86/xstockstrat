@@ -16,5 +16,5 @@
 ## Session 2026-05-29T00:01:00Z — user decisions
 
 - **Service name**: `xstockstrat-ui` confirmed.
-- **DO routing**: single domain, routes configured directly in DO App Platform spec (no per-basePath custom domains).
+- **DO routing**: single domain; routes configured directly in DO App Platform spec (no per-basePath custom domains). This also eliminates the need for nginx to proxy `/agent/sse` and `/agent/messages` — those routes are configured in the DO spec to hit `xstockstrat-agent` directly. FR-3 updated accordingly; no Next.js rewrites needed for agent routes.
 - **pg access**: keep direct `pg` calls in the consolidated app as-is; no server-only module isolation needed.

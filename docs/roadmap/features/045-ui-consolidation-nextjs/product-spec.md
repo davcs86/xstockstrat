@@ -18,7 +18,7 @@ FR-1. The consolidated service (`xstockstrat-ui`) serves all routes previously h
 
 FR-2. The root path `/` redirects to `/trader` (preserving the current nginx behavior).
 
-FR-3. Agent SSE and messages endpoints (`/agent/sse`, `/agent/messages`) are proxied to `xstockstrat-agent:9000` via Next.js `rewrites` in `next.config.js`, replacing the nginx upstream blocks for those routes.
+FR-3. Agent SSE and messages endpoints (`/agent/sse`, `/agent/messages`) are routed directly to `xstockstrat-agent` via DO App Platform route rules in `.do/app.dev.yaml` and `.do/app.yaml` — no nginx and no Next.js rewrites needed. In `docker-compose.yml` the agent service remains directly accessible on its own port (9000).
 
 FR-4. All existing JWT auth flows (login, refresh, logout) continue to function per-basePath: each app segment retains its own `/api/auth/*` routes and middleware protection covering only its own path prefix.
 
@@ -83,7 +83,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 3. `http://localhost:3000/insights` loads the analytics dashboard; strategy browsing and market data charts work.
 4. `http://localhost:3000/config-ui` loads the config management UI; namespace CRUD and audit log work (including direct PostgreSQL access).
 5. `http://localhost:3000/` redirects to `/trader`.
-6. `http://localhost:3000/agent/sse` and `/agent/messages` successfully proxy to `xstockstrat-agent:9000`.
+6. In the DO environments, `/agent/sse` and `/agent/messages` route directly to `xstockstrat-agent` via App Platform route rules (no proxy hop through the UI service). In local docker-compose, the agent is reachable on its own port.
 7. JWT auth (login, refresh, logout) works independently on each basePath segment.
 8. `x-trace-id` header is present on all backend calls made from the consolidated service.
 9. OTel traces appear in Grafana Cloud under the new service name `xstockstrat-ui`.
