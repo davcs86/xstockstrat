@@ -124,3 +124,16 @@
 - Feature promoted and committed: 790d855782d7581455619911aa86fdaf627376b4
 - Status updated: `code-completed` → `launched`
 - Launched date: 2026-05-27
+
+## Session 2026-05-29 — DOCR → GHCR migration
+
+- Completed migration of all 15 services from DOCR to GHCR.
+- **Before:** 10 services used `ghcr_push: true`, 5 services (identity, notify, trader, insights, config-ui) used `push: true` (DOCR). The DOCR 5-repo basic plan limit was the constraint.
+- **After:** All 15 services push to `ghcr.io/davcs86/xstockstrat/<service>` via GHCR. No DOCR dependency remaining.
+- `DO_REGISTRY_NAME` GitHub secret is no longer needed; removed from all workflows.
+- `DIGITALOCEAN_ACCESS_TOKEN` retained for `doctl apps update` in deploy workflows.
+- App specs (`.do/app.yaml`, `.do/app.dev.yaml`): all 5 previously-DOCR services now use `registry_type: GHCR`, `registry: ghcr.io`, `repository: davcs86/xstockstrat/<service>`.
+- `docker-compose.yml`: all 15 image refs updated from `registry.digitalocean.com/...` to `ghcr.io/davcs86/xstockstrat/...`.
+- Docs updated: `docs/setup/digitalocean.md`, `docs/launch-pdfs/infra-ci.md`, `.claude/skills/digitalocean-setup/SKILL.md`.
+- Step 4.5 in setup guide updated from "Create DOCR registry" to "Make GHCR packages public".
+- Packages must be set to public on GitHub after first CI push for DO App Platform to pull without credentials.

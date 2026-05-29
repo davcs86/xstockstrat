@@ -300,9 +300,9 @@ services:
 
   - name: xstockstrat-identity
     image:
-      registry_type: DOCR
-      registry: YOUR_REGISTRY_NAME
-      repository: xstockstrat-identity
+      registry_type: GHCR
+      registry: ghcr.io
+      repository: davcs86/xstockstrat/xstockstrat-identity
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50058
@@ -337,9 +337,9 @@ services:
 
   - name: xstockstrat-notify
     image:
-      registry_type: DOCR
-      registry: YOUR_REGISTRY_NAME
-      repository: xstockstrat-notify
+      registry_type: GHCR
+      registry: ghcr.io
+      repository: davcs86/xstockstrat/xstockstrat-notify
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50059
@@ -420,9 +420,9 @@ services:
 
   - name: xstockstrat-trader
     image:
-      registry_type: DOCR
-      registry: YOUR_REGISTRY_NAME
-      repository: xstockstrat-trader
+      registry_type: GHCR
+      registry: ghcr.io
+      repository: davcs86/xstockstrat/xstockstrat-trader
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 3000
@@ -450,9 +450,9 @@ services:
 
   - name: xstockstrat-insights
     image:
-      registry_type: DOCR
-      registry: YOUR_REGISTRY_NAME
-      repository: xstockstrat-insights
+      registry_type: GHCR
+      registry: ghcr.io
+      repository: davcs86/xstockstrat/xstockstrat-insights
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 3001
@@ -484,9 +484,9 @@ services:
 
   - name: xstockstrat-config-ui
     image:
-      registry_type: DOCR
-      registry: YOUR_REGISTRY_NAME
-      repository: xstockstrat-config-ui
+      registry_type: GHCR
+      registry: ghcr.io
+      repository: davcs86/xstockstrat/xstockstrat-config-ui
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 3002
