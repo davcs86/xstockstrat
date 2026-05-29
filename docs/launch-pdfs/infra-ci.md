@@ -228,8 +228,8 @@ For each service:
 - name: xstockstrat-trading
   image:
     registry_type: GHCR
-    registry: ghcr.io
-    repository: davcs86/xstockstrat/xstockstrat-trading
+    registry: davcs86     # github.repository_owner, substituted by deploy workflow
+    repository: xstockstrat/xstockstrat-trading
     tag: latest
   instance_size_slug: apps-s-1vcpu-1gb
   instance_count: 1

@@ -132,7 +132,7 @@
 - **After:** All 15 services push to `ghcr.io/davcs86/xstockstrat/<service>` via GHCR. No DOCR dependency remaining.
 - `DO_REGISTRY_NAME` GitHub secret is no longer needed; removed from all workflows.
 - `DIGITALOCEAN_ACCESS_TOKEN` retained for `doctl apps update` in deploy workflows.
-- App specs (`.do/app.yaml`, `.do/app.dev.yaml`): all 5 previously-DOCR services now use `registry_type: GHCR`, `registry: ghcr.io`, `repository: davcs86/xstockstrat/<service>`.
+- App specs (`.do/app.yaml`, `.do/app.dev.yaml`): all 5 previously-DOCR services now use `registry_type: GHCR`, `registry: YOUR_GITHUB_ORG` (substituted to `davcs86` by deploy workflow sed), `repository: xstockstrat/<service>` — same format as the existing 10 GHCR services.
 - `docker-compose.yml`: all 15 image refs updated from `registry.digitalocean.com/...` to `ghcr.io/davcs86/xstockstrat/...`.
 - Docs updated: `docs/setup/digitalocean.md`, `docs/launch-pdfs/infra-ci.md`, `.claude/skills/digitalocean-setup/SKILL.md`.
 - Step 4.5 in setup guide updated from "Create DOCR registry" to "Make GHCR packages public".

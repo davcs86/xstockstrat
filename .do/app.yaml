@@ -301,8 +301,8 @@ services:
   - name: xstockstrat-identity
     image:
       registry_type: GHCR
-      registry: ghcr.io
-      repository: davcs86/xstockstrat/xstockstrat-identity
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-identity
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50058
@@ -338,8 +338,8 @@ services:
   - name: xstockstrat-notify
     image:
       registry_type: GHCR
-      registry: ghcr.io
-      repository: davcs86/xstockstrat/xstockstrat-notify
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-notify
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50059
@@ -421,8 +421,8 @@ services:
   - name: xstockstrat-trader
     image:
       registry_type: GHCR
-      registry: ghcr.io
-      repository: davcs86/xstockstrat/xstockstrat-trader
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-trader
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 3000
@@ -451,8 +451,8 @@ services:
   - name: xstockstrat-insights
     image:
       registry_type: GHCR
-      registry: ghcr.io
-      repository: davcs86/xstockstrat/xstockstrat-insights
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-insights
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 3001
@@ -485,8 +485,8 @@ services:
   - name: xstockstrat-config-ui
     image:
       registry_type: GHCR
-      registry: ghcr.io
-      repository: davcs86/xstockstrat/xstockstrat-config-ui
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-config-ui
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 3002
