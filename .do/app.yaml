@@ -35,7 +35,7 @@ services:
 
   - name: xstockstrat-trading
     github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-trading/Dockerfile
@@ -71,7 +71,7 @@ services:
 
   - name: xstockstrat-portfolio
     github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-portfolio/Dockerfile
@@ -99,7 +99,7 @@ services:
 
   - name: xstockstrat-marketdata
     github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-marketdata/Dockerfile
@@ -135,7 +135,7 @@ services:
 
   - name: xstockstrat-indicators
     github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-indicators/Dockerfile
@@ -162,7 +162,7 @@ services:
 
   - name: xstockstrat-ingest
     github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-ingest/Dockerfile
@@ -199,7 +199,7 @@ services:
 
   - name: xstockstrat-analysis
     github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-analysis/Dockerfile
@@ -236,7 +236,7 @@ services:
 
   - name: xstockstrat-agent
     github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-agent/Dockerfile
@@ -269,7 +269,7 @@ services:
 
   - name: xstockstrat-ledger
     github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-ledger/Dockerfile
@@ -370,7 +370,7 @@ services:
 
   - name: xstockstrat-config
     github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-config/Dockerfile
@@ -400,7 +400,7 @@ services:
 
   - name: xstockstrat-nginx
     github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat
       branch: main
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-nginx/Dockerfile
@@ -510,7 +510,7 @@ jobs:
   - name: db-migrator
     kind: PRE_DEPLOY
     github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat
       branch: main
       deploy_on_push: false
     dockerfile_path: scripts/Dockerfile.migrate

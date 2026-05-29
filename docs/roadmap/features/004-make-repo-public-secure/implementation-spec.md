@@ -314,7 +314,7 @@ grep "openssl rand -hex 32" CONTRIBUTING.md
 **Create `CONTRIBUTING.md`** at repo root covering all items in FR-5:
 
 ```markdown
-# Contributing to xstockstrat-orchestration
+# Contributing to xstockstrat
 
 Thank you for your interest in contributing. This guide covers how to set up the local
 development environment, how to submit changes, and what style requirements apply.
@@ -334,8 +334,8 @@ development environment, how to submit changes, and what style requirements appl
 
 1. **Clone**:
    ```bash
-   git clone https://github.com/<your-fork>/xstockstrat-orchestration.git
-   cd xstockstrat-orchestration
+   git clone https://github.com/<your-fork>/xstockstrat.git
+   cd xstockstrat
    ```
 
 2. **Environment file**:
@@ -527,13 +527,13 @@ ls -la .gitleaks.toml
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Confirmed via grep: `docs/setup/getting-started.md:40: git clone https://github.com/davcs86/xstockstrat-orchestration.git`
-- Confirmed via grep: `docs/setup/digitalocean.md:24: GitHub repo 'davcs86/xstockstrat-orchestration' is your source of truth`
-- Confirmed via grep: `docs/setup/digitalocean.md:141: 3. Select repo: 'davcs86/xstockstrat-orchestration'`
+- Confirmed via grep: `docs/setup/getting-started.md:40: git clone https://github.com/davcs86/xstockstrat.git`
+- Confirmed via grep: `docs/setup/digitalocean.md:24: GitHub repo 'davcs86/xstockstrat' is your source of truth`
+- Confirmed via grep: `docs/setup/digitalocean.md:141: 3. Select repo: 'davcs86/xstockstrat'`
 - Confirmed via grep: `scripts/setup-branch-protection.sh:11: GITHUB_USER="${GITHUB_USER:-davcs86}"`
 - Confirmed via grep: `scripts/subtree-setup.sh:12: GITHUB_USER="${GITHUB_USER:-davcs86}"`
-- Confirmed via grep count: `.do/app.yaml` has 14 occurrences of `repo: davcs86/xstockstrat-orchestration`
-- Confirmed via grep count: `.do/app.dev.yaml` has 14 occurrences of `repo: davcs86/xstockstrat-orchestration`
+- Confirmed via grep count: `.do/app.yaml` has 14 occurrences of `repo: davcs86/xstockstrat`
+- Confirmed via grep count: `.do/app.dev.yaml` has 14 occurrences of `repo: davcs86/xstockstrat`
 
 **Instructions**:
 

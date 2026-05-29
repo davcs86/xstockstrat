@@ -319,7 +319,7 @@ This is a browser-only OAuth step — no CLI command can perform it.
 Walk the user through:
 
 1. Go to: DigitalOcean Console → **Apps** → **New App** → **GitHub** → **Authorize DigitalOcean**
-2. After authorization, select repository: `<your-org>/xstockstrat-orchestration`
+2. After authorization, select repository: `<your-org>/xstockstrat`
 3. Do NOT complete the app creation wizard here — just confirm the OAuth is done and close that tab
 
 Ask the user to confirm they have completed the GitHub authorization before proceeding.

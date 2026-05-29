@@ -59,7 +59,7 @@
 
 ### Session summary
 **All steps complete** — Feature ready for merge.
-**Integration PR**: [#157](https://github.com/davcs86/xstockstrat-orchestration/pull/157)
+**Integration PR**: [#157](https://github.com/davcs86/xstockstrat/pull/157)
 **Next**: Merge PR #157 into `main-dev` when CI passes and reviewers approve. Repository is then ready for public release on GitHub.
 
 ## Session 2026-05-11T02:15:00Z — sdd-execute GH_PAT_SCAN token update
