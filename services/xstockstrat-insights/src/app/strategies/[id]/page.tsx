@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/components/ui/utils';
+import { BASE_PATH } from '@/lib/basepath';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -19,7 +20,7 @@ interface BacktestFormState {
 
 export default function StrategyDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
-  const { data: report, isLoading } = useSWR(`/api/analysis/report/${id}`, fetcher);
+  const { data: report, isLoading } = useSWR(`${BASE_PATH}/api/analysis/report/${id}`, fetcher);
 
   const [form, setForm] = useState<BacktestFormState>({
     symbol: 'AAPL',
@@ -35,7 +36,7 @@ export default function StrategyDetailPage({ params }: { params: { id: string } 
     setRunning(true);
     setRunError(null);
     try {
-      const res = await fetch('/api/analysis/backtest', {
+      const res = await fetch(`${BASE_PATH}/api/analysis/backtest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { AppShell } from '@/components/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { BASE_PATH } from '@/lib/basepath';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -21,7 +22,7 @@ function scoreColor(score: number): string {
 }
 
 export default function StrategiesPage() {
-  const { data, isLoading, error } = useSWR('/api/analysis/strategies', fetcher, {
+  const { data, isLoading, error } = useSWR(`${BASE_PATH}/api/analysis/strategies`, fetcher, {
     refreshInterval: 30000,
   });
 
