@@ -30,3 +30,11 @@
   - `044-client-api-pattern` migrates SWR → react-query in all three source services; merge before 045 for the same reason.
   - `014-trader-chart-panel`, `002-broker-accounts-ui`, `003-formula-management-ui` also touch one or more source services — merge before 045 to avoid re-doing work in the consolidated service.
   - `038-ci-docker-registry-deploy` builds images for old services + nginx; must be updated to reference `xstockstrat-ui` after 045 merges (or merge 038 after 045).
+
+## Session 2026-05-29T00:03:00Z — overlap clarification
+
+- User confirmed 002, 005, 006, and 012 are already `launched` (code in main-dev).
+- Revised overlap picture: the source services already have basePaths (005), nginx routing (006), auth + header propagation (012), and broker accounts UI (002) in place.
+- Remaining active-feature concerns before executing 045:
+  - **Merge before 045**: `014-trader-chart-panel` (touches xstockstrat-trader), `044-client-api-pattern` (touches all three source services), `003-formula-management-ui` (touches xstockstrat-insights).
+  - **Merge after 045 or update**: `038-ci-docker-registry-deploy` references old service names in CI; update to `xstockstrat-ui` after 045 lands.
