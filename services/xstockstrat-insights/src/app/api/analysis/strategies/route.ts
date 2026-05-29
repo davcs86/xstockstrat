@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ strategies: enriched });
   } catch (err) {
-    if (err instanceof ConnectError) {
+    if (ConnectError && err instanceof ConnectError) {
       return NextResponse.json({ error: err.rawMessage }, { status: connectCodeToHttp(err.code) });
     }
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

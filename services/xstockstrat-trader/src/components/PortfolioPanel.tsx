@@ -1,6 +1,7 @@
 'use client';
 
 import useSWR from 'swr';
+import { BASE_PATH } from '@/lib/basepath';
 import type { TradingMode } from '@/app/page';
 import { useAccountContext } from '@/context/AccountContext';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
@@ -24,7 +25,7 @@ function Stat({ label, value, valueClass = 'text-foreground' }: { label: string;
 export function PortfolioPanel({ mode }: { mode: TradingMode }) {
   const { accounts, selectedAccountId } = useAccountContext();
   const { data, isLoading, error } = useSWR(
-    `/api/portfolio/accounts?account_id=${selectedAccountId ?? ''}`,
+    `${BASE_PATH}/api/portfolio/accounts?account_id=${selectedAccountId ?? ''}`,
     fetcher,
     { refreshInterval: 10000 },
   );

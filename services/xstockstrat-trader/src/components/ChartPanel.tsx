@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { BASE_PATH } from '@/lib/basepath';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
@@ -48,7 +49,7 @@ export function ChartPanel() {
 
   // Load symbol list on mount
   useEffect(() => {
-    fetch('/api/chart', { method: 'POST' })
+    fetch(`${BASE_PATH}/api/chart`, { method: 'POST' })
       .then((r) => r.json())
       .then((data) => {
         const list: string[] = data.symbols ?? [];
@@ -113,7 +114,7 @@ export function ChartPanel() {
     setError(null);
     try {
       const res = await fetch(
-        `/api/chart?symbol=${encodeURIComponent(sym)}&timeframe=${tf}&limit=${count}`,
+        `${BASE_PATH}/api/chart?symbol=${encodeURIComponent(sym)}&timeframe=${tf}&limit=${count}`,
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to load bars');

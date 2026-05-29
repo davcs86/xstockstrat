@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { BASE_PATH } from '@/lib/basepath';
 
 export type BrokerAccount = {
   account_id: string;
@@ -25,7 +26,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   const fetchAccounts = React.useCallback(async () => {
     try {
-      const res = await fetch('/api/accounts');
+      const res = await fetch(`${BASE_PATH}/api/accounts`);
       const data = await res.json();
       const fetched: BrokerAccount[] = data.accounts ?? [];
       setAccounts(fetched);

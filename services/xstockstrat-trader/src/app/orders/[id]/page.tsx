@@ -1,5 +1,6 @@
 'use client';
 import useSWR from 'swr';
+import { BASE_PATH } from '@/lib/basepath';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
@@ -45,7 +46,7 @@ function formatQty(v: unknown): string {
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
   const orderId = params?.id;
-  const { data: order, error, isLoading } = useSWR(orderId ? `/api/orders/${orderId}` : null, fetcher, {
+  const { data: order, error, isLoading } = useSWR(orderId ? `${BASE_PATH}/api/orders/${orderId}` : null, fetcher, {
     refreshInterval: 5000,
   });
 

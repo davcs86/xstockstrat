@@ -11,6 +11,7 @@ import {
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '@components/ui/select';
+import { BASE_PATH } from '@/app/lib/basepath';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -148,7 +149,7 @@ export default function SourcesPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const fetchSources = useCallback(() => {
-    return fetch('/api/sources?include_inactive=true')
+    return fetch(`${BASE_PATH}/api/sources?include_inactive=true`)
       .then((r) => r.json())
       .then((data) => setSources(data.sources ?? []));
   }, []);
@@ -157,7 +158,7 @@ export default function SourcesPage() {
     setLoading(true);
     Promise.all([
       fetchSources(),
-      fetch('/api/config?namespace=analysis&env=dev&mode=paper')
+      fetch(`${BASE_PATH}/api/config?namespace=analysis&env=dev&mode=paper`)
         .then((r) => r.json())
         .then((data) => {
           const weightKey = (data.keys ?? []).find(
@@ -209,7 +210,7 @@ export default function SourcesPage() {
             },
             operation: 'update',
           };
-      await fetch('/api/sources', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      await fetch(`${BASE_PATH}/api/sources`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       await fetchSources();
     } catch (e: any) {
       setError(e.message);
@@ -237,7 +238,7 @@ export default function SourcesPage() {
     if (form.credentialsRef) body.credentialsRef = form.credentialsRef;
 
     try {
-      const res = await fetch('/api/sources', {
+      const res = await fetch(`${BASE_PATH}/api/sources`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

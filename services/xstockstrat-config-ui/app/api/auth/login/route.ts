@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     );
     return response;
   } catch (err) {
-    if (err instanceof ConnectError && err.code === Code.Unauthenticated) {
+    if (ConnectError && err instanceof ConnectError && err.code === Code.Unauthenticated) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
     // Service unavailable — don't leak internal error detail to the browser.
