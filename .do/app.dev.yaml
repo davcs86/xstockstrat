@@ -34,11 +34,11 @@ services:
   # ── Go services ────────────────────────────────────────────────────────────
 
   - name: xstockstrat-trading
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-trading/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-trading
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50051
       - 8051
@@ -70,11 +70,11 @@ services:
         type: SECRET
 
   - name: xstockstrat-portfolio
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-portfolio/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-portfolio
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50052
       - 8052
@@ -98,11 +98,11 @@ services:
         value: portfolio
 
   - name: xstockstrat-marketdata
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-marketdata/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-marketdata
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50053
       - 8053
@@ -134,11 +134,11 @@ services:
   # ── Python services ────────────────────────────────────────────────────────
 
   - name: xstockstrat-indicators
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-indicators/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-indicators
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50054
       - 8054
@@ -161,11 +161,11 @@ services:
         value: indicators
 
   - name: xstockstrat-ingest
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-ingest/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-ingest
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50055
       - 8055
@@ -198,11 +198,11 @@ services:
         type: SECRET
 
   - name: xstockstrat-analysis
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-analysis/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-analysis
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50056
       - 8056
@@ -235,11 +235,11 @@ services:
         type: SECRET
 
   - name: xstockstrat-agent
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-agent/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-agent
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 9000
     instance_count: 1
@@ -268,11 +268,11 @@ services:
   # ── Node.js services ───────────────────────────────────────────────────────
 
   - name: xstockstrat-ledger
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-ledger/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-ledger
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50057
       - 8057
@@ -370,11 +370,11 @@ services:
         type: SECRET
 
   - name: xstockstrat-config
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-config/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-config
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50060
       - 8060
@@ -400,11 +400,11 @@ services:
   # ── Nginx Reverse Proxy (new HTTP ingress) ────────────────────────────────
 
   - name: xstockstrat-nginx
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-nginx/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-nginx
+      tag: "YOUR_IMAGE_TAG"
     http_port: 80
     instance_count: 1
     instance_size_slug: basic-xs
