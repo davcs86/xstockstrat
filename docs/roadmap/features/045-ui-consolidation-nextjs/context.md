@@ -12,3 +12,9 @@
 - Pre-scan of the three frontends confirmed: all use basePaths (/trader, /insights, /config-ui), identical middleware pattern, shared dependency set, Next.js version skew (trader on v15, insights + config-ui on v14), and config-ui has direct pg access for audit log.
 - nginx also proxies /agent/sse and /agent/messages — captured in FR-3 to move those to Next.js rewrites.
 - New service name `xstockstrat-ui` proposed (open question in product-spec).
+
+## Session 2026-05-29T00:01:00Z — user decisions
+
+- **Service name**: `xstockstrat-ui` confirmed.
+- **DO routing**: single domain, routes configured directly in DO App Platform spec (no per-basePath custom domains).
+- **pg access**: keep direct `pg` calls in the consolidated app as-is; no server-only module isolation needed.

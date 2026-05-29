@@ -93,6 +93,6 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] Should the consolidated service keep the name `xstockstrat-ui` or reuse `xstockstrat-trader` as the canonical name? (Recommendation: new name `xstockstrat-ui` to avoid implying trading-only scope.)
-- [ ] Does the DigitalOcean dev app need a custom domain per basePath, or is a single domain with sub-paths sufficient? (Likely already path-based — confirm with current `.do/app.dev.yaml`.)
-- [ ] Should the `pg` dependency (currently in config-ui for audit log reads) be isolated in a server-only module, or is the current direct pattern acceptable in the consolidated app? (Recommendation: keep as-is for now; no new DB access pattern needed.)
+- [x] ~~Should the consolidated service keep the name `xstockstrat-ui` or reuse `xstockstrat-trader` as the canonical name?~~ **Resolved**: `xstockstrat-ui`.
+- [x] ~~Does the DigitalOcean dev app need a custom domain per basePath, or is a single domain with sub-paths sufficient?~~ **Resolved**: single domain; routes configured directly in DO App Platform spec.
+- [x] ~~Should the `pg` dependency (currently in config-ui for audit log reads) be isolated in a server-only module, or is the current direct pattern acceptable in the consolidated app?~~ **Resolved**: keep direct `pg` calls as-is.
