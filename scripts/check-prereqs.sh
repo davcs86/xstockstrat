@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/check-prereqs.sh
-# Checks tools required to work with xstockstrat-orchestration locally.
+# Checks tools required to work with xstockstrat locally.
 #
 # Hard requirement (exits 1 if missing):
 #   docker — services, proto codegen, and migrations all run in containers

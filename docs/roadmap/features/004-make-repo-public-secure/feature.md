@@ -37,7 +37,7 @@
 
 ## Summary
 
-Audit the xstockstrat-orchestration repository for all hardcoded secrets, credentials, API keys, and sensitive configuration values, remove or replace them with environment variable references or safe placeholders, and update documentation to reflect public-repo best practices before making the repository public on GitHub.
+Audit the xstockstrat repository for all hardcoded secrets, credentials, API keys, and sensitive configuration values, remove or replace them with environment variable references or safe placeholders, and update documentation to reflect public-repo best practices before making the repository public on GitHub.
 
 ## Reviewers
 
@@ -51,4 +51,4 @@ _(Snapshot finalized by /sdd-spec 2026-05-11. Re-run /sdd-spec if the registry c
 
 ## Next Action
 
-— launched in production via promotion PR [#158](https://github.com/davcs86/xstockstrat-orchestration/pull/158) (integration PR [#157](https://github.com/davcs86/xstockstrat-orchestration/pull/157)).
+— launched in production via promotion PR [#158](https://github.com/davcs86/xstockstrat/pull/158) (integration PR [#157](https://github.com/davcs86/xstockstrat/pull/157)).

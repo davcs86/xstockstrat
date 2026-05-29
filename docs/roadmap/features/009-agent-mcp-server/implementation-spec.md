@@ -1058,7 +1058,7 @@ docker run --rm -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf.template:ro \
    ```yaml
    - name: xstockstrat-agent
      github:
-       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+       repo: YOUR_GITHUB_ORG/xstockstrat
        branch: main-dev
        deploy_on_push: false
      source_dir: services/xstockstrat-agent

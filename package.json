@@ -1,5 +1,5 @@
 {
-  "name": "xstockstrat-orchestration",
+  "name": "xstockstrat",
   "version": "0.0.0",
   "private": true,
   "packageManager": "pnpm@9.15.0"

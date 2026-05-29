@@ -258,7 +258,7 @@ No service application code, proto contracts, database migrations, or config key
 - Confirmed via: Read `.do/app.dev.yaml` L26–L35 (xstockstrat-trading entry) — the full `github:` + `dockerfile_path` block to replace:
   ```yaml
   github:
-    repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+    repo: YOUR_GITHUB_ORG/xstockstrat
     branch: main-dev
     deploy_on_push: false
   dockerfile_path: services/xstockstrat-trading/Dockerfile
@@ -272,7 +272,7 @@ For each of the 15 service entries in both `.do/app.dev.yaml` and `.do/app.yaml`
 Replace this pattern (example for `xstockstrat-trading`):
 ```yaml
     github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat
       branch: main-dev
       deploy_on_push: false
     dockerfile_path: services/xstockstrat-trading/Dockerfile

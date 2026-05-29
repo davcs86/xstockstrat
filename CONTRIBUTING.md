@@ -1,4 +1,4 @@
-# Contributing to xstockstrat-orchestration
+# Contributing to xstockstrat
 
 ## Local Setup
 
@@ -7,8 +7,8 @@ Follow **[docs/setup/getting-started.md](docs/setup/getting-started.md)** — it
 Short version:
 
 ```bash
-git clone https://github.com/<your-fork>/xstockstrat-orchestration.git
-cd xstockstrat-orchestration
+git clone https://github.com/<your-fork>/xstockstrat.git
+cd xstockstrat
 cp .env.example .env
 # Edit .env — required: ALPACA_API_KEY, ALPACA_API_SECRET, JWT_SECRET (openssl rand -hex 32)
 # Leave POSTGRES_PASSWORD at its default — DATABASE_URL is auto-constructed by docker-compose

@@ -15,7 +15,7 @@ Every frontend sets `basePath` in `next.config.js` (e.g. `/trader`, `/insights`,
 | In-app navigation (stay in the same frontend) | `<Link>` | `<Link href="/strategies">` → `/insights/strategies` |
 | Cross-app navigation (escape the basePath, re-enter via nginx) | plain `<a>` | `<a href="/trader">` stays `/trader` |
 
-**Bug avoided** ([PR #399](https://github.com/davcs86/xstockstrat-orchestration/pull/399)): the config-ui ENV/MODE switcher used `<a href="/?env=production&mode=paper">`. Without basePath prefixing, this navigated to the site root (`https://host/?...`) instead of `/config-ui/?...`. Switched the four anchors to `<Link>`. The four cross-app nav links in each AppShell stay as `<a>` because we **want** them to escape the basePath.
+**Bug avoided** ([PR #399](https://github.com/davcs86/xstockstrat/pull/399)): the config-ui ENV/MODE switcher used `<a href="/?env=production&mode=paper">`. Without basePath prefixing, this navigated to the site root (`https://host/?...`) instead of `/config-ui/?...`. Switched the four anchors to `<Link>`. The four cross-app nav links in each AppShell stay as `<a>` because we **want** them to escape the basePath.
 
 ```tsx
 // In-app — Link, basePath added automatically
@@ -47,7 +47,7 @@ The same rule applies to any client-side `fetch` that targets an API route in th
 
 ### Never hardcode `http://localhost:300X`
 
-The first version of every AppShell shipped with `href="http://localhost:3000"` etc. ([PR #398](https://github.com/davcs86/xstockstrat-orchestration/pull/398)). These 404 on every deployed environment. Always use platform-relative paths (`/trader`, `/insights`, `/config-ui`) — nginx routes them correctly in every environment, including local docker-compose.
+The first version of every AppShell shipped with `href="http://localhost:3000"` etc. ([PR #398](https://github.com/davcs86/xstockstrat/pull/398)). These 404 on every deployed environment. Always use platform-relative paths (`/trader`, `/insights`, `/config-ui`) — nginx routes them correctly in every environment, including local docker-compose.
 
 ---
 
@@ -55,7 +55,7 @@ The first version of every AppShell shipped with `href="http://localhost:3000"` 
 
 The pattern `'/((?!_next/static|...).*)'` matches `/anything` but **does not** match the bare `/`. Without an explicit `'/'` entry, the root landing page of every frontend (`/trader`, `/insights`, `/config-ui` after basePath stripping) bypasses the middleware entirely. Unauthenticated visitors would see a statically prerendered dashboard shell stuck on "Loading…" forever instead of being bounced to `/login`.
 
-**Bug avoided** ([PR #401](https://github.com/davcs86/xstockstrat-orchestration/pull/401)). Canonical matcher:
+**Bug avoided** ([PR #401](https://github.com/davcs86/xstockstrat/pull/401)). Canonical matcher:
 
 ```ts
 export const config = {
@@ -84,7 +84,7 @@ services/xstockstrat-insights/src/app/icon.svg   # violet bar chart
 services/xstockstrat-config-ui/app/icon.svg      # green layers
 ```
 
-**Bug avoided** ([PR #402](https://github.com/davcs86/xstockstrat-orchestration/pull/402)): none of the three frontends had an icon, so browsers got HTML 200 or 404 for `/favicon.ico` requests and the tab icon was empty. `/trader/icon.svg` 307'd to `/login` because the middleware matcher didn't exclude it.
+**Bug avoided** ([PR #402](https://github.com/davcs86/xstockstrat/pull/402)): none of the three frontends had an icon, so browsers got HTML 200 or 404 for `/favicon.ico` requests and the tab icon was empty. `/trader/icon.svg` 307'd to `/login` because the middleware matcher didn't exclude it.
 
 Use distinct colors per app so users can tell tabs apart at a glance.
 
@@ -94,7 +94,7 @@ Use distinct colors per app so users can tell tabs apart at a glance.
 
 When a client component uses `useSearchParams()`, Next.js requires it to be wrapped in `<Suspense>`. During SSR, Next.js emits `BAILOUT_TO_CLIENT_SIDE_RENDERING` for the Suspense subtree and renders the **fallback** instead. If the fallback is `null` or absent, the server-rendered HTML body is effectively empty until JS hydrates.
 
-**Bug avoided** ([PR #400](https://github.com/davcs86/xstockstrat-orchestration/pull/400)). Measured on staging:
+**Bug avoided** ([PR #400](https://github.com/davcs86/xstockstrat/pull/400)). Measured on staging:
 
 | Page | Before | After |
 |---|---|---|
@@ -140,7 +140,7 @@ export default function LoginPage() {
 
 Radix's `SelectValue` cannot map `value` → label during SSR because `SelectContent` items aren't mounted yet. If the trigger has a value but no `children`, the resulting `<button>` renders an **empty `<span>`** until hydration.
 
-**Bug avoided** ([PR #404](https://github.com/davcs86/xstockstrat-orchestration/pull/404)). Two trader dropdowns flashed empty pills on first paint:
+**Bug avoided** ([PR #404](https://github.com/davcs86/xstockstrat/pull/404)). Two trader dropdowns flashed empty pills on first paint:
 
 - `OrderForm` order-type select — value defaulted to `'market'`, placeholder ignored.
 - `ChartPanel` bar-count select — no placeholder, no children, fully empty pill.
@@ -187,7 +187,7 @@ location = / {
 }
 ```
 
-See [PR #403](https://github.com/davcs86/xstockstrat-orchestration/pull/403).
+See [PR #403](https://github.com/davcs86/xstockstrat/pull/403).
 
 ---
 
@@ -240,7 +240,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 ```
 
-**Bug avoided** ([PR #413](https://github.com/davcs86/xstockstrat-orchestration/pull/413), originally introduced by [#406](https://github.com/davcs86/xstockstrat-orchestration/pull/406) before the Next 15 upgrade landed). The compile error looks like:
+**Bug avoided** ([PR #413](https://github.com/davcs86/xstockstrat/pull/413), originally introduced by [#406](https://github.com/davcs86/xstockstrat/pull/406) before the Next 15 upgrade landed). The compile error looks like:
 
 ```
 Type error: Route "src/app/api/orders/[id]/route.ts" has an invalid "GET" export:
