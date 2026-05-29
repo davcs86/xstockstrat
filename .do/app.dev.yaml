@@ -330,6 +330,7 @@ services:
         value: ${xstockstrat.CA_CERT}
       - key: JWT_SECRET
         scope: RUN_TIME
+        value: YOUR_DEV_JWT_SECRET
         type: SECRET
       - key: SERVICE_NAME
         value: identity
@@ -442,6 +443,7 @@ services:
         value: ${APP_URL}
       - key: JWT_SECRET
         scope: RUN_TIME
+        value: YOUR_DEV_JWT_SECRET
         type: SECRET
       - key: SERVICE_NAME
         value: trader
@@ -475,6 +477,7 @@ services:
         value: ${APP_URL}
       - key: JWT_SECRET
         scope: RUN_TIME
+        value: YOUR_DEV_JWT_SECRET
         type: SECRET
       - key: SERVICE_NAME
         value: insights
@@ -500,6 +503,7 @@ services:
         value: ${APP_URL}
       - key: JWT_SECRET
         scope: RUN_TIME
+        value: YOUR_DEV_JWT_SECRET
         type: SECRET
       - key: SERVICE_NAME
         value: config-ui

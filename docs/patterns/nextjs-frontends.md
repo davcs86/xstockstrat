@@ -27,6 +27,24 @@ Every frontend sets `basePath` in `next.config.js` (e.g. `/trader`, `/insights`,
 <a href="/config-ui">Config</a>                       // /config-ui
 ```
 
+### Client-side `fetch()` is NOT basePath-aware
+
+Unlike `<Link>` and `redirect()`, a raw `fetch('/api/auth/login')` in a browser component is resolved from the document root — Next.js does **not** prepend the basePath automatically.
+
+```ts
+// ✗ Wrong — browser sends POST /api/auth/login → nginx has no route → 404 HTML
+const res = await fetch('/api/auth/login', { method: 'POST', body });
+
+// ✓ Correct — browser sends POST /trader/api/auth/login → nginx → Next.js route
+const res = await fetch('/trader/api/auth/login', { method: 'POST', body });
+```
+
+**Bug fixed** ([PR #417](https://github.com/davcs86/xstockstrat-orchestration/pull/417)): all three login pages used `fetch('/api/auth/login')`. Nginx returned a 404 HTML page; JSON parsing that HTML body failed, and the catch block showed "Login failed. Please check your credentials." regardless of whether the credentials were correct. Fixed by using the full basePath-prefixed path in all three `login/page.tsx` files.
+
+The same rule applies to any client-side `fetch` that targets an API route in the **same** frontend (e.g. `/trader/api/orders`, `/insights/api/analysis`). Middleware `fetch` calls (which run server-side) are unaffected — use `new URL(\`\${req.nextUrl.basePath}/api/auth/refresh\`, req.url)` there.
+
+---
+
 ### Never hardcode `http://localhost:300X`
 
 The first version of every AppShell shipped with `href="http://localhost:3000"` etc. ([PR #398](https://github.com/davcs86/xstockstrat/pull/398)). These 404 on every deployed environment. Always use platform-relative paths (`/trader`, `/insights`, `/config-ui`) — nginx routes them correctly in every environment, including local docker-compose.
