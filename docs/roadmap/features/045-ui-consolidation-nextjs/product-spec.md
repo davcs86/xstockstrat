@@ -53,7 +53,7 @@ Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-trader` — merged into consolidated service; directory removed
 - `xstockstrat-insights` — merged into consolidated service; directory removed
 - `xstockstrat-config-ui` — merged into consolidated service; directory removed
-- `xstockstrat-nginx` — removed entirely (no replacement needed; agent proxying moves to Next.js rewrites)
+- `xstockstrat-nginx` — removed entirely (no replacement needed; agent routes handled by DO App Platform route rules)
 - `xstockstrat-ui` (new) — new consolidated Next.js service on port 3000
 
 ## Proto Contract Changes

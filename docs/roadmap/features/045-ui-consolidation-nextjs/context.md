@@ -18,3 +18,15 @@
 - **Service name**: `xstockstrat-ui` confirmed.
 - **DO routing**: single domain; routes configured directly in DO App Platform spec (no per-basePath custom domains). This also eliminates the need for nginx to proxy `/agent/sse` and `/agent/messages` — those routes are configured in the DO spec to hit `xstockstrat-agent` directly. FR-3 updated accordingly; no Next.js rewrites needed for agent routes.
 - **pg access**: keep direct `pg` calls in the consolidated app as-is; no server-only module isolation needed.
+
+## Session 2026-05-29T00:02:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings:
+  - (advisory) xstockstrat-nginx Affected Services description was stale ("Next.js rewrites" vs actual "DO App Platform route rules") — fixed in product-spec.md.
+- Overlap findings (all advisory ⚠, no blocking conflicts):
+  - `005-frontend-reverse-proxy`, `006-do-nginx-integration` are functionally inverse (set up nginx that 045 removes) — recommend demoting both before executing 045.
+  - `012-wire-fe-auth` wires auth into the three source services + nginx; merge before executing 045 so 045 absorbs the finished auth implementation.
+  - `044-client-api-pattern` migrates SWR → react-query in all three source services; merge before 045 for the same reason.
+  - `014-trader-chart-panel`, `002-broker-accounts-ui`, `003-formula-management-ui` also touch one or more source services — merge before 045 to avoid re-doing work in the consolidated service.
+  - `038-ci-docker-registry-deploy` builds images for old services + nginx; must be updated to reference `xstockstrat-ui` after 045 merges (or merge 038 after 045).
