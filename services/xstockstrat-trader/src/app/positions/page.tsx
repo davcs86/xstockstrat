@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import useSWR from 'swr';
+import { BASE_PATH } from '@/lib/basepath';
 import { AppShell } from '@/components/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -40,7 +41,7 @@ export default function PositionsPage() {
   const [mode, setMode] = useState<TradingMode>('paper');
 
   const { data, error, isLoading } = useSWR(
-    `/api/portfolio?trading_mode=${mode}&account_id=${selectedAccountId ?? ''}`,
+    `${BASE_PATH}/api/portfolio?trading_mode=${mode}&account_id=${selectedAccountId ?? ''}`,
     fetcher,
     { refreshInterval: 10_000 },
   );
