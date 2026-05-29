@@ -50,7 +50,7 @@ Wire the nginx reverse proxy (created by feature 005-frontend-reverse-proxy on t
 
   - name: xstockstrat-nginx
     github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat
       branch: main-dev
       deploy_on_push: false
     source_dir: services/xstockstrat-nginx
@@ -75,7 +75,7 @@ Wire the nginx reverse proxy (created by feature 005-frontend-reverse-proxy on t
    ```yaml
    - name: xstockstrat-trader
      github:
-       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+       repo: YOUR_GITHUB_ORG/xstockstrat
        branch: main-dev
        deploy_on_push: false
      source_dir: services/xstockstrat-trader
@@ -139,7 +139,7 @@ yq eval '.services[] | select(.name == "xstockstrat-config-ui") | .http_port' .d
 
   - name: xstockstrat-nginx
     github:
-      repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+      repo: YOUR_GITHUB_ORG/xstockstrat
       branch: main
       deploy_on_push: false
     source_dir: services/xstockstrat-nginx
@@ -166,7 +166,7 @@ yq eval '.services[] | select(.name == "xstockstrat-config-ui") | .http_port' .d
    ```yaml
    - name: xstockstrat-trader
      github:
-       repo: YOUR_GITHUB_ORG/xstockstrat-orchestration
+       repo: YOUR_GITHUB_ORG/xstockstrat
        branch: main
        deploy_on_push: false
      source_dir: services/xstockstrat-trader

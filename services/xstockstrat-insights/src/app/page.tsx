@@ -12,9 +12,40 @@ import { AccountPortfolioSelector } from '@/components/AccountPortfolioSelector'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
+function DashboardSkeleton() {
+  return (
+    <AppShell>
+      <div className="p-4 sm:p-6 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+          <div className="md:col-span-4">
+            <Card className="h-full">
+              <CardHeader>
+                <CardTitle>Strategy Scores</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">Loading…</p>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="md:col-span-8">
+            <Card className="h-full">
+              <CardHeader>
+                <CardTitle>Equity Curve</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-60 rounded-md bg-secondary/40 animate-pulse" />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </AppShell>
+  );
+}
+
 export default function Page() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<DashboardSkeleton />}>
       <InsightsDashboard />
     </Suspense>
   );

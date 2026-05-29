@@ -182,7 +182,7 @@ export function ChartPanel() {
             onValueChange={(v) => setBarCount(Number(v) as BarCount)}
           >
             <SelectTrigger className="w-20 h-7 text-xs">
-              <SelectValue />
+              <SelectValue>{barCount} bars</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {([50, 100, 200] as BarCount[]).map((n) => (

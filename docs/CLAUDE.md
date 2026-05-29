@@ -20,9 +20,9 @@ Operational runbooks, one-time setup guides, implementation roadmap, and reusabl
 | I need to… | File |
 |---|---|
 | Build or modify a Next.js frontend (auth, middleware, routes) | `patterns/frontend-auth.md` |
+| Other Next.js frontend work (basePath, Suspense, Radix hydration, middleware matcher, app icons, PR stacking) | `patterns/nextjs-frontends.md` |
 | Wire a new frontend through nginx | `patterns/nginx-routing.md` |
 | Add header propagation to a new backend service | `patterns/header-propagation.md` |
-| Sync a service to/from its individual GitHub repo | `patterns/git-subtree.md` |
 | Triage and fix a bug (SEV-1 hotfix, config fix, or SDD path) | `runbooks/bug-triage.md` |
 | View the production hotfix incident history | `runbooks/hotfix-log.md` |
 | Roll out a config change safely | `runbooks/config-rollout.md` |

@@ -6,7 +6,7 @@
 
 ## Problem Statement
 
-The xstockstrat-orchestration repository contains the full platform codebase including configuration, scripts, CI/CD pipelines, and documentation. Before making it public on GitHub, any hardcoded secrets, credentials, API keys, tokens, internal hostnames, or other sensitive values must be identified, removed, and replaced with safe references — and the documentation must be updated to guide external contributors without exposing internal infrastructure details.
+The xstockstrat repository contains the full platform codebase including configuration, scripts, CI/CD pipelines, and documentation. Before making it public on GitHub, any hardcoded secrets, credentials, API keys, tokens, internal hostnames, or other sensitive values must be identified, removed, and replaced with safe references — and the documentation must be updated to guide external contributors without exposing internal infrastructure details.
 
 ## User Story
 

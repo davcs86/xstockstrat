@@ -5,18 +5,9 @@
  * POST /api/config                                        → SetConfig
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { ConnectError } from '@connectrpc/connect';
+import { configClient, connectCodeToHttp } from '@/app/lib/connectClients';
 import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/app/lib/auth';
-
-const CONFIG_HTTP_ENDPOINT =
-  process.env.CONFIG_HTTP_ENDPOINT ?? 'http://xstockstrat-config:8060';
-
-async function rpc(method: string, body: object, propagationHeaders: Record<string, string>): Promise<Response> {
-  return fetch(`${CONFIG_HTTP_ENDPOINT}/${method}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/connect+json', ...propagationHeaders },
-    body: JSON.stringify(body),
-  });
-}
 
 function envToProto(env: string): number {
   return env === 'production' ? 2 : 1;
@@ -25,33 +16,46 @@ function modeToProto(mode: string): number {
   return mode === 'live' ? 2 : mode === 'paper' ? 1 : 0;
 }
 
+function propagationHeaders(
+  req: NextRequest,
+  claims: { user_id: string; roles: string[] },
+): Headers {
+  return new Headers({
+    'x-user-id': claims.user_id,
+    'x-access-scope': String(rolesToAccessScope(claims.roles)),
+    'x-trace-id': req.headers.get('x-trace-id') ?? generateTraceId(),
+  });
+}
+
+function errorResponse(err: unknown): NextResponse {
+  if (err instanceof ConnectError) {
+    return NextResponse.json({ error: err.rawMessage }, { status: connectCodeToHttp(err.code) });
+  }
+  return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+}
+
 export async function GET(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
   if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const accessScope = String(rolesToAccessScope(claims.roles));
-  const traceId = req.headers.get('x-trace-id') ?? generateTraceId();
-  const propagationHeaders = {
-    'x-user-id': claims.user_id,
-    'x-access-scope': accessScope,
-    'x-trace-id': traceId,
-  };
   const { searchParams } = new URL(req.url);
   const namespace = searchParams.get('namespace') ?? 'platform';
   const env = searchParams.get('env') ?? 'dev';
   const mode = searchParams.get('mode') ?? 'paper';
 
   try {
-    const res = await rpc('xstockstrat.config.v1.ConfigService/ListKeys', {
-      namespace,
-      environment: envToProto(env),
-      tradingMode: modeToProto(mode),
-    }, propagationHeaders);
-    const response = await res.json();
+    const response = await configClient.listKeys(
+      {
+        namespace,
+        environment: envToProto(env),
+        tradingMode: modeToProto(mode),
+      },
+      { headers: propagationHeaders(req, claims) },
+    );
     return NextResponse.json(response);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return errorResponse(err);
   }
 }
 
@@ -60,29 +64,24 @@ export async function POST(req: NextRequest) {
   if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const accessScope = String(rolesToAccessScope(claims.roles));
-  const traceId = req.headers.get('x-trace-id') ?? generateTraceId();
-  const propagationHeaders = {
-    'x-user-id': claims.user_id,
-    'x-access-scope': accessScope,
-    'x-trace-id': traceId,
-  };
   const body = await req.json();
   const { namespace, key, value, env, mode, reason } = body;
 
   try {
-    const res = await rpc('xstockstrat.config.v1.ConfigService/SetConfig', {
-      namespace,
-      key,
-      value: { stringVal: String(value) },
-      author: claims.user_id,
-      reason: reason ?? 'Updated via config-ui',
-      environment: envToProto(env ?? 'dev'),
-      tradingMode: modeToProto(mode ?? 'paper'),
-    }, propagationHeaders);
-    const response = await res.json();
+    const response = await configClient.setConfig(
+      {
+        namespace,
+        key,
+        value: { stringVal: String(value) },
+        author: claims.user_id,
+        reason: reason ?? 'Updated via config-ui',
+        environment: envToProto(env ?? 'dev'),
+        tradingMode: modeToProto(mode ?? 'paper'),
+      },
+      { headers: propagationHeaders(req, claims) },
+    );
     return NextResponse.json(response);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return errorResponse(err);
   }
 }

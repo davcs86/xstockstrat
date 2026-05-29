@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { clearSessionCookies, refreshSession, setSessionCookies } from '@/app/lib/auth';
+import { clearSessionCookies, setSessionCookies } from '@/app/lib/auth';
+import { refreshSession } from '@/app/lib/identity';
 
 export async function POST(req: NextRequest) {
   const refreshToken = req.cookies.get('refresh_token')?.value;

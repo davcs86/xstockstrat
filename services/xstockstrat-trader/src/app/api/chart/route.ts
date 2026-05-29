@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ConnectError } from '@connectrpc/connect';
+import { connectCodeToHttp, marketDataClient } from '@/lib/connectClients';
 import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/lib/auth';
 
-const MARKETDATA_BASE_URL =
-  process.env.MARKETDATA_HTTP_ENDPOINT ?? 'http://xstockstrat-marketdata:8053';
-
-async function rpc(method: string, body: object, headers: Record<string, string>): Promise<Response> {
-  return fetch(`${MARKETDATA_BASE_URL}/${method}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/connect+json', ...headers },
-    body: JSON.stringify(body),
+function propagationHeaders(req: NextRequest, claims: { user_id: string; roles: string[] }): Headers {
+  return new Headers({
+    'x-user-id': claims.user_id,
+    'x-access-scope': String(rolesToAccessScope(claims.roles)),
+    'x-trace-id': req.headers.get('x-trace-id') ?? generateTraceId(),
   });
+}
+
+function errorResponse(err: unknown): NextResponse {
+  if (err instanceof ConnectError) {
+    return NextResponse.json({ error: err.rawMessage }, { status: connectCodeToHttp(err.code) });
+  }
+  return NextResponse.json({ error: (err as Error).message }, { status: 500 });
 }
 
 // GET /api/chart?symbol=AAPL&timeframe=1d&limit=100
@@ -19,14 +25,6 @@ export async function GET(req: NextRequest) {
   if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const accessScope = String(rolesToAccessScope(claims.roles));
-  const traceId = req.headers.get('x-trace-id') ?? generateTraceId();
-  const propagationHeaders = {
-    'x-user-id': claims.user_id,
-    'x-access-scope': accessScope,
-    'x-trace-id': traceId,
-  };
-
   const { searchParams } = new URL(req.url);
   const symbol = searchParams.get('symbol') ?? '';
   const timeframe = searchParams.get('timeframe') ?? '1d';
@@ -37,21 +35,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const res = await rpc(
-      'xstockstrat.marketdata.v1.MarketDataService/GetBars',
-      {
-        symbol,
-        timeframe,
-        page: { pageSize: limit },
-      },
-      propagationHeaders,
+    const data = await marketDataClient.getBars(
+      { symbol, timeframe, page: { pageSize: limit } },
+      { headers: propagationHeaders(req, claims) },
     );
-    if (!res.ok) {
-      const errText = await res.text();
-      return NextResponse.json({ error: errText || 'GetBars failed' }, { status: res.status });
-    }
-    const data = await res.json();
-    const bars = (data.bars ?? []).map((b: any) => ({
+    const bars = ((data as any).bars ?? []).map((b: any) => ({
       // lightweight-charts expects { time: Unix seconds, open, high, low, close }
       time: b.time?.seconds ?? Math.floor(new Date(b.time).getTime() / 1000),
       open: Number(b.open),
@@ -61,8 +49,8 @@ export async function GET(req: NextRequest) {
       volume: Number(b.volume ?? 0),
     }));
     return NextResponse.json({ bars });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return errorResponse(err);
   }
 }
 
@@ -72,27 +60,17 @@ export async function POST(req: NextRequest) {
   if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const accessScope = String(rolesToAccessScope(claims.roles));
-  const traceId = req.headers.get('x-trace-id') ?? generateTraceId();
-  const propagationHeaders = {
-    'x-user-id': claims.user_id,
-    'x-access-scope': accessScope,
-    'x-trace-id': traceId,
-  };
-
   try {
-    const res = await rpc(
-      'xstockstrat.marketdata.v1.MarketDataService/ListAssets',
+    const data = await marketDataClient.listAssets(
       { assetClass: 'us_equity', tradableOnly: true },
-      propagationHeaders,
+      { headers: propagationHeaders(req, claims) },
     );
-    if (!res.ok) {
-      return NextResponse.json({ symbols: [] });
-    }
-    const data = await res.json();
-    const symbols: string[] = (data.assets ?? []).map((a: any) => a.symbol as string).filter(Boolean);
+    const symbols: string[] = ((data as any).assets ?? [])
+      .map((a: any) => a.symbol as string)
+      .filter(Boolean);
     return NextResponse.json({ symbols });
   } catch {
+    // ListAssets is best-effort for the symbol picker; failures shouldn't 5xx.
     return NextResponse.json({ symbols: [] });
   }
 }

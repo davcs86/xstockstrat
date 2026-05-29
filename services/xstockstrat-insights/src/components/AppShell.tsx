@@ -9,9 +9,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui
 import { Separator } from './ui/separator';
 
 const PLATFORM_NAV = [
-  { label: 'Trader', href: 'http://localhost:3000', icon: <TrendingUp className="h-4 w-4" /> },
-  { label: 'Insights', href: 'http://localhost:3001', icon: <BarChart2 className="h-4 w-4" /> },
-  { label: 'Config', href: 'http://localhost:3002', icon: <Settings className="h-4 w-4" /> },
+  { label: 'Trader', href: '/trader', icon: <TrendingUp className="h-4 w-4" /> },
+  { label: 'Insights', href: '/insights', icon: <BarChart2 className="h-4 w-4" /> },
+  { label: 'Config', href: '/config-ui', icon: <Settings className="h-4 w-4" /> },
 ];
 
 interface AppShellProps {

@@ -9,7 +9,7 @@
 set -euo pipefail
 
 GITHUB_USER="${GITHUB_USER:?GITHUB_USER env var is required (your GitHub username or org)}"
-REPO="xstockstrat-orchestration"
+REPO="xstockstrat"
 
 # The check context must match: workflow name / job name from ci.yml
 #   name: CI  →  jobs.proto-lint.name: Proto lint and breaking check

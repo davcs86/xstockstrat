@@ -1,5 +1,6 @@
 'use client';
 import useSWR from 'swr';
+import Link from 'next/link';
 import type { TradingMode } from '@/app/page';
 import { useAccountContext } from '@/context/AccountContext';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
@@ -54,8 +55,12 @@ export function OrderBook({ mode }: { mode: TradingMode }) {
               </TableHeader>
               <TableBody>
                 {data.orders.map((order: any) => (
-                  <TableRow key={order.order_id}>
-                    <TableCell className="font-mono font-semibold">{order.symbol}</TableCell>
+                  <TableRow key={order.order_id} className="cursor-pointer hover:bg-accent/40">
+                    <TableCell className="font-mono font-semibold">
+                      <Link href={`/orders/${order.order_id}`} className="hover:underline">
+                        {order.symbol}
+                      </Link>
+                    </TableCell>
                     <TableCell>
                       <Badge variant={order.side === 'ORDER_SIDE_BUY' ? 'buy' : 'sell'}>
                         {order.side === 'ORDER_SIDE_BUY' ? 'BUY' : 'SELL'}
@@ -137,7 +142,12 @@ export function PortfolioSummary({ mode }: { mode: TradingMode }) {
 
         {data.positions?.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Positions</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Positions</p>
+              <Link href="/positions" className="text-xs text-primary hover:underline">
+                View all →
+              </Link>
+            </div>
             <div className="space-y-1.5">
               {data.positions.map((pos: any) => (
                 <div key={pos.symbol} className="flex justify-between text-xs">

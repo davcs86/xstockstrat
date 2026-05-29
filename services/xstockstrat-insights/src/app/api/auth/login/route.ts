@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ConnectError, Code } from '@connectrpc/connect';
+import { identityClient } from '@/lib/connectClients';
 import { setSessionCookies } from '@/lib/auth';
-
-const IDENTITY_ENDPOINT =
-  process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058';
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
@@ -10,22 +9,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'email and password are required' }, { status: 400 });
   }
   try {
-    const res = await fetch(
-      `${IDENTITY_ENDPOINT}/xstockstrat.identity.v1.IdentityService/AuthenticateUser`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/connect+json' },
-        body: JSON.stringify({ email: body.email, password: body.password }),
-      }
+    const data = (await identityClient.authenticateUser({
+      email: body.email,
+      password: body.password,
+    })) as any;
+    const response = NextResponse.json({ ok: true });
+    setSessionCookies(
+      response,
+      data.accessToken,
+      data.refreshToken,
     );
-    if (!res.ok) {
+    return response;
+  } catch (err) {
+    if (err instanceof ConnectError && err.code === Code.Unauthenticated) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
-    const data = await res.json();
-    const response = NextResponse.json({ ok: true });
-    setSessionCookies(response, data.access_token, data.refresh_token);
-    return response;
-  } catch {
-    return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
+    console.error('[login] identity service error:', err);
+    return NextResponse.json(
+      { error: 'Authentication service unavailable. Please try again.' },
+      { status: 503 },
+    );
   }
 }

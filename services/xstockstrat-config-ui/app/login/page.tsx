@@ -18,7 +18,7 @@ function LoginForm() {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/config-ui/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -75,9 +75,28 @@ function LoginForm() {
   );
 }
 
+function LoginSkeleton() {
+  return (
+    <div className="min-h-screen bg-background font-sans flex items-center justify-center p-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle className="text-2xl">xstockstrat Config</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="h-10 rounded-md bg-secondary animate-pulse" />
+            <div className="h-10 rounded-md bg-secondary animate-pulse" />
+            <div className="h-10 rounded-md bg-secondary/80 animate-pulse" />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function LoginPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<LoginSkeleton />}>
       <LoginForm />
     </Suspense>
   );
