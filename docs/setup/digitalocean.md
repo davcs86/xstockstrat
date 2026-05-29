@@ -201,24 +201,16 @@ You do not need to complete the app creation wizard — cancel after authorizati
 
 ---
 
-## Step 4.5 — Create a DOCR Container Registry
+## Step 4.5 — Make GHCR Packages Public
 
-The app specs reference pre-built Docker images stored in DigitalOcean Container Registry (DOCR). The CI `docker-build` job pushes images on every push to `main-dev` or `main`; App Platform pulls them with zero additional credential configuration (native DO authentication).
+All Docker images are pushed to GitHub Container Registry (GHCR) at `ghcr.io/davcs86/xstockstrat/<service>` by the CI `docker-build` job on every push to `main-dev` or `main`. App Platform pulls them using `registry_type: GHCR` in the app spec — no separate registry credential is needed when packages are public.
 
-Create the registry once — it is shared by both dev and prod apps:
+After the first CI push runs (Step 9 triggers it), make all 15 packages public so DO App Platform can pull without credentials:
 
-```bash
-doctl registry create xstockstrat --region nyc1 --subscription-tier basic
-```
+1. Go to **GitHub → davcs86 → Packages**
+2. For each `xstockstrat-<service>` package → **Package settings → Change visibility → Public**
 
-> **Note:** The registry slug (e.g. `xstockstrat`) is the value you will set as `DO_REGISTRY_NAME` in GitHub Actions secrets (Step 9). Retrieve it at any time with:
-> ```bash
-> doctl registry get
-> ```
-
-**Basic plan limit:** The DOCR basic plan allows up to 5 repositories. The current migration covers the 5 heaviest-install services (trader, insights, config-ui, identity, notify). If you upgrade to a higher-tier plan, additional services in the CI matrix will push automatically — update the app specs to reference those images.
-
-**App Platform auth:** DO App Platform pulls from DOCR using the same API token that manages the app — no separate registry credential is needed in the app spec or via `doctl apps update`.
+> **Tip:** Packages are created automatically on first push. Run the first CI job (push to `main-dev` after Step 9) before attempting to change visibility.
 
 ---
 
@@ -226,9 +218,9 @@ doctl registry create xstockstrat --region nyc1 --subscription-tier basic
 
 The dev app deploys from `main-dev`, runs all services in `TRADING_MODE=paper`, and uses cheaper `basic-xs` instances.
 
-> **Prerequisite:** Push to `main-dev` first and wait for the CI `docker-build` job to complete before running `doctl apps create`. The app spec references DOCR images by commit SHA; the first deploy will fail if no images have been pushed yet.
+> **Prerequisite:** Push to `main-dev` first and wait for the CI `docker-build` job to complete before running `doctl apps create`. The app spec references GHCR images by commit SHA; the first deploy will fail if no images have been pushed yet.
 
-The app spec contains `YOUR_GITHUB_ORG`, `YOUR_IMAGE_TAG`, and `YOUR_REGISTRY_NAME` as placeholders. In normal CI-driven deploys these are substituted automatically by the deploy workflow. For the initial manual creation, substitute only `YOUR_GITHUB_ORG` — the CI workflow handles the image tag on subsequent deploys:
+The app spec contains `YOUR_GITHUB_ORG` and `YOUR_IMAGE_TAG` as placeholders. In normal CI-driven deploys these are substituted automatically by the deploy workflow. For the initial manual creation, substitute only `YOUR_GITHUB_ORG` — the CI workflow handles the image tag on subsequent deploys:
 
 ```bash
 sed "s|YOUR_GITHUB_ORG|<your-github-org>|g" .do/app.dev.yaml > /tmp/app.dev.yaml
@@ -266,7 +258,7 @@ Inter-service routing uses DigitalOcean private networking: `${xstockstrat-confi
 
 The prod app deploys from `main`, runs all services in `TRADING_MODE=live`, and uses `professional-xs` instances (higher throughput, above 60s idle timeout).
 
-> **Prerequisite:** Ensure CI has pushed images to DOCR from the `main` branch before creating the prod app (`doctl registry repository list-tags` confirms this). The first CI push happens automatically when `main-dev` is promoted via the `/promote` workflow.
+> **Prerequisite:** Ensure CI has pushed images to GHCR from the `main` branch before creating the prod app. Check `https://github.com/davcs86?tab=packages` or the `docker-build` workflow run. The first CI push happens automatically when `main-dev` is promoted via the `/promote` workflow.
 
 Substitute `YOUR_GITHUB_ORG` before creating:
 
@@ -407,13 +399,12 @@ Via console (if the spec-based attach fails):
 
 ## Step 9 — Configure GitHub Actions Secrets
 
-The CI/CD workflows need six repository secrets. Go to:
+The CI/CD workflows need the following repository secrets. Go to:
 **GitHub → repository → Settings → Secrets and variables → Actions → New repository secret**
 
 | Secret Name | Value | Used by |
 |---|---|---|
-| `DIGITALOCEAN_ACCESS_TOKEN` | The PAT created in Step 2 | ci (docker-build), deploy-dev, deploy-prod |
-| `DO_REGISTRY_NAME` | DOCR registry slug (e.g. `xstockstrat`) — from Step 4.5 (`doctl registry get → Name`) | ci (docker-build), deploy-dev, deploy-prod |
+| `DIGITALOCEAN_ACCESS_TOKEN` | The PAT created in Step 2 | deploy-dev, deploy-prod (`doctl apps update`) |
 | `DO_DEV_APP_ID` | App ID of the staging app (from Step 5) | deploy-dev |
 | `DO_PROD_APP_ID` | App ID of the production app (from Step 6) | deploy-prod |
 | `DO_DEV_PROJECT_ID` | Project ID of the staging DO project (from Step 5) | deploy-dev — assigns app to project on every deploy |
@@ -422,9 +413,9 @@ The CI/CD workflows need six repository secrets. Go to:
 | `DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY` | 64-char hex AES-256 key for staging (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
 | `PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY` | 64-char hex AES-256 key for production (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
 
-See [Key Identifiers](#key-identifiers) above for the difference between App ID and Project ID.
+`GITHUB_TOKEN` is automatically provided by GitHub Actions for GHCR pushes — no setup needed.
 
-`GITHUB_TOKEN` is automatically provided by GitHub Actions — no setup needed.
+See [Key Identifiers](#key-identifiers) above for the difference between App ID and Project ID.
 
 ### Obtaining a BUF_TOKEN
 
@@ -533,17 +524,16 @@ Check that `ALPACA_API_KEY` and `ALPACA_API_SECRET` are set on the correct servi
 Run `CREATE EXTENSION IF NOT EXISTS timescaledb;` on the managed database before running migrations. See Step 3b.
 
 ### Deploy fails with "image not found" or "repository does not exist"
-The `docker-build` CI job has not yet pushed images for this commit SHA. Push to `main-dev` (or `main`) and wait for the CI `docker-build` job to complete before retrying the deploy. Confirm images exist with:
-```bash
-doctl registry repository list-tags <DO_REGISTRY_NAME>/xstockstrat-identity
-```
+The `docker-build` CI job has not yet pushed images for this commit SHA. Push to `main-dev` (or `main`) and wait for the CI `docker-build` job to complete before retrying the deploy. Confirm images exist by checking `https://github.com/davcs86?tab=packages`.
+
+If the GHCR packages are private, App Platform cannot pull them. Make all 15 packages public — see Step 4.5.
 
 ### `docker compose pull` fails with "unauthorized"
-The local Docker daemon is not authenticated with DOCR. Run:
+The GHCR packages are private. Either make them public (see Step 4.5) or authenticate the local Docker daemon:
 ```bash
-doctl registry login
+echo $GITHUB_TOKEN | docker login ghcr.io -u davcs86 --password-stdin
 ```
-This writes temporary credentials (valid 1 hour) to your Docker config. Re-run `docker compose pull` after authenticating.
+Re-run `docker compose pull` after authenticating.
 
 ---
 

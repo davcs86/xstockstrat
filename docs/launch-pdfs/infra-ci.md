@@ -21,9 +21,9 @@ A walkthrough of how 15 services build, test, and ship: GitHub Actions for CI, D
 | 0:55 – 1:30 | **The proto-first build.** Stubs are generated from `.proto` files via a single codegen container. CI's `proto-freshness` job blocks any drift between committed stubs and what `buf generate` would produce. | `./scripts/buf-gen.sh` running, then the CI job catching a stale stub. |
 | 1:30 – 2:15 | **CI: path-filtered, per-service jobs.** A `paths-filter` step detects which services changed; only their lint/test/coverage jobs run. Coverage thresholds enforced per language. | CI YAML showing matrix jobs. GitHub Actions UI showing only changed services running. |
 | 2:15 – 2:55 | **Branch protection + required checks.** `main` and `main-dev` block direct pushes. `CI / Proto lint and breaking check` is a required check. A PR cannot merge with a red status. | Settings page showing branch protection rules. |
-| 2:55 – 3:40 | **Deploy on merge: dev (paper) vs prod (live).** Push to `main-dev` → `Deploy dev` workflow → DOCR image push → DO App Platform update with `.do/app.dev.yaml`. Push to `main` → same path with `.do/app.yaml`. | Workflow run page side-by-side with the two app specs. |
-| 3:40 – 4:20 | **DO App Platform.** App spec is checked into the repo. Each service is a separate component with `instance_size`, `instance_count`, env vars, and a DOCR image reference. Managed TimescaleDB attached as `databases:`. | `.do/app.yaml` showing one service block, the managed DB block. |
-| 4:20 – 4:55 | **Secrets & registry.** Secrets injected from GitHub Actions on every deploy. DigitalOcean Container Registry (DOCR) stores images per-SHA + a `latest` / `latest-dev` tag. Old images rotated by retention policy. | DOCR repo browser, GitHub secrets settings (blurred values). |
+| 2:55 – 3:40 | **Deploy on merge: dev (paper) vs prod (live).** Push to `main-dev` → `Deploy dev` workflow → GHCR image push → DO App Platform update with `.do/app.dev.yaml`. Push to `main` → same path with `.do/app.yaml`. | Workflow run page side-by-side with the two app specs. |
+| 3:40 – 4:20 | **DO App Platform.** App spec is checked into the repo. Each service is a separate component with `instance_size`, `instance_count`, env vars, and a GHCR image reference. Managed TimescaleDB attached as `databases:`. | `.do/app.yaml` showing one service block, the managed DB block. |
+| 4:20 – 4:55 | **Secrets & registry.** Secrets injected from GitHub Actions on every deploy. GitHub Container Registry (GHCR) stores images per-SHA + a `latest` / `latest-dev` tag. `GITHUB_TOKEN` authenticates pushes automatically. | GHCR package browser, GitHub secrets settings (blurred values). |
 | 4:55 – 5:30 | **Observability hooks.** OTel collector in compose pipes traces locally; production uses OTLP env vars pointing at Grafana Cloud. `OTEL_ENABLED=true` everywhere. | Grafana Cloud trace view. |
 | 5:30 – 6:00 | **Safety.** `buf breaking` blocks contract regressions. Secret scanning (trufflehog + gitleaks) runs on every PR. `db-migrator` PRE_DEPLOY job runs migrations before service restarts on every push. | Failing PR with secret scan annotation; successful migration log. |
 | 6:00 – 6:30 | **Outro.** All infra config is in the repo. Reproducible from a fresh DO account in under an hour using `/digitalocean-setup`. | `/digitalocean-setup` interactive skill running. |
@@ -184,7 +184,7 @@ Configured via `./scripts/setup-branch-protection.sh` (one-time, uses `gh api`).
 push to main-dev
   └── .github/workflows/deploy-dev.yml
        ├── buf-push-dev    # publish proto as draft to BSR
-       ├── build-images    # build all 15 service Docker images, push to DOCR
+       ├── build-images    # build all 15 service Docker images, push to GHCR
        └── deploy          # doctl apps update $DO_DEV_APP_ID --spec .do/app.dev.yaml
             └── DO redeploys components with TRADING_MODE=paper
 ```
@@ -195,7 +195,7 @@ push to main-dev
 push to main
   └── .github/workflows/deploy-prod.yml
        ├── buf-push        # publish proto (final) to BSR
-       ├── build-images    # build all 15 service Docker images, push to DOCR
+       ├── build-images    # build all 15 service Docker images, push to GHCR
        └── deploy          # doctl apps update $DO_PROD_APP_ID --spec .do/app.yaml
             └── DO redeploys components with TRADING_MODE=live
 ```
@@ -208,11 +208,11 @@ The deploy job is a reusable workflow (`.github/workflows/deploy.yml`) parameter
 
 ### Image registry
 
-DigitalOcean Container Registry (DOCR). Every push gets two tags:
+GitHub Container Registry (GHCR) at `ghcr.io/davcs86/xstockstrat/<service>`. Every push gets two tags:
 - The **short SHA** of the commit (`a1b2c3d`) — immutable, used for the exact deploy
 - A **floating tag** (`latest-dev` or `latest`) — points at the most recent successful build for that environment
 
-Rollback = re-deploy with a previous SHA tag. No image rebuild needed.
+Rollback = re-deploy with a previous SHA tag. No image rebuild needed. Packages must be public for DO App Platform to pull without credentials.
 
 ---
 
@@ -227,8 +227,9 @@ For each service:
 ```yaml
 - name: xstockstrat-trading
   image:
-    registry_type: DOCR
-    repository: xstockstrat-trading
+    registry_type: GHCR
+    registry: davcs86     # github.repository_owner, substituted by deploy workflow
+    repository: xstockstrat/xstockstrat-trading
     tag: latest
   instance_size_slug: apps-s-1vcpu-1gb
   instance_count: 1
@@ -320,10 +321,11 @@ Secret namespacing in config:
 
 GitHub Actions secrets injected at deploy time:
 - `DIGITALOCEAN_ACCESS_TOKEN` (deploy auth)
-- `DO_REGISTRY_NAME` (image push target)
 - `DO_DEV_APP_ID` / `DO_PROD_APP_ID`
 - `DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY` / `PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY`
 - `BUF_TOKEN` (BSR proto publishing)
+
+`GITHUB_TOKEN` is provided automatically for GHCR image pushes — no setup needed.
 
 None of these values are in the repo. The deploy workflow reads them from the GitHub secrets API at run time.
 
@@ -334,11 +336,11 @@ None of these values are in the repo. The deploy workflow reads them from the Gi
 The whole DO infrastructure can be bootstrapped from a fresh account using the `/digitalocean-setup` skill (interactive, 9 numbered steps):
 
 1. `doctl` auth and project setup
-2. DOCR (Container Registry) creation
-3. Managed PostgreSQL + TimescaleDB cluster
-4. Dev App Platform app from `.do/app.dev.yaml`
-4.5. DOCR-to-app linkage
-5. Prod App Platform app from `.do/app.yaml`
+2. Managed PostgreSQL + TimescaleDB cluster
+3. Dev App Platform app from `.do/app.dev.yaml`
+4. GHCR packages — make public after first CI push
+4.5. Prod App Platform app from `.do/app.yaml`
+5. Secrets wiring (GitHub Actions → DO)
 6. Secrets wiring (GitHub Actions → DO)
 7. GitHub Actions workflow validation
 8. First deployment trigger
@@ -367,7 +369,7 @@ End-to-end time from empty DO account to live dev deploy: **~45 minutes** with `
 
 All infrastructure config — CI workflows, compose file, DO specs, migrations, secret-scanning rules — is checked into this repo. Nothing depends on a private wiki or a `~/.config` file. Pull the repo, run the setup skills, and you have the same dev + prod environment.
 
-The infrastructure itself is also a feature in the backlog. `038-ci-docker-registry-deploy` (launched) is what introduced the DOCR + GitHub Actions build pipeline described above. `033-phase7-observability` (draft) will activate the OTel SDK already stubbed into every service. See `product-features.pdf` § "What's Next" or browse `docs/roadmap/features/` directly.
+The infrastructure itself is also a feature in the backlog. `038-ci-docker-registry-deploy` (launched) is what introduced the GHCR + GitHub Actions build pipeline described above. `033-phase7-observability` (draft) will activate the OTel SDK already stubbed into every service. See `product-features.pdf` § "What's Next" or browse `docs/roadmap/features/` directly.
 
 **Repository:** `github.com/davcs86/xstockstrat`
 **Setup runbooks:** `docs/setup/`
