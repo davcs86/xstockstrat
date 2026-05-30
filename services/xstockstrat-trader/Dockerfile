@@ -8,7 +8,7 @@ RUN npm config set fetch-timeout 120000 && \
 
 FROM base AS deps
 WORKDIR /workspace
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml .npmrc ./
 COPY packages/proto/gen/ts/ ./packages/proto/gen/ts/
 COPY services/xstockstrat-trader/package.json ./services/xstockstrat-trader/
 RUN pnpm install --frozen-lockfile --filter xstockstrat-trader
