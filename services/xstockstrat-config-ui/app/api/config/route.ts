@@ -5,7 +5,6 @@
  * POST /api/config                                        → SetConfig
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { ConnectError } from '@connectrpc/connect';
 import { configClient, connectCodeToHttp } from '@/app/lib/connectClients';
 import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/app/lib/auth';
 
@@ -28,11 +27,12 @@ function propagationHeaders(
 }
 
 function errorResponse(err: unknown): NextResponse {
-  if (ConnectError) {
-    const ce = ConnectError.from(err);
-    return NextResponse.json({ error: ce.rawMessage }, { status: connectCodeToHttp(ce.code) });
-  }
-  return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  const code = (err as any)?.code;
+  const message = (err as any)?.rawMessage ?? (err as Error)?.message ?? 'Internal error';
+  return NextResponse.json(
+    { error: message },
+    { status: typeof code === 'number' ? connectCodeToHttp(code) : 500 },
+  );
 }
 
 export async function GET(req: NextRequest) {

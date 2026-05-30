@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ConnectError, Code } from '@connectrpc/connect';
+import { Code } from '@connectrpc/connect';
 import { identityClient } from '@/lib/connectClients';
 import { setSessionCookies } from '@/lib/auth';
 
@@ -21,11 +21,8 @@ export async function POST(req: NextRequest) {
     );
     return response;
   } catch (err) {
-    if (ConnectError) {
-      const ce = ConnectError.from(err);
-      if (ce.code === Code.Unauthenticated) {
-        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
-      }
+    if ((err as any)?.code === Code.Unauthenticated) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
     console.error('[login] identity service error:', err);
     return NextResponse.json(
