@@ -6,7 +6,7 @@ name: xstockstrat-production
 region: nyc
 
 # Route all public traffic through the nginx reverse proxy.
-# Backend gRPC services use http_port + protocol: HTTP2. HTTP/1 agent-callable ports use internal_ports.
+# All backend services use internal_ports for TCP (any protocol, including gRPC H2C).
 ingress:
   rules:
     - component:
@@ -39,15 +39,13 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-trading
       tag: "YOUR_IMAGE_TAG"
-    http_port: 50051
-    protocol: HTTP2
+    internal_ports:
+      - 50051
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50051"
-      - key: HTTP_PORT
-        value: "8051"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -74,15 +72,13 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-portfolio
       tag: "YOUR_IMAGE_TAG"
-    http_port: 50052
-    protocol: HTTP2
+    internal_ports:
+      - 50052
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50052"
-      - key: HTTP_PORT
-        value: "8052"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -101,15 +97,13 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-marketdata
       tag: "YOUR_IMAGE_TAG"
-    http_port: 50053
-    protocol: HTTP2
+    internal_ports:
+      - 50053
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50053"
-      - key: HTTP_PORT
-        value: "8053"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -136,15 +130,13 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-indicators
       tag: "YOUR_IMAGE_TAG"
-    http_port: 50054
-    protocol: HTTP2
+    internal_ports:
+      - 50054
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50054"
-      - key: HTTP_PORT
-        value: "8054"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -263,15 +255,13 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-ledger
       tag: "YOUR_IMAGE_TAG"
-    http_port: 50057
-    protocol: HTTP2
+    internal_ports:
+      - 50057
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50057"
-      - key: HTTP_PORT
-        value: "8057"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: NOTIFY_ENDPOINT
@@ -293,15 +283,13 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-identity
       tag: "YOUR_IMAGE_TAG"
-    http_port: 50058
-    protocol: HTTP2
+    internal_ports:
+      - 50058
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
       - key: GRPC_PORT
         value: "50058"
-      - key: HTTP_PORT
-        value: "8058"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -360,16 +348,14 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-config
       tag: "YOUR_IMAGE_TAG"
-    http_port: 50060
-    protocol: HTTP2
+    internal_ports:
+      - 50060
     instance_count: 1
     # professional-s: extra headroom for WatchConfig streaming RPC (above 60s idle timeout)
     instance_size_slug: professional-s
     envs:
       - key: GRPC_PORT
         value: "50060"
-      - key: HTTP_PORT
-        value: "8060"
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}
