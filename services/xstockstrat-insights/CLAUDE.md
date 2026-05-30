@@ -1,7 +1,7 @@
 # xstockstrat-insights — CLAUDE.md
 
 ## Role
-Next.js 14 analytics and insights dashboard. Displays strategy backtests, performance scoring, indicator charts, and historical market data. Read-heavy; no order placement. Uses Connect-RPC HTTP to communicate with backend services.
+Next.js 14 analytics and insights dashboard. Displays strategy backtests, performance scoring, indicator charts, and historical market data. Read-heavy; no order placement. Uses gRPC (H2C) to communicate with backend services from server-side route handlers.
 
 **Note on paper vs live**: Strategy backtests are independent simulations run by `xstockstrat-analysis` against historical market data — they are not derived from paper or live order history. No paper/live mode toggle is needed in this service. If future pages show real trade history or realized P&L from the portfolio service, a `trading_mode` filter should be added at that point.
 
@@ -19,31 +19,31 @@ Frontend pattern — see `docs/patterns/docker-build.md` for the base + deps + b
 ```
 Browser (React Client Components)
   └── SWR → /api/analysis/*, /api/indicators/*, /api/marketdata/*
-        └── Next.js Route Handlers (server-side Connect-RPC clients)
-              ├── Connect-RPC → xstockstrat-analysis:8056
-              ├── Connect-RPC → xstockstrat-indicators:8054
-              ├── Connect-RPC → xstockstrat-marketdata:8053
-              ├── Connect-RPC → xstockstrat-notify:8059
-              └── Connect-RPC → xstockstrat-identity:8058
+        └── Next.js Route Handlers (server-side gRPC clients)
+              ├── gRPC (H2C) → xstockstrat-analysis:50056
+              ├── gRPC (H2C) → xstockstrat-indicators:50054
+              ├── gRPC (H2C) → xstockstrat-marketdata:50053
+              ├── gRPC (H2C) → xstockstrat-notify:50059
+              └── gRPC (H2C) → xstockstrat-identity:50058
 ```
 
-## Connect-RPC Client
+## gRPC Client
 
-- Transport factory: `src/lib/connectTransport.ts` — `createTransport(baseUrl)` returns `createNodeHttpTransport` server-side or `createConnectTransport` browser-side
-- All API routes import this factory; no `@grpc/grpc-js` dependency
-- Dependencies: `@connectrpc/connect`, `@connectrpc/connect-node`, `@connectrpc/connect-web`, `@bufbuild/protobuf`
+- Client factory: `src/lib/connectClients.ts` — uses `createGrpcTransport` (H2C HTTP/2) with connect v2 service descriptors from `@xstockstrat/proto/*_pb` files
+- All API route handlers import typed clients from this file; no `@grpc/grpc-js` dependency
+- Dependencies: `@connectrpc/connect`, `@connectrpc/connect-node`, `@bufbuild/protobuf`
 
 ## Dependencies
 
 | Dependency | Type | Reason |
 |---|---|---|
-| xstockstrat-analysis | Connect-RPC HTTP `8056` | Backtests, strategy scores, reports |
-| xstockstrat-indicators | Connect-RPC HTTP `8054` | Compute indicators for charts |
-| xstockstrat-marketdata | Connect-RPC HTTP `8053` | Historical OHLCV chart data |
-| xstockstrat-notify | Connect-RPC HTTP `8059` | Live alerts |
-| xstockstrat-identity | Connect-RPC HTTP `8058` | Token validation |
-| xstockstrat-trading | Connect-RPC HTTP `8051` | Broker account list (`ListBrokerAccounts`) |
-| xstockstrat-portfolio | Connect-RPC HTTP `8052` | Per-account portfolio data (`ListPortfolios`) |
+| xstockstrat-analysis | gRPC `50056` | Backtests, strategy scores, reports |
+| xstockstrat-indicators | gRPC `50054` | Compute indicators for charts |
+| xstockstrat-marketdata | gRPC `50053` | Historical OHLCV chart data |
+| xstockstrat-notify | gRPC `50059` | Live alerts |
+| xstockstrat-identity | gRPC `50058` | Token validation |
+| xstockstrat-trading | gRPC `50051` | Broker account list (`ListBrokerAccounts`) |
+| xstockstrat-portfolio | gRPC `50052` | Per-account portfolio data (`ListPortfolios`) |
 
 ## Key Pages
 
@@ -59,14 +59,14 @@ Browser (React Client Components)
 ## Environment Variables
 
 ```
-# Connect-RPC HTTP endpoints (not raw gRPC ports)
-ANALYSIS_HTTP_ENDPOINT=http://xstockstrat-analysis:8056
-INDICATORS_HTTP_ENDPOINT=http://xstockstrat-indicators:8054
-MARKETDATA_HTTP_ENDPOINT=http://xstockstrat-marketdata:8053
-NOTIFY_HTTP_ENDPOINT=http://xstockstrat-notify:8059
-IDENTITY_HTTP_ENDPOINT=http://xstockstrat-identity:8058
-TRADING_HTTP_ENDPOINT=http://xstockstrat-trading:8051
-PORTFOLIO_HTTP_ENDPOINT=http://xstockstrat-portfolio:8052
+# gRPC endpoints (host:port, no protocol) — consumed by server-side route handlers only
+ANALYSIS_ENDPOINT=xstockstrat-analysis:50056
+INDICATORS_ENDPOINT=xstockstrat-indicators:50054
+MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
+NOTIFY_ENDPOINT=xstockstrat-notify:50059
+IDENTITY_ENDPOINT=xstockstrat-identity:50058
+TRADING_ENDPOINT=xstockstrat-trading:50051
+PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
 ```

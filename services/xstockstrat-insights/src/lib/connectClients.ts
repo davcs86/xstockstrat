@@ -2,119 +2,44 @@
  * Connect-RPC clients for xstockstrat-insights.
  * Used server-side in Next.js Route Handlers — NOT in browser components.
  *
- * Service descriptors use untyped I/O (`{} as any`) so we get a working
- * client without depending on generated proto stubs. JSON encoding is
- * used over Connect-RPC HTTP.
+ * Uses @connectrpc/connect v2 with service descriptors from the generated
+ * *_pb.ts files (protobuf-es v2 schema-based). In connect v2, createClient
+ * does not use instanceof for message normalization, so the runtime TypeError
+ * from connect v1 + protoc-gen-es v2 type erasure no longer applies.
  */
-import { MethodKind } from '@bufbuild/protobuf';
 import { Code, createClient } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-node';
+import { createGrpcTransport } from '@connectrpc/connect-node';
+import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
+import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
+import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 
-function makeTransport(baseUrl: string) {
-  return createConnectTransport({ baseUrl, httpVersion: '1.1' });
+// ── gRPC endpoints (host:port, no protocol) ───────────────────────────────
+const ANALYSIS_ENDPOINT =
+  process.env.ANALYSIS_ENDPOINT ?? 'xstockstrat-analysis:50056';
+const MARKETDATA_ENDPOINT =
+  process.env.MARKETDATA_ENDPOINT ?? 'xstockstrat-marketdata:50053';
+const PORTFOLIO_ENDPOINT =
+  process.env.PORTFOLIO_ENDPOINT ?? 'xstockstrat-portfolio:50052';
+const TRADING_ENDPOINT =
+  process.env.TRADING_ENDPOINT ?? 'xstockstrat-trading:50051';
+const IDENTITY_ENDPOINT =
+  process.env.IDENTITY_ENDPOINT ?? 'xstockstrat-identity:50058';
+
+function makeTransport(endpoint: string) {
+  return createGrpcTransport({ baseUrl: `http://${endpoint}` });
 }
 
-// ── Base URLs ──────────────────────────────────────────────────────────────
-const ANALYSIS_BASE_URL =
-  process.env.ANALYSIS_HTTP_ENDPOINT ?? 'http://xstockstrat-analysis:8056';
-const MARKETDATA_BASE_URL =
-  process.env.MARKETDATA_HTTP_ENDPOINT ?? 'http://xstockstrat-marketdata:8053';
-const PORTFOLIO_BASE_URL =
-  process.env.PORTFOLIO_HTTP_ENDPOINT ?? 'http://xstockstrat-portfolio:8052';
-const TRADING_BASE_URL =
-  process.env.TRADING_HTTP_ENDPOINT ?? 'http://xstockstrat-trading:8051';
-const IDENTITY_BASE_URL =
-  process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058';
-
-// ── Service descriptors ────────────────────────────────────────────────────
-
-const AnalysisServiceDef = {
-  typeName: 'xstockstrat.analysis.v1.AnalysisService',
-  methods: {
-    runBacktest: { name: 'RunBacktest', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    scoreStrategy: { name: 'ScoreStrategy', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    listStrategies: { name: 'ListStrategies', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    getStrategyReport: { name: 'GetStrategyReport', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-  },
-} as const;
-
-const MarketDataServiceDef = {
-  typeName: 'xstockstrat.marketdata.v1.MarketDataService',
-  methods: {
-    getBars: { name: 'GetBars', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    getLatestQuote: { name: 'GetLatestQuote', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    listAssets: { name: 'ListAssets', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    backfillBars: { name: 'BackfillBars', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-  },
-} as const;
-
-const PortfolioServiceDef = {
-  typeName: 'xstockstrat.portfolio.v1.PortfolioService',
-  methods: {
-    getPortfolio: { name: 'GetPortfolio', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    getPosition: { name: 'GetPosition', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    listPositions: { name: 'ListPositions', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    getPnl: { name: 'GetPnl', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    listPortfolios: { name: 'ListPortfolios', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-  },
-} as const;
-
-const TradingServiceDef = {
-  typeName: 'xstockstrat.trading.v1.TradingService',
-  methods: {
-    listBrokerAccounts: { name: 'ListBrokerAccounts', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-  },
-} as const;
-
-const IdentityServiceDef = {
-  typeName: 'xstockstrat.identity.v1.IdentityService',
-  methods: {
-    authenticateUser: { name: 'AuthenticateUser', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    validateToken: { name: 'ValidateToken', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    refreshToken: { name: 'RefreshToken', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    revokeToken: { name: 'RevokeToken', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-  },
-} as const;
-
 // ── Exported clients ───────────────────────────────────────────────────────
-// We cast AnalysisServiceDef etc. to `any` for createClient(), which loses
-// the per-method `kind` narrowing TypeScript needs to pick the unary
-// overload. Cast each exported client to an UntypedClient so call sites
-// can pass `(input)` or `(input, options)` without TS routing them to the
-// streaming overload (which expects an AsyncIterable input).
-type UntypedClient = Record<
-  string,
-  (input?: unknown, options?: { headers?: Headers }) => Promise<unknown>
->;
 
-export const analysisClient = createClient(
-  AnalysisServiceDef as any,
-  makeTransport(ANALYSIS_BASE_URL),
-) as unknown as UntypedClient;
-
-export const marketDataClient = createClient(
-  MarketDataServiceDef as any,
-  makeTransport(MARKETDATA_BASE_URL),
-) as unknown as UntypedClient;
-
-export const portfolioClient = createClient(
-  PortfolioServiceDef as any,
-  makeTransport(PORTFOLIO_BASE_URL),
-) as unknown as UntypedClient;
-
-export const tradingClient = createClient(
-  TradingServiceDef as any,
-  makeTransport(TRADING_BASE_URL),
-) as unknown as UntypedClient;
-
-export const identityClient = createClient(
-  IdentityServiceDef as any,
-  makeTransport(IDENTITY_BASE_URL),
-) as unknown as UntypedClient;
+export const analysisClient = createClient(AnalysisService, makeTransport(ANALYSIS_ENDPOINT));
+export const marketDataClient = createClient(MarketDataService, makeTransport(MARKETDATA_ENDPOINT));
+export const portfolioClient = createClient(PortfolioService, makeTransport(PORTFOLIO_ENDPOINT));
+export const tradingClient = createClient(TradingService, makeTransport(TRADING_ENDPOINT));
+export const identityClient = createClient(IdentityService, makeTransport(IDENTITY_ENDPOINT));
 
 // ── Connect-Code → HTTP status helper ──────────────────────────────────────
-// Shared by every route that catches ConnectError so upstream failures
-// surface with a meaningful HTTP status instead of a blanket 500.
 export function connectCodeToHttp(code: Code): number {
   switch (code) {
     case Code.InvalidArgument:

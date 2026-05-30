@@ -251,9 +251,62 @@ The rule applies to every dynamic segment — `[id]`, `[symbol]`, `[namespace]`,
 
 ---
 
-## 10. The typed Connect client needs the `UntypedClient` cast
+## 10. Transport protocol — hard architecture requirement
 
-This belongs to `frontend-auth.md` because it's part of `connectClients.ts`, but every Next.js API route inherits it: when calling a typed Connect client without a second `{ headers }` argument, TypeScript routes the call to the streaming overload (whose input is `AsyncIterable<...>`) and fails to compile. Either pass `{ headers }` on every call, or — what we do — cast each exported client to `UntypedClient` so arity no longer drives overload selection. See `docs/patterns/frontend-auth.md` § *Why every export is cast to `UntypedClient`* for the full snippet and the PR #413 background.
+> **Every Next.js frontend in this platform is a BFF (Backend-for-Frontend). This section is non-negotiable.**
+
+### The required call chain
+
+```
+Browser (React Client Components)
+  └── Connect-RPC (HTTP/1.1, basePath + /api)
+        └── Next.js BFF catch-all  app/api/[...connect]/route.ts
+              via lib/connectBff.ts (createConnectRouter + dispatchConnect)
+                └── gRPC H2C (HTTP/2, port 50xxx)
+                      └── Backend services
+```
+
+### Rules
+
+| Rule | Rationale |
+|---|---|
+| **Server-side code uses `createGrpcTransport` (port 50xxx) only** | gRPC is the authoritative inter-service protocol. HTTP/1.1 Connect-RPC on 80xx ports exists only for the MCP agent and webhook callers. |
+| **Never import `createConnectTransport` in `connectClients.ts`** | That function is for browser code only (`connectTransport.ts`). Using it server-side routes calls to the wrong port and protocol. |
+| **`*_ENDPOINT` env vars are `host:port` (no protocol)** | Prefixed with `http://` inside `createGrpcTransport`. Using a full URL here would double-prefix it. |
+| **`*_HTTP_ENDPOINT` env vars are reserved for agent/webhooks** | The three services the MCP agent calls over HTTP — ingest (8055), analysis (8056), notify (8059) — use `*_HTTP_ENDPOINT`. Nothing in `connectClients.ts` should read these. |
+| **No `UntypedClient` cast** | connect v2 + protobuf-es v2 `GenService` descriptors give a properly typed `Client<T>` where methods accept `MessageInitShape<I>` (plain objects). No cast needed. Using one silently hides proto field name bugs. |
+| **DO app specs need `http2_ports: [50xxx]`** | Without it, DO's internal load balancer negotiates HTTP/1.1 to gRPC ports and all calls fail. Add it to both `app.yaml` and `app.dev.yaml` for every service with a gRPC port. |
+
+### BFF catch-all: one file per frontend
+
+Each frontend has two BFF files:
+
+```
+lib/connectBff.ts           ← router setup, auth helpers, dispatchConnect()
+app/api/[...connect]/route.ts  ← two lines: export GET/POST = dispatchConnect
+```
+
+`connectBff.ts` registers services via `createConnectRouter` (from `@connectrpc/connect`) and builds a handler map keyed by `basePath + '/api' + handler.requestPath`. The `dispatchConnect` function adapts Web API `Request`/`Response` to `UniversalServerRequest`/`UniversalServerResponse`.
+
+All existing specific App Router routes (`auth/*`, `health`, `alerts/stream`, `audit`, etc.) take precedence over the `[...connect]` catch-all due to Next.js route ordering (static > required catch-all).
+
+### Browser-side: `connectTransport.ts`
+
+Browser components call the BFF via `browserTransport`:
+
+```ts
+// lib/connectTransport.ts — browser only
+import { createConnectTransport } from '@connectrpc/connect-web';
+export const browserTransport = createConnectTransport({ baseUrl: '/trader/api' });
+```
+
+`baseUrl` is `/<basePath>/api`. The browser sends Connect-RPC (HTTP/1.1) to the catch-all; the BFF proxies it as gRPC H2C to the backend.
+
+### What breaks if you violate this
+
+- Using `createConnectTransport` server-side → routes calls to 80xx ports → those ports are either absent in DO (removed) or serve HTTP/1.1 only → gRPC calls time out silently.
+- Using `UntypedClient` → proto field name bugs compile and run silently (e.g. `{startTime: x}` instead of `{start: x}` reaches the backend as `undefined`).
+- Missing `http2_ports` in DO → all gRPC calls fail in production with connection errors even though local docker-compose works fine.
 
 ---
 
@@ -265,7 +318,10 @@ This belongs to `frontend-auth.md` because it's part of `connectClients.ts`, but
 | `src/middleware.ts` | Edge | auth gate; only imports Edge-safe code |
 | `src/lib/auth.ts` | Edge-safe | JWT, cookies, role bitmap, trace IDs |
 | `src/lib/identity.ts` | Node | `refreshSession`, `revokeToken` (uses Connect client) |
-| `src/lib/connectClients.ts` | Node | typed clients + `connectCodeToHttp` |
+| `src/lib/connectClients.ts` | Node | typed gRPC clients (`createGrpcTransport`, 50xxx) + `connectCodeToHttp` |
+| `src/lib/connectTransport.ts` | Browser | `browserTransport` — Connect-RPC to BFF catch-all |
+| `src/lib/connectBff.ts` | Node | `createConnectRouter` service impls + `dispatchConnect()` |
+| `src/app/api/[...connect]/route.ts` | Node | BFF catch-all — exports `GET`/`POST = dispatchConnect` |
 | `src/app/layout.tsx` | server | global `<html>` / `<body>` shell |
 | `src/app/page.tsx` | client (`'use client'`) | dashboard; **must** have non-null Suspense fallback |
 | `src/app/login/page.tsx` | client | login form; same Suspense rule |

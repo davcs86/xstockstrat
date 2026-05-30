@@ -6,7 +6,7 @@ name: xstockstrat-staging
 region: nyc
 
 # Route all public traffic through the nginx reverse proxy.
-# All backend services use internal_ports (no public routes).
+# Backend gRPC services use http_port + protocol: HTTP2. HTTP/1 agent-callable ports use internal_ports.
 ingress:
   rules:
     - component:
@@ -39,9 +39,8 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-trading
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 50051
-      - 8051
+    http_port: 50051
+    protocol: HTTP2
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -75,9 +74,8 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-portfolio
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 50052
-      - 8052
+    http_port: 50052
+    protocol: HTTP2
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -103,9 +101,8 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-marketdata
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 50053
-      - 8053
+    http_port: 50053
+    protocol: HTTP2
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -139,9 +136,8 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-indicators
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 50054
-      - 8054
+    http_port: 50054
+    protocol: HTTP2
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -166,8 +162,9 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-ingest
       tag: "YOUR_IMAGE_TAG"
+    http_port: 50055
+    protocol: HTTP2
     internal_ports:
-      - 50055
       - 8055
     instance_count: 1
     instance_size_slug: basic-xs
@@ -203,8 +200,9 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-analysis
       tag: "YOUR_IMAGE_TAG"
+    http_port: 50056
+    protocol: HTTP2
     internal_ports:
-      - 50056
       - 8056
     instance_count: 1
     instance_size_slug: basic-xs
@@ -273,9 +271,8 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-ledger
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 50057
-      - 8057
+    http_port: 50057
+    protocol: HTTP2
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -304,9 +301,8 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-identity
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 50058
-      - 8058
+    http_port: 50058
+    protocol: HTTP2
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -341,8 +337,9 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-notify
       tag: "YOUR_IMAGE_TAG"
+    http_port: 50059
+    protocol: HTTP2
     internal_ports:
-      - 50059
       - 8059
     instance_count: 1
     instance_size_slug: basic-xs
@@ -375,9 +372,8 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-config
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 50060
-      - 8060
+    http_port: 50060
+    protocol: HTTP2
     instance_count: 1
     # basic-s: extra headroom for WatchConfig streaming RPC (above 60s idle timeout)
     instance_size_slug: basic-s
@@ -429,16 +425,16 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: TRADING_HTTP_ENDPOINT
-        value: ${xstockstrat-trading.PRIVATE_URL}
-      - key: PORTFOLIO_HTTP_ENDPOINT
-        value: ${xstockstrat-portfolio.PRIVATE_URL}
-      - key: NOTIFY_HTTP_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: IDENTITY_HTTP_ENDPOINT
-        value: ${xstockstrat-identity.PRIVATE_URL}
-      - key: MARKETDATA_HTTP_ENDPOINT
-        value: ${xstockstrat-marketdata.PRIVATE_URL}
+      - key: TRADING_ENDPOINT
+        value: ${xstockstrat-trading.PRIVATE_DOMAIN}:50051
+      - key: PORTFOLIO_ENDPOINT
+        value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
+      - key: NOTIFY_ENDPOINT
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
+      - key: MARKETDATA_ENDPOINT
+        value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
       - key: APP_URL
         value: ${APP_URL}
       - key: JWT_SECRET
@@ -459,20 +455,20 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: ANALYSIS_HTTP_ENDPOINT
-        value: ${xstockstrat-analysis.PRIVATE_URL}
-      - key: INDICATORS_HTTP_ENDPOINT
-        value: ${xstockstrat-indicators.PRIVATE_URL}
-      - key: MARKETDATA_HTTP_ENDPOINT
-        value: ${xstockstrat-marketdata.PRIVATE_URL}
-      - key: PORTFOLIO_HTTP_ENDPOINT
-        value: ${xstockstrat-portfolio.PRIVATE_URL}
-      - key: TRADING_HTTP_ENDPOINT
-        value: ${xstockstrat-trading.PRIVATE_URL}
-      - key: NOTIFY_HTTP_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: IDENTITY_HTTP_ENDPOINT
-        value: ${xstockstrat-identity.PRIVATE_URL}
+      - key: ANALYSIS_ENDPOINT
+        value: ${xstockstrat-analysis.PRIVATE_DOMAIN}:50056
+      - key: INDICATORS_ENDPOINT
+        value: ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
+      - key: MARKETDATA_ENDPOINT
+        value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
+      - key: PORTFOLIO_ENDPOINT
+        value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
+      - key: TRADING_ENDPOINT
+        value: ${xstockstrat-trading.PRIVATE_DOMAIN}:50051
+      - key: NOTIFY_ENDPOINT
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: APP_URL
         value: ${APP_URL}
       - key: JWT_SECRET
@@ -493,12 +489,12 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: CONFIG_HTTP_ENDPOINT
-        value: ${xstockstrat-config.PRIVATE_URL}
-      - key: IDENTITY_HTTP_ENDPOINT
-        value: ${xstockstrat-identity.PRIVATE_URL}
-      - key: INGEST_HTTP_ENDPOINT
-        value: ${xstockstrat-ingest.PRIVATE_URL}
+      - key: CONFIG_ENDPOINT
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
+      - key: INGEST_ENDPOINT
+        value: ${xstockstrat-ingest.PRIVATE_DOMAIN}:50055
       - key: APP_URL
         value: ${APP_URL}
       - key: JWT_SECRET

@@ -2,85 +2,36 @@
  * Connect-RPC clients for xstockstrat-config-ui.
  * Used server-side in Next.js Route Handlers — NOT in browser components.
  *
- * Service descriptors use untyped I/O (`{} as any`) so we get a working
- * client without depending on generated proto stubs. JSON encoding is
- * used over Connect-RPC HTTP.
+ * Uses @connectrpc/connect v2 with service descriptors from the generated
+ * *_pb.ts files (protobuf-es v2 schema-based). In connect v2, createClient
+ * does not use instanceof for message normalization, so the runtime TypeError
+ * from connect v1 + protoc-gen-es v2 type erasure no longer applies.
  */
-import { MethodKind } from '@bufbuild/protobuf';
 import { Code, createClient } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-node';
+import { createGrpcTransport } from '@connectrpc/connect-node';
+import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
+import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
+import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 
-function makeTransport(baseUrl: string) {
-  return createConnectTransport({ baseUrl, httpVersion: '1.1' });
+// ── gRPC endpoints (host:port, no protocol) ───────────────────────────────
+const CONFIG_ENDPOINT =
+  process.env.CONFIG_ENDPOINT ?? 'xstockstrat-config:50060';
+const IDENTITY_ENDPOINT =
+  process.env.IDENTITY_ENDPOINT ?? 'xstockstrat-identity:50058';
+const INGEST_ENDPOINT =
+  process.env.INGEST_ENDPOINT ?? 'xstockstrat-ingest:50055';
+
+function makeTransport(endpoint: string) {
+  return createGrpcTransport({ baseUrl: `http://${endpoint}` });
 }
 
-// ── Base URLs ──────────────────────────────────────────────────────────────
-const CONFIG_HTTP_ENDPOINT =
-  process.env.CONFIG_HTTP_ENDPOINT ?? 'http://xstockstrat-config:8060';
-const IDENTITY_BASE_URL =
-  process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058';
-const INGEST_HTTP_ENDPOINT =
-  process.env.INGEST_HTTP_ENDPOINT ?? 'http://xstockstrat-ingest:8055';
-
-// ── Service descriptors ────────────────────────────────────────────────────
-
-const ConfigServiceDef = {
-  typeName: 'xstockstrat.config.v1.ConfigService',
-  methods: {
-    getConfig: { name: 'GetConfig', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    setConfig: { name: 'SetConfig', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    listKeys: { name: 'ListKeys', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    // watchConfig is a server-streaming RPC; config-ui doesn't subscribe to it.
-  },
-} as const;
-
-const IdentityServiceDef = {
-  typeName: 'xstockstrat.identity.v1.IdentityService',
-  methods: {
-    authenticateUser: { name: 'AuthenticateUser', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    validateToken: { name: 'ValidateToken', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    refreshToken: { name: 'RefreshToken', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    revokeToken: { name: 'RevokeToken', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-  },
-} as const;
-
-const IngestServiceDef = {
-  typeName: 'xstockstrat.ingest.v1.IngestService',
-  methods: {
-    listSignalSources: { name: 'ListSignalSources', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-    manageSignalSource: { name: 'ManageSignalSource', I: {} as any, O: {} as any, kind: MethodKind.Unary },
-  },
-} as const;
-
 // ── Exported clients ───────────────────────────────────────────────────────
-// We cast each ServiceDef to `any` for createClient(), which loses the
-// per-method `kind` narrowing TypeScript needs to pick the unary overload.
-// Cast each exported client to an UntypedClient so call sites can pass
-// `(input)` or `(input, options)` without TS routing them to the streaming
-// overload (which expects an AsyncIterable input).
-type UntypedClient = Record<
-  string,
-  (input?: unknown, options?: { headers?: Headers }) => Promise<unknown>
->;
 
-export const configClient = createClient(
-  ConfigServiceDef as any,
-  makeTransport(CONFIG_HTTP_ENDPOINT),
-) as unknown as UntypedClient;
-
-export const identityClient = createClient(
-  IdentityServiceDef as any,
-  makeTransport(IDENTITY_BASE_URL),
-) as unknown as UntypedClient;
-
-export const ingestClient = createClient(
-  IngestServiceDef as any,
-  makeTransport(INGEST_HTTP_ENDPOINT),
-) as unknown as UntypedClient;
+export const configClient = createClient(ConfigService, makeTransport(CONFIG_ENDPOINT));
+export const identityClient = createClient(IdentityService, makeTransport(IDENTITY_ENDPOINT));
+export const ingestClient = createClient(IngestService, makeTransport(INGEST_ENDPOINT));
 
 // ── Connect-Code → HTTP status helper ──────────────────────────────────────
-// Shared by every route that catches ConnectError so upstream failures
-// surface with a meaningful HTTP status instead of a blanket 500.
 export function connectCodeToHttp(code: Code): number {
   switch (code) {
     case Code.InvalidArgument:

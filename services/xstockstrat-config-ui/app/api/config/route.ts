@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
       {
         namespace,
         key,
-        value: { stringVal: String(value) },
+        value: { value: { case: 'stringVal', value: String(value) } },
         author: claims.user_id,
         reason: reason ?? 'Updated via config-ui',
         environment: envToProto(env ?? 'dev'),

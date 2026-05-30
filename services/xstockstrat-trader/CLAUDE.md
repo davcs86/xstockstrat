@@ -19,26 +19,26 @@ Browser (React Client Components)
   └── SWR → /api/orders, /api/portfolio   (polling)
   └── EventSource → /api/alerts/stream     (SSE, live alerts)
         └── Next.js Route Handlers (server-side)
-              ├── Connect-RPC → xstockstrat-trading:8051
-              ├── Connect-RPC → xstockstrat-portfolio:8052
-              ├── Connect-RPC → xstockstrat-notify:8059
-              └── Connect-RPC → xstockstrat-identity:8058
+              ├── gRPC (H2C) → xstockstrat-trading:50051
+              ├── gRPC (H2C) → xstockstrat-portfolio:50052
+              ├── gRPC (H2C) → xstockstrat-notify:50059
+              └── gRPC (H2C) → xstockstrat-identity:50058
 ```
 
-## Connect-RPC Client
+## gRPC Client
 
-- Transport factory: `src/lib/connectTransport.ts` — `createTransport(baseUrl)` returns `createNodeHttpTransport` server-side or `createConnectTransport` browser-side
-- All API routes import this factory; no `@grpc/grpc-js` dependency
-- Dependencies: `@connectrpc/connect`, `@connectrpc/connect-node`, `@connectrpc/connect-web`, `@bufbuild/protobuf`
+- Client factory: `src/lib/connectClients.ts` — uses `createGrpcTransport` (H2C HTTP/2) with connect v2 service descriptors from `@xstockstrat/proto/*_pb` files
+- All API route handlers import typed clients from this file; no `@grpc/grpc-js` dependency
+- Dependencies: `@connectrpc/connect`, `@connectrpc/connect-node`, `@bufbuild/protobuf`
 
 ## Dependencies
 
 | Dependency | Type | Reason |
 |---|---|---|
-| xstockstrat-trading | Connect-RPC HTTP `8051` | Place, cancel, list orders |
-| xstockstrat-portfolio | Connect-RPC HTTP `8052` | Portfolio equity, positions, P&L |
-| xstockstrat-notify | Connect-RPC HTTP `8059` | Alert delivery |
-| xstockstrat-identity | Connect-RPC HTTP `8058` | Token validation |
+| xstockstrat-trading | gRPC `50051` | Place, cancel, list orders |
+| xstockstrat-portfolio | gRPC `50052` | Portfolio equity, positions, P&L |
+| xstockstrat-notify | gRPC `50059` | Alert delivery |
+| xstockstrat-identity | gRPC `50058` | Token validation |
 
 ## Config Keys Consumed
 
@@ -66,11 +66,11 @@ This ensures the order book and portfolio summary only show data for the selecte
 ## Environment Variables
 
 ```
-# Connect-RPC HTTP endpoints (not raw gRPC ports)
-TRADING_HTTP_ENDPOINT=http://xstockstrat-trading:8051
-PORTFOLIO_HTTP_ENDPOINT=http://xstockstrat-portfolio:8052
-NOTIFY_HTTP_ENDPOINT=http://xstockstrat-notify:8059
-IDENTITY_HTTP_ENDPOINT=http://xstockstrat-identity:8058
+# gRPC endpoints (host:port, no protocol) — consumed by server-side route handlers only
+TRADING_ENDPOINT=xstockstrat-trading:50051
+PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
+NOTIFY_ENDPOINT=xstockstrat-notify:50059
+IDENTITY_ENDPOINT=xstockstrat-identity:50058
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
 ```
