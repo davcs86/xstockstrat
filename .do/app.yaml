@@ -6,7 +6,7 @@ name: xstockstrat-production
 region: nyc
 
 # Route all public traffic through the nginx reverse proxy.
-# All backend services use internal_ports (no public routes).
+# Backend gRPC services use http_port + protocol: HTTP2. HTTP/1 agent-callable ports use internal_ports.
 ingress:
   rules:
     - component:
@@ -39,8 +39,8 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-trading
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 50051
+    http_port: 50051
+    protocol: HTTP2
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -74,8 +74,8 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-portfolio
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 50052
+    http_port: 50052
+    protocol: HTTP2
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -101,8 +101,8 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-marketdata
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 50053
+    http_port: 50053
+    protocol: HTTP2
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -136,8 +136,8 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-indicators
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 50054
+    http_port: 50054
+    protocol: HTTP2
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -162,8 +162,9 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-ingest
       tag: "YOUR_IMAGE_TAG"
+    http_port: 50055
+    protocol: HTTP2
     internal_ports:
-      - 50055
       - 8055
     instance_count: 1
     instance_size_slug: professional-xs
@@ -199,8 +200,9 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-analysis
       tag: "YOUR_IMAGE_TAG"
+    http_port: 50056
+    protocol: HTTP2
     internal_ports:
-      - 50056
       - 8056
     instance_count: 1
     instance_size_slug: professional-xs
@@ -269,8 +271,8 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-ledger
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 50057
+    http_port: 50057
+    protocol: HTTP2
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -299,8 +301,8 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-identity
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 50058
+    http_port: 50058
+    protocol: HTTP2
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
@@ -335,8 +337,9 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-notify
       tag: "YOUR_IMAGE_TAG"
+    http_port: 50059
+    protocol: HTTP2
     internal_ports:
-      - 50059
       - 8059
     instance_count: 1
     instance_size_slug: professional-xs
@@ -369,8 +372,8 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-config
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 50060
+    http_port: 50060
+    protocol: HTTP2
     instance_count: 1
     # professional-s: extra headroom for WatchConfig streaming RPC (above 60s idle timeout)
     instance_size_slug: professional-s
