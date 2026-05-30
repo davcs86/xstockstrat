@@ -29,9 +29,9 @@ _setup_gen_path()
 
 @pytest.fixture(autouse=True)
 def set_env(monkeypatch):
-    monkeypatch.setenv("INGEST_HTTP_ENDPOINT", "http://ingest-test:8055")
-    monkeypatch.setenv("NOTIFY_HTTP_ENDPOINT", "http://notify-test:8059")
-    monkeypatch.setenv("ANALYSIS_HTTP_ENDPOINT", "http://analysis-test:8056")
+    monkeypatch.setenv("INGEST_ENDPOINT", "ingest-test:50055")
+    monkeypatch.setenv("NOTIFY_ENDPOINT", "notify-test:50059")
+    monkeypatch.setenv("ANALYSIS_ENDPOINT", "analysis-test:50056")
     monkeypatch.setenv("MCP_AGENT_SECRET", "test-secret")
     monkeypatch.setenv("MCP_TRANSPORT", "stdio")
     monkeypatch.setenv("IDENTITY_ENDPOINT", "identity-test:50058")
@@ -39,7 +39,7 @@ def set_env(monkeypatch):
     # Also patch module-level vars in client.py — they are read at import time so
     # setenv alone has no effect on tests that import the module before fixtures run.
     from app import client
-    monkeypatch.setattr(client, "INGEST_HTTP_ENDPOINT", "http://ingest-test:8055")
-    monkeypatch.setattr(client, "NOTIFY_HTTP_ENDPOINT", "http://notify-test:8059")
-    monkeypatch.setattr(client, "ANALYSIS_HTTP_ENDPOINT", "http://analysis-test:8056")
+    monkeypatch.setattr(client, "INGEST_ENDPOINT", "ingest-test:50055")
+    monkeypatch.setattr(client, "NOTIFY_ENDPOINT", "notify-test:50059")
+    monkeypatch.setattr(client, "ANALYSIS_ENDPOINT", "analysis-test:50056")
     monkeypatch.setattr(client, "MCP_AGENT_SECRET", "test-secret")

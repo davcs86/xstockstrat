@@ -162,17 +162,13 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-ingest
       tag: "YOUR_IMAGE_TAG"
-    http_port: 50055
-    protocol: HTTP2
     internal_ports:
-      - 8055
+      - 50055
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50055"
-      - key: HTTP_PORT
-        value: "8055"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -200,17 +196,13 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-analysis
       tag: "YOUR_IMAGE_TAG"
-    http_port: 50056
-    protocol: HTTP2
     internal_ports:
-      - 8056
+      - 50056
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50056"
-      - key: HTTP_PORT
-        value: "8056"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -243,12 +235,12 @@ services:
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: INGEST_HTTP_ENDPOINT
-        value: ${xstockstrat-ingest.PRIVATE_URL}
-      - key: NOTIFY_HTTP_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: ANALYSIS_HTTP_ENDPOINT
-        value: ${xstockstrat-analysis.PRIVATE_URL}
+      - key: INGEST_ENDPOINT
+        value: ${xstockstrat-ingest.PRIVATE_DOMAIN}:50055
+      - key: NOTIFY_ENDPOINT
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
+      - key: ANALYSIS_ENDPOINT
+        value: ${xstockstrat-analysis.PRIVATE_DOMAIN}:50056
       - key: IDENTITY_ENDPOINT
         value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: CONFIG_ENDPOINT
@@ -337,17 +329,13 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-notify
       tag: "YOUR_IMAGE_TAG"
-    http_port: 50059
-    protocol: HTTP2
     internal_ports:
-      - 8059
+      - 50059
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50059"
-      - key: HTTP_PORT
-        value: "8059"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT

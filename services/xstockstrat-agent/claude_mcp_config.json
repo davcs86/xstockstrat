@@ -9,9 +9,9 @@
       "cwd": "<absolute-path-to>/services/xstockstrat-agent",
       "env": {
         "MCP_TRANSPORT": "stdio",
-        "INGEST_HTTP_ENDPOINT": "http://localhost:8055",
-        "NOTIFY_HTTP_ENDPOINT": "http://localhost:8059",
-        "ANALYSIS_HTTP_ENDPOINT": "http://localhost:8056",
+        "INGEST_ENDPOINT": "localhost:50055",
+        "NOTIFY_ENDPOINT": "localhost:50059",
+        "ANALYSIS_ENDPOINT": "localhost:50056",
         "IDENTITY_ENDPOINT": "localhost:50058",
         "CONFIG_ENDPOINT": "localhost:50060",
         "MCP_AGENT_SECRET": "<your-mcp-agent-secret-from-.env>"
