@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
       }
     }
-    console.error('[login] identity service error:', err);
+    console.error('[login] identity service error:', (err as Error)?.stack ?? err);
     return NextResponse.json(
       { error: 'Authentication service unavailable. Please try again.' },
       { status: 503 },
