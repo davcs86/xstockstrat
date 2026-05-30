@@ -8,7 +8,7 @@
  *   const config = createClient(ConfigService, browserTransport);
  *   const result = await config.listKeys({ ... });
  *
- * Next.js serves the Pages Router catch-all (pages/api/[[...connect]].ts)
+ * Next.js serves the App Router catch-all (app/api/[...connect]/route.ts)
  * under basePath + /api, so the effective URL is /config-ui/api/<service>/<method>.
  */
 import { createConnectTransport } from '@connectrpc/connect-web';

@@ -8,7 +8,7 @@
  *   const trading = createClient(TradingService, browserTransport);
  *   const result = await trading.listOrders({ ... });
  *
- * Next.js serves the Pages Router catch-all (src/pages/api/[[...connect]].ts)
+ * Next.js serves the App Router catch-all (src/app/api/[...connect]/route.ts)
  * under basePath + /api, so the effective URL is /trader/api/<service>/<method>.
  */
 import { createConnectTransport } from '@connectrpc/connect-web';
