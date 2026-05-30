@@ -3,7 +3,7 @@
 **Lifecycle Status**: `draft`
 **Development Branch**: `feature/phase7-observability`
 **Created**: 2026-05-26
-**Last Updated**: 2026-05-26
+**Last Updated**: 2026-05-30
 
 ---
 
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-05-30 | `draft` → `draft` | /sdd-story | Product spec regenerated fresh; open questions left for review |
 
 ---
 
