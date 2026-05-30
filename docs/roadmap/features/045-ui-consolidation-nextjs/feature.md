@@ -1,9 +1,9 @@
 # Feature: ui-consolidation-nextjs
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `draft`
 **Development Branch**: `feature/ui-consolidation-nextjs`
 **Created**: 2026-05-29
-**Last Updated**: 2026-05-29
+**Last Updated**: 2026-05-30
 ---
 
 ## Status History
@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-05-29 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-29 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 advisory warning) |
+| 2026-05-30 | `spec-ready` → `draft` | /sdd-story | Product spec regenerated fresh; previously-resolved questions re-opened for review |
 
 ---
 
@@ -42,4 +43,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec ui-consolidation-nextjs` — generate implementation spec from the approved product spec
+`/sdd-review ui-consolidation-nextjs product-spec` — re-review the regenerated product spec (open questions re-opened)

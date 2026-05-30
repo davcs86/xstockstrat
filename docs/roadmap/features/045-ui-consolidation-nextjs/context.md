@@ -38,3 +38,19 @@
 - Remaining active-feature concerns before executing 045:
   - **Merge before 045**: `014-trader-chart-panel` (touches xstockstrat-trader), `044-client-api-pattern` (touches all three source services), `003-formula-management-ui` (touches xstockstrat-insights).
   - **Merge after 045 or update**: `038-ci-docker-registry-deploy` references old service names in CI; update to `xstockstrat-ui` after 045 lands.
+
+## Session 2026-05-30T00:00:00Z — sdd-story (regenerate)
+
+- Product spec regenerated fresh as part of a 4-feature spec batch (033, 041, 045, 044), each
+  delivered as an independent PR off `main-dev`. Per the requesting story, previously-resolved
+  open questions were deliberately RE-OPENED and left for the `/sdd-review product-spec` gate.
+  Status reverted: `spec-ready` → `draft`.
+- Re-opened questions: consolidated service name (was resolved to `xstockstrat-ui`), DO routing
+  model (was resolved to single-domain), and config-ui `pg` access (was resolved to keep-as-is).
+  Added two sequencing questions: vs feature 041 (Next.js 15 upgrade — consolidation needs all
+  three UIs on one major) and vs features 044 / 038.
+- Corrected stale facts against current `main-dev`: backends are now gRPC-only (the 80xx
+  HTTP/Connect-RPC servers were removed), so FR-6 now references gRPC `*_ENDPOINT` vars only —
+  the previous `*_HTTP_ENDPOINT` reference was removed. Added an explicit platform-lead approval
+  gate (service registry change: four services removed, one added with a new port assignment).
+- Next action: `/sdd-review ui-consolidation-nextjs product-spec`.
