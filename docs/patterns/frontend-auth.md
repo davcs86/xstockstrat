@@ -146,37 +146,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 ### `connectClients.ts` conventions
 
-- One descriptor per service: `typeName: 'xstockstrat.<service>.v1.<Service>Service'`.
-- Method definitions use `I: {} as any, O: {} as any` (untyped — we don't generate proto stubs in TS).
-- One transport per base URL: `createConnectTransport({ baseUrl, httpVersion: '1.1' })`.
-- Export one client per service: `tradingClient`, `portfolioClient`, `marketDataClient`, `identityClient`, …
-- **Cast every exported client to `UntypedClient`** (see below).
+- Import service descriptors from `@xstockstrat/proto/<service>/v1/<service>_pb` — the `GenService` runtime values produced by protobuf-es v2. **Never use hand-rolled descriptor objects** (`typeName: '...'`, `I: {} as any`).
+- Use `createGrpcTransport({ baseUrl: \`http://\${endpoint}\` })` from `@connectrpc/connect-node`. This is H2C (cleartext HTTP/2) to the gRPC ports (50xxx). **Never use `createConnectTransport`** — HTTP/1.1 on the 80xx ports is reserved for the MCP agent and webhook callers, not server-side route handlers.
+- Read endpoints from `process.env.*_ENDPOINT` in `host:port` format (no protocol). Never read `*_HTTP_ENDPOINT` from frontend `connectClients.ts`.
+- Export one typed `Client<ServiceDescriptor>` per service. No `UntypedClient` cast: connect v2 + protobuf-es v2 `GenService` descriptors give fully-typed clients whose methods accept `MessageInitShape<I>` (a partial plain object), so plain object inputs pass the type-checker without any cast.
 - Export the shared `connectCodeToHttp` helper.
 
-### Why every export is cast to `UntypedClient`
-
-Passing `SomeServiceDef as any` to `createClient` discards the per-method `kind` (Unary / ServerStreaming / …). Without that narrowing, TypeScript picks **whichever overload matches first** for a method call — and the streaming overload (whose first arg is `AsyncIterable<PartialMessage<...>>`) often wins. Unary calls then fail to compile:
-
-```
-Type error: Object literal may only specify known properties, and 'accountId' does not exist in
-type 'AsyncIterable<PartialMessage<Message<unknown>>>'.
-```
-
-PR #413 fixed this for trader and insights by casting each exported client to a minimal record type:
-
 ```ts
-type UntypedClient = Record<
-  string,
-  (input?: unknown, options?: { headers?: Headers }) => Promise<unknown>
->;
+import { createClient } from '@connectrpc/connect';
+import { createGrpcTransport } from '@connectrpc/connect-node';
+import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 
-export const tradingClient = createClient(
-  TradingServiceDef as any,
-  makeTransport(TRADING_BASE_URL),
-) as unknown as UntypedClient;
+const TRADING_ENDPOINT = process.env.TRADING_ENDPOINT ?? 'xstockstrat-trading:50051';
+
+function makeTransport(endpoint: string) {
+  return createGrpcTransport({ baseUrl: `http://${endpoint}` });
+}
+
+export const tradingClient = createClient(TradingService, makeTransport(TRADING_ENDPOINT));
 ```
-
-With the cast, every call site is unambiguous regardless of arity — `client.method(input)` and `client.method(input, { headers })` both resolve to the same `(input?, options?) => Promise<unknown>` signature. Callers `as any`-cast the returned `unknown` to read fields (`(data as any).accounts`), which is the same trade-off as the descriptor's untyped I/O.
 
 ### The `connectCodeToHttp` helper
 
@@ -208,7 +196,7 @@ It runs **before** the user has a session, so it does not propagate `x-user-id` 
 import { ConnectError, Code } from '@connectrpc/connect';
 
 try {
-  const data = await identityClient.authenticateUser({ email, password }) as any;
+  const data = await identityClient.authenticateUser({ email, password });
   const response = NextResponse.json({ ok: true });
   setSessionCookies(response, data.accessToken, data.refreshToken);
   return response;
@@ -247,9 +235,9 @@ Middleware only catches **browser navigations**, not direct `curl` calls. The `/
 | Variable | Where set | Notes |
 |---|---|---|
 | `JWT_SECRET` | `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml` | ≥32 chars; same value across all frontends and the identity service |
-| `IDENTITY_HTTP_ENDPOINT` | Same | DO: `${xstockstrat-identity.PRIVATE_URL}`; local: `http://xstockstrat-identity:8058` |
+| `IDENTITY_ENDPOINT` | Same | `host:port` format (no protocol). DO: `${xstockstrat-identity.PRIVATE_DOMAIN}:50058`; local: `xstockstrat-identity:50058` |
 
-`auth.ts` does **not** read `IDENTITY_HTTP_ENDPOINT` directly — it's consumed by `connectClients.ts` for the `identityClient` transport.
+`auth.ts` does **not** read `IDENTITY_ENDPOINT` directly — it's consumed by `connectClients.ts` for the `identityClient` gRPC transport.
 
 ## Required `package.json` additions
 
@@ -265,11 +253,11 @@ Middleware only catches **browser navigations**, not direct `curl` calls. The `/
 ## Adding a new frontend service — checklist
 
 1. Copy `auth.ts`, `identity.ts`, `connectClients.ts`, `middleware.ts`, and `app/login/`, `app/api/auth/*` from `xstockstrat-trader`.
-2. In `connectClients.ts`, prune the descriptors to the services your frontend actually calls.
-3. Add `JWT_SECRET` and `IDENTITY_HTTP_ENDPOINT` to `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`.
+2. In `connectClients.ts`, add only the gRPC clients your frontend actually calls. Use `createGrpcTransport` + `*_ENDPOINT` vars. See `docs/patterns/nextjs-frontends.md` §10 for the hard transport rule.
+3. Add `JWT_SECRET` and `IDENTITY_ENDPOINT` (format: `host:port`) to `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`. Add `http2_ports: [50058]` to the identity service block in both DO app specs.
 4. Add `xstockstrat-identity` to `depends_on` in `docker-compose.yml`.
 5. Every new API route under `/api/*` calls `getSessionFromRequest` + 401-on-null before touching a backend.
-6. Every outbound call uses the typed Connect client with `Headers` propagation and `connectCodeToHttp` on `ConnectError`.
+6. Every outbound call uses the typed gRPC client with `Headers` propagation and `connectCodeToHttp` on `ConnectError`.
 7. Follow `docs/patterns/nginx-routing.md` for the nginx upstream and location.
 8. In `app/login/page.tsx`, use the full basePath-prefixed path in the login `fetch`: `fetch('/mybasepath/api/auth/login', ...)`. A bare `fetch('/api/auth/login')` resolves from the document root, hits nginx with no matching route, and silently returns HTML — see `docs/patterns/nextjs-frontends.md` §1.
 9. **Run `pnpm --filter <new-service> build` locally before opening a PR.** The Edge-runtime trap is invisible in source review — only a build catches it.

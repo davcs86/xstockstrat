@@ -22,11 +22,14 @@ export async function POST(req: NextRequest) {
     );
     return response;
   } catch (err) {
-    if (err instanceof ConnectError && err.code === Code.Unauthenticated) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    if (ConnectError) {
+      const ce = ConnectError.from(err);
+      if (ce.code === Code.Unauthenticated) {
+        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+      }
     }
     // Service unavailable — don't leak internal error detail to the browser.
-    console.error('[login] identity service error:', err);
+    console.error('[login] identity service error:', (err as Error)?.stack ?? err);
     return NextResponse.json(
       { error: 'Authentication service unavailable. Please try again.' },
       { status: 503 },

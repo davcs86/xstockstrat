@@ -1,5 +1,6 @@
 import type { HandlerContext, ServiceImpl } from '@connectrpc/connect';
 import { ConnectError, Code } from '@connectrpc/connect';
+import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
 import type {
   AuthenticateUserRequest,
@@ -18,7 +19,7 @@ import { IdentityServiceImpl } from '../grpc/identityServiceImpl';
 // wraps it as Code.Internal, so callers can never distinguish e.g.
 // Unauthenticated from an actual internal error.
 const GRPC_TO_CONNECT: Record<number, Code> = {
-  0: Code.Ok,              1: Code.Canceled,          2: Code.Unknown,
+  1: Code.Canceled,          2: Code.Unknown,
   3: Code.InvalidArgument, 4: Code.DeadlineExceeded,  5: Code.NotFound,
   6: Code.AlreadyExists,   7: Code.PermissionDenied,  8: Code.ResourceExhausted,
   9: Code.FailedPrecondition, 10: Code.Aborted,        11: Code.OutOfRange,
@@ -31,6 +32,27 @@ function toConnectError(err: any): ConnectError {
   return new ConnectError(err?.message ?? 'internal error', code);
 }
 
+// The shared impl returns `Date` instances for Timestamp fields (the shape
+// ts-proto's grpc-js serializer requires). protobuf-es, used by the Connect
+// HTTP path, expects `google.protobuf.Timestamp` messages instead, so deep-walk
+// the response and convert any Date before it reaches the Connect framework.
+function normalizeTimestamps(value: any): any {
+  if (value instanceof Date) {
+    return timestampFromDate(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(normalizeTimestamps);
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, any> = {};
+    for (const key of Object.keys(value)) {
+      out[key] = normalizeTimestamps(value[key]);
+    }
+    return out;
+  }
+  return value;
+}
+
 export function createIdentityServiceConnectImpl(
   impl: IdentityServiceImpl
 ): ServiceImpl<typeof IdentityService> {
@@ -39,7 +61,7 @@ export function createIdentityServiceConnectImpl(
       return new Promise<any>((resolve, reject) => {
         impl.authenticateUser({ request: req }, (err: any, res: any) => {
           if (err) reject(toConnectError(err));
-          else resolve(res);
+          else resolve(normalizeTimestamps(res));
         });
       });
     },
@@ -48,7 +70,7 @@ export function createIdentityServiceConnectImpl(
       return new Promise<any>((resolve, reject) => {
         impl.validateToken({ request: req }, (err: any, res: any) => {
           if (err) reject(toConnectError(err));
-          else resolve(res);
+          else resolve(normalizeTimestamps(res));
         });
       });
     },
@@ -57,7 +79,7 @@ export function createIdentityServiceConnectImpl(
       return new Promise<any>((resolve, reject) => {
         impl.refreshToken({ request: req }, (err: any, res: any) => {
           if (err) reject(toConnectError(err));
-          else resolve(res);
+          else resolve(normalizeTimestamps(res));
         });
       });
     },
@@ -66,7 +88,7 @@ export function createIdentityServiceConnectImpl(
       return new Promise<any>((resolve, reject) => {
         impl.revokeToken({ request: req }, (err: any, res: any) => {
           if (err) reject(toConnectError(err));
-          else resolve(res);
+          else resolve(normalizeTimestamps(res));
         });
       });
     },
@@ -75,7 +97,7 @@ export function createIdentityServiceConnectImpl(
       return new Promise<any>((resolve, reject) => {
         impl.createApiKey({ request: req }, (err: any, res: any) => {
           if (err) reject(toConnectError(err));
-          else resolve(res);
+          else resolve(normalizeTimestamps(res));
         });
       });
     },
@@ -84,7 +106,7 @@ export function createIdentityServiceConnectImpl(
       return new Promise<any>((resolve, reject) => {
         impl.validateApiKey({ request: req }, (err: any, res: any) => {
           if (err) reject(toConnectError(err));
-          else resolve(res);
+          else resolve(normalizeTimestamps(res));
         });
       });
     },
@@ -93,7 +115,7 @@ export function createIdentityServiceConnectImpl(
       return new Promise<any>((resolve, reject) => {
         impl.listApiKeys({ request: req }, (err: any, res: any) => {
           if (err) reject(toConnectError(err));
-          else resolve(res);
+          else resolve(normalizeTimestamps(res));
         });
       });
     },
@@ -102,7 +124,7 @@ export function createIdentityServiceConnectImpl(
       return new Promise<any>((resolve, reject) => {
         impl.revokeApiKey({ request: req }, (err: any, res: any) => {
           if (err) reject(toConnectError(err));
-          else resolve(res);
+          else resolve(normalizeTimestamps(res));
         });
       });
     },

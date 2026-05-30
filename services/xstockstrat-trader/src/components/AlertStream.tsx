@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { BASE_PATH } from '@/lib/basepath';
 import { Bell } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -27,7 +28,7 @@ export function AlertStream() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
 
   useEffect(() => {
-    const es = new EventSource('/api/alerts/stream');
+    const es = new EventSource(`${BASE_PATH}/api/alerts/stream`);
     es.onmessage = (e) => {
       try {
         const alert: Alert = JSON.parse(e.data);

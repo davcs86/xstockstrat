@@ -28,8 +28,9 @@ function propagationHeaders(
 }
 
 function errorResponse(err: unknown): NextResponse {
-  if (err instanceof ConnectError) {
-    return NextResponse.json({ error: err.rawMessage }, { status: connectCodeToHttp(err.code) });
+  if (ConnectError) {
+    const ce = ConnectError.from(err);
+    return NextResponse.json({ error: ce.rawMessage }, { status: connectCodeToHttp(ce.code) });
   }
   return NextResponse.json({ error: (err as Error).message }, { status: 500 });
 }
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
       {
         namespace,
         key,
-        value: { stringVal: String(value) },
+        value: { value: { case: 'stringVal', value: String(value) } },
         author: claims.user_id,
         reason: reason ?? 'Updated via config-ui',
         environment: envToProto(env ?? 'dev'),

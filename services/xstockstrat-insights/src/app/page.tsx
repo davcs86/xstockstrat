@@ -9,6 +9,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AccountPortfolioSelector } from '@/components/AccountPortfolioSelector';
+import { BASE_PATH } from '@/lib/basepath';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -66,7 +67,7 @@ function InsightsDashboard() {
     router.replace(`/?${params.toString()}`);
   };
 
-  const { data: strategies } = useSWR('/api/analysis/strategies', fetcher, {
+  const { data: strategies } = useSWR(`${BASE_PATH}/api/analysis/strategies`, fetcher, {
     refreshInterval: 30000,
   });
 

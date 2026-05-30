@@ -108,7 +108,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-config/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-config:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-config:latest-dev
     container_name: xstockstrat-config
     env_file: [".env.local"]
     environment:
@@ -136,7 +136,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-ledger/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-ledger:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-ledger:latest-dev
     container_name: xstockstrat-ledger
     env_file: [".env.local"]
     environment:
@@ -167,7 +167,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-identity/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-identity:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-identity:latest-dev
     container_name: xstockstrat-identity
     env_file: [".env.local"]
     environment:
@@ -202,13 +202,12 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-notify/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-notify:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-notify:latest-dev
     container_name: xstockstrat-notify
     env_file: [".env.local"]
     environment:
       <<: [*common-env, *db-url]
       GRPC_PORT: "50059"
-      HTTP_PORT: "8059"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
@@ -217,7 +216,6 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50059:50059"
-      - "8059:8059"
     healthcheck:
       <<: *hc-defaults
       test: ["CMD", "nc", "-z", "localhost", "50059"]
@@ -237,7 +235,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-marketdata/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-marketdata:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-marketdata:latest-dev
     container_name: xstockstrat-marketdata
     env_file: [".env.local"]
     environment:
@@ -272,7 +270,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-indicators/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-indicators:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-indicators:latest-dev
     container_name: xstockstrat-indicators
     env_file: [".env.local"]
     environment:
@@ -303,13 +301,12 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-ingest/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-ingest:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-ingest:latest-dev
     container_name: xstockstrat-ingest
     env_file: [".env.local"]
     environment:
       <<: [*common-env, *db-url]
       GRPC_PORT: "50055"
-      HTTP_PORT: "8055"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
@@ -321,7 +318,6 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50055:50055"
-      - "8055:8055"
     healthcheck:
       <<: *hc-defaults
       test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/50055"]
@@ -341,13 +337,12 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-analysis/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-analysis:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-analysis:latest-dev
     container_name: xstockstrat-analysis
     env_file: [".env.local"]
     environment:
       <<: [*common-env, *db-url]
       GRPC_PORT: "50056"
-      HTTP_PORT: "8056"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
@@ -359,7 +354,6 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50056:50056"
-      - "8056:8056"
     healthcheck:
       <<: *hc-defaults
       test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/50056"]
@@ -381,7 +375,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-portfolio/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-portfolio:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-portfolio:latest-dev
     container_name: xstockstrat-portfolio
     env_file: [".env.local"]
     environment:
@@ -413,7 +407,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-trading/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-trading:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-trading:latest-dev
     container_name: xstockstrat-trading
     env_file: [".env.local"]
     environment:
@@ -450,17 +444,17 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-trader/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-trader:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-trader:latest-dev
     container_name: xstockstrat-trader
     env_file: [".env.local", ".env.fe.local"]
     environment:
       <<: *common-env
-      # Connect-RPC HTTP endpoints (not raw gRPC ports)
-      TRADING_HTTP_ENDPOINT: http://xstockstrat-trading:8051
-      PORTFOLIO_HTTP_ENDPOINT: http://xstockstrat-portfolio:8052
-      NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
-      IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
-      MARKETDATA_HTTP_ENDPOINT: http://xstockstrat-marketdata:8053
+      # gRPC endpoints (host:port, no protocol) — server-side only
+      TRADING_ENDPOINT: xstockstrat-trading:50051
+      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
+      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: trader
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
@@ -479,19 +473,19 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-insights/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-insights:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-insights:latest-dev
     container_name: xstockstrat-insights
     env_file: [".env.local", ".env.fe.local"]
     environment:
       <<: *common-env
-      # Connect-RPC HTTP endpoints (not raw gRPC ports)
-      ANALYSIS_HTTP_ENDPOINT: http://xstockstrat-analysis:8056
-      INDICATORS_HTTP_ENDPOINT: http://xstockstrat-indicators:8054
-      MARKETDATA_HTTP_ENDPOINT: http://xstockstrat-marketdata:8053
-      PORTFOLIO_HTTP_ENDPOINT: http://xstockstrat-portfolio:8052
-      TRADING_HTTP_ENDPOINT: http://xstockstrat-trading:8051
-      NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
-      IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
+      # gRPC endpoints (host:port, no protocol) — server-side only
+      ANALYSIS_ENDPOINT: xstockstrat-analysis:50056
+      INDICATORS_ENDPOINT: xstockstrat-indicators:50054
+      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
+      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      TRADING_ENDPOINT: xstockstrat-trading:50051
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: insights
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
@@ -508,15 +502,15 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-config-ui/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-config-ui:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-config-ui:latest-dev
     container_name: xstockstrat-config-ui
     env_file: [".env.local", ".env.fe.local"]
     environment:
       <<: [*common-env, *db-url]
-      # Connect-RPC HTTP endpoint for xstockstrat-config
-      CONFIG_HTTP_ENDPOINT: http://xstockstrat-config:8060
-      IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
-      INGEST_HTTP_ENDPOINT: http://xstockstrat-ingest:8055
+      # gRPC endpoints (host:port, no protocol) — server-side only
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
+      INGEST_ENDPOINT: xstockstrat-ingest:50055
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: config-ui
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
@@ -541,7 +535,7 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-nginx/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-nginx:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-nginx:latest-dev
     container_name: xstockstrat-nginx
     environment:
       - XSTOCKSTRAT_TRADER_PRIVATE_URL=xstockstrat-trader
@@ -567,14 +561,14 @@ services:
     build:
       context: .
       dockerfile: services/xstockstrat-agent/Dockerfile
-    image: registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/xstockstrat-agent:latest-dev
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-agent:latest-dev
     container_name: xstockstrat-agent
     env_file: [".env.local"]
     environment:
       <<: *common-env
-      INGEST_HTTP_ENDPOINT: http://xstockstrat-ingest:8055
-      NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
-      ANALYSIS_HTTP_ENDPOINT: http://xstockstrat-analysis:8056
+      INGEST_ENDPOINT: xstockstrat-ingest:50055
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      ANALYSIS_ENDPOINT: xstockstrat-analysis:50056
       IDENTITY_ENDPOINT: xstockstrat-identity:50058
       CONFIG_ENDPOINT: xstockstrat-config:50060
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-identity:50058"

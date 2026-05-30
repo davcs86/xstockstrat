@@ -12,6 +12,7 @@ import { Badge } from '@components/ui/badge';
 import { Button } from '@components/ui/button';
 import { Input } from '@components/ui/input';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@components/ui/table';
+import { BASE_PATH } from '@/app/lib/basepath';
 
 interface ConfigKey {
   key: string;
@@ -46,7 +47,7 @@ export default function NamespacePage({ params, searchParams }: Props) {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/config?namespace=${namespace}&env=${env}&mode=${mode}`)
+    fetch(`${BASE_PATH}/api/config?namespace=${namespace}&env=${env}&mode=${mode}`)
       .then((r) => r.json())
       .then((data: ListKeysResponse) => {
         setKeys(data.keys ?? []);
@@ -61,7 +62,7 @@ export default function NamespacePage({ params, searchParams }: Props) {
   async function handleSave(key: string) {
     setSaving(true);
     try {
-      await fetch('/api/config', {
+      await fetch(`${BASE_PATH}/api/config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -76,7 +77,7 @@ export default function NamespacePage({ params, searchParams }: Props) {
       });
       setEditingKey(null);
       const data: ListKeysResponse = await fetch(
-        `/api/config?namespace=${namespace}&env=${env}&mode=${mode}`
+        `${BASE_PATH}/api/config?namespace=${namespace}&env=${env}&mode=${mode}`
       ).then((r) => r.json());
       setKeys(data.keys ?? []);
     } finally {

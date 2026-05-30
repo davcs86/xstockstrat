@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useAccountContext } from '@/context/AccountContext';
+import { BASE_PATH } from '@/lib/basepath';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -57,7 +58,7 @@ export function AccountManagementPanel() {
   async function handleRemove(accountId: string) {
     setRemoving(true);
     try {
-      await fetch(`/api/accounts/${accountId}`, { method: 'DELETE' });
+      await fetch(`${BASE_PATH}/api/accounts/${accountId}`, { method: 'DELETE' });
       const remaining = accounts.find(
         (a) => a.is_active && a.account_id !== accountId,
       );
@@ -86,7 +87,7 @@ export function AccountManagementPanel() {
             })
           : JSON.stringify({ api_key: apiKey, api_secret: apiSecret });
 
-      const res = await fetch('/api/accounts', {
+      const res = await fetch(`${BASE_PATH}/api/accounts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

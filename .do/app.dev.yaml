@@ -6,7 +6,7 @@ name: xstockstrat-staging
 region: nyc
 
 # Route all public traffic through the nginx reverse proxy.
-# All backend services use internal_ports (no public routes).
+# All backend services use internal_ports for TCP (any protocol, including gRPC H2C).
 ingress:
   rules:
     - component:
@@ -34,21 +34,18 @@ services:
   # ── Go services ────────────────────────────────────────────────────────────
 
   - name: xstockstrat-trading
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-trading/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-trading
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50051
-      - 8051
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50051"
-      - key: HTTP_PORT
-        value: "8051"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -70,21 +67,18 @@ services:
         type: SECRET
 
   - name: xstockstrat-portfolio
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-portfolio/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-portfolio
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50052
-      - 8052
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50052"
-      - key: HTTP_PORT
-        value: "8052"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -98,21 +92,18 @@ services:
         value: portfolio
 
   - name: xstockstrat-marketdata
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-marketdata/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-marketdata
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50053
-      - 8053
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50053"
-      - key: HTTP_PORT
-        value: "8053"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -134,21 +125,18 @@ services:
   # ── Python services ────────────────────────────────────────────────────────
 
   - name: xstockstrat-indicators
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-indicators/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-indicators
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50054
-      - 8054
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50054"
-      - key: HTTP_PORT
-        value: "8054"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -161,21 +149,18 @@ services:
         value: indicators
 
   - name: xstockstrat-ingest
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-ingest/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-ingest
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50055
-      - 8055
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50055"
-      - key: HTTP_PORT
-        value: "8055"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -198,21 +183,18 @@ services:
         type: SECRET
 
   - name: xstockstrat-analysis
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-analysis/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-analysis
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50056
-      - 8056
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50056"
-      - key: HTTP_PORT
-        value: "8056"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -235,22 +217,22 @@ services:
         type: SECRET
 
   - name: xstockstrat-agent
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-agent/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-agent
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 9000
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: INGEST_HTTP_ENDPOINT
-        value: ${xstockstrat-ingest.PRIVATE_URL}
-      - key: NOTIFY_HTTP_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: ANALYSIS_HTTP_ENDPOINT
-        value: ${xstockstrat-analysis.PRIVATE_URL}
+      - key: INGEST_ENDPOINT
+        value: ${xstockstrat-ingest.PRIVATE_DOMAIN}:50055
+      - key: NOTIFY_ENDPOINT
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
+      - key: ANALYSIS_ENDPOINT
+        value: ${xstockstrat-analysis.PRIVATE_DOMAIN}:50056
       - key: IDENTITY_ENDPOINT
         value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: CONFIG_ENDPOINT
@@ -268,21 +250,18 @@ services:
   # ── Node.js services ───────────────────────────────────────────────────────
 
   - name: xstockstrat-ledger
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-ledger/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-ledger
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50057
-      - 8057
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50057"
-      - key: HTTP_PORT
-        value: "8057"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: NOTIFY_ENDPOINT
@@ -300,20 +279,17 @@ services:
 
   - name: xstockstrat-identity
     image:
-      registry_type: DOCR
-      registry: YOUR_REGISTRY_NAME
-      repository: xstockstrat-identity
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-identity
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50058
-      - 8058
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50058"
-      - key: HTTP_PORT
-        value: "8058"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -337,20 +313,17 @@ services:
 
   - name: xstockstrat-notify
     image:
-      registry_type: DOCR
-      registry: YOUR_REGISTRY_NAME
-      repository: xstockstrat-notify
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-notify
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50059
-      - 8059
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50059"
-      - key: HTTP_PORT
-        value: "8059"
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: LEDGER_ENDPOINT
@@ -370,22 +343,19 @@ services:
         type: SECRET
 
   - name: xstockstrat-config
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-config/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-config
+      tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50060
-      - 8060
     instance_count: 1
     # basic-s: extra headroom for WatchConfig streaming RPC (above 60s idle timeout)
     instance_size_slug: basic-s
     envs:
       - key: GRPC_PORT
         value: "50060"
-      - key: HTTP_PORT
-        value: "8060"
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}
@@ -400,11 +370,11 @@ services:
   # ── Nginx Reverse Proxy (new HTTP ingress) ────────────────────────────────
 
   - name: xstockstrat-nginx
-    github:
-      repo: YOUR_GITHUB_ORG/xstockstrat
-      branch: main-dev
-      deploy_on_push: false
-    dockerfile_path: services/xstockstrat-nginx/Dockerfile
+    image:
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-nginx
+      tag: "YOUR_IMAGE_TAG"
     http_port: 80
     instance_count: 1
     instance_size_slug: basic-xs
@@ -420,25 +390,25 @@ services:
 
   - name: xstockstrat-trader
     image:
-      registry_type: DOCR
-      registry: YOUR_REGISTRY_NAME
-      repository: xstockstrat-trader
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-trader
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 3000
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: TRADING_HTTP_ENDPOINT
-        value: ${xstockstrat-trading.PRIVATE_URL}
-      - key: PORTFOLIO_HTTP_ENDPOINT
-        value: ${xstockstrat-portfolio.PRIVATE_URL}
-      - key: NOTIFY_HTTP_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: IDENTITY_HTTP_ENDPOINT
-        value: ${xstockstrat-identity.PRIVATE_URL}
-      - key: MARKETDATA_HTTP_ENDPOINT
-        value: ${xstockstrat-marketdata.PRIVATE_URL}
+      - key: TRADING_ENDPOINT
+        value: ${xstockstrat-trading.PRIVATE_DOMAIN}:50051
+      - key: PORTFOLIO_ENDPOINT
+        value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
+      - key: NOTIFY_ENDPOINT
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
+      - key: MARKETDATA_ENDPOINT
+        value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
       - key: APP_URL
         value: ${APP_URL}
       - key: JWT_SECRET
@@ -450,29 +420,29 @@ services:
 
   - name: xstockstrat-insights
     image:
-      registry_type: DOCR
-      registry: YOUR_REGISTRY_NAME
-      repository: xstockstrat-insights
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-insights
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 3001
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: ANALYSIS_HTTP_ENDPOINT
-        value: ${xstockstrat-analysis.PRIVATE_URL}
-      - key: INDICATORS_HTTP_ENDPOINT
-        value: ${xstockstrat-indicators.PRIVATE_URL}
-      - key: MARKETDATA_HTTP_ENDPOINT
-        value: ${xstockstrat-marketdata.PRIVATE_URL}
-      - key: PORTFOLIO_HTTP_ENDPOINT
-        value: ${xstockstrat-portfolio.PRIVATE_URL}
-      - key: TRADING_HTTP_ENDPOINT
-        value: ${xstockstrat-trading.PRIVATE_URL}
-      - key: NOTIFY_HTTP_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: IDENTITY_HTTP_ENDPOINT
-        value: ${xstockstrat-identity.PRIVATE_URL}
+      - key: ANALYSIS_ENDPOINT
+        value: ${xstockstrat-analysis.PRIVATE_DOMAIN}:50056
+      - key: INDICATORS_ENDPOINT
+        value: ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
+      - key: MARKETDATA_ENDPOINT
+        value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
+      - key: PORTFOLIO_ENDPOINT
+        value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
+      - key: TRADING_ENDPOINT
+        value: ${xstockstrat-trading.PRIVATE_DOMAIN}:50051
+      - key: NOTIFY_ENDPOINT
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: APP_URL
         value: ${APP_URL}
       - key: JWT_SECRET
@@ -484,21 +454,21 @@ services:
 
   - name: xstockstrat-config-ui
     image:
-      registry_type: DOCR
-      registry: YOUR_REGISTRY_NAME
-      repository: xstockstrat-config-ui
+      registry_type: GHCR
+      registry: YOUR_GITHUB_ORG
+      repository: xstockstrat/xstockstrat-config-ui
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 3002
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
-      - key: CONFIG_HTTP_ENDPOINT
-        value: ${xstockstrat-config.PRIVATE_URL}
-      - key: IDENTITY_HTTP_ENDPOINT
-        value: ${xstockstrat-identity.PRIVATE_URL}
-      - key: INGEST_HTTP_ENDPOINT
-        value: ${xstockstrat-ingest.PRIVATE_URL}
+      - key: CONFIG_ENDPOINT
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
+      - key: INGEST_ENDPOINT
+        value: ${xstockstrat-ingest.PRIVATE_DOMAIN}:50055
       - key: APP_URL
         value: ${APP_URL}
       - key: JWT_SECRET

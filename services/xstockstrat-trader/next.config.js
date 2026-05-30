@@ -2,8 +2,9 @@
 const nextConfig = {
   basePath: '/trader',
   output: 'standalone',
-  // Ensure Connect-RPC Node transport runs in server context without bundling issues
-  serverExternalPackages: ['@connectrpc/connect-node', '@opentelemetry/sdk-node', '@opentelemetry/exporter-trace-otlp-http'],
+  // Keep all Connect-RPC + protobuf packages external so instanceof checks share
+  // the same class instance as connect-node (bundling them separately breaks instanceof ConnectError).
+  serverExternalPackages: ['@connectrpc/connect', '@connectrpc/connect-node', '@bufbuild/protobuf', '@opentelemetry/sdk-node', '@opentelemetry/exporter-trace-otlp-http'],
 };
 
 module.exports = nextConfig;

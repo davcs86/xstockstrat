@@ -24,19 +24,25 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { strategy_id, symbol, start, end, initial_capital = 100000 } = body;
 
+    const isoToTimestamp = (iso: string) => {
+      const ms = new Date(iso).getTime();
+      return { seconds: BigInt(Math.floor(ms / 1000)), nanos: (ms % 1000) * 1_000_000 };
+    };
+
     const result = await analysisClient.runBacktest(
       {
         strategyId: strategy_id,
         symbols: symbol ? [symbol] : [],
         initialCapital: initial_capital,
-        range: start && end ? { startTime: start, endTime: end } : undefined,
+        range: start && end ? { start: isoToTimestamp(start), end: isoToTimestamp(end) } : undefined,
       },
       { headers },
     );
     return NextResponse.json(result);
   } catch (err) {
-    if (err instanceof ConnectError) {
-      return NextResponse.json({ error: err.rawMessage }, { status: connectCodeToHttp(err.code) });
+    if (ConnectError) {
+      const ce = ConnectError.from(err);
+      return NextResponse.json({ error: ce.rawMessage }, { status: connectCodeToHttp(ce.code) });
     }
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

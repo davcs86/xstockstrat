@@ -64,7 +64,7 @@ export class NotifyServiceImpl {
         context: req.context,
         tags: req.tags ?? [],
         correlationId: req.correlationId ?? '',
-        createdAt: { seconds: Math.floor(now.getTime() / 1000) },
+        createdAt: now,
         acknowledged: false,
       };
 
@@ -83,7 +83,7 @@ export class NotifyServiceImpl {
 
       callback(null, {
         alertId,
-        createdAt: { seconds: Math.floor(now.getTime() / 1000) },
+        createdAt: now,
       });
     } catch (err: any) {
       log.error('emitAlert failed', { error: err.message });
@@ -178,7 +178,7 @@ export function rowToAlert(row: any) {
     body: row.body,
     sourceService: row.source_service,
     targetUserId: row.target_user_id ?? '',
-    createdAt: { seconds: Math.floor(new Date(row.created_at).getTime() / 1000) },
+    createdAt: new Date(row.created_at),
     acknowledged: row.acknowledged,
     correlationId: row.correlation_id ?? '',
     tags: row.tags ?? [],

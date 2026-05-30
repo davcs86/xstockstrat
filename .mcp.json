@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "digitalocean-apps": {
+      "type": "http",
+      "url": "https://apps.mcp.digitalocean.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DIGITALOCEAN_TOKEN}"
+      }
+    },
+    "digitalocean-databases": {
+      "type": "http",
+      "url": "https://databases.mcp.digitalocean.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DIGITALOCEAN_TOKEN}"
+      }
+    }
+  }
+}

@@ -1,4 +1,5 @@
 {
+  "enabledMcpjsonServers": ["digitalocean-apps", "digitalocean-databases"],
   "hooks": {
     "SessionStart": [
       {

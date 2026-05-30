@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import type { TradingMode } from '@/app/page';
 import { useAccountContext } from '@/context/AccountContext';
+import { BASE_PATH } from '@/lib/basepath';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -38,7 +39,7 @@ export function OrderForm({ mode }: OrderFormProps) {
     setMessage('');
 
     try {
-      const res = await fetch('/api/orders', {
+      const res = await fetch(`${BASE_PATH}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,7 +1,7 @@
 # xstockstrat-config-ui — CLAUDE.md
 
 ## Role
-Next.js 14 web UI for managing runtime configuration values across the xstockstrat platform. Allows operators to view, edit, and audit config keys scoped by environment (dev/production) and trading mode (paper/live). Communicates with `xstockstrat-config` via Connect-RPC on port 8060.
+Next.js 14 web UI for managing runtime configuration values across the xstockstrat platform. Allows operators to view, edit, and audit config keys scoped by environment (dev/production) and trading mode (paper/live). Communicates with `xstockstrat-config` via gRPC (H2C) on port 50060.
 
 ## Language
 TypeScript / Next.js 14 (App Router)
@@ -17,7 +17,7 @@ Frontend pattern — see `docs/patterns/docker-build.md` for the base + deps + b
 ```
 Browser (React Client Components)
   └── /api/config → Next.js Route Handler
-        └── Connect-RPC → xstockstrat-config:8060
+        └── gRPC (H2C) → xstockstrat-config:50060
               └── ListKeys, SetConfig RPCs
   └── /api/audit → Next.js Route Handler
         └── Direct DB query → config.config_audit table
@@ -41,13 +41,18 @@ The config service returns values appropriate for the selected scope.
 
 | Dependency | Type | Reason |
 |---|---|---|
-| xstockstrat-config | Connect-RPC HTTP (port 8060) | ListKeys, SetConfig RPCs |
+| xstockstrat-config | gRPC `50060` | ListKeys, SetConfig RPCs |
+| xstockstrat-identity | gRPC `50058` | Token validation |
+| xstockstrat-ingest | gRPC `50055` | Signal data queries |
 | TimescaleDB/PostgreSQL | Direct DB (schema: `config`) | Read config.config_audit for audit log |
 
 ## Environment Variables
 
 ```
-CONFIG_HTTP_ENDPOINT=http://xstockstrat-config:8060    # Connect-RPC HTTP port (not gRPC)
+# gRPC endpoints (host:port, no protocol) — consumed by server-side route handlers only
+CONFIG_ENDPOINT=xstockstrat-config:50060
+IDENTITY_ENDPOINT=xstockstrat-identity:50058
+INGEST_ENDPOINT=xstockstrat-ingest:50055
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 APPLICATION_ENV=development            # .env.local
 TRADING_MODE=paper

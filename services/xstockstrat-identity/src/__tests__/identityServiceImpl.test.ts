@@ -12,6 +12,7 @@
  */
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
+import * as jwt from 'jsonwebtoken';
 
 // ---------------------------------------------------------------------------
 // Lazy imports — guard against strip-only TypeScript syntax errors
@@ -170,5 +171,46 @@ describe('createApiKey', () => {
         resolve();
       });
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: success responses must carry `Date` Timestamp fields so the
+// ts-proto grpc-js serializer can encode them. Before the fix, `{ seconds }`
+// plain objects threw `getTime is not a function` inside `responseSerialize`
+// (after the handler returned), which grpc-js surfaced to callers — e.g. the
+// trader login route — as an INTERNAL trailers-only error.
+// ---------------------------------------------------------------------------
+
+describe('validateToken success serialization (regression)', () => {
+  it('returns Date timestamps that ts-proto encodes without throwing', async () => {
+    const impl = makeImpl();
+    if (!impl) return;
+
+    let TokenClaims: any;
+    try {
+      ({ TokenClaims } = await import('@xstockstrat/proto/identity/v1/identity.js'));
+    } catch {
+      return; // proto package unavailable in this runtime — skip.
+    }
+
+    process.env.JWT_SECRET = 'regression-test-secret';
+    const now = Math.floor(Date.now() / 1000);
+    const token = (jwt as any).sign(
+      { user_id: 'u1', email: 'u@example.com', roles: ['trader'], issued_at: now, expires_at: now + 900 },
+      process.env.JWT_SECRET,
+    );
+
+    const res: any = await new Promise((resolve, reject) => {
+      impl.validateToken(makeCall({ token }), (err: any, r: any) =>
+        err ? reject(err) : resolve(r),
+      );
+    });
+
+    assert.ok(res.issuedAt instanceof Date, 'issuedAt must be a Date');
+    assert.ok(res.expiresAt instanceof Date, 'expiresAt must be a Date');
+    // The exact serialization grpc-js performs via responseSerialize — the call
+    // that threw before the fix. Must not throw now.
+    assert.doesNotThrow(() => TokenClaims.encode(res).finish());
   });
 });

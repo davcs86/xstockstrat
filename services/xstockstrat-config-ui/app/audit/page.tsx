@@ -10,6 +10,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { Card, CardContent } from '@components/ui/card';
 import { Badge } from '@components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@components/ui/table';
+import { BASE_PATH } from '@/app/lib/basepath';
 
 interface AuditEntry {
   id: string;
@@ -29,7 +30,7 @@ export default function AuditPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/audit')
+    fetch(`${BASE_PATH}/api/audit`)
       .then((r) => r.json())
       .then((data) => {
         setEntries(data.entries ?? []);

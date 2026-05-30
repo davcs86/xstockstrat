@@ -45,7 +45,7 @@ export class LedgerServiceImpl {
       callback(null, {
         eventId,
         sequence: row.sequence,
-        recordedAt: { seconds: Math.floor(row.recorded_at.getTime() / 1000) },
+        recordedAt: row.recorded_at,
       });
     } catch (err: any) {
       log.error('appendEvent failed', { error: err.message, streamKey: req.streamKey });
@@ -182,8 +182,8 @@ export function rowToEvent(row: any) {
     streamKey: row.stream_key,
     payload: row.payload,
     metadata: row.metadata ?? {},
-    occurredAt: { seconds: Math.floor(new Date(row.occurred_at).getTime() / 1000) },
-    recordedAt: { seconds: Math.floor(new Date(row.recorded_at).getTime() / 1000) },
+    occurredAt: new Date(row.occurred_at),
+    recordedAt: new Date(row.recorded_at),
     sequence: row.sequence,
   };
 }

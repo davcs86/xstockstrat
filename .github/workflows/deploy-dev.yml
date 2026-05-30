@@ -34,9 +34,6 @@ jobs:
     name: Build and push Docker images
     needs: [prepare]
     uses: ./.github/workflows/docker-build.yml
-    secrets:
-      DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-      DO_REGISTRY_NAME: ${{ secrets.DO_REGISTRY_NAME }}
     with:
       image_tag: ${{ needs.prepare.outputs.short_sha }}
       latest_tag: latest-dev
@@ -49,7 +46,6 @@ jobs:
       DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       DO_APP_ID: ${{ secrets.DO_DEV_APP_ID }}
       DO_PROJECT_ID: ${{ secrets.DO_DEV_PROJECT_ID }}
-      DO_REGISTRY_NAME: ${{ secrets.DO_REGISTRY_NAME }}
       BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY }}
       JWT_SECRET: ${{ secrets.DEV_JWT_SECRET }}
     with:

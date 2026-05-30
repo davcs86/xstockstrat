@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { BASE_PATH } from '@/lib/basepath';
 
 type Timeframe = '10Min' | '30Min' | '1Hour' | '1Day' | '1Week' | '1Month';
 
@@ -92,7 +93,7 @@ export default function MarketSymbolPage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`/api/marketdata?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&limit=300`)
+    fetch(`${BASE_PATH}/api/marketdata?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&limit=300`)
       .then(async (res) => {
         const body = await res.json();
         if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
