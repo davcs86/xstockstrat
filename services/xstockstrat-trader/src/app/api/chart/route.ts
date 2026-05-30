@@ -12,8 +12,9 @@ function propagationHeaders(req: NextRequest, claims: { user_id: string; roles: 
 }
 
 function errorResponse(err: unknown): NextResponse {
-  if (ConnectError && err instanceof ConnectError) {
-    return NextResponse.json({ error: err.rawMessage }, { status: connectCodeToHttp(err.code) });
+  if (ConnectError) {
+    const ce = ConnectError.from(err);
+    return NextResponse.json({ error: ce.rawMessage }, { status: connectCodeToHttp(ce.code) });
   }
   return NextResponse.json({ error: (err as Error).message }, { status: 500 });
 }
