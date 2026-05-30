@@ -25,31 +25,11 @@ function makeTransport(endpoint: string) {
   return createGrpcTransport({ baseUrl: `http://${endpoint}` });
 }
 
-// Cast to a generic record so route handlers can call any method with plain
-// object inputs without TypeScript routing them through the protobuf-es v2
-// message shape types. At runtime, connect v2's JSON serializer reads field
-// values from the plain object by name, so this is safe.
-type UntypedClient = Record<
-  string,
-  (input?: unknown, options?: { headers?: Headers }) => Promise<unknown>
->;
-
 // ── Exported clients ───────────────────────────────────────────────────────
 
-export const configClient = createClient(
-  ConfigService,
-  makeTransport(CONFIG_ENDPOINT),
-) as unknown as UntypedClient;
-
-export const identityClient = createClient(
-  IdentityService,
-  makeTransport(IDENTITY_ENDPOINT),
-) as unknown as UntypedClient;
-
-export const ingestClient = createClient(
-  IngestService,
-  makeTransport(INGEST_ENDPOINT),
-) as unknown as UntypedClient;
+export const configClient = createClient(ConfigService, makeTransport(CONFIG_ENDPOINT));
+export const identityClient = createClient(IdentityService, makeTransport(IDENTITY_ENDPOINT));
+export const ingestClient = createClient(IngestService, makeTransport(INGEST_ENDPOINT));
 
 // ── Connect-Code → HTTP status helper ──────────────────────────────────────
 export function connectCodeToHttp(code: Code): number {

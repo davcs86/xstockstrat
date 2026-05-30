@@ -31,41 +31,13 @@ function makeTransport(endpoint: string) {
   return createGrpcTransport({ baseUrl: `http://${endpoint}` });
 }
 
-// Cast to a generic record so route handlers can call any method with plain
-// object inputs without TypeScript routing them through the protobuf-es v2
-// message shape types. At runtime, connect v2's JSON serializer reads field
-// values from the plain object by name, so this is safe.
-type UntypedClient = Record<
-  string,
-  (input?: unknown, options?: { headers?: Headers }) => Promise<unknown>
->;
-
 // ── Exported clients ───────────────────────────────────────────────────────
 
-export const analysisClient = createClient(
-  AnalysisService,
-  makeTransport(ANALYSIS_ENDPOINT),
-) as unknown as UntypedClient;
-
-export const marketDataClient = createClient(
-  MarketDataService,
-  makeTransport(MARKETDATA_ENDPOINT),
-) as unknown as UntypedClient;
-
-export const portfolioClient = createClient(
-  PortfolioService,
-  makeTransport(PORTFOLIO_ENDPOINT),
-) as unknown as UntypedClient;
-
-export const tradingClient = createClient(
-  TradingService,
-  makeTransport(TRADING_ENDPOINT),
-) as unknown as UntypedClient;
-
-export const identityClient = createClient(
-  IdentityService,
-  makeTransport(IDENTITY_ENDPOINT),
-) as unknown as UntypedClient;
+export const analysisClient = createClient(AnalysisService, makeTransport(ANALYSIS_ENDPOINT));
+export const marketDataClient = createClient(MarketDataService, makeTransport(MARKETDATA_ENDPOINT));
+export const portfolioClient = createClient(PortfolioService, makeTransport(PORTFOLIO_ENDPOINT));
+export const tradingClient = createClient(TradingService, makeTransport(TRADING_ENDPOINT));
+export const identityClient = createClient(IdentityService, makeTransport(IDENTITY_ENDPOINT));
 
 // ── Connect-Code → HTTP status helper ──────────────────────────────────────
 export function connectCodeToHttp(code: Code): number {
