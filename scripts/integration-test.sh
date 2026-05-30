@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
 # xstockstrat Platform — Phase 6 Integration Test
 #
-# Exercises the full end-to-end trading flow across all services using
-# Connect-RPC HTTP endpoints (port 805X). Mirrors Verification Checkpoint 6
-# in _tasks/x-implementation-roadmap.md.
+# ⚠️  PENDING UPDATE — backend HTTP/Connect-RPC (80xx) ports were REMOVED.
+#     Backend services are now gRPC-only (50xx). This script still targets the
+#     old Connect-RPC HTTP endpoints (port 805X) and therefore will NOT pass as
+#     written. It must be converted to call the gRPC services via `grpcurl`
+#     (the backends keep server reflection enabled, and Connect JSON payloads map
+#     1:1 to grpcurl `-d` protojson). Conversion needs a live stack to validate
+#     response field-name casing — tracked as a follow-up to the 80xx-server
+#     removal. The UI health checks (ports 30xx) are unaffected.
+#
+# Exercises the full end-to-end trading flow across all services. Mirrors
+# Verification Checkpoint 6 in _tasks/x-implementation-roadmap.md.
 #
 # Usage:
 #   ./scripts/integration-test.sh

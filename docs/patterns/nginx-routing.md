@@ -73,4 +73,4 @@ When a new Next.js frontend (e.g. `xstockstrat-newui` on port `3003`) needs to b
 
 7. **`CLAUDE.md`** (root) — add a row to the Service Registry table and the nginx Environment Variables table.
 
-8. **Auth pattern** — follow `docs/patterns/frontend-auth.md`: add `jose`, create `lib/auth.ts`, login page, `/api/auth/*` routes, `middleware.ts`, and ensure all outbound API route fetches forward the three propagation headers. Add `JWT_SECRET` and `IDENTITY_HTTP_ENDPOINT` env vars to compose and DO specs.
+8. **Auth pattern** — follow `docs/patterns/frontend-auth.md`: add `jose`, create `lib/auth.ts`, login page, `/api/auth/*` routes, `middleware.ts`, and ensure all outbound API route fetches forward the three propagation headers. Add `JWT_SECRET` and `IDENTITY_ENDPOINT` (gRPC `host:port`) env vars to compose and DO specs.

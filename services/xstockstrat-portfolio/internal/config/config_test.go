@@ -12,9 +12,6 @@ func TestLoadFromEnv_Defaults(t *testing.T) {
 	if cfg.GRPCPort != "50052" {
 		t.Errorf("GRPCPort default: got %q, want %q", cfg.GRPCPort, "50052")
 	}
-	if cfg.HTTPPort != "8052" {
-		t.Errorf("HTTPPort default: got %q, want %q", cfg.HTTPPort, "8052")
-	}
 	if cfg.ConfigEndpoint != "xstockstrat-config:50060" {
 		t.Errorf("ConfigEndpoint default: got %q", cfg.ConfigEndpoint)
 	}
@@ -34,7 +31,6 @@ func TestLoadFromEnv_Defaults(t *testing.T) {
 
 func TestLoadFromEnv_Overrides(t *testing.T) {
 	t.Setenv("GRPC_PORT", "50099")
-	t.Setenv("HTTP_PORT", "8099")
 	t.Setenv("APPLICATION_ENV", "production")
 	t.Setenv("TRADING_MODE", "live")
 	t.Setenv("MARKETDATA_ENDPOINT", "custom-marketdata:50053")
@@ -43,9 +39,6 @@ func TestLoadFromEnv_Overrides(t *testing.T) {
 
 	if cfg.GRPCPort != "50099" {
 		t.Errorf("GRPCPort override: got %q", cfg.GRPCPort)
-	}
-	if cfg.HTTPPort != "8099" {
-		t.Errorf("HTTPPort override: got %q", cfg.HTTPPort)
 	}
 	if cfg.ApplicationEnv != "production" {
 		t.Errorf("ApplicationEnv override: got %q", cfg.ApplicationEnv)

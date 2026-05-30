@@ -53,7 +53,7 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /deploy ./
-EXPOSE 50XXX 8XXX
+EXPOSE 50XXX
 CMD ["node", "dist/index.js"]
 ```
 
@@ -164,7 +164,7 @@ RUN uv pip install -e /proto/gen/python
 RUN ln -s /proto/gen/python /app/gen
 
 COPY services/xstockstrat-<service>/ .
-EXPOSE 50XXX 8XXX
+EXPOSE 50XXX
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["python", "-m", "app.main"]
 ```
@@ -214,7 +214,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o service ./cmd/server
 FROM gcr.io/distroless/static-debian12
 WORKDIR /app
 COPY --from=builder /app/service .
-EXPOSE 50XXX 8XXX
+EXPOSE 50XXX
 ENTRYPOINT ["/app/service"]
 ```
 
@@ -371,11 +371,11 @@ All Node.js backend and frontend services in the platform already include this c
 
 ## When Adding a New Service
 
-### Node.js Backend (gRPC + Connect-RPC)
+### Node.js Backend (gRPC)
 Use the **Node.js Backend Pattern**:
 1. Create `services/xstockstrat-<service>/Dockerfile` from the template above
 2. Replace `xstockstrat-<service>` placeholder
-3. Update EXPOSE ports (gRPC 50XXX, HTTP 80XX)
+3. Update EXPOSE port (gRPC 50XXX)
 4. Ensure `pnpm-lock.yaml` is committed (enforced by CI)
 5. Reference `docs/patterns/docker-build.md` in service CLAUDE.md
 
@@ -387,19 +387,19 @@ Use the **Next.js Frontend Pattern**:
 4. Ensure `pnpm-lock.yaml` is committed (enforced by CI)
 5. Reference `docs/patterns/docker-build.md` in service CLAUDE.md
 
-### Python Backend (gRPC + Connect-RPC)
+### Python Backend (gRPC)
 Use the **Python Pattern**:
 1. Create `services/xstockstrat-<service>/Dockerfile` from the template above
 2. Replace `xstockstrat-<service>` placeholder
-3. Update EXPOSE ports (gRPC 50XXX, HTTP 80XX)
+3. Update EXPOSE port (gRPC 50XXX)
 4. Ensure `uv.lock` is committed (enforced by `uv lock --check` in CI)
 5. Reference `docs/patterns/docker-build.md` in service CLAUDE.md
 
-### Go Backend (gRPC + Connect-RPC)
+### Go Backend (gRPC)
 Use the **Go Pattern**:
 1. Create `services/xstockstrat-<service>/Dockerfile` from the template above
 2. Replace `xstockstrat-<service>` placeholder
-3. Update EXPOSE ports (gRPC 50XXX, HTTP 80XX)
+3. Update EXPOSE port (gRPC 50XXX)
 4. Verify `go.mod` and `go.sum` are committed
 5. Ensure `./cmd/server` is the binary entry point (or adjust the build path)
 6. Reference `docs/patterns/docker-build.md` in service CLAUDE.md

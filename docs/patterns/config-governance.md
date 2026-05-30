@@ -1,6 +1,6 @@
 # Config Governance Rules
 
-All runtime configuration is served by **xstockstrat-config** via `WatchConfig` streaming RPC (gRPC port 50060 / Connect-RPC port 8060).
+All runtime configuration is served by **xstockstrat-config** via `WatchConfig` streaming RPC (gRPC port 50060). config is gRPC-only.
 
 ## Rules (apply to every service)
 

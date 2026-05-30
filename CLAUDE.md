@@ -8,7 +8,7 @@
 - `scripts/` — codegen, bootstrap, and CI helpers
 - Root-level config governance documentation (this file)
 
-All services live as siblings under `services/`. They consume generated code from `packages/proto/` and coordinate via Connect-RPC (HTTP/1.1 + HTTP/2 with protobuf). Internal service-to-service calls use gRPC ports; browser/external clients use HTTP Connect-RPC ports.
+All services live as siblings under `services/`. They consume generated code from `packages/proto/` and coordinate via gRPC (HTTP/2 with protobuf). Backend services expose **gRPC only**; the Next.js frontends and the MCP agent reach them over gRPC (via `@connectrpc/connect-node` gRPC transport / native gRPC stubs) and re-expose HTTP to browsers/external clients themselves.
 
 ---
 
@@ -44,18 +44,22 @@ This file covers always-needed platform conventions. For larger reference sectio
 
 ## Service Registry
 
-| Service | Language | Role | gRPC Port | HTTP (Connect-RPC) Port |
+Backend services are **gRPC-only** (the HTTP/Connect-RPC ports were removed once all
+callers — frontends and the MCP agent — moved to gRPC). The HTTP Port column applies only
+to the frontends, nginx, and the agent.
+
+| Service | Language | Role | gRPC Port | HTTP Port |
 |---|---|---|---|---|
-| xstockstrat-trading | Go | Order execution, trade lifecycle | 50051 | 8051 |
-| xstockstrat-portfolio | Go | Position tracking, P&L | 50052 | 8052 |
-| xstockstrat-marketdata | Go | Alpaca feed ingestion, OHLCV storage | 50053 | 8053 |
-| xstockstrat-indicators | Python | Formula engine, sandboxed execution | 50054 | 8054 |
-| xstockstrat-ingest | Python | Raw data normalization, event publishing | 50055 | 8055 |
-| xstockstrat-analysis | Python | Strategy scoring, backtesting | 50056 | 8056 |
-| xstockstrat-ledger | Node.js | Append-only event store | 50057 | 8057 |
-| xstockstrat-identity | Node.js | Auth, API keys, JWT | 50058 | 8058 |
-| xstockstrat-notify | Node.js | Connect-RPC streaming alert delivery | 50059 | 8059 |
-| xstockstrat-config | Node.js | Live config WatchConfig stream | 50060 | 8060 |
+| xstockstrat-trading | Go | Order execution, trade lifecycle | 50051 | — |
+| xstockstrat-portfolio | Go | Position tracking, P&L | 50052 | — |
+| xstockstrat-marketdata | Go | Alpaca feed ingestion, OHLCV storage | 50053 | — |
+| xstockstrat-indicators | Python | Formula engine, sandboxed execution | 50054 | — |
+| xstockstrat-ingest | Python | Raw data normalization, event publishing | 50055 | — |
+| xstockstrat-analysis | Python | Strategy scoring, backtesting | 50056 | — |
+| xstockstrat-ledger | Node.js | Append-only event store | 50057 | — |
+| xstockstrat-identity | Node.js | Auth, API keys, JWT | 50058 | — |
+| xstockstrat-notify | Node.js | gRPC streaming alert delivery | 50059 | — |
+| xstockstrat-config | Node.js | Live config WatchConfig stream | 50060 | — |
 | xstockstrat-trader | Next.js | Trading UI frontend | — | 3000 |
 | xstockstrat-insights | Next.js | Analytics/insights dashboard | — | 3001 |
 | xstockstrat-config-ui | Next.js | Config management UI | — | 3002 |
@@ -135,7 +139,7 @@ See `docs/runbooks/approval-flow.md`. Breaking proto: 2 owners + platform lead. 
 
 ## Config Governance Rules
 
-Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060 / HTTP 8060). Key rules: no hardcoded values in source; naming is `<service>.<category>.<key>`; all services subscribe at startup; sensitive keys use `secret.*` prefix; defaults declared in each service's `CLAUDE.md`.
+Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key rules: no hardcoded values in source; naming is `<service>.<category>.<key>`; all services subscribe at startup; sensitive keys use `secret.*` prefix; defaults declared in each service's `CLAUDE.md`.
 
 **Full rules, global key table, and registration steps** → `docs/patterns/config-governance.md`.
 
@@ -148,13 +152,12 @@ All inter-service connection env vars follow these patterns. **Never invent new 
 | Pattern | Format | Used for | Example |
 |---|---|---|---|
 | `<SERVICE>_ENDPOINT` | `host:port` (no protocol) | gRPC connections | `IDENTITY_ENDPOINT=xstockstrat-identity:50058` |
-| `<SERVICE>_HTTP_ENDPOINT` | `http://host:port` (full URL) | HTTP Connect-RPC + webhook calls | `INGEST_HTTP_ENDPOINT=http://xstockstrat-ingest:8055` |
 | `XSTOCKSTRAT_<SERVICE>_PRIVATE_URL` | `PRIVATE_DOMAIN` on DO (e.g. `svc.internal`), bare container name in Compose | **nginx container only** — `envsubst` upstream resolution; entrypoint strips `http://` prefix just in case, but the nginx template already appends `:PORT` so `PRIVATE_URL` (which includes the port) must not be used here | `XSTOCKSTRAT_AGENT_PRIVATE_URL=xstockstrat-agent` |
 
 **Rules:**
+- All backend services are gRPC-only, so all inter-service connection vars use the `_ENDPOINT` (gRPC `host:port`) form. The legacy `<SERVICE>_HTTP_ENDPOINT` form was removed when the backend HTTP/Connect-RPC (80xx) servers were deleted — do not reintroduce it (test-only Playwright mocks may still set it, but no runtime code reads it).
 - No `XSTOCKSTRAT_` prefix except for nginx `PRIVATE_URL` vars.
-- No `_URL` suffix on inter-service connection vars — always `_ENDPOINT` or `_HTTP_ENDPOINT`.
-- `_ENDPOINT` and `_HTTP_ENDPOINT` for the same service coexist when a caller needs both gRPC and HTTP access.
+- No `_URL` suffix on inter-service connection vars — always `_ENDPOINT`.
 - When a new service introduces connection env vars, check `docker-compose.yml` first — the var may already exist in another service's block and only needs to be added to the new service's block with the same value.
 - `N8N_WEBHOOK_SECRET` was removed by feature 011 (`remove-n8n-references`). Do not reference it. The MCP agent uses `MCP_AGENT_SECRET` (sent as `x-mcp-secret` header on outbound calls to identify itself to platform services); the receiving services do not currently enforce it.
 
@@ -168,16 +171,17 @@ TimescaleDB (PostgreSQL). Each service owns its schema; migrations run via `scri
 
 ---
 
-## Webhook Integration
+## Service-to-Service Calls
 
-Selected services expose HTTP webhook handlers (under `/webhooks/`) on the HTTP port (80XX) alongside the Connect-RPC routes. The agent MCP server (009) and other callers trigger these handlers for signal ingestion, alert emission, and backtest triggering.
+Backend services are **gRPC-only**. The MCP agent and the frontends call them via native
+gRPC stubs / `@connectrpc/connect-node` gRPC transport on the 50xx ports. There are no HTTP
+`/webhooks/` handlers and no backend HTTP/Connect-RPC (80xx) ports — these were removed once
+all callers migrated to gRPC. Signal ingestion, alert emission, and backtest triggering are
+plain gRPC RPCs (`IngestSignal`, `EmitAlert`, `RunBacktest`, …) invoked directly by the agent.
 
-Pattern:
 ```
-Agent / Caller → POST /webhooks/<action> → service webhook handler → internal gRPC client → target service
+Agent / Frontend → gRPC RPC (50xx) → target backend service
 ```
-
-Connect-RPC is directly callable from the agent or any HTTP client via POST to the service's Connect-RPC endpoint (port 80XX), using JSON or protobuf encoding.
 
 ---
 
@@ -199,7 +203,7 @@ OTel SDK → OTLP → Grafana Cloud. Toggle: `OTEL_ENABLED=true`. OTel init erro
 
 ## Frontend Authentication Pattern
 
-Every new Next.js frontend **must** implement JWT auth via `lib/auth.ts` (Edge Runtime, `jose`), `middleware.ts` (route protection + trace ID injection), `/api/auth/{login,refresh,logout}` routes, and forward `x-user-id` / `x-access-scope` / `x-trace-id` on all outbound fetches. Required env vars: `JWT_SECRET`, `IDENTITY_HTTP_ENDPOINT`.
+Every new Next.js frontend **must** implement JWT auth via `lib/auth.ts` (Edge Runtime, `jose`), `middleware.ts` (route protection + trace ID injection), `/api/auth/{login,refresh,logout}` routes, and forward `x-user-id` / `x-access-scope` / `x-trace-id` on all outbound calls. Required env vars: `JWT_SECRET`, `IDENTITY_ENDPOINT` (gRPC `host:port`).
 
 **Full pattern, required files, and code snippets** → read `docs/patterns/frontend-auth.md`. Reference implementation: `services/xstockstrat-trader/`.
 
@@ -288,7 +292,7 @@ xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted ba
 
 ## Header Propagation Convention
 
-Every backend service **must** propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from inbound requests to all outbound gRPC/Connect-RPC calls. Nginx strips them from external requests so they are trusted as platform-internal values.
+Every backend service **must** propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from inbound requests to all outbound gRPC calls. Nginx strips them from external requests so they are trusted as platform-internal values.
 
 **Language-specific patterns (Go interceptor, Python per-method, Node.js AsyncLocalStorage), code snippets, and reference implementations** → read `docs/patterns/header-propagation.md`.
 

@@ -18,15 +18,9 @@ Go pattern — see `docs/patterns/docker-build.md` for multi-stage builder, stat
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50051` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8051` | Connect-RPC (HTTP/1.1 + HTTP/2 via h2c) |
 
-## Connect-RPC
-
-Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8051`. Both servers delegate to the same handler implementation.
-
-- Handler registration: `cmd/server/main.go` — uses `tradingv1connect.NewTradingServiceHandler` wrapped with `h2c.NewHandler`
-- Callers (frontends, agent) use HTTP `8051`; internal services use gRPC `50051`
-- Transport: `golang.org/x/net/http2/h2c` supports HTTP/1.1 and HTTP/2 cleartext on same port
+This service is **gRPC-only**. All callers (internal services, the frontends, and the MCP
+agent) connect over gRPC `50051`. The former HTTP/Connect-RPC server on `8051` was removed.
 
 ## Dependencies
 
@@ -59,7 +53,7 @@ All config values are served by **xstockstrat-config** namespace `trading`.
 
 ## Webhooks
 
-_Webhook layer removed in feature-011. Use Connect-RPC directly on port 8051._
+_No webhooks. Call the gRPC RPCs on port 50051 directly._
 
 ## Database
 
@@ -91,7 +85,6 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 
 ```
 GRPC_PORT=50051
-HTTP_PORT=8051
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052

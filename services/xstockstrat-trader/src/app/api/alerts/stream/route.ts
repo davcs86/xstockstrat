@@ -1,113 +1,94 @@
 /**
  * SSE endpoint — proxies xstockstrat-notify alerts to the browser via
- * Server-Sent Events. Polls ListAlerts every 5 seconds and streams new
- * alerts as they arrive. The browser AlertStream component reconnects
- * automatically via EventSource.
+ * Server-Sent Events. Subscribes to the notify gRPC StreamAlerts server-stream
+ * and forwards each alert as it arrives. The browser AlertStream component
+ * reconnects automatically via EventSource.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { ConnectError, Code } from '@connectrpc/connect';
+import { notifyClient } from '@/lib/connectClients';
 import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
-
-const NOTIFY_BASE_URL =
-  process.env.NOTIFY_HTTP_ENDPOINT ?? 'http://xstockstrat-notify:8059';
-
-const SEVERITY_MAP: Record<string, number> = {
-  ALERT_SEVERITY_INFO: 1,
-  ALERT_SEVERITY_WARNING: 2,
-  ALERT_SEVERITY_ERROR: 3,
-  ALERT_SEVERITY_CRITICAL: 4,
-};
 
 export async function GET(request: NextRequest) {
   const claims = await getSessionFromRequest(request);
   if (!claims) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const accessScope = String(rolesToAccessScope(claims.roles));
-  const traceId = request.headers.get('x-trace-id') ?? generateTraceId();
-  const propagationHeaders = {
+  const propagationHeaders = new Headers({
     'x-user-id': claims.user_id,
-    'x-access-scope': accessScope,
-    'x-trace-id': traceId,
-  };
-
-  const listAlerts = async (): Promise<any[]> => {
-    const res = await fetch(
-      `${NOTIFY_BASE_URL}/xstockstrat.notify.v1.NotifyService/ListAlerts`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...propagationHeaders },
-        body: JSON.stringify({
-          userId: claims.user_id,
-          categories: [],
-          limit: 20,
-          pageToken: '',
-        }),
-        // Short timeout to avoid blocking the polling loop
-        signal: AbortSignal.timeout(4000),
-      },
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.alerts ?? [];
-  };
+    'x-access-scope': String(rolesToAccessScope(claims.roles)),
+    'x-trace-id': request.headers.get('x-trace-id') ?? generateTraceId(),
+  });
 
   const encoder = new TextEncoder();
-  const seenIds = new Set<string>();
 
   const stream = new ReadableStream({
     async start(controller) {
+      let closed = false;
       const send = (payload: string) => {
         try {
           controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
         } catch {}
       };
-
-      // Immediately send a keep-alive comment
-      send(':ok');
-
-      const poll = async () => {
-        try {
-          const alerts = await listAlerts();
-          for (const a of alerts) {
-            const id = a.alertId ?? a.alert_id;
-            if (id && !seenIds.has(id)) {
-              seenIds.add(id);
-              send(
-                JSON.stringify({
-                  alert_id: id,
-                  severity: SEVERITY_MAP[a.severity] ?? 1,
-                  category: a.category ?? '',
-                  title: a.title ?? '',
-                  body: a.body ?? '',
-                  source_service: a.sourceService ?? a.source_service ?? '',
-                }),
-              );
-            }
-          }
-          // Keep seenIds bounded
-          if (seenIds.size > 500) seenIds.clear();
-        } catch {}
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        try { controller.close(); } catch {}
       };
 
-      await poll();
+      // Immediately send a keep-alive comment so the browser opens the stream.
+      send(':ok');
 
-      // Poll every 5 seconds while connected
-      const intervalId = setInterval(poll, 5000);
+      // Abort the upstream gRPC stream on client disconnect or periodic recycle.
+      const abortController = new AbortController();
 
-      // Close after 10 minutes — EventSource will automatically reconnect
+      // Recycle the connection after 10 minutes — EventSource auto-reconnects.
       const timeoutId = setTimeout(() => {
-        clearInterval(intervalId);
-        try { controller.close(); } catch {}
+        abortController.abort();
+        close();
       }, 10 * 60 * 1000);
 
-      // Clean up if the request is aborted (client disconnected)
       request.signal.addEventListener('abort', () => {
-        clearInterval(intervalId);
         clearTimeout(timeoutId);
-        try { controller.close(); } catch {}
+        abortController.abort();
+        close();
       });
+
+      try {
+        const alerts = notifyClient.streamAlerts(
+          {
+            userId: claims.user_id,
+            categories: [],
+            severities: [],
+            includeAcknowledged: false,
+          },
+          { headers: propagationHeaders, signal: abortController.signal },
+        );
+        for await (const a of alerts) {
+          const alert = a as any;
+          send(
+            JSON.stringify({
+              alert_id: alert.alertId ?? '',
+              // severity is already the numeric AlertSeverity enum (1–4)
+              severity: alert.severity ?? 1,
+              category: alert.category ?? '',
+              title: alert.title ?? '',
+              body: alert.body ?? '',
+              source_service: alert.sourceService ?? '',
+            }),
+          );
+        }
+      } catch (err) {
+        // Aborts (client disconnect / recycle) surface as Canceled — expected.
+        if (!(err instanceof ConnectError) || err.code !== Code.Canceled) {
+          send(JSON.stringify({ error: 'alert stream interrupted' }));
+        }
+      } finally {
+        clearTimeout(timeoutId);
+        close();
+      }
     },
   });
 

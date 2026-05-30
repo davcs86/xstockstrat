@@ -1,22 +1,16 @@
 import { initTelemetry } from './telemetry';
 initTelemetry();
 
-import { propagationStore, extractFromHttpRequest } from './middleware/propagation';
-
 import * as grpc from '@grpc/grpc-js';
-import * as http from 'http';
 import { Pool } from 'pg';
-import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { getLogger } from './services/logger';
 import { ConfigServiceImpl } from './grpc/configServiceImpl';
 import { createConfigServiceDefinition } from './grpc/serviceDefinition';
-import { createConnectRouter } from './connect/connectRouter';
 
 const log = getLogger('config:server');
 
 async function main() {
   const grpcPort = process.env.GRPC_PORT ?? '50060';
-  const httpPort = process.env.HTTP_PORT ?? '8060';
   const databaseUrl = process.env.DATABASE_URL ?? '';
 
   // NOTE: xstockstrat-config does NOT subscribe to itself.
@@ -50,28 +44,6 @@ async function main() {
   const grpcServer = new grpc.Server();
   grpcServer.addService(createConfigServiceDefinition(), configImpl as unknown as grpc.UntypedServiceImplementation);
 
-  // ── Connect-RPC HTTP server (browser + external clients, port 8060) ────
-  // Built here but only started after gRPC is bound, so the Docker health check
-  // (which probes port 8060) cannot pass before port 50060 is ready.
-  const connectHandler = connectNodeAdapter({ routes: createConnectRouter(configImpl) });
-  const httpServer = http.createServer((req, res) => {
-    // Add CORS headers for browser clients
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Connect-Protocol-Version, Connect-Timeout-Ms');
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-    if (req.method === 'GET' && req.url === '/health') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', service: 'xstockstrat-config' }));
-      return;
-    }
-    propagationStore.run(extractFromHttpRequest(req), () => connectHandler(req, res));
-  });
-
   grpcServer.bindAsync(
     `0.0.0.0:${grpcPort}`,
     grpc.ServerCredentials.createInsecure(),
@@ -82,19 +54,11 @@ async function main() {
       }
       grpcServer.start();
       log.info(`Config gRPC service listening on port ${port}`);
-
-      // Start HTTP only after gRPC is accepting connections so that
-      // service_healthy (which probes /health on 8060) cannot trigger
-      // dependent-service startup before port 50060 is ready.
-      httpServer.listen(parseInt(httpPort, 10), () => {
-        log.info(`Config Connect-RPC HTTP service listening on port ${httpPort}`);
-      });
     }
   );
 
   const shutdown = () => {
     log.info('Shutting down config service...');
-    httpServer.close();
     grpcServer.tryShutdown(() => {
       pool.end();
       process.exit(0);

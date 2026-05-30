@@ -17,7 +17,6 @@ import (
 // Config holds all runtime config for the trading service.
 type Config struct {
 	GRPCPort             string
-	HTTPPort             string
 	ConfigEndpoint       string
 	LedgerEndpoint       string
 	PortfolioEndpoint    string
@@ -33,7 +32,6 @@ type Config struct {
 func LoadFromEnv() *Config {
 	return &Config{
 		GRPCPort:                    getEnv("GRPC_PORT", "50051"),
-		HTTPPort:                    getEnv("HTTP_PORT", "8051"),
 		ConfigEndpoint:              getEnv("CONFIG_ENDPOINT", "xstockstrat-config:50060"),
 		LedgerEndpoint:              getEnv("LEDGER_ENDPOINT", "xstockstrat-ledger:50057"),
 		PortfolioEndpoint:           getEnv("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052"),

@@ -19,12 +19,12 @@ The WatchConfig background loop retries the gRPC stream every 2 s on error, so i
 
 ## Docker Compose: healthcheck + `condition: service_healthy`
 
-In `docker-compose.yml`, `xstockstrat-config` declares a healthcheck so dependent services wait until it is serving HTTP before attempting to connect:
+In `docker-compose.yml`, `xstockstrat-config` declares a healthcheck so dependent services wait until its gRPC port is accepting connections before attempting to connect. (config is gRPC-only — the former HTTP `8060` `/health` endpoint was removed, so the probe is a TCP check on `50060`.)
 
 ```yaml
 xstockstrat-config:
   healthcheck:
-    test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8060/health"]
+    test: ["CMD", "nc", "-z", "localhost", "50060"]
     interval: 5s
     timeout: 3s
     start_period: 15s

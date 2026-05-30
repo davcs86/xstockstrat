@@ -18,7 +18,6 @@ import (
 // Config holds all environment-sourced configuration for xstockstrat-marketdata.
 type Config struct {
 	GRPCPort        string
-	HTTPPort        string
 	ConfigEndpoint  string
 	LedgerEndpoint  string
 	NotifyEndpoint  string
@@ -35,7 +34,6 @@ type Config struct {
 func LoadFromEnv() *Config {
 	return &Config{
 		GRPCPort:        getEnv("GRPC_PORT", "50053"),
-		HTTPPort:        getEnv("HTTP_PORT", "8053"),
 		ConfigEndpoint:  getEnv("CONFIG_ENDPOINT", "xstockstrat-config:50060"),
 		LedgerEndpoint:  getEnv("LEDGER_ENDPOINT", "xstockstrat-ledger:50057"),
 		NotifyEndpoint:  getEnv("NOTIFY_ENDPOINT", "xstockstrat-notify:50059"),

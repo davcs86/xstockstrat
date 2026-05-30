@@ -1,16 +1,11 @@
 import { initTelemetry } from './telemetry';
 initTelemetry();
 
-import { propagationStore, extractFromHttpRequest } from './middleware/propagation';
-
 import * as grpc from '@grpc/grpc-js';
-import * as http from 'http';
 import { getLogger } from './services/logger';
 import { ConfigWatcher } from './services/configWatcher';
 import { LedgerServiceImpl } from './grpc/ledgerServiceImpl';
 import { createLedgerServiceDefinition } from './grpc/serviceDefinition';
-import { createConnectRouter } from './connect/connectRouter';
-import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { Pool } from 'pg';
 
 const log = getLogger('ledger:server');
@@ -18,7 +13,6 @@ const log = getLogger('ledger:server');
 async function main() {
   const configEndpoint = process.env.CONFIG_ENDPOINT ?? 'xstockstrat-config:50060';
   const grpcPort = process.env.GRPC_PORT ?? '50057';
-  const httpPort = process.env.HTTP_PORT ?? '8057';
   const databaseUrl = process.env.DATABASE_URL ?? '';
 
   // Subscribe to config before accepting traffic
@@ -67,28 +61,9 @@ async function main() {
     }
   );
 
-  // ── Connect-RPC HTTP server (browser + external clients, port 8057) ────
-  const connectHandler = connectNodeAdapter({ routes: createConnectRouter(ledgerImpl) });
-  const httpServer = http.createServer((req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Connect-Protocol-Version, Connect-Timeout-Ms');
-    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
-    if (req.method === 'GET' && req.url === '/health') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', service: 'xstockstrat-ledger' }));
-      return;
-    }
-    propagationStore.run(extractFromHttpRequest(req), () => connectHandler(req, res));
-  });
-  httpServer.listen(parseInt(httpPort, 10), () => {
-    log.info(`Ledger Connect-RPC HTTP service listening on port ${httpPort}`);
-  });
-
   // Graceful shutdown
   const shutdown = async () => {
     log.info('Shutting down ledger service...');
-    httpServer.close();
     grpcServer.tryShutdown(() => {
       pool.end();
       process.exit(0);

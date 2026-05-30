@@ -16,15 +16,9 @@ Go pattern — see `docs/patterns/docker-build.md` for multi-stage builder, stat
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50052` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8052` | Connect-RPC + n8n webhooks (HTTP/1.1 + HTTP/2 via h2c) |
 
-## Connect-RPC
-
-Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8052`.
-
-- Handler registration: `cmd/server/main.go` — uses `portfoliov1connect.NewPortfolioServiceHandler` wrapped with `h2c.NewHandler`
-- Callers (frontends, n8n) use HTTP `8052`; internal services use gRPC `50052`
-- Transport: `golang.org/x/net/http2/h2c` supports HTTP/1.1 and HTTP/2 cleartext on same port
+This service is **gRPC-only**. All callers connect over gRPC `50052`. The former
+HTTP/Connect-RPC server on `8052` (and its `/webhooks/n8n/portfolio-report` handler) was removed.
 
 ## Dependencies
 
@@ -54,12 +48,6 @@ Namespace: `portfolio`
 - Hypertable: `portfolio.snapshots` — point-in-time portfolio state (partition by `time`, chunk = 1 day)
 - Migration tool: `golang-migrate`
 
-## n8n Webhooks
-
-| Endpoint | Method | Payload | Action |
-|---|---|---|---|
-| `/webhooks/n8n/portfolio-report` | POST | `{user_id, range}` | Returns P&L summary |
-
 ## Ledger Events Emitted
 
 | Event Type | Trigger |
@@ -73,7 +61,6 @@ Namespace: `portfolio`
 
 ```
 GRPC_PORT=50052
-HTTP_PORT=8052
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053

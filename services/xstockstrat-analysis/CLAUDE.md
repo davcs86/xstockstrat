@@ -20,15 +20,10 @@ Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` bui
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50056` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8056` | Connect-RPC + webhooks |
 
-## Connect-RPC
-
-Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8056` via `asyncio.gather`.
-
-- Handler: `app/main.py` — `start_connect_server(servicer)` runs uvicorn with `ConnectHandler` ASGI wrapper
-- `asyncio.gather(grpc_server.wait_for_termination(), start_connect_server(servicer))` starts both concurrently
-- Callers (frontends, agent) use HTTP `8056`; internal services use gRPC `50056`
+This service is **gRPC-only** (`app/main.py` runs a single `grpc.aio` server). The MCP agent
+triggers backtests via the `RunBacktest` gRPC RPC. The former HTTP/Connect-RPC server on `8056`
+(and its `/webhooks/run-backtest` handler) was removed.
 
 ## Dependencies
 
@@ -68,12 +63,6 @@ Namespace: `analysis`
 | `analysis.scoring.win_rate_weight` | float | `0.3` | Weight of win rate |
 | `analysis.signals.source_weights` | string (JSON) | `"{}"` | JSON object mapping source name to reliability weight in [0.0, 1.0]. Empty → all sources use 1.0 (neutral). Values outside [0.0, 1.0] are clamped at read time. |
 
-## Webhooks
-
-| Endpoint | Method | Payload | Action |
-|---|---|---|---|
-| `/webhooks/run-backtest` | POST | `{strategy_id, symbols, start, end, initial_capital}` | Runs backtest |
-
 ## Ledger Events Emitted
 
 | Event Type | Trigger |
@@ -96,7 +85,6 @@ After any change to `pyproject.toml`, run `uv lock` and commit the updated `uv.l
 
 ```
 GRPC_PORT=50056
-HTTP_PORT=8056
 CONFIG_ENDPOINT=xstockstrat-config:50060
 MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
 INDICATORS_ENDPOINT=xstockstrat-indicators:50054

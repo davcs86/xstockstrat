@@ -1,7 +1,7 @@
 # xstockstrat-config — CLAUDE.md
 
 ## Role
-Node.js gRPC + Connect-RPC service that is the **central configuration authority** for the entire platform. Provides a `WatchConfig` server-streaming RPC that all services subscribe to at startup. Config changes propagate live to all subscribers via the persistent gRPC stream. Config values are scoped by **environment** (`dev`/`production`) and **trading_mode** (`paper`/`live`/`all`).
+Node.js gRPC service that is the **central configuration authority** for the entire platform. Provides a `WatchConfig` server-streaming RPC that all services subscribe to at startup. Config changes propagate live to all subscribers via the persistent gRPC stream. Config values are scoped by **environment** (`dev`/`production`) and **trading_mode** (`paper`/`live`/`all`).
 
 ## Language
 Node.js 20 + TypeScript
@@ -13,8 +13,12 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 
 | Port | Protocol | Usage |
 |---|---|---|
-| `50060` | gRPC (HTTP/2) | Internal service-to-service WatchConfig stream |
-| `8060` | Connect-RPC (HTTP/1.1 + HTTP/2) | Browser clients, config-ui |
+| `50060` | gRPC (HTTP/2) | Internal WatchConfig stream + all config reads/writes |
+
+This service is **gRPC-only**. config-ui reaches it over gRPC `50060` (`app/lib/connectClients.ts`).
+The former Connect-RPC HTTP server on `8060` (and the `src/connect/` Connect router) was removed.
+Because there is no longer a separate HTTP port to gate, the gRPC server simply binds `50060` at
+startup; the Docker healthcheck probes `50060` directly.
 
 ## Critical Invariants
 
@@ -54,11 +58,11 @@ See `migrations/001_config_tables.up.sql` for the canonical seed list and full p
 
 ## Webhooks
 
-_Webhook layer removed in feature-011. Use Connect-RPC directly on port 8060 for config mutations: POST /xstockstrat.config.v1.ConfigService/SetConfig._
+_No webhooks. Mutate config via the `SetConfig` gRPC RPC on port 50060._
 
 ## Config Governance
 
-All config changes via webhook must comply with the governance rules in the root `CLAUDE.md`. Key rules:
+All config changes must comply with the governance rules in the root `CLAUDE.md`. Key rules:
 - New keys require PR to `packages/proto/` (for type documentation)
 - Sensitive keys (`is_secret=true`) values are never stored as plaintext
 - All changes are written to `config.config_audit` automatically
@@ -67,7 +71,6 @@ All config changes via webhook must comply with the governance rules in the root
 
 ```
 GRPC_PORT=50060
-HTTP_PORT=8060
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 APPLICATION_ENV=development  # development | production — default scope for this instance
 TRADING_MODE=paper   # paper | live — default scope for this instance
