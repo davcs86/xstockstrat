@@ -41,7 +41,6 @@ services:
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50051
-      - 8051
     http2_ports:
       - 50051
     instance_count: 1
@@ -79,7 +78,6 @@ services:
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50052
-      - 8052
     http2_ports:
       - 50052
     instance_count: 1
@@ -109,7 +107,6 @@ services:
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50053
-      - 8053
     http2_ports:
       - 50053
     instance_count: 1
@@ -147,7 +144,6 @@ services:
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50054
-      - 8054
     http2_ports:
       - 50054
     instance_count: 1
@@ -287,7 +283,6 @@ services:
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50057
-      - 8057
     http2_ports:
       - 50057
     instance_count: 1
@@ -320,7 +315,6 @@ services:
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50058
-      - 8058
     http2_ports:
       - 50058
     instance_count: 1
@@ -395,7 +389,6 @@ services:
       tag: "YOUR_IMAGE_TAG"
     internal_ports:
       - 50060
-      - 8060
     http2_ports:
       - 50060
     instance_count: 1
