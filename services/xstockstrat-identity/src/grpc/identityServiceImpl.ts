@@ -8,6 +8,17 @@ import { getLogger } from '../services/logger';
 
 const log = getLogger('identity:impl');
 
+// ts-proto's grpc-js serializer maps `google.protobuf.Timestamp` fields to JS
+// `Date` and calls `.getTime()` on them during encode. Responses must therefore
+// carry `Date` instances, not `{ seconds }` plain objects — otherwise encoding
+// throws a TypeError, which grpc-js surfaces to callers as an INTERNAL
+// trailers-only error (the handler's own try/catch cannot intercept it because
+// the failure happens after `callback(null, ...)` returns). The Connect adapter
+// converts these Dates to protobuf-es Timestamps for the HTTP path.
+function secondsToDate(seconds: number): Date {
+  return new Date(seconds * 1000);
+}
+
 export class IdentityServiceImpl {
   constructor(
     private readonly pool: Pool,
@@ -83,13 +94,13 @@ export class IdentityServiceImpl {
       callback(null, {
         accessToken,
         refreshToken,
-        expiresAt: { seconds: expiresAt },
+        expiresAt: secondsToDate(expiresAt),
         claims: {
           userId: user.user_id,
           email,
           roles: user.roles ?? [],
-          issuedAt: { seconds: now },
-          expiresAt: { seconds: expiresAt },
+          issuedAt: secondsToDate(now),
+          expiresAt: secondsToDate(expiresAt),
         },
       });
     } catch (err: any) {
@@ -110,8 +121,8 @@ export class IdentityServiceImpl {
         userId: decoded.user_id ?? '',
         email: decoded.email ?? '',
         roles: decoded.roles ?? [],
-        issuedAt: { seconds: decoded.issued_at ?? Math.floor(Date.now() / 1000) },
-        expiresAt: { seconds: decoded.expires_at ?? decoded.exp ?? 0 },
+        issuedAt: secondsToDate(decoded.issued_at ?? Math.floor(Date.now() / 1000)),
+        expiresAt: secondsToDate(decoded.expires_at ?? decoded.exp ?? 0),
       });
     } catch (err: any) {
       callback({ code: 16, message: 'invalid or expired token' });
@@ -168,13 +179,13 @@ export class IdentityServiceImpl {
       callback(null, {
         accessToken: newAccessToken,
         refreshToken: newRefreshToken,
-        expiresAt: { seconds: expiresAt },
+        expiresAt: secondsToDate(expiresAt),
         claims: {
           userId: user_id,
           email,
           roles: roles ?? [],
-          issuedAt: { seconds: now },
-          expiresAt: { seconds: expiresAt },
+          issuedAt: secondsToDate(now),
+          expiresAt: secondsToDate(expiresAt),
         },
       });
     } catch (err: any) {
@@ -225,7 +236,7 @@ export class IdentityServiceImpl {
         userId,
         name,
         scopes: scopes ?? [],
-        createdAt: { seconds: Math.floor(now.getTime() / 1000) },
+        createdAt: now,
       });
     } catch (err: any) {
       callback({ code: 13, message: err.message });
@@ -251,8 +262,8 @@ export class IdentityServiceImpl {
         userId: r.user_id,
         email: r.email,
         roles: [...(r.roles ?? []), ...(r.scopes ?? [])],
-        issuedAt: { seconds: now },
-        expiresAt: { seconds: now + 3600 },
+        issuedAt: secondsToDate(now),
+        expiresAt: secondsToDate(now + 3600),
       });
     } catch (err: any) {
       callback({ code: 13, message: err.message });
@@ -273,7 +284,7 @@ export class IdentityServiceImpl {
           userId: r.user_id,
           name: r.name,
           scopes: r.scopes,
-          createdAt: { seconds: Math.floor(new Date(r.created_at).getTime() / 1000) },
+          createdAt: new Date(r.created_at),
         }))
       });
     } catch (err: any) {
