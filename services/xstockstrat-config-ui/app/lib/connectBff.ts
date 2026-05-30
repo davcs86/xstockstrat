@@ -47,21 +47,21 @@ const router = createConnectRouter({ acceptCompression: [compressionGzip, compre
 router.service(ConfigService, {
   async listKeys(req, ctx) {
     const claims = await requireSession(ctx);
-    return configClient.listKeys(req, { headers: backendHeaders(claims, ctx) }) as any;
+    return configClient.listKeys(req, { headers: backendHeaders(claims, ctx) });
   },
   async setConfig(req, ctx) {
     const claims = await requireSession(ctx);
     return configClient.setConfig(
       { ...req, author: claims.user_id },
       { headers: backendHeaders(claims, ctx) },
-    ) as any;
+    );
   },
 });
 
 router.service(IngestService, {
   async listSignalSources(req, ctx) {
     const claims = await requireSession(ctx);
-    return ingestClient.listSignalSources(req, { headers: backendHeaders(claims, ctx) }) as any;
+    return ingestClient.listSignalSources(req, { headers: backendHeaders(claims, ctx) });
   },
   async manageSignalSource(req, ctx) {
     const claims = await requireSession(ctx);
@@ -69,7 +69,7 @@ router.service(IngestService, {
     const adminKey = ctx.requestHeader.get('x-admin-api-key');
     const headers = backendHeaders(claims, ctx);
     if (adminKey) headers.set('Authorization', `Bearer ${adminKey}`);
-    return ingestClient.manageSignalSource(req, { headers }) as any;
+    return ingestClient.manageSignalSource(req, { headers });
   },
 });
 

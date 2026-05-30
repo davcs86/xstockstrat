@@ -53,56 +53,56 @@ router.service(TradingService, {
     return tradingClient.placeOrder(
       { ...req, userId: claims.user_id },
       { headers: backendHeaders(claims, ctx) },
-    ) as any;
+    );
   },
   async listOrders(req, ctx) {
     const claims = await requireSession(ctx);
     return tradingClient.listOrders(
       { ...req, userId: claims.user_id },
       { headers: backendHeaders(claims, ctx) },
-    ) as any;
+    );
   },
   async getOrder(req, ctx) {
     const claims = await requireSession(ctx);
-    return tradingClient.getOrder(req, { headers: backendHeaders(claims, ctx) }) as any;
+    return tradingClient.getOrder(req, { headers: backendHeaders(claims, ctx) });
   },
   async cancelOrder(req, ctx) {
     const claims = await requireSession(ctx);
-    return tradingClient.cancelOrder(req, { headers: backendHeaders(claims, ctx) }) as any;
+    return tradingClient.cancelOrder(req, { headers: backendHeaders(claims, ctx) });
   },
   async listBrokerAccounts(req, ctx) {
     const claims = await requireSession(ctx);
-    return tradingClient.listBrokerAccounts(req, { headers: backendHeaders(claims, ctx) }) as any;
+    return tradingClient.listBrokerAccounts(req, { headers: backendHeaders(claims, ctx) });
   },
   async registerBrokerAccount(req, ctx) {
     const claims = await requireSession(ctx);
-    return tradingClient.registerBrokerAccount(req, { headers: backendHeaders(claims, ctx) }) as any;
+    return tradingClient.registerBrokerAccount(req, { headers: backendHeaders(claims, ctx) });
   },
   async deregisterBrokerAccount(req, ctx) {
     const claims = await requireSession(ctx);
-    return tradingClient.deregisterBrokerAccount(req, { headers: backendHeaders(claims, ctx) }) as any;
+    return tradingClient.deregisterBrokerAccount(req, { headers: backendHeaders(claims, ctx) });
   },
 });
 
 router.service(PortfolioService, {
   async getPortfolio(req, ctx) {
     const claims = await requireSession(ctx);
-    return portfolioClient.getPortfolio(req, { headers: backendHeaders(claims, ctx) }) as any;
+    return portfolioClient.getPortfolio(req, { headers: backendHeaders(claims, ctx) });
   },
   async listPortfolios(req, ctx) {
     const claims = await requireSession(ctx);
-    return portfolioClient.listPortfolios(req, { headers: backendHeaders(claims, ctx) }) as any;
+    return portfolioClient.listPortfolios(req, { headers: backendHeaders(claims, ctx) });
   },
 });
 
 router.service(MarketDataService, {
   async getBars(req, ctx) {
     const claims = await requireSession(ctx);
-    return marketDataClient.getBars(req, { headers: backendHeaders(claims, ctx) }) as any;
+    return marketDataClient.getBars(req, { headers: backendHeaders(claims, ctx) });
   },
   async listAssets(req, ctx) {
     const claims = await requireSession(ctx);
-    return marketDataClient.listAssets(req, { headers: backendHeaders(claims, ctx) }) as any;
+    return marketDataClient.listAssets(req, { headers: backendHeaders(claims, ctx) });
   },
 });
 
