@@ -253,3 +253,41 @@ describe('appendEvent', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Regression: events must carry `Date` timestamps so ts-proto's grpc-js
+// serializer can encode them. Before the fix, `{ seconds }` plain objects threw
+// `getTime is not a function` during responseSerialize / stream write, which
+// grpc-js surfaced to gRPC callers as an INTERNAL error after the handler had
+// already returned.
+// ---------------------------------------------------------------------------
+
+describe('rowToEvent serialization (regression)', () => {
+  it('produces Date timestamps that ts-proto encodes without throwing', async () => {
+    if (!rowToEvent) return;
+
+    let LedgerEvent: any;
+    try {
+      ({ LedgerEvent } = await import('@xstockstrat/proto/ledger/v1/ledger.js'));
+    } catch {
+      return; // proto package unavailable in this runtime — skip.
+    }
+
+    const event = rowToEvent({
+      event_id: 'e1',
+      event_type: 'order.filled',
+      source_service: 'trading',
+      correlation_id: 'c1',
+      stream_key: 'order:1',
+      payload: {},
+      metadata: {},
+      occurred_at: new Date(),
+      recorded_at: new Date(),
+      sequence: 1,
+    });
+
+    assert.ok(event.occurredAt instanceof Date, 'occurredAt must be a Date');
+    assert.ok(event.recordedAt instanceof Date, 'recordedAt must be a Date');
+    assert.doesNotThrow(() => LedgerEvent.encode(event).finish());
+  });
+});
