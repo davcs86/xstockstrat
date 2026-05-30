@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       }
     }
     // Service unavailable — don't leak internal error detail to the browser.
-    console.error('[login] identity service error:', err);
+    console.error('[login] identity service error:', (err as Error)?.stack ?? err);
     return NextResponse.json(
       { error: 'Authentication service unavailable. Please try again.' },
       { status: 503 },
