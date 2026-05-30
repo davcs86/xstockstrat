@@ -35,12 +35,6 @@ importers:
       '@bufbuild/protobuf':
         specifier: ^2.0.0
         version: 2.12.0
-      '@connectrpc/connect':
-        specifier: ^2.0.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect-node':
-        specifier: ^2.0.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
       '@grpc/grpc-js':
         specifier: ^1.10.9
         version: 1.14.3
@@ -241,12 +235,6 @@ importers:
       '@bufbuild/protobuf':
         specifier: ^2.0.0
         version: 2.12.0
-      '@connectrpc/connect':
-        specifier: ^2.0.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect-node':
-        specifier: ^2.0.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
       '@grpc/grpc-js':
         specifier: ^1.10.9
         version: 1.14.3
@@ -462,12 +450,6 @@ importers:
       '@bufbuild/protobuf':
         specifier: ^2.0.0
         version: 2.12.0
-      '@connectrpc/connect':
-        specifier: ^2.0.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect-node':
-        specifier: ^2.0.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
       '@grpc/grpc-js':
         specifier: ^1.10.9
         version: 1.14.3
@@ -547,12 +529,6 @@ importers:
       '@bufbuild/protobuf':
         specifier: ^2.0.0
         version: 2.12.0
-      '@connectrpc/connect':
-        specifier: ^2.0.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect-node':
-        specifier: ^2.0.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
       '@grpc/grpc-js':
         specifier: ^1.10.9
         version: 1.14.3

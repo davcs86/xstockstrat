@@ -1,6 +1,6 @@
 # Header Propagation Convention
 
-Every service that receives **inbound** gRPC or Connect-RPC calls **must** extract and forward the three propagation headers on all **outbound** calls. This convention was established by feature `wire-fe-auth`.
+Every service that receives **inbound** gRPC calls **must** extract and forward the three propagation headers on all **outbound** calls. This convention was established by feature `wire-fe-auth`.
 
 | Header | Carries | Set by |
 |---|---|---|
@@ -80,15 +80,16 @@ async def _background_task(self, arg, propagation_meta=()):
     await self._stub.SomeRPC(req, metadata=propagation_meta)
 ```
 
-## Node.js services (Connect-RPC)
+## Node.js services (gRPC)
 
-Reference implementation: `services/xstockstrat-ledger/src/middleware/propagation.ts`
+Backend Node.js services are **gRPC-only** (`@grpc/grpc-js`). Use `AsyncLocalStorage` to carry
+the three headers from the inbound gRPC call's metadata to any outbound gRPC clients.
 
-Create `src/middleware/propagation.ts`:
+Reference store: `services/xstockstrat-ledger/src/middleware/propagation.ts`
 
 ```typescript
 import { AsyncLocalStorage } from 'async_hooks';
-import type { IncomingMessage } from 'http';
+import type { Metadata } from '@grpc/grpc-js';
 
 export interface PropagationContext {
   userId: string;
@@ -98,19 +99,23 @@ export interface PropagationContext {
 
 export const propagationStore = new AsyncLocalStorage<PropagationContext>();
 
-export function extractFromHttpRequest(req: IncomingMessage): PropagationContext {
+export function extractFromMetadata(md: Metadata): PropagationContext {
+  const get = (k: string) => (md.get(k)[0] as string) ?? '';
   return {
-    userId:      (req.headers['x-user-id']      as string) ?? '',
-    accessScope: (req.headers['x-access-scope'] as string) ?? '0',
-    traceId:     (req.headers['x-trace-id']     as string) ?? '',
+    userId:      get('x-user-id'),
+    accessScope: get('x-access-scope') || '0',
+    traceId:     get('x-trace-id'),
   };
 }
 ```
 
-In `src/index.ts`, wrap the `connectHandler` call inside the existing CORS/health callback — do **not** replace the whole callback:
+In each gRPC handler (or a shared wrapper), run the body inside the store using the call's
+metadata, then attach it to outbound metadata on downstream gRPC calls:
 
 ```typescript
-import { propagationStore, extractFromHttpRequest } from './middleware/propagation';
-// ...
-propagationStore.run(extractFromHttpRequest(req), () => connectHandler(req, res));
+propagationStore.run(extractFromMetadata(call.metadata), () => handle(call, callback));
 ```
+
+> Note: sink/source services (ledger, config) and auth (identity) make few or no authenticated
+> outbound calls, so they may keep the store unused. Wire the interceptor when a service starts
+> making outbound calls that must carry user/trace context.

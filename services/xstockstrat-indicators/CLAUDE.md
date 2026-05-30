@@ -16,15 +16,10 @@ Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` bui
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50054` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8054` | Connect-RPC |
 
-## Connect-RPC
-
-Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8054` via `asyncio.gather`.
-
-- Handler: `app/main.py` — `start_connect_server(servicer)` runs uvicorn with `ConnectHandler` ASGI wrapper
-- `asyncio.gather(grpc_server.wait_for_termination(), start_connect_server(servicer))` starts both concurrently
-- Callers (frontends, agent) use HTTP `8054`; internal services use gRPC `50054`
+This service is **gRPC-only** (`app/main.py` runs a single `grpc.aio` server). All callers —
+internal services, the frontends, and the MCP agent — connect over gRPC `50054`. The former
+HTTP/Connect-RPC server on `8054` was removed.
 
 ## Dependencies
 
@@ -56,7 +51,7 @@ Namespace: `indicators`
 
 ## Webhooks
 
-_Webhook layer removed in feature-011. Use Connect-RPC directly on port 8054._
+_No webhooks. Call the gRPC RPCs on port 50054 directly._
 
 ## Ledger Events Emitted
 
@@ -71,7 +66,6 @@ _Webhook layer removed in feature-011. Use Connect-RPC directly on port 8054._
 
 ```
 GRPC_PORT=50054
-HTTP_PORT=8054
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059

@@ -270,10 +270,10 @@ Browser (React Client Components)
 
 | Rule | Rationale |
 |---|---|
-| **Server-side code uses `createGrpcTransport` (port 50xxx) only** | gRPC is the authoritative inter-service protocol. HTTP/1.1 Connect-RPC on 80xx ports exists only for the MCP agent and webhook callers. |
+| **Server-side code uses `createGrpcTransport` (port 50xxx) only** | gRPC is the authoritative — and only — backend protocol. Backend services no longer run HTTP/Connect-RPC (80xx) servers; the MCP agent also calls them over gRPC. |
 | **Never import `createConnectTransport` in `connectClients.ts`** | That function is for browser code only (`connectTransport.ts`). Using it server-side routes calls to the wrong port and protocol. |
 | **`*_ENDPOINT` env vars are `host:port` (no protocol)** | Prefixed with `http://` inside `createGrpcTransport`. Using a full URL here would double-prefix it. |
-| **`*_HTTP_ENDPOINT` env vars are reserved for agent/webhooks** | The three services the MCP agent calls over HTTP — ingest (8055), analysis (8056), notify (8059) — use `*_HTTP_ENDPOINT`. Nothing in `connectClients.ts` should read these. |
+| **`*_HTTP_ENDPOINT` env vars are obsolete** | The backend HTTP (80xx) servers were removed. No runtime code reads `*_HTTP_ENDPOINT` (only test-only Playwright mocks may still set it). Use `*_ENDPOINT` (gRPC). |
 | **No `UntypedClient` cast** | connect v2 + protobuf-es v2 `GenService` descriptors give a properly typed `Client<T>` where methods accept `MessageInitShape<I>` (plain objects). No cast needed. Using one silently hides proto field name bugs. |
 | **DO app specs need `http2_ports: [50xxx]`** | Without it, DO's internal load balancer negotiates HTTP/1.1 to gRPC ports and all calls fail. Add it to both `app.yaml` and `app.dev.yaml` for every service with a gRPC port. |
 

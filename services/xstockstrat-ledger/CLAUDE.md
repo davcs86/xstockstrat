@@ -14,16 +14,11 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50057` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8057` | Connect-RPC |
 
-## Connect-RPC
-
-Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8057`.
-
-- Implementation: `src/connect/ledgerServiceConnect.ts` — `ServiceImpl<typeof LedgerService>` with typed `HandlerContext`; exposes `AppendEvent`, `QueryEvents`, `GetEvent` (unary) and `StreamEvents` (server-streaming async generator)
-- Router: `src/connect/connectRouter.ts` — thin wiring: `router.service(LedgerService, createLedgerServiceConnectImpl(impl))`
-- Entry: `src/index.ts` — HTTP server with CORS headers mounts the Connect router via `connectNodeAdapter`
-- Callers (frontends, agent) use HTTP `8057`; internal services use gRPC `50057`
+This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing
+`AppendEvent`, `QueryEvents`, `GetEvent`, and `StreamEvents`). All callers connect over gRPC
+`50057`. The former HTTP/Connect-RPC server on `8057` (and the `src/connect/` Connect router)
+was removed.
 
 ## Critical Invariants
 
@@ -71,13 +66,12 @@ Namespace: `ledger`
 
 ## Webhooks
 
-_Webhook layer removed in feature-011. Use Connect-RPC directly on port 8057._
+_No webhooks. Call the gRPC RPCs on port 50057 directly._
 
 ## Environment Variables
 
 ```
 GRPC_PORT=50057
-HTTP_PORT=8057
 CONFIG_ENDPOINT=xstockstrat-config:50060
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 APPLICATION_ENV=development         # development | production

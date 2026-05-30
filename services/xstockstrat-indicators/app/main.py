@@ -1,12 +1,11 @@
 """
-xstockstrat-indicators — gRPC + HTTP server entry point.
+xstockstrat-indicators — gRPC server entry point.
 
 Formula engine + sandboxed Python execution.
 Timeout and memory cap sourced from xstockstrat-config at startup.
 
 Ports:
   GRPC_PORT (50054)  — gRPC (HTTP/2), internal service-to-service
-  HTTP_PORT (8054)   — Connect-RPC compatible HTTP (JSON), browser + external clients
 """
 
 import asyncio
@@ -15,14 +14,12 @@ import os
 import signal
 
 import grpc
-import uvicorn
 from gen.indicators.v1 import indicators_pb2_grpc
 from gen.indicators.v1.indicators_pb2 import DESCRIPTOR as INDICATORS_DESCRIPTOR
 from grpc_reflection.v1alpha import reflection
 
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IndicatorsServicer
-from app.http_server import build_app
 from app.telemetry import init_telemetry
 
 logging.basicConfig(
@@ -32,23 +29,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 GRPC_PORT = os.environ.get("GRPC_PORT", "50054")
-HTTP_PORT = int(os.environ.get("HTTP_PORT", "8054"))
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
-
-
-async def start_http_server(servicer: IndicatorsServicer) -> None:
-    """Start FastAPI HTTP server on HTTP_PORT (Connect-RPC compatible JSON API)."""
-    app = build_app(servicer)
-    config = uvicorn.Config(
-        app=app,
-        host="0.0.0.0",
-        port=HTTP_PORT,
-        loop="asyncio",
-        log_level="info",
-    )
-    server = uvicorn.Server(config)
-    log.info("indicators HTTP service starting on port %d", HTTP_PORT)
-    await server.serve()
 
 
 async def serve():
@@ -83,11 +64,7 @@ async def serve():
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)
 
-    # Run both servers concurrently
-    await asyncio.gather(
-        grpc_server.wait_for_termination(),
-        start_http_server(servicer),
-    )
+    await grpc_server.wait_for_termination()
 
 
 if __name__ == "__main__":

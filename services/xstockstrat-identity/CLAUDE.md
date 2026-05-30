@@ -14,16 +14,11 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50058` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8058` | Connect-RPC |
 
-## Connect-RPC
-
-Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8058`.
-
-- Implementation: `src/connect/identityServiceConnect.ts` — `ServiceImpl<typeof IdentityService>` with typed `HandlerContext`; exposes all eight methods: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`, `CreateApiKey`, `ValidateApiKey`, `ListApiKeys`, `RevokeApiKey`
-- Router: `src/connect/connectRouter.ts` — thin wiring: `router.service(IdentityService, createIdentityServiceConnectImpl(impl))`
-- Entry: `src/index.ts` — HTTP server with CORS headers mounts the Connect router via `connectNodeAdapter`
-- Callers (frontends, agent) use HTTP `8058`; internal services use gRPC `50058`
+This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing all
+eight methods: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`, `CreateApiKey`,
+`ValidateApiKey`, `ListApiKeys`, `RevokeApiKey`). The frontends validate tokens over gRPC `50058`.
+The former HTTP/Connect-RPC server on `8058` (and the `src/connect/` Connect router) was removed.
 
 ## Dependencies
 
@@ -46,7 +41,7 @@ Namespace: `identity`
 
 ## Webhooks
 
-_Webhook layer removed in feature-011. Use Connect-RPC directly on port 8058._
+_No webhooks. Call the gRPC RPCs on port 50058 directly._
 
 ## Environment Variables
 
@@ -54,7 +49,6 @@ Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_EN
 
 ```
 GRPC_PORT=50058
-HTTP_PORT=8058
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env

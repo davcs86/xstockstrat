@@ -14,16 +14,12 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50059` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8059` | Connect-RPC + webhooks |
 
-## Connect-RPC
-
-Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8059`.
-
-- Implementation: `src/connect/notifyServiceConnect.ts` — `ServiceImpl<typeof NotifyService>` with typed `HandlerContext`; exposes `EmitAlert`, `AcknowledgeAlert`, `ListAlerts` (unary) and `StreamAlerts` (server-streaming async generator bridging the in-process fan-out model)
-- Router: `src/connect/connectRouter.ts` — thin wiring: `router.service(NotifyService, createNotifyServiceConnectImpl(impl))`
-- Entry: `src/index.ts` — HTTP server with CORS headers mounts the Connect router via `connectNodeAdapter`
-- Callers (frontends, agent) use HTTP `8059`; internal services use gRPC `50059`
+This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing
+`EmitAlert`, `AcknowledgeAlert`, `ListAlerts`, and the `StreamAlerts` server-stream). The MCP
+agent emits alerts via `EmitAlert`; the trader UI subscribes to `StreamAlerts` over gRPC and
+bridges it to browser SSE. The former HTTP/Connect-RPC server on `8059` (its `src/connect/`
+Connect router and `src/webhooks/` handlers) was removed.
 
 ## Key Design
 
@@ -50,18 +46,10 @@ Namespace: `notify`
 | `notify.alert.retention_days` | int | `30` | Alert history retention |
 | `notify.alert.max_body_bytes` | int | `4096` | Max alert body size |
 
-## Webhooks
-
-| Endpoint | Method | Payload | Action |
-|---|---|---|---|
-| `/webhooks/emit-alert` | POST | `{severity, category, title, body, source_service, target_user_id}` | Emits alert via gRPC |
-| `/webhooks/list-alerts` | POST | `{user_id, categories, limit}` | Returns recent alerts |
-
 ## Environment Variables
 
 ```
 GRPC_PORT=50059
-HTTP_PORT=8059
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
