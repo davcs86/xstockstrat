@@ -42,6 +42,8 @@ services:
     internal_ports:
       - 50051
       - 8051
+    http2_ports:
+      - 50051
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -78,6 +80,8 @@ services:
     internal_ports:
       - 50052
       - 8052
+    http2_ports:
+      - 50052
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -106,6 +110,8 @@ services:
     internal_ports:
       - 50053
       - 8053
+    http2_ports:
+      - 50053
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -142,6 +148,8 @@ services:
     internal_ports:
       - 50054
       - 8054
+    http2_ports:
+      - 50054
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -169,6 +177,8 @@ services:
     internal_ports:
       - 50055
       - 8055
+    http2_ports:
+      - 50055
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -206,6 +216,8 @@ services:
     internal_ports:
       - 50056
       - 8056
+    http2_ports:
+      - 50056
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -276,6 +288,8 @@ services:
     internal_ports:
       - 50057
       - 8057
+    http2_ports:
+      - 50057
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -307,6 +321,8 @@ services:
     internal_ports:
       - 50058
       - 8058
+    http2_ports:
+      - 50058
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -344,6 +360,8 @@ services:
     internal_ports:
       - 50059
       - 8059
+    http2_ports:
+      - 50059
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -378,6 +396,8 @@ services:
     internal_ports:
       - 50060
       - 8060
+    http2_ports:
+      - 50060
     instance_count: 1
     # basic-s: extra headroom for WatchConfig streaming RPC (above 60s idle timeout)
     instance_size_slug: basic-s
