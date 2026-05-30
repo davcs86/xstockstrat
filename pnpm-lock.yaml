@@ -118,17 +118,17 @@ importers:
   services/xstockstrat-config-ui:
     dependencies:
       '@bufbuild/protobuf':
-        specifier: ^1.10.0
-        version: 1.10.1
+        specifier: ^2.0.0
+        version: 2.12.0
       '@connectrpc/connect':
-        specifier: ^1.4.0
-        version: 1.7.0(@bufbuild/protobuf@1.10.1)
+        specifier: ^2.1.0
+        version: 2.1.1(@bufbuild/protobuf@2.12.0)
       '@connectrpc/connect-node':
-        specifier: ^1.4.0
-        version: 1.7.0(@bufbuild/protobuf@1.10.1)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.1))
+        specifier: ^2.1.0
+        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
       '@connectrpc/connect-web':
-        specifier: ^1.4.0
-        version: 1.7.0(@bufbuild/protobuf@1.10.1)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.1))
+        specifier: ^2.1.0
+        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
       '@opentelemetry/exporter-trace-otlp-http':
         specifier: ^0.218.0
         version: 0.218.0(@opentelemetry/api@1.9.1)
@@ -153,6 +153,9 @@ importers:
       '@radix-ui/react-slot':
         specifier: ^1.1.0
         version: 1.2.4(@types/react@18.3.28)(react@18.3.1)
+      '@xstockstrat/proto':
+        specifier: workspace:*
+        version: link:../../packages/proto/gen/ts
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -333,17 +336,17 @@ importers:
   services/xstockstrat-insights:
     dependencies:
       '@bufbuild/protobuf':
-        specifier: ^1.10.0
-        version: 1.10.1
+        specifier: ^2.0.0
+        version: 2.12.0
       '@connectrpc/connect':
-        specifier: ^1.4.0
-        version: 1.7.0(@bufbuild/protobuf@1.10.1)
+        specifier: ^2.1.0
+        version: 2.1.1(@bufbuild/protobuf@2.12.0)
       '@connectrpc/connect-node':
-        specifier: ^1.4.0
-        version: 1.7.0(@bufbuild/protobuf@1.10.1)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.1))
+        specifier: ^2.1.0
+        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
       '@connectrpc/connect-web':
-        specifier: ^1.4.0
-        version: 1.7.0(@bufbuild/protobuf@1.10.1)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.1))
+        specifier: ^2.1.0
+        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
       '@opentelemetry/exporter-trace-otlp-http':
         specifier: ^0.218.0
         version: 0.218.0(@opentelemetry/api@1.9.1)
@@ -368,6 +371,9 @@ importers:
       '@radix-ui/react-slot':
         specifier: ^1.1.0
         version: 1.2.4(@types/react@18.3.28)(react@18.3.1)
+      '@xstockstrat/proto':
+        specifier: workspace:*
+        version: link:../../packages/proto/gen/ts
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -636,17 +642,17 @@ importers:
   services/xstockstrat-trader:
     dependencies:
       '@bufbuild/protobuf':
-        specifier: ^1.10.0
-        version: 1.10.1
+        specifier: ^2.0.0
+        version: 2.12.0
       '@connectrpc/connect':
-        specifier: ^1.4.0
-        version: 1.7.0(@bufbuild/protobuf@1.10.1)
+        specifier: ^2.1.0
+        version: 2.1.1(@bufbuild/protobuf@2.12.0)
       '@connectrpc/connect-node':
-        specifier: ^1.4.0
-        version: 1.7.0(@bufbuild/protobuf@1.10.1)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.1))
+        specifier: ^2.1.0
+        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
       '@connectrpc/connect-web':
-        specifier: ^1.4.0
-        version: 1.7.0(@bufbuild/protobuf@1.10.1)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.1))
+        specifier: ^2.1.0
+        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
       '@opentelemetry/exporter-trace-otlp-http':
         specifier: ^0.218.0
         version: 0.218.0(@opentelemetry/api@1.9.1)
@@ -671,6 +677,9 @@ importers:
       '@radix-ui/react-slot':
         specifier: ^1.1.0
         version: 1.2.4(@types/react@18.3.28)(react@18.3.1)
+      '@xstockstrat/proto':
+        specifier: workspace:*
+        version: link:../../packages/proto/gen/ts
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -794,13 +803,6 @@ packages:
     resolution: {integrity: sha512-Ir+AOibqzrIsL6ajt3Rz3LskB7OiMVHqltZmspbW/TJuTVuyOMirVqAkjfY6JISiLHgyNqicAC8AyHHGzNd/dA==}
     engines: {node: '>=0.1.90'}
 
-  '@connectrpc/connect-node@1.7.0':
-    resolution: {integrity: sha512-6vaPIkG/NyhxlYgytLoR9KYbPhczEboFB2OYWkA9qvUz1K7efXfeGrlRxoLtpa+r8VxyIOw73w5ktNe743nD+A==}
-    engines: {node: '>=16.0.0'}
-    peerDependencies:
-      '@bufbuild/protobuf': ^1.10.0
-      '@connectrpc/connect': 1.7.0
-
   '@connectrpc/connect-node@2.1.1':
     resolution: {integrity: sha512-s3TfsI1XF+n+1z6MBS9rTnFsxxR4Rw5wmdEnkQINli81ESGxcsfaEet8duzq8LVuuCupmhUsgpRo0Nv9pZkufg==}
     engines: {node: '>=20'}
@@ -808,11 +810,11 @@ packages:
       '@bufbuild/protobuf': ^2.7.0
       '@connectrpc/connect': 2.1.1
 
-  '@connectrpc/connect-web@1.7.0':
-    resolution: {integrity: sha512-qyP0YOnUPRWwCc/VfsoydMJvkb7EyUPr2q9sHgBuJzbADjiqck1gKH5V5ZPzPhTLBvmz5UvG+wiZ5sMRQHU1MQ==}
+  '@connectrpc/connect-web@2.1.1':
+    resolution: {integrity: sha512-J8317Q2MaFRCT1jzVR1o06bZhDIBmU0UAzWx6xOIXzOq8+k71/+k7MUF7AwcBUX+34WIvbm5syRgC5HXQA8fOg==}
     peerDependencies:
-      '@bufbuild/protobuf': ^1.10.0
-      '@connectrpc/connect': 1.7.0
+      '@bufbuild/protobuf': ^2.7.0
+      '@connectrpc/connect': 2.1.1
 
   '@connectrpc/connect@1.7.0':
     resolution: {integrity: sha512-iNKdJRi69YP3mq6AePRT8F/HrxWCewrhxnLMNm0vpqXAR8biwzRtO6Hjx80C6UvtKJ5sFmffQT7I4Baecz389w==}
@@ -870,10 +872,6 @@ packages:
   '@eslint/js@8.57.1':
     resolution: {integrity: sha512-d9zaMRSTIKDLhctzH12MtXvJKSSUhaHcjV+2Z+GK+EEY7XKpP5yR4x+N3TAcHTcu963nIr+TMcCb4DBCYX1z6Q==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
-
-  '@fastify/busboy@2.1.1':
-    resolution: {integrity: sha512-vBZP4NlzfOlerQTnba4aqZoMhE/a9HY7HRqoOPaETQcSQuWEIyZMHGfVu6w9wGtGK5fED5qRs2DteVCjOH60sA==}
-    engines: {node: '>=14'}
 
   '@floating-ui/core@1.7.5':
     resolution: {integrity: sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ==}
@@ -4205,10 +4203,6 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  undici@5.29.0:
-    resolution: {integrity: sha512-raqeBD6NQK4SkWhQzeYKd1KmIG6dllBOTt55Rmkt4HtI9mwdWtJljnrXjAFUBLTSN67HWrOIZ3EPF4kjUw80Bg==}
-    engines: {node: '>=14.0'}
-
   unrs-resolver@1.11.1:
     resolution: {integrity: sha512-bSjt9pjaEBnNiGgc9rUiHGKv5l4/TGzDmYw3RhnkJGtLhbnnA/5qJj7x3dNDCRx/PJxu774LlH8lCOlB4hEfKg==}
 
@@ -4402,25 +4396,15 @@ snapshots:
 
   '@colors/colors@1.6.0': {}
 
-  '@connectrpc/connect-node@1.7.0(@bufbuild/protobuf@1.10.1)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.1))':
-    dependencies:
-      '@bufbuild/protobuf': 1.10.1
-      '@connectrpc/connect': 1.7.0(@bufbuild/protobuf@1.10.1)
-      undici: 5.29.0
-
   '@connectrpc/connect-node@2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))':
     dependencies:
       '@bufbuild/protobuf': 2.12.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.12.0)
 
-  '@connectrpc/connect-web@1.7.0(@bufbuild/protobuf@1.10.1)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.1))':
+  '@connectrpc/connect-web@2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))':
     dependencies:
-      '@bufbuild/protobuf': 1.10.1
-      '@connectrpc/connect': 1.7.0(@bufbuild/protobuf@1.10.1)
-
-  '@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.1)':
-    dependencies:
-      '@bufbuild/protobuf': 1.10.1
+      '@bufbuild/protobuf': 2.12.0
+      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.12.0)
 
   '@connectrpc/connect@1.7.0(@bufbuild/protobuf@2.12.0)':
     dependencies:
@@ -4489,8 +4473,6 @@ snapshots:
       - supports-color
 
   '@eslint/js@8.57.1': {}
-
-  '@fastify/busboy@2.1.1': {}
 
   '@floating-ui/core@1.7.5':
     dependencies:
@@ -8085,10 +8067,6 @@ snapshots:
       which-boxed-primitive: 1.1.1
 
   undici-types@6.21.0: {}
-
-  undici@5.29.0:
-    dependencies:
-      '@fastify/busboy': 2.1.1
 
   unrs-resolver@1.11.1:
     dependencies:

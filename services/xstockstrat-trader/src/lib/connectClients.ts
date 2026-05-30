@@ -2,11 +2,18 @@
  * Connect-RPC clients for xstockstrat-trader.
  * Used server-side in Next.js Route Handlers — NOT in browser components.
  *
- * Uses raw fetch with Connect-RPC JSON protocol instead of createClient() to
- * avoid the normalize() instanceof check that throws TypeError when method.I
- * is not a proper constructor (generated connect-es v1 + protobuf-es v2 mismatch).
+ * Uses @connectrpc/connect v2 with service descriptors from the generated
+ * *_pb.ts files (protobuf-es v2 schema-based). In connect v2, createClient
+ * does not use instanceof for message normalization, so the runtime TypeError
+ * from connect v1 + protoc-gen-es v2 type erasure no longer applies.
  */
-import { ConnectError, Code } from '@connectrpc/connect';
+import { Code, createClient } from '@connectrpc/connect';
+import { createConnectTransport } from '@connectrpc/connect-node';
+import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
+import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
+import { NotifyService } from '@xstockstrat/proto/notify/v1/notify_pb';
+import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 
 // ── Base URLs ──────────────────────────────────────────────────────────────
 const TRADING_BASE_URL =
@@ -20,125 +27,45 @@ const IDENTITY_BASE_URL =
 const MARKETDATA_BASE_URL =
   process.env.MARKETDATA_HTTP_ENDPOINT ?? 'http://xstockstrat-marketdata:8053';
 
+function makeTransport(baseUrl: string) {
+  return createConnectTransport({ baseUrl, httpVersion: '1.1' });
+}
+
+// Cast to a generic record so route handlers can call any method with plain
+// object inputs without TypeScript routing them through the protobuf-es v2
+// message shape types. At runtime, connect v2's JSON serializer reads field
+// values from the plain object by name, so this is safe.
 type UntypedClient = Record<
   string,
   (input?: unknown, options?: { headers?: Headers }) => Promise<unknown>
 >;
 
-// Maps Connect-RPC JSON error code strings to Code enum values.
-function codeFromString(codeStr: string): Code {
-  switch (codeStr) {
-    case 'canceled': return Code.Canceled;
-    case 'unknown': return Code.Unknown;
-    case 'invalid_argument': return Code.InvalidArgument;
-    case 'deadline_exceeded': return Code.DeadlineExceeded;
-    case 'not_found': return Code.NotFound;
-    case 'already_exists': return Code.AlreadyExists;
-    case 'permission_denied': return Code.PermissionDenied;
-    case 'resource_exhausted': return Code.ResourceExhausted;
-    case 'failed_precondition': return Code.FailedPrecondition;
-    case 'aborted': return Code.Aborted;
-    case 'out_of_range': return Code.OutOfRange;
-    case 'unimplemented': return Code.Unimplemented;
-    case 'internal': return Code.Internal;
-    case 'unavailable': return Code.Unavailable;
-    case 'data_loss': return Code.DataLoss;
-    case 'unauthenticated': return Code.Unauthenticated;
-    default: return Code.Unknown;
-  }
-}
-
-async function connectPost(url: string, input: unknown, headers?: Headers): Promise<unknown> {
-  const reqHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (headers) {
-    headers.forEach((value, key) => { reqHeaders[key] = value; });
-  }
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: reqHeaders,
-    body: JSON.stringify(input ?? {}),
-  });
-  if (res.ok) return res.json();
-  let body: Record<string, unknown> = {};
-  try { body = await res.json(); } catch { /* ignore parse error */ }
-  const msg = typeof body.message === 'string' ? body.message : 'RPC error';
-  const code = typeof body.code === 'string' ? codeFromString(body.code) : Code.Unknown;
-  throw new ConnectError(msg, code);
-}
-
-function makeClient(
-  baseUrl: string,
-  typeName: string,
-  methods: Record<string, string>,
-): UntypedClient {
-  const client: UntypedClient = {};
-  for (const [methodName, rpcName] of Object.entries(methods)) {
-    client[methodName] = (input?: unknown, options?: { headers?: Headers }) =>
-      connectPost(`${baseUrl}/${typeName}/${rpcName}`, input, options?.headers);
-  }
-  return client;
-}
-
 // ── Exported clients ───────────────────────────────────────────────────────
 
-export const tradingClient = makeClient(
-  TRADING_BASE_URL,
-  'xstockstrat.trading.v1.TradingService',
-  {
-    placeOrder: 'PlaceOrder',
-    cancelOrder: 'CancelOrder',
-    getOrder: 'GetOrder',
-    listOrders: 'ListOrders',
-    streamOrderUpdates: 'StreamOrderUpdates',
-    listBrokerAccounts: 'ListBrokerAccounts',
-    registerBrokerAccount: 'RegisterBrokerAccount',
-    deregisterBrokerAccount: 'DeregisterBrokerAccount',
-  },
-);
+export const tradingClient = createClient(
+  TradingService,
+  makeTransport(TRADING_BASE_URL),
+) as unknown as UntypedClient;
 
-export const portfolioClient = makeClient(
-  PORTFOLIO_BASE_URL,
-  'xstockstrat.portfolio.v1.PortfolioService',
-  {
-    getPortfolio: 'GetPortfolio',
-    getPosition: 'GetPosition',
-    listPositions: 'ListPositions',
-    getPnl: 'GetPnl',
-    listPortfolios: 'ListPortfolios',
-  },
-);
+export const portfolioClient = createClient(
+  PortfolioService,
+  makeTransport(PORTFOLIO_BASE_URL),
+) as unknown as UntypedClient;
 
-export const notifyClient = makeClient(
-  NOTIFY_BASE_URL,
-  'xstockstrat.notify.v1.NotifyService',
-  {
-    emitAlert: 'EmitAlert',
-    listAlerts: 'ListAlerts',
-    acknowledgeAlert: 'AcknowledgeAlert',
-  },
-);
+export const notifyClient = createClient(
+  NotifyService,
+  makeTransport(NOTIFY_BASE_URL),
+) as unknown as UntypedClient;
 
-export const identityClient = makeClient(
-  IDENTITY_BASE_URL,
-  'xstockstrat.identity.v1.IdentityService',
-  {
-    authenticateUser: 'AuthenticateUser',
-    validateToken: 'ValidateToken',
-    refreshToken: 'RefreshToken',
-    revokeToken: 'RevokeToken',
-  },
-);
+export const identityClient = createClient(
+  IdentityService,
+  makeTransport(IDENTITY_BASE_URL),
+) as unknown as UntypedClient;
 
-export const marketDataClient = makeClient(
-  MARKETDATA_BASE_URL,
-  'xstockstrat.marketdata.v1.MarketDataService',
-  {
-    getBars: 'GetBars',
-    getLatestQuote: 'GetLatestQuote',
-    listAssets: 'ListAssets',
-    backfillBars: 'BackfillBars',
-  },
-);
+export const marketDataClient = createClient(
+  MarketDataService,
+  makeTransport(MARKETDATA_BASE_URL),
+) as unknown as UntypedClient;
 
 // ── Connect-Code → HTTP status helper ──────────────────────────────────────
 export function connectCodeToHttp(code: Code): number {
@@ -168,3 +95,4 @@ export function connectCodeToHttp(code: Code): number {
       return 500;
   }
 }
+
