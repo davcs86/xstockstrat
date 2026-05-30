@@ -1,9 +1,9 @@
 # Feature: upgrade-nextjs15
 
-**Lifecycle Status**: `idea`
+**Lifecycle Status**: `draft`
 **Development Branch**: `feature/upgrade-nextjs15`
 **Created**: 2026-05-27
-**Last Updated**: 2026-05-27
+**Last Updated**: 2026-05-30
 
 ---
 
@@ -12,11 +12,14 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-27 | `idea` | manual | Backlog entry created after DO deploy failures investigation |
+| 2026-05-30 | `idea` → `draft` | /sdd-story | Product spec generated; open questions left for review |
 
 ---
 
 ## Artifacts
 
+- [Product Spec](product-spec.md) — requirements and governance
+- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec upgrade-nextjs15`_
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -57,6 +60,16 @@ The immediate fix applied was to update the Dockerfile CMD and static COPY to us
 5. Verify all pages and API routes in dev, then run `pnpm run build` to confirm clean standalone output
 6. Update `pnpm-lock.yaml` and commit
 
+## Reviewers
+
+_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
+change types. Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry changes.)_
+
+| Role | Review Focus |
+|---|---|
+| xstockstrat-insights owner | Analytics display accuracy, SSE polling resilience, no regression on upgrade |
+| xstockstrat-config-ui owner | Config mutation safety, direct `pg` access still works, no regression on upgrade |
+
 ## Next Action
 
-Run `/sdd-story upgrade-nextjs15` when ready to write a full product spec and begin implementation.
+`/sdd-review upgrade-nextjs15 product-spec` — AI review of product spec before running /sdd-spec

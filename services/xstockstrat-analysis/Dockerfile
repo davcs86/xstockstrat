@@ -16,7 +16,6 @@ COPY scripts/wait-for-deps.sh /usr/local/bin/wait-for-deps.sh
 COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/wait-for-deps.sh /docker-entrypoint.sh
 EXPOSE 50056
-EXPOSE 8056
 ENV PATH="/app/.venv/bin:$PATH"
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["python", "-m", "app.main"]

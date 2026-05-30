@@ -30,5 +30,5 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /deploy ./
-EXPOSE 50060 8060
+EXPOSE 50060
 CMD ["node", "dist/index.js"]

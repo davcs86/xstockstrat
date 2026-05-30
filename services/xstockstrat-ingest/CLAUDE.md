@@ -16,15 +16,10 @@ Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` bui
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50055` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8055` | Connect-RPC + webhooks |
 
-## Connect-RPC
-
-Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8055` via `asyncio.gather`.
-
-- Handler: `app/main.py` — `start_connect_server(servicer)` runs uvicorn with `ConnectHandler` ASGI wrapper
-- `asyncio.gather(grpc_server.wait_for_termination(), start_connect_server(servicer))` starts both concurrently
-- Callers (frontends, agent) use HTTP `8055`; internal services use gRPC `50055`
+This service is **gRPC-only** (`app/main.py` runs a single `grpc.aio` server). The MCP agent
+ingests signals via the `IngestSignal` gRPC RPC. The former HTTP/Connect-RPC server on `8055`
+(and its `/webhooks/{trigger-backfill,backfill-status,ingest-signal}` handlers) was removed.
 
 ## Dependencies
 
@@ -63,14 +58,6 @@ Namespace: `ingest`
 | `ingest.signals.dedup_window_hours` | int | `24` | Skip re-ingesting same symbol+source+direction within this window |
 | `platform.ledger_endpoint` | string | — | Ledger address |
 
-## Webhooks
-
-| Endpoint | Method | Payload | Action |
-|---|---|---|---|
-| `/webhooks/trigger-backfill` | POST | `{symbols, timeframe, start, end, overwrite}` | Starts backfill job |
-| `/webhooks/backfill-status` | POST | `{job_id}` | Returns job status |
-| `/webhooks/ingest-signal` | POST | `{source, symbol, direction, conviction?, valid_from, valid_until?, headline?, raw_url?, tags?}` | Ingests a newsletter signal |
-
 ## Ledger Events Emitted
 
 | Event Type | Trigger |
@@ -96,7 +83,6 @@ After any change to `pyproject.toml`, run `uv lock` and commit the updated `uv.l
 
 ```
 GRPC_PORT=50055
-HTTP_PORT=8055
 CONFIG_ENDPOINT=xstockstrat-config:50060
 MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
 LEDGER_ENDPOINT=xstockstrat-ledger:50057

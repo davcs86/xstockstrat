@@ -1,7 +1,7 @@
 # xstockstrat-trader — CLAUDE.md
 
 ## Role
-Next.js 14 frontend for trading execution and order management. Uses the App Router with server-side Route Handlers as Connect-RPC-to-HTTP adapters. Browser components communicate with Next.js API routes; API routes communicate with backend services via Connect-RPC HTTP. Receives live alerts via SSE streaming from `xstockstrat-notify`.
+Next.js 14 frontend for trading execution and order management. Uses the App Router with server-side Route Handlers as gRPC-to-HTTP adapters. Browser components communicate with Next.js API routes; API routes communicate with backend services via gRPC (`@connectrpc/connect-node` gRPC transport). Receives live alerts via SSE streaming, bridged from the notify `StreamAlerts` gRPC server-stream.
 
 ## Language
 TypeScript / Next.js 14 (App Router)

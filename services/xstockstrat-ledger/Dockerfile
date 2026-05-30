@@ -33,6 +33,6 @@ COPY --from=builder /deploy ./
 COPY scripts/wait-for-deps.sh /usr/local/bin/wait-for-deps.sh
 COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/wait-for-deps.sh /docker-entrypoint.sh
-EXPOSE 50057 8057
+EXPOSE 50057
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["node", "dist/index.js"]

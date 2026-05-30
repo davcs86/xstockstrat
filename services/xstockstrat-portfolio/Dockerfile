@@ -10,5 +10,4 @@ FROM gcr.io/distroless/static-debian12
 WORKDIR /app
 COPY --from=builder /app/service .
 EXPOSE 50052
-EXPOSE 8052
 ENTRYPOINT ["/app/service"]

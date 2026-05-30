@@ -20,15 +20,9 @@ Go pattern — see `docs/patterns/docker-build.md` for multi-stage builder, stat
 | Protocol | Port | Purpose |
 |---|---|---|
 | gRPC | `50053` | Internal service-to-service (protobuf) |
-| HTTP (Connect-RPC) | `8053` | Connect-RPC + n8n webhooks (HTTP/1.1 + HTTP/2 via h2c) |
 
-## Connect-RPC
-
-Connect-RPC HTTP server runs alongside gRPC on `HTTP_PORT=8053`.
-
-- Handler registration: `cmd/server/main.go` — uses `marketdatav1connect.NewMarketDataServiceHandler` wrapped with `h2c.NewHandler`
-- Callers (frontends, n8n) use HTTP `8053`; internal services use gRPC `50053`
-- Transport: `golang.org/x/net/http2/h2c` supports HTTP/1.1 and HTTP/2 cleartext on same port
+This service is **gRPC-only**. All callers connect over gRPC `50053`. The former
+HTTP/Connect-RPC server on `8053` (and its `/webhooks/n8n/{backfill,subscribe}` handlers) was removed.
 
 ## Dependencies
 
@@ -69,20 +63,12 @@ Namespace: `marketdata`
 - WebSocket: real-time bar stream, quote stream — same package
 - Credentials sourced from env vars (never from config service — these are secrets)
 
-## n8n Webhooks
-
-| Endpoint | Method | Payload | Action |
-|---|---|---|---|
-| `/webhooks/n8n/backfill` | POST | `{symbols, timeframe, start, end}` | Triggers historical backfill job |
-| `/webhooks/n8n/subscribe` | POST | `{symbols, timeframe}` | Adds symbols to live stream |
-
 ## Environment Variables
 
 Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_ENV` and `NODE_ENV` come from `.env.local` (committed). `DATABASE_URL` is constructed by docker-compose from `POSTGRES_PASSWORD` in `.env`. `ALPACA_API_KEY` and `ALPACA_API_SECRET` come from `.env` (see `.env.example`).
 
 ```
 GRPC_PORT=50053
-HTTP_PORT=8053
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
