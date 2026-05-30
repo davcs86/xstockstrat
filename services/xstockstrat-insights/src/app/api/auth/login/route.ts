@@ -21,8 +21,11 @@ export async function POST(req: NextRequest) {
     );
     return response;
   } catch (err) {
-    if (ConnectError && err instanceof ConnectError && err.code === Code.Unauthenticated) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    if (ConnectError) {
+      const ce = ConnectError.from(err);
+      if (ce.code === Code.Unauthenticated) {
+        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+      }
     }
     console.error('[login] identity service error:', err);
     return NextResponse.json(
