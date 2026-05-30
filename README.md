@@ -84,29 +84,4 @@ The artifacts of this loop are checked in: every active and shipped feature has 
 - **Runbooks** — [`docs/runbooks/feature-workflow.md`](docs/runbooks/feature-workflow.md), [`docs/runbooks/bug-triage.md`](docs/runbooks/bug-triage.md), [`docs/runbooks/approval-flow.md`](docs/runbooks/approval-flow.md). These describe the manual paths for anything the agent can't or shouldn't do alone.
 - **CLAUDE.md files at every level** — [root](CLAUDE.md), [`docs/`](docs/CLAUDE.md), [`docs/patterns/`](docs/patterns/CLAUDE.md), and per-service. These are agent-readable context that scales with the repo.
 
-### The live backlog
-
-[`docs/roadmap/features/`](docs/roadmap/features/) holds 43 numbered feature directories, each with a live lifecycle status that CI updates automatically on promotion:
-
-| Status | Count | What it is |
-|---|---|---|
-| `launched` | 14 | Live in production, with the merging commit SHA on `feature.md` |
-| `implementation-ready` | 2 | Numbered, grep-cited implementation spec written, ready for `/sdd-execute` |
-| `draft` | 12 | Product spec written, awaiting `/sdd-review` to advance |
-| `idea` | 6 | One-line story stubs |
-| `demoted/canceled` | 9 | Decided against — kept on disk so future agents can detect overlap with old rejections |
-
-This is the actual queue, not a curated public roadmap. Highlights from the active backlog: a position-sizing engine (`023`), automatic broker bracket orders (`030`), walk-forward backtesting (`032`), an OAuth surface for Claude.ai remote MCP (`018`), a scheduled email-signal ingester (`010`), and the Phase 7 observability buildout (`033`). Run `/sdd-status` for a live tabular view.
-
-### Companion documents (`docs/launch-pdfs/`)
-
-Four PDFs walk through the project from different angles, designed to be readable individually or as a set:
-
-| PDF | Focus |
-|---|---|
-| `sdd-flow.pdf` | 1–3 min narrative video script of the SDD loop |
-| `sdd-lifecycle.pdf` | State-machine reference: every status, every transition, the live backlog snapshot |
-| `product-features.pdf` | Platform capabilities + the active backlog grouped by theme |
-| `infra-ci.pdf` | CI workflows, Docker Compose stack, DigitalOcean App Platform deploys |
-
 If you want to use a similar workflow on your own codebase, start by reading the root `CLAUDE.md` to see what an LLM-readable project description looks like, then look at any feature directory under `docs/roadmap/features/` to see the artifacts the SDD loop produces.
