@@ -17,9 +17,9 @@
   "dependencies": {
     "@bufbuild/protobuf": "^2.0.0",
     "@connectrpc/connect": "^2.1.0",
+    "@connectrpc/connect-next": "^2.1.0",
     "@connectrpc/connect-node": "^2.1.0",
     "@connectrpc/connect-web": "^2.1.0",
-    "@xstockstrat/proto": "workspace:*",
     "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
     "@opentelemetry/resources": "^2.7.1",
     "@opentelemetry/sdk-node": "^0.218.0",
@@ -28,6 +28,7 @@
     "@radix-ui/react-select": "^2.1.2",
     "@radix-ui/react-separator": "^1.1.0",
     "@radix-ui/react-slot": "^1.1.0",
+    "@xstockstrat/proto": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
