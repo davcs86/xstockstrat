@@ -208,7 +208,6 @@ services:
     environment:
       <<: [*common-env, *db-url]
       GRPC_PORT: "50059"
-      HTTP_PORT: "8059"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
@@ -217,7 +216,6 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50059:50059"
-      - "8059:8059"
     healthcheck:
       <<: *hc-defaults
       test: ["CMD", "nc", "-z", "localhost", "50059"]
@@ -309,7 +307,6 @@ services:
     environment:
       <<: [*common-env, *db-url]
       GRPC_PORT: "50055"
-      HTTP_PORT: "8055"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
@@ -321,7 +318,6 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50055:50055"
-      - "8055:8055"
     healthcheck:
       <<: *hc-defaults
       test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/50055"]
@@ -347,7 +343,6 @@ services:
     environment:
       <<: [*common-env, *db-url]
       GRPC_PORT: "50056"
-      HTTP_PORT: "8056"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
@@ -359,7 +354,6 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50056:50056"
-      - "8056:8056"
     healthcheck:
       <<: *hc-defaults
       test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/50056"]
@@ -572,9 +566,9 @@ services:
     env_file: [".env.local"]
     environment:
       <<: *common-env
-      INGEST_HTTP_ENDPOINT: http://xstockstrat-ingest:8055
-      NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
-      ANALYSIS_HTTP_ENDPOINT: http://xstockstrat-analysis:8056
+      INGEST_ENDPOINT: xstockstrat-ingest:50055
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      ANALYSIS_ENDPOINT: xstockstrat-analysis:50056
       IDENTITY_ENDPOINT: xstockstrat-identity:50058
       CONFIG_ENDPOINT: xstockstrat-config:50060
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-identity:50058"

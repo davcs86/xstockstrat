@@ -5,9 +5,9 @@ Six tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
-  ingest_signal        — ingests a trading signal via ingest webhook
-  emit_alert           — emits an alert via notify webhook
-  run_backtest         — triggers a backtest via analysis webhook
+  ingest_signal        — ingests a trading signal via gRPC IngestSignal
+  emit_alert           — emits an alert via gRPC EmitAlert
+  run_backtest         — triggers a backtest via gRPC RunBacktest
 """
 import base64
 import logging
@@ -45,21 +45,17 @@ def register_tools(server: FastMCP) -> None:
         extractor_tool: 'extract_email_content' | 'extract_website_content' | null.
         Claude must follow extractor_tool exactly — do not infer routing from source_type.
         source_type: optional filter list (e.g. ['mediated_simple_email', 'mediated_email_attachment'])."""
-        result = await client.post_ingest(
-            "/xstockstrat.ingest.v1.IngestService/ListSignalSources",
-            {"includeInactive": False},
-        )
+        sources = await client.list_signal_sources(include_inactive=False)
         # Enrich each source with extractor_tool derived from source_type.
-        # credentials_ref is intentionally excluded — never exposed to Claude.
-        sources = result.get("sources", [])
+        # has_credentials and credentials are intentionally excluded — never exposed to Claude.
         enriched = []
         for src in sources:
-            st = src.get("source_type", "")
+            st = src["source_type"]
             enriched.append({
-                "slug": src.get("slug", ""),
-                "display_name": src.get("display_name", ""),
+                "slug": src["slug"],
+                "display_name": src["display_name"],
                 "source_type": st,
-                "config_json": src.get("config_json") or src.get("configJson", {}),
+                "config_json": src["config_json"],
                 "extractor_tool": _EXTRACTOR_TOOL_MAP.get(st, None),
             })
         if source_type:
@@ -84,10 +80,10 @@ def register_tools(server: FastMCP) -> None:
 
         src = await _get_source(source_slug)
 
-        credentials_ref = src.get("credentials_ref")
         password: str | None = None
-        if credentials_ref:
-            password = await client.get_config_value(credentials_ref)
+        if src.get("has_credentials"):
+            # Credentials are stored in config under the conventional key source.<slug>.credentials
+            password = await client.get_config_value(f"source.{source_slug}.credentials")
 
         texts: list[str] = []
 
@@ -120,10 +116,10 @@ def register_tools(server: FastMCP) -> None:
         if not url:
             raise ValueError(f"Source '{source_slug}' has no url in config_json")
 
-        credentials_ref = src.get("credentials_ref")
         password: str | None = None
-        if credentials_ref:
-            password = await client.get_config_value(credentials_ref)
+        if src.get("has_credentials"):
+            # Credentials are stored in config under the conventional key source.<slug>.credentials
+            password = await client.get_config_value(f"source.{source_slug}.credentials")
 
         text = await _fetch_url(url, password=password)
         return {"raw_text": text}
@@ -147,23 +143,17 @@ def register_tools(server: FastMCP) -> None:
         valid_from: ISO 8601 datetime string e.g. '2026-05-01T00:00:00Z'.
         conviction: float 0.0-1.0 (optional, ingest applies source default if absent).
         Returns signal_id on success; raises on unknown source slug (INVALID_ARGUMENT)."""
-        payload: dict = {
-            "source": source,
-            "symbol": symbol,
-            "direction": direction,
-            "valid_from": valid_from,
-        }
-        if conviction is not None:
-            payload["conviction"] = conviction
-        if valid_until is not None:
-            payload["valid_until"] = valid_until
-        if headline is not None:
-            payload["headline"] = headline
-        if raw_url is not None:
-            payload["raw_url"] = raw_url
-        if tags is not None:
-            payload["tags"] = tags
-        result = await client.post_ingest("/webhooks/ingest-signal", payload)
+        result = await client.ingest_signal(
+            source=source,
+            symbol=symbol,
+            direction=direction,
+            valid_from=valid_from,
+            conviction=conviction,
+            valid_until=valid_until,
+            headline=headline,
+            raw_url=raw_url,
+            tags=tags,
+        )
         # Auto-emit alert for high-conviction signals — deterministic rule, not model-driven.
         threshold_str = await client.get_config_value(_ALERT_THRESHOLD_CONFIG_KEY)
         try:
@@ -176,16 +166,13 @@ def register_tools(server: FastMCP) -> None:
                 alert_body = f"Signal ingested: {direction} {symbol} (conviction {conviction:.2f})"
                 if valid_until:
                     alert_body += f", valid until {valid_until}"
-                await client.post_notify(
-                    "/webhooks/emit-alert",
-                    {
-                        "severity": "info",
-                        "category": "signal",
-                        "title": alert_title,
-                        "body": alert_body,
-                        "source_service": "xstockstrat-agent",
-                        "target_user_id": "",
-                    },
+                await client.emit_alert(
+                    severity="info",
+                    category="signal",
+                    title=alert_title,
+                    body=alert_body,
+                    source_service="xstockstrat-agent",
+                    target_user_id="",
                 )
             except Exception as e:
                 log.warning("Auto-alert failed after ingest_signal (signal already ingested): %s", e)
@@ -204,16 +191,13 @@ def register_tools(server: FastMCP) -> None:
         severity: e.g. 'info', 'warning', 'critical'.
         category: alert category e.g. 'signal', 'system'.
         Use for system-level alerts or alerts not tied to a specific ingested signal."""
-        return await client.post_notify(
-            "/webhooks/emit-alert",
-            {
-                "severity": severity,
-                "category": category,
-                "title": title,
-                "body": body,
-                "source_service": source_service,
-                "target_user_id": target_user_id,
-            },
+        return await client.emit_alert(
+            severity=severity,
+            category=category,
+            title=title,
+            body=body,
+            source_service=source_service,
+            target_user_id=target_user_id,
         )
 
     @server.tool()
@@ -226,25 +210,19 @@ def register_tools(server: FastMCP) -> None:
         strategy_id: identifies the strategy (e.g. 'sma_crossover').
         symbols: list of ticker symbols e.g. ['NVDA', 'AAPL'].
         initial_capital: starting capital in USD (default 100000)."""
-        return await client.post_analysis(
-            "/webhooks/run-backtest",
-            {
-                "strategy_id": strategy_id,
-                "symbols": symbols,
-                "initial_capital": initial_capital,
-            },
+        return await client.run_backtest(
+            strategy_id=strategy_id,
+            symbols=symbols,
+            initial_capital=initial_capital,
         )
 
 
 async def _get_source(source_slug: str) -> dict:
     """Fetch a single signal source by slug from the ingest registry.
     Raises ValueError if slug is not found or source is inactive."""
-    result = await client.post_ingest(
-        "/xstockstrat.ingest.v1.IngestService/ListSignalSources",
-        {"includeInactive": False},
-    )
-    for src in result.get("sources", []):
-        if src.get("slug") == source_slug:
+    sources = await client.list_signal_sources(include_inactive=False)
+    for src in sources:
+        if src["slug"] == source_slug:
             return src
     raise ValueError(f"Unknown or inactive source slug: '{source_slug}'")
 
@@ -259,7 +237,7 @@ def _extract_from_bytes(data: bytes, password: str | None = None) -> str:
             if not doc.authenticate(password):
                 raise ValueError("Failed to decrypt PDF: incorrect password")
         elif doc.is_encrypted:
-            raise ValueError("PDF is password-protected but no credentials_ref is configured")
+            raise ValueError("PDF is password-protected but no credentials are configured")
         return "\n".join(page.get_text() for page in doc)
     except Exception as pdf_err:
         log.debug("PDF parsing failed (%s), falling back to UTF-8 decode", pdf_err)
