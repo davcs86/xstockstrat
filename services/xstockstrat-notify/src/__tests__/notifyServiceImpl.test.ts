@@ -212,3 +212,41 @@ describe('streamAlerts', () => {
     assert.strictEqual((impl as any).subscribers.size, 0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Regression: alerts must carry a `Date` createdAt so ts-proto's grpc-js
+// serializer can encode them. Before the fix, `{ seconds }` plain objects threw
+// `getTime is not a function` during responseSerialize / stream write, which
+// grpc-js surfaced to callers (e.g. the trader alert stream) as an INTERNAL
+// error after the handler had already returned.
+// ---------------------------------------------------------------------------
+
+describe('rowToAlert serialization (regression)', () => {
+  it('produces a Date createdAt that ts-proto encodes without throwing', async () => {
+    if (!rowToAlert) return;
+
+    let Alert: any;
+    try {
+      ({ Alert } = await import('@xstockstrat/proto/notify/v1/notify.js'));
+    } catch {
+      return; // proto package unavailable in this runtime — skip.
+    }
+
+    const alert = rowToAlert({
+      alert_id: 'a1',
+      severity: 2,
+      category: 'risk',
+      title: 't',
+      body: 'b',
+      source_service: 'trading',
+      target_user_id: 'u1',
+      created_at: new Date(),
+      acknowledged: false,
+      correlation_id: 'c1',
+      tags: [],
+    });
+
+    assert.ok(alert.createdAt instanceof Date, 'createdAt must be a Date');
+    assert.doesNotThrow(() => Alert.encode(alert).finish());
+  });
+});
