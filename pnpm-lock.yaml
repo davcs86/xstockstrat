@@ -123,9 +123,6 @@ importers:
       '@connectrpc/connect':
         specifier: ^2.1.0
         version: 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect-next':
-        specifier: ^2.1.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect-node@2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0)))(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))(next@14.2.35(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
       '@connectrpc/connect-node':
         specifier: ^2.1.0
         version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
@@ -344,9 +341,6 @@ importers:
       '@connectrpc/connect':
         specifier: ^2.1.0
         version: 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect-next':
-        specifier: ^2.1.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect-node@2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0)))(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))(next@14.2.35(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
       '@connectrpc/connect-node':
         specifier: ^2.1.0
         version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
@@ -653,9 +647,6 @@ importers:
       '@connectrpc/connect':
         specifier: ^2.1.0
         version: 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect-next':
-        specifier: ^2.1.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect-node@2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0)))(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
       '@connectrpc/connect-node':
         specifier: ^2.1.0
         version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
@@ -811,15 +802,6 @@ packages:
   '@colors/colors@1.6.0':
     resolution: {integrity: sha512-Ir+AOibqzrIsL6ajt3Rz3LskB7OiMVHqltZmspbW/TJuTVuyOMirVqAkjfY6JISiLHgyNqicAC8AyHHGzNd/dA==}
     engines: {node: '>=0.1.90'}
-
-  '@connectrpc/connect-next@2.1.1':
-    resolution: {integrity: sha512-Ch3CmGas7QngT5P2DzS/8xUolZPaN2/EHdfl8F+Bsf6KVi9TZ3wIIVw2879e669xEB3ck7SYv6zVLZ9fkUOa0Q==}
-    engines: {node: '>=20'}
-    peerDependencies:
-      '@bufbuild/protobuf': ^2.7.0
-      '@connectrpc/connect': 2.1.1
-      '@connectrpc/connect-node': 2.1.1
-      next: ^13.2.4 || ^14.2.5 || ^15.0.2
 
   '@connectrpc/connect-node@2.1.1':
     resolution: {integrity: sha512-s3TfsI1XF+n+1z6MBS9rTnFsxxR4Rw5wmdEnkQINli81ESGxcsfaEet8duzq8LVuuCupmhUsgpRo0Nv9pZkufg==}
@@ -4415,20 +4397,6 @@ snapshots:
       - supports-color
 
   '@colors/colors@1.6.0': {}
-
-  '@connectrpc/connect-next@2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect-node@2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0)))(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))(next@14.2.35(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))':
-    dependencies:
-      '@bufbuild/protobuf': 2.12.0
-      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect-node': 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
-      next: 14.2.35(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-
-  '@connectrpc/connect-next@2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect-node@2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0)))(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))(next@15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))':
-    dependencies:
-      '@bufbuild/protobuf': 2.12.0
-      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect-node': 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
-      next: 15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
 
   '@connectrpc/connect-node@2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))':
     dependencies:
