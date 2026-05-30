@@ -8,27 +8,27 @@
  * from connect v1 + protoc-gen-es v2 type erasure no longer applies.
  */
 import { Code, createClient } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-node';
+import { createGrpcTransport } from '@connectrpc/connect-node';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 
-// ── Base URLs ──────────────────────────────────────────────────────────────
-const ANALYSIS_BASE_URL =
-  process.env.ANALYSIS_HTTP_ENDPOINT ?? 'http://xstockstrat-analysis:8056';
-const MARKETDATA_BASE_URL =
-  process.env.MARKETDATA_HTTP_ENDPOINT ?? 'http://xstockstrat-marketdata:8053';
-const PORTFOLIO_BASE_URL =
-  process.env.PORTFOLIO_HTTP_ENDPOINT ?? 'http://xstockstrat-portfolio:8052';
-const TRADING_BASE_URL =
-  process.env.TRADING_HTTP_ENDPOINT ?? 'http://xstockstrat-trading:8051';
-const IDENTITY_BASE_URL =
-  process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058';
+// ── gRPC endpoints (host:port, no protocol) ───────────────────────────────
+const ANALYSIS_ENDPOINT =
+  process.env.ANALYSIS_ENDPOINT ?? 'xstockstrat-analysis:50056';
+const MARKETDATA_ENDPOINT =
+  process.env.MARKETDATA_ENDPOINT ?? 'xstockstrat-marketdata:50053';
+const PORTFOLIO_ENDPOINT =
+  process.env.PORTFOLIO_ENDPOINT ?? 'xstockstrat-portfolio:50052';
+const TRADING_ENDPOINT =
+  process.env.TRADING_ENDPOINT ?? 'xstockstrat-trading:50051';
+const IDENTITY_ENDPOINT =
+  process.env.IDENTITY_ENDPOINT ?? 'xstockstrat-identity:50058';
 
-function makeTransport(baseUrl: string) {
-  return createConnectTransport({ baseUrl, httpVersion: '1.1' });
+function makeTransport(endpoint: string) {
+  return createGrpcTransport({ baseUrl: `http://${endpoint}` });
 }
 
 // Cast to a generic record so route handlers can call any method with plain
@@ -44,27 +44,27 @@ type UntypedClient = Record<
 
 export const analysisClient = createClient(
   AnalysisService,
-  makeTransport(ANALYSIS_BASE_URL),
+  makeTransport(ANALYSIS_ENDPOINT),
 ) as unknown as UntypedClient;
 
 export const marketDataClient = createClient(
   MarketDataService,
-  makeTransport(MARKETDATA_BASE_URL),
+  makeTransport(MARKETDATA_ENDPOINT),
 ) as unknown as UntypedClient;
 
 export const portfolioClient = createClient(
   PortfolioService,
-  makeTransport(PORTFOLIO_BASE_URL),
+  makeTransport(PORTFOLIO_ENDPOINT),
 ) as unknown as UntypedClient;
 
 export const tradingClient = createClient(
   TradingService,
-  makeTransport(TRADING_BASE_URL),
+  makeTransport(TRADING_ENDPOINT),
 ) as unknown as UntypedClient;
 
 export const identityClient = createClient(
   IdentityService,
-  makeTransport(IDENTITY_BASE_URL),
+  makeTransport(IDENTITY_ENDPOINT),
 ) as unknown as UntypedClient;
 
 // ── Connect-Code → HTTP status helper ──────────────────────────────────────

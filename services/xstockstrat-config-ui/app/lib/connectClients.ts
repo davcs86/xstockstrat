@@ -8,21 +8,21 @@
  * from connect v1 + protoc-gen-es v2 type erasure no longer applies.
  */
 import { Code, createClient } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-node';
+import { createGrpcTransport } from '@connectrpc/connect-node';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
 import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 
-// ── Base URLs ──────────────────────────────────────────────────────────────
-const CONFIG_HTTP_ENDPOINT =
-  process.env.CONFIG_HTTP_ENDPOINT ?? 'http://xstockstrat-config:8060';
-const IDENTITY_BASE_URL =
-  process.env.IDENTITY_HTTP_ENDPOINT ?? 'http://xstockstrat-identity:8058';
-const INGEST_HTTP_ENDPOINT =
-  process.env.INGEST_HTTP_ENDPOINT ?? 'http://xstockstrat-ingest:8055';
+// ── gRPC endpoints (host:port, no protocol) ───────────────────────────────
+const CONFIG_ENDPOINT =
+  process.env.CONFIG_ENDPOINT ?? 'xstockstrat-config:50060';
+const IDENTITY_ENDPOINT =
+  process.env.IDENTITY_ENDPOINT ?? 'xstockstrat-identity:50058';
+const INGEST_ENDPOINT =
+  process.env.INGEST_ENDPOINT ?? 'xstockstrat-ingest:50055';
 
-function makeTransport(baseUrl: string) {
-  return createConnectTransport({ baseUrl, httpVersion: '1.1' });
+function makeTransport(endpoint: string) {
+  return createGrpcTransport({ baseUrl: `http://${endpoint}` });
 }
 
 // Cast to a generic record so route handlers can call any method with plain
@@ -38,17 +38,17 @@ type UntypedClient = Record<
 
 export const configClient = createClient(
   ConfigService,
-  makeTransport(CONFIG_HTTP_ENDPOINT),
+  makeTransport(CONFIG_ENDPOINT),
 ) as unknown as UntypedClient;
 
 export const identityClient = createClient(
   IdentityService,
-  makeTransport(IDENTITY_BASE_URL),
+  makeTransport(IDENTITY_ENDPOINT),
 ) as unknown as UntypedClient;
 
 export const ingestClient = createClient(
   IngestService,
-  makeTransport(INGEST_HTTP_ENDPOINT),
+  makeTransport(INGEST_ENDPOINT),
 ) as unknown as UntypedClient;
 
 // ── Connect-Code → HTTP status helper ──────────────────────────────────────

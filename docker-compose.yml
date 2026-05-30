@@ -455,12 +455,12 @@ services:
     env_file: [".env.local", ".env.fe.local"]
     environment:
       <<: *common-env
-      # Connect-RPC HTTP endpoints (not raw gRPC ports)
-      TRADING_HTTP_ENDPOINT: http://xstockstrat-trading:8051
-      PORTFOLIO_HTTP_ENDPOINT: http://xstockstrat-portfolio:8052
-      NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
-      IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
-      MARKETDATA_HTTP_ENDPOINT: http://xstockstrat-marketdata:8053
+      # gRPC endpoints (host:port, no protocol) — server-side only
+      TRADING_ENDPOINT: xstockstrat-trading:50051
+      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
+      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: trader
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
@@ -484,14 +484,14 @@ services:
     env_file: [".env.local", ".env.fe.local"]
     environment:
       <<: *common-env
-      # Connect-RPC HTTP endpoints (not raw gRPC ports)
-      ANALYSIS_HTTP_ENDPOINT: http://xstockstrat-analysis:8056
-      INDICATORS_HTTP_ENDPOINT: http://xstockstrat-indicators:8054
-      MARKETDATA_HTTP_ENDPOINT: http://xstockstrat-marketdata:8053
-      PORTFOLIO_HTTP_ENDPOINT: http://xstockstrat-portfolio:8052
-      TRADING_HTTP_ENDPOINT: http://xstockstrat-trading:8051
-      NOTIFY_HTTP_ENDPOINT: http://xstockstrat-notify:8059
-      IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
+      # gRPC endpoints (host:port, no protocol) — server-side only
+      ANALYSIS_ENDPOINT: xstockstrat-analysis:50056
+      INDICATORS_ENDPOINT: xstockstrat-indicators:50054
+      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
+      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      TRADING_ENDPOINT: xstockstrat-trading:50051
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: insights
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
@@ -513,10 +513,10 @@ services:
     env_file: [".env.local", ".env.fe.local"]
     environment:
       <<: [*common-env, *db-url]
-      # Connect-RPC HTTP endpoint for xstockstrat-config
-      CONFIG_HTTP_ENDPOINT: http://xstockstrat-config:8060
-      IDENTITY_HTTP_ENDPOINT: http://xstockstrat-identity:8058
-      INGEST_HTTP_ENDPOINT: http://xstockstrat-ingest:8055
+      # gRPC endpoints (host:port, no protocol) — server-side only
+      CONFIG_ENDPOINT: xstockstrat-config:50060
+      IDENTITY_ENDPOINT: xstockstrat-identity:50058
+      INGEST_ENDPOINT: xstockstrat-ingest:50055
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: config-ui
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318

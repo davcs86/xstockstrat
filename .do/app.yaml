@@ -429,16 +429,16 @@ services:
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
-      - key: TRADING_HTTP_ENDPOINT
-        value: ${xstockstrat-trading.PRIVATE_URL}
-      - key: PORTFOLIO_HTTP_ENDPOINT
-        value: ${xstockstrat-portfolio.PRIVATE_URL}
-      - key: NOTIFY_HTTP_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: IDENTITY_HTTP_ENDPOINT
-        value: ${xstockstrat-identity.PRIVATE_URL}
-      - key: MARKETDATA_HTTP_ENDPOINT
-        value: ${xstockstrat-marketdata.PRIVATE_URL}
+      - key: TRADING_ENDPOINT
+        value: ${xstockstrat-trading.PRIVATE_DOMAIN}:50051
+      - key: PORTFOLIO_ENDPOINT
+        value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
+      - key: NOTIFY_ENDPOINT
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
+      - key: MARKETDATA_ENDPOINT
+        value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
       - key: APP_URL
         value: ${APP_URL}
       - key: JWT_SECRET
@@ -459,20 +459,20 @@ services:
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
-      - key: ANALYSIS_HTTP_ENDPOINT
-        value: ${xstockstrat-analysis.PRIVATE_URL}
-      - key: INDICATORS_HTTP_ENDPOINT
-        value: ${xstockstrat-indicators.PRIVATE_URL}
-      - key: MARKETDATA_HTTP_ENDPOINT
-        value: ${xstockstrat-marketdata.PRIVATE_URL}
-      - key: PORTFOLIO_HTTP_ENDPOINT
-        value: ${xstockstrat-portfolio.PRIVATE_URL}
-      - key: TRADING_HTTP_ENDPOINT
-        value: ${xstockstrat-trading.PRIVATE_URL}
-      - key: NOTIFY_HTTP_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_URL}
-      - key: IDENTITY_HTTP_ENDPOINT
-        value: ${xstockstrat-identity.PRIVATE_URL}
+      - key: ANALYSIS_ENDPOINT
+        value: ${xstockstrat-analysis.PRIVATE_DOMAIN}:50056
+      - key: INDICATORS_ENDPOINT
+        value: ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
+      - key: MARKETDATA_ENDPOINT
+        value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
+      - key: PORTFOLIO_ENDPOINT
+        value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
+      - key: TRADING_ENDPOINT
+        value: ${xstockstrat-trading.PRIVATE_DOMAIN}:50051
+      - key: NOTIFY_ENDPOINT
+        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: APP_URL
         value: ${APP_URL}
       - key: JWT_SECRET
@@ -493,12 +493,12 @@ services:
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
-      - key: CONFIG_HTTP_ENDPOINT
-        value: ${xstockstrat-config.PRIVATE_URL}
-      - key: IDENTITY_HTTP_ENDPOINT
-        value: ${xstockstrat-identity.PRIVATE_URL}
-      - key: INGEST_HTTP_ENDPOINT
-        value: ${xstockstrat-ingest.PRIVATE_URL}
+      - key: CONFIG_ENDPOINT
+        value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
+      - key: IDENTITY_ENDPOINT
+        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
+      - key: INGEST_ENDPOINT
+        value: ${xstockstrat-ingest.PRIVATE_DOMAIN}:50055
       - key: APP_URL
         value: ${APP_URL}
       - key: JWT_SECRET
