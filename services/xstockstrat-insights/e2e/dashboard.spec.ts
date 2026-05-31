@@ -1,12 +1,35 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+import { SignJWT } from 'jose';
 
 /**
  * E2E tests for the InsightsDashboard page.
  *
- * The /api/analysis/strategies route is mocked at the browser level with
+ * Auth cookie is injected directly so the middleware does not redirect to /login.
+ * The Connect-RPC ListStrategies call is mocked at the browser level with
  * page.route() so the component's rendering, score colour coding, and
  * navigation are tested without relying on the mock backend server.
  */
+
+const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
+const BASE_URL = 'http://localhost:3001';
+
+async function addAuthCookie(page: Page): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  const token = await new SignJWT({
+    user_id: 'test-user-001',
+    email: 'test@example.com',
+    roles: [],
+    issued_at: now,
+    expires_at: now + 3600,
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime('1h')
+    .sign(new TextEncoder().encode(TEST_JWT_SECRET));
+
+  await page.context().addCookies([
+    { name: 'access_token', value: token, url: BASE_URL, httpOnly: true, sameSite: 'Lax' },
+  ]);
+}
 
 const MOCK_STRATEGIES = [
   { strategyId: 'strat-high-001', name: 'Momentum Alpha', rating: 'A', overallScore: 0.87 },
@@ -16,7 +39,8 @@ const MOCK_STRATEGIES = [
 
 test.describe('InsightsDashboard', () => {
   test('Strategy Scores card is visible', async ({ page }) => {
-    await page.route('/insights/api/analysis/strategies', async (route) => {
+    await addAuthCookie(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ListStrategies', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -25,11 +49,12 @@ test.describe('InsightsDashboard', () => {
     });
 
     await page.goto('/insights');
-    await expect(page.getByText('Strategy Scores')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Strategy Scores' })).toBeVisible();
   });
 
   test('renders strategy cards for each returned strategy', async ({ page }) => {
-    await page.route('/insights/api/analysis/strategies', async (route) => {
+    await addAuthCookie(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ListStrategies', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -46,7 +71,8 @@ test.describe('InsightsDashboard', () => {
   });
 
   test('high-score strategy (≥80%) shows score in green', async ({ page }) => {
-    await page.route('/insights/api/analysis/strategies', async (route) => {
+    await addAuthCookie(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ListStrategies', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -63,7 +89,8 @@ test.describe('InsightsDashboard', () => {
   });
 
   test('mid-score strategy (60–79%) shows score in yellow', async ({ page }) => {
-    await page.route('/insights/api/analysis/strategies', async (route) => {
+    await addAuthCookie(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ListStrategies', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -80,7 +107,8 @@ test.describe('InsightsDashboard', () => {
   });
 
   test('low-score strategy (<60%) shows score in red', async ({ page }) => {
-    await page.route('/insights/api/analysis/strategies', async (route) => {
+    await addAuthCookie(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ListStrategies', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -97,7 +125,8 @@ test.describe('InsightsDashboard', () => {
   });
 
   test('rating badge is shown for strategies with a rating field', async ({ page }) => {
-    await page.route('/insights/api/analysis/strategies', async (route) => {
+    await addAuthCookie(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ListStrategies', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -108,11 +137,12 @@ test.describe('InsightsDashboard', () => {
     });
 
     await page.goto('/insights');
-    await expect(page.getByText('A')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('A', { exact: true }).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('empty-state link "Run a backtest" shown when strategies is empty', async ({ page }) => {
-    await page.route('/insights/api/analysis/strategies', async (route) => {
+    await addAuthCookie(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ListStrategies', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -125,7 +155,8 @@ test.describe('InsightsDashboard', () => {
   });
 
   test('clicking a strategy navigates to /strategies/[id]', async ({ page }) => {
-    await page.route('/insights/api/analysis/strategies', async (route) => {
+    await addAuthCookie(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ListStrategies', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -136,7 +167,7 @@ test.describe('InsightsDashboard', () => {
     });
 
     await page.goto('/insights');
-    await page.getByText('strat-nav-001').click();
+    await page.getByText('strat-nav-001', { exact: true }).click();
 
     await expect(page).toHaveURL(/\/strategies\/strat-nav-001/);
   });

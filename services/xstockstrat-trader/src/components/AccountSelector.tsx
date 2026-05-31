@@ -4,6 +4,7 @@ import React from 'react';
 import { Settings } from 'lucide-react';
 import { useAccountContext } from '@/context/AccountContext';
 import { AccountManagementPanel } from './AccountManagementPanel';
+import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import {
@@ -21,13 +22,13 @@ import {
   SheetTrigger,
 } from './ui/sheet';
 
-function brokerLabel(brokerType: number): string {
-  return brokerType === 2 ? 'IBKR' : 'Alpaca';
+function brokerLabel(brokerType: BrokerType): string {
+  return brokerType === BrokerType.IBKR ? 'IBKR' : 'Alpaca';
 }
 
 export function AccountSelector() {
   const { accounts, selectedAccountId, setSelectedAccountId } = useAccountContext();
-  const activeAccounts = accounts.filter((a) => a.is_active);
+  const activeAccounts = accounts.filter((a) => a.isActive);
 
   return (
     <div className="flex items-center gap-1">
@@ -40,14 +41,14 @@ export function AccountSelector() {
         </SelectTrigger>
         <SelectContent>
           {activeAccounts.map((account) => (
-            <SelectItem key={account.account_id} value={account.account_id}>
+            <SelectItem key={account.id} value={account.id}>
               <span className="flex items-center gap-1">
-                {account.display_name}
+                {account.displayName}
                 <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
-                  {brokerLabel(account.broker_type)}
+                  {brokerLabel(account.brokerType)}
                 </Badge>
                 <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
-                  {account.is_paper ? 'Paper' : 'Live'}
+                  {account.isPaper ? 'Paper' : 'Live'}
                 </Badge>
               </span>
             </SelectItem>

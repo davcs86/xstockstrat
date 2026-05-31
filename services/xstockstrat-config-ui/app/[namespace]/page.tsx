@@ -5,14 +5,15 @@
  */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import Link from 'next/link';
+import { ConnectError } from '@connectrpc/connect';
 import { Card, CardContent } from '@components/ui/card';
 import { Badge } from '@components/ui/badge';
 import { Button } from '@components/ui/button';
 import { Input } from '@components/ui/input';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@components/ui/table';
-import { BASE_PATH } from '@/app/lib/basepath';
+import { configClient } from '@/app/lib/browserClients';
 
 interface ConfigKey {
   key: string;
@@ -24,19 +25,26 @@ interface ConfigKey {
   tradingMode: number;
 }
 
-interface ListKeysResponse {
-  keys: ConfigKey[];
+function envToProto(env: string): number {
+  return env === 'production' ? 2 : 1;
+}
+function modeToProto(mode: string): number {
+  return mode === 'live' ? 2 : mode === 'paper' ? 1 : 0;
+}
+function errMessage(err: unknown): string {
+  return err instanceof ConnectError ? err.rawMessage : (err as Error).message;
 }
 
 type Props = {
-  params: { namespace: string };
-  searchParams: { env?: string; mode?: string };
+  params: Promise<{ namespace: string }>;
+  searchParams: Promise<{ env?: string; mode?: string }>;
 };
 
 export default function NamespacePage({ params, searchParams }: Props) {
-  const { namespace } = params;
-  const env = searchParams.env ?? 'dev';
-  const mode = searchParams.mode ?? 'paper';
+  const { namespace } = use(params);
+  const resolvedSearchParams = use(searchParams);
+  const env = resolvedSearchParams.env ?? 'dev';
+  const mode = resolvedSearchParams.mode ?? 'paper';
 
   const [keys, setKeys] = useState<ConfigKey[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,14 +55,18 @@ export default function NamespacePage({ params, searchParams }: Props) {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${BASE_PATH}/api/config?namespace=${namespace}&env=${env}&mode=${mode}`)
-      .then((r) => r.json())
-      .then((data: ListKeysResponse) => {
-        setKeys(data.keys ?? []);
+    configClient
+      .listKeys({
+        namespace,
+        environment: envToProto(env),
+        tradingMode: modeToProto(mode),
+      })
+      .then((data) => {
+        setKeys((data.keys ?? []) as ConfigKey[]);
         setLoading(false);
       })
       .catch((e) => {
-        setError(e.message);
+        setError(errMessage(e));
         setLoading(false);
       });
   }, [namespace, env, mode]);
@@ -62,24 +74,23 @@ export default function NamespacePage({ params, searchParams }: Props) {
   async function handleSave(key: string) {
     setSaving(true);
     try {
-      await fetch(`${BASE_PATH}/api/config`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          namespace,
-          key,
-          value: editValue,
-          env,
-          mode,
-          author: 'config-ui',
-          reason: 'Updated via config-ui',
-        }),
+      await configClient.setConfig({
+        namespace,
+        key,
+        value: { value: { case: 'stringVal', value: String(editValue) } },
+        reason: 'Updated via config-ui',
+        environment: envToProto(env),
+        tradingMode: modeToProto(mode),
       });
       setEditingKey(null);
-      const data: ListKeysResponse = await fetch(
-        `${BASE_PATH}/api/config?namespace=${namespace}&env=${env}&mode=${mode}`
-      ).then((r) => r.json());
-      setKeys(data.keys ?? []);
+      const data = await configClient.listKeys({
+        namespace,
+        environment: envToProto(env),
+        tradingMode: modeToProto(mode),
+      });
+      setKeys((data.keys ?? []) as ConfigKey[]);
+    } catch (e) {
+      setError(errMessage(e));
     } finally {
       setSaving(false);
     }

@@ -12,12 +12,18 @@ This doc covers the **auth-specific** rules. For general Next.js patterns (baseP
 |---|---|---|
 | `src/lib/auth.ts` | **Edge-safe** | JWT verification, cookie helpers, role bitmap, trace IDs |
 | `src/lib/identity.ts` | **Node-only** | `refreshSession`, `revokeToken` — calls `identityClient` |
-| `src/lib/connectClients.ts` | **Node-only** | Typed Connect clients + `connectCodeToHttp` helper |
+| `src/lib/connectClients.ts` | **Node-only** | Typed gRPC clients (`createGrpcTransport`) + `connectCodeToHttp`; used **only inside `connectBff.ts`** |
+| `src/lib/connectBff.ts` | **Node-only** | `createConnectRouter` impls (each calls `requireSession` + forwards headers) + `dispatchConnect`; handler map keyed on **`'/api'`** (basePath-relative — see `nextjs-frontends.md §10`) |
+| `src/app/api/[...connect]/route.ts` | Node | BFF catch-all — `export GET/POST = dispatchConnect` |
+| `src/lib/connectTransport.ts` | **Browser** | `browserTransport` — connect-web to BFF (`baseUrl: '/<basePath>/api'`) |
+| `src/lib/browserClients.ts` | **Browser** | typed connect-web clients on `browserTransport` — the only client import allowed in Client Components |
 | `src/middleware.ts` | **Edge runtime** | Auth gate, redirects to `/login`, near-expiry refresh |
 | `src/app/login/page.tsx` | Browser | Login form |
 | `src/app/api/auth/login/route.ts` | Node | `AuthenticateUser` → sets cookies |
 | `src/app/api/auth/refresh/route.ts` | Node | `RefreshToken` (calls `identity.ts`) |
 | `src/app/api/auth/logout/route.ts` | Node | `RevokeToken` + clears cookies (calls `identity.ts`) |
+
+> Browser data calls go through the BFF via `browserClients.ts` (connect-web), **not** bespoke JSON `/api/*` routes. The only hand-written routes are `auth/{login,refresh,logout}` and `health`; everything else is the `[...connect]` catch-all. See `nextjs-frontends.md §10` for the call chain, the handler-map basePath gotcha, the typed-message data shape, and how to verify a BFF route resolves.
 
 ---
 
@@ -107,12 +113,16 @@ export async function revokeToken(token: string): Promise<void>;
 
 ---
 
-## API routes — Connect-RPC client + header forwarding
+## Session + header forwarding (where it lives now)
 
-Outbound calls to backend services must:
-1. Use the typed client from `lib/connectClients.ts` (not raw `fetch`).
+**Backend data calls are not made from per-route handlers anymore — they go through the BFF.** The `connectBff.ts` router does this once for every RPC: each service-impl method calls `requireSession(ctx)` (reads the `access_token` cookie, verifies it) and forwards `x-user-id` / `x-access-scope` / `x-trace-id` to the gRPC client via a `Headers` object. Browser components call those RPCs through `browserClients.ts`; there are no bespoke `/api/orders`, `/api/portfolio`, … routes to gate individually.
+
+The pattern below is the **reference for the surviving hand-written routes** (`auth/*`) and for the BFF interceptor itself. Any outbound call to a backend service must:
+1. Use the typed client (the gRPC `connectClients.ts` clients **inside the BFF**; never raw `fetch`).
 2. Forward the three propagation headers as a `Headers` object on the call options.
 3. Catch `ConnectError` and map to HTTP status via `connectCodeToHttp`.
+
+> Do **not** add new `/api/<resource>` JSON routes for backend data. Register the RPC on the BFF router and call it from `browserClients.ts`. See `nextjs-frontends.md §10`.
 
 ```ts
 import { NextRequest, NextResponse } from 'next/server';

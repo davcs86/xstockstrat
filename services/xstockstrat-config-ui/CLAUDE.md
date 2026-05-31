@@ -1,10 +1,10 @@
 # xstockstrat-config-ui — CLAUDE.md
 
 ## Role
-Next.js 14 web UI for managing runtime configuration values across the xstockstrat platform. Allows operators to view, edit, and audit config keys scoped by environment (dev/production) and trading mode (paper/live). Communicates with `xstockstrat-config` via gRPC (H2C) on port 50060.
+Next.js 15 web UI for managing runtime configuration values across the xstockstrat platform. Allows operators to view, edit, and audit config keys scoped by environment (dev/production) and trading mode (paper/live). Communicates with `xstockstrat-config` via gRPC (H2C) on port 50060.
 
 ## Language
-TypeScript / Next.js 14 (App Router)
+TypeScript / Next.js 15 (App Router)
 
 ## Docker Build Pattern
 Frontend pattern — see `docs/patterns/docker-build.md` for the base + deps + builder + runner stages, `--filter` usage, and `.next/standalone` optimization.

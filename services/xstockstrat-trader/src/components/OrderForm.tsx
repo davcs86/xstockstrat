@@ -2,7 +2,11 @@
 import { useState } from 'react';
 import type { TradingMode } from '@/app/page';
 import { useAccountContext } from '@/context/AccountContext';
-import { BASE_PATH } from '@/lib/basepath';
+import { tradingClient } from '@/lib/browserClients';
+import { OrderSide as PbOrderSide, OrderType as PbOrderType, OrderStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { TradingMode as PbTradingMode } from '@xstockstrat/proto/common/v1/common_pb';
+import { ConnectError } from '@connectrpc/connect';
+// BASE_PATH no longer needed — calls go through the typed Connect client.
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -17,6 +21,13 @@ const ORDER_TYPE_LABEL: Record<OrderType, string> = {
   limit: 'Limit',
   stop: 'Stop',
   stop_limit: 'Stop Limit',
+};
+
+const ORDER_TYPE_ENUM: Record<OrderType, PbOrderType> = {
+  market: PbOrderType.MARKET,
+  limit: PbOrderType.LIMIT,
+  stop: PbOrderType.STOP,
+  stop_limit: PbOrderType.STOP_LIMIT,
 };
 
 interface OrderFormProps {
@@ -39,27 +50,21 @@ export function OrderForm({ mode }: OrderFormProps) {
     setMessage('');
 
     try {
-      const res = await fetch(`${BASE_PATH}/api/orders`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol: symbol.toUpperCase(),
-          side,
-          order_type: orderType,
-          qty: parseFloat(qty),
-          limit_price: limitPrice ? parseFloat(limitPrice) : undefined,
-          trading_mode: mode,
-          account_id: selectedAccountId ?? '',
-        }),
+      const order = await tradingClient.placeOrder({
+        symbol: symbol.toUpperCase(),
+        side: side === 'buy' ? PbOrderSide.BUY : PbOrderSide.SELL,
+        orderType: ORDER_TYPE_ENUM[orderType],
+        qty: parseFloat(qty),
+        limitPrice: limitPrice ? parseFloat(limitPrice) : 0,
+        tradingMode: mode === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER,
+        accountId: selectedAccountId ?? '',
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Order failed');
       setStatus('success');
-      setMessage(`Order placed: ${data.order_id} (${data.status})`);
+      setMessage(`Order placed: ${order.orderId} (${OrderStatus[order.status] ?? 'UNKNOWN'})`);
       setSymbol(''); setQty(''); setLimitPrice('');
-    } catch (err: any) {
+    } catch (err) {
       setStatus('error');
-      setMessage(err.message);
+      setMessage(err instanceof ConnectError ? err.rawMessage : (err as Error).message);
     }
   };
 
