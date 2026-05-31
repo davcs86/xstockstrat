@@ -42,6 +42,8 @@ export default defineConfig({
     env: {
       ANALYSIS_HTTP_ENDPOINT: 'http://127.0.0.1:9092',
       IDENTITY_HTTP_ENDPOINT: 'http://127.0.0.1:9092',
+      TRADING_HTTP_ENDPOINT: 'http://127.0.0.1:9092',
+      PORTFOLIO_HTTP_ENDPOINT: 'http://127.0.0.1:9092',
       JWT_SECRET: 'test-jwt-secret-for-e2e-tests-min32c',
     },
   },

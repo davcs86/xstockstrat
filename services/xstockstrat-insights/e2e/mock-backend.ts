@@ -49,30 +49,30 @@ let RESPONSES: Record<string, object> = {
   },
   '/xstockstrat.trading.v1.TradingService/ListBrokerAccounts': {
     accounts: [
-      { account_id: 'alpaca-default', display_name: 'Alpaca Paper', broker_type: 1, is_paper: true, is_active: true },
-      { account_id: 'ibkr-001', display_name: 'IBKR Paper', broker_type: 2, is_paper: true, is_active: true },
+      { id: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true },
+      { id: 'ibkr-001', displayName: 'IBKR Paper', brokerType: 2, isPaper: true, isActive: true },
     ],
   },
   '/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios': {
     portfolios: [
       {
-        portfolio_id: 'port-001',
-        account_id: 'alpaca-default',
+        portfolioId: 'port-001',
+        accountId: 'alpaca-default',
         equity: '50000.00',
         cash: '20000.00',
-        day_pnl: '150.00',
-        day_pnl_pct: '0.003',
-        total_pnl: '1500.00',
+        dayPnl: '150.00',
+        dayPnlPct: '0.003',
+        totalPnl: '1500.00',
         positions: [],
       },
       {
-        portfolio_id: 'port-002',
-        account_id: 'ibkr-001',
+        portfolioId: 'port-002',
+        accountId: 'ibkr-001',
         equity: '30000.00',
         cash: '10000.00',
-        day_pnl: '-50.00',
-        day_pnl_pct: '-0.0017',
-        total_pnl: '800.00',
+        dayPnl: '-50.00',
+        dayPnlPct: '-0.0017',
+        totalPnl: '800.00',
         positions: [],
       },
     ],
@@ -93,9 +93,9 @@ export async function startMockBackend(): Promise<void> {
   }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('1h').sign(secret);
 
   const identityPayload = {
-    access_token: testAccessToken,
-    refresh_token: 'test-refresh-token',
-    claims: { user_id: 'test-user-001', email: 'test@example.com', roles: [] },
+    accessToken: testAccessToken,
+    refreshToken: 'test-refresh-token',
+    claims: { userId: 'test-user-001', email: 'test@example.com', roles: [] },
   };
   RESPONSES['/xstockstrat.identity.v1.IdentityService/AuthenticateUser'] = identityPayload;
   RESPONSES['/xstockstrat.identity.v1.IdentityService/RefreshToken'] = identityPayload;
@@ -106,7 +106,7 @@ export async function startMockBackend(): Promise<void> {
       const path = req.url ?? '/';
       const body = RESPONSES[path] ?? {};
       res.writeHead(200, {
-        'Content-Type': 'application/connect+json',
+        'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
       });
       res.end(JSON.stringify(body));
