@@ -122,22 +122,22 @@ service `package.json` / `Dockerfile` pairs and the lockfile change.
 
 ## Open Questions
 
-_Left open for the `/sdd-review product-spec` gate — do not resolve inline._
+_Resolved at `/sdd-review product-spec` gate (2026-05-31)._
 
-- [ ] **Exact Next.js 15 target version.** Pin to trader's exact current version
-  (`^15.5.15` at time of writing) or to the latest 15.x at implementation time? Pinning to
-  trader's version minimizes skew; latest captures fixes. Decide the pinning policy.
-- [ ] **React 18 vs React 19.** Next.js 15 supports both, but ships defaults aligned with React
-  19. Trader currently pairs Next 15 with which React major? Should insights/config-ui match
-  trader's React major exactly, and do any UI dependencies (Radix UI, charting libs) gate the
-  React 19 move?
-- [ ] **Standalone-path workaround disposition.** Does upgrading to v15 change the pnpm-workspace
-  standalone path-mirroring behavior such that the `docs/patterns/docker-build.md` workaround can
-  be removed, or must it stay? Verify build output before deciding.
-- [ ] **OpenTelemetry package compatibility.** Both services pin `@opentelemetry/sdk-node`
-  `^0.218.0` and `exporter-trace-otlp-http` `^0.218.0`. Confirm these remain compatible with the
-  Next.js 15 instrumentation hook, or whether a coordinated OTel bump is required.
-- [ ] **Sequencing vs feature 045 (UI consolidation).** 045 consolidates all three frontends into
-  one service. If 045 lands first, this upgrade is partially subsumed. Should 041 ship before
-  045 (de-risk the consolidation by getting everyone on v15 first), or be folded into 045? This
-  also interacts with feature 044.
+- [x] **Exact Next.js 15 target version.** **Pin to `^15.5.15`** — match trader's current exact
+  pin. Minimizes skew; trader already validated this version in production. Do not chase latest
+  15.x; update only when trader bumps.
+- [x] **React 18 vs React 19.** **Stay on React 18.3.1** — trader pairs Next.js 15.5.15 with
+  React 18.3.1 (confirmed in `pnpm-lock.yaml` L3767). No Radix/charting gate needed. No React
+  19 bump for this feature.
+- [x] **Standalone-path workaround disposition.** **Stays.** Next.js 15 does not change
+  pnpm-workspace standalone path mirroring. Both Dockerfiles already use
+  `CMD ["node", "services/<service>/server.js"]` and this remains correct on v15. Step 7 will
+  add "(confirmed on Next.js 15.5.15)" to the `docs/patterns/docker-build.md` gotcha note.
+- [x] **OpenTelemetry package compatibility.** **No bump needed.** `@opentelemetry/sdk-node
+  ^0.218.0` and `exporter-trace-otlp-http ^0.218.0` are confirmed compatible with Next.js 15 —
+  trader uses identical pins with Next.js 15.5.15 in production.
+- [x] **Sequencing vs feature 045 (UI consolidation).** **041 proceeds independently.** Feature
+  045 is still `draft`. Upgrading insights and config-ui to Next.js 15 first de-risks the
+  eventual consolidation by ensuring all three services share one major before the merge. No
+  blocking dependency on 044 either — orthogonal changes.

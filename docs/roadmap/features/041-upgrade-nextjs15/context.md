@@ -33,3 +33,16 @@
   - No `next/headers` imports in either service — no `cookies()` or `headers()` async migration needed.
   - `app/[namespace]/page.tsx` in config-ui has `'use client'` (L6) despite having `params`/`searchParams` in its type signature — Client Components are unaffected by the async-props change.
   - The pnpm-workspace standalone-path workaround in `docs/patterns/docker-build.md` (CMD using subdirectory `services/<service>/server.js`) is already implemented in both Dockerfiles. The behavior is expected to be unchanged on Next.js 15.
+
+## Session 2026-05-31T00:00:00Z — sdd-review product-spec
+
+- Retroactive product-spec review (gate was skipped when /sdd-spec ran directly from `draft`).
+- Result: PASS after resolving 5 open questions.
+- Warnings: 1 — feature `formula-management-ui` (003) also modifies `services/xstockstrat-insights/package.json`; merge conflict risk; coordinate merge order.
+- Open questions resolved:
+  1. Next.js version pin: `^15.5.15` (match trader exactly)
+  2. React version: stay on 18.3.1 (trader confirmed on React 18 + Next 15)
+  3. Standalone-path workaround: stays; behavior unchanged on v15
+  4. OTel compatibility: no bump needed; ^0.218.0 confirmed via trader
+  5. Sequencing vs 045: 041 proceeds independently; 045 still draft
+- Status: lifecycle unchanged (already `implementation-ready`); product-spec.md open questions checked off.
