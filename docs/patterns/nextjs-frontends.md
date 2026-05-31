@@ -389,3 +389,91 @@ This is exactly the gap that let [PR #451](https://github.com/davcs86/xstockstra
 | `src/app/login/page.tsx` | client | login form; same Suspense rule |
 | `src/app/icon.svg` | static | metadata icon (auto-linked into `<head>`) |
 | `src/app/api/**/route.ts` | Node | always gate with `getSessionFromRequest`; use typed Connect client |
+
+---
+
+## Next.js 15 Migration Reference
+
+All three frontends (`trader`, `insights`, `config-ui`) are on **Next.js 15.5.15** as of feature `041-upgrade-nextjs15`. Key breaking changes and their fixes:
+
+### 1. `serverExternalPackages` rename
+
+```js
+// Before (Next.js 14) — WRONG in v15, emits a deprecation warning
+const nextConfig = {
+  experimental: {
+    serverComponentsExternalPackages: ['@connectrpc/connect', '@connectrpc/connect-node', ...],
+  },
+};
+
+// After (Next.js 15) — top-level key, no experimental wrapper
+const nextConfig = {
+  serverExternalPackages: ['@connectrpc/connect', '@connectrpc/connect-node',
+    '@bufbuild/protobuf', '@opentelemetry/sdk-node', '@opentelemetry/exporter-trace-otlp-http'],
+};
+```
+
+### 2. Async request props (`params` and `searchParams`)
+
+In Next.js 15, both `params` and `searchParams` in page/layout/route-handler props are now `Promise<T>` and must be awaited. The pattern differs by component type:
+
+**Server Components** — use `async` function + `await`:
+```tsx
+// Before (Next.js 14)
+export default function HomePage({ searchParams }: { searchParams: { env?: string } }) {
+  const env = searchParams.env ?? 'dev';
+
+// After (Next.js 15)
+export default async function HomePage({ searchParams }: { searchParams: Promise<{ env?: string }> }) {
+  const resolvedSearchParams = await searchParams;
+  const env = resolvedSearchParams.env ?? 'dev';
+```
+
+**Client Components** (`'use client'`) — use `React.use()` (cannot `await` in a non-async render function):
+```tsx
+// Before (Next.js 14)
+export default function NamespacePage({ params }: { params: { id: string } }) {
+  const { id } = params;
+
+// After (Next.js 15)
+import { use } from 'react';
+export default function NamespacePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+```
+
+> **Note:** Next.js 15 enforces the `PageProps` TypeScript constraint on **all** page components, including `'use client'` ones. The TypeScript build will error if params/searchParams are typed as sync even in client components. The `React.use()` pattern is required (not `await`) since client component render functions are not `async`.
+
+**Route Handlers** (in `app/api/[id]/route.ts`) — same `await` pattern as Server Components:
+```ts
+// Before (Next.js 14)
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const id = params.id;
+
+// After (Next.js 15)
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+```
+
+Catch-all route handlers (`[...connect]/route.ts`) that receive `Request` directly (no params destructuring) are **unaffected**.
+
+### 3. Cross-app `<a>` links and `@next/next/no-html-link-for-pages`
+
+`eslint-config-next@15` now errors (previously warned) on `<a>` elements that appear to navigate to internal pages. Cross-app links (e.g. `<a href="/trader">`) will be flagged even though they intentionally escape the current app's `basePath`.
+
+Fix: add `{/* eslint-disable-next-line @next/next/no-html-link-for-pages */}` before each cross-app `<a>` link in layout files. Do NOT use `<Link>` for cross-app links — `basePath` would mangle the href (e.g. `/config-ui/trader` instead of `/trader`).
+
+### 4. Test infrastructure: `@connectrpc/connect-node` JSON mode
+
+`@connectrpc/connect-node`'s `createConnectTransport` defaults to **binary protobuf** (`useBinaryFormat: true`), unlike the browser transport which defaults to JSON. When using an HTTP mock backend in E2E tests, explicitly set `useBinaryFormat: false`:
+
+```ts
+// In connectClients.ts — HTTP override path for test mocking
+function makeTransport(grpcEndpoint: string, httpOverride?: string) {
+  if (httpOverride) {
+    return createConnectTransport({ baseUrl: httpOverride, httpVersion: '1.1', useBinaryFormat: false });
+  }
+  return createGrpcTransport({ baseUrl: `http://${grpcEndpoint}` });
+}
+```
+
+Mock backend must return `Content-Type: application/json` (not `application/connect+json`, which is for streaming). Proto3 zero-value fields (`false`, `0`, `""`) are omitted from JSON — test assertions must handle `undefined` as semantically equivalent to the zero value.

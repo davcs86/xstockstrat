@@ -303,7 +303,7 @@ docker compose build --no-cache xstockstrat-config-ui
 
 ### Step 7 — docs: Update documentation for Next.js 15 alignment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`
 **Files**:
 - `docs/patterns/nextjs-frontends.md` — modify if any new Next.js 15-specific gotchas are discovered
