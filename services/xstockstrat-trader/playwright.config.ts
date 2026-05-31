@@ -3,11 +3,8 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Playwright configuration for xstockstrat-trader (port 3000).
  *
- * Before each test run:
- *   1. globalSetup starts a lightweight mock Connect-RPC server on port 9091.
- *   2. The Next.js dev server starts with *_HTTP_ENDPOINT env vars pointing at
- *      that mock server so no real backend services are required.
- *   3. globalTeardown stops the mock server.
+ * globalSetup starts a mock gRPC server (connectNodeAdapter + http2) on port
+ * 9091 before the Next.js dev server, so tests run without real backend services.
  *
  * Run:  pnpm test:e2e
  * UI:   pnpm test:e2e:ui
@@ -43,12 +40,11 @@ export default defineConfig({
     url: 'http://localhost:3000/trader/api/health',
     reuseExistingServer: !process.env.CI,
     env: {
-      // Point all backend clients at the mock server started in globalSetup
-      TRADING_HTTP_ENDPOINT: 'http://127.0.0.1:9091',
-      PORTFOLIO_HTTP_ENDPOINT: 'http://127.0.0.1:9091',
-      NOTIFY_HTTP_ENDPOINT: 'http://127.0.0.1:9091',
-      IDENTITY_HTTP_ENDPOINT: 'http://127.0.0.1:9091',
-      MARKETDATA_HTTP_ENDPOINT: 'http://127.0.0.1:9091',
+      TRADING_ENDPOINT: '127.0.0.1:9091',
+      PORTFOLIO_ENDPOINT: '127.0.0.1:9091',
+      NOTIFY_ENDPOINT: '127.0.0.1:9091',
+      IDENTITY_ENDPOINT: '127.0.0.1:9091',
+      MARKETDATA_ENDPOINT: '127.0.0.1:9091',
       JWT_SECRET: 'test-jwt-secret-for-e2e-tests-min32c',
     },
   },
