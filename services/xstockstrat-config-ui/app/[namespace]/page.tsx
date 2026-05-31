@@ -5,7 +5,7 @@
  */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import { ConnectError } from '@connectrpc/connect';
 import { Card, CardContent } from '@components/ui/card';
@@ -36,14 +36,15 @@ function errMessage(err: unknown): string {
 }
 
 type Props = {
-  params: { namespace: string };
-  searchParams: { env?: string; mode?: string };
+  params: Promise<{ namespace: string }>;
+  searchParams: Promise<{ env?: string; mode?: string }>;
 };
 
 export default function NamespacePage({ params, searchParams }: Props) {
-  const { namespace } = params;
-  const env = searchParams.env ?? 'dev';
-  const mode = searchParams.mode ?? 'paper';
+  const { namespace } = use(params);
+  const resolvedSearchParams = use(searchParams);
+  const env = resolvedSearchParams.env ?? 'dev';
+  const mode = resolvedSearchParams.mode ?? 'paper';
 
   const [keys, setKeys] = useState<ConfigKey[]>([]);
   const [loading, setLoading] = useState(true);

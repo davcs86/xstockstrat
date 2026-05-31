@@ -1,85 +1,27 @@
 /**
- * Lightweight mock Connect-RPC HTTP server for xstockstrat-insights tests.
+ * gRPC mock server for xstockstrat-insights E2E tests.
  *
- * Port 9092 — pointed at by ANALYSIS_HTTP_ENDPOINT in playwright.config.ts.
+ * Uses connectNodeAdapter + http2.createServer to serve real gRPC/H2C so the
+ * production connectClients.ts (createGrpcTransport) needs no test-specific
+ * overrides.  All mock endpoints are registered via router.service() so the
+ * binary-proto serialization is handled by the connect-node runtime.
  *
- * The /api/analysis/strategies route calls both ListStrategies and then
- * ScoreStrategy for each strategy without an overallScore.  The mock returns
- * strategies with overallScore already set so ScoreStrategy is skipped,
- * keeping test behaviour predictable.
+ * Port 9092 — pointed at by ANALYSIS_ENDPOINT and IDENTITY_ENDPOINT in
+ * playwright.config.ts.
  */
-import * as http from 'http';
+import * as http2 from 'node:http2';
+import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { SignJWT } from 'jose';
+import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
+import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 
 export const MOCK_PORT = 9092;
 
 const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
 
-let RESPONSES: Record<string, object> = {
-  '/xstockstrat.analysis.v1.AnalysisService/ListStrategies': {
-    strategies: [
-      {
-        strategyId: 'strat-high-001',
-        name: 'Momentum Alpha',
-        description: 'High-conviction momentum strategy',
-        rating: 'A',
-        overallScore: 0.87,   // 87% — rendered as green (≥80%)
-      },
-      {
-        strategyId: 'strat-mid-002',
-        name: 'Mean Reversion',
-        description: 'Statistical arbitrage mean reversion',
-        rating: 'B',
-        overallScore: 0.68,   // 68% — rendered as yellow (60–79%)
-      },
-      {
-        strategyId: 'strat-low-003',
-        name: 'Trend Follow',
-        description: 'Simple trend following strategy',
-        rating: 'D',
-        overallScore: 0.42,   // 42% — rendered as red (<60%)
-      },
-    ],
-  },
-  // ScoreStrategy is called as fallback when overallScore is missing —
-  // return a minimal score so the enrichment branch doesn't error
-  '/xstockstrat.analysis.v1.AnalysisService/ScoreStrategy': {
-    overallScore: 0.5,
-    rating: 'C',
-  },
-  '/xstockstrat.trading.v1.TradingService/ListBrokerAccounts': {
-    accounts: [
-      { account_id: 'alpaca-default', display_name: 'Alpaca Paper', broker_type: 1, is_paper: true, is_active: true },
-      { account_id: 'ibkr-001', display_name: 'IBKR Paper', broker_type: 2, is_paper: true, is_active: true },
-    ],
-  },
-  '/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios': {
-    portfolios: [
-      {
-        portfolio_id: 'port-001',
-        account_id: 'alpaca-default',
-        equity: '50000.00',
-        cash: '20000.00',
-        day_pnl: '150.00',
-        day_pnl_pct: '0.003',
-        total_pnl: '1500.00',
-        positions: [],
-      },
-      {
-        portfolio_id: 'port-002',
-        account_id: 'ibkr-001',
-        equity: '30000.00',
-        cash: '10000.00',
-        day_pnl: '-50.00',
-        day_pnl_pct: '-0.0017',
-        total_pnl: '800.00',
-        positions: [],
-      },
-    ],
-  },
-};
-
-let server: http.Server | null = null;
+let server: http2.Http2Server | null = null;
 
 export async function startMockBackend(): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
@@ -92,26 +34,69 @@ export async function startMockBackend(): Promise<void> {
     expires_at: now + 3600,
   }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('1h').sign(secret);
 
-  const identityPayload = {
-    access_token: testAccessToken,
-    refresh_token: 'test-refresh-token',
-    claims: { user_id: 'test-user-001', email: 'test@example.com', roles: [] },
-  };
-  RESPONSES['/xstockstrat.identity.v1.IdentityService/AuthenticateUser'] = identityPayload;
-  RESPONSES['/xstockstrat.identity.v1.IdentityService/RefreshToken'] = identityPayload;
-  RESPONSES['/xstockstrat.identity.v1.IdentityService/RevokeToken'] = { success: true };
+  const handler = connectNodeAdapter({
+    routes(router) {
+      router.service(AnalysisService, {
+        async listStrategies() {
+          return {
+            strategies: [
+              { strategyId: 'strat-high-001', name: 'Momentum Alpha', description: 'High-conviction momentum strategy', rating: 'A', overallScore: 0.87 },
+              { strategyId: 'strat-mid-002', name: 'Mean Reversion', description: 'Statistical arbitrage mean reversion', rating: 'B', overallScore: 0.68 },
+              { strategyId: 'strat-low-003', name: 'Trend Follow', description: 'Simple trend following strategy', rating: 'D', overallScore: 0.42 },
+            ],
+          };
+        },
+        async scoreStrategy() {
+          return { overallScore: 0.5, rating: 'C' };
+        },
+      });
+
+      router.service(IdentityService, {
+        async authenticateUser() {
+          return {
+            accessToken: testAccessToken,
+            refreshToken: 'test-refresh-token',
+            claims: { userId: 'test-user-001', email: 'test@example.com', roles: [] },
+          };
+        },
+        async refreshToken() {
+          return {
+            accessToken: testAccessToken,
+            refreshToken: 'test-refresh-token',
+            claims: { userId: 'test-user-001', email: 'test@example.com', roles: [] },
+          };
+        },
+        async revokeToken() {
+          return { success: true };
+        },
+      });
+
+      router.service(TradingService, {
+        async listBrokerAccounts() {
+          return {
+            accounts: [
+              { accountId: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true },
+              { accountId: 'ibkr-001', displayName: 'IBKR Paper', brokerType: 2, isPaper: true, isActive: true },
+            ],
+          };
+        },
+      });
+
+      router.service(PortfolioService, {
+        async listPortfolios() {
+          return {
+            portfolios: [
+              { portfolioId: 'port-001', accountId: 'alpaca-default', equity: 50000, cash: 20000, dayPnl: 150, dayPnlPct: 0.003, totalPnl: 1500, positions: [] },
+              { portfolioId: 'port-002', accountId: 'ibkr-001', equity: 30000, cash: 10000, dayPnl: -50, dayPnlPct: -0.0017, totalPnl: 800, positions: [] },
+            ],
+          };
+        },
+      });
+    },
+  });
 
   return new Promise((resolve, reject) => {
-    server = http.createServer((req, res) => {
-      const path = req.url ?? '/';
-      const body = RESPONSES[path] ?? {};
-      res.writeHead(200, {
-        'Content-Type': 'application/connect+json',
-        'Access-Control-Allow-Origin': '*',
-      });
-      res.end(JSON.stringify(body));
-    });
-
+    server = http2.createServer(handler);
     server.on('error', reject);
     server.listen(MOCK_PORT, '127.0.0.1', () => resolve());
   });

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, use } from 'react';
 import useSWR from 'swr';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AppShell } from '@/components/AppShell';
@@ -17,8 +17,8 @@ interface BacktestFormState {
   initial_capital: string;
 }
 
-export default function StrategyDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function StrategyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const { data: report, isLoading } = useSWR(
     ['analysis-report', id],
     () => analysisClient.getStrategyReport({ strategyId: id }),

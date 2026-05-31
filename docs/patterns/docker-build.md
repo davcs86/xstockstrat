@@ -294,7 +294,7 @@ CMD ["python", "-m", "app.main"]
 
 ## Critical Gotcha: Next.js Standalone server.js Path in pnpm Workspace
 
-**Problem:** In a pnpm workspace, Next.js mirrors the full repository path inside the standalone output directory. `server.js` is placed at `standalone/services/xstockstrat-<service>/server.js`, **not** at the standalone root. `CMD ["node", "server.js"]` from `WORKDIR /app` fails because `/app/server.js` doesn't exist.
+**Problem:** In a pnpm workspace, Next.js mirrors the full repository path inside the standalone output directory. `server.js` is placed at `standalone/services/xstockstrat-<service>/server.js`, **not** at the standalone root. `CMD ["node", "server.js"]` from `WORKDIR /app` fails because `/app/server.js` doesn't exist. (Confirmed unchanged on Next.js 15.5.15 — same path behavior as Next.js 14.)
 
 **Error:**
 ```
