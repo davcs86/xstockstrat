@@ -1,6 +1,6 @@
 # Implementation Spec: upgrade-nextjs15
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-05-31
 **Feature**: `docs/roadmap/features/041-upgrade-nextjs15/feature.md`
 **Total Steps**: 7
@@ -349,3 +349,13 @@ grep -n "serverExternalPackages\|async.*params\|Promise.*params" docs/patterns/n
 1. That route handler was deleted by the 044 client-api-pattern merge before this step ran — no change needed there.
 2. A build failure revealed `src/app/strategies/[id]/page.tsx` (a `'use client'` component) also needed its `params` type updated. Next.js 15 enforces `PageProps` even on client components. Fix: imported `use` from React and changed `const { id } = params` → `const { id } = use(params)` with type `Promise<{ id: string }>`.
 **Reason**: (1) 044 deleted the originally-targeted file. (2) Exhaustive Option A scan missed `strategies/[id]/page.tsx` because it is a client component — but Next.js 15 TypeScript types enforce `PageProps` regardless, surfaced by the build. Pattern for client components is `React.use()` not `await`.
+
+### Deviation: Steps 3 & 6 — E2E mock backend approach revised post-completion
+**Spec said**: (Implied) Test infrastructure using `createConnectTransport` HTTP override in production `connectClients.ts` for test mocking.
+**Actual**: Initial implementation added `createConnectTransport` + `httpOverride` env var to production `connectClients.ts` in both insights (Step 3) and config-ui (Step 6). In a subsequent session, the user requested the test-specific code be moved entirely into the test harness. Both `connectClients.ts` files were reverted to pure `createGrpcTransport` (no test-only branches). The mock backends (`e2e/mock-backend.ts`) were rewritten to use `connectNodeAdapter + http2.createServer` (real gRPC/H2C), so the production clients need no overrides.
+**Reason**: User preference — "I don't like hacky harness solutions in production code. I'd rather have the hacky solution in the dev/testing side." Canonical pattern documented in `docs/patterns/nextjs-frontends.md` section 4.
+
+### Deviation: Out-of-scope — xstockstrat-trader E2E mock backend aligned
+**Spec said**: Scope limited to `xstockstrat-insights` and `xstockstrat-config-ui`.
+**Actual**: After completing Steps 3 and 6, it was discovered that `xstockstrat-trader`'s `e2e/mock-backend.ts` still used the old HTTP/1.1 JSON dispatch pattern and `playwright.config.ts` set stale `*_HTTP_ENDPOINT` vars that nothing read. The trader mock was rewritten to `connectNodeAdapter + http2.createServer` and `playwright.config.ts` updated to `*_ENDPOINT: '127.0.0.1:9091'` format. The trader's `connectClients.ts` was already clean (pure `createGrpcTransport`). Change included in PR #457 (step-4 branch).
+**Reason**: Same root cause; consistent fix across all three frontends.

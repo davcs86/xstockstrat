@@ -117,3 +117,25 @@
   - Proto3 zero-value booleans (`false`) are omitted from JSON encoding — test assertions must handle `undefined` as equivalent to `false`.
   - Old test routes `/api/config` and `/api/sources` don't exist; architecture uses Connect BFF catch-all.
 - Files modified: `services/xstockstrat-config-ui/app/lib/connectClients.ts`, `services/xstockstrat-config-ui/playwright.config.ts`, `services/xstockstrat-config-ui/e2e/mock-backend.ts`, `services/xstockstrat-config-ui/e2e/env-mode-switcher.spec.ts`, `services/xstockstrat-config-ui/e2e/namespace-nav.spec.ts`, `services/xstockstrat-config-ui/e2e/api-smoke.spec.ts`, `services/xstockstrat-config-ui/e2e/sources.spec.ts`
+
+### Step 7 — docs: Update documentation for Next.js 15 alignment [done]
+- Updated `services/xstockstrat-insights/CLAUDE.md` and `services/xstockstrat-config-ui/CLAUDE.md` Language lines from `Next.js 14` to `Next.js 15`.
+- Added Next.js 15 migration section to `docs/patterns/nextjs-frontends.md` covering `serverExternalPackages` rename, async params patterns (server components + client components), E2E mock backend pattern (`connectNodeAdapter + http2`), and the `eslint-config-next@15` `<a>` link rule.
+- Added "(confirmed on Next.js 15.5.15)" to the standalone-path workaround note in `docs/patterns/docker-build.md`.
+- Files modified: `services/xstockstrat-insights/CLAUDE.md`, `services/xstockstrat-config-ui/CLAUDE.md`, `docs/patterns/nextjs-frontends.md`, `docs/patterns/docker-build.md`
+- Deviations: none
+
+### Post-completion: E2E mock backend refactored to real gRPC/H2C [done]
+- Initial Step 3/6 implementation added `createConnectTransport` + `httpOverride` to production `connectClients.ts` in insights and config-ui for test mocking. User requested test-specific code be removed from production modules.
+- `services/xstockstrat-insights/src/lib/connectClients.ts` and `services/xstockstrat-config-ui/app/lib/connectClients.ts` reverted to pure `createGrpcTransport`.
+- `e2e/mock-backend.ts` in both services rewritten to use `connectNodeAdapter + http2.createServer` (real gRPC/H2C on H2C port) — production clients need no test overrides.
+- `playwright.config.ts` in both services updated: env vars changed from `*_HTTP_ENDPOINT: 'http://...'` to `*_ENDPOINT: 'host:port'` format.
+- `xstockstrat-trader` E2E infrastructure aligned in the same pass: `e2e/mock-backend.ts` rewritten from HTTP/1.1 dispatch to `connectNodeAdapter + http2.createServer` (port 9091); `playwright.config.ts` updated from `*_HTTP_ENDPOINT` to `*_ENDPOINT`; trader `connectClients.ts` was already clean.
+- Canonical pattern documented in `docs/patterns/nextjs-frontends.md` section 4.
+- Files modified: `services/xstockstrat-insights/src/lib/connectClients.ts`, `services/xstockstrat-insights/e2e/mock-backend.ts`, `services/xstockstrat-insights/playwright.config.ts`, `services/xstockstrat-config-ui/app/lib/connectClients.ts`, `services/xstockstrat-config-ui/e2e/mock-backend.ts`, `services/xstockstrat-config-ui/playwright.config.ts`, `services/xstockstrat-trader/e2e/mock-backend.ts`, `services/xstockstrat-trader/playwright.config.ts`
+
+## Session 2026-05-31T00:00:00Z — sdd-execute
+**Steps this session**: [all-done path — lifecycle + integration PR]
+**Progress**: 7 done / 7 total
+**Stopped at**: all complete — integration PR created
+**Next**: merge PR into main-dev, then `/sdd-execute upgrade-nextjs15 next` is not needed (feature complete)

@@ -1,9 +1,9 @@
 # Feature: upgrade-nextjs15
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/upgrade-nextjs15`
 **Created**: 2026-05-27
-**Last Updated**: 2026-05-30
+**Last Updated**: 2026-05-31
 
 ---
 
@@ -16,6 +16,7 @@
 | 2026-05-31 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps |
 | 2026-05-31 | product-spec retroactive review | /sdd-review | All 5 open questions resolved; product spec approved. Status unchanged (already implementation-ready). |
 | 2026-05-31 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — insights package.json and pnpm-lock.yaml updated |
+| 2026-05-31 | `in-progress` → `code-completed` | /sdd-execute | All 7 steps done; E2E mock backends refactored to real gRPC/H2C; trader E2E aligned |
 
 ---
 
