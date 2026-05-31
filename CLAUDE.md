@@ -19,7 +19,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | Task | Read |
 |---|---|
 | Building or modifying a Next.js frontend | `docs/patterns/frontend-auth.md` |
-| Other Next.js patterns (basePath, Suspense fallbacks, Radix hydration, middleware matcher, app icons) | `docs/patterns/nextjs-frontends.md` |
+| Other Next.js patterns (basePath, BFF connect-web call chain + handler-map basePath gotcha, browser typed-client data shape, BFF route verification, Suspense fallbacks, Radix hydration, middleware matcher, app icons) | `docs/patterns/nextjs-frontends.md` |
 | Adding nginx routing for a new frontend | `docs/patterns/nginx-routing.md` |
 | Adding a new backend service (any language) | `docs/patterns/header-propagation.md` |
 | Docker build patterns (Node.js, Next.js, Python, Go) | `docs/patterns/docker-build.md` |
