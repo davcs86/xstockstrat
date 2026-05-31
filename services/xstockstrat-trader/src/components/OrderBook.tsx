@@ -1,32 +1,41 @@
 'use client';
 import useSWR from 'swr';
-import { BASE_PATH } from '@/lib/basepath';
 import Link from 'next/link';
 import type { TradingMode } from '@/app/page';
 import { useAccountContext } from '@/context/AccountContext';
+import { tradingClient, portfolioClient } from '@/lib/browserClients';
+import { OrderSide, OrderStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { TradingMode as PbTradingMode } from '@xstockstrat/proto/common/v1/common_pb';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './ui/table';
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+function toPbMode(mode: TradingMode): PbTradingMode {
+  return mode === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER;
+}
+
+const STATUS_VARIANT: Record<string, 'info' | 'warning' | 'buy' | 'secondary' | 'destructive'> = {
+  NEW: 'info',
+  PARTIALLY_FILLED: 'warning',
+  FILLED: 'buy',
+  CANCELED: 'secondary',
+  EXPIRED: 'secondary',
+  REJECTED: 'destructive',
+  PENDING_APPROVAL: 'warning',
+};
 
 // ── OrderBook ──────────────────────────────────────────────────────────────
 export function OrderBook({ mode }: { mode: TradingMode }) {
   const { selectedAccountId } = useAccountContext();
   const { data, error, isLoading } = useSWR(
-    `${BASE_PATH}/api/orders?trading_mode=${mode}&account_id=${selectedAccountId ?? ''}`,
-    fetcher,
+    ['orders', mode, selectedAccountId],
+    () =>
+      tradingClient.listOrders({
+        tradingMode: toPbMode(mode),
+        page: { pageSize: 50 },
+      }),
     { refreshInterval: 5000 },
   );
-
-  const statusVariant: Record<string, 'info' | 'warning' | 'buy' | 'secondary' | 'destructive' | 'warning'> = {
-    ORDER_STATUS_NEW: 'info',
-    ORDER_STATUS_PARTIALLY_FILLED: 'warning',
-    ORDER_STATUS_FILLED: 'buy',
-    ORDER_STATUS_CANCELED: 'secondary',
-    ORDER_STATUS_REJECTED: 'destructive',
-    ORDER_STATUS_PENDING_APPROVAL: 'warning',
-  };
 
   return (
     <Card>
@@ -55,30 +64,33 @@ export function OrderBook({ mode }: { mode: TradingMode }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.orders.map((order: any) => (
-                  <TableRow key={order.order_id} className="cursor-pointer hover:bg-accent/40">
-                    <TableCell className="font-mono font-semibold">
-                      <Link href={`/orders/${order.order_id}`} className="hover:underline">
-                        {order.symbol}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={order.side === 'ORDER_SIDE_BUY' ? 'buy' : 'sell'}>
-                        {order.side === 'ORDER_SIDE_BUY' ? 'BUY' : 'SELL'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">{order.qty}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">{order.filled_qty ?? 0}</TableCell>
-                    <TableCell className="text-right hidden sm:table-cell">
-                      {order.filled_avg_price ? `$${Number(order.filled_avg_price).toFixed(2)}` : '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={(statusVariant[order.status] as any) ?? 'secondary'}>
-                        {order.status?.replace('ORDER_STATUS_', '')}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {data.orders.map((order) => {
+                  const statusName = OrderStatus[order.status] ?? 'UNKNOWN';
+                  return (
+                    <TableRow key={order.orderId} className="cursor-pointer hover:bg-accent/40">
+                      <TableCell className="font-mono font-semibold">
+                        <Link href={`/orders/${order.orderId}`} className="hover:underline">
+                          {order.symbol}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={order.side === OrderSide.BUY ? 'buy' : 'sell'}>
+                          {order.side === OrderSide.BUY ? 'BUY' : 'SELL'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">{order.qty}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{order.filledQty ?? 0}</TableCell>
+                      <TableCell className="text-right hidden sm:table-cell">
+                        {order.filledAvgPrice ? `$${Number(order.filledAvgPrice).toFixed(2)}` : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={STATUS_VARIANT[statusName] ?? 'secondary'}>
+                          {statusName}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
             {data.orders.length === 0 && (
@@ -95,8 +107,12 @@ export function OrderBook({ mode }: { mode: TradingMode }) {
 export function PortfolioSummary({ mode }: { mode: TradingMode }) {
   const { selectedAccountId } = useAccountContext();
   const { data, isLoading, error } = useSWR(
-    `${BASE_PATH}/api/portfolio?trading_mode=${mode}&account_id=${selectedAccountId ?? ''}`,
-    fetcher,
+    ['portfolio', mode, selectedAccountId],
+    () =>
+      portfolioClient.getPortfolio({
+        tradingMode: toPbMode(mode),
+        ...(selectedAccountId ? { accountId: selectedAccountId } : {}),
+      }),
     { refreshInterval: 10000 },
   );
 
@@ -116,7 +132,7 @@ export function PortfolioSummary({ mode }: { mode: TradingMode }) {
     </Card>
   );
 
-  const pnlPositive = data.day_pnl >= 0;
+  const pnlPositive = data.dayPnl >= 0;
 
   return (
     <Card>
@@ -132,13 +148,13 @@ export function PortfolioSummary({ mode }: { mode: TradingMode }) {
         <div className="space-y-2">
           <Stat label="Equity" value={`$${Number(data.equity).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />
           <Stat label="Cash" value={`$${Number(data.cash).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />
-          <Stat label="Buying Power" value={`$${Number(data.buying_power).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />
+          <Stat label="Buying Power" value={`$${Number(data.buyingPower).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />
           <Stat
             label="Day P&L"
-            value={`${pnlPositive ? '+' : ''}$${Number(data.day_pnl).toFixed(2)} (${Number(data.day_pnl_pct * 100).toFixed(2)}%)`}
+            value={`${pnlPositive ? '+' : ''}$${Number(data.dayPnl).toFixed(2)} (${Number(data.dayPnlPct * 100).toFixed(2)}%)`}
             valueClass={pnlPositive ? 'text-buy' : 'text-destructive'}
           />
-          <Stat label="Total P&L" value={`$${Number(data.total_pnl).toFixed(2)}`} />
+          <Stat label="Total P&L" value={`$${Number(data.totalPnl).toFixed(2)}`} />
         </div>
 
         {data.positions?.length > 0 && (
@@ -150,11 +166,11 @@ export function PortfolioSummary({ mode }: { mode: TradingMode }) {
               </Link>
             </div>
             <div className="space-y-1.5">
-              {data.positions.map((pos: any) => (
+              {data.positions.map((pos) => (
                 <div key={pos.symbol} className="flex justify-between text-xs">
                   <span className="font-mono font-semibold">{pos.symbol}</span>
-                  <span className={pos.unrealized_pnl >= 0 ? 'text-buy' : 'text-destructive'}>
-                    {pos.unrealized_pnl >= 0 ? '+' : ''}${Number(pos.unrealized_pnl).toFixed(2)}
+                  <span className={pos.unrealizedPnl >= 0 ? 'text-buy' : 'text-destructive'}>
+                    {pos.unrealizedPnl >= 0 ? '+' : ''}${Number(pos.unrealizedPnl).toFixed(2)}
                   </span>
                 </div>
               ))}

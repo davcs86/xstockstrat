@@ -1,7 +1,9 @@
 # xstockstrat-trader — CLAUDE.md
 
 ## Role
-Next.js 14 frontend for trading execution and order management. Uses the App Router with server-side Route Handlers as gRPC-to-HTTP adapters. Browser components communicate with Next.js API routes; API routes communicate with backend services via gRPC (`@connectrpc/connect-node` gRPC transport). Receives live alerts via SSE streaming, bridged from the notify `StreamAlerts` gRPC server-stream.
+Next.js 14 frontend for trading execution and order management. Browser Client Components call backend RPCs through a single Connect BFF using `@connectrpc/connect-web` typed clients (`src/lib/browserClients.ts`); the BFF catch-all (`src/app/api/[...connect]/route.ts` → `src/lib/connectBff.ts`) authenticates the session cookie, propagates `x-user-id`/`x-access-scope`/`x-trace-id`, and forwards to the backend gRPC services via `@connectrpc/connect-node`. Components consume the typed protobuf-es messages directly (camelCase fields, numeric enums) — no per-route JSON mapping. Live alerts stream over Connect server-streaming (`NotifyService.StreamAlerts`), replacing the former SSE bridge. This follows the platform `044-client-api-pattern`.
+
+The only non-BFF routes are `auth/{login,refresh,logout}` and `health`.
 
 ## Language
 TypeScript / Next.js 14 (App Router)
@@ -16,20 +18,23 @@ Frontend pattern — see `docs/patterns/docker-build.md` for the base + deps + b
 
 ```
 Browser (React Client Components)
-  └── SWR → /api/orders, /api/portfolio   (polling)
-  └── EventSource → /api/alerts/stream     (SSE, live alerts)
-        └── Next.js Route Handlers (server-side)
-              ├── gRPC (H2C) → xstockstrat-trading:50051
-              ├── gRPC (H2C) → xstockstrat-portfolio:50052
-              ├── gRPC (H2C) → xstockstrat-notify:50059
-              └── gRPC (H2C) → xstockstrat-identity:50058
+  └── @connectrpc/connect-web typed clients (src/lib/browserClients.ts)
+        │   SWR-wrapped unary for polling; async-iterator for StreamAlerts
+        └── Connect BFF  /trader/api/[...connect]  (connectBff.ts)
+              │   requireSession + backendHeaders (x-user-id/-access-scope/-trace-id)
+              └── @connectrpc/connect-node gRPC (H2C) →
+                    ├── xstockstrat-trading:50051
+                    ├── xstockstrat-portfolio:50052
+                    ├── xstockstrat-marketdata:50053
+                    ├── xstockstrat-notify:50059   (StreamAlerts server-stream)
+                    └── xstockstrat-identity:50058 (token verify, in middleware/auth)
 ```
 
-## gRPC Client
+## Connect Clients
 
-- Client factory: `src/lib/connectClients.ts` — uses `createGrpcTransport` (H2C HTTP/2) with connect v2 service descriptors from `@xstockstrat/proto/*_pb` files
-- All API route handlers import typed clients from this file; no `@grpc/grpc-js` dependency
-- Dependencies: `@connectrpc/connect`, `@connectrpc/connect-node`, `@bufbuild/protobuf`
+- **Server (BFF → backend):** `src/lib/connectClients.ts` — `createGrpcTransport` (H2C HTTP/2) clients used only inside `connectBff.ts`. No `@grpc/grpc-js` dependency.
+- **Browser (Client Components → BFF):** `src/lib/browserClients.ts` — `@connectrpc/connect-web` clients bound to `browserTransport` (`src/lib/connectTransport.ts`, baseUrl `/trader/api`). Components import these; never import `connectClients.ts` (server-only) into a Client Component.
+- Dependencies: `@connectrpc/connect`, `@connectrpc/connect-web`, `@connectrpc/connect-node`, `@bufbuild/protobuf`
 
 ## Dependencies
 
