@@ -75,7 +75,7 @@ pnpm install --filter xstockstrat-insights 2>&1 | grep -E "ERR|WARN|error" | gre
 
 ### Step 2 — service: Fix next.config.js and async params in xstockstrat-insights
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/next.config.js` — modify
@@ -343,4 +343,9 @@ grep -n "serverExternalPackages\|async.*params\|Promise.*params" docs/patterns/n
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 2 — Fix next.config.js and async params in xstockstrat-insights
+**Spec said**: Fix async params in `src/app/api/analysis/report/[id]/route.ts` using `await params` (Route Handler pattern).
+**Actual**:
+1. That route handler was deleted by the 044 client-api-pattern merge before this step ran — no change needed there.
+2. A build failure revealed `src/app/strategies/[id]/page.tsx` (a `'use client'` component) also needed its `params` type updated. Next.js 15 enforces `PageProps` even on client components. Fix: imported `use` from React and changed `const { id } = params` → `const { id } = use(params)` with type `Promise<{ id: string }>`.
+**Reason**: (1) 044 deleted the originally-targeted file. (2) Exhaustive Option A scan missed `strategies/[id]/page.tsx` because it is a client component — but Next.js 15 TypeScript types enforce `PageProps` regardless, surfaced by the build. Pattern for client components is `React.use()` not `await`.

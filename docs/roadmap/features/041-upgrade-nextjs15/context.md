@@ -47,6 +47,13 @@
   5. Sequencing vs 045: 041 proceeds independently; 045 still draft
 - Status: lifecycle unchanged (already `implementation-ready`); product-spec.md open questions checked off.
 
+### Step 2 — Fix next.config.js and async params in xstockstrat-insights [done]
+- Renamed `experimental.serverComponentsExternalPackages` → top-level `serverExternalPackages` in `next.config.js`; `experimental` block removed.
+- Original async-params target (`src/app/api/analysis/report/[id]/route.ts`) was deleted by 044. Exhaustive scan (Option A) found `src/app/strategies/[id]/page.tsx` failing TypeScript PageProps constraint. Fixed with `React.use(params)` pattern (client component pattern for Next.js 15).
+- `pnpm run build` passes cleanly — full route table emitted, exit 0.
+- Files modified: `services/xstockstrat-insights/next.config.js`, `services/xstockstrat-insights/src/app/strategies/[id]/page.tsx`
+- Deviations: see Deviation Log — async-params fix applied to different file using client-component pattern
+
 ### Step 1 — Upgrade xstockstrat-insights to Next.js 15 [done]
 - Changed `next` from `^14.2.3` to `^15.5.15` and `eslint-config-next` from `^14.2.35` to `^15` in `services/xstockstrat-insights/package.json`. `react`, `react-dom`, and all `@opentelemetry/*` versions unchanged.
 - Ran `pnpm install --filter xstockstrat-insights` — completed with no peer-dependency errors; root `pnpm-lock.yaml` updated.
