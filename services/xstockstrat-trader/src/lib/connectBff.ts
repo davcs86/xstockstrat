@@ -17,7 +17,8 @@ import { compressionGzip, compressionBrotli } from '@connectrpc/connect-node';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
-import { tradingClient, portfolioClient, marketDataClient } from '@/lib/connectClients';
+import { NotifyService } from '@xstockstrat/proto/notify/v1/notify_pb';
+import { tradingClient, portfolioClient, marketDataClient, notifyClient } from '@/lib/connectClients';
 import { verifyAccessToken, rolesToAccessScope, generateTraceId, type JwtClaims } from '@/lib/auth';
 
 // ── Auth helpers ──────────────────────────────────────────────────────────
@@ -103,6 +104,18 @@ router.service(MarketDataService, {
   async listAssets(req, ctx) {
     const claims = await requireSession(ctx);
     return marketDataClient.listAssets(req, { headers: backendHeaders(claims, ctx) });
+  },
+});
+
+router.service(NotifyService, {
+  // Server-streaming: forward the notify StreamAlerts gRPC server-stream to the
+  // browser over the Connect streaming protocol (replaces the old SSE bridge).
+  async *streamAlerts(req, ctx) {
+    const claims = await requireSession(ctx);
+    yield* notifyClient.streamAlerts(
+      { ...req, userId: claims.user_id },
+      { headers: backendHeaders(claims, ctx), signal: ctx.signal },
+    );
   },
 });
 

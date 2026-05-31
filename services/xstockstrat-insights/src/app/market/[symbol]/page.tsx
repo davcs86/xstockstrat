@@ -6,7 +6,8 @@ import { ArrowLeft } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BASE_PATH } from '@/lib/basepath';
+import { ConnectError } from '@connectrpc/connect';
+import { marketDataClient } from '@/lib/browserClients';
 
 type Timeframe = '10Min' | '30Min' | '1Hour' | '1Day' | '1Week' | '1Month';
 
@@ -93,20 +94,26 @@ export default function MarketSymbolPage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`${BASE_PATH}/api/marketdata?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&limit=300`)
-      .then(async (res) => {
-        const body = await res.json();
-        if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-        return body;
-      })
-      .then((data) => {
+    marketDataClient
+      .getBars({ symbol, timeframe, page: { pageSize: 300 } })
+      .then((res) => {
         if (cancelled) return;
-        const sorted: Bar[] = (data.bars ?? []).sort((a: Bar, b: Bar) => a.time - b.time);
+        const mapped: Bar[] = res.bars.map((b) => ({
+          time: b.time ? Number(b.time.seconds) : 0,
+          open: b.open,
+          high: b.high,
+          low: b.low,
+          close: b.close,
+          volume: Number(b.volume),
+        }));
+        const sorted = mapped.sort((a, b) => a.time - b.time);
         setBars(sorted);
         if (seriesRef.current) seriesRef.current.setData(sorted);
       })
-      .catch((err: Error) => {
-        if (!cancelled) setError(err.message);
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof ConnectError ? err.rawMessage : (err as Error).message);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

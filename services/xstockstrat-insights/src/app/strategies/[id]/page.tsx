@@ -7,9 +7,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/components/ui/utils';
-import { BASE_PATH } from '@/lib/basepath';
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { ConnectError } from '@connectrpc/connect';
+import { analysisClient } from '@/lib/browserClients';
 
 interface BacktestFormState {
   symbol: string;
@@ -20,7 +19,10 @@ interface BacktestFormState {
 
 export default function StrategyDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
-  const { data: report, isLoading } = useSWR(`${BASE_PATH}/api/analysis/report/${id}`, fetcher);
+  const { data: report, isLoading } = useSWR(
+    ['analysis-report', id],
+    () => analysisClient.getStrategyReport({ strategyId: id }),
+  );
 
   const [form, setForm] = useState<BacktestFormState>({
     symbol: 'AAPL',
@@ -36,22 +38,21 @@ export default function StrategyDetailPage({ params }: { params: { id: string } 
     setRunning(true);
     setRunError(null);
     try {
-      const res = await fetch(`${BASE_PATH}/api/analysis/backtest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          strategy_id: id,
-          symbol: form.symbol,
-          start: new Date(form.start).toISOString(),
-          end: new Date(form.end).toISOString(),
-          initial_capital: parseFloat(form.initial_capital),
-        }),
+      const isoToTimestamp = (iso: string) => {
+        const ms = new Date(iso).getTime();
+        return { seconds: BigInt(Math.floor(ms / 1000)), nanos: (ms % 1000) * 1_000_000 };
+      };
+      const start = new Date(form.start).toISOString();
+      const end = new Date(form.end).toISOString();
+      const result = await analysisClient.runBacktest({
+        strategyId: id,
+        symbols: form.symbol ? [form.symbol] : [],
+        initialCapital: parseFloat(form.initial_capital),
+        range: { start: isoToTimestamp(start), end: isoToTimestamp(end) },
       });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setBacktestResult(data);
-    } catch (e: any) {
-      setRunError(e.message);
+      setBacktestResult(result);
+    } catch (err) {
+      setRunError(err instanceof ConnectError ? err.rawMessage : (err as Error).message);
     } finally {
       setRunning(false);
     }

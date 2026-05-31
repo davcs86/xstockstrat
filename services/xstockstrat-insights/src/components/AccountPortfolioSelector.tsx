@@ -10,11 +10,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { tradingClient, portfolioClient } from '@/lib/browserClients';
+import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 
 function brokerLabel(brokerType: number): string {
-  return brokerType === 2 ? 'IBKR' : 'Alpaca';
+  return brokerType === BrokerType.IBKR ? 'IBKR' : 'Alpaca';
 }
 
 function Stat({ label, value, valueClass = 'text-foreground' }: { label: string; value: string; valueClass?: string }) {
@@ -33,30 +33,36 @@ interface AccountPortfolioSelectorProps {
 
 export function AccountPortfolioSelector({ accountId, onAccountChange }: AccountPortfolioSelectorProps) {
   const { data, isLoading } = useSWR(
-    `/api/portfolio?account_id=${accountId}`,
-    fetcher,
+    ['acct-portfolios', accountId],
+    async () => {
+      const [a, p] = await Promise.all([
+        tradingClient.listBrokerAccounts({}),
+        portfolioClient.listPortfolios(accountId ? { accountId } : {}),
+      ]);
+      return { accounts: a.accounts, portfolios: p.portfolios };
+    },
     { refreshInterval: 30000 },
   );
 
-  const accounts: any[] = data?.accounts ?? [];
-  const portfolios: any[] = data?.portfolios ?? [];
-  const activeAccounts = accounts.filter((a) => a.is_active);
+  const accounts = data?.accounts ?? [];
+  const portfolios = data?.portfolios ?? [];
+  const activeAccounts = accounts.filter((a) => a.isActive);
 
   // Aggregate across all portfolios for "All Accounts" view
   const aggregated = portfolios.reduce(
     (acc, p) => ({
       equity: acc.equity + Number(p.equity ?? 0),
-      day_pnl: acc.day_pnl + Number(p.day_pnl ?? 0),
+      dayPnl: acc.dayPnl + Number(p.dayPnl ?? 0),
       positions: [...acc.positions, ...(p.positions ?? [])],
     }),
-    { equity: 0, day_pnl: 0, positions: [] as any[] },
+    { equity: 0, dayPnl: 0, positions: [] as unknown[] },
   );
 
   const selectedPortfolio = accountId
-    ? portfolios.find((p) => p.account_id === accountId)
+    ? portfolios.find((p) => p.accountId === accountId)
     : null;
   const selectedAccount = accountId
-    ? accounts.find((a) => a.account_id === accountId)
+    ? accounts.find((a) => a.id === accountId)
     : null;
 
   return (
@@ -71,11 +77,11 @@ export function AccountPortfolioSelector({ accountId, onAccountChange }: Account
         <SelectContent>
           <SelectItem value="__all__">All Accounts</SelectItem>
           {activeAccounts.map((account) => (
-            <SelectItem key={account.account_id} value={account.account_id}>
+            <SelectItem key={account.id} value={account.id}>
               <span className="flex items-center gap-1">
-                {account.display_name}
+                {account.displayName}
                 <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
-                  {brokerLabel(account.broker_type)}
+                  {brokerLabel(account.brokerType)}
                 </Badge>
               </span>
             </SelectItem>
@@ -95,11 +101,11 @@ export function AccountPortfolioSelector({ accountId, onAccountChange }: Account
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">
-                {selectedAccount?.display_name ?? accountId}
+                {selectedAccount?.displayName ?? accountId}
               </CardTitle>
               {selectedAccount && (
                 <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
-                  {brokerLabel(selectedAccount.broker_type)}
+                  {brokerLabel(selectedAccount.brokerType)}
                 </Badge>
               )}
             </div>
@@ -115,12 +121,12 @@ export function AccountPortfolioSelector({ accountId, onAccountChange }: Account
             />
             <Stat
               label="Day P&L"
-              value={`${Number(selectedPortfolio.day_pnl) >= 0 ? '+' : ''}$${Number(selectedPortfolio.day_pnl).toFixed(2)}`}
-              valueClass={Number(selectedPortfolio.day_pnl) >= 0 ? 'text-buy' : 'text-destructive'}
+              value={`${Number(selectedPortfolio.dayPnl) >= 0 ? '+' : ''}$${Number(selectedPortfolio.dayPnl).toFixed(2)}`}
+              valueClass={Number(selectedPortfolio.dayPnl) >= 0 ? 'text-buy' : 'text-destructive'}
             />
             <Stat
               label="Total P&L"
-              value={`$${Number(selectedPortfolio.total_pnl ?? 0).toFixed(2)}`}
+              value={`$${Number(selectedPortfolio.totalPnl ?? 0).toFixed(2)}`}
             />
             {selectedPortfolio.positions?.length > 0 && (
               <p className="text-xs text-muted-foreground pt-1">
@@ -142,8 +148,8 @@ export function AccountPortfolioSelector({ accountId, onAccountChange }: Account
             />
             <Stat
               label="Day P&L"
-              value={`${aggregated.day_pnl >= 0 ? '+' : ''}$${aggregated.day_pnl.toFixed(2)}`}
-              valueClass={aggregated.day_pnl >= 0 ? 'text-buy' : 'text-destructive'}
+              value={`${aggregated.dayPnl >= 0 ? '+' : ''}$${aggregated.dayPnl.toFixed(2)}`}
+              valueClass={aggregated.dayPnl >= 0 ? 'text-buy' : 'text-destructive'}
             />
             {aggregated.positions.length > 0 && (
               <p className="text-xs text-muted-foreground pt-1">
