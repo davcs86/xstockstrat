@@ -64,9 +64,9 @@ export async function startMockBackend(): Promise<void> {
   }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('1h').sign(secret);
 
   const identityPayload = {
-    access_token: testAccessToken,
-    refresh_token: 'test-refresh-token',
-    claims: { user_id: 'test-user-001', email: 'test@example.com', roles: [] },
+    accessToken: testAccessToken,
+    refreshToken: 'test-refresh-token',
+    claims: { userId: 'test-user-001', email: 'test@example.com', roles: [] },
   };
   RESPONSES['/xstockstrat.identity.v1.IdentityService/AuthenticateUser'] = identityPayload;
   RESPONSES['/xstockstrat.identity.v1.IdentityService/RefreshToken'] = identityPayload;
@@ -79,7 +79,7 @@ export async function startMockBackend(): Promise<void> {
       sourceType: 'simple_email',
       extractorModule: 'app.extractors.example_simple_email',
       active: true,
-      hasCredentials: false,
+      hasCredentials: true,   // non-zero so proto3 JSON encoding includes the field
       configJson: { sender_patterns: ['noreply@example.com'], subject_patterns: ['Signal:'] },
     }],
   };
@@ -100,7 +100,7 @@ export async function startMockBackend(): Promise<void> {
       const path = req.url ?? '/';
       const body = RESPONSES[path] ?? {};
       res.writeHead(200, {
-        'Content-Type': 'application/connect+json',
+        'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
       });
       res.end(JSON.stringify(body));

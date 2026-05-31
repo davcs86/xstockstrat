@@ -31,7 +31,7 @@ export default defineConfig({
     url: 'http://localhost:3002/config-ui/api/health',
     reuseExistingServer: !process.env.CI,
     env: {
-      CONFIG_ENDPOINT: 'http://127.0.0.1:9093',
+      CONFIG_HTTP_ENDPOINT: 'http://127.0.0.1:9093',
       IDENTITY_HTTP_ENDPOINT: 'http://127.0.0.1:9093',
       INGEST_HTTP_ENDPOINT: 'http://127.0.0.1:9093',
       JWT_SECRET: 'test-jwt-secret-for-e2e-tests-min32c',
