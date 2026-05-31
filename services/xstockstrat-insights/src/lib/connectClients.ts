@@ -8,7 +8,7 @@
  * from connect v1 + protoc-gen-es v2 type erasure no longer applies.
  */
 import { Code, createClient } from '@connectrpc/connect';
-import { createGrpcTransport, createConnectTransport } from '@connectrpc/connect-node';
+import { createGrpcTransport } from '@connectrpc/connect-node';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
@@ -27,20 +27,17 @@ const TRADING_ENDPOINT =
 const IDENTITY_ENDPOINT =
   process.env.IDENTITY_ENDPOINT ?? 'xstockstrat-identity:50058';
 
-function makeTransport(grpcEndpoint: string, httpOverride?: string) {
-  if (httpOverride) {
-    return createConnectTransport({ baseUrl: httpOverride, httpVersion: '1.1', useBinaryFormat: false });
-  }
-  return createGrpcTransport({ baseUrl: `http://${grpcEndpoint}` });
+function makeTransport(endpoint: string) {
+  return createGrpcTransport({ baseUrl: `http://${endpoint}` });
 }
 
 // ── Exported clients ───────────────────────────────────────────────────────
 
-export const analysisClient = createClient(AnalysisService, makeTransport(ANALYSIS_ENDPOINT, process.env.ANALYSIS_HTTP_ENDPOINT));
-export const marketDataClient = createClient(MarketDataService, makeTransport(MARKETDATA_ENDPOINT, process.env.MARKETDATA_HTTP_ENDPOINT));
-export const portfolioClient = createClient(PortfolioService, makeTransport(PORTFOLIO_ENDPOINT, process.env.PORTFOLIO_HTTP_ENDPOINT));
-export const tradingClient = createClient(TradingService, makeTransport(TRADING_ENDPOINT, process.env.TRADING_HTTP_ENDPOINT));
-export const identityClient = createClient(IdentityService, makeTransport(IDENTITY_ENDPOINT, process.env.IDENTITY_HTTP_ENDPOINT));
+export const analysisClient = createClient(AnalysisService, makeTransport(ANALYSIS_ENDPOINT));
+export const marketDataClient = createClient(MarketDataService, makeTransport(MARKETDATA_ENDPOINT));
+export const portfolioClient = createClient(PortfolioService, makeTransport(PORTFOLIO_ENDPOINT));
+export const tradingClient = createClient(TradingService, makeTransport(TRADING_ENDPOINT));
+export const identityClient = createClient(IdentityService, makeTransport(IDENTITY_ENDPOINT));
 
 // ── Connect-Code → HTTP status helper ──────────────────────────────────────
 export function connectCodeToHttp(code: Code): number {

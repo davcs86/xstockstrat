@@ -3,8 +3,8 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Playwright configuration for xstockstrat-insights (port 3001).
  *
- * globalSetup starts a mock Connect-RPC server on port 9092 before the
- * Next.js dev server, so tests run without real backend services.
+ * globalSetup starts a mock gRPC server (connectNodeAdapter + http2) on port
+ * 9092 before the Next.js dev server, so tests run without real backend services.
  *
  * Run:  pnpm test:e2e
  * UI:   pnpm test:e2e:ui
@@ -40,10 +40,10 @@ export default defineConfig({
     url: 'http://localhost:3001/insights/api/health',
     reuseExistingServer: !process.env.CI,
     env: {
-      ANALYSIS_HTTP_ENDPOINT: 'http://127.0.0.1:9092',
-      IDENTITY_HTTP_ENDPOINT: 'http://127.0.0.1:9092',
-      TRADING_HTTP_ENDPOINT: 'http://127.0.0.1:9092',
-      PORTFOLIO_HTTP_ENDPOINT: 'http://127.0.0.1:9092',
+      ANALYSIS_ENDPOINT: '127.0.0.1:9092',
+      IDENTITY_ENDPOINT: '127.0.0.1:9092',
+      TRADING_ENDPOINT: '127.0.0.1:9092',
+      PORTFOLIO_ENDPOINT: '127.0.0.1:9092',
       JWT_SECRET: 'test-jwt-secret-for-e2e-tests-min32c',
     },
   },
