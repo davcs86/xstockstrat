@@ -121,9 +121,12 @@ router.service(NotifyService, {
 
 // ── Handler map ───────────────────────────────────────────────────────────
 
-// basePath('/trader') + '/api' + handler.requestPath
-// e.g. /trader/api/trading.v1.TradingService/PlaceOrder
-const PREFIX = '/trader/api';
+// Next.js strips the configured basePath ('/trader') from req.url before it
+// reaches this route handler, so dispatchConnect sees a basePath-relative
+// pathname: '/api' + handler.requestPath (e.g. /api/trading.v1.TradingService/
+// PlaceOrder). Key the map on that — NOT on the basePath-prefixed public URL,
+// which would never match and 404 every RPC.
+const PREFIX = '/api';
 const handlerMap = new Map(router.handlers.map((h) => [PREFIX + h.requestPath, h]));
 
 // ── Web API ↔ Universal adapters ──────────────────────────────────────────

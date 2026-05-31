@@ -286,7 +286,16 @@ lib/connectBff.ts           ← router setup, auth helpers, dispatchConnect()
 app/api/[...connect]/route.ts  ← two lines: export GET/POST = dispatchConnect
 ```
 
-`connectBff.ts` registers services via `createConnectRouter` (from `@connectrpc/connect`) and builds a handler map keyed by `basePath + '/api' + handler.requestPath`. The `dispatchConnect` function adapts Web API `Request`/`Response` to `UniversalServerRequest`/`UniversalServerResponse`.
+`connectBff.ts` registers services via `createConnectRouter` (from `@connectrpc/connect`) and builds a handler map keyed by **`'/api' + handler.requestPath`** — i.e. the **basePath-relative** path, NOT `basePath + '/api' + ...`. The `dispatchConnect` function adapts Web API `Request`/`Response` to `UniversalServerRequest`/`UniversalServerResponse`.
+
+> ⚠️ **The #1 BFF footgun — do not prefix the basePath onto the handler-map keys.**
+> Next.js **strips the configured `basePath` from `req.url` before the route handler runs.** Inside `dispatchConnect`, `new URL(req.url).pathname` is therefore basePath-relative — e.g. `/api/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios`, **not** `/trader/api/...`. If you build the map with `const PREFIX = '/trader/api'` (the public URL the browser sees), **every lookup misses and every RPC returns 404.** The browser hits `/trader/api/...` (correct — `browserTransport.baseUrl` includes the basePath, and nginx forwards it intact), but by the time it reaches `dispatchConnect` the `/trader` prefix is gone. Key the map on `'/api'` only:
+> ```ts
+> // ✓ Correct — matches the basePath-relative pathname dispatchConnect actually receives
+> const PREFIX = '/api';
+> const handlerMap = new Map(router.handlers.map((h) => [PREFIX + h.requestPath, h]));
+> ```
+> **Bug fixed** ([PR #453](https://github.com/davcs86/xstockstrat/pull/453)): all three BFFs keyed on `'/<basePath>/api'`. Latent until the trader frontend actually started calling its BFF (connect-web migration, [PR #451](https://github.com/davcs86/xstockstrat/pull/451)) — then **every** method (`ListOrders`, `ListPortfolios`, `RegisterBrokerAccount`, `ListBrokerAccounts`, `StreamAlerts`, `ListAssets`) 404'd in production. See "Verifying a BFF route actually resolves" below — a `next build` pass does **not** catch this.
 
 All existing specific App Router routes (`auth/*`, `health`, `alerts/stream`, `audit`, etc.) take precedence over the `[...connect]` catch-all due to Next.js route ordering (static > required catch-all).
 
@@ -307,6 +316,58 @@ export const browserTransport = createConnectTransport({ baseUrl: '/trader/api' 
 - Using `createConnectTransport` server-side → routes calls to 80xx ports → those ports are either absent in DO (removed) or serve HTTP/1.1 only → gRPC calls time out silently.
 - Using `UntypedClient` → proto field name bugs compile and run silently (e.g. `{startTime: x}` instead of `{start: x}` reaches the backend as `undefined`).
 - Missing `http2_ports` in DO → all gRPC calls fail in production with connection errors even though local docker-compose works fine.
+- Prefixing the basePath onto the BFF handler-map keys → every RPC 404s (see the footgun callout above).
+
+### Browser components consume the typed message — do NOT hand-map JSON
+
+Browser Client Components MUST call backend RPCs through `browserClients.ts`
+(`@connectrpc/connect-web` typed clients on `browserTransport`) and consume the
+returned **protobuf-es message directly**: **camelCase fields and numeric enums**
+(`order.orderId`, `account.id`, `order.side === OrderSide.BUY`,
+`OrderStatus[order.status]` for a label). This is the single canonical contract
+end-to-end — there is no per-route JSON adapter to map snake_case ⇄ camelCase or
+string-enum ⇄ numeric-enum.
+
+| Do | Don't |
+|---|---|
+| `useSWR(['orders', mode], () => tradingClient.listOrders({ tradingMode }))` | `useSWR('/trader/api/orders', fetcher)` against a bespoke JSON route |
+| `account.id`, `account.displayName`, `account.brokerType === BrokerType.IBKR` | `account.account_id`, `account.display_name`, `account.broker_type === 2` |
+| `order.side === OrderSide.BUY`, label via `OrderStatus[order.status]` | `order.side === 'ORDER_SIDE_BUY'`, `order.status.replace('ORDER_STATUS_','')` |
+| import enums from `@xstockstrat/proto/<svc>/v1/<svc>_pb` / `common/v1/common_pb` | hardcode magic numbers (`2` for IBKR) |
+
+**Bug fixed** ([PR #451](https://github.com/davcs86/xstockstrat/pull/451)): the trader frontend mixed bespoke JSON `/api/*` routes with components written for a snake_case + string-enum shape, while the gRPC-transport clients emit camelCase + numeric enums. Broker-account registration and the orders/portfolio/positions views silently broke (e.g. `data.account.account_id` was `undefined`, so a newly registered account was never selected). Fixed by routing every browser call through the connect-web BFF and reading the typed shape. **A raw `fetch('/api/...')` in a browser component is now a smell** — the only non-BFF routes are `auth/{login,refresh,logout}` and `health`.
+
+> **`NextResponse.json(protobufEsMessage)` is not a safe contract.** It emits camelCase keys, a leaking `$typeName`, numeric enums, and **throws on any int64 field** (BigInt isn't JSON-serializable). If you ever must return JSON from a route (you generally shouldn't), use `toJson(Schema, msg, { useProtoFieldName: true })` — never the raw object.
+
+### Verifying a BFF route actually resolves — `next build` is NOT enough
+
+`tsc`, `next lint`, and `next build` all pass even when **every** BFF RPC 404s
+(the handler-map key bug above, and any path/middleware mismatch, are runtime-only).
+Before declaring a BFF change done, smoke-test the actual request against a
+**production** standalone build:
+
+```bash
+# 1. production build + run the standalone server with a JWT secret
+next build
+JWT_SECRET=<32+ char secret> NODE_ENV=production PORT=3100 HOSTNAME=127.0.0.1 \
+  node .next/standalone/services/xstockstrat-<svc>/server.js &
+
+# 2. forge a session cookie (jose, same secret) and POST a real method path
+#    NOTE: the path includes the basePath — the browser/nginx see /<basePath>/api/...
+curl -i -X POST "http://127.0.0.1:3100/<basePath>/api/xstockstrat.<pkg>.v1.<Service>/<Method>" \
+  -H 'Content-Type: application/json' -H "Cookie: access_token=<jwt>" --data '{}'
+```
+
+Interpreting the status (no backend running locally is fine):
+
+| Status | Meaning |
+|---|---|
+| **404** (5-byte Next body) | Route never reached `dispatchConnect`, or handler-map miss — **the bug**. Add a temporary `console.error('miss %j keys=%j', pathname, [...handlerMap.keys()])` before the 404 to see pathname-vs-keys. |
+| **307** → `/login` | Request had no valid `access_token` cookie (middleware redirect) — forge the cookie. |
+| **415** | Reached the Connect handler; rejected the raw body for lacking a Connect content-type — **routing is correct.** |
+| **503 `unavailable: ENOTFOUND <service>`** | Passed `requireSession`, attempted the backend gRPC dial — **fully wired**; resolves to 200 in an environment where the backend is reachable. |
+
+This is exactly the gap that let [PR #451](https://github.com/davcs86/xstockstrat/pull/451) ship the basePath 404 ([PR #453](https://github.com/davcs86/xstockstrat/pull/453)): it was build-/typecheck-verified only. The frontend e2e suites should cover this leg — see feature `046-align-frontend-e2e-bff-mocks`.
 
 ---
 
@@ -318,9 +379,10 @@ export const browserTransport = createConnectTransport({ baseUrl: '/trader/api' 
 | `src/middleware.ts` | Edge | auth gate; only imports Edge-safe code |
 | `src/lib/auth.ts` | Edge-safe | JWT, cookies, role bitmap, trace IDs |
 | `src/lib/identity.ts` | Node | `refreshSession`, `revokeToken` (uses Connect client) |
-| `src/lib/connectClients.ts` | Node | typed gRPC clients (`createGrpcTransport`, 50xxx) + `connectCodeToHttp` |
-| `src/lib/connectTransport.ts` | Browser | `browserTransport` — Connect-RPC to BFF catch-all |
-| `src/lib/connectBff.ts` | Node | `createConnectRouter` service impls + `dispatchConnect()` |
+| `src/lib/connectClients.ts` | Node | typed gRPC clients (`createGrpcTransport`, 50xxx) used **only inside `connectBff.ts`** + `connectCodeToHttp` |
+| `src/lib/connectTransport.ts` | Browser | `browserTransport` — `createConnectTransport` to BFF catch-all (`baseUrl: '/<basePath>/api'`) |
+| `src/lib/browserClients.ts` | Browser | typed connect-web clients on `browserTransport`; **the only client import allowed in Client Components** |
+| `src/lib/connectBff.ts` | Node | `createConnectRouter` service impls + `dispatchConnect()`; handler map keyed on **`'/api'`** (basePath-relative), never `'/<basePath>/api'` |
 | `src/app/api/[...connect]/route.ts` | Node | BFF catch-all — exports `GET`/`POST = dispatchConnect` |
 | `src/app/layout.tsx` | server | global `<html>` / `<body>` shell |
 | `src/app/page.tsx` | client (`'use client'`) | dashboard; **must** have non-null Suspense fallback |
