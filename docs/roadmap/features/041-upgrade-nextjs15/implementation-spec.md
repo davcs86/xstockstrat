@@ -175,7 +175,7 @@ docker compose build --no-cache xstockstrat-insights
 
 ### Step 4 — service: Upgrade xstockstrat-config-ui to Next.js 15
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/package.json` — modify
@@ -214,7 +214,7 @@ pnpm install --filter xstockstrat-config-ui 2>&1 | grep -E "ERR|WARN|error" | gr
 
 ### Step 5 — service: Fix next.config.js and async params in xstockstrat-config-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/next.config.js` — modify
@@ -266,7 +266,7 @@ cd services/xstockstrat-config-ui && pnpm run build 2>&1 | tail -20
 
 ### Step 6 — test: E2E validation for xstockstrat-config-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**: none (test only)
 
@@ -303,7 +303,7 @@ docker compose build --no-cache xstockstrat-config-ui
 
 ### Step 7 — docs: Update documentation for Next.js 15 alignment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`
 **Files**:
 - `docs/patterns/nextjs-frontends.md` — modify if any new Next.js 15-specific gotchas are discovered
