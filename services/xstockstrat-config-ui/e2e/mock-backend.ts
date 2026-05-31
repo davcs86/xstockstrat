@@ -1,56 +1,26 @@
 /**
- * Lightweight mock Connect-RPC HTTP server for xstockstrat-config-ui tests.
+ * gRPC mock server for xstockstrat-config-ui E2E tests.
  *
- * Port 9093 — pointed at by CONFIG_ENDPOINT in playwright.config.ts.
+ * Uses connectNodeAdapter + http2.createServer to serve real gRPC/H2C so the
+ * production connectClients.ts (createGrpcTransport) needs no test-specific
+ * overrides.  All mock endpoints are registered via router.service() so the
+ * binary-proto serialization is handled by the connect-node runtime.
  *
- * The /api/config route calls ListKeys and SetConfig on the config service.
- * The mock returns a realistic set of keys including one secret, matching the
- * exact ConfigKey interface the [namespace]/page.tsx component expects.
+ * Port 9093 — pointed at by CONFIG_ENDPOINT, IDENTITY_ENDPOINT, and
+ * INGEST_ENDPOINT in playwright.config.ts.
  */
-import * as http from 'http';
+import * as http2 from 'node:http2';
+import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { SignJWT } from 'jose';
+import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
+import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
+import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 
 export const MOCK_PORT = 9093;
 
 const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
 
-// Default keys returned for any namespace
-let MOCK_KEYS = [
-  {
-    key: 'platform.log_level',
-    description: 'Global log level for all services',
-    defaultValue: 'info',
-    isSecret: false,
-    consumingService: 'all',
-    environment: 1,   // dev
-    tradingMode: 0,   // all modes
-  },
-  {
-    key: 'platform.maintenance_mode',
-    description: 'Halts all trading operations when true',
-    defaultValue: 'false',
-    isSecret: false,
-    consumingService: 'all',
-    environment: 1,
-    tradingMode: 0,
-  },
-  {
-    key: 'secret.alpaca_api_key',
-    description: 'Alpaca API key for live trading',
-    defaultValue: '[secret]',
-    isSecret: true,
-    consumingService: 'trading',
-    environment: 2,   // production
-    tradingMode: 2,   // live
-  },
-];
-
-let RESPONSES: Record<string, object> = {
-  '/xstockstrat.config.v1.ConfigService/ListKeys': { keys: MOCK_KEYS },
-  '/xstockstrat.config.v1.ConfigService/SetConfig': {},
-};
-
-let server: http.Server | null = null;
+let server: http2.Http2Server | null = null;
 
 export async function startMockBackend(): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
@@ -63,49 +33,76 @@ export async function startMockBackend(): Promise<void> {
     expires_at: now + 3600,
   }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('1h').sign(secret);
 
-  const identityPayload = {
-    accessToken: testAccessToken,
-    refreshToken: 'test-refresh-token',
-    claims: { userId: 'test-user-001', email: 'test@example.com', roles: [] },
-  };
-  RESPONSES['/xstockstrat.identity.v1.IdentityService/AuthenticateUser'] = identityPayload;
-  RESPONSES['/xstockstrat.identity.v1.IdentityService/RefreshToken'] = identityPayload;
-  RESPONSES['/xstockstrat.identity.v1.IdentityService/RevokeToken'] = { success: true };
+  const handler = connectNodeAdapter({
+    routes(router) {
+      router.service(ConfigService, {
+        async listKeys() {
+          return {
+            keys: [
+              { key: 'platform.log_level', description: 'Global log level for all services', defaultValue: 'info', isSecret: false, consumingService: 'all', environment: 1, tradingMode: 0 },
+              { key: 'platform.maintenance_mode', description: 'Halts all trading operations when true', defaultValue: 'false', isSecret: false, consumingService: 'all', environment: 1, tradingMode: 0 },
+              { key: 'secret.alpaca_api_key', description: 'Alpaca API key for live trading', defaultValue: '[secret]', isSecret: true, consumingService: 'trading', environment: 2, tradingMode: 2 },
+            ],
+          };
+        },
+        async setConfig() {
+          return {};
+        },
+      });
 
-  RESPONSES['/xstockstrat.ingest.v1.IngestService/ListSignalSources'] = {
-    sources: [{
-      slug: 'example_simple_email',
-      displayName: 'Example Simple Email',
-      sourceType: 'simple_email',
-      extractorModule: 'app.extractors.example_simple_email',
-      active: true,
-      hasCredentials: true,   // non-zero so proto3 JSON encoding includes the field
-      configJson: { sender_patterns: ['noreply@example.com'], subject_patterns: ['Signal:'] },
-    }],
-  };
-  RESPONSES['/xstockstrat.ingest.v1.IngestService/ManageSignalSource'] = {
-    source: {
-      slug: 'example_simple_email',
-      displayName: 'Example Simple Email',
-      sourceType: 'simple_email',
-      extractorModule: 'app.extractors.example_simple_email',
-      active: true,
-      hasCredentials: false,
-      configJson: {},
+      router.service(IdentityService, {
+        async authenticateUser() {
+          return {
+            accessToken: testAccessToken,
+            refreshToken: 'test-refresh-token',
+            claims: { userId: 'test-user-001', email: 'test@example.com', roles: [] },
+          };
+        },
+        async refreshToken() {
+          return {
+            accessToken: testAccessToken,
+            refreshToken: 'test-refresh-token',
+            claims: { userId: 'test-user-001', email: 'test@example.com', roles: [] },
+          };
+        },
+        async revokeToken() {
+          return { success: true };
+        },
+      });
+
+      router.service(IngestService, {
+        async listSignalSources() {
+          return {
+            sources: [{
+              slug: 'example_simple_email',
+              displayName: 'Example Simple Email',
+              sourceType: 'simple_email',
+              extractorModule: 'app.extractors.example_simple_email',
+              active: true,
+              hasCredentials: true,
+              configJson: { sender_patterns: ['noreply@example.com'], subject_patterns: ['Signal:'] },
+            }],
+          };
+        },
+        async manageSignalSource() {
+          return {
+            source: {
+              slug: 'example_simple_email',
+              displayName: 'Example Simple Email',
+              sourceType: 'simple_email',
+              extractorModule: 'app.extractors.example_simple_email',
+              active: true,
+              hasCredentials: true,
+              configJson: {},
+            },
+          };
+        },
+      });
     },
-  };
+  });
 
   return new Promise((resolve, reject) => {
-    server = http.createServer((req, res) => {
-      const path = req.url ?? '/';
-      const body = RESPONSES[path] ?? {};
-      res.writeHead(200, {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      });
-      res.end(JSON.stringify(body));
-    });
-
+    server = http2.createServer(handler);
     server.on('error', reject);
     server.listen(MOCK_PORT, '127.0.0.1', () => resolve());
   });

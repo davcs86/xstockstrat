@@ -8,7 +8,7 @@
  * from connect v1 + protoc-gen-es v2 type erasure no longer applies.
  */
 import { Code, createClient } from '@connectrpc/connect';
-import { createGrpcTransport, createConnectTransport } from '@connectrpc/connect-node';
+import { createGrpcTransport } from '@connectrpc/connect-node';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
 import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
@@ -21,18 +21,15 @@ const IDENTITY_ENDPOINT =
 const INGEST_ENDPOINT =
   process.env.INGEST_ENDPOINT ?? 'xstockstrat-ingest:50055';
 
-function makeTransport(grpcEndpoint: string, httpOverride?: string) {
-  if (httpOverride) {
-    return createConnectTransport({ baseUrl: httpOverride, httpVersion: '1.1', useBinaryFormat: false });
-  }
-  return createGrpcTransport({ baseUrl: `http://${grpcEndpoint}` });
+function makeTransport(endpoint: string) {
+  return createGrpcTransport({ baseUrl: `http://${endpoint}` });
 }
 
 // ── Exported clients ───────────────────────────────────────────────────────
 
-export const configClient = createClient(ConfigService, makeTransport(CONFIG_ENDPOINT, process.env.CONFIG_HTTP_ENDPOINT));
-export const identityClient = createClient(IdentityService, makeTransport(IDENTITY_ENDPOINT, process.env.IDENTITY_HTTP_ENDPOINT));
-export const ingestClient = createClient(IngestService, makeTransport(INGEST_ENDPOINT, process.env.INGEST_HTTP_ENDPOINT));
+export const configClient = createClient(ConfigService, makeTransport(CONFIG_ENDPOINT));
+export const identityClient = createClient(IdentityService, makeTransport(IDENTITY_ENDPOINT));
+export const ingestClient = createClient(IngestService, makeTransport(INGEST_ENDPOINT));
 
 // ── Connect-Code → HTTP status helper ──────────────────────────────────────
 export function connectCodeToHttp(code: Code): number {

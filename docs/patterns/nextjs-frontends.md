@@ -462,18 +462,42 @@ Catch-all route handlers (`[...connect]/route.ts`) that receive `Request` direct
 
 Fix: add `{/* eslint-disable-next-line @next/next/no-html-link-for-pages */}` before each cross-app `<a>` link in layout files. Do NOT use `<Link>` for cross-app links — `basePath` would mangle the href (e.g. `/config-ui/trader` instead of `/trader`).
 
-### 4. Test infrastructure: `@connectrpc/connect-node` JSON mode
+### 4. Test infrastructure: real gRPC mock with `connectNodeAdapter`
 
-`@connectrpc/connect-node`'s `createConnectTransport` defaults to **binary protobuf** (`useBinaryFormat: true`), unlike the browser transport which defaults to JSON. When using an HTTP mock backend in E2E tests, explicitly set `useBinaryFormat: false`:
+Production `connectClients.ts` uses only `createGrpcTransport` — no test-specific logic. E2E mock servers use `connectNodeAdapter` + `http2.createServer` to serve real gRPC/H2C, the same wire protocol the production transport expects:
 
 ```ts
-// In connectClients.ts — HTTP override path for test mocking
-function makeTransport(grpcEndpoint: string, httpOverride?: string) {
-  if (httpOverride) {
-    return createConnectTransport({ baseUrl: httpOverride, httpVersion: '1.1', useBinaryFormat: false });
-  }
-  return createGrpcTransport({ baseUrl: `http://${grpcEndpoint}` });
+// e2e/mock-backend.ts
+import * as http2 from 'node:http2';
+import { connectNodeAdapter } from '@connectrpc/connect-node';
+import { MyService } from '@xstockstrat/proto/myservice/v1/myservice_pb';
+
+let server: http2.Http2Server | null = null;
+
+export async function startMockBackend(): Promise<void> {
+  const handler = connectNodeAdapter({
+    routes(router) {
+      router.service(MyService, {
+        async myMethod() { return { result: 'mock' }; },
+      });
+    },
+  });
+  return new Promise((resolve, reject) => {
+    server = http2.createServer(handler);
+    server.on('error', reject);
+    server.listen(9092, '127.0.0.1', () => resolve());
+  });
 }
 ```
 
-Mock backend must return `Content-Type: application/json` (not `application/connect+json`, which is for streaming). Proto3 zero-value fields (`false`, `0`, `""`) are omitted from JSON — test assertions must handle `undefined` as semantically equivalent to the zero value.
+Point `playwright.config.ts` env vars to the mock using the standard `host:port` format (no `http://`):
+
+```ts
+env: {
+  ANALYSIS_ENDPOINT: '127.0.0.1:9092',
+  IDENTITY_ENDPOINT: '127.0.0.1:9092',
+  JWT_SECRET: 'test-jwt-secret',
+}
+```
+
+Router implementations return `Partial<ServiceImpl<T>>` — unimplemented methods return gRPC `UNIMPLEMENTED`. Return camelCase field names matching the protobuf-es TypeScript interface. Proto3 zero-value booleans (`false`) are transmitted in binary gRPC but omitted by the BFF's Connect JSON serializer — test assertions must handle `undefined` as semantically equivalent to the zero value.
