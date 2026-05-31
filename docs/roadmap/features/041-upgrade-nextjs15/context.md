@@ -46,3 +46,9 @@
   4. OTel compatibility: no bump needed; ^0.218.0 confirmed via trader
   5. Sequencing vs 045: 041 proceeds independently; 045 still draft
 - Status: lifecycle unchanged (already `implementation-ready`); product-spec.md open questions checked off.
+
+### Step 1 — Upgrade xstockstrat-insights to Next.js 15 [done]
+- Changed `next` from `^14.2.3` to `^15.5.15` and `eslint-config-next` from `^14.2.35` to `^15` in `services/xstockstrat-insights/package.json`. `react`, `react-dom`, and all `@opentelemetry/*` versions unchanged.
+- Ran `pnpm install --filter xstockstrat-insights` — completed with no peer-dependency errors; root `pnpm-lock.yaml` updated.
+- Files modified: `services/xstockstrat-insights/package.json`, `pnpm-lock.yaml`
+- Deviations: none

@@ -31,7 +31,7 @@ changes.
 
 ### Step 1 — service: Upgrade xstockstrat-insights to Next.js 15
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/package.json` — modify

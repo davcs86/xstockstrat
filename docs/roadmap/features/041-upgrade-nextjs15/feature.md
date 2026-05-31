@@ -1,6 +1,6 @@
 # Feature: upgrade-nextjs15
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/upgrade-nextjs15`
 **Created**: 2026-05-27
 **Last Updated**: 2026-05-30
@@ -15,6 +15,7 @@
 | 2026-05-30 | `idea` → `draft` | /sdd-story | Product spec generated; open questions left for review |
 | 2026-05-31 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps |
 | 2026-05-31 | product-spec retroactive review | /sdd-review | All 5 open questions resolved; product spec approved. Status unchanged (already implementation-ready). |
+| 2026-05-31 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — insights package.json and pnpm-lock.yaml updated |
 
 ---
 
