@@ -142,7 +142,7 @@ cd services/xstockstrat-insights && pnpm run build 2>&1 | tail -20
 
 ### Step 3 — test: E2E validation for xstockstrat-insights
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**: none (test only)
 

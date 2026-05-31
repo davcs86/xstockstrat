@@ -47,6 +47,19 @@
   5. Sequencing vs 045: 041 proceeds independently; 045 still draft
 - Status: lifecycle unchanged (already `implementation-ready`); product-spec.md open questions checked off.
 
+### Step 3 — E2E validation for xstockstrat-insights [done]
+- All 44 E2E tests pass (Chromium + Firefox) after fixing tests stale from the 044 client-api-pattern merge.
+- Root causes found and fixed:
+  1. `connectClients.ts`: added `createConnectTransport` (with `useBinaryFormat: false`) as HTTP override path for test mocking; `makeTransport` now accepts optional `httpOverride` env var.
+  2. `playwright.config.ts`: added missing `TRADING_HTTP_ENDPOINT` and `PORTFOLIO_HTTP_ENDPOINT` env vars pointing at mock backend (port 9092).
+  3. `mock-backend.ts`: fixed Content-Type from `application/connect+json` (streaming) to `application/json` (Connect unary); fixed BrokerAccount and Portfolio field names to camelCase proto JSON; fixed identity response field names to camelCase (`accessToken`, `refreshToken`, `claims.userId`).
+  4. `dashboard.spec.ts`, `account-portfolio.spec.ts`: replaced stale JSON route intercepts with Connect-RPC URL patterns (`**/xstockstrat.<svc>/...`); added `addAuthCookie()` for middleware pass-through; fixed content-type to `application/json`; fixed selector ambiguities (exact match, role-based).
+  5. `api-smoke.spec.ts`: rewrote to call BFF via `page.evaluate()` (browser fetch) to avoid Next.js dev server Transfer-Encoding+Content-Length conflict with Playwright/undici; navigates to login page first for same-origin context.
+  6. `auth.spec.ts`: updated protected-route test to use Connect-RPC BFF endpoint (POST) instead of deleted JSON route.
+- connect-node `createConnectTransport` defaults `useBinaryFormat: true`; the mock needed `useBinaryFormat: false` to serve JSON.
+- Files modified: `services/xstockstrat-insights/src/lib/connectClients.ts`, `services/xstockstrat-insights/playwright.config.ts`, `services/xstockstrat-insights/e2e/mock-backend.ts`, `services/xstockstrat-insights/e2e/dashboard.spec.ts`, `services/xstockstrat-insights/e2e/account-portfolio.spec.ts`, `services/xstockstrat-insights/e2e/api-smoke.spec.ts`, `services/xstockstrat-insights/e2e/auth.spec.ts`
+- Deviations: expanded scope to fix 7 stale test files (Option A chosen); Docker build check deferred (no Docker daemon in environment).
+
 ### Step 2 — Fix next.config.js and async params in xstockstrat-insights [done]
 - Renamed `experimental.serverComponentsExternalPackages` → top-level `serverExternalPackages` in `next.config.js`; `experimental` block removed.
 - Original async-params target (`src/app/api/analysis/report/[id]/route.ts`) was deleted by 044. Exhaustive scan (Option A) found `src/app/strategies/[id]/page.tsx` failing TypeScript PageProps constraint. Fixed with `React.use(params)` pattern (client component pattern for Next.js 15).
