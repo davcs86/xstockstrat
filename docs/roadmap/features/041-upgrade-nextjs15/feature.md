@@ -1,6 +1,6 @@
 # Feature: upgrade-nextjs15
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/upgrade-nextjs15`
 **Created**: 2026-05-27
 **Last Updated**: 2026-05-30
@@ -13,13 +13,16 @@
 |---|---|---|---|
 | 2026-05-27 | `idea` | manual | Backlog entry created after DO deploy failures investigation |
 | 2026-05-30 | `idea` → `draft` | /sdd-story | Product spec generated; open questions left for review |
+| 2026-05-31 | `draft` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps |
+| 2026-05-31 | product-spec retroactive review | /sdd-review | All 5 open questions resolved; product spec approved. Status unchanged (already implementation-ready). |
+| 2026-05-31 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — insights package.json and pnpm-lock.yaml updated |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec upgrade-nextjs15`_
+- [Implementation Spec](implementation-spec.md) — 7 steps, generated 2026-05-31
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -62,14 +65,13 @@ The immediate fix applied was to update the Dockerfile CMD and static COPY to us
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| xstockstrat-insights owner | Analytics display accuracy, SSE polling resilience, no regression on upgrade |
-| xstockstrat-config-ui owner | Config mutation safety, direct `pg` access still works, no regression on upgrade |
+| xstockstrat-insights owner | Analytics display accuracy, SSE polling resilience, read-only access pattern |
+| xstockstrat-config-ui owner | Config mutation safety, environment scope correctness, no secret values rendered in UI |
 
 ## Next Action
 
-`/sdd-review upgrade-nextjs15 product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-review upgrade-nextjs15 impl-spec` — validate implementation spec, then `/sdd-execute upgrade-nextjs15`
