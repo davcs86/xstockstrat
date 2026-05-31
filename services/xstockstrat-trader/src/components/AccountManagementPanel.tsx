@@ -2,7 +2,8 @@
 
 import React from 'react';
 import { useAccountContext } from '@/context/AccountContext';
-import { BASE_PATH } from '@/lib/basepath';
+import { tradingClient } from '@/lib/browserClients';
+import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -14,8 +15,8 @@ import {
   SelectValue,
 } from './ui/select';
 
-function brokerLabel(brokerType: number): string {
-  return brokerType === 2 ? 'IBKR' : 'Alpaca';
+function brokerLabel(brokerType: BrokerType): string {
+  return brokerType === BrokerType.IBKR ? 'IBKR' : 'Alpaca';
 }
 
 export function AccountManagementPanel() {
@@ -58,13 +59,13 @@ export function AccountManagementPanel() {
   async function handleRemove(accountId: string) {
     setRemoving(true);
     try {
-      await fetch(`${BASE_PATH}/api/accounts/${accountId}`, { method: 'DELETE' });
+      await tradingClient.deregisterBrokerAccount({ accountId });
       const remaining = accounts.find(
-        (a) => a.is_active && a.account_id !== accountId,
+        (a) => a.isActive && a.id !== accountId,
       );
       await refreshAccounts();
       if (selectedAccountId === accountId) {
-        setSelectedAccountId(remaining?.account_id ?? null);
+        setSelectedAccountId(remaining?.id ?? null);
       }
     } finally {
       setRemoving(false);
@@ -76,9 +77,9 @@ export function AccountManagementPanel() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const brokerTypeNum = parseInt(brokerType, 10);
-      const credentials_json =
-        brokerTypeNum === 2
+      const brokerTypeNum = parseInt(brokerType, 10) as BrokerType;
+      const credentialsJson =
+        brokerTypeNum === BrokerType.IBKR
           ? JSON.stringify({
               consumer_key: consumerKey,
               access_token: accessToken,
@@ -87,20 +88,15 @@ export function AccountManagementPanel() {
             })
           : JSON.stringify({ api_key: apiKey, api_secret: apiSecret });
 
-      const res = await fetch(`${BASE_PATH}/api/accounts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          display_name: displayName,
-          broker_type: brokerTypeNum,
-          is_paper: isPaper,
-          credentials_json,
-        }),
+      const { account } = await tradingClient.registerBrokerAccount({
+        displayName,
+        brokerType: brokerTypeNum,
+        isPaper,
+        credentialsJson,
       });
-      const data = await res.json();
       await refreshAccounts();
-      if (data.account?.account_id) {
-        setSelectedAccountId(data.account.account_id);
+      if (account?.id) {
+        setSelectedAccountId(account.id);
       }
       setDisplayName('');
       setBrokerType('1');
@@ -122,25 +118,25 @@ export function AccountManagementPanel() {
           <div className="space-y-2">
             {accounts.map((account) => (
               <div
-                key={account.account_id}
-                className={`flex items-center justify-between gap-2 p-2 rounded-md border${!account.is_active ? ' opacity-50' : ''}`}
+                key={account.id}
+                className={`flex items-center justify-between gap-2 p-2 rounded-md border${!account.isActive ? ' opacity-50' : ''}`}
               >
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-sm font-medium truncate">{account.display_name}</span>
-                  <Badge variant="secondary">{brokerLabel(account.broker_type)}</Badge>
-                  <Badge variant="secondary">{account.is_paper ? 'Paper' : 'Live'}</Badge>
+                  <span className="text-sm font-medium truncate">{account.displayName}</span>
+                  <Badge variant="secondary">{brokerLabel(account.brokerType)}</Badge>
+                  <Badge variant="secondary">{account.isPaper ? 'Paper' : 'Live'}</Badge>
                 </div>
-                {account.is_active &&
-                  (confirmingId === account.account_id ? (
+                {account.isActive &&
+                  (confirmingId === account.id ? (
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       <p className="text-xs text-destructive text-right max-w-[160px]">
-                        Deregister {account.display_name}? In-flight orders will complete but no new orders can be placed.
+                        Deregister {account.displayName}? In-flight orders will complete but no new orders can be placed.
                       </p>
                       <div className="flex gap-1">
                         <Button
                           size="sm"
                           variant="destructive"
-                          onClick={() => handleRemove(account.account_id)}
+                          onClick={() => handleRemove(account.id)}
                           disabled={removing}
                         >
                           Confirm
@@ -160,7 +156,7 @@ export function AccountManagementPanel() {
                       size="sm"
                       variant="ghost"
                       className="shrink-0"
-                      onClick={() => setConfirmingId(account.account_id)}
+                      onClick={() => setConfirmingId(account.id)}
                     >
                       Remove
                     </Button>

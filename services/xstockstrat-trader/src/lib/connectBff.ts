@@ -17,7 +17,8 @@ import { compressionGzip, compressionBrotli } from '@connectrpc/connect-node';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
-import { tradingClient, portfolioClient, marketDataClient } from '@/lib/connectClients';
+import { NotifyService } from '@xstockstrat/proto/notify/v1/notify_pb';
+import { tradingClient, portfolioClient, marketDataClient, notifyClient } from '@/lib/connectClients';
 import { verifyAccessToken, rolesToAccessScope, generateTraceId, type JwtClaims } from '@/lib/auth';
 
 // ── Auth helpers ──────────────────────────────────────────────────────────
@@ -106,11 +107,26 @@ router.service(MarketDataService, {
   },
 });
 
+router.service(NotifyService, {
+  // Server-streaming: forward the notify StreamAlerts gRPC server-stream to the
+  // browser over the Connect streaming protocol (replaces the old SSE bridge).
+  async *streamAlerts(req, ctx) {
+    const claims = await requireSession(ctx);
+    yield* notifyClient.streamAlerts(
+      { ...req, userId: claims.user_id },
+      { headers: backendHeaders(claims, ctx), signal: ctx.signal },
+    );
+  },
+});
+
 // ── Handler map ───────────────────────────────────────────────────────────
 
-// basePath('/trader') + '/api' + handler.requestPath
-// e.g. /trader/api/trading.v1.TradingService/PlaceOrder
-const PREFIX = '/trader/api';
+// Next.js strips the configured basePath ('/trader') from req.url before it
+// reaches this route handler, so dispatchConnect sees a basePath-relative
+// pathname: '/api' + handler.requestPath (e.g. /api/trading.v1.TradingService/
+// PlaceOrder). Key the map on that — NOT on the basePath-prefixed public URL,
+// which would never match and 404 every RPC.
+const PREFIX = '/api';
 const handlerMap = new Map(router.handlers.map((h) => [PREFIX + h.requestPath, h]));
 
 // ── Web API ↔ Universal adapters ──────────────────────────────────────────

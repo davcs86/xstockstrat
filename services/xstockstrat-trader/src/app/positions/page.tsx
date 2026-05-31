@@ -1,29 +1,16 @@
 'use client';
 import { useState } from 'react';
 import useSWR from 'swr';
-import { BASE_PATH } from '@/lib/basepath';
 import { AppShell } from '@/components/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
+import { portfolioClient } from '@/lib/browserClients';
+import { TradingMode as PbTradingMode } from '@xstockstrat/proto/common/v1/common_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
-
 type TradingMode = 'paper' | 'live';
-
-interface Position {
-  symbol: string;
-  qty: number;
-  avg_entry_price: number;
-  current_price: number;
-  market_value: number;
-  unrealized_pnl: number;
-  unrealized_pnl_pct: number;
-  cost_basis: number;
-  account_id?: string;
-}
 
 function fmtUsd(n: number | undefined | null): string {
   if (n === undefined || n === null || Number.isNaN(Number(n))) return '—';
@@ -41,13 +28,17 @@ export default function PositionsPage() {
   const [mode, setMode] = useState<TradingMode>('paper');
 
   const { data, error, isLoading } = useSWR(
-    `${BASE_PATH}/api/portfolio?trading_mode=${mode}&account_id=${selectedAccountId ?? ''}`,
-    fetcher,
+    ['positions', mode, selectedAccountId],
+    () =>
+      portfolioClient.getPortfolio({
+        tradingMode: mode === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER,
+        ...(selectedAccountId ? { accountId: selectedAccountId } : {}),
+      }),
     { refreshInterval: 10_000 },
   );
 
-  const positions: Position[] = data?.positions ?? [];
-  const totalUnrealized = positions.reduce((sum, p) => sum + Number(p.unrealized_pnl ?? 0), 0);
+  const positions = data?.positions ?? [];
+  const totalUnrealized = positions.reduce((sum, p) => sum + Number(p.unrealizedPnl ?? 0), 0);
 
   return (
     <AppShell>
@@ -123,17 +114,17 @@ export default function PositionsPage() {
                 </TableHeader>
                 <TableBody>
                   {positions.map((p) => {
-                    const pnlPositive = Number(p.unrealized_pnl ?? 0) >= 0;
+                    const pnlPositive = Number(p.unrealizedPnl ?? 0) >= 0;
                     return (
-                      <TableRow key={`${p.account_id ?? ''}-${p.symbol}`}>
+                      <TableRow key={`${p.accountId ?? ''}-${p.symbol}`}>
                         <TableCell className="font-mono font-semibold">{p.symbol}</TableCell>
                         <TableCell className="text-right tabular-nums">{p.qty}</TableCell>
                         <TableCell className="text-right tabular-nums hidden sm:table-cell">
-                          {fmtUsd(p.avg_entry_price)}
+                          {fmtUsd(p.avgEntryPrice)}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums">{fmtUsd(p.current_price)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{fmtUsd(p.currentPrice)}</TableCell>
                         <TableCell className="text-right tabular-nums hidden md:table-cell">
-                          {fmtUsd(p.market_value)}
+                          {fmtUsd(p.marketValue)}
                         </TableCell>
                         <TableCell
                           className={`text-right tabular-nums font-semibold ${
@@ -141,14 +132,14 @@ export default function PositionsPage() {
                           }`}
                         >
                           {pnlPositive ? '+' : ''}
-                          {fmtUsd(p.unrealized_pnl)}
+                          {fmtUsd(p.unrealizedPnl)}
                         </TableCell>
                         <TableCell
                           className={`text-right tabular-nums ${
                             pnlPositive ? 'text-buy' : 'text-destructive'
                           }`}
                         >
-                          {fmtPct(p.unrealized_pnl_pct)}
+                          {fmtPct(p.unrealizedPnlPct)}
                         </TableCell>
                       </TableRow>
                     );

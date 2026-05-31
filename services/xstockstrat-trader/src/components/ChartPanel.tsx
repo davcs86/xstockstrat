@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { BASE_PATH } from '@/lib/basepath';
+import { marketDataClient } from '@/lib/browserClients';
+import { ConnectError } from '@connectrpc/connect';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
@@ -49,10 +50,10 @@ export function ChartPanel() {
 
   // Load symbol list on mount
   useEffect(() => {
-    fetch(`${BASE_PATH}/api/chart`, { method: 'POST' })
-      .then((r) => r.json())
-      .then((data) => {
-        const list: string[] = data.symbols ?? [];
+    marketDataClient
+      .listAssets({ assetClass: 'us_equity', tradableOnly: true })
+      .then((res) => {
+        const list = res.assets.map((a) => a.symbol).filter(Boolean);
         setSymbols(list);
         if (list.length > 0) setSymbol(list[0]);
       })
@@ -113,15 +114,24 @@ export function ChartPanel() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `${BASE_PATH}/api/chart?symbol=${encodeURIComponent(sym)}&timeframe=${tf}&limit=${count}`,
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Failed to load bars');
-      const bars: Bar[] = (data.bars ?? []).sort((a: Bar, b: Bar) => a.time - b.time);
+      const res = await marketDataClient.getBars({
+        symbol: sym,
+        timeframe: tf,
+        page: { pageSize: count },
+      });
+      const bars: Bar[] = res.bars
+        .map((b) => ({
+          time: b.time ? Number(b.time.seconds) : 0,
+          open: b.open,
+          high: b.high,
+          low: b.low,
+          close: b.close,
+          volume: Number(b.volume),
+        }))
+        .sort((a, b) => a.time - b.time);
       seriesRef.current.setData(bars);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof ConnectError ? err.rawMessage : (err as Error).message);
     } finally {
       setLoading(false);
     }
