@@ -838,7 +838,7 @@ New logic is in `src/hooks/` and `src/lib/` — no coverage threshold applies; E
 
 ### Step 9 — test: Verify tsc and SWR removal for xstockstrat-insights and xstockstrat-config-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`, `xstockstrat-config-ui`
 
 **Reviewers**: xstockstrat-insights service owner — Analytics display accuracy, SSE polling resilience, read-only access pattern; xstockstrat-config-ui service owner — Config mutation safety, environment scope correctness, no secret values rendered in UI

@@ -143,6 +143,13 @@
 - Files modified: `insights/src/app/page.tsx`, `insights/src/app/strategies/page.tsx`, `insights/src/app/strategies/[id]/page.tsx`, `trader/src/app/api/auth/login/route.ts`, `insights/src/app/api/auth/login/route.ts`, `config-ui/app/api/auth/login/route.ts`, `trader/src/lib/identity.ts`, `insights/src/lib/identity.ts`, `config-ui/app/lib/identity.ts`, `config-ui/app/api/audit/route.ts`
 - Deviations: `AuthTokenResponse` not `AuthenticateUserResponse`/`RefreshTokenResponse`; `claims` cast via `unknown`.
 
+### Step 9 — Verify tsc and SWR removal for xstockstrat-insights and xstockstrat-config-ui [done]
+- insights tsc --noEmit: 0 errors ✓; no swr, no catch any, no any in hooks ✓
+- config-ui tsc --noEmit: 0 errors ✓; no swr, no catch any, no any in hooks ✓
+- E2E tests: skipped (no running backend in execution environment)
+- Files modified: (spec/context only)
+- Deviations: E2E tests require live backend; all static checks pass.
+
 ### Step 8 — Verify tsc and SWR removal for xstockstrat-trader [done]
 - tsc --noEmit: 0 errors ✓
 - No `swr` in src/ or package.json ✓
