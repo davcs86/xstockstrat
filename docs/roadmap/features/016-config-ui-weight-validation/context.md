@@ -41,3 +41,22 @@
   `max_value`; optional `validation` field on `ConfigKey`. Non-breaking addition.
 - Affected services updated: `packages/proto`, `xstockstrat-config`, `xstockstrat-ui`.
 - Approval gates updated: proto reviewer required; 1 service owner (non-breaking addition).
+
+## Session 2026-06-01T00:02:00Z — sdd-spec
+
+- Generated implementation-spec.md with 6 steps. Status: spec-ready → implementation-ready.
+- Key codebase findings:
+  - `ConfigKeyMeta` message in `packages/proto/config/v1/config.proto` at line 99; highest field number is `7` (`trading_mode`). New `validation` field will use `= 8`; new `ValueType` enum and `ValidationRule` message added as new top-level definitions.
+  - `listKeys` handler in `services/xstockstrat-config/src/grpc/configServiceImpl.ts` at line 270. DB `value_type` column stores storage type (`string`, `int`, etc.), not semantic type — validation field must be computed from key name via a static registry (not from a DB column).
+  - `analysis.signals.source_weights` key is seeded in `migrations/003_analysis_signal_source_weights.up.sql` with `value_type = 'string'` (storage type only); no existing validation bounds in DB.
+  - Feature 045 (`ui-consolidation-nextjs`) is in `draft` status and `services/xstockstrat-ui` does not yet exist. Steps 5–6 target `services/xstockstrat-config-ui/app/[namespace]/page.tsx` (the current weight editor). A rebase will be required if 045 merges before this branch completes.
+  - Inline editor in `app/[namespace]/page.tsx` at line 74: `handleSave` calls `configClient.setConfig(...)` unconditionally — validation gate (FR-6) must be added at the top of this function before the RPC call.
+
+## Session 2026-06-01 — sdd-review impl-spec + decisions
+
+- impl-spec review: PASS (0 failures, 4 advisory warnings).
+- **W1 FIXED in spec**: `buf breaking` baseline changed from `feature/config-ui-weight-validation` (self-comparison, trivially passes) to `main-dev`. Always use `main-dev` as the baseline.
+- W2 (environment integer mapping): executor checks existing mapping at `configServiceImpl.ts` lines 281–289 before copying the pattern to confirm DB column string values.
+- W3 (Steps 5–6 retarget): **Decision: rebase and re-spec after 045 merges.** Steps 5–6 currently target `services/xstockstrat-config-ui/` — after 045 they must target `services/xstockstrat-ui/src/app/config-ui/`. After 045 merges to `main-dev`, rebase `feature/config-ui-weight-validation` on `main-dev` and re-run `/sdd-spec config-ui-weight-validation` to regenerate Steps 5–6 with accurate xstockstrat-ui paths. Steps 1–4 (proto, stubs, config service, unit tests) are stable and do not need re-spec.
+- W4 (mock-backend.ts overlap with 019): execution order (019 before 016) enforces this; coordinate at Step 6 to include both features' mock additions.
+- Execution position in Stream 2: 044 → 046 → 045 → 003 → 019 → **016**.
