@@ -1,18 +1,13 @@
 'use client';
-import useSWR from 'swr';
 import Link from 'next/link';
 import type { TradingMode } from '@/app/page';
 import { useAccountContext } from '@/context/AccountContext';
-import { tradingClient, portfolioClient } from '@/lib/browserClients';
+import { useOrders } from '@/hooks/useOrders';
+import { usePortfolio } from '@/hooks/usePortfolio';
 import { OrderSide, OrderStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
-import { TradingMode as PbTradingMode } from '@xstockstrat/proto/common/v1/common_pb';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './ui/table';
-
-function toPbMode(mode: TradingMode): PbTradingMode {
-  return mode === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER;
-}
 
 const STATUS_VARIANT: Record<string, 'info' | 'warning' | 'buy' | 'secondary' | 'destructive'> = {
   NEW: 'info',
@@ -27,15 +22,7 @@ const STATUS_VARIANT: Record<string, 'info' | 'warning' | 'buy' | 'secondary' | 
 // ── OrderBook ──────────────────────────────────────────────────────────────
 export function OrderBook({ mode }: { mode: TradingMode }) {
   const { selectedAccountId } = useAccountContext();
-  const { data, error, isLoading } = useSWR(
-    ['orders', mode, selectedAccountId],
-    () =>
-      tradingClient.listOrders({
-        tradingMode: toPbMode(mode),
-        page: { pageSize: 50 },
-      }),
-    { refreshInterval: 5000 },
-  );
+  const { data, error, isLoading } = useOrders(mode, selectedAccountId);
 
   return (
     <Card>
@@ -106,15 +93,7 @@ export function OrderBook({ mode }: { mode: TradingMode }) {
 // ── PortfolioSummary ───────────────────────────────────────────────────────
 export function PortfolioSummary({ mode }: { mode: TradingMode }) {
   const { selectedAccountId } = useAccountContext();
-  const { data, isLoading, error } = useSWR(
-    ['portfolio', mode, selectedAccountId],
-    () =>
-      portfolioClient.getPortfolio({
-        tradingMode: toPbMode(mode),
-        ...(selectedAccountId ? { accountId: selectedAccountId } : {}),
-      }),
-    { refreshInterval: 10000 },
-  );
+  const { data, isLoading, error } = usePortfolio(mode, selectedAccountId);
 
   if (isLoading) return (
     <Card>

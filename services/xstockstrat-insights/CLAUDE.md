@@ -18,8 +18,8 @@ Frontend pattern — see `docs/patterns/docker-build.md` for the base + deps + b
 
 ```
 Browser (React Client Components)
-  └── SWR → /api/analysis/*, /api/indicators/*, /api/marketdata/*
-        └── Next.js Route Handlers (server-side gRPC clients)
+  └── TanStack Query typed hooks (src/hooks/) → browserClients.ts (connect-web)
+        └── Connect BFF  /insights/api/[...connect]  (connectBff.ts)
               ├── gRPC (H2C) → xstockstrat-analysis:50056
               ├── gRPC (H2C) → xstockstrat-indicators:50054
               ├── gRPC (H2C) → xstockstrat-marketdata:50053
@@ -29,9 +29,21 @@ Browser (React Client Components)
 
 ## gRPC Client
 
-- Client factory: `src/lib/connectClients.ts` — uses `createGrpcTransport` (H2C HTTP/2) with connect v2 service descriptors from `@xstockstrat/proto/*_pb` files
-- All API route handlers import typed clients from this file; no `@grpc/grpc-js` dependency
-- Dependencies: `@connectrpc/connect`, `@connectrpc/connect-node`, `@bufbuild/protobuf`
+- **Server (BFF → backend):** `src/lib/connectClients.ts` — uses `createGrpcTransport` (H2C HTTP/2) with connect v2 service descriptors; no `@grpc/grpc-js` dependency.
+- **Browser (Client Components → BFF):** `src/lib/browserClients.ts` — connect-web clients. Components access them via named hooks in `src/hooks/`; never import `browserClients.ts` directly from a Client Component.
+- Dependencies: `@connectrpc/connect`, `@connectrpc/connect-node`, `@connectrpc/connect-web`, `@bufbuild/protobuf`, `@tanstack/react-query`, `@normy/react-query`
+
+## Client Hooks
+
+All client-side data access goes through named typed hooks in `src/hooks/`:
+
+| Hook file | Exported hooks | Query key |
+|---|---|---|
+| `useStrategies.ts` | `useStrategies`, `useStrategyReport` | `['analysis-strategies']`, `['analysis-report', id]` |
+| `useBacktest.ts` | `useRunBacktest` | mutation |
+| `useAccountPortfolios.ts` | `useAccountPortfolios` | `['acct-portfolios', accountId]` |
+
+Provider: `src/lib/queryClient.ts` + `src/app/providers.tsx`. Normalization keys: `orderId`, `strategyId`.
 
 ## Dependencies
 

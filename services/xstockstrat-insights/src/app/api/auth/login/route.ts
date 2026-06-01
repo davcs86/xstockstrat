@@ -9,10 +9,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'email and password are required' }, { status: 400 });
   }
   try {
-    const data = (await identityClient.authenticateUser({
+    const data = await identityClient.authenticateUser({
       email: body.email,
       password: body.password,
-    })) as any;
+    });
     const response = NextResponse.json({ ok: true });
     setSessionCookies(
       response,

@@ -17,6 +17,17 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ### Features
 - upgrade-nextjs15: Upgrade `xstockstrat-insights` and `xstockstrat-config-ui` from Next.js 14.2.x to Next.js 15.x (the version already used by `xstockstrat-trader`). The current workaround for the pnpm workspace standalone path issue (subdirectory CMD and static COPY paths) works correctly but leaves two services on an older, unsupported Next.js major version. Upgrading aligns all three frontends on the same major version and eliminates the version split.
+- client-api-pattern: Standardise the **client-side** API layer across all three Next.js frontends (xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui): replace SWR with a single typed data-fetching + cache-normalization stack (library choice deferred to review), wrap every read and write in named typed hooks backed by generated `@xstockstrat/proto` types, and eliminate `any` from request/response boundaries. The server-side Connect-RPC clients are already typed with `@xstockstrat/proto`, so this feature is scoped to the client→route-handler boundary only.
+
+### Summary
+6 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-06-01
+
+### Features
+- upgrade-nextjs15: Upgrade `xstockstrat-insights` and `xstockstrat-config-ui` from Next.js 14.2.x to Next.js 15.x (the version already used by `xstockstrat-trader`). The current workaround for the pnpm workspace standalone path issue (subdirectory CMD and static COPY paths) works correctly but leaves two services on an older, unsupported Next.js major version. Upgrading aligns all three frontends on the same major version and eliminates the version split.
 
 ### Summary
 1 commits, 0 feature merges since last promotion.

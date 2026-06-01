@@ -73,3 +73,11 @@
 - Pre-execution note in impl spec updated: Steps 7–10 now require both a service path change
   (xstockstrat-insights → xstockstrat-ui) and an API pattern change (gRPC + connect-query-es).
 - Re-run `/sdd-spec formula-management-ui` after both 044 and 045 merge.
+
+## Session 2026-06-01 — re-spec plan confirmed
+
+- Decision: Option Y — wait for 044, 045, and 046 to all merge before executing any step of 003.
+- Rationale: re-spec will regenerate all 12 steps targeting `xstockstrat-ui`; Steps 1–5 are valid now but merging them independently would create a short-lived PR that adds proto/DB/gRPC without any UI surface, increasing rebase overhead later.
+- **Action**: after 044+045+046 merge to `main-dev`, rebase `feature/formula-management-ui` on `main-dev`, then re-run `/sdd-spec formula-management-ui` to regenerate the impl spec end-to-end against the consolidated service.
+- @monaco-editor/react: the re-spec will include it in the `xstockstrat-ui/package.json` at Step 1 (alongside the connect-query-es deps from 044).
+- Execution position in Stream 2: 044 → 046 → 045 → **003** → 019 → 016.

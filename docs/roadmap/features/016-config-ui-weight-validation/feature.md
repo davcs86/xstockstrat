@@ -1,6 +1,6 @@
 # Feature: config-ui-weight-validation
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/config-ui-weight-validation`
 **Created**: 2026-05-23
 **Last Updated**: 2026-06-01
@@ -14,13 +14,14 @@
 | 2026-05-23 | `idea` | backlog | Captured during 007-signal-source-weighting review |
 | 2026-06-01 | `idea` → `draft` | /sdd-story | Product spec generated from preliminary notes |
 | 2026-06-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved. 3 OQs resolved: Option B (proto-declared ValidationRule), key detection N/A, must follow 045 (targets xstockstrat-ui). |
+| 2026-06-01 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec config-ui-weight-validation`_
+- [Implementation Spec](implementation-spec.md) — numbered steps with exact file/symbol references
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -39,8 +40,8 @@ re-run /sdd-spec if the registry changes.)_
 |---|---|
 | Proto Reviewer | Field number uniqueness, no breaking changes, `buf lint` + `buf breaking` passes |
 | `xstockstrat-config` owner | Config key naming, WatchConfig stream stability, validation field population correctness |
-| `xstockstrat-ui` owner (`test`) | Config mutation safety, validation UX correctness, no secret values rendered in UI |
+| `xstockstrat-config-ui` owner (`test`) | Config mutation safety, validation UX correctness, no secret values rendered in UI |
 
 ## Next Action
 
-`/sdd-spec config-ui-weight-validation` — generate implementation spec from the approved product spec
+`/sdd-review config-ui-weight-validation impl-spec` — validate implementation spec, then `/sdd-execute config-ui-weight-validation`
