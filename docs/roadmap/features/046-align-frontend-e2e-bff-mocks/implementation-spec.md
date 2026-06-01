@@ -1,6 +1,6 @@
 # Implementation Spec: align-frontend-e2e-bff-mocks
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-06-01
 **Feature**: `docs/roadmap/features/046-align-frontend-e2e-bff-mocks/feature.md`
 **Total Steps**: 8
@@ -580,7 +580,7 @@ Confirms all three CLAUDE.md files contain the section.
 
 ### Step 8 — test: cross-frontend CI validation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**: none (verification only)
 
