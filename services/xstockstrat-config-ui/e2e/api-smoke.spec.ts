@@ -2,22 +2,23 @@ import { test, expect, type Page } from '@playwright/test';
 import { SignJWT } from 'jose';
 
 /**
- * API smoke tests for xstockstrat-config-ui Next.js route handlers.
+ * BFF smoke tests for the Connect-RPC gateway in xstockstrat-config-ui.
  *
- * These tests call GET /api/config and POST /api/config via Playwright's
- * page.request (BrowserContext request context).  The route handler uses the
- * Connect-RPC client which points at the mock backend started in globalSetup.
+ * The mock backend (started in globalSetup on port 9093) handles ListKeys and
+ * SetConfig and returns pre-configured keys.  These tests call the BFF via
+ * browser-level fetch (page.evaluate) to avoid the Next.js dev-server
+ * Transfer-Encoding quirk that breaks Playwright's undici-based APIRequestContext.
  *
- * Assertions are scoped to the exact fields the [namespace]/page.tsx component
- * consumes so that any shape mismatch between the route and the UI is caught.
+ * Auth cookie is injected directly so the middleware allows the BFF call through.
  *
- * Auth cookies are injected via addAuthCookie() so each test exercises the
- * authenticated code path.  The auth.spec.ts file covers the unauthenticated
- * (redirect/401) and login/logout flows separately.
+ * The tests assert on the exact shape that [namespace]/page.tsx (NamespacePage)
+ * consumes so that any backend-to-UI contract mismatch is caught here first.
  */
 
 const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
 const BASE_URL = 'http://localhost:3002';
+const CONFIG_BFF = '/config-ui/api/xstockstrat.config.v1.ConfigService/ListKeys';
+const SET_CONFIG_BFF = '/config-ui/api/xstockstrat.config.v1.ConfigService/SetConfig';
 
 async function addAuthCookie(page: Page): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
@@ -37,6 +38,25 @@ async function addAuthCookie(page: Page): Promise<void> {
   ]);
 }
 
+async function callBff(
+  page: Page,
+  url: string,
+  body: Record<string, unknown> = {},
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  return page.evaluate(
+    async ({ url, body }) => {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const responseBody = await res.json() as Record<string, unknown>;
+      return { status: res.status, body: responseBody };
+    },
+    { url, body },
+  );
+}
+
 test.describe('GET /api/config — namespace config table data contract', () => {
   /**
    * [namespace]/page.tsx (NamespacePage) accesses:
@@ -51,113 +71,98 @@ test.describe('GET /api/config — namespace config table data contract', () => 
    */
   test('returns { keys: [] } wrapper matching the ListKeysResponse interface', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/config-ui/api/config?namespace=platform&env=dev&mode=paper');
-    expect(res.status()).toBe(200);
-
-    const body = await res.json();
-    // Component does: const data: ListKeysResponse = await fetch(...).then(r => r.json())
-    // then: setKeys(data.keys ?? [])
+    await page.goto('/config-ui/login');
+    const { status, body } = await callBff(page, CONFIG_BFF, { namespace: 'platform', environment: 1, tradingMode: 0 });
+    expect(status).toBe(200);
     expect(body).toHaveProperty('keys');
     expect(Array.isArray(body.keys)).toBe(true);
   });
 
   test('each key has all ConfigKey interface fields', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/config-ui/api/config?namespace=platform&env=dev&mode=paper');
-    const { keys } = await res.json();
+    await page.goto('/config-ui/login');
+    const { body } = await callBff(page, CONFIG_BFF, { namespace: 'platform', environment: 1, tradingMode: 0 });
+    const keys = body.keys as Array<Record<string, unknown>>;
 
     expect(keys.length).toBeGreaterThan(0);
     for (const k of keys) {
       expect(k).toHaveProperty('key');           // row key + displayed in Key column
       expect(k).toHaveProperty('defaultValue');  // displayed in Value column
       expect(k).toHaveProperty('description');   // Description column
-      expect(k).toHaveProperty('isSecret');      // boolean gate — must be boolean
-      expect(typeof k.isSecret).toBe('boolean');
+      // isSecret is a proto3 bool — false (zero value) is omitted from JSON;
+      // absent means false, which is the correct semantic for the component
+      expect(typeof k.isSecret === 'boolean' || k.isSecret === undefined).toBe(true);
     }
   });
 
   test('non-secret key: defaultValue is a readable string (not [secret])', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/config-ui/api/config?namespace=platform&env=dev&mode=paper');
-    const { keys } = await res.json();
+    await page.goto('/config-ui/login');
+    const { body } = await callBff(page, CONFIG_BFF, { namespace: 'platform', environment: 1, tradingMode: 0 });
+    const keys = body.keys as Array<Record<string, unknown>>;
 
-    const nonSecret = keys.find((k: { isSecret: boolean }) => !k.isSecret);
+    const nonSecret = keys.find((k) => !k.isSecret);
     expect(nonSecret).toBeDefined();
-    // Component renders k.defaultValue directly when isSecret is false
-    // It must be a string the operator can read and edit
-    expect(typeof nonSecret.defaultValue).toBe('string');
-    expect(nonSecret.defaultValue).not.toBe('[secret]');
+    expect(typeof nonSecret!.defaultValue).toBe('string');
+    expect(nonSecret!.defaultValue).not.toBe('[secret]');
   });
 
   test('secret key: isSecret is true and value is masked', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/config-ui/api/config?namespace=platform&env=dev&mode=paper');
-    const { keys } = await res.json();
+    await page.goto('/config-ui/login');
+    const { body } = await callBff(page, CONFIG_BFF, { namespace: 'platform', environment: 1, tradingMode: 0 });
+    const keys = body.keys as Array<Record<string, unknown>>;
 
-    const secretKey = keys.find((k: { isSecret: boolean }) => k.isSecret);
+    const secretKey = keys.find((k) => k.isSecret);
     if (!secretKey) {
-      // Mock may not include a secret key for every namespace — skip if absent
       test.skip();
       return;
     }
 
     expect(secretKey.isSecret).toBe(true);
-    // Component renders <span>[secret]</span> and disables the Edit button for secrets
-    // The route should return '[secret]' as the defaultValue for secret keys
     expect(secretKey.defaultValue).toBe('[secret]');
   });
 
   test('env and mode params are forwarded to ListKeys as proto enums', async ({ page }) => {
     await addAuthCookie(page);
-    // GET with production/live scope — the mock returns the same keys regardless,
-    // but the route must not error when receiving these params
-    const res = await page.request.get('/config-ui/api/config?namespace=platform&env=production&mode=live');
-    expect(res.status()).toBe(200);
-
-    const body = await res.json();
+    await page.goto('/config-ui/login');
+    const { status, body } = await callBff(page, CONFIG_BFF, { namespace: 'platform', environment: 2, tradingMode: 2 });
+    expect(status).toBe(200);
     expect(body).toHaveProperty('keys');
   });
 });
 
 test.describe('POST /api/config — inline edit save flow', () => {
   /**
-   * NamespacePage handleSave() sends:
-   *   { namespace, key, value, env, mode, author: 'config-ui', reason: 'Updated via config-ui' }
-   * then re-fetches GET /api/config to refresh the table.
+   * NamespacePage handleSave() sends SetConfig via the browser configClient.
+   * Verifies the BFF accepts the payload and returns a success response.
    */
   test('accepts a valid SetConfig payload and returns 200', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.post('/config-ui/api/config', {
-      data: {
-        namespace: 'platform',
-        key: 'platform.log_level',
-        value: 'debug',
-        env: 'dev',
-        mode: 'paper',
-        author: 'config-ui',
-        reason: 'Updated via config-ui',
-      },
+    await page.goto('/config-ui/login');
+    const { status } = await callBff(page, SET_CONFIG_BFF, {
+      namespace: 'platform',
+      key: 'platform.log_level',
+      value: { value: { case: 'stringVal', value: 'debug' } },
+      reason: 'Updated via config-ui',
+      environment: 1,
+      tradingMode: 0,
     });
-    expect(res.status()).toBe(200);
+    expect(status).toBe(200);
   });
 
   test('SetConfig does not return an error field on success', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.post('/config-ui/api/config', {
-      data: {
-        namespace: 'platform',
-        key: 'platform.log_level',
-        value: 'warn',
-        env: 'dev',
-        mode: 'paper',
-        author: 'config-ui',
-        reason: 'Updated via config-ui',
-      },
+    await page.goto('/config-ui/login');
+    const { status, body } = await callBff(page, SET_CONFIG_BFF, {
+      namespace: 'platform',
+      key: 'platform.log_level',
+      value: { value: { case: 'stringVal', value: 'warn' } },
+      reason: 'Updated via config-ui',
+      environment: 1,
+      tradingMode: 0,
     });
-    expect(res.status()).toBe(200);
-    const body = await res.json();
-    // A successful save must not have an error field — the component doesn't
-    // check for it but an error here would silently fail the operator's save
+    expect(status).toBe(200);
     expect(body).not.toHaveProperty('error');
   });
 });

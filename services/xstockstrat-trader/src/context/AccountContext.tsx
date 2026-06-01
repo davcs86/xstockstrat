@@ -1,15 +1,10 @@
 'use client';
 
 import React from 'react';
-import { BASE_PATH } from '@/lib/basepath';
+import { tradingClient } from '@/lib/browserClients';
+import type { BrokerAccount } from '@xstockstrat/proto/trading/v1/trading_pb';
 
-export type BrokerAccount = {
-  account_id: string;
-  display_name: string;
-  broker_type: number; // 1=ALPACA, 2=IBKR
-  is_paper: boolean;
-  is_active: boolean;
-};
+export type { BrokerAccount };
 
 export type AccountContextValue = {
   accounts: BrokerAccount[];
@@ -26,14 +21,12 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   const fetchAccounts = React.useCallback(async () => {
     try {
-      const res = await fetch(`${BASE_PATH}/api/accounts`);
-      const data = await res.json();
-      const fetched: BrokerAccount[] = data.accounts ?? [];
+      const { accounts: fetched } = await tradingClient.listBrokerAccounts({});
       setAccounts(fetched);
       setSelectedAccountId((prev) => {
         if (prev) return prev;
-        const firstActive = fetched.find((a) => a.is_active);
-        return firstActive?.account_id ?? null;
+        const firstActive = fetched.find((a) => a.isActive);
+        return firstActive?.id ?? null;
       });
     } catch {
       // non-fatal — leave existing state intact
