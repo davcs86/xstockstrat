@@ -49,3 +49,26 @@
 - Product spec updated: FR-7 split into FR-7 (separate /auth/oauth-login route) and FR-8
   (identity HTTP server removal + agent redirect update); FR-9 (styling). Affected services
   now includes `xstockstrat-agent`. Config key changes now documents `UI_BASE_URL`.
+
+## Session 2026-06-01T00:02:00Z — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
+- Key codebase findings:
+  - `xstockstrat-ui` does not yet exist (feature 045 is still `draft`). Spec targets post-045 consolidated service; all step instructions include a note that execution requires 045 to be `launched` first.
+  - `xstockstrat-identity` HTTP Express server is already absent (`services/xstockstrat-identity/src/index.ts` is gRPC-only with no `express` or HTTP listen calls). FR-8 is already satisfied for identity — Step 5 is a verification-only no-op unless feature 018 adds an Express server that must be removed.
+  - Feature 018 (`agent-mcp-oauth`) has not landed yet — no `/oauth/authorize` handler exists in `services/xstockstrat-agent/app/main.py`. Step 6 includes a conditional instruction: add `UI_BASE_URL` env var wiring now; update the redirect target once 018 lands.
+  - All three existing per-basePath login pages are confirmed at `services/xstockstrat-trader/src/app/login/page.tsx`, `services/xstockstrat-insights/src/app/login/page.tsx`, `services/xstockstrat-config-ui/app/login/page.tsx`. All three middleware files redirect to `/login` (not `/auth/login`) — Step 3 updates all of them.
+  - Cookie `path: '/'` is already set in `services/xstockstrat-trader/src/lib/auth.ts` line 43 — platform-wide JWT is compatible with the existing cookie implementation; no change needed to `lib/auth.ts`.
+  - `UI_BASE_URL` confirmed absent in `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml` (grep returned 0 matches).
+
+## Session 2026-06-01 — sdd-review impl-spec + decisions
+
+- impl-spec review: PASS (0 failures, 7 advisory warnings).
+- W1 (POST target path): executor confirms `/auth/login` is served at domain root in consolidated service (not under any basePath) at Step 1 start.
+- W2 (per-basePath auth route deletions not in Files): advisory; executor deletes them per Step 2 instruction 4.
+- W3 (middleware.ts path uncertainty): executor runs `find services/xstockstrat-ui -name "middleware.ts"` before Step 3 — confirmed single file per 045 sdd-spec session.
+- W4 (main.py conditional): accepted; TODO comment added if 018 not landed.
+- W5 (mock-backend.ts overlap with 016): **ensure 019 executes before 016**. At Step 8, after adding auth mock entries, rebase on 016 branch (or coordinate) so both features' mock additions are present in the final file.
+- W5 (Step 5 typed `service` but NO-OP): advisory; no spec change.
+- W6 (xstockstrat-agent no paired test): advisory; env var wiring is minimal risk.
+- Hard dependency: execute after 045 is merged. Execution position: 044 → 046 → 045 → 003 → **019** → 016.
