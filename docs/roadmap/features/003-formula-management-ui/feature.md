@@ -3,7 +3,7 @@
 **Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/formula-management-ui`
 **Created**: 2026-05-10
-**Last Updated**: 2026-05-10T00:00:00Z
+**Last Updated**: 2026-06-01
 
 ---
 
@@ -13,7 +13,8 @@
 |---|---|---|---|
 | 2026-05-10 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 advisory warning) |
-| 2026-05-10 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
+| 2026-05-10 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
+| 2026-06-01 | `implementation-ready` (spec updated) | /sdd-review | Added to Stream 2; FR-13 corrected to gRPC transport; impl spec Steps 6–10 flagged for pre-execution revision after 044 lands. |
 
 ---
 
@@ -42,4 +43,4 @@ _(Snapshot finalized by /sdd-spec on 2026-05-10. Re-run /sdd-spec to update if r
 
 ## Next Action
 
-`/sdd-review formula-management-ui impl-spec` — validate implementation spec, then `/sdd-execute formula-management-ui`
+Wait for `044-client-api-pattern` to merge, then re-run `/sdd-spec formula-management-ui` to regenerate Steps 6–10 with the gRPC + connect-query-es pattern, then `/sdd-execute formula-management-ui`.

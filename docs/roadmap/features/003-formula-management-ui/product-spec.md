@@ -26,7 +26,12 @@ FR-9. The UI must support creating a new formula (name, description, source code
 FR-10. The UI must support editing an owned formula's name, description, source, and is_public flag.
 FR-11. The UI must support deleting an owned formula with a confirmation step.
 FR-12. The UI must support test-executing a formula inline (send JSON input, display output/stderr) on the formula detail page.
-FR-13. All UI→backend calls must go through Next.js API routes that proxy to the indicators Connect-RPC HTTP endpoint (port 8054). The API routes read `user_id` from the `X-User-Id` request header; when absent, a `'dev-user'` fallback is used in non-production environments.
+FR-13. All UI→backend calls must go through Next.js API route handlers (BFF) that call
+`xstockstrat-indicators` via `@connectrpc/connect-node` gRPC transport on `INDICATORS_ENDPOINT`
+(`host:port`, no HTTP 80xx port). After feature `044-client-api-pattern` lands, the client
+layer uses typed `connect-query-es` + TanStack Query hooks; the BFF route handlers remain
+server-side only. API route handlers read `user_id` from the `X-User-Id` request header; when
+absent, a `'dev-user'` fallback is used in non-production environments.
 
 ## Out of Scope
 
@@ -110,6 +115,15 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 8. Editing a formula via the UI updates the record in the database.
 9. Deleting a formula via the UI removes it from the database and the list.
 10. Test-executing a formula from the detail page returns the formula output or a structured error within the sandbox timeout.
+
+## Merge-order Dependencies
+
+- **Must execute after `044-client-api-pattern`** is merged: the xstockstrat-insights API
+  layer is being refactored by 044 (SWR → connect-query-es + TanStack Query hooks); 003's
+  formula hooks and BFF route handlers must follow 044's established pattern.
+- **Must execute before `045-ui-consolidation-nextjs`**: 003 targets `xstockstrat-insights`;
+  after 045 consolidates insights into `xstockstrat-ui`, the target service no longer exists
+  as a standalone directory. Execute 003 first, then 045 absorbs the completed formula UI.
 
 ## Open Questions
 
