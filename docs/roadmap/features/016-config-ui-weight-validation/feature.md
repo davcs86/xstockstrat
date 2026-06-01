@@ -1,9 +1,9 @@
 # Feature: config-ui-weight-validation
 
-**Lifecycle Status**: `idea`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/config-ui-weight-validation`
 **Created**: 2026-05-23
-**Last Updated**: 2026-05-23
+**Last Updated**: 2026-06-01
 
 ---
 
@@ -12,23 +12,35 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-23 | `idea` | backlog | Captured during 007-signal-source-weighting review |
+| 2026-06-01 | `idea` → `draft` | /sdd-story | Product spec generated from preliminary notes |
+| 2026-06-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved. 3 OQs resolved: Option B (proto-declared ValidationRule), key detection N/A, must follow 045 (targets xstockstrat-ui). |
+
+---
+
+## Artifacts
+
+- [Product Spec](product-spec.md) — requirements and governance
+- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec config-ui-weight-validation`_
+- [Context Log](context.md) — session history, decisions, deviations
 
 ---
 
 ## Summary
 
-Add client-side validation to `xstockstrat-config-ui` so that when an operator edits a key whose value is a JSON weight map (e.g. `analysis.signals.source_weights`), the UI rejects values outside `[0.0, 1.0]` before calling `SetConfig`. Currently the generic inline editor accepts any string; bounds are only enforced server-side in the consuming service.
+Add client-side validation to the config-ui weight editor so that JSON weight map keys (e.g. `analysis.signals.source_weights`) reject values outside `[0.0, 1.0]` before calling `SetConfig`, giving operators immediate feedback instead of silently-clamped server-side results.
 
-## Origin
+## Reviewers
 
-Deferred from feature `007-signal-source-weighting` (Out of Scope). The analysis service clamps out-of-range weights at read time (FR-5), so this is a UX improvement, not a correctness fix.
+_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
+change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
+re-run /sdd-spec if the registry changes.)_
 
-## Notes
-
-- Option A (simple): detect the key name in `[namespace]/page.tsx` and validate JSON values client-side — no backend changes.
-- Option B (principled): add a `validation` field to the `ConfigKey` proto/response so the config service can declare allowed value formats per key; UI validates generically — requires proto + config service changes.
-- Option A is sufficient unless multiple keys need format-specific validation.
+| Role | Review Focus |
+|---|---|
+| Proto Reviewer | Field number uniqueness, no breaking changes, `buf lint` + `buf breaking` passes |
+| `xstockstrat-config` owner | Config key naming, WatchConfig stream stability, validation field population correctness |
+| `xstockstrat-ui` owner (`test`) | Config mutation safety, validation UX correctness, no secret values rendered in UI |
 
 ## Next Action
 
-`/sdd-story config-ui-weight-validation` — write a full product spec when this is prioritized.
+`/sdd-spec config-ui-weight-validation` — generate implementation spec from the approved product spec
