@@ -875,7 +875,7 @@ New logic is in `app/hooks/` and `app/lib/` — no coverage threshold applies; E
 
 ### Step 10 — service: Update CLAUDE.md files to reflect new client-side architecture
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-trader/CLAUDE.md` — modify

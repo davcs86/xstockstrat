@@ -18,8 +18,8 @@ Frontend pattern — see `docs/patterns/docker-build.md` for the base + deps + b
 
 ```
 Browser (React Client Components)
-  └── @connectrpc/connect-web typed clients (src/lib/browserClients.ts)
-        │   SWR-wrapped unary for polling; async-iterator for StreamAlerts
+  └── @connectrpc/connect-web typed clients via TanStack Query hooks (src/hooks/)
+        │   useQuery for polling; useMutation for writes; async-iterator for StreamAlerts
         └── Connect BFF  /trader/api/[...connect]  (connectBff.ts)
               │   requireSession + backendHeaders (x-user-id/-access-scope/-trace-id)
               └── @connectrpc/connect-node gRPC (H2C) →
@@ -33,8 +33,20 @@ Browser (React Client Components)
 ## Connect Clients
 
 - **Server (BFF → backend):** `src/lib/connectClients.ts` — `createGrpcTransport` (H2C HTTP/2) clients used only inside `connectBff.ts`. No `@grpc/grpc-js` dependency.
-- **Browser (Client Components → BFF):** `src/lib/browserClients.ts` — `@connectrpc/connect-web` clients bound to `browserTransport` (`src/lib/connectTransport.ts`, baseUrl `/trader/api`). Components import these; never import `connectClients.ts` (server-only) into a Client Component.
-- Dependencies: `@connectrpc/connect`, `@connectrpc/connect-web`, `@connectrpc/connect-node`, `@bufbuild/protobuf`
+- **Browser (Client Components → BFF):** `src/lib/browserClients.ts` — `@connectrpc/connect-web` clients bound to `browserTransport` (`src/lib/connectTransport.ts`, baseUrl `/trader/api`). Components import these via named hooks in `src/hooks/`; never import `connectClients.ts` (server-only) or `browserClients.ts` directly from a Client Component.
+- Dependencies: `@connectrpc/connect`, `@connectrpc/connect-web`, `@connectrpc/connect-node`, `@bufbuild/protobuf`, `@tanstack/react-query`, `@normy/react-query`
+
+## Client Hooks
+
+All client-side data access goes through named typed hooks in `src/hooks/`:
+
+| Hook file | Exported hooks | Query key |
+|---|---|---|
+| `useOrders.ts` | `useOrders`, `useOrder` | `['orders', mode, accountId]`, `['order', id]` |
+| `usePortfolio.ts` | `usePortfolio`, `usePortfolios`, `usePositions` | `['portfolio', ...]`, `['portfolios', ...]`, `['positions', ...]` |
+| `usePlaceOrder.ts` | `usePlaceOrder` | mutation |
+
+Provider: `src/lib/queryClient.ts` + `src/app/providers.tsx`. Normalization keys: `orderId`, `strategyId`.
 
 ## Dependencies
 

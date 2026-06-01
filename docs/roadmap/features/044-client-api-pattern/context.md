@@ -143,6 +143,13 @@
 - Files modified: `insights/src/app/page.tsx`, `insights/src/app/strategies/page.tsx`, `insights/src/app/strategies/[id]/page.tsx`, `trader/src/app/api/auth/login/route.ts`, `insights/src/app/api/auth/login/route.ts`, `config-ui/app/api/auth/login/route.ts`, `trader/src/lib/identity.ts`, `insights/src/lib/identity.ts`, `config-ui/app/lib/identity.ts`, `config-ui/app/api/audit/route.ts`
 - Deviations: `AuthTokenResponse` not `AuthenticateUserResponse`/`RefreshTokenResponse`; `claims` cast via `unknown`.
 
+### Step 10 — Update CLAUDE.md files to reflect new client-side architecture [done]
+- trader/CLAUDE.md: replaced "SWR-wrapped unary" with "TanStack Query hooks"; added Client Hooks section.
+- insights/CLAUDE.md: replaced SWR architecture diagram with connect-web + TanStack Query; added Client Hooks section.
+- config-ui/CLAUDE.md: updated architecture diagram to show hook layer; added Client Hooks section.
+- Files modified: `services/xstockstrat-trader/CLAUDE.md`, `services/xstockstrat-insights/CLAUDE.md`, `services/xstockstrat-config-ui/CLAUDE.md`
+- Deviations: none.
+
 ### Step 9 — Verify tsc and SWR removal for xstockstrat-insights and xstockstrat-config-ui [done]
 - insights tsc --noEmit: 0 errors ✓; no swr, no catch any, no any in hooks ✓
 - config-ui tsc --noEmit: 0 errors ✓; no swr, no catch any, no any in hooks ✓
