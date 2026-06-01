@@ -26,7 +26,7 @@ This feature replaces SWR with `@connectrpc/connect-query` + TanStack Query v5 +
 
 ### Step 1 — service: Add connect-query deps + QueryClient provider to xstockstrat-trader
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/package.json` — modify
@@ -118,7 +118,7 @@ Confirm `0 errors` (or only errors in SWR call sites not yet migrated; those are
 
 ### Step 2 — service: Add connect-query deps + QueryClient provider to xstockstrat-insights
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/package.json` — modify
