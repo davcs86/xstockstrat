@@ -66,3 +66,12 @@
 - W4 (runBacktest stub shape): executor greps `packages/proto/gen/ts/analysis/v1/` at step start.
 - **W5 (CLAUDE.md conflict with 044)**: rebase `feature/align-frontend-e2e-bff-mocks` on `feature/client-api-pattern` before executing Step 7. Execution order enforces this (044 merges before 046).
 - W6 (003 overlap): execution order (046 before 003) handles this.
+
+## Session 2026-06-01 — sdd-execute
+
+### Step 1 — trader mock: add `streamAlerts` and fix stale comment [done]
+- Added `type Alert` to the `NotifyService` import in `mock-backend.ts`.
+- Added `async *streamAlerts()` async generator yielding 3 bounded Alert objects then ending cleanly.
+- Updated `global-setup.ts` JSDoc: replaced stale `*_HTTP_ENDPOINT` with `*_ENDPOINT env vars in playwright.config.ts webServer.env`.
+- Files modified: `services/xstockstrat-trader/e2e/mock-backend.ts`, `services/xstockstrat-trader/e2e/global-setup.ts`
+- Deviations: none

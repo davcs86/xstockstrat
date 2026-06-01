@@ -1,6 +1,6 @@
 # Implementation Spec: align-frontend-e2e-bff-mocks
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-06-01
 **Feature**: `docs/roadmap/features/046-align-frontend-e2e-bff-mocks/feature.md`
 **Total Steps**: 8
@@ -38,7 +38,7 @@ cross-frontend end-to-end CI validation test.
 
 ### Step 1 — service: xstockstrat-trader mock — add `streamAlerts` and remove stale comment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/e2e/mock-backend.ts` — modify

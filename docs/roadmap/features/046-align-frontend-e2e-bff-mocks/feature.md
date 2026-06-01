@@ -1,6 +1,6 @@
 # Feature: align-frontend-e2e-bff-mocks
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/align-frontend-e2e-bff-mocks`
 **Created**: 2026-05-31
 **Last Updated**: 2026-06-01
@@ -14,6 +14,7 @@
 | 2026-05-31 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-06-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 overlap warnings — advisory only). Mock approach resolved: H2C gRPC via *_ENDPOINT, per-frontend, bounded StreamAlerts. |
 | 2026-06-01 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps. |
+| 2026-06-01 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — streamAlerts added to trader mock. |
 
 ---
 
