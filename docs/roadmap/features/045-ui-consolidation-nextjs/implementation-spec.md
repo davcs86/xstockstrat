@@ -485,7 +485,7 @@ All three health endpoints must return `{"status":"ok",...}`. Root must 302 to `
 
 ### Step 6 — service: Remove obsolete service directories and nginx artifacts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: repository root (cleanup)
 **Files**:
 - `services/xstockstrat-trader/` — delete entire directory
