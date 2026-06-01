@@ -96,3 +96,10 @@
   - `order-form.spec.ts`: combobox scoped to `page.locator('form').getByRole('combobox')` to avoid picking ChartPanel bar-count selector. FILLED success assertion tightened to `getByText(/Order placed:.*FILLED/)`.
 - Files modified: `services/xstockstrat-trader/e2e/alert-stream.spec.ts`, `api-smoke.spec.ts`, `chart-panel.spec.ts`, `order-form.spec.ts`, `mock-backend.ts`
 - Deviations: All deviations are test-spec corrections to match actual Connect/protobuf-es runtime behavior; no production code changed.
+
+### Step 4 — insights mock: add MarketDataService and MARKETDATA_ENDPOINT [done]
+- Added `import { MarketDataService }` to `services/xstockstrat-insights/e2e/mock-backend.ts` and added `router.service(MarketDataService, { async getBars() { ... } })` block after `PortfolioService`.
+- Added `runBacktest` and `getStrategyReport` stub handlers to the `AnalysisService` block.
+- Added `MARKETDATA_ENDPOINT: '127.0.0.1:9092'` to `services/xstockstrat-insights/playwright.config.ts` `webServer.env`.
+- Files modified: `services/xstockstrat-insights/e2e/mock-backend.ts`, `services/xstockstrat-insights/playwright.config.ts`
+- Deviations: Spec's `runBacktest` return shape was `{ result: { ... } }` — wrong. Proto says `rpc RunBacktest returns (BacktestResult)` directly. Fixed to return `BacktestResult` fields at top level. Spec's `getStrategyReport` return shape had `overallScore`/`rating` at top level — wrong. `StrategyReport` proto has `strategy_id`, `latest_backtest`, `score`, `metadata`. Returned minimal `{ strategyId }` stub instead.

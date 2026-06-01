@@ -319,7 +319,7 @@ All tests passed, 0 failed.
 
 ### Step 4 — service: xstockstrat-insights mock — add `MarketDataService` and `MARKETDATA_ENDPOINT`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/e2e/mock-backend.ts` — modify
