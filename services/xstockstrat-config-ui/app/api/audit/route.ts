@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
         tradingMode: r.trading_mode ?? 'all',
       })),
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });
   }
 }

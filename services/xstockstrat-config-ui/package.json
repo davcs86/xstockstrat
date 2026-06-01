@@ -19,6 +19,7 @@
     "@bufbuild/protobuf": "^2.0.0",
     "@connectrpc/connect": "^2.1.0",
     "@connectrpc/connect-node": "^2.1.0",
+    "@connectrpc/connect-query": "^2.2.0",
     "@connectrpc/connect-web": "^2.1.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
     "@opentelemetry/resources": "^2.7.1",
@@ -28,6 +29,8 @@
     "@radix-ui/react-select": "^2.1.2",
     "@radix-ui/react-separator": "^1.1.0",
     "@radix-ui/react-slot": "^1.1.0",
+    "@normy/react-query": "^0.21.0",
+    "@tanstack/react-query": "^5.62.0",
     "@xstockstrat/proto": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -38,7 +41,8 @@
     "pg": "^8.11.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "swr": "^2.2.5",
+    "@normy/react-query": "^0.21.0",
+    "@tanstack/react-query": "^5.62.0",
     "tailwind-merge": "^2.5.4"
   },
   "devDependencies": {

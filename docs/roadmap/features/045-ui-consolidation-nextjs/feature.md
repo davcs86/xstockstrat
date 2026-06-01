@@ -1,9 +1,10 @@
 # Feature: ui-consolidation-nextjs
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/ui-consolidation-nextjs`
 **Created**: 2026-05-29
 **Last Updated**: 2026-06-01
+
 ---
 
 ## Status History
@@ -14,13 +15,14 @@
 | 2026-05-29 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 advisory warning) |
 | 2026-05-30 | `spec-ready` → `draft` | /sdd-story | Product spec regenerated fresh; previously-resolved questions re-opened for review |
 | 2026-06-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved. All 5 OQs resolved: `xstockstrat-ui` name, single-domain DO routing, keep pg as-is, 041 already launched (no dep), 044 before 045. |
+| 2026-06-01 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec ui-consolidation-nextjs`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -44,4 +46,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec ui-consolidation-nextjs` — generate implementation spec from the approved product spec
+`/sdd-review ui-consolidation-nextjs impl-spec` — validate implementation spec, then `/sdd-execute ui-consolidation-nextjs`

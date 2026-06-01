@@ -5,7 +5,7 @@
  */
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useState, use } from 'react';
 import Link from 'next/link';
 import { ConnectError } from '@connectrpc/connect';
 import { Card, CardContent } from '@components/ui/card';
@@ -13,17 +13,8 @@ import { Badge } from '@components/ui/badge';
 import { Button } from '@components/ui/button';
 import { Input } from '@components/ui/input';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@components/ui/table';
-import { configClient } from '@/app/lib/browserClients';
-
-interface ConfigKey {
-  key: string;
-  description: string;
-  defaultValue: string;
-  isSecret: boolean;
-  consumingService: string;
-  environment: number;
-  tradingMode: number;
-}
+import { useConfigKeys } from '@/app/hooks/useConfigKeys';
+import { useSetConfig } from '@/app/hooks/useSetConfig';
 
 function envToProto(env: string): number {
   return env === 'production' ? 2 : 1;
@@ -46,54 +37,34 @@ export default function NamespacePage({ params, searchParams }: Props) {
   const env = resolvedSearchParams.env ?? 'dev';
   const mode = resolvedSearchParams.mode ?? 'paper';
 
-  const [keys, setKeys] = useState<ConfigKey[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
-  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    setLoading(true);
-    configClient
-      .listKeys({
-        namespace,
-        environment: envToProto(env),
-        tradingMode: modeToProto(mode),
-      })
-      .then((data) => {
-        setKeys((data.keys ?? []) as ConfigKey[]);
-        setLoading(false);
-      })
-      .catch((e) => {
-        setError(errMessage(e));
-        setLoading(false);
-      });
-  }, [namespace, env, mode]);
+  const { data: keysData, isLoading: loading, error: keysError } = useConfigKeys(namespace, env, mode);
+  const { mutate: setConfigMutate, isPending: saving, error: saveError } = useSetConfig(namespace, env, mode);
 
-  async function handleSave(key: string) {
-    setSaving(true);
-    try {
-      await configClient.setConfig({
+  const keys = (keysData?.keys ?? []) as {
+    key: string;
+    description: string;
+    defaultValue: string;
+    isSecret: boolean;
+    consumingService: string;
+    environment: number;
+    tradingMode: number;
+  }[];
+
+  function handleSave(key: string) {
+    setConfigMutate(
+      {
         namespace,
         key,
         value: { value: { case: 'stringVal', value: String(editValue) } },
         reason: 'Updated via config-ui',
         environment: envToProto(env),
         tradingMode: modeToProto(mode),
-      });
-      setEditingKey(null);
-      const data = await configClient.listKeys({
-        namespace,
-        environment: envToProto(env),
-        tradingMode: modeToProto(mode),
-      });
-      setKeys((data.keys ?? []) as ConfigKey[]);
-    } catch (e) {
-      setError(errMessage(e));
-    } finally {
-      setSaving(false);
-    }
+      },
+      { onSuccess: () => setEditingKey(null) },
+    );
   }
 
   return (
@@ -114,9 +85,10 @@ export default function NamespacePage({ params, searchParams }: Props) {
       </div>
 
       {loading && <p className="text-muted-foreground text-sm">Loading…</p>}
-      {error && <p className="text-destructive text-sm">Error: {error}</p>}
+      {keysError && <p className="text-destructive text-sm">Error: {errMessage(keysError)}</p>}
+      {saveError && <p className="text-destructive text-sm">Save error: {errMessage(saveError)}</p>}
 
-      {!loading && !error && (
+      {!loading && !keysError && (
         <Card>
           <CardContent className="pt-4 p-0">
             <Table>
