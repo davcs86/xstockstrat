@@ -384,7 +384,7 @@ All Playwright tests must pass (green) — 0 failures across trader, insights, a
 
 ### Step 4 — service: Update CI workflow to reference `xstockstrat-ui`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: CI configuration
 **Files**:
 - `.github/workflows/ci.yml` — modify
