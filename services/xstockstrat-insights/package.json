@@ -28,6 +28,8 @@
     "@radix-ui/react-select": "^2.1.2",
     "@radix-ui/react-separator": "^1.1.0",
     "@radix-ui/react-slot": "^1.1.0",
+    "@normy/react-query": "^0.21.0",
+    "@tanstack/react-query": "^5.62.0",
     "@xstockstrat/proto": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
