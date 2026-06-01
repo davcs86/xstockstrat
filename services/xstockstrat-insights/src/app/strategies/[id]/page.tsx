@@ -1,6 +1,5 @@
 'use client';
 import { useState, use } from 'react';
-import useSWR from 'swr';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AppShell } from '@/components/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -8,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/components/ui/utils';
 import { ConnectError } from '@connectrpc/connect';
-import { analysisClient } from '@/lib/browserClients';
+import { useStrategyReport } from '@/hooks/useStrategies';
+import { useRunBacktest } from '@/hooks/useBacktest';
+import type { TradeRecord } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 interface BacktestFormState {
   symbol: string;
@@ -19,10 +20,8 @@ interface BacktestFormState {
 
 export default function StrategyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { data: report, isLoading } = useSWR(
-    ['analysis-report', id],
-    () => analysisClient.getStrategyReport({ strategyId: id }),
-  );
+  const { data: report, isLoading } = useStrategyReport(id);
+  const { mutate: runBacktestMutate, data: backtestResult, isPending: running, error: runErrorObj } = useRunBacktest();
 
   const [form, setForm] = useState<BacktestFormState>({
     symbol: 'AAPL',
@@ -30,32 +29,22 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
     end: '2024-12-31',
     initial_capital: '100000',
   });
-  const [backtestResult, setBacktestResult] = useState<any>(null);
-  const [running, setRunning] = useState(false);
-  const [runError, setRunError] = useState<string | null>(null);
 
-  async function runBacktest() {
-    setRunning(true);
-    setRunError(null);
-    try {
-      const isoToTimestamp = (iso: string) => {
-        const ms = new Date(iso).getTime();
-        return { seconds: BigInt(Math.floor(ms / 1000)), nanos: (ms % 1000) * 1_000_000 };
-      };
-      const start = new Date(form.start).toISOString();
-      const end = new Date(form.end).toISOString();
-      const result = await analysisClient.runBacktest({
-        strategyId: id,
-        symbols: form.symbol ? [form.symbol] : [],
-        initialCapital: parseFloat(form.initial_capital),
-        range: { start: isoToTimestamp(start), end: isoToTimestamp(end) },
-      });
-      setBacktestResult(result);
-    } catch (err) {
-      setRunError(err instanceof ConnectError ? err.rawMessage : (err as Error).message);
-    } finally {
-      setRunning(false);
-    }
+  const runError = runErrorObj instanceof ConnectError
+    ? (runErrorObj as ConnectError).rawMessage
+    : (runErrorObj?.message ?? null);
+
+  function handleRunBacktest() {
+    const isoToTimestamp = (iso: string) => {
+      const ms = new Date(iso).getTime();
+      return { seconds: BigInt(Math.floor(ms / 1000)), nanos: (ms % 1000) * 1_000_000 };
+    };
+    runBacktestMutate({
+      strategyId: id,
+      symbols: form.symbol ? [form.symbol] : [],
+      initialCapital: parseFloat(form.initial_capital),
+      range: { start: isoToTimestamp(form.start), end: isoToTimestamp(form.end) },
+    });
   }
 
   const result = backtestResult ?? report?.latestBacktest;
@@ -63,7 +52,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
   const equityCurve = (() => {
     if (!result?.trades?.length) return [];
     let equity = parseFloat(form.initial_capital) || 100000;
-    return result.trades.map((t: any, i: number) => {
+    return result.trades.map((t: TradeRecord, i: number) => {
       equity += t.pnl ?? 0;
       return { trade: i + 1, equity: Math.round(equity) };
     });
@@ -145,7 +134,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                     />
                   </div>
                   <Button
-                    onClick={runBacktest}
+                    onClick={handleRunBacktest}
                     disabled={running}
                     className="w-full"
                   >
@@ -221,7 +210,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                               borderRadius: 8,
                             }}
                             labelStyle={{ color: 'hsl(215 16% 47%)' }}
-                            formatter={(v: any) => [`$${Number(v).toLocaleString()}`, 'Equity']}
+                            formatter={(v: unknown) => [`$${typeof v === 'number' ? v.toLocaleString() : '0'}`, 'Equity']}
                           />
                           <Line
                             type="monotone"

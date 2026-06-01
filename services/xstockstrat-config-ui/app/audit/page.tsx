@@ -4,40 +4,15 @@
  */
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { Card, CardContent } from '@components/ui/card';
 import { Badge } from '@components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@components/ui/table';
-import { BASE_PATH } from '@/app/lib/basepath';
-
-interface AuditEntry {
-  id: string;
-  namespace: string;
-  key: string;
-  oldValue: string;
-  newValue: string;
-  changedBy: string;
-  reason: string;
-  changedAt: string;
-  environment: string;
-  tradingMode: string;
-}
+import { useAuditLog } from '@/app/hooks/useAuditLog';
 
 export default function AuditPage() {
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch(`${BASE_PATH}/api/audit`)
-      .then((r) => r.json())
-      .then((data) => {
-        setEntries(data.entries ?? []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
+  const { data: entries = [], isLoading: loading } = useAuditLog();
 
   return (
     <div className="space-y-4">

@@ -1,7 +1,6 @@
 'use client';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
-import useSWR from 'swr';
 import Link from 'next/link';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AppShell } from '@/components/AppShell';
@@ -9,7 +8,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AccountPortfolioSelector } from '@/components/AccountPortfolioSelector';
-import { analysisClient } from '@/lib/browserClients';
+import { useStrategies } from '@/hooks/useStrategies';
+import type { StrategyScore } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 function DashboardSkeleton() {
   return (
@@ -65,11 +65,7 @@ function InsightsDashboard() {
     router.replace(`/?${params.toString()}`);
   };
 
-  const { data: strategies } = useSWR(
-    ['analysis-strategies'],
-    () => analysisClient.listStrategies({ page: { pageSize: 50 } }),
-    { refreshInterval: 30000 },
-  );
+  const { data: strategies } = useStrategies();
 
   const topStrategy = strategies?.strategies?.[0];
 
@@ -94,7 +90,7 @@ function InsightsDashboard() {
                   <p className="text-sm text-muted-foreground">Loading…</p>
                 ) : (
                   <ul className="space-y-3">
-                    {(strategies?.strategies ?? []).map((s: any) => (
+                    {(strategies?.strategies ?? []).map((s: StrategyScore) => (
                       <li key={s.strategyId}>
                         <Link
                           href={`/strategies/${s.strategyId}`}
@@ -105,7 +101,7 @@ function InsightsDashboard() {
                           </span>
                           <div className="flex items-center gap-2 shrink-0">
                             {s.rating && (
-                              <Badge variant={ratingVariant(s.rating) as any}>
+                              <Badge variant={ratingVariant(s.rating)}>
                                 {s.rating}
                               </Badge>
                             )}
@@ -162,7 +158,7 @@ function InsightsDashboard() {
                         borderRadius: 8,
                       }}
                       labelStyle={{ color: 'hsl(215 16% 47%)' }}
-                      formatter={(v: any) => [`${Number(v).toFixed(0)}`, 'Score']}
+                      formatter={(v: unknown) => [typeof v === 'number' ? `${v.toFixed(0)}` : '0', 'Score']}
                     />
                     <Line
                       type="monotone"
@@ -193,14 +189,14 @@ function scoreColor(score: number): string {
   return 'text-destructive';
 }
 
-function ratingVariant(rating: string): string {
+function ratingVariant(rating: string): 'buy' | 'info' | 'warning' | 'destructive' {
   if (rating === 'A') return 'buy';
   if (rating === 'B') return 'info';
   if (rating === 'C') return 'warning';
   return 'destructive';
 }
 
-function chartData(strategies: any[]): { label: string; score: number }[] {
+function chartData(strategies: StrategyScore[]): { label: string; score: number }[] {
   if (strategies.length === 0) {
     return Array.from({ length: 5 }, (_, i) => ({ label: `S${i + 1}`, score: 0 }));
   }
