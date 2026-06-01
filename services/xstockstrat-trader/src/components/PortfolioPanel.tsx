@@ -1,9 +1,8 @@
 'use client';
 
-import useSWR from 'swr';
 import type { TradingMode } from '@/app/page';
 import { useAccountContext } from '@/context/AccountContext';
-import { portfolioClient } from '@/lib/browserClients';
+import { usePortfolios } from '@/hooks/usePortfolio';
 import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
@@ -23,14 +22,7 @@ function Stat({ label, value, valueClass = 'text-foreground' }: { label: string;
 
 export function PortfolioPanel({ mode }: { mode: TradingMode }) {
   const { accounts, selectedAccountId } = useAccountContext();
-  const { data, isLoading, error } = useSWR(
-    ['portfolios', selectedAccountId],
-    () =>
-      portfolioClient.listPortfolios(
-        selectedAccountId ? { accountId: selectedAccountId } : {},
-      ),
-    { refreshInterval: 10000 },
-  );
+  const { data, isLoading, error } = usePortfolios(selectedAccountId);
 
   if (isLoading) return (
     <Card>

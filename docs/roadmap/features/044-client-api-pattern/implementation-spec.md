@@ -242,7 +242,7 @@ cd services/xstockstrat-config-ui && pnpm install && pnpm exec tsc --noEmit 2>&1
 
 ### Step 4 — service: Migrate SWR call sites to typed hooks in xstockstrat-trader
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/hooks/useOrders.ts` — create
@@ -962,3 +962,13 @@ Confirm file exists and contains the three key terms.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 4 — Migrate SWR call sites to typed hooks in xstockstrat-trader
+**Spec said**: `useMutation<Order, Error, PlaceOrderRequest>` — use `PlaceOrderRequest` as the mutation variable type.
+**Actual**: Used `Parameters<typeof tradingClient.placeOrder>[0]` as the mutation variable type.
+**Reason**: `PartialMessage<PlaceOrderRequest>` was removed in protobuf-es v2. `PlaceOrderRequest` extends `Message<...>` which requires `$typeName`, making plain object literals incompatible. `Parameters<...>[0]` resolves to the exact accepted type from the Connect client method.
+
+### Deviation: Step 4 — step-1 deps included in step-4 branch
+**Spec said**: Step 4 depends on Step 1 (package.json deps + providers.tsx already merged into feature branch).
+**Actual**: Steps 1–3 PRs (#476–478) were not yet merged into `feature/client-api-pattern` when the step-4 branch was created. Applied step-1 files (`package.json`, `queryClient.ts`, `providers.tsx`, `layout.tsx`) directly in step-4 to keep the branch self-contained and passing TypeScript check.
+**Reason**: Feature branch lacked the dep additions, so tsc would fail for hooks importing `@tanstack/react-query`.

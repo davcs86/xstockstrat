@@ -110,3 +110,13 @@
 - W4 (RefreshTokenResponse field names): executor greps generated stub at step start.
 - W5 (Step 10 typed `service` but docs-only): advisory only; no spec change.
 - W6 (003 overlap on xstockstrat-insights/package.json): execution order (044 before 003) enforces this; no merge-order entry needed beyond existing sequence.
+
+### Step 4 — Migrate SWR call sites to typed hooks in xstockstrat-trader [done]
+- Created `src/hooks/useOrders.ts` (`useOrders`, `useOrder`), `src/hooks/usePortfolio.ts` (`usePortfolio`, `usePortfolios`, `usePositions`), `src/hooks/usePlaceOrder.ts`.
+- Migrated all `useSWR` calls in `OrderBook.tsx`, `PortfolioPanel.tsx`, `orders/[id]/page.tsx`, `positions/page.tsx`. Migrated `OrderForm.tsx` to `useMutation` via `usePlaceOrder`.
+- Also applied step-1 files (`queryClient.ts`, `providers.tsx`, `layout.tsx`, `package.json`) to this branch since steps 1–3 PRs were not yet merged into `feature/client-api-pattern` when step-4 branch was created.
+- Files modified: `src/hooks/useOrders.ts`, `src/hooks/usePortfolio.ts`, `src/hooks/usePlaceOrder.ts`, `src/lib/queryClient.ts`, `src/app/providers.tsx`, `src/app/layout.tsx`, `src/components/OrderBook.tsx`, `src/components/PortfolioPanel.tsx`, `src/app/orders/[id]/page.tsx`, `src/app/positions/page.tsx`, `src/components/OrderForm.tsx`, `package.json`
+- Deviations: `PartialMessage<PlaceOrderRequest>` not available in protobuf-es v2 → used `Parameters<typeof tradingClient.placeOrder>[0]`; package.json and step-1 files included because steps 1–3 PRs not merged.
+
+## Open Items
+- **Step 6 enum values**: context.md W2 note says spec uses `Environment.ENVIRONMENT_PRODUCTION` / `TradingMode.TRADING_MODE_LIVE` — these are WRONG. Actual TypeScript enum members in protobuf-es v2 are SHORT names: `Environment.PRODUCTION`, `TradingMode.LIVE`. Must fix when executing Step 6.

@@ -1,10 +1,9 @@
 'use client';
-import useSWR from 'swr';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
-import { tradingClient } from '@/lib/browserClients';
+import { useOrder } from '@/hooks/useOrders';
 import { OrderSide, OrderStatus, OrderType } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { TradingMode } from '@xstockstrat/proto/common/v1/common_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -42,11 +41,7 @@ function formatQty(v: number | undefined | null): string {
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
   const orderId = params?.id;
-  const { data: order, error, isLoading } = useSWR(
-    orderId ? ['order', orderId] : null,
-    () => tradingClient.getOrder({ orderId: orderId! }),
-    { refreshInterval: 5000 },
-  );
+  const { data: order, error, isLoading } = useOrder(orderId);
 
   return (
     <AppShell>
