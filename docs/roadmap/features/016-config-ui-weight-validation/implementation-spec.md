@@ -92,15 +92,12 @@ the consolidated service.
 
 **Verification**:
 ```bash
-cd /home/user/xstockstrat/packages/proto
+cd packages/proto
 buf lint
-buf breaking --against ".git#branch=feature/config-ui-weight-validation"
-```
-Expected: both commands exit 0 with no diagnostics. If the feature branch does not yet exist
-on origin, run against `main-dev`:
-```bash
 buf breaking --against ".git#branch=main-dev"
 ```
+Expected: both commands exit 0 with no diagnostics. Always use `main-dev` as the baseline
+for `buf breaking` — comparing against the feature branch itself is a no-op (same content).
 
 ---
 
