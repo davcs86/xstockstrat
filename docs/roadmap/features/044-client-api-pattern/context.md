@@ -166,5 +166,16 @@
 - Files modified: (spec/context only)
 - Deviations: E2E tests require live backend; all static checks pass.
 
+### Step 11 — docs: Create docs/patterns/client-api-pattern.md [done]
+- Created `docs/patterns/client-api-pattern.md` covering: library stack, directory structure (src/ vs flat app/), shared provider/config template, query hook example (useStrategies), mutation hook example (usePlaceOrder), cache-normalization extension guide (current keys: orderId, strategyId; deferred: symbol, key, portfolioId), rules (FR-3/FR-4/FR-10), reference implementations.
+- Files modified: `docs/patterns/client-api-pattern.md`
+- Deviations: none.
+
+## Session 2026-06-01T00:02:00Z — sdd-execute
+**Steps this session**: [11]
+**Progress**: 11 done / 11 total
+**Stopped at**: Step 11 (all complete)
+**Next**: Integration PR — `feature/client-api-pattern` → `main-dev`
+
 ## Open Items
 _(none)_

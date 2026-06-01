@@ -1,6 +1,6 @@
 # Implementation Spec: client-api-pattern
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-01
 **Feature**: `docs/roadmap/features/044-client-api-pattern/feature.md`
 **Total Steps**: 11
@@ -925,7 +925,7 @@ Confirm: no remaining references to SWR in CLAUDE.md files (stale architecture d
 
 ### Step 11 — docs: Create docs/patterns/client-api-pattern.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`
 **Files**:
 - `docs/patterns/client-api-pattern.md` — create
