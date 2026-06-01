@@ -1,6 +1,5 @@
 'use client';
 
-import useSWR from 'swr';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -10,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { tradingClient, portfolioClient } from '@/lib/browserClients';
+import { useAccountPortfolios } from '@/hooks/useAccountPortfolios';
 import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 
 function brokerLabel(brokerType: number): string {
@@ -32,17 +31,7 @@ interface AccountPortfolioSelectorProps {
 }
 
 export function AccountPortfolioSelector({ accountId, onAccountChange }: AccountPortfolioSelectorProps) {
-  const { data, isLoading } = useSWR(
-    ['acct-portfolios', accountId],
-    async () => {
-      const [a, p] = await Promise.all([
-        tradingClient.listBrokerAccounts({}),
-        portfolioClient.listPortfolios(accountId ? { accountId } : {}),
-      ]);
-      return { accounts: a.accounts, portfolios: p.portfolios };
-    },
-    { refreshInterval: 30000 },
-  );
+  const { data, isLoading } = useAccountPortfolios(accountId);
 
   const accounts = data?.accounts ?? [];
   const portfolios = data?.portfolios ?? [];
