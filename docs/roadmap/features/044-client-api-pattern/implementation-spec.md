@@ -804,7 +804,7 @@ Confirm: `tsc --noEmit` exits 0 in all three; `any` only appears inside internal
 
 ### Step 8 — test: Verify tsc and SWR removal for xstockstrat-trader
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 
 **Reviewers**: xstockstrat-trader service owner — Trading UI correctness, Connect-RPC call safety, no direct DB access from frontend

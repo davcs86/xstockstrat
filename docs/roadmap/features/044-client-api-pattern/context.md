@@ -143,5 +143,14 @@
 - Files modified: `insights/src/app/page.tsx`, `insights/src/app/strategies/page.tsx`, `insights/src/app/strategies/[id]/page.tsx`, `trader/src/app/api/auth/login/route.ts`, `insights/src/app/api/auth/login/route.ts`, `config-ui/app/api/auth/login/route.ts`, `trader/src/lib/identity.ts`, `insights/src/lib/identity.ts`, `config-ui/app/lib/identity.ts`, `config-ui/app/api/audit/route.ts`
 - Deviations: `AuthTokenResponse` not `AuthenticateUserResponse`/`RefreshTokenResponse`; `claims` cast via `unknown`.
 
+### Step 8 — Verify tsc and SWR removal for xstockstrat-trader [done]
+- tsc --noEmit: 0 errors ✓
+- No `swr` in src/ or package.json ✓
+- No `catch (err: any)` in src/ ✓
+- No `: any` in src/hooks/ or src/lib/queryClient.ts ✓
+- E2E tests: fail with exit code 1 (no running backend in execution environment) — deviation noted.
+- Files modified: (spec/context only)
+- Deviations: E2E tests require live backend; all static checks pass.
+
 ## Open Items
 _(none)_
