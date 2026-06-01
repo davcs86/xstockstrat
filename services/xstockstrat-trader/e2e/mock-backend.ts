@@ -1,168 +1,29 @@
 /**
- * Lightweight mock Connect-RPC HTTP server for xstockstrat-trader tests.
+ * gRPC mock server for xstockstrat-trader E2E tests.
  *
- * Handles POST requests to Connect-RPC method paths and returns canned
- * JSON responses shaped to match what the real backend services return.
- * Field names use snake_case matching proto field names (the Go services
- * use UseProtoNames: true in their Connect-RPC JSON encoding).
+ * Uses connectNodeAdapter + http2.createServer to serve real gRPC/H2C so the
+ * production connectClients.ts (createGrpcTransport) needs no test-specific
+ * overrides.  All mock endpoints are registered via router.service() so the
+ * binary-proto serialization is handled by the connect-node runtime.
  *
- * Port 9091 — pointed at by TRADING_HTTP_ENDPOINT, PORTFOLIO_HTTP_ENDPOINT,
- * and NOTIFY_HTTP_ENDPOINT in playwright.config.ts webServer.env.
+ * Port 9091 — pointed at by TRADING_ENDPOINT, PORTFOLIO_ENDPOINT,
+ * NOTIFY_ENDPOINT, IDENTITY_ENDPOINT, and MARKETDATA_ENDPOINT in
+ * playwright.config.ts.
  */
-import * as http from 'http';
+import * as http2 from 'node:http2';
+import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { SignJWT } from 'jose';
+import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
+import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
+import { NotifyService } from '@xstockstrat/proto/notify/v1/notify_pb';
+import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 
 export const MOCK_PORT = 9091;
 
 const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
 
-// Canned responses keyed by Connect-RPC path: /<package>.<Service>/<Method>
-let RESPONSES: Record<string, object> = {
-  '/xstockstrat.trading.v1.TradingService/PlaceOrder': {
-    order_id: 'mock-order-001',
-    status: 'ORDER_STATUS_FILLED',
-    trading_mode: 1,
-  },
-  '/xstockstrat.trading.v1.TradingService/ListOrders': {
-    orders: [
-      {
-        order_id: 'mock-order-001',
-        symbol: 'AAPL',
-        side: 'ORDER_SIDE_BUY',
-        qty: 10,
-        filled_qty: 10,
-        filled_avg_price: '175.50',
-        status: 'ORDER_STATUS_FILLED',
-        trading_mode: 1,
-      },
-      {
-        order_id: 'mock-order-002',
-        symbol: 'TSLA',
-        side: 'ORDER_SIDE_SELL',
-        qty: 5,
-        filled_qty: 0,
-        filled_avg_price: '0',
-        status: 'ORDER_STATUS_NEW',
-        trading_mode: 1,
-      },
-    ],
-  },
-  '/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio': {
-    equity: '52341.89',
-    cash: '18200.00',
-    buying_power: '36400.00',
-    day_pnl: '341.89',
-    day_pnl_pct: '0.0066',
-    total_pnl: '2341.89',
-    positions: [
-      { symbol: 'AAPL', unrealized_pnl: '215.30' },
-      { symbol: 'MSFT', unrealized_pnl: '-87.40' },
-    ],
-  },
-  '/xstockstrat.notify.v1.NotifyService/ListAlerts': {
-    alerts: [
-      {
-        alert_id: 'alert-001',
-        severity: 'ALERT_SEVERITY_WARNING',
-        category: 'RISK',
-        title: 'Position limit approaching',
-        body: 'AAPL position is at 80% of max allowed.',
-        source_service: 'trading',
-      },
-      {
-        alert_id: 'alert-002',
-        severity: 'ALERT_SEVERITY_CRITICAL',
-        category: 'SYSTEM',
-        title: 'Order rejected',
-        body: 'Insufficient buying power for TSLA order.',
-        source_service: 'trading',
-      },
-    ],
-  },
-  '/xstockstrat.trading.v1.TradingService/ListBrokerAccounts': {
-    accounts: [
-      {
-        account_id: 'alpaca-default',
-        display_name: 'Alpaca Paper',
-        broker_type: 1,
-        is_paper: true,
-        is_active: true,
-      },
-      {
-        account_id: 'ibkr-001',
-        display_name: 'IBKR Paper',
-        broker_type: 2,
-        is_paper: true,
-        is_active: true,
-      },
-    ],
-  },
-  '/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount': {
-    account: {
-      account_id: 'new-account-001',
-      display_name: 'New Account',
-      broker_type: 1,
-      is_paper: true,
-      is_active: true,
-    },
-  },
-  '/xstockstrat.trading.v1.TradingService/DeregisterBrokerAccount': {},
-  '/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios': {
-    portfolios: [
-      {
-        portfolio_id: 'port-001',
-        account_id: 'alpaca-default',
-        equity: '50000.00',
-        cash: '20000.00',
-        buying_power: '40000.00',
-        day_pnl: '150.00',
-        day_pnl_pct: '0.003',
-        total_pnl: '1500.00',
-        positions: [{ symbol: 'AAPL', unrealized_pnl: '100.00' }],
-      },
-    ],
-  },
-  '/xstockstrat.marketdata.v1.MarketDataService/GetBars': {
-    bars: [
-      {
-        symbol: 'AAPL',
-        time: { seconds: 1716422400, nanos: 0 },
-        open: 188.0,
-        high: 190.5,
-        low: 187.2,
-        close: 189.8,
-        volume: 45000000,
-        vwap: 189.1,
-        trade_count: 120000,
-        timeframe: '1Day',
-        source: 'alpaca',
-      },
-      {
-        symbol: 'AAPL',
-        time: { seconds: 1716508800, nanos: 0 },
-        open: 189.8,
-        high: 192.0,
-        low: 188.5,
-        close: 191.5,
-        volume: 38000000,
-        vwap: 190.5,
-        trade_count: 98000,
-        timeframe: '1Day',
-        source: 'alpaca',
-      },
-    ],
-    page: { next_page_token: '', total_count: 2 },
-  },
-  '/xstockstrat.marketdata.v1.MarketDataService/ListAssets': {
-    assets: [
-      { symbol: 'AAPL', exchange: 'NASDAQ', asset_class: 'us_equity' },
-      { symbol: 'MSFT', exchange: 'NASDAQ', asset_class: 'us_equity' },
-      { symbol: 'TSLA', exchange: 'NASDAQ', asset_class: 'us_equity' },
-    ],
-  },
-};
-
-let server: http.Server | null = null;
+let server: http2.Http2Server | null = null;
 
 export async function startMockBackend(): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
@@ -175,26 +36,185 @@ export async function startMockBackend(): Promise<void> {
     expires_at: now + 3600,
   }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('1h').sign(secret);
 
-  const identityPayload = {
-    access_token: testAccessToken,
-    refresh_token: 'test-refresh-token',
-    claims: { user_id: 'test-user-001', email: 'test@example.com', roles: [] },
-  };
-  RESPONSES['/xstockstrat.identity.v1.IdentityService/AuthenticateUser'] = identityPayload;
-  RESPONSES['/xstockstrat.identity.v1.IdentityService/RefreshToken'] = identityPayload;
-  RESPONSES['/xstockstrat.identity.v1.IdentityService/RevokeToken'] = { success: true };
+  const handler = connectNodeAdapter({
+    routes(router) {
+      router.service(TradingService, {
+        async placeOrder() {
+          return {
+            orderId: 'mock-order-001',
+            status: 3,       // ORDER_STATUS_FILLED
+            tradingMode: 1,  // TRADING_MODE_PAPER
+          };
+        },
+        async listOrders() {
+          return {
+            orders: [
+              {
+                orderId: 'mock-order-001',
+                symbol: 'AAPL',
+                side: 1,             // ORDER_SIDE_BUY
+                qty: 10,
+                filledQty: 10,
+                filledAvgPrice: 175.50,
+                status: 3,           // ORDER_STATUS_FILLED
+                tradingMode: 1,      // TRADING_MODE_PAPER
+              },
+              {
+                orderId: 'mock-order-002',
+                symbol: 'TSLA',
+                side: 2,             // ORDER_SIDE_SELL
+                qty: 5,
+                filledQty: 0,
+                filledAvgPrice: 0,
+                status: 1,           // ORDER_STATUS_NEW
+                tradingMode: 1,
+              },
+            ],
+          };
+        },
+        async listBrokerAccounts() {
+          return {
+            accounts: [
+              { accountId: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true },
+              { accountId: 'ibkr-001', displayName: 'IBKR Paper', brokerType: 2, isPaper: true, isActive: true },
+            ],
+          };
+        },
+        async registerBrokerAccount() {
+          return {
+            account: { accountId: 'new-account-001', displayName: 'New Account', brokerType: 1, isPaper: true, isActive: true },
+          };
+        },
+        async deregisterBrokerAccount() {
+          return {};
+        },
+      });
+
+      router.service(PortfolioService, {
+        async getPortfolio() {
+          return {
+            equity: 52341.89,
+            cash: 18200.00,
+            buyingPower: 36400.00,
+            dayPnl: 341.89,
+            dayPnlPct: 0.0066,
+            totalPnl: 2341.89,
+            positions: [
+              { symbol: 'AAPL', unrealizedPnl: 215.30 },
+              { symbol: 'MSFT', unrealizedPnl: -87.40 },
+            ],
+          };
+        },
+        async listPortfolios() {
+          return {
+            portfolios: [
+              {
+                portfolioId: 'port-001',
+                accountId: 'alpaca-default',
+                equity: 50000.00,
+                cash: 20000.00,
+                buyingPower: 40000.00,
+                dayPnl: 150.00,
+                dayPnlPct: 0.003,
+                totalPnl: 1500.00,
+                positions: [{ symbol: 'AAPL', unrealizedPnl: 100.00 }],
+              },
+            ],
+          };
+        },
+      });
+
+      router.service(NotifyService, {
+        async listAlerts() {
+          return {
+            alerts: [
+              {
+                alertId: 'alert-001',
+                severity: 2,           // ALERT_SEVERITY_WARNING
+                category: 'RISK',
+                title: 'Position limit approaching',
+                body: 'AAPL position is at 80% of max allowed.',
+                sourceService: 'trading',
+              },
+              {
+                alertId: 'alert-002',
+                severity: 4,           // ALERT_SEVERITY_CRITICAL
+                category: 'SYSTEM',
+                title: 'Order rejected',
+                body: 'Insufficient buying power for TSLA order.',
+                sourceService: 'trading',
+              },
+            ],
+          };
+        },
+      });
+
+      router.service(MarketDataService, {
+        async getBars() {
+          return {
+            bars: [
+              {
+                symbol: 'AAPL',
+                open: 188.0,
+                high: 190.5,
+                low: 187.2,
+                close: 189.8,
+                volume: BigInt(45000000),
+                vwap: 189.1,
+                tradeCount: 120000,
+                timeframe: '1Day',
+                source: 'alpaca',
+              },
+              {
+                symbol: 'AAPL',
+                open: 189.8,
+                high: 192.0,
+                low: 188.5,
+                close: 191.5,
+                volume: BigInt(38000000),
+                vwap: 190.5,
+                tradeCount: 98000,
+                timeframe: '1Day',
+                source: 'alpaca',
+              },
+            ],
+          };
+        },
+        async listAssets() {
+          return {
+            assets: [
+              { symbol: 'AAPL', exchange: 'NASDAQ', assetClass: 'us_equity' },
+              { symbol: 'MSFT', exchange: 'NASDAQ', assetClass: 'us_equity' },
+              { symbol: 'TSLA', exchange: 'NASDAQ', assetClass: 'us_equity' },
+            ],
+          };
+        },
+      });
+
+      router.service(IdentityService, {
+        async authenticateUser() {
+          return {
+            accessToken: testAccessToken,
+            refreshToken: 'test-refresh-token',
+            claims: { userId: 'test-user-001', email: 'test@example.com', roles: [] },
+          };
+        },
+        async refreshToken() {
+          return {
+            accessToken: testAccessToken,
+            refreshToken: 'test-refresh-token',
+            claims: { userId: 'test-user-001', email: 'test@example.com', roles: [] },
+          };
+        },
+        async revokeToken() {
+          return { success: true };
+        },
+      });
+    },
+  });
 
   return new Promise((resolve, reject) => {
-    server = http.createServer((req, res) => {
-      const path = req.url ?? '/';
-      const body = RESPONSES[path] ?? {};
-      res.writeHead(200, {
-        'Content-Type': 'application/connect+json',
-        'Access-Control-Allow-Origin': '*',
-      });
-      res.end(JSON.stringify(body));
-    });
-
+    server = http2.createServer(handler);
     server.on('error', reject);
     server.listen(MOCK_PORT, '127.0.0.1', () => resolve());
   });

@@ -1,23 +1,16 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { BASE_PATH } from '@/lib/basepath';
+import { notifyClient } from '@/lib/browserClients';
+import type { Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { Bell } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet';
 import { Separator } from './ui/separator';
 
-interface Alert {
-  alert_id: string;
-  severity: number;
-  category: string;
-  title: string;
-  body: string;
-  source_service: string;
-}
-
+// AlertSeverity enum: 1=INFO, 2=WARNING, 3=ERROR, 4=CRITICAL
 const severityLabel: Record<number, string> = { 1: 'INFO', 2: 'WARN', 3: 'ERROR', 4: 'CRITICAL' };
-const severityVariant: Record<number, 'info' | 'warning' | 'destructive' | 'destructive'> = {
+const severityVariant: Record<number, 'info' | 'warning' | 'destructive'> = {
   1: 'info',
   2: 'warning',
   3: 'destructive',
@@ -28,15 +21,21 @@ export function AlertStream() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
 
   useEffect(() => {
-    const es = new EventSource(`${BASE_PATH}/api/alerts/stream`);
-    es.onmessage = (e) => {
+    const ctrl = new AbortController();
+    (async () => {
       try {
-        const alert: Alert = JSON.parse(e.data);
-        setAlerts((prev) => [alert, ...prev].slice(0, 50));
-      } catch {}
-    };
-    es.onerror = () => es.close();
-    return () => es.close();
+        const stream = notifyClient.streamAlerts(
+          { categories: [], severities: [], includeAcknowledged: false },
+          { signal: ctrl.signal },
+        );
+        for await (const alert of stream) {
+          setAlerts((prev) => [alert, ...prev].slice(0, 50));
+        }
+      } catch {
+        // Stream aborted (unmount) or interrupted — EventSource-style silent stop.
+      }
+    })();
+    return () => ctrl.abort();
   }, []);
 
   const unread = alerts.length;
@@ -80,7 +79,7 @@ export function AlertStream() {
             <ul className="space-y-2">
               {alerts.map((a) => (
                 <li
-                  key={a.alert_id}
+                  key={a.alertId}
                   className="rounded-lg border border-border bg-card p-3 space-y-1"
                 >
                   <div className="flex items-center justify-between">

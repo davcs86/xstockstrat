@@ -26,8 +26,15 @@ test.describe('Auth — POST /api/auth/login', () => {
 });
 
 test.describe('Auth — protected routes require a session', () => {
-  test('GET /api/analysis/strategies redirects to /login without a session cookie', async ({ page }) => {
-    const res = await page.request.get('/insights/api/analysis/strategies', { maxRedirects: 0 });
+  test('Connect BFF redirects to /login without a session cookie', async ({ page }) => {
+    const res = await page.request.post(
+      '/insights/api/xstockstrat.analysis.v1.AnalysisService/ListStrategies',
+      {
+        headers: { 'content-type': 'application/json' },
+        data: '{}',
+        maxRedirects: 0,
+      },
+    );
     expect([302, 307]).toContain(res.status());
   });
 });
