@@ -54,3 +54,24 @@
   the previous `*_HTTP_ENDPOINT` reference was removed. Added an explicit platform-lead approval
   gate (service registry change: four services removed, one added with a new port assignment).
 - Next action: `/sdd-review ui-consolidation-nextjs product-spec`.
+
+## Session 2026-06-01T00:00:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- All 5 open questions resolved at review gate:
+  - Service name: `xstockstrat-ui` — restores the 2026-05-29 decision; service registry, OTel
+    `service.name`, image name, and CI references updated in the implementation.
+  - DO routing: single domain, path-based App Platform route rules — restores prior decision;
+    no per-basePath custom domains; auth cookies scoped within the same origin per basePath.
+  - config-ui `pg` access: keep direct `pg` calls as-is — restores prior decision; no
+    server-only isolation module needed.
+  - Sequencing vs 041: no dependency — feature 041 (Next.js 15 upgrade) is already `launched`;
+    all three source UIs are already on Next.js 15.
+  - Sequencing vs 044 / 038: 044 must land before 045 so the consolidated app absorbs the
+    finished typed hook layer; 038 is already `launched` (CI image references to old service
+    names updated as part of 045's removal step, not a separate PR).
+- Overlap warnings (advisory, no blocking action required):
+  - `044-client-api-pattern` and `046-align-frontend-e2e-bff-mocks` must merge before 045 —
+    already captured in merge-order.md from prior session.
+  - `014-trader-chart-panel` and `003-formula-management-ui` touch source services — merge
+    before 045 or absorb the work into the consolidated service.
