@@ -536,7 +536,7 @@ cd services/xstockstrat-insights && pnpm exec tsc --noEmit && grep -rn "useSWR\|
 
 ### Step 6 — service: Migrate useEffect+fetch data-loading to typed hooks in xstockstrat-config-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/app/hooks/useConfigKeys.ts` — create
@@ -982,3 +982,23 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: Each step branch is based on `feature/client-api-pattern`.
 **Actual**: Going forward, each step branch is based on the previous step branch to avoid redundant dep additions and merge conflicts. Step-5 is based on step-4.
 **Reason**: User instruction to use sequential PRs so each step builds on the previous.
+
+### Deviation: Step 6 — enum short names (fix applied)
+**Spec said**: `Environment.ENVIRONMENT_PRODUCTION`, `Environment.ENVIRONMENT_DEV`, `TradingMode.TRADING_MODE_LIVE`, `TradingMode.TRADING_MODE_PAPER`, `TradingMode.TRADING_MODE_UNSPECIFIED`.
+**Actual**: `Environment.PRODUCTION`, `Environment.DEV`, `TradingMode.LIVE`, `TradingMode.PAPER`, `TradingMode.UNSPECIFIED`.
+**Reason**: protobuf-es v2 uses short enum member names; the spec's long names (`ENVIRONMENT_PRODUCTION` etc.) do not exist at runtime. Noted in context.md Open Items before execution; confirmed by user before applying.
+
+### Deviation: Step 6 — mutation input types use Parameters<...>[0] pattern
+**Spec said**: `useMutation<SetConfigResponse, Error, SetConfigRequest>` and `useMutation<ManageSignalSourceResponse, Error, ManageSignalSourceRequest>`.
+**Actual**: Used `Parameters<typeof configClient.setConfig>[0]` and `Parameters<typeof ingestClient.manageSignalSource>[0]` as mutation variable types.
+**Reason**: Same protobuf-es v2 `$typeName` issue as in steps 4–5. `SetConfigRequest` / `ManageSignalSourceRequest` extend `Message<...>` requiring `$typeName`, so plain object literals are incompatible.
+
+### Deviation: Step 6 — providers.tsx uses QueryNormalizerProvider (not NormalizationProvider)
+**Spec said**: `import { NormalizationProvider } from '@normy/react-query'` with `<NormalizationProvider normalizer={normalizer}>`.
+**Actual**: `import { QueryNormalizerProvider } from '@normy/react-query'` with `<QueryNormalizerProvider queryClient={queryClient} normalizerConfig={normalizerConfig}>`.
+**Reason**: `NormalizationProvider` / `normalizer` are not the public API in `@normy/react-query ^0.21.0`. The correct export is `QueryNormalizerProvider` accepting `queryClient` + `normalizerConfig` props. This matches the pattern established in steps 4–5.
+
+### Deviation: Step 6 — @normy/react-query version ^0.21.0 (not ^1.1.0)
+**Spec said**: `"@normy/react-query": "^1.1.0"` in package.json.
+**Actual**: `"@normy/react-query": "^0.21.0"` — consistent with steps 4–5 and the library decision in context.md.
+**Reason**: `^1.1.0` does not exist as a published version. The package is at `^0.21.0`.

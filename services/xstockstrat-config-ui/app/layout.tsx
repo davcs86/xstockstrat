@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import Link from 'next/link';
+import { Providers } from './providers';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -60,7 +61,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </nav>
           </div>
         </header>
-        <main className="p-4 sm:p-6">{children}</main>
+        <main className="p-4 sm:p-6">
+          <Providers>{children}</Providers>
+        </main>
       </body>
     </html>
   );

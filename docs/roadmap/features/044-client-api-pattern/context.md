@@ -126,5 +126,12 @@
 - Files modified: `src/hooks/useStrategies.ts`, `src/hooks/useBacktest.ts`, `src/hooks/useAccountPortfolios.ts`, `src/lib/queryClient.ts`, `src/app/providers.tsx`, `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/strategies/page.tsx`, `src/app/strategies/[id]/page.tsx`, `src/components/AccountPortfolioSelector.tsx`, `package.json`
 - Deviations: hook types use `Awaited<ReturnType<...>>`; step-2 deps included; sequential chain used.
 
+### Step 6 — Migrate useEffect+fetch data-loading to typed hooks in xstockstrat-config-ui [done]
+- Created `app/hooks/useConfigKeys.ts`, `app/hooks/useSetConfig.ts`, `app/hooks/useAuditLog.ts`, `app/hooks/useSignalSources.ts`, `app/hooks/useSignalSourceMutations.ts`.
+- Migrated `useEffect` data-loading in `app/[namespace]/page.tsx`, `app/audit/page.tsx`, `app/sources/page.tsx` to typed hooks.
+- Applied step-3 provider files: `app/lib/queryClient.ts`, `app/providers.tsx`, `app/layout.tsx` (Providers wrapper), `package.json` (@tanstack/react-query + @normy/react-query, remove swr).
+- Files modified: `app/hooks/useConfigKeys.ts`, `app/hooks/useSetConfig.ts`, `app/hooks/useAuditLog.ts`, `app/hooks/useSignalSources.ts`, `app/hooks/useSignalSourceMutations.ts`, `app/lib/queryClient.ts`, `app/providers.tsx`, `app/layout.tsx`, `app/[namespace]/page.tsx`, `app/audit/page.tsx`, `app/sources/page.tsx`, `package.json`
+- Deviations: enum short names fixed (`Environment.PRODUCTION` not `ENVIRONMENT_PRODUCTION`); `Parameters<...>[0]` for mutation types; `QueryNormalizerProvider` not `NormalizationProvider`; `@normy/react-query ^0.21.0` not `^1.1.0`.
+
 ## Open Items
-- **Step 6 enum values**: context.md W2 note says spec uses `Environment.ENVIRONMENT_PRODUCTION` / `TradingMode.TRADING_MODE_LIVE` — these are WRONG. Actual TypeScript enum members in protobuf-es v2 are SHORT names: `Environment.PRODUCTION`, `TradingMode.LIVE`. Must fix when executing Step 6.
+_(none)_
