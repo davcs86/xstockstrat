@@ -419,7 +419,7 @@ Confirms import and `router.service(MarketDataService, ...)` present.
 
 ### Step 5 — test: xstockstrat-insights — CI threshold compliance
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**: none (verification only)
 

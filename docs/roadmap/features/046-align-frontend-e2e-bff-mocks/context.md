@@ -103,3 +103,9 @@
 - Added `MARKETDATA_ENDPOINT: '127.0.0.1:9092'` to `services/xstockstrat-insights/playwright.config.ts` `webServer.env`.
 - Files modified: `services/xstockstrat-insights/e2e/mock-backend.ts`, `services/xstockstrat-insights/playwright.config.ts`
 - Deviations: Spec's `runBacktest` return shape was `{ result: { ... } }` — wrong. Proto says `rpc RunBacktest returns (BacktestResult)` directly. Fixed to return `BacktestResult` fields at top level. Spec's `getStrategyReport` return shape had `overallScore`/`rating` at top level — wrong. `StrategyReport` proto has `strategy_id`, `latest_backtest`, `score`, `metadata`. Returned minimal `{ strategyId }` stub instead.
+
+### Step 5 — test: xstockstrat-insights — CI threshold compliance [done]
+- Ran `node_modules/.bin/playwright test --project=chromium` in `services/xstockstrat-insights`: 22 passed, 0 failed.
+- Additional fix during this step: `mock-backend.ts` had pre-existing `accountId` → `id` bug in `TradingService.listBrokerAccounts` (same bug as trader Step 3). The `AccountPortfolioSelector` component keyed accounts by `account.id`; with `accountId` the key was always `""` causing React duplicate-key crash and Next.js error overlay blocking all dashboard tests. Fixed `accountId` → `id` in insights mock.
+- Files modified: `services/xstockstrat-insights/e2e/mock-backend.ts`
+- Deviations: Applied `accountId` → `id` fix to insights mock (same proto field correction as Step 3 for trader mock). This was undetected in Step 4 because Step 4 verification only checked for the presence of `MarketDataService` imports, not a full suite run.
