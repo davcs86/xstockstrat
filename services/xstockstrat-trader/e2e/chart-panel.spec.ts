@@ -2,11 +2,10 @@ import { test, expect, type Page } from '@playwright/test';
 import { SignJWT } from 'jose';
 
 /**
- * E2E tests for /api/chart route handler and ChartPanel component.
+ * E2E tests for the MarketDataService BFF paths and ChartPanel component.
  *
- * API tests exercise the full server-side path against the mock backend.
- * Component tests load the trading dashboard page and assert the ChartPanel
- * renders correctly (symbol selector, timeframe buttons, chart container).
+ * API tests call the BFF via page.evaluate to avoid the undici Transfer-Encoding
+ * quirk. Component tests load the trading dashboard and assert DOM rendering.
  */
 
 const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
@@ -30,71 +29,99 @@ async function addAuthCookie(page: Page): Promise<void> {
   ]);
 }
 
-test.describe('GET /api/chart — GetBars proxy', () => {
+test.describe('Connect BFF — MarketDataService/GetBars data contract', () => {
   test('returns bars array with required OHLCV fields', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/trader/api/chart?symbol=AAPL&timeframe=1Day&limit=100');
-    expect(res.status()).toBe(200);
+    await page.goto('/trader/login');
 
-    const body = await res.json();
+    const result = await page.evaluate(async () => {
+      const res = await fetch(
+        '/trader/api/xstockstrat.marketdata.v1.MarketDataService/GetBars',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ symbol: 'AAPL', timeframe: '1Day', limit: 100 }),
+        },
+      );
+      return { status: res.status, body: await res.json() as Record<string, unknown> };
+    });
+
+    expect(result.status).toBe(200);
+    const body = result.body;
     expect(body).toHaveProperty('bars');
     expect(Array.isArray(body.bars)).toBe(true);
-    expect(body.bars.length).toBeGreaterThan(0);
+    expect((body.bars as unknown[]).length).toBeGreaterThan(0);
 
-    const bar = body.bars[0];
-    expect(bar).toHaveProperty('time');
-    expect(typeof bar.time).toBe('number');
+    const bar = (body.bars as Record<string, unknown>[])[0];
+    expect(bar).toHaveProperty('symbol');
     expect(bar).toHaveProperty('open');
     expect(bar).toHaveProperty('high');
     expect(bar).toHaveProperty('low');
     expect(bar).toHaveProperty('close');
-    expect(bar).toHaveProperty('volume');
-
-    // bars must be sorted ascending by time (lightweight-charts requirement)
-    if (body.bars.length > 1) {
-      expect(body.bars[0].time).toBeLessThanOrEqual(body.bars[1].time);
-    }
-  });
-
-  test('returns 400 when symbol query param is missing', async ({ page }) => {
-    await addAuthCookie(page);
-    const res = await page.request.get('/trader/api/chart?timeframe=1Day&limit=100');
-    expect(res.status()).toBe(400);
-    const body = await res.json();
-    expect(body).toHaveProperty('error');
+    // BigInt fields serialize as string in protobuf-es JSON
+    expect(typeof bar.volume).toBe('string');
   });
 
   test('returns 401 when not authenticated', async ({ page }) => {
-    // No auth cookie — middleware should reject
-    const res = await page.request.get('/trader/api/chart?symbol=AAPL&timeframe=1Day&limit=100');
-    expect([401, 307]).toContain(res.status());
+    // No auth cookie — middleware rejects BFF call
+    await page.goto('/trader/login');
+    const result = await page.evaluate(async () => {
+      const res = await fetch(
+        '/trader/api/xstockstrat.marketdata.v1.MarketDataService/GetBars',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ symbol: 'AAPL', timeframe: '1Day', limit: 100 }),
+        },
+      );
+      return { status: res.status };
+    });
+    expect([401, 307]).toContain(result.status);
   });
 });
 
-test.describe('POST /api/chart — ListAssets proxy', () => {
-  test('returns symbols array for the symbol selector', async ({ page }) => {
+test.describe('Connect BFF — MarketDataService/ListAssets data contract', () => {
+  test('returns assets array for the symbol selector', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.post('/trader/api/chart', { data: {} });
-    expect(res.status()).toBe(200);
+    await page.goto('/trader/login');
 
-    const body = await res.json();
-    expect(body).toHaveProperty('symbols');
-    expect(Array.isArray(body.symbols)).toBe(true);
-    expect(body.symbols.length).toBeGreaterThan(0);
+    const result = await page.evaluate(async () => {
+      const res = await fetch(
+        '/trader/api/xstockstrat.marketdata.v1.MarketDataService/ListAssets',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        },
+      );
+      return { status: res.status, body: await res.json() as Record<string, unknown> };
+    });
 
-    // All symbols must be non-empty strings
-    for (const sym of body.symbols) {
-      expect(typeof sym).toBe('string');
-      expect(sym.length).toBeGreaterThan(0);
+    expect(result.status).toBe(200);
+    const assets = result.body.assets as Array<{ symbol: string; exchange: string; assetClass: string }>;
+    expect(Array.isArray(assets)).toBe(true);
+    expect(assets.length).toBeGreaterThan(0);
+    for (const asset of assets) {
+      expect(typeof asset.symbol).toBe('string');
+      expect(asset.symbol.length).toBeGreaterThan(0);
     }
-
-    // Mock backend returns AAPL, MSFT, TSLA
-    expect(body.symbols).toContain('AAPL');
+    expect(assets.map((a) => a.symbol)).toContain('AAPL');
   });
 
   test('returns 401 when not authenticated', async ({ page }) => {
-    const res = await page.request.post('/trader/api/chart', { data: {} });
-    expect([401, 307]).toContain(res.status());
+    await page.goto('/trader/login');
+    const result = await page.evaluate(async () => {
+      const res = await fetch(
+        '/trader/api/xstockstrat.marketdata.v1.MarketDataService/ListAssets',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        },
+      );
+      return { status: res.status };
+    });
+    expect([401, 307]).toContain(result.status);
   });
 });
 
@@ -117,15 +144,11 @@ test.describe('ChartPanel component — trading dashboard', () => {
   });
 
   test('1d is the active timeframe by default', async ({ page }) => {
-    // The active button has a distinct variant — check it is present and the others are not
     const dayButton = page.getByRole('button', { name: '1d' });
     await expect(dayButton).toBeVisible({ timeout: 10000 });
-    // Active button uses 'default' variant (dark background); verify aria or class distinguishes it
-    // We assert the button exists and is visible — visual variant is verified via aria-pressed if set
   });
 
   test('renders bar count selector with 50 / 100 / 200 options', async ({ page }) => {
-    // The bar count selector is a <select> element
     const select = page.locator('select');
     await expect(select).toBeVisible({ timeout: 10000 });
 

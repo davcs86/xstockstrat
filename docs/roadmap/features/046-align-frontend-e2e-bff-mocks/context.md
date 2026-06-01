@@ -75,3 +75,13 @@
 - Updated `global-setup.ts` JSDoc: replaced stale `*_HTTP_ENDPOINT` with `*_ENDPOINT env vars in playwright.config.ts webServer.env`.
 - Files modified: `services/xstockstrat-trader/e2e/mock-backend.ts`, `services/xstockstrat-trader/e2e/global-setup.ts`
 - Deviations: none
+
+### Step 2 — trader specs: rewrite legacy REST specs to BFF paths [done]
+- Rewrote all 5 trader e2e spec files to use Connect BFF paths instead of non-existent REST routes.
+- `alert-stream.spec.ts`: removed SSE `page.route` mocks; tests navigate to `/trader` with auth cookie and assert against the real mock's bounded `streamAlerts` (3 alerts, badge shows "3", bg-destructive).
+- `api-smoke.spec.ts`: replaced REST `page.request.get/post` with `page.evaluate` fetch POSTs to BFF Connect paths; asserts camelCase fields (orderId, filledQty, buyingPower, etc.).
+- `chart-panel.spec.ts`: replaced `/api/chart` REST tests with BFF `GetBars`/`ListAssets` calls; kept component tests unchanged.
+- `order-form.spec.ts`: added auth cookie + `ListBrokerAccounts` route intercept in beforeEach (using correct proto `id` field); success test asserts "mock-order-001" and "FILLED"; failure test intercepts `PlaceOrder` BFF path with Connect error JSON.
+- `account-selector.spec.ts`: replaced `/trader/api/accounts` route mocks with BFF `ListBrokerAccounts` and `RegisterBrokerAccount` route intercepts; added auth cookie throughout.
+- Files modified: `services/xstockstrat-trader/e2e/alert-stream.spec.ts`, `api-smoke.spec.ts`, `chart-panel.spec.ts`, `order-form.spec.ts`, `account-selector.spec.ts`
+- Deviations: (1) For `order-form.spec.ts` failed-order test, added BFF `PlaceOrder` route intercept returning Connect error JSON (content-type: application/connect+json) — spec said "remove page.route mock" but that referred to the old REST route; BFF path intercept is the correct replacement. (2) `ListBrokerAccounts` mock in `order-form.spec.ts`/`account-selector.spec.ts` uses `id` (correct proto field) instead of the mock-backend.ts which incorrectly uses `accountId` — intercepting the BFF path bypasses this pre-existing mock bug.

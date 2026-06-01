@@ -128,7 +128,7 @@ grep -n "export.*startMockBackend\|export.*stopMockBackend" \
 
 ### Step 2 — service: xstockstrat-trader specs — rewrite legacy REST specs to BFF paths
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/e2e/alert-stream.spec.ts` — modify
