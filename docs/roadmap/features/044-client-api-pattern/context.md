@@ -110,3 +110,17 @@
 - W4 (RefreshTokenResponse field names): executor greps generated stub at step start.
 - W5 (Step 10 typed `service` but docs-only): advisory only; no spec change.
 - W6 (003 overlap on xstockstrat-insights/package.json): execution order (044 before 003) enforces this; no merge-order entry needed beyond existing sequence.
+
+## Session 2026-06-01 — sdd-execute Step 1
+
+### Step 1 — Add connect-query deps + QueryClient provider to xstockstrat-trader [done]
+- Installed `@connectrpc/connect-query@^2.2.0`, `@tanstack/react-query@^5.62.0`, `@normy/react-query@^0.21.0`; removed `swr@^2.2.5` from `services/xstockstrat-trader/package.json`.
+- Created `src/lib/queryClient.ts` (exports `createQueryClient()` + `normalizerConfig` object).
+- Created `src/app/providers.tsx` (`Providers` client component: `QueryClientProvider` → `QueryNormalizerProvider` → `AccountProvider`).
+- Modified `src/app/layout.tsx` to import and use `Providers` instead of `AccountProvider` directly.
+- Files modified: `services/xstockstrat-trader/package.json`, `services/xstockstrat-trader/src/lib/queryClient.ts`, `services/xstockstrat-trader/src/app/providers.tsx`, `services/xstockstrat-trader/src/app/layout.tsx`
+- Deviations:
+  - `@normy/react-query@^1.1.0` does not exist; installed `^0.21.0`. Real API uses `QueryNormalizerProvider` (requires `queryClient` + `normalizerConfig` props) instead of `NormalizationProvider`/`createNormalizer`. User decision.
+  - `@connectrpc/connect-query@^1.4.2` → `^2.2.0` (user decision; peer deps already compatible).
+  - `providers.tsx` was omitted from spec's `**Files**` section but required by Instructions; created and staged.
+- Verification: `pnpm install` clean; `tsc --noEmit` errors only in SWR call sites (expected; fixed in Step 4) and pre-existing `any` types (fixed in Step 7). Zero errors in new files.

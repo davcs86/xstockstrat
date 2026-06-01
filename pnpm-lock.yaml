@@ -626,9 +626,15 @@ importers:
       '@connectrpc/connect-node':
         specifier: ^2.1.0
         version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
+      '@connectrpc/connect-query':
+        specifier: ^2.2.0
+        version: 2.2.0(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))(@tanstack/query-core@5.100.14)(@tanstack/react-query@5.100.14(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@connectrpc/connect-web':
         specifier: ^2.1.0
         version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
+      '@normy/react-query':
+        specifier: ^0.21.0
+        version: 0.21.0(@tanstack/query-core@5.100.14)(@tanstack/react-query@5.100.14(react@18.3.1))
       '@opentelemetry/exporter-trace-otlp-http':
         specifier: ^0.218.0
         version: 0.218.0(@opentelemetry/api@1.9.1)
@@ -653,6 +659,9 @@ importers:
       '@radix-ui/react-slot':
         specifier: ^1.1.0
         version: 1.2.4(@types/react@18.3.28)(react@18.3.1)
+      '@tanstack/react-query':
+        specifier: ^5.62.0
+        version: 5.100.14(react@18.3.1)
       '@xstockstrat/proto':
         specifier: workspace:*
         version: link:../../packages/proto/gen/ts
@@ -686,9 +695,6 @@ importers:
       recharts:
         specifier: ^2.12.7
         version: 2.15.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      swr:
-        specifier: ^2.2.5
-        version: 2.4.1(react@18.3.1)
       tailwind-merge:
         specifier: ^2.5.4
         version: 2.6.1
@@ -785,6 +791,22 @@ packages:
     peerDependencies:
       '@bufbuild/protobuf': ^2.7.0
       '@connectrpc/connect': 2.1.1
+
+  '@connectrpc/connect-query-core@2.2.0':
+    resolution: {integrity: sha512-t/CuxW/vP84y2iyS+PnbAnBwgOTYMzHXTSoBUKC1vIn706aNiZP40Y6mGJybglyH63RhAPcOdUgzG7DjzaAHCw==}
+    peerDependencies:
+      '@bufbuild/protobuf': 2.x
+      '@connectrpc/connect': ^2.0.1
+      '@tanstack/query-core': '>=5.62.0'
+
+  '@connectrpc/connect-query@2.2.0':
+    resolution: {integrity: sha512-oQ+coXOwBmfl4/t6EOrTfzW0zdoGDe3kvUYqZHrbzORkRFd693Cz8PxuDBjRCjmBPhDRCQMxFhR1jn2+SbgEKQ==}
+    peerDependencies:
+      '@bufbuild/protobuf': 2.x
+      '@connectrpc/connect': ^2.0.1
+      '@tanstack/react-query': '>=5.62.0'
+      react: ^18 || ^19
+      react-dom: ^18 || ^19
 
   '@connectrpc/connect-web@2.1.1':
     resolution: {integrity: sha512-J8317Q2MaFRCT1jzVR1o06bZhDIBmU0UAzWx6xOIXzOq8+k71/+k7MUF7AwcBUX+34WIvbm5syRgC5HXQA8fOg==}
@@ -1135,6 +1157,19 @@ packages:
   '@nolyfill/is-core-module@1.0.39':
     resolution: {integrity: sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA==}
     engines: {node: '>=12.4.0'}
+
+  '@normy/core@0.14.0':
+    resolution: {integrity: sha512-3I0S62BNEIlvSL10TutHsLvTxguRoXEjs6b/udSUnxlKFVgrAIdW4F4tJDiZsJQrWRi6A6V3Eo5Dzji3zyn40Q==}
+
+  '@normy/query-core@0.21.0':
+    resolution: {integrity: sha512-O1GM0wqXIHHiWremrbvGG3ZuDxPsg+k9DDin+7sjkK/jHT2ER2MVodoMG40sB3I+zCKCdGVDi+/nZlb36m/mmA==}
+    peerDependencies:
+      '@tanstack/query-core': '>=5.4.3'
+
+  '@normy/react-query@0.21.0':
+    resolution: {integrity: sha512-hyFHtdPFzDuSS4yWXTtCacTm0GE/+L8ZflULH7Ua3KYgoDFNxZZkWCigd74vvbyV6AJptyxVBaoaCtg/Vgs3jQ==}
+    peerDependencies:
+      '@tanstack/react-query': '>=5.4.3'
 
   '@opentelemetry/api-logs@0.218.0':
     resolution: {integrity: sha512-fmEWp5kXlGEc3i/lR698Hz41DfGyN4Tbe4g7L1AxSc7fF8Xeh/FQ9Quqpa9dVA413Q1Ad43QOLzU4JoXgbFPWw==}
@@ -1810,6 +1845,14 @@ packages:
   '@swc/helpers@0.5.15':
     resolution: {integrity: sha512-JQ5TuMi45Owi4/BIMAJBoSQoOJu12oOk/gADqlcUL9JEdHB8vyjUSsxqeNXnmXHjYKMi2WcYtezGEEhqUI/E2g==}
 
+  '@tanstack/query-core@5.100.14':
+    resolution: {integrity: sha512-5X41dGpxgeaHISCRW2oYwcSycZeULZzAunaudXT9ov1KOTj9xwt0CH6hbwqP1/z74ZWF7rYFnDpyYH07XFcZew==}
+
+  '@tanstack/react-query@5.100.14':
+    resolution: {integrity: sha512-oOr6aRdSFEwWhzxEkD/9ZcItM3+LjBSkeVmadWKwUssAHTsqd/7bOjWrX4AbvEkoEhgAxzN0Xk6H/aYzXiYBAw==}
+    peerDependencies:
+      react: ^18 || ^19
+
   '@tsconfig/node10@1.0.12':
     resolution: {integrity: sha512-UCYBaeFvM11aU2y3YPZ//O5Rhj+xKyzy7mvcIoAjASbigy8mHMryP5cK7dgjlz2hWxh1g5pLw084E0a/wlUSFQ==}
 
@@ -2447,6 +2490,10 @@ packages:
 
   deep-is@0.1.4:
     resolution: {integrity: sha512-oIPzksmTg4/MriiaYGO+okXDT7ztn/w3Eptv/+gSIdMdKsJo0u4CfYNFJPy+4SKMuCqGw2wxnA+URMg3t8a/bQ==}
+
+  deepmerge@4.3.1:
+    resolution: {integrity: sha512-3sUqbMEc77XqpdNO7FRyRog+eW3ph+GYCbj+rK+uYyRMuwsVy0rMiVtPn+QJlKFvWP/1PYpapqYn0Me2knFn+A==}
+    engines: {node: '>=0.10.0'}
 
   define-data-property@1.1.4:
     resolution: {integrity: sha512-rBMvIzlpA8v6E+SJZoo++HAYqsLrkg7MSfIinMPFhmkorw7X+dOXVJQs+QT69zGkzMyfDnIMN2Wid1+NbL3T+A==}
@@ -4246,6 +4293,23 @@ snapshots:
       '@bufbuild/protobuf': 2.12.0
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.12.0)
 
+  '@connectrpc/connect-query-core@2.2.0(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))(@tanstack/query-core@5.100.14)':
+    dependencies:
+      '@bufbuild/protobuf': 2.12.0
+      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.12.0)
+      '@tanstack/query-core': 5.100.14
+
+  '@connectrpc/connect-query@2.2.0(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))(@tanstack/query-core@5.100.14)(@tanstack/react-query@5.100.14(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@bufbuild/protobuf': 2.12.0
+      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.12.0)
+      '@connectrpc/connect-query-core': 2.2.0(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))(@tanstack/query-core@5.100.14)
+      '@tanstack/react-query': 5.100.14(react@18.3.1)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+    transitivePeerDependencies:
+      - '@tanstack/query-core'
+
   '@connectrpc/connect-web@2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))':
     dependencies:
       '@bufbuild/protobuf': 2.12.0
@@ -4563,6 +4627,24 @@ snapshots:
       fastq: 1.20.1
 
   '@nolyfill/is-core-module@1.0.39': {}
+
+  '@normy/core@0.14.0':
+    dependencies:
+      '@babel/runtime': 7.29.2
+      deepmerge: 4.3.1
+
+  '@normy/query-core@0.21.0(@tanstack/query-core@5.100.14)':
+    dependencies:
+      '@normy/core': 0.14.0
+      '@tanstack/query-core': 5.100.14
+
+  '@normy/react-query@0.21.0(@tanstack/query-core@5.100.14)(@tanstack/react-query@5.100.14(react@18.3.1))':
+    dependencies:
+      '@normy/core': 0.14.0
+      '@normy/query-core': 0.21.0(@tanstack/query-core@5.100.14)
+      '@tanstack/react-query': 5.100.14(react@18.3.1)
+    transitivePeerDependencies:
+      - '@tanstack/query-core'
 
   '@opentelemetry/api-logs@0.218.0':
     dependencies:
@@ -5296,6 +5378,13 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
+  '@tanstack/query-core@5.100.14': {}
+
+  '@tanstack/react-query@5.100.14(react@18.3.1)':
+    dependencies:
+      '@tanstack/query-core': 5.100.14
+      react: 18.3.1
+
   '@tsconfig/node10@1.0.12': {}
 
   '@tsconfig/node12@1.0.11': {}
@@ -5921,6 +6010,8 @@ snapshots:
   decimal.js-light@2.5.1: {}
 
   deep-is@0.1.4: {}
+
+  deepmerge@4.3.1: {}
 
   define-data-property@1.1.4:
     dependencies:

@@ -1,6 +1,6 @@
 # Feature: client-api-pattern
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/client-api-pattern`
 **Created**: 2026-05-28
 **Last Updated**: 2026-06-01
@@ -16,6 +16,7 @@
 | 2026-05-30 | `spec-ready` → `draft` | /sdd-story | Product spec regenerated fresh; server-side typing now done, scope narrowed to client layer; library question re-opened for review |
 | 2026-06-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 overlap warnings — advisory only). Library stack resolved: connect-query-es + TanStack Query v5 + normy. |
 | 2026-06-01 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps. |
+| 2026-06-01 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — connect-query deps + QueryClient provider added to xstockstrat-trader |
 
 ---
 
@@ -45,4 +46,4 @@ _(Finalized by /sdd-spec 2026-06-01. Covers all distinct reviewers across 11 ste
 
 ## Next Action
 
-`/sdd-review client-api-pattern impl-spec` — validate implementation spec, then `/sdd-execute client-api-pattern`
+`/sdd-execute client-api-pattern next` — Step 2: Add connect-query deps + QueryClient provider to xstockstrat-insights

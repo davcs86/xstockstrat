@@ -26,7 +26,7 @@ This feature replaces SWR with `@connectrpc/connect-query` + TanStack Query v5 +
 
 ### Step 1 — service: Add connect-query deps + QueryClient provider to xstockstrat-trader
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/package.json` — modify
@@ -961,4 +961,17 @@ Confirm file exists and contains the three key terms.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 1 — @normy/react-query version and API
+**Spec said**: `"@normy/react-query": "^1.1.0"` with exports `createNormalizer` (to create the normalizer) and `NormalizationProvider` (to wrap children)
+**Actual**: Installed `"@normy/react-query": "^0.21.0"`. The 1.x version has never been published. The 0.21.0 API uses `QueryNormalizerProvider` (not `NormalizationProvider`), accepts `queryClient` and `normalizerConfig` props directly (no separate `createNormalizer` call), and must be nested inside `QueryClientProvider`. `queryClient.ts` exports `normalizerConfig` (a plain object) instead of a `normalizer` instance.
+**Reason**: Package does not exist at version 1.x; user decision to use 0.21.0 with real API.
+
+### Deviation: Step 1 — @connectrpc/connect-query version
+**Spec said**: `"@connectrpc/connect-query": "^1.4.2"`
+**Actual**: Installed `"@connectrpc/connect-query": "^2.2.0"`. Peer deps (`@bufbuild/protobuf: ^2.0.0`, `@connectrpc/connect: ^2.1.0`) were already compatible with v2.
+**Reason**: v2 is the current stable release; v1 would require downgrading peer deps already at v2; user decision.
+
+### Deviation: Step 1 — providers.tsx missing from **Files**
+**Spec said**: `**Files**` listed `package.json`, `queryClient.ts`, `layout.tsx` only
+**Actual**: Also created `services/xstockstrat-trader/src/app/providers.tsx` (the Client Component wrapper). The Instructions section described this file but it was omitted from `**Files**`.
+**Reason**: Spec omission; file is required for the layout.tsx change to work (Server Components cannot directly import `QueryClientProvider`).
