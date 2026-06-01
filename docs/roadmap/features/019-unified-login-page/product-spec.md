@@ -46,12 +46,19 @@ FR-6. Logout and token refresh routes (`/api/auth/logout`, `/api/auth/refresh`) 
 consolidated — one set of routes for all basePaths — with refresh logic calling identity's
 `RefreshToken` gRPC RPC.
 
-FR-7. Identity's minimal `GET /login` HTML form (added by feature 018 for the OAuth redirect
-flow) is replaced with a redirect to `xstockstrat-ui/auth/login`, preserving the OAuth
-`redirect_uri` and `state` params so the unified login page can redirect back to the agent's
-OAuth authorize endpoint after the user authenticates.
+FR-7. A separate route `GET /auth/oauth-login` in `xstockstrat-ui` handles the agent OAuth
+redirect flow from feature 018. It presents a login form that, on success, redirects to the
+OAuth `redirect_uri` + `state` params from the agent's authorization request — keeping OAuth
+UX separate from the regular operator login and avoiding branching logic on a shared route.
 
-FR-8. The unified login page is styled consistently with the platform design (matching the
+FR-8. Identity's HTTP Express server (added by feature 018 to serve `GET /login`) is removed
+entirely. Identity returns to gRPC-only. `xstockstrat-agent`'s `/oauth/authorize` handler is
+updated to redirect browsers to `{UI_BASE_URL}/auth/oauth-login` (instead of the identity HTTP
+server). `UI_BASE_URL` is a new env var for the agent: `http://localhost:3000` locally, the
+public App Platform URL in dev/prod. It is a browser-redirect target, not a gRPC endpoint, and
+does not follow the `_ENDPOINT` suffix convention.
+
+FR-9. The unified login page is styled consistently with the platform design (matching the
 existing trader login page) and is server-side rendered from a single Next.js page component.
 
 ## Out of Scope
@@ -67,10 +74,9 @@ existing trader login page) and is server-side rendered from a single Next.js pa
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-ui` — unified login page and consolidated auth routes; per-basePath login pages
-  removed; middleware updated to redirect to `/auth/login`.
-- `xstockstrat-identity` — `GET /login` HTML form (added by feature 018) replaced with a
-  redirect to `xstockstrat-ui/auth/login`; no gRPC changes.
+- `xstockstrat-ui` — unified login page at `/auth/login`; separate OAuth login at `/auth/oauth-login`; per-basePath login pages removed; middleware updated to redirect to `/auth/login`.
+- `xstockstrat-identity` — HTTP Express server (added by feature 018) removed; identity returns to gRPC-only; no gRPC or proto changes.
+- `xstockstrat-agent` — `/oauth/authorize` redirect target updated from identity HTTP to `{UI_BASE_URL}/auth/oauth-login`.
 
 ## Proto Contract Changes
 
@@ -79,8 +85,12 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Config Key Changes
 
-- [x] No new config keys — consolidated auth routes use the same `JWT_SECRET`,
-  `IDENTITY_ENDPOINT`, and `identity.*` config keys already present in `xstockstrat-ui`.
+New env var (browser-redirect URL, not a gRPC `_ENDPOINT`):
+- `UI_BASE_URL` — added to `xstockstrat-agent` environment; e.g. `http://localhost:3000`
+  locally and the public App Platform URL in dev/prod. Used to construct the OAuth login
+  redirect URL (`{UI_BASE_URL}/auth/oauth-login`).
+
+All other auth keys (`JWT_SECRET`, `IDENTITY_ENDPOINT`, `identity.*`) are unchanged.
 
 ## Database Changes
 
@@ -118,19 +128,15 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-_Left open for the `/sdd-review product-spec` gate — do not resolve inline._
+_Resolved at `/sdd-review product-spec` gate (2026-06-01)._
 
-- [ ] **JWT scope after consolidation.** The current per-basePath auth issues separate JWTs
-  (one per service). After consolidation, should `xstockstrat-ui` issue a single platform-wide
-  JWT accepted by all three basePaths (simpler, one `JWT_SECRET`), or keep per-basePath JWTs
-  with independent secrets (stronger isolation, more config)? Single JWT is the natural fit for
-  a single-process app; per-basePath only makes sense if the basePaths remain isolatable.
-- [ ] **OAuth redirect mechanics.** FR-7 has identity redirect to `xstockstrat-ui/auth/login`;
-  the unified page must then redirect back to the agent's OAuth authorize URL after login. What
-  query param carries the agent callback URL through the unified login page, and how does the
-  page distinguish an OAuth login from a regular frontend login so it can redirect correctly?
-- [ ] **Identity HTTP server lifecycle.** Feature 018 adds an HTTP Express server to identity
-  (currently gRPC-only) to serve `GET /login`. After 019 replaces that form with a redirect,
-  does the HTTP server remain in identity (serving only the redirect endpoint), or is it removed
-  entirely? Keeping it is simpler but adds a permanent HTTP surface to an otherwise gRPC-only
-  service.
+- [x] **JWT scope after consolidation.** **Decision: single platform-wide JWT.** One JWT issued
+  by identity, one `JWT_SECRET` shared with `xstockstrat-ui`, valid for all basePaths within
+  the consolidated service. No per-basePath re-issuance needed.
+- [x] **OAuth redirect mechanics.** **Decision: separate `GET /auth/oauth-login` route.** The
+  OAuth flow uses a dedicated route distinct from the regular login, keeping handler logic clean
+  and avoiding `?type=oauth` branching on a shared route. The agent redirects directly to
+  `/auth/oauth-login` (not `/auth/login`).
+- [x] **Identity HTTP server lifecycle.** **Decision: remove — update agent to redirect to UI.**
+  Identity's HTTP Express server is removed; identity returns to gRPC-only. The agent's
+  `/oauth/authorize` is updated to point to `{UI_BASE_URL}/auth/oauth-login`.

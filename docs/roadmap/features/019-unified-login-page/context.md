@@ -33,3 +33,19 @@
   - Identity HTTP server lifecycle captured as OQ-3 (should identity's Express HTTP server
     remain after its login form is replaced with a redirect?).
 - Merge-order dependencies: must follow 045 (`ui-consolidation-nextjs`) and 018 (`agent-mcp-oauth`) being launched.
+
+## Session 2026-06-01T00:01:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- All 3 open questions resolved at review gate:
+  - JWT scope: single platform-wide JWT — one `JWT_SECRET` shared between identity and
+    `xstockstrat-ui`; valid for all basePaths within the consolidated service.
+  - OAuth redirect mechanics: separate `GET /auth/oauth-login` route — dedicated to the
+    agent OAuth flow; avoids branching logic on the shared `/auth/login` route; agent redirects
+    directly to `/auth/oauth-login`, not `/auth/login`.
+  - Identity HTTP server lifecycle: remove entirely — identity returns to gRPC-only; agent's
+    `/oauth/authorize` updated to redirect to `{UI_BASE_URL}/auth/oauth-login`; `UI_BASE_URL`
+    is a new env var for the agent (browser-redirect URL, not a gRPC `_ENDPOINT`).
+- Product spec updated: FR-7 split into FR-7 (separate /auth/oauth-login route) and FR-8
+  (identity HTTP server removal + agent redirect update); FR-9 (styling). Affected services
+  now includes `xstockstrat-agent`. Config key changes now documents `UI_BASE_URL`.

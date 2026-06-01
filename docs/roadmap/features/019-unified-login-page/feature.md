@@ -1,6 +1,6 @@
 # Feature: unified-login-page
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/unified-login-page`
 **Created**: 2026-05-25
 **Last Updated**: 2026-06-01
@@ -13,6 +13,7 @@
 |---|---|---|---|
 | 2026-05-25 | `idea` | manual | Captured as follow-up to 018-agent-mcp-oauth |
 | 2026-06-01 | `idea` → `draft` | /sdd-story | Product spec formalized from preliminary idea capture |
+| 2026-06-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved. 3 OQs resolved: single platform-wide JWT, separate /auth/oauth-login route for OAuth, identity HTTP server removed (gRPC-only). |
 
 ---
 
@@ -37,9 +38,9 @@ re-run /sdd-spec if the registry changes.)_
 | Role | Review Focus |
 |---|---|
 | `xstockstrat-identity` owner | JWT expiry and rotation, API key scoping, secret store integration (never plaintext secrets in config) |
-| `xstockstrat-trader` owner (`test`) | Trading UI correctness, Connect-RPC call safety, no direct DB access from frontend |
-| Security | No secrets in config service state, JWT claims minimal, API key scoping correct |
+| `xstockstrat-ui` owner (`test`) | Auth middleware correctness, open-redirect protection on `?redirect=`, no direct DB from login routes |
+| Security | JWT claims minimal, platform-wide JWT scope, no secrets in config, open-redirect validation |
 
 ## Next Action
 
-`/sdd-review unified-login-page product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec unified-login-page` — generate implementation spec from the approved product spec
