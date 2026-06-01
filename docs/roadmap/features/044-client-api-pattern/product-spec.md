@@ -29,9 +29,12 @@ bookkeeping.
 
 ## Functional Requirements
 
-FR-1. Adopt a single client-side data-fetching + cache-normalization stack across all three
-frontends (the specific libraries are an Open Question — see below), replacing SWR. SWR is fully
-removed from all three `package.json` files and all call sites.
+FR-1. Adopt `@connectrpc/connect-query` (connect-query-es) + TanStack Query v5 + `@normy/react-query`
+as the single client-side data-fetching + cache-normalization stack across all three frontends,
+replacing SWR. SWR is fully removed from all three `package.json` files and all call sites.
+connect-query-es generates typed TanStack Query hooks directly from proto service descriptors;
+`@normy/react-query` provides automatic entity propagation across co-mounted queries without
+manual invalidation bookkeeping.
 
 FR-2. The chosen stack is provisioned once per service via shared provider wiring in each
 service's root `layout.tsx`, with any normalization/cache configuration centralized in a single
@@ -132,20 +135,17 @@ Approval gates required (per `docs/runbooks/feature-workflow.md`):
 
 ## Open Questions
 
-_Left open for the `/sdd-review product-spec` gate — do not resolve inline._
+_Resolved at `/sdd-review product-spec` gate (2026-06-01)._
 
-- [ ] **Data-fetching + normalization library choice.** TanStack Query v5 + `@normy/react-query`
-  (automatic entity propagation across co-mounted queries) vs. staying on/standardizing SWR with
-  manual invalidation, vs. another option? react-query + normy is the suggested default because
-  automatic propagation eliminates the manual-invalidation dependency graph as panels multiply,
-  but it carries a one-time migration cost. Decide before impl-spec.
-- [ ] **Normalization key scope.** Which entities are safe to normalize by a stable domain ID?
-  `orderId` and `strategyId` are obvious candidates; `symbol` (positions), `key` (config), and
-  `portfolioId` use field names that may be too generic to normalize without cross-entity
-  collisions. Confirm the initial whitelist and the extension policy.
-- [ ] **Sole mutation pattern.** Is a single mutation-hook primitive used everywhere, or is more
-  than one mutation pattern permitted? (Tied to the library choice above.)
-- [ ] **Sequencing vs features 045 / 041.** 045 consolidates these three services into one and
-  041 upgrades two of them to Next.js 15. Should 044 land before 045 so the consolidated app
-  absorbs the finished hook layer (045's own overlap analysis recommends this), and does the
-  Next.js 15 upgrade affect the chosen library's provider wiring?
+- [x] **Data-fetching + normalization library choice.** **Decision: `@connectrpc/connect-query`
+  (connect-query-es) + TanStack Query v5 + `@normy/react-query`.** connect-query-es generates
+  typed TanStack Query hooks directly from proto service descriptors; `@normy/react-query`
+  provides automatic entity propagation across co-mounted queries without manual invalidation.
+- [x] **Normalization key scope.** **Decision: `orderId` and `strategyId` only** for the initial
+  rollout. `symbol` (positions), `key` (config), and `portfolioId` deferred — field names too
+  generic to normalize without cross-entity collision risk. Expand in a follow-up feature.
+- [x] **Sole mutation pattern.** **Decision: single pattern** — `useMutation` from TanStack Query
+  (via connect-query-es). No other mutation primitives permitted in component files.
+- [x] **Sequencing vs features 045 / 041.** **Decision: 044 lands before 045.** Feature 041
+  (`upgrade-nextjs15`) is already `launched` — any artifacts in this spec referencing it as
+  in-flight are outdated; the Next.js 15 upgrade is complete and does not affect provider wiring.

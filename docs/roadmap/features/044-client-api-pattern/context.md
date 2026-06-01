@@ -77,3 +77,15 @@
   key whitelist, and the sole-mutation-pattern question. Added a sequencing question vs features
   045 (consolidation) and 041 (Next.js 15 upgrade).
 - Next action: `/sdd-review client-api-pattern product-spec`.
+
+## Session 2026-06-01T00:00:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- All 4 open questions resolved at review gate:
+  - Library stack: `@connectrpc/connect-query` (connect-query-es) + TanStack Query v5 + `@normy/react-query`
+  - Normalization key whitelist: `orderId` and `strategyId` only; others deferred
+  - Mutation pattern: single — `useMutation` from TanStack Query, no direct `fetch` in components
+  - Sequencing: 044 lands before 045; feature 041 already `launched` (artifacts referencing it as in-flight are outdated)
+- Warnings (advisory, no merge-order entries required):
+  - `formula-management-ui` also modifies `xstockstrat-insights` — coordinate merge order
+  - `upgrade-nextjs15` overlap warnings are moot — feature already `launched`

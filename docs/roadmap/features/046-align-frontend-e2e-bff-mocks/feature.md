@@ -1,9 +1,9 @@
 # Feature: align-frontend-e2e-bff-mocks
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/align-frontend-e2e-bff-mocks`
 **Created**: 2026-05-31
-**Last Updated**: 2026-05-31
+**Last Updated**: 2026-06-01
 
 ---
 
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-31 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-06-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 overlap warnings — advisory only). Mock approach resolved: H2C gRPC via *_ENDPOINT, per-frontend, bounded StreamAlerts. |
 
 ---
 
@@ -41,4 +42,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review align-frontend-e2e-bff-mocks product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec align-frontend-e2e-bff-mocks` — generate implementation spec from the approved product spec
