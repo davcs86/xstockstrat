@@ -89,3 +89,14 @@
 - Warnings (advisory, no merge-order entries required):
   - `formula-management-ui` also modifies `xstockstrat-insights` — coordinate merge order
   - `upgrade-nextjs15` overlap warnings are moot — feature already `launched`
+
+## Session 2026-06-01T00:01:00Z — sdd-spec
+
+- Generated implementation-spec.md with 11 steps. Status → implementation-ready.
+- Key codebase findings:
+  - SWR present in all three services at `^2.2.5` (package.json); call sites: 4 files in trader (OrderBook, PortfolioPanel, orders/[id]/page, positions/page), 4 files in insights (page.tsx, strategies/page.tsx, strategies/[id]/page.tsx, AccountPortfolioSelector), none in config-ui (uses useEffect+fetch pattern instead).
+  - `TradingService`, `AnalysisService`, etc. are `GenService` descriptors already compiled into `packages/proto/gen/ts/dist/` via `*_pb.js` — no changes to proto package needed. The `*_connect.ts` source files (MethodKind API) are excluded from the dist build by tsconfig (line 17 of packages/proto/gen/ts/tsconfig.json: `"**/*_connect.ts"`).
+  - `any` occurrences: trader (2: login route + identity.ts), insights (9: multiple component files), config-ui (3: login route + identity.ts + audit catch clause). Primary sources: `as any` on `authenticateUser`/`refreshToken` return types and untyped strategy map callbacks.
+  - No new env vars or docker-compose changes needed — feature is entirely client-side.
+  - config-ui flat layout (no src/): hooks go under `app/hooks/`, queryClient under `app/lib/queryClient.ts`, tsconfig `@/*` maps to `./*`.
+  - `OrderForm.tsx` already uses direct `await tradingClient.placeOrder()` (not SWR) but lacks `useMutation` wrapper — addressed in Step 4.
