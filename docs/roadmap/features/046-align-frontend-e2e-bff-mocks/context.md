@@ -114,3 +114,9 @@
 - Added JSDoc comment to `services/xstockstrat-config-ui/e2e/global-setup.ts` before `export default async function globalSetup()` documenting the *_ENDPOINT env var wiring pattern.
 - Files modified: `services/xstockstrat-config-ui/e2e/global-setup.ts`
 - Deviations: none
+
+### Step 7 — docs: add E2E Backend Mock section to all three frontend CLAUDE.md files [done]
+- Appended `## E2E Backend Mock` section to `services/xstockstrat-trader/CLAUDE.md`, `services/xstockstrat-insights/CLAUDE.md`, `services/xstockstrat-config-ui/CLAUDE.md`.
+- Each section documents: mock port, registered services, `*_ENDPOINT` values, and the `*_HTTP_ENDPOINT` exclusion note.
+- Files modified: `services/xstockstrat-trader/CLAUDE.md`, `services/xstockstrat-insights/CLAUDE.md`, `services/xstockstrat-config-ui/CLAUDE.md`
+- Deviations: none

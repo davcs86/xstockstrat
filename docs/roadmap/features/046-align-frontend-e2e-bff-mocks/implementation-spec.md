@@ -488,7 +488,7 @@ Confirm JSDoc comment is present.
 
 ### Step 7 — docs: add e2e mock wiring note to each frontend's CLAUDE.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-trader/CLAUDE.md` — modify
