@@ -56,3 +56,13 @@
     `global-setup.ts` and CLAUDE.md documentation.
   - `global-setup.ts` stale comment in trader: says `*_HTTP_ENDPOINT`; must be corrected.
   - No production code changes needed — all changes are in `e2e/` files and CLAUDE.md.
+
+## Session 2026-06-01 — sdd-review impl-spec + decisions
+
+- impl-spec review: PASS (0 failures, 6 advisory warnings).
+- **W1 FIXED in spec**: Step 1 verification command changed from `node --input-type=module` (cannot execute TypeScript) to `pnpm exec tsc --noEmit` + export grep. Node.js cannot run `.ts` files directly without a TS transpiler.
+- W2 (dense 5-file Step 2): accepted as-is; executor commits file-by-file within the step.
+- W3 (failed order submission path underspecified): executor checks `mock-backend.ts` for existing `Code.InvalidArgument` response on `placeOrder`.
+- W4 (runBacktest stub shape): executor greps `packages/proto/gen/ts/analysis/v1/` at step start.
+- **W5 (CLAUDE.md conflict with 044)**: rebase `feature/align-frontend-e2e-bff-mocks` on `feature/client-api-pattern` before executing Step 7. Execution order enforces this (044 merges before 046).
+- W6 (003 overlap): execution order (046 before 003) handles this.

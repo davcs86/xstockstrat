@@ -114,15 +114,15 @@ router.service(NotifyService, {
 
 **Verification**:
 ```bash
-cd services/xstockstrat-trader && node --input-type=module <<'EOF'
-import { startMockBackend, stopMockBackend } from './e2e/mock-backend.ts';
-await startMockBackend();
-console.log('mock started');
-await stopMockBackend();
-console.log('mock stopped');
-EOF
+# Confirm TypeScript compiles (confirms exports exist and types are correct):
+pnpm --filter xstockstrat-trader exec tsc --noEmit
+# Expected: 0 errors
+
+# Confirm the new exports are present:
+grep -n "export.*startMockBackend\|export.*stopMockBackend" \
+  services/xstockstrat-trader/e2e/mock-backend.ts
+# Expected: 2 matches
 ```
-Expect both log lines with no errors.
 
 ---
 
