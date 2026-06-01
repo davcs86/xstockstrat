@@ -57,3 +57,35 @@
   - make-repo-public-secure, do-nginx-integration, ci-docker-registry-deploy,
     frontend-reverse-proxy, fix-grafana-otel-variables, wire-fe-auth,
     add-ikbr-account-support: orthogonal changes, low conflict risk.
+
+## Session 2026-05-30T00:00:00Z — sdd-story (regenerate)
+
+- Product spec regenerated fresh as part of a 4-feature spec batch (033, 041, 045, 044), each
+  delivered as an independent PR off `main-dev`. Per the requesting story, the previously-resolved
+  open questions were deliberately RE-OPENED for the `/sdd-review product-spec` gate. Status
+  reverted: `spec-ready` → `draft`.
+- Major scope correction against current `main-dev`: the server-side Connect-RPC clients
+  (`lib/connectClients.ts`, `configClient.ts`) are ALREADY typed with `@xstockstrat/proto`
+  service descriptors over a gRPC transport (`createGrpcTransport`, `createClient(TradingService,…)`
+  from `*_pb`). The `{} as any` placeholders are gone and `@xstockstrat/proto` is already a
+  dependency in all three frontends. So the old FR-1–FR-4 (add `_connect` to dist, add dep,
+  replace `{} as any`) are obsolete/done. The feature is now scoped purely to the **client-side**
+  layer: SWR is still present (`^2.2.5` in all three), and `any` still leaks (18 / 21 / 5 in
+  trader / insights / config-ui).
+- Re-opened questions: the data-fetching + normalization library choice (react-query + normy was
+  previously selected; now presented as the suggested default but left open), the normalization
+  key whitelist, and the sole-mutation-pattern question. Added a sequencing question vs features
+  045 (consolidation) and 041 (Next.js 15 upgrade).
+- Next action: `/sdd-review client-api-pattern product-spec`.
+
+## Session 2026-06-01T00:00:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- All 4 open questions resolved at review gate:
+  - Library stack: `@connectrpc/connect-query` (connect-query-es) + TanStack Query v5 + `@normy/react-query`
+  - Normalization key whitelist: `orderId` and `strategyId` only; others deferred
+  - Mutation pattern: single — `useMutation` from TanStack Query, no direct `fetch` in components
+  - Sequencing: 044 lands before 045; feature 041 already `launched` (artifacts referencing it as in-flight are outdated)
+- Warnings (advisory, no merge-order entries required):
+  - `formula-management-ui` also modifies `xstockstrat-insights` — coordinate merge order
+  - `upgrade-nextjs15` overlap warnings are moot — feature already `launched`

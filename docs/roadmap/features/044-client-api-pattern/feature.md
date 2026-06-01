@@ -3,7 +3,7 @@
 **Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/client-api-pattern`
 **Created**: 2026-05-28
-**Last Updated**: 2026-05-28
+**Last Updated**: 2026-06-01
 
 ---
 
@@ -13,6 +13,8 @@
 |---|---|---|---|
 | 2026-05-28 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-28 | `draft` → `spec-ready` | /sdd-review | Product spec approved (11 overlap warnings — advisory only) |
+| 2026-05-30 | `spec-ready` → `draft` | /sdd-story | Product spec regenerated fresh; server-side typing now done, scope narrowed to client layer; library question re-opened for review |
+| 2026-06-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 overlap warnings — advisory only). Library stack resolved: connect-query-es + TanStack Query v5 + normy. |
 
 ---
 
@@ -26,7 +28,7 @@
 
 ## Summary
 
-Standardise client-side API calls across all three Next.js frontends (xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui) by migrating from SWR to TanStack Query v5 + normy, replacing `{} as any` service-descriptor placeholders with generated `@xstockstrat/proto` types, and wrapping all data fetching in named typed hooks — eliminating `any` from request/response boundaries and replacing manual cache invalidation with normy's automatic entity propagation.
+Standardise the **client-side** API layer across all three Next.js frontends (xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui): replace SWR with a single typed data-fetching + cache-normalization stack (library choice deferred to review), wrap every read and write in named typed hooks backed by generated `@xstockstrat/proto` types, and eliminate `any` from request/response boundaries. The server-side Connect-RPC clients are already typed with `@xstockstrat/proto`, so this feature is scoped to the client→route-handler boundary only.
 
 ## Reviewers
 

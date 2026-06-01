@@ -73,5 +73,5 @@
 - Overlap warnings (advisory, no blocking action required):
   - `044-client-api-pattern` and `046-align-frontend-e2e-bff-mocks` must merge before 045 —
     already captured in merge-order.md from prior session.
-  - `014-trader-chart-panel` and `003-formula-management-ui` touch source services — merge
-    before 045 or absorb the work into the consolidated service.
+  - `003-formula-management-ui` added to Stream 2 workstream — must merge before 045 to avoid
+    re-doing xstockstrat-insights work in the consolidated service.

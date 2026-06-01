@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { ConnectError } from '@connectrpc/connect';
+import type { JsonObject } from '@bufbuild/protobuf';
 import { Card, CardContent } from '@components/ui/card';
 import { Badge } from '@components/ui/badge';
 import { Button } from '@components/ui/button';
@@ -11,7 +13,7 @@ import {
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '@components/ui/select';
-import { BASE_PATH } from '@/app/lib/basepath';
+import { configClient, ingestClient } from '@/app/lib/browserClients';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -31,7 +33,7 @@ interface SignalSource {
   extractorModule: string;
   active: boolean;
   hasCredentials: boolean;
-  configJson: Record<string, unknown>;
+  configJson: JsonObject;
 }
 
 interface FormState {
@@ -96,9 +98,13 @@ function splitPatterns(s: string): string[] {
   return s.split(',').map((x) => x.trim()).filter(Boolean);
 }
 
-function buildConfigJson(form: FormState): Record<string, unknown> {
+function errMessage(err: unknown): string {
+  return err instanceof ConnectError ? err.rawMessage : (err as Error).message;
+}
+
+function buildConfigJson(form: FormState): JsonObject {
   if (isEmailType(form.sourceType)) {
-    const cfg: Record<string, unknown> = {
+    const cfg: JsonObject = {
       sender_patterns: splitPatterns(form.senderPatterns),
       subject_patterns: splitPatterns(form.subjectPatterns),
     };
@@ -149,27 +155,27 @@ export default function SourcesPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const fetchSources = useCallback(() => {
-    return fetch(`${BASE_PATH}/api/sources?include_inactive=true`)
-      .then((r) => r.json())
-      .then((data) => setSources(data.sources ?? []));
+    return ingestClient
+      .listSignalSources({ includeInactive: true })
+      .then((data) => setSources((data.sources ?? []) as unknown as SignalSource[]));
   }, []);
 
   useEffect(() => {
     setLoading(true);
     Promise.all([
       fetchSources(),
-      fetch(`${BASE_PATH}/api/config?namespace=analysis&env=dev&mode=paper`)
-        .then((r) => r.json())
+      configClient
+        .listKeys({ namespace: 'analysis', environment: 1, tradingMode: 1 })
         .then((data) => {
           const weightKey = (data.keys ?? []).find(
-            (k: { key: string; defaultValue: string }) => k.key === 'analysis.signals.source_weights',
+            (k) => k.key === 'analysis.signals.source_weights',
           );
           if (weightKey) {
             try { setWeights(JSON.parse(weightKey.defaultValue)); } catch { /* no-op */ }
           }
         }),
     ])
-      .catch((e) => setError(e.message))
+      .catch((e) => setError(errMessage(e)))
       .finally(() => setLoading(false));
   }, [fetchSources]);
 
@@ -197,7 +203,7 @@ export default function SourcesPage() {
   async function handleToggle(src: SignalSource) {
     setSaving(true);
     try {
-      const body = src.active
+      const req = src.active
         ? { source: { slug: src.slug }, operation: 'deactivate' }
         : {
             source: {
@@ -210,10 +216,10 @@ export default function SourcesPage() {
             },
             operation: 'update',
           };
-      await fetch(`${BASE_PATH}/api/sources`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      await ingestClient.manageSignalSource(req);
       await fetchSources();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(errMessage(e));
     } finally {
       setSaving(false);
     }
@@ -224,7 +230,7 @@ export default function SourcesPage() {
     setSaveError(null);
     const isNew = editingSlug === '__new__';
     const configJson = buildConfigJson(form);
-    const body: Record<string, unknown> = {
+    const req: Record<string, unknown> = {
       source: {
         slug: form.slug,
         displayName: form.displayName,
@@ -235,20 +241,14 @@ export default function SourcesPage() {
       },
       operation: isNew ? 'register' : 'update',
     };
-    if (form.credentialsRef) body.credentialsRef = form.credentialsRef;
+    if (form.credentialsRef) req.credentialsRef = form.credentialsRef;
 
     try {
-      const res = await fetch(`${BASE_PATH}/api/sources`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (data.error) { setSaveError(data.error); return; }
+      await ingestClient.manageSignalSource(req);
       await fetchSources();
       closeForm();
-    } catch (e: any) {
-      setSaveError(e.message);
+    } catch (e) {
+      setSaveError(errMessage(e));
     } finally {
       setSaving(false);
     }

@@ -26,12 +26,13 @@ const KNOWN_NAMESPACES = [
 
 type SearchParams = { env?: string; mode?: string };
 
-export default function HomePage({ searchParams }: { searchParams: SearchParams }) {
-  if (!searchParams.env && !searchParams.mode) {
+export default async function HomePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const resolvedSearchParams = await searchParams;
+  if (!resolvedSearchParams.env && !resolvedSearchParams.mode) {
     redirect('/?env=dev&mode=paper');
   }
-  const env = searchParams.env ?? 'dev';
-  const mode = searchParams.mode ?? 'paper';
+  const env = resolvedSearchParams.env ?? 'dev';
+  const mode = resolvedSearchParams.mode ?? 'paper';
 
   return (
     <div className="space-y-6">
