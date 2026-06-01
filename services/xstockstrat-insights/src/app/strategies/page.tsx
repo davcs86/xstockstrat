@@ -4,6 +4,7 @@ import { AppShell } from '@/components/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useStrategies } from '@/hooks/useStrategies';
+import type { StrategyScore } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 function ratingVariant(rating: string): 'buy' | 'info' | 'warning' | 'destructive' {
   if (rating === 'A') return 'buy';
@@ -34,7 +35,7 @@ export default function StrategiesPage() {
 
         {data && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {(data.strategies ?? []).map((s: any) => (
+            {(data.strategies ?? []).map((s: StrategyScore) => (
               <Link key={s.strategyId} href={`/strategies/${s.strategyId}`}>
                 <Card className="h-full hover:border-primary/50 transition-colors cursor-pointer">
                   <CardContent className="pt-5">

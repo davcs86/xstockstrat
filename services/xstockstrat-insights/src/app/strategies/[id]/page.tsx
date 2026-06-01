@@ -9,6 +9,7 @@ import { cn } from '@/components/ui/utils';
 import { ConnectError } from '@connectrpc/connect';
 import { useStrategyReport } from '@/hooks/useStrategies';
 import { useRunBacktest } from '@/hooks/useBacktest';
+import type { TradeRecord } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 interface BacktestFormState {
   symbol: string;
@@ -51,7 +52,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
   const equityCurve = (() => {
     if (!result?.trades?.length) return [];
     let equity = parseFloat(form.initial_capital) || 100000;
-    return result.trades.map((t: any, i: number) => {
+    return result.trades.map((t: TradeRecord, i: number) => {
       equity += t.pnl ?? 0;
       return { trade: i + 1, equity: Math.round(equity) };
     });
@@ -209,7 +210,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                               borderRadius: 8,
                             }}
                             labelStyle={{ color: 'hsl(215 16% 47%)' }}
-                            formatter={(v: any) => [`$${Number(v).toLocaleString()}`, 'Equity']}
+                            formatter={(v: unknown) => [`$${typeof v === 'number' ? v.toLocaleString() : '0'}`, 'Equity']}
                           />
                           <Line
                             type="monotone"

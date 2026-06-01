@@ -725,7 +725,7 @@ Confirm: `tsc --noEmit` exits 0; no SWR imports; no `useEffect`+`fetch` data-loa
 
 ### Step 7 — service: Eliminate `any` from hook files and component internals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-insights/src/app/page.tsx` — modify
@@ -1002,3 +1002,13 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: `"@normy/react-query": "^1.1.0"` in package.json.
 **Actual**: `"@normy/react-query": "^0.21.0"` — consistent with steps 4–5 and the library decision in context.md.
 **Reason**: `^1.1.0` does not exist as a published version. The package is at `^0.21.0`.
+
+### Deviation: Step 7 — AuthTokenResponse instead of AuthenticateUserResponse/RefreshTokenResponse
+**Spec said**: Import `AuthenticateUserResponse` and `RefreshTokenResponse` from `@xstockstrat/proto/identity/v1/identity_pb`.
+**Actual**: Both `authenticateUser()` and `refreshToken()` return `AuthTokenResponse`. There is no `AuthenticateUserResponse` or `RefreshTokenResponse` type in the proto package.
+**Reason**: The proto service descriptor confirms both RPCs share a single response message `AuthTokenResponse`. Spec used incorrect type names.
+
+### Deviation: Step 7 — claims cast as unknown as JwtClaims
+**Spec said**: `data.claims` assigned to `claims: JwtClaims` directly.
+**Actual**: `data.claims as unknown as JwtClaims` cast required.
+**Reason**: `TokenClaims` from proto has `userId` (camelCase) while `JwtClaims` expects `user_id` (snake_case), plus extra fields `issued_at`/`expires_at`. Since `claims` is not consumed by any caller (refresh route uses only `accessToken`/`refreshToken`), the cast is safe at runtime.

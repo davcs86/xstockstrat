@@ -6,16 +6,17 @@
  */
 import { identityClient } from '@/app/lib/connectClients';
 import type { JwtClaims } from '@/app/lib/auth';
+import type { AuthTokenResponse } from '@xstockstrat/proto/identity/v1/identity_pb';
 
 export async function refreshSession(
   refreshToken: string,
 ): Promise<{ accessToken: string; refreshToken: string; claims: JwtClaims } | null> {
   try {
-    const data = (await identityClient.refreshToken({ refreshToken })) as any;
+    const data: AuthTokenResponse = await identityClient.refreshToken({ refreshToken });
     return {
-      accessToken: data.access_token ?? data.accessToken,
-      refreshToken: data.refresh_token ?? data.refreshToken,
-      claims: data.claims,
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken,
+      claims: data.claims as unknown as JwtClaims,
     };
   } catch {
     return null;

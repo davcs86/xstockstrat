@@ -133,5 +133,15 @@
 - Files modified: `app/hooks/useConfigKeys.ts`, `app/hooks/useSetConfig.ts`, `app/hooks/useAuditLog.ts`, `app/hooks/useSignalSources.ts`, `app/hooks/useSignalSourceMutations.ts`, `app/lib/queryClient.ts`, `app/providers.tsx`, `app/layout.tsx`, `app/[namespace]/page.tsx`, `app/audit/page.tsx`, `app/sources/page.tsx`, `package.json`
 - Deviations: enum short names fixed (`Environment.PRODUCTION` not `ENVIRONMENT_PRODUCTION`); `Parameters<...>[0]` for mutation types; `QueryNormalizerProvider` not `NormalizationProvider`; `@normy/react-query ^0.21.0` not `^1.1.0`.
 
+### Step 7 — Eliminate any from hook files and component internals [done]
+- Fixed `any` in `insights/src/app/page.tsx`: `StrategyScore` type, typed `ratingVariant` return, `formatter` uses `unknown`, `chartData` parameter typed.
+- Fixed `any` in `insights/src/app/strategies/page.tsx`: `StrategyScore` type on map.
+- Fixed `any` in `insights/src/app/strategies/[id]/page.tsx`: `TradeRecord` type on map, `formatter` uses `unknown`.
+- Fixed `any` in all three `auth/login/route.ts`: removed `as any` cast on `authenticateUser()` return, use `data.accessToken`/`data.refreshToken` directly.
+- Fixed `any` in all three `identity.ts`: imported `AuthTokenResponse`, removed `as any` and snake_case field fallbacks; `claims` cast as `unknown as JwtClaims`.
+- Fixed `catch (err: any)` in `config-ui/app/api/audit/route.ts`: changed to `catch (err: unknown)`.
+- Files modified: `insights/src/app/page.tsx`, `insights/src/app/strategies/page.tsx`, `insights/src/app/strategies/[id]/page.tsx`, `trader/src/app/api/auth/login/route.ts`, `insights/src/app/api/auth/login/route.ts`, `config-ui/app/api/auth/login/route.ts`, `trader/src/lib/identity.ts`, `insights/src/lib/identity.ts`, `config-ui/app/lib/identity.ts`, `config-ui/app/api/audit/route.ts`
+- Deviations: `AuthTokenResponse` not `AuthenticateUserResponse`/`RefreshTokenResponse`; `claims` cast via `unknown`.
+
 ## Open Items
 _(none)_
