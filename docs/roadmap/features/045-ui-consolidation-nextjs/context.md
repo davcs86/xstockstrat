@@ -75,3 +75,26 @@
     already captured in merge-order.md from prior session.
   - `003-formula-management-ui` added to Stream 2 workstream — must merge before 045 to avoid
     re-doing xstockstrat-insights work in the consolidated service.
+
+## Session 2026-06-01T00:01:00Z — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
+- Key codebase findings:
+  - All three frontends already on Next.js 15.5.15 (package.json confirmed); no version alignment work needed.
+  - Config-ui uses `app/` (no `src/`) layout and `@/app/lib/*` import paths — migrated files must remap to `@/lib/*` in the consolidated `src/` tree.
+  - All three middleware files are logically identical; the consolidated service uses a single middleware.ts at `src/middleware.ts` — no per-segment middleware files needed.
+  - Three separate mock backends (ports 9091/9092/9093) must remain distinct in the consolidated e2e suite — they serve different gRPC service sets and cannot be merged.
+  - `next.config.js` carries no top-level `basePath`; each segment is a route group under `src/app/`. The existing connectBff.ts files key the handler map on `'/api' + h.requestPath` — this works in the separate services because each has `basePath` set and Next.js strips it before the handler sees the URL. In the consolidated `xstockstrat-ui` with no top-level `basePath`, route handlers at `src/app/trader/api/[...connect]/route.ts` receive the full URL `/trader/api/...`; the `'/api/...'` key will NOT match. This was incorrectly noted as "correct" in this session. **See post-review decision below for the resolution.**
+  - Config-ui's `pg` Pool access in `app/api/audit/route.ts:12` carried forward as-is; `DATABASE_URL` added to consolidated service's env var set.
+  - DO ingress must add a `/agent` route rule before the root `/` rule to route agent SSE/messages to `xstockstrat-agent` without passing through the UI service.
+
+## Session 2026-06-01 — sdd-review impl-spec + decisions
+
+- impl-spec review: PASS (0 failures, 7 advisory warnings).
+- **W1 CRITICAL — DECISION: Option A chosen.** The BFF handler map key mismatch (handler map uses `'/api/...'` but consolidated service receives `'/trader/api/...'`) must be resolved by updating each segment's `connectBff.ts` to prefix handler map keys with the segment path: `'/trader/api' + h.requestPath`, `'/insights/api' + h.requestPath`, `'/config-ui/api' + h.requestPath`. Executor implements this at Step 1 when scaffolding the consolidated BFF files.
+- W2 (directory entries in Files/Step 1): advisory only.
+- W3 (IDENTITY_ENDPOINT multiplexed to 9091): executor verifies all three IdentityService mocks are identical at Step 3 start.
+- W4 (directory entries in Files/Step 3): advisory only.
+- **W5 (045 Step 6 deletes xstockstrat-insights): 003 is being re-spec'd after 044+045+046 merge — 003 will not have UI steps merged before 045 Step 6. Safe to proceed.**
+- **W6 (monaco-editor): 003 re-spec will target xstockstrat-ui and will include @monaco-editor/react in the xstockstrat-ui package.json at that time. Executor checks 003 merge state at Step 1.**
+- Execution order: 044 → 046 → 045 → 003 (re-spec) → 019 → 016.
