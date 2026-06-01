@@ -69,6 +69,19 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] H2C gRPC mock vs. a test-only transport override in `connectClients.ts` — which is simpler/more robust given the BFF uses `createGrpcTransport`?
-- [ ] Can a single shared mock module be reused across all three frontends, or does each need its own service-set fixture?
-- [ ] How should `StreamAlerts` be mocked for a deterministic, bounded stream in tests (emit N alerts then end)?
+_Resolved at `/sdd-review product-spec` gate (2026-06-01)._
+
+- [x] **H2C gRPC mock vs. transport override.** **Decision: H2C gRPC mock via `*_ENDPOINT`.**
+  Each frontend's `e2e/mock-backend.ts` starts a `@connectrpc/connect-node` gRPC server on a
+  fixed port (e.g. `50099`) and `playwright.config.ts` sets `<SERVICE>_ENDPOINT=localhost:50099`.
+  No production code is touched — the BFF's `createGrpcTransport` dials the mock exactly as it
+  would dial a real backend.
+- [x] **Shared mock module vs. per-frontend.** **Decision: per-frontend mock.** Each frontend
+  calls a distinct service set (trader: trading/portfolio/marketdata; insights:
+  analysis/marketdata/portfolio; config-ui: config/ingest). A shared module would couple
+  unrelated service fixtures. The existing per-frontend `mock-backend.ts` pattern is kept and
+  updated in place.
+- [x] **`StreamAlerts` deterministic bounded stream.** **Decision: yield N then end.** The mock
+  handler uses an async generator that yields 3 fixed `Alert` proto objects then returns,
+  producing a bounded stream. The Playwright spec asserts the first alert appears in the DOM;
+  the stream ending cleanly prevents test hangs.
