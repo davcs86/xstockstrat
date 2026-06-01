@@ -442,7 +442,7 @@ All tests passed, 0 failed.
 
 ### Step 6 — service: xstockstrat-config-ui — fix stale global-setup comment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/e2e/global-setup.ts` — modify
