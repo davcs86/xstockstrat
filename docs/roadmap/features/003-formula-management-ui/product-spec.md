@@ -45,7 +45,7 @@ absent, a `'dev-user'` fallback is used in non-production environments.
 
 Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-indicators` — adds DB persistence, new CRUD RPCs, authorization checks
-- `xstockstrat-insights` — adds formula management UI pages and API routes
+- `xstockstrat-ui` — adds formula management UI pages and API routes (post-045 consolidated service; was `xstockstrat-insights` before 045)
 
 _(Proto contract changes are tracked in the "Proto Contract Changes" section below — `packages/proto` is not a service and is not listed here.)_
 
@@ -118,12 +118,12 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Merge-order Dependencies
 
-- **Must execute after `044-client-api-pattern`** is merged: the xstockstrat-insights API
-  layer is being refactored by 044 (SWR → connect-query-es + TanStack Query hooks); 003's
-  formula hooks and BFF route handlers must follow 044's established pattern.
-- **Must execute before `045-ui-consolidation-nextjs`**: 003 targets `xstockstrat-insights`;
-  after 045 consolidates insights into `xstockstrat-ui`, the target service no longer exists
-  as a standalone directory. Execute 003 first, then 045 absorbs the completed formula UI.
+- **Must execute after `044-client-api-pattern`** is merged: the insights/UI API layer is
+  being refactored by 044 (SWR → connect-query-es + TanStack Query hooks); 003's formula hooks
+  and BFF route handlers must follow 044's established pattern.
+- **Must execute after `045-ui-consolidation-nextjs`**: 045 consolidates `xstockstrat-insights`
+  into `xstockstrat-ui`; 003's UI steps (pages, API routes, components) target `xstockstrat-ui`
+  — the standalone `xstockstrat-insights` directory will no longer exist at execution time.
 
 ## Open Questions
 

@@ -61,4 +61,15 @@
   to get accurate codebase evidence from the updated `xstockstrat-insights`.
 - Merge-order dependencies added to product-spec.md:
   - After `044-client-api-pattern` (client layer pattern established)
-  - Before `045-ui-consolidation-nextjs` (003 targets xstockstrat-insights standalone service)
+  - After `045-ui-consolidation-nextjs` (003 now targets `xstockstrat-ui`; 045 must land first)
+- Stream 2 execution order: 044 → 046 → 045 → 003 → 019 → 016
+
+## Session 2026-06-01T00:01:00Z — stream-2 reorder
+
+- 003 swapped to execute after 045, not before.
+- Consequence: UI steps (Steps 7–10) target `services/xstockstrat-ui/` (post-consolidation),
+  not `services/xstockstrat-insights/`. Affected services updated: `xstockstrat-ui` replaces
+  `xstockstrat-insights` for the UI portion of this feature.
+- Pre-execution note in impl spec updated: Steps 7–10 now require both a service path change
+  (xstockstrat-insights → xstockstrat-ui) and an API pattern change (gRPC + connect-query-es).
+- Re-run `/sdd-spec formula-management-ui` after both 044 and 045 merge.

@@ -14,7 +14,7 @@
 | 2026-05-10 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 advisory warning) |
 | 2026-05-10 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
-| 2026-06-01 | `implementation-ready` (spec updated) | /sdd-review | Added to Stream 2; FR-13 corrected to gRPC transport; impl spec Steps 6–10 flagged for pre-execution revision after 044 lands. |
+| 2026-06-01 | `implementation-ready` (spec updated) | /sdd-review | Added to Stream 2 after 045; FR-13 corrected to gRPC + xstockstrat-ui target; impl spec Steps 6–10 flagged for regeneration after 044+045 land. |
 
 ---
 
@@ -43,4 +43,4 @@ _(Snapshot finalized by /sdd-spec on 2026-05-10. Re-run /sdd-spec to update if r
 
 ## Next Action
 
-Wait for `044-client-api-pattern` to merge, then re-run `/sdd-spec formula-management-ui` to regenerate Steps 6–10 with the gRPC + connect-query-es pattern, then `/sdd-execute formula-management-ui`.
+Wait for `044-client-api-pattern` **and** `045-ui-consolidation-nextjs` to merge, then re-run `/sdd-spec formula-management-ui` to regenerate Steps 6–10 targeting `xstockstrat-ui`, then `/sdd-execute formula-management-ui`.

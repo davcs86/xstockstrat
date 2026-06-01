@@ -17,19 +17,18 @@
   Steps 1–5) are served directly over gRPC on `INDICATORS_ENDPOINT` (port 50054). Step 6 is
   superseded — no HTTP route additions are required; delete or skip this step.
 
-- **Steps 7–10 (xstockstrat-insights routes and pages)**: These steps use `fetch` +
-  `INDICATORS_HTTP_ENDPOINT ?? 'http://xstockstrat-indicators:8054'` — a pattern that no longer
-  exists at runtime. Revision required before execution:
-  - BFF route handlers (`/api/formulas/`, `/api/formulas/[id]/`, `/api/formulas/[id]/execute/`)
-    must call indicators via `createGrpcTransport` on `INDICATORS_ENDPOINT` using
-    `@connectrpc/connect-node`, matching the pattern in `src/lib/connectClients.ts`.
-  - After `044-client-api-pattern` lands, the client-side layer (pages, components) must use
-    typed `connect-query-es` + TanStack Query hooks (`useListFormulas`, `useGetFormula`, etc.)
-    rather than `useSWR` + `fetch`.
-  - Remove all `INDICATORS_HTTP_ENDPOINT` references; use `INDICATORS_ENDPOINT` (gRPC host:port).
+- **Steps 7–10 (UI routes and pages)**: These steps target `services/xstockstrat-insights/`
+  and use `fetch` + `INDICATORS_HTTP_ENDPOINT ?? 'http://xstockstrat-indicators:8054'` — both
+  invalid. Two revisions required before execution:
+  1. **Service path**: after 045 consolidates insights into `xstockstrat-ui`, all paths change
+     from `services/xstockstrat-insights/src/...` to `services/xstockstrat-ui/src/insights/...`
+     (or the equivalent basePath-scoped directory in the consolidated service).
+  2. **API pattern**: BFF route handlers must use `createGrpcTransport` on `INDICATORS_ENDPOINT`
+     via `@connectrpc/connect-node`; client-side components use typed `connect-query-es` +
+     TanStack Query hooks per the 044 pattern. Remove all `INDICATORS_HTTP_ENDPOINT` references.
 
-Re-run `/sdd-spec formula-management-ui` after 044 merges to regenerate Steps 6–10 with
-accurate codebase evidence from the updated `xstockstrat-insights` service.
+Re-run `/sdd-spec formula-management-ui` after **both 044 and 045 merge** to regenerate
+Steps 6–10 with accurate codebase evidence from the consolidated `xstockstrat-ui` service.
 
 ---
 
