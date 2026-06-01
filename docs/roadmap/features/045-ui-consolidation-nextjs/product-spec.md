@@ -131,23 +131,23 @@ Approval gates required (per `docs/runbooks/feature-workflow.md`):
 
 ## Open Questions
 
-_Left open for the `/sdd-review product-spec` gate — do not resolve inline._
+_Resolved at `/sdd-review product-spec` gate (2026-06-01)._
 
-- [ ] **Consolidated service name.** Adopt a new `xstockstrat-ui` name, or reuse
-  `xstockstrat-trader` as the canonical host? A new name is cleaner but touches the service
-  registry, OTel service.name, image names, and CI references (feature 038); reuse minimizes
-  churn. Decide before impl-spec.
-- [ ] **DO routing model.** Single domain with sub-path route rules (one app, path-based
-  routing), or a custom domain per basePath? Single-domain is simpler and is the assumed default,
-  but confirm it satisfies auth-cookie scoping and the agent route-rule approach.
-- [ ] **config-ui `pg` access.** Keep direct `pg` calls in the consolidated app as-is, or isolate
-  them in a server-only module to guarantee they never bundle into client code once the apps
-  share one build?
-- [ ] **Sequencing vs feature 041.** Consolidation requires all three UIs on one Next.js major.
-  trader is on 15; insights/config-ui are on 14.2 (feature 041 upgrades them). Should 041 land
-  first so this feature merges three already-aligned UIs, or should the consolidation perform the
-  version alignment itself? Establishes a merge-order dependency.
-- [ ] **Sequencing vs feature 044 (client-api-pattern) and CI feature 038.** 044 migrates SWR →
-  react-query in the three source services; 038 builds images referencing the old service names.
-  Confirm whether 044 must land before this feature (so the consolidated app absorbs the finished
-  hook layer) and how 038's CI references are updated post-consolidation.
+- [x] **Consolidated service name.** **Decision: `xstockstrat-ui`.** New name adopted; service
+  registry, OTel `service.name`, image name, and CI references updated in the implementation.
+  Restores prior decision from 2026-05-29 session.
+- [x] **DO routing model.** **Decision: single domain, path-based route rules.** One DO App
+  Platform component with sub-path route rules in `.do/app.dev.yaml` and `.do/app.yaml`; no
+  per-basePath custom domains. Auth cookies are scoped per basePath segment within the same
+  origin. Restores prior decision from 2026-05-29 session.
+- [x] **config-ui `pg` access.** **Decision: keep direct `pg` calls as-is.** No server-only
+  module isolation required; the consolidated app continues to call `pg` directly in API routes
+  where it already does today. Restores prior decision from 2026-05-29 session.
+- [x] **Sequencing vs feature 041.** **Decision: no dependency — 041 is already `launched`.**
+  Feature 041 (Next.js 15 upgrade for insights and config-ui) is already merged to production.
+  All three source UIs are on Next.js 15; no version alignment work needed in this feature.
+- [x] **Sequencing vs feature 044 (client-api-pattern) and CI feature 038.** **Decision: 044
+  must land before 045; 038 is already `launched` (no blocking action).** The consolidated app
+  absorbs the typed query/mutation hook layer from 044. Feature 038 CI references to old service
+  names are updated as part of the 045 implementation step that removes the old service
+  directories.
