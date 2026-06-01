@@ -36,3 +36,23 @@
   - `client-api-pattern` also modifies xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
     — expected; 046 is test-infra alignment for the pattern 044 introduces; merge 044 first.
   - `formula-management-ui` also modifies xstockstrat-insights — coordinate merge order.
+
+## Session 2026-06-01T00:00:00Z — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
+- Key codebase findings:
+  - The H2C gRPC mock + `*_ENDPOINT` playwright.config.ts wiring is ALREADY in place for all
+    three frontends (ports 9091/9092/9093). The product spec's context.md note that `*_HTTP_ENDPOINT`
+    was the gap is now historical — the code has already been updated. The remaining gaps are:
+  - Trader: `mock-backend.ts` has `listAlerts` but NOT `streamAlerts`; `alert-stream.spec.ts`
+    still mocks the old SSE `/api/alerts/stream` route (non-existent); `api-smoke.spec.ts` and
+    `chart-panel.spec.ts` test non-existent REST routes (`/api/orders`, `/api/portfolio`,
+    `/api/chart`); `order-form.spec.ts` and `account-selector.spec.ts` mock non-existent REST
+    paths. All trader spec files need rewriting to use BFF Connect paths.
+  - Insights: `mock-backend.ts` is missing `MarketDataService`; `playwright.config.ts` is missing
+    `MARKETDATA_ENDPOINT` (falls back to production default). `runBacktest` and `getStrategyReport`
+    are also absent from the mock (no test currently exercises them but they would fail if hit).
+  - Config-ui: fully aligned — no mock gaps, no missing env vars; only needs a comment in
+    `global-setup.ts` and CLAUDE.md documentation.
+  - `global-setup.ts` stale comment in trader: says `*_HTTP_ENDPOINT`; must be corrected.
+  - No production code changes needed — all changes are in `e2e/` files and CLAUDE.md.
