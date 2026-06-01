@@ -1,10 +1,9 @@
 'use client';
-import useSWR from 'swr';
 import Link from 'next/link';
 import { AppShell } from '@/components/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { analysisClient } from '@/lib/browserClients';
+import { useStrategies } from '@/hooks/useStrategies';
 
 function ratingVariant(rating: string): 'buy' | 'info' | 'warning' | 'destructive' {
   if (rating === 'A') return 'buy';
@@ -20,11 +19,7 @@ function scoreColor(score: number): string {
 }
 
 export default function StrategiesPage() {
-  const { data, isLoading, error } = useSWR(
-    ['analysis-strategies'],
-    () => analysisClient.listStrategies({ page: { pageSize: 50 } }),
-    { refreshInterval: 30000 },
-  );
+  const { data, isLoading, error } = useStrategies();
 
   return (
     <AppShell>

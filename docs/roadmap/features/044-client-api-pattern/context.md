@@ -118,5 +118,13 @@
 - Files modified: `src/hooks/useOrders.ts`, `src/hooks/usePortfolio.ts`, `src/hooks/usePlaceOrder.ts`, `src/lib/queryClient.ts`, `src/app/providers.tsx`, `src/app/layout.tsx`, `src/components/OrderBook.tsx`, `src/components/PortfolioPanel.tsx`, `src/app/orders/[id]/page.tsx`, `src/app/positions/page.tsx`, `src/components/OrderForm.tsx`, `package.json`
 - Deviations: `PartialMessage<PlaceOrderRequest>` not available in protobuf-es v2 → used `Parameters<typeof tradingClient.placeOrder>[0]`; package.json and step-1 files included because steps 1–3 PRs not merged.
 
+### Step 5 — Migrate SWR call sites to typed hooks in xstockstrat-insights [done]
+- Created `src/hooks/useStrategies.ts` (`useStrategies`, `useStrategyReport`), `src/hooks/useBacktest.ts` (`useRunBacktest`), `src/hooks/useAccountPortfolios.ts`.
+- Migrated `useSWR` in `page.tsx`, `strategies/page.tsx`, `strategies/[id]/page.tsx`, `AccountPortfolioSelector.tsx`.
+- `strategies/[id]/page.tsx`: replaced manual async `runBacktest()` + three useState vars with `useRunBacktest()` mutation; derived `runError` from `runErrorObj`.
+- Step-5 branch rebased onto step-4 (sequential PR chain per user instruction).
+- Files modified: `src/hooks/useStrategies.ts`, `src/hooks/useBacktest.ts`, `src/hooks/useAccountPortfolios.ts`, `src/lib/queryClient.ts`, `src/app/providers.tsx`, `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/strategies/page.tsx`, `src/app/strategies/[id]/page.tsx`, `src/components/AccountPortfolioSelector.tsx`, `package.json`
+- Deviations: hook types use `Awaited<ReturnType<...>>`; step-2 deps included; sequential chain used.
+
 ## Open Items
 - **Step 6 enum values**: context.md W2 note says spec uses `Environment.ENVIRONMENT_PRODUCTION` / `TradingMode.TRADING_MODE_LIVE` — these are WRONG. Actual TypeScript enum members in protobuf-es v2 are SHORT names: `Environment.PRODUCTION`, `TradingMode.LIVE`. Must fix when executing Step 6.

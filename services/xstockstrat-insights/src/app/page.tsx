@@ -1,7 +1,6 @@
 'use client';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
-import useSWR from 'swr';
 import Link from 'next/link';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AppShell } from '@/components/AppShell';
@@ -9,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AccountPortfolioSelector } from '@/components/AccountPortfolioSelector';
-import { analysisClient } from '@/lib/browserClients';
+import { useStrategies } from '@/hooks/useStrategies';
 
 function DashboardSkeleton() {
   return (
@@ -65,11 +64,7 @@ function InsightsDashboard() {
     router.replace(`/?${params.toString()}`);
   };
 
-  const { data: strategies } = useSWR(
-    ['analysis-strategies'],
-    () => analysisClient.listStrategies({ page: { pageSize: 50 } }),
-    { refreshInterval: 30000 },
-  );
+  const { data: strategies } = useStrategies();
 
   const topStrategy = strategies?.strategies?.[0];
 

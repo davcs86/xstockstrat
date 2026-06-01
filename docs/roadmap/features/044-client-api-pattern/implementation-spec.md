@@ -408,7 +408,7 @@ Confirm: `tsc --noEmit` exits 0. `grep` for SWR returns no matches.
 
 ### Step 5 — service: Migrate SWR call sites to typed hooks in xstockstrat-insights
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/src/hooks/useStrategies.ts` — create
@@ -972,3 +972,13 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: Step 4 depends on Step 1 (package.json deps + providers.tsx already merged into feature branch).
 **Actual**: Steps 1–3 PRs (#476–478) were not yet merged into `feature/client-api-pattern` when the step-4 branch was created. Applied step-1 files (`package.json`, `queryClient.ts`, `providers.tsx`, `layout.tsx`) directly in step-4 to keep the branch self-contained and passing TypeScript check.
 **Reason**: Feature branch lacked the dep additions, so tsc would fail for hooks importing `@tanstack/react-query`.
+
+### Deviation: Step 5 — hook types use Awaited<ReturnType<...>> instead of imported proto types
+**Spec said**: `import type { ListStrategiesResponse }` / `import type { BrokerAccount }` / `import type { Portfolio }` from proto packages.
+**Actual**: Used `Awaited<ReturnType<typeof client.method>>` and `['accounts'][number]` / `['portfolios'][number]` array element types.
+**Reason**: Avoids protobuf-es v2 `$typeName` compatibility issues at mutation/query boundaries; consistent with step-4 approach.
+
+### Deviation: Step 5 — step-5 branch rebased onto step-4 (sequential branching)
+**Spec said**: Each step branch is based on `feature/client-api-pattern`.
+**Actual**: Going forward, each step branch is based on the previous step branch to avoid redundant dep additions and merge conflicts. Step-5 is based on step-4.
+**Reason**: User instruction to use sequential PRs so each step builds on the previous.
