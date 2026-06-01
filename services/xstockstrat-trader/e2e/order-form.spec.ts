@@ -56,19 +56,21 @@ test.describe('OrderForm', () => {
   });
 
   test('limit price field appears when order type is Limit', async ({ page }) => {
-    await page.getByRole('combobox').last().click();
+    // The order type combobox is inside the <form> — use that scope to avoid picking
+    // ChartPanel's bar-count or symbol selectors which render after the form in the DOM.
+    await page.locator('form').getByRole('combobox').click();
     await page.getByRole('option', { name: 'Limit', exact: true }).click();
     await expect(page.getByPlaceholder('Limit price')).toBeVisible();
   });
 
   test('limit price field appears when order type is Stop Limit', async ({ page }) => {
-    await page.getByRole('combobox').last().click();
+    await page.locator('form').getByRole('combobox').click();
     await page.getByRole('option', { name: 'Stop Limit', exact: true }).click();
     await expect(page.getByPlaceholder('Limit price')).toBeVisible();
   });
 
   test('limit price field is hidden for Stop orders', async ({ page }) => {
-    await page.getByRole('combobox').last().click();
+    await page.locator('form').getByRole('combobox').click();
     await page.getByRole('option', { name: 'Stop', exact: true }).click();
     await expect(page.getByPlaceholder('Limit price')).not.toBeVisible();
   });
@@ -81,7 +83,8 @@ test.describe('OrderForm', () => {
     // Mock returns { orderId: 'mock-order-001', status: 3 }
     // Component shows: "Order placed: mock-order-001 (FILLED)" (OrderStatus[3] = 'FILLED')
     await expect(page.getByText(/mock-order-001/)).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText(/FILLED/)).toBeVisible();
+    // Order book also shows "FILLED" badge — match the success message paragraph specifically
+    await expect(page.getByText(/Order placed:.*FILLED/)).toBeVisible();
   });
 
   test('failed order submission shows error message', async ({ page }) => {

@@ -295,7 +295,7 @@ passes against `/MarketDataService/GetBars`, `order-form.spec.ts` passes showing
 
 ### Step 3 — test: xstockstrat-trader — CI threshold compliance
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**: none (verification only)
 

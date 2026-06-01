@@ -68,14 +68,13 @@ test.describe('Connect BFF — TradingService/ListOrders data contract', () => {
     expect(order).toHaveProperty('orderId');
     expect(order).toHaveProperty('symbol');
     expect(order).toHaveProperty('side');
-    // side is a numeric enum: 1=BUY, 2=SELL
-    expect(typeof order.side).toBe('number');
+    // Connect JSON (protobuf-es) serializes enum fields as their string name, not a number
+    expect(typeof order.side).toBe('string');
     expect(order).toHaveProperty('qty');
     expect(order).toHaveProperty('filledQty');
     expect(order).toHaveProperty('filledAvgPrice');
     expect(order).toHaveProperty('status');
-    // status is a numeric enum: 3=FILLED
-    expect(typeof order.status).toBe('number');
+    expect(typeof order.status).toBe('string');
   });
 });
 
@@ -104,8 +103,8 @@ test.describe('Connect BFF — TradingService/PlaceOrder data contract', () => {
     expect(typeof result.body.orderId).toBe('string');
     expect((result.body.orderId as string).length).toBeGreaterThan(0);
     expect(result.body).toHaveProperty('status');
-    // mock returns status 3 (ORDER_STATUS_FILLED)
-    expect(typeof result.body.status).toBe('number');
+    // Connect JSON (protobuf-es) serializes enum fields as their string name
+    expect(typeof result.body.status).toBe('string');
   });
 });
 
