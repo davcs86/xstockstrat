@@ -138,6 +138,30 @@ symbol survey produced matches relevant to that step's scope.
 | **Order type coverage** | `OrderType` enum, order creation, order dispatch, or routing | Enumerate which of the 5 `OrderType` values this step handles: MARKET, LIMIT, STOP, STOP_LIMIT, TRAILING_STOP — or state "order type handling unaffected by this step" | If adding type handling: confirm each named type is covered in the updated code |
 | **Fill state completeness** | `OrderStatus`, order fill callbacks, fill processing, or status updates | Address both `PARTIALLY_FILLED` and `FILLED` states in Instructions — describe how each is handled or propagated — or state "fill handling unaffected by this step" | Include a partial-fill test case alongside the full-fill (happy-path) case |
 
+### 5c. Cross-cutting code-quality constraints (every `service` step)
+
+These apply to **every** `service` step regardless of domain. They mirror conventions CI
+already enforces — wiring them into each step's `**Verification**` surfaces failures during
+`/sdd-execute` Phase 3 instead of after a per-step PR is pushed.
+
+| Concern | Trigger | Required in **Instructions** / **Codebase Evidence** | Required in **Verification** |
+|---|---|---|---|
+| **Lint/format gate** | Any `service` step that creates or modifies a source file | — | Include the service's lint command (table below) in addition to the behavioral/coverage check |
+| **Header propagation** | Step adds a **new outbound gRPC call** to another backend service (e.g. a new client stub call, `grpc.Dial`/`NewClient`, or a new RPC invocation on an existing client) | Cite the service's existing propagation mechanism from `docs/patterns/header-propagation.md`, confirmed via grep: Go interceptor, Python per-method `metadata`, or Node.js AsyncLocalStorage. The new call must forward `x-user-id`, `x-access-scope`, `x-trace-id`. If the call reuses an already-propagating client/interceptor, say so and cite it. | `grep -n` confirming the new call path carries the three headers (or reuses the propagating client/interceptor) |
+
+**Lint command table** (run from repo root; matches `.github/workflows/ci.yml`):
+
+| Language / services | Lint command |
+|---|---|
+| Go — `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata` | `cd services/<name> && GOWORK=off golangci-lint run --modules-download-mode=mod` |
+| Python — `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`, `xstockstrat-agent` | `cd services/<name> && ruff check . && ruff format --check .` |
+| Node.js — `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config` | `cd services/<name> && pnpm run lint` |
+| Next.js — `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui` | `cd services/<name> && pnpm run lint` |
+
+The lint command may live in the paired `test` step's `**Verification**` (alongside the
+coverage command) rather than the `service` step — either placement satisfies the gate, as
+long as one of the two paired steps runs it.
+
 ### 6. Write implementation-spec.md
 
 Write `$FEATURE_DIR/implementation-spec.md`:
@@ -205,7 +229,9 @@ Categories to use for step naming: `proto`, `proto-gen`, `migration`, `service`,
 **Test step pairing rule**: Every `service` step for a non-frontend service must have a
 corresponding `test` step. Place it immediately after the `service` step, or declare it in
 `## Step Dependencies` (e.g. "Step 5 [test] covers Step 4 [service]"). The `test` step's
-`**Verification**` must be a runnable bash command enforcing the CI coverage threshold:
+`**Verification**` must be a runnable bash command enforcing the CI coverage threshold, and
+must also include the language's lint command per §5c (lint + coverage together satisfy the
+code-quality gate):
 
 | Service | Threshold | Verification command |
 |---|---|---|
