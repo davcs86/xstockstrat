@@ -1,6 +1,6 @@
 # Implementation Spec: client-api-pattern
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-01
 **Feature**: `docs/roadmap/features/044-client-api-pattern/feature.md`
 **Total Steps**: 11
@@ -26,7 +26,7 @@ This feature replaces SWR with `@connectrpc/connect-query` + TanStack Query v5 +
 
 ### Step 1 — service: Add connect-query deps + QueryClient provider to xstockstrat-trader
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/package.json` — modify
@@ -118,7 +118,7 @@ Confirm `0 errors` (or only errors in SWR call sites not yet migrated; those are
 
 ### Step 2 — service: Add connect-query deps + QueryClient provider to xstockstrat-insights
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/package.json` — modify
@@ -176,7 +176,7 @@ cd services/xstockstrat-insights && pnpm install && pnpm exec tsc --noEmit 2>&1 
 
 ### Step 3 — service: Add connect-query deps + QueryClient provider to xstockstrat-config-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/package.json` — modify
@@ -242,7 +242,7 @@ cd services/xstockstrat-config-ui && pnpm install && pnpm exec tsc --noEmit 2>&1
 
 ### Step 4 — service: Migrate SWR call sites to typed hooks in xstockstrat-trader
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 **Files**:
 - `services/xstockstrat-trader/src/hooks/useOrders.ts` — create
@@ -408,7 +408,7 @@ Confirm: `tsc --noEmit` exits 0. `grep` for SWR returns no matches.
 
 ### Step 5 — service: Migrate SWR call sites to typed hooks in xstockstrat-insights
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/src/hooks/useStrategies.ts` — create
@@ -536,7 +536,7 @@ cd services/xstockstrat-insights && pnpm exec tsc --noEmit && grep -rn "useSWR\|
 
 ### Step 6 — service: Migrate useEffect+fetch data-loading to typed hooks in xstockstrat-config-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/app/hooks/useConfigKeys.ts` — create
@@ -725,7 +725,7 @@ Confirm: `tsc --noEmit` exits 0; no SWR imports; no `useEffect`+`fetch` data-loa
 
 ### Step 7 — service: Eliminate `any` from hook files and component internals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-insights/src/app/page.tsx` — modify
@@ -804,7 +804,7 @@ Confirm: `tsc --noEmit` exits 0 in all three; `any` only appears inside internal
 
 ### Step 8 — test: Verify tsc and SWR removal for xstockstrat-trader
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`
 
 **Reviewers**: xstockstrat-trader service owner — Trading UI correctness, Connect-RPC call safety, no direct DB access from frontend
@@ -838,7 +838,7 @@ New logic is in `src/hooks/` and `src/lib/` — no coverage threshold applies; E
 
 ### Step 9 — test: Verify tsc and SWR removal for xstockstrat-insights and xstockstrat-config-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`, `xstockstrat-config-ui`
 
 **Reviewers**: xstockstrat-insights service owner — Analytics display accuracy, SSE polling resilience, read-only access pattern; xstockstrat-config-ui service owner — Config mutation safety, environment scope correctness, no secret values rendered in UI
@@ -875,7 +875,7 @@ New logic is in `app/hooks/` and `app/lib/` — no coverage threshold applies; E
 
 ### Step 10 — service: Update CLAUDE.md files to reflect new client-side architecture
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-trader/CLAUDE.md` — modify
@@ -925,7 +925,7 @@ Confirm: no remaining references to SWR in CLAUDE.md files (stale architecture d
 
 ### Step 11 — docs: Create docs/patterns/client-api-pattern.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`
 **Files**:
 - `docs/patterns/client-api-pattern.md` — create
@@ -962,3 +962,53 @@ Confirm file exists and contains the three key terms.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 4 — Migrate SWR call sites to typed hooks in xstockstrat-trader
+**Spec said**: `useMutation<Order, Error, PlaceOrderRequest>` — use `PlaceOrderRequest` as the mutation variable type.
+**Actual**: Used `Parameters<typeof tradingClient.placeOrder>[0]` as the mutation variable type.
+**Reason**: `PartialMessage<PlaceOrderRequest>` was removed in protobuf-es v2. `PlaceOrderRequest` extends `Message<...>` which requires `$typeName`, making plain object literals incompatible. `Parameters<...>[0]` resolves to the exact accepted type from the Connect client method.
+
+### Deviation: Step 4 — step-1 deps included in step-4 branch
+**Spec said**: Step 4 depends on Step 1 (package.json deps + providers.tsx already merged into feature branch).
+**Actual**: Steps 1–3 PRs (#476–478) were not yet merged into `feature/client-api-pattern` when the step-4 branch was created. Applied step-1 files (`package.json`, `queryClient.ts`, `providers.tsx`, `layout.tsx`) directly in step-4 to keep the branch self-contained and passing TypeScript check.
+**Reason**: Feature branch lacked the dep additions, so tsc would fail for hooks importing `@tanstack/react-query`.
+
+### Deviation: Step 5 — hook types use Awaited<ReturnType<...>> instead of imported proto types
+**Spec said**: `import type { ListStrategiesResponse }` / `import type { BrokerAccount }` / `import type { Portfolio }` from proto packages.
+**Actual**: Used `Awaited<ReturnType<typeof client.method>>` and `['accounts'][number]` / `['portfolios'][number]` array element types.
+**Reason**: Avoids protobuf-es v2 `$typeName` compatibility issues at mutation/query boundaries; consistent with step-4 approach.
+
+### Deviation: Step 5 — step-5 branch rebased onto step-4 (sequential branching)
+**Spec said**: Each step branch is based on `feature/client-api-pattern`.
+**Actual**: Going forward, each step branch is based on the previous step branch to avoid redundant dep additions and merge conflicts. Step-5 is based on step-4.
+**Reason**: User instruction to use sequential PRs so each step builds on the previous.
+
+### Deviation: Step 6 — enum short names (fix applied)
+**Spec said**: `Environment.ENVIRONMENT_PRODUCTION`, `Environment.ENVIRONMENT_DEV`, `TradingMode.TRADING_MODE_LIVE`, `TradingMode.TRADING_MODE_PAPER`, `TradingMode.TRADING_MODE_UNSPECIFIED`.
+**Actual**: `Environment.PRODUCTION`, `Environment.DEV`, `TradingMode.LIVE`, `TradingMode.PAPER`, `TradingMode.UNSPECIFIED`.
+**Reason**: protobuf-es v2 uses short enum member names; the spec's long names (`ENVIRONMENT_PRODUCTION` etc.) do not exist at runtime. Noted in context.md Open Items before execution; confirmed by user before applying.
+
+### Deviation: Step 6 — mutation input types use Parameters<...>[0] pattern
+**Spec said**: `useMutation<SetConfigResponse, Error, SetConfigRequest>` and `useMutation<ManageSignalSourceResponse, Error, ManageSignalSourceRequest>`.
+**Actual**: Used `Parameters<typeof configClient.setConfig>[0]` and `Parameters<typeof ingestClient.manageSignalSource>[0]` as mutation variable types.
+**Reason**: Same protobuf-es v2 `$typeName` issue as in steps 4–5. `SetConfigRequest` / `ManageSignalSourceRequest` extend `Message<...>` requiring `$typeName`, so plain object literals are incompatible.
+
+### Deviation: Step 6 — providers.tsx uses QueryNormalizerProvider (not NormalizationProvider)
+**Spec said**: `import { NormalizationProvider } from '@normy/react-query'` with `<NormalizationProvider normalizer={normalizer}>`.
+**Actual**: `import { QueryNormalizerProvider } from '@normy/react-query'` with `<QueryNormalizerProvider queryClient={queryClient} normalizerConfig={normalizerConfig}>`.
+**Reason**: `NormalizationProvider` / `normalizer` are not the public API in `@normy/react-query ^0.21.0`. The correct export is `QueryNormalizerProvider` accepting `queryClient` + `normalizerConfig` props. This matches the pattern established in steps 4–5.
+
+### Deviation: Step 6 — @normy/react-query version ^0.21.0 (not ^1.1.0)
+**Spec said**: `"@normy/react-query": "^1.1.0"` in package.json.
+**Actual**: `"@normy/react-query": "^0.21.0"` — consistent with steps 4–5 and the library decision in context.md.
+**Reason**: `^1.1.0` does not exist as a published version. The package is at `^0.21.0`.
+
+### Deviation: Step 7 — AuthTokenResponse instead of AuthenticateUserResponse/RefreshTokenResponse
+**Spec said**: Import `AuthenticateUserResponse` and `RefreshTokenResponse` from `@xstockstrat/proto/identity/v1/identity_pb`.
+**Actual**: Both `authenticateUser()` and `refreshToken()` return `AuthTokenResponse`. There is no `AuthenticateUserResponse` or `RefreshTokenResponse` type in the proto package.
+**Reason**: The proto service descriptor confirms both RPCs share a single response message `AuthTokenResponse`. Spec used incorrect type names.
+
+### Deviation: Step 7 — claims cast as unknown as JwtClaims
+**Spec said**: `data.claims` assigned to `claims: JwtClaims` directly.
+**Actual**: `data.claims as unknown as JwtClaims` cast required.
+**Reason**: `TokenClaims` from proto has `userId` (camelCase) while `JwtClaims` expects `user_id` (snake_case), plus extra fields `issued_at`/`expires_at`. Since `claims` is not consumed by any caller (refresh route uses only `accessToken`/`refreshToken`), the cast is safe at runtime.

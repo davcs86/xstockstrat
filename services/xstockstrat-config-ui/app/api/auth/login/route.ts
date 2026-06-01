@@ -13,12 +13,11 @@ export async function POST(req: NextRequest) {
       email: body.email,
       password: body.password,
     });
-    const tokens = data as any;
     const response = NextResponse.json({ ok: true });
     setSessionCookies(
       response,
-      tokens.accessToken,
-      tokens.refreshToken,
+      data.accessToken,
+      data.refreshToken,
     );
     return response;
   } catch (err) {

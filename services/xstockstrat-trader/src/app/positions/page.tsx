@@ -1,10 +1,8 @@
 'use client';
 import { useState } from 'react';
-import useSWR from 'swr';
 import { AppShell } from '@/components/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
-import { portfolioClient } from '@/lib/browserClients';
-import { TradingMode as PbTradingMode } from '@xstockstrat/proto/common/v1/common_pb';
+import { usePositions } from '@/hooks/usePortfolio';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,15 +25,7 @@ export default function PositionsPage() {
   const { selectedAccountId } = useAccountContext();
   const [mode, setMode] = useState<TradingMode>('paper');
 
-  const { data, error, isLoading } = useSWR(
-    ['positions', mode, selectedAccountId],
-    () =>
-      portfolioClient.getPortfolio({
-        tradingMode: mode === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER,
-        ...(selectedAccountId ? { accountId: selectedAccountId } : {}),
-      }),
-    { refreshInterval: 10_000 },
-  );
+  const { data, error, isLoading } = usePositions(mode, selectedAccountId);
 
   const positions = data?.positions ?? [];
   const totalUnrealized = positions.reduce((sum, p) => sum + Number(p.unrealizedPnl ?? 0), 0);

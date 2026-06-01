@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import type { TradingMode } from '@/app/page';
 import { useAccountContext } from '@/context/AccountContext';
-import { tradingClient } from '@/lib/browserClients';
+import { usePlaceOrder } from '@/hooks/usePlaceOrder';
 import { OrderSide as PbOrderSide, OrderType as PbOrderType, OrderStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { TradingMode as PbTradingMode } from '@xstockstrat/proto/common/v1/common_pb';
 import { ConnectError } from '@connectrpc/connect';
@@ -41,16 +41,15 @@ export function OrderForm({ mode }: OrderFormProps) {
   const [orderType, setOrderType] = useState<OrderType>('market');
   const [qty, setQty] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
-  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [isErrorMsg, setIsErrorMsg] = useState(false);
+  const { mutate: placeOrder, isPending } = usePlaceOrder();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setStatus('submitting');
     setMessage('');
-
-    try {
-      const order = await tradingClient.placeOrder({
+    placeOrder(
+      {
         symbol: symbol.toUpperCase(),
         side: side === 'buy' ? PbOrderSide.BUY : PbOrderSide.SELL,
         orderType: ORDER_TYPE_ENUM[orderType],
@@ -58,14 +57,19 @@ export function OrderForm({ mode }: OrderFormProps) {
         limitPrice: limitPrice ? parseFloat(limitPrice) : 0,
         tradingMode: mode === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER,
         accountId: selectedAccountId ?? '',
-      });
-      setStatus('success');
-      setMessage(`Order placed: ${order.orderId} (${OrderStatus[order.status] ?? 'UNKNOWN'})`);
-      setSymbol(''); setQty(''); setLimitPrice('');
-    } catch (err) {
-      setStatus('error');
-      setMessage(err instanceof ConnectError ? err.rawMessage : (err as Error).message);
-    }
+      },
+      {
+        onSuccess: (order) => {
+          setIsErrorMsg(false);
+          setMessage(`Order placed: ${order.orderId} (${OrderStatus[order.status] ?? 'UNKNOWN'})`);
+          setSymbol(''); setQty(''); setLimitPrice('');
+        },
+        onError: (err) => {
+          setIsErrorMsg(true);
+          setMessage(err instanceof ConnectError ? (err as ConnectError).rawMessage : (err as Error).message);
+        },
+      },
+    );
   };
 
   const needsLimitPrice = orderType === 'limit' || orderType === 'stop_limit';
@@ -142,14 +146,14 @@ export function OrderForm({ mode }: OrderFormProps) {
           <Button
             type="submit"
             variant={side === 'buy' ? 'buy' : 'sell'}
-            disabled={status === 'submitting' || !selectedAccountId}
+            disabled={isPending || !selectedAccountId}
             className="w-full"
           >
-            {status === 'submitting' ? 'Placing…' : `${side.toUpperCase()} ${symbol || '—'}`}
+            {isPending ? 'Placing…' : `${side.toUpperCase()} ${symbol || '—'}`}
           </Button>
 
           {message && (
-            <p className={`text-xs ${status === 'error' ? 'text-destructive' : 'text-buy'}`}>
+            <p className={`text-xs ${isErrorMsg ? 'text-destructive' : 'text-buy'}`}>
               {message}
             </p>
           )}

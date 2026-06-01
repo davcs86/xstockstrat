@@ -16,12 +16,27 @@ Frontend pattern — see `docs/patterns/docker-build.md` for the base + deps + b
 
 ```
 Browser (React Client Components)
-  └── /api/config → Next.js Route Handler
-        └── gRPC (H2C) → xstockstrat-config:50060
-              └── ListKeys, SetConfig RPCs
-  └── /api/audit → Next.js Route Handler
+  └── TanStack Query typed hooks (app/hooks/) → browserClients.ts (connect-web)
+        └── Connect BFF  /config-ui/api/[...connect]  (connectBff.ts)
+              ├── gRPC (H2C) → xstockstrat-config:50060  (ListKeys, SetConfig)
+              └── gRPC (H2C) → xstockstrat-ingest:50055  (ListSignalSources, ManageSignalSource)
+  └── app/api/audit → Next.js Route Handler
         └── Direct DB query → config.config_audit table
 ```
+
+## Client Hooks
+
+All client-side data access goes through named typed hooks in `app/hooks/`:
+
+| Hook file | Exported hooks | Query key |
+|---|---|---|
+| `useConfigKeys.ts` | `useConfigKeys` | `['config-keys', namespace, env, mode]` |
+| `useSetConfig.ts` | `useSetConfig` | mutation |
+| `useAuditLog.ts` | `useAuditLog` | `['audit-log']` |
+| `useSignalSources.ts` | `useSignalSources` | `['signal-sources']` |
+| `useSignalSourceMutations.ts` | `useManageSignalSource` | mutation |
+
+Provider: `app/lib/queryClient.ts` + `app/providers.tsx`. Note: config-ui has flat layout (no `src/`); `@/*` maps to `./*`.
 
 ## Key Pages
 

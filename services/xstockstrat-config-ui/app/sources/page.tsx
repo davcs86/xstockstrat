@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState } from 'react';
 import { ConnectError } from '@connectrpc/connect';
 import type { JsonObject } from '@bufbuild/protobuf';
 import { Card, CardContent } from '@components/ui/card';
@@ -13,7 +13,9 @@ import {
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '@components/ui/select';
-import { configClient, ingestClient } from '@/app/lib/browserClients';
+import { useSignalSources } from '@/app/hooks/useSignalSources';
+import { useManageSignalSource } from '@/app/hooks/useSignalSourceMutations';
+import type { SignalSource } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -25,16 +27,6 @@ const SOURCE_TYPES = [
 ] as const;
 
 type SourceType = typeof SOURCE_TYPES[number];
-
-interface SignalSource {
-  slug: string;
-  displayName: string;
-  sourceType: SourceType;
-  extractorModule: string;
-  active: boolean;
-  hasCredentials: boolean;
-  configJson: JsonObject;
-}
 
 interface FormState {
   slug: string;
@@ -129,7 +121,7 @@ function formFromSource(src: SignalSource): FormState {
   return {
     slug: src.slug,
     displayName: src.displayName,
-    sourceType: src.sourceType,
+    sourceType: src.sourceType as SourceType,
     extractorModule: src.extractorModule,
     active: src.active,
     senderPatterns: arrToStr(cfg.sender_patterns),
@@ -145,39 +137,12 @@ function formFromSource(src: SignalSource): FormState {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function SourcesPage() {
-  const [sources, setSources] = useState<SignalSource[]>([]);
-  const [weights, setWeights] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { sources, weights, isLoading: loading, error } = useSignalSources();
+  const { mutate: manageMutate, isPending: saving } = useManageSignalSource();
+
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  const fetchSources = useCallback(() => {
-    return ingestClient
-      .listSignalSources({ includeInactive: true })
-      .then((data) => setSources((data.sources ?? []) as unknown as SignalSource[]));
-  }, []);
-
-  useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      fetchSources(),
-      configClient
-        .listKeys({ namespace: 'analysis', environment: 1, tradingMode: 1 })
-        .then((data) => {
-          const weightKey = (data.keys ?? []).find(
-            (k) => k.key === 'analysis.signals.source_weights',
-          );
-          if (weightKey) {
-            try { setWeights(JSON.parse(weightKey.defaultValue)); } catch { /* no-op */ }
-          }
-        }),
-    ])
-      .catch((e) => setError(errMessage(e)))
-      .finally(() => setLoading(false));
-  }, [fetchSources]);
 
   function openEdit(src: SignalSource) {
     setForm(formFromSource(src));
@@ -200,37 +165,28 @@ export default function SourcesPage() {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
-  async function handleToggle(src: SignalSource) {
-    setSaving(true);
-    try {
-      const req = src.active
-        ? { source: { slug: src.slug }, operation: 'deactivate' }
-        : {
-            source: {
-              slug: src.slug,
-              displayName: src.displayName,
-              sourceType: src.sourceType,
-              extractorModule: src.extractorModule,
-              active: true,
-              configJson: src.configJson,
-            },
-            operation: 'update',
-          };
-      await ingestClient.manageSignalSource(req);
-      await fetchSources();
-    } catch (e) {
-      setError(errMessage(e));
-    } finally {
-      setSaving(false);
-    }
+  function handleToggle(src: SignalSource) {
+    const req = src.active
+      ? { source: { slug: src.slug }, operation: 'deactivate' }
+      : {
+          source: {
+            slug: src.slug,
+            displayName: src.displayName,
+            sourceType: src.sourceType,
+            extractorModule: src.extractorModule,
+            active: true,
+            configJson: src.configJson,
+          },
+          operation: 'update',
+        };
+    manageMutate(req);
   }
 
-  async function handleSave() {
-    setSaving(true);
+  function handleSave() {
     setSaveError(null);
     const isNew = editingSlug === '__new__';
     const configJson = buildConfigJson(form);
-    const req: Record<string, unknown> = {
+    const req = {
       source: {
         slug: form.slug,
         displayName: form.displayName,
@@ -240,24 +196,18 @@ export default function SourcesPage() {
         configJson,
       },
       operation: isNew ? 'register' : 'update',
+      ...(form.credentialsRef ? { credentialsRef: form.credentialsRef } : {}),
     };
-    if (form.credentialsRef) req.credentialsRef = form.credentialsRef;
-
-    try {
-      await ingestClient.manageSignalSource(req);
-      await fetchSources();
-      closeForm();
-    } catch (e) {
-      setSaveError(errMessage(e));
-    } finally {
-      setSaving(false);
-    }
+    manageMutate(req, {
+      onSuccess: () => closeForm(),
+      onError: (e) => setSaveError(errMessage(e)),
+    });
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) return <div className="text-sm text-muted-foreground">Loading sources…</div>;
-  if (error) return <div className="text-sm text-destructive">Error: {error}</div>;
+  if (error) return <div className="text-sm text-destructive">Error: {errMessage(error)}</div>;
 
   return (
     <div className="space-y-4">
@@ -294,7 +244,7 @@ export default function SourcesPage() {
                   <TableCell>
                     <div className="flex items-center gap-1.5">
                       <span>{src.sourceType}</span>
-                      {isMediatedType(src.sourceType) && (
+                      {isMediatedType(src.sourceType as SourceType) && (
                         <Badge variant="info">Claude-mediated</Badge>
                       )}
                     </div>
