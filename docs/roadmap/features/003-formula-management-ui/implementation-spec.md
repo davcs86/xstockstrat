@@ -8,6 +8,30 @@
 
 ---
 
+## ⚠ Pre-execution Revision Required (2026-06-01)
+
+**Steps 6 and 7–10 must be revised before execution to align with the platform's current state:**
+
+- **Step 6 (`http_server.py`)**: The indicators HTTP/Connect-RPC server (port 8054) has been
+  removed as part of the platform-wide gRPC-only migration. The gRPC service stubs (added in
+  Steps 1–5) are served directly over gRPC on `INDICATORS_ENDPOINT` (port 50054). Step 6 is
+  superseded — no HTTP route additions are required; delete or skip this step.
+
+- **Steps 7–10 (UI routes and pages)**: These steps target `services/xstockstrat-insights/`
+  and use `fetch` + `INDICATORS_HTTP_ENDPOINT ?? 'http://xstockstrat-indicators:8054'` — both
+  invalid. Two revisions required before execution:
+  1. **Service path**: after 045 consolidates insights into `xstockstrat-ui`, all paths change
+     from `services/xstockstrat-insights/src/...` to `services/xstockstrat-ui/src/insights/...`
+     (or the equivalent basePath-scoped directory in the consolidated service).
+  2. **API pattern**: BFF route handlers must use `createGrpcTransport` on `INDICATORS_ENDPOINT`
+     via `@connectrpc/connect-node`; client-side components use typed `connect-query-es` +
+     TanStack Query hooks per the 044 pattern. Remove all `INDICATORS_HTTP_ENDPOINT` references.
+
+Re-run `/sdd-spec formula-management-ui` after **both 044 and 045 merge** to regenerate
+Steps 6–10 with accurate codebase evidence from the consolidated `xstockstrat-ui` service.
+
+---
+
 ## Execution Summary
 
 Work begins in `packages/proto` (Step 1 — proto changes) followed immediately by stub regeneration (Step 2). Once new proto messages and RPCs are available, the indicators service receives its DB migration (Step 3), then a new repository layer (Step 4), then servicer changes that wire DB persistence into `RegisterFormula` and add `ListFormulas`, `UpdateFormula`, and `DeleteFormula` (Step 5), followed by the matching HTTP server routes (Step 6). Steps 7–10 add the insights API routes and pages: Step 7 adds the collection and per-record API routes, Step 8 adds the execute route (before the pages that call it), Step 9 adds the FormulaEditor component and list/detail pages, and Step 10 adds the new-formula creation page. Step 11 adds tests to both services. Step 12 updates `CLAUDE.md` for the indicators service to document the new environment variable and dependency. All steps in the indicators service must come after Step 3 (migration) since the servicer depends on the schema existing. Steps 7–10 (insights) depend only on Step 2 (stubs available for TS import) and may proceed in parallel with Steps 4–6 in a multi-developer context, but the canonical sequential order keeps proto changes first.
