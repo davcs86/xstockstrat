@@ -100,3 +100,13 @@
   - No new env vars or docker-compose changes needed — feature is entirely client-side.
   - config-ui flat layout (no src/): hooks go under `app/hooks/`, queryClient under `app/lib/queryClient.ts`, tsconfig `@/*` maps to `./*`.
   - `OrderForm.tsx` already uses direct `await tradingClient.placeOrder()` (not SWR) but lacks `useMutation` wrapper — addressed in Step 4.
+
+## Session 2026-06-01 — sdd-review impl-spec + decisions
+
+- impl-spec review: PASS (0 failures, 6 advisory warnings).
+- W1 (basepath import): executor runs `ls services/xstockstrat-{trader,insights,config-ui}/src/lib/basepath.ts` at Step 3 start; if absent, use inline constant in useAuditLog.
+- **W2 FIXED in spec**: `useConfigKeys` in Step 4 now imports `Environment` and `TradingMode` from `@xstockstrat/proto/common/v1/common_pb` and uses named enum constants (`Environment.ENVIRONMENT_PRODUCTION`, `TradingMode.TRADING_MODE_LIVE`, etc.) instead of magic integers.
+- W3 (residual any deferred to Step 7): accepted as designed.
+- W4 (RefreshTokenResponse field names): executor greps generated stub at step start.
+- W5 (Step 10 typed `service` but docs-only): advisory only; no spec change.
+- W6 (003 overlap on xstockstrat-insights/package.json): execution order (044 before 003) enforces this; no merge-order entry needed beyond existing sequence.

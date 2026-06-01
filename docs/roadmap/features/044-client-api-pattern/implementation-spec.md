@@ -564,14 +564,21 @@ Create `services/xstockstrat-config-ui/app/hooks/useConfigKeys.ts`:
 import { useQuery } from '@tanstack/react-query';
 import { configClient } from '@/app/lib/browserClients';
 import type { ListKeysResponse } from '@xstockstrat/proto/config/v1/config_pb';
+import { Environment, TradingMode } from '@xstockstrat/proto/common/v1/common_pb';
 
 export function useConfigKeys(
   namespace: string,
   env: string,
   mode: string,
 ): { data: ListKeysResponse | undefined; isLoading: boolean; error: Error | null } {
-  function envToProto(e: string): number { return e === 'production' ? 2 : 1; }
-  function modeToProto(m: string): number { return m === 'live' ? 2 : m === 'paper' ? 1 : 0; }
+  function envToProto(e: string): Environment {
+    return e === 'production' ? Environment.ENVIRONMENT_PRODUCTION : Environment.ENVIRONMENT_DEV;
+  }
+  function modeToProto(m: string): TradingMode {
+    return m === 'live' ? TradingMode.TRADING_MODE_LIVE
+      : m === 'paper' ? TradingMode.TRADING_MODE_PAPER
+      : TradingMode.TRADING_MODE_UNSPECIFIED;
+  }
   return useQuery({
     queryKey: ['config-keys', namespace, env, mode],
     queryFn: () =>
