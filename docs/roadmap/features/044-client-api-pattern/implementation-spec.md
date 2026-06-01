@@ -176,7 +176,7 @@ cd services/xstockstrat-insights && pnpm install && pnpm exec tsc --noEmit 2>&1 
 
 ### Step 3 — service: Add connect-query deps + QueryClient provider to xstockstrat-config-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/package.json` — modify
