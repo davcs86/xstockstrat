@@ -75,3 +75,15 @@
     already captured in merge-order.md from prior session.
   - `003-formula-management-ui` added to Stream 2 workstream — must merge before 045 to avoid
     re-doing xstockstrat-insights work in the consolidated service.
+
+## Session 2026-06-01T00:01:00Z — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
+- Key codebase findings:
+  - All three frontends already on Next.js 15.5.15 (package.json confirmed); no version alignment work needed.
+  - Config-ui uses `app/` (no `src/`) layout and `@/app/lib/*` import paths — migrated files must remap to `@/lib/*` in the consolidated `src/` tree.
+  - All three middleware files are logically identical; the consolidated service uses a single middleware.ts at `src/middleware.ts` — no per-segment middleware files needed.
+  - Three separate mock backends (ports 9091/9092/9093) must remain distinct in the consolidated e2e suite — they serve different gRPC service sets and cannot be merged.
+  - `next.config.js` carries no top-level `basePath`; each segment is a route group under `src/app/`. The BFF `handlerMap` keyed on `'/api' + h.requestPath` is correct because Next.js strips the segment path prefix before the handler (confirmed in all three connectBff.ts files).
+  - Config-ui's `pg` Pool access in `app/api/audit/route.ts:12` carried forward as-is; `DATABASE_URL` added to consolidated service's env var set.
+  - DO ingress must add a `/agent` route rule before the root `/` rule to route agent SSE/messages to `xstockstrat-agent` without passing through the UI service.
