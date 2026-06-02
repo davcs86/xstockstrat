@@ -142,3 +142,8 @@
 - Copied 5 config-ui specs with `BASE_URL` updated: `http://localhost:3002` → `http://localhost:3000`.
 - Files modified: `services/xstockstrat-ui/playwright.config.ts`, `services/xstockstrat-ui/e2e/` (18 files)
 - Deviations: `pnpm test:e2e` full run not attempted — no display server/Playwright browsers in environment. TypeScript check (`npx tsc --noEmit`) passed with zero errors. Next.js build still passes.
+
+### Step 4 — Update CI workflow to reference `xstockstrat-ui` [done]
+- Updated `.github/workflows/ci.yml`: replaced 4 filter entries (trader/insights/config-ui/nginx) with single `xstockstrat-ui` entry; replaced 3-entry `frontend-lint` matrix with single `xstockstrat-ui`; replaced 3-entry `frontend-e2e` matrix with single `xstockstrat-ui`.
+- Files modified: `.github/workflows/ci.yml`
+- Deviations: none
