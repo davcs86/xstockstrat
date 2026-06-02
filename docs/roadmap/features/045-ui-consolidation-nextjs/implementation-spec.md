@@ -568,7 +568,7 @@ Any remaining references should be in historical/context files (deviations, feat
 
 ### Step 8 — docs: Update root CLAUDE.md service registry, language map, and inter-service dependency graph
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: repository root
 **Files**:
 - `CLAUDE.md` — modify
