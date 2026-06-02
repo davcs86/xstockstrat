@@ -98,3 +98,28 @@
 - **W5 (045 Step 6 deletes xstockstrat-insights): 003 is being re-spec'd after 044+045+046 merge — 003 will not have UI steps merged before 045 Step 6. Safe to proceed.**
 - **W6 (monaco-editor): 003 re-spec will target xstockstrat-ui and will include @monaco-editor/react in the xstockstrat-ui package.json at that time. Executor checks 003 merge state at Step 1.**
 - Execution order: 044 → 046 → 045 → 003 (re-spec) → 019 → 016.
+
+## Session 2026-06-01T00:02:00Z — sdd-execute Step 1
+
+- Step 1 complete. All source files for `services/xstockstrat-ui` created. Build passes: `pnpm run build` produced all 31 routes with zero TypeScript errors.
+- Files modified: `services/xstockstrat-ui/` (entire service tree, ~90 files), `docs/roadmap/features/045-ui-consolidation-nextjs/`
+- Deviations:
+  - Per-service browser clients (`lib/browserClients/{service}Client.ts`) used instead of single `lib/browserClients.ts` — user-adjusted plan (Phase 2).
+  - No shared `connectTransport.ts` created — not needed with per-service client pattern.
+  - `INDICATORS_ENDPOINT` removed from `connectClients.ts` — no `indicatorsClient` exported; indicators BFF not used by any segment.
+  - `pnpm install` (without `--frozen-lockfile`) run first to generate lockfile for new service.
+  - Component relative imports (`./ui/*`) fixed to `../ui/*` after move to segment subdirectory.
+  - Insights AppShell internal nav links updated: `/` → `/insights`, `/strategies` → `/insights/strategies`.
+  - Trader AppShell logo link updated: `/` → `/trader`.
+  - `TradingMode` import in trader components updated: `@/app/page` → `@/app/trader/page`.
+
+### Step 1 — Create `services/xstockstrat-ui` [done]
+- Created all 90+ files: package.json, next.config.js, tsconfig.json, middleware.ts, auth.ts, identity.ts, three BFF files, 7 browser client files, all segment pages (trader, insights, config-ui), all hooks co-located with segments, all components namespaced by segment.
+- Files modified: `services/xstockstrat-ui/` (entire tree)
+- Deviations: see Deviation Log in implementation-spec.md
+
+## Session 2026-06-01 — sdd-execute Step 1 end
+**Steps this session**: [1]
+**Progress**: 1 done / 9 total
+**Stopped at**: Step 1 complete
+**Next**: /sdd-execute ui-consolidation-nextjs next
