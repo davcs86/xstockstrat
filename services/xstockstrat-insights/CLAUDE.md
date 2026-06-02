@@ -89,3 +89,18 @@ TRADING_MODE=paper                     # paper | live
 pnpm install
 pnpm run dev
 ```
+
+## E2E Backend Mock
+
+Playwright e2e tests run against a real H2C gRPC mock server (`e2e/mock-backend.ts`) that
+registers the same service descriptors (`AnalysisService`, `MarketDataService`, `PortfolioService`,
+`TradingService`, `IdentityService`) as the production BFF. The mock starts in `e2e/global-setup.ts`
+on port 9092 before the Next.js dev server.
+
+`playwright.config.ts` `webServer.env` sets every `*_ENDPOINT` to `127.0.0.1:9092`, so the BFF's
+`createGrpcTransport` clients dial the mock exactly as they would dial real backends. No production
+code is modified.
+
+- `ANALYSIS_ENDPOINT`, `MARKETDATA_ENDPOINT`, `PORTFOLIO_ENDPOINT`, `TRADING_ENDPOINT`,
+  `IDENTITY_ENDPOINT` → all `127.0.0.1:9092`
+- Do not use `*_HTTP_ENDPOINT` — that env var is not read by any runtime code.

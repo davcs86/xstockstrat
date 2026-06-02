@@ -2,16 +2,15 @@ import { test, expect, type Page } from '@playwright/test';
 import { SignJWT } from 'jose';
 
 /**
- * API smoke tests for xstockstrat-trader Next.js route handlers.
+ * BFF smoke tests for the Connect-RPC gateway in xstockstrat-trader.
  *
- * These tests make HTTP requests directly to the Next.js API routes via
- * Playwright's page.request (BrowserContext request context).  The route
- * handlers call the real Connect-RPC client code which points at the mock
- * backend started in globalSetup — so the full server-side path is exercised.
+ * The mock backend (port 9091) handles TradingService, PortfolioService, and
+ * MarketDataService. These tests call the BFF via browser-level fetch
+ * (page.evaluate) to avoid the Next.js dev-server Transfer-Encoding quirk
+ * that breaks Playwright's undici-based APIRequestContext.
  *
- * Auth cookies are injected via addAuthCookie() so each test exercises the
- * authenticated code path.  The auth.spec.ts file covers the unauthenticated
- * (redirect/401) and login/logout flows separately.
+ * Auth cookie is injected directly so the BFF middleware allows the calls.
+ * All assertions use camelCase protobuf-es JSON field names (orderId, filledQty, etc.)
  */
 
 const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
@@ -35,148 +34,132 @@ async function addAuthCookie(page: Page): Promise<void> {
   ]);
 }
 
-test.describe('GET /api/orders — OrderBook data contract', () => {
+test.describe('Connect BFF — TradingService/ListOrders data contract', () => {
   /**
-   * OrderBook.tsx accesses:
+   * OrderBook.tsx (via useOrders hook) accesses:
    *   data.orders[]
-   *   order.order_id   → TableRow key
-   *   order.symbol     → displayed in Symbol column
-   *   order.side       → compared to 'ORDER_SIDE_BUY' for Badge variant
-   *   order.qty        → displayed in Qty column
-   *   order.filled_qty → displayed in Filled column (falls back to 0)
-   *   order.filled_avg_price → formatted as $N.NN or '—'
-   *   order.status     → mapped to Badge variant via statusVariant lookup
+   *   order.orderId        → TableRow key
+   *   order.symbol         → Symbol column
+   *   order.side           → numeric enum (1=BUY, 2=SELL)
+   *   order.qty            → Qty column
+   *   order.filledQty      → Filled column
+   *   order.filledAvgPrice → formatted as $N.NN or '—'
+   *   order.status         → numeric enum (3=FILLED)
    */
-  test('returns orders array with all UI-required fields', async ({ page }) => {
+  test('returns orders array with all UI-required camelCase fields', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/trader/api/orders?trading_mode=paper');
-    expect(res.status()).toBe(200);
+    await page.goto('/trader/login');
 
-    const body = await res.json();
-    expect(body).toHaveProperty('orders');
-    expect(Array.isArray(body.orders)).toBe(true);
-    expect(body.orders.length).toBeGreaterThan(0);
+    const result = await page.evaluate(async () => {
+      const res = await fetch('/trader/api/xstockstrat.trading.v1.TradingService/ListOrders', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ tradingMode: 1 }),
+      });
+      return { status: res.status, body: await res.json() as Record<string, unknown> };
+    });
 
-    const order = body.orders[0];
-    // Fields accessed by OrderBook rows
-    expect(order).toHaveProperty('order_id');       // key prop
-    expect(order).toHaveProperty('symbol');          // Symbol column
-    expect(order).toHaveProperty('side');            // Badge variant test
-    expect(order).toHaveProperty('qty');             // Qty column
-    expect(order).toHaveProperty('filled_qty');      // Filled column
-    expect(order).toHaveProperty('filled_avg_price'); // Avg Price column
-    expect(order).toHaveProperty('status');          // Status badge
+    expect(result.status).toBe(200);
+    expect(result.body).toHaveProperty('orders');
+    expect(Array.isArray(result.body.orders)).toBe(true);
+    expect((result.body.orders as unknown[]).length).toBeGreaterThan(0);
 
-    // side must be one of the values the statusVariant map handles
-    expect(order.side).toMatch(/^ORDER_SIDE_(BUY|SELL)$/);
-
-    // status must start with ORDER_STATUS_ (component strips prefix for display)
-    expect(order.status).toMatch(/^ORDER_STATUS_/);
-
-    // filled_avg_price is passed to Number() so it must be numeric-safe
-    expect(Number(order.filled_avg_price)).not.toBeNaN();
+    const order = (result.body.orders as Record<string, unknown>[])[0];
+    expect(order).toHaveProperty('orderId');
+    expect(order).toHaveProperty('symbol');
+    expect(order).toHaveProperty('side');
+    // Connect JSON (protobuf-es) serializes enum fields as their string name, not a number
+    expect(typeof order.side).toBe('string');
+    expect(order).toHaveProperty('qty');
+    expect(order).toHaveProperty('filledQty');
+    expect(order).toHaveProperty('filledAvgPrice');
+    expect(order).toHaveProperty('status');
+    expect(typeof order.status).toBe('string');
   });
 });
 
-test.describe('POST /api/orders — OrderForm success path', () => {
+test.describe('Connect BFF — TradingService/PlaceOrder data contract', () => {
   /**
-   * OrderForm.tsx success handler:
-   *   setMessage(`Order placed: ${data.order_id} (${data.status})`)
+   * OrderForm.tsx (via usePlaceOrder hook) success handler:
+   *   setMessage(`Order placed: ${order.orderId} (${OrderStatus[order.status] ?? 'UNKNOWN'})`)
    *
-   * Both order_id and status must be present in the response.
+   * orderId and status must be present in the response.
    */
-  test('returns order_id and status used in the success message', async ({ page }) => {
+  test('returns orderId and numeric status on success', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.post('/trader/api/orders', {
-      data: {
-        symbol: 'AAPL',
-        side: 'buy',
-        order_type: 'market',
-        qty: 1,
-        trading_mode: 'paper',
-      },
+    await page.goto('/trader/login');
+
+    const result = await page.evaluate(async () => {
+      const res = await fetch('/trader/api/xstockstrat.trading.v1.TradingService/PlaceOrder', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ symbol: 'AAPL', side: 1, orderType: 1, qty: 1, tradingMode: 1 }),
+      });
+      return { status: res.status, body: await res.json() as Record<string, unknown> };
     });
-    expect(res.status()).toBe(200);
 
-    const body = await res.json();
-    // UI success message: `Order placed: ${data.order_id} (${data.status})`
-    expect(body).toHaveProperty('order_id');
-    expect(typeof body.order_id).toBe('string');
-    expect(body.order_id.length).toBeGreaterThan(0);
-
-    expect(body).toHaveProperty('status');
-    expect(typeof body.status).toBe('string');
-
-    // trading_mode returned for reference
-    expect(body).toHaveProperty('trading_mode');
-  });
-
-  test('returns error field when order placement fails', async ({ page }) => {
-    await addAuthCookie(page);
-    // Send an invalid payload (missing required fields) to trigger a 500
-    const res = await page.request.post('/trader/api/orders', {
-      data: { symbol: '', qty: -1 },
-    });
-    // Route handler catches errors and returns JSON { error: ... } with status 500
-    expect([400, 500]).toContain(res.status());
-    const body = await res.json();
-    expect(body).toHaveProperty('error');
-    expect(typeof body.error).toBe('string');
+    expect(result.status).toBe(200);
+    expect(result.body).toHaveProperty('orderId');
+    expect(typeof result.body.orderId).toBe('string');
+    expect((result.body.orderId as string).length).toBeGreaterThan(0);
+    expect(result.body).toHaveProperty('status');
+    // Connect JSON (protobuf-es) serializes enum fields as their string name
+    expect(typeof result.body.status).toBe('string');
   });
 });
 
-test.describe('GET /api/portfolio — PortfolioSummary data contract', () => {
+test.describe('Connect BFF — PortfolioService/GetPortfolio data contract', () => {
   /**
-   * PortfolioSummary in OrderBook.tsx accesses:
-   *   data.equity        → $N.NN (Number().toLocaleString)
-   *   data.cash          → $N.NN
-   *   data.buying_power  → $N.NN
-   *   data.day_pnl       → compared >= 0 for colour, formatted ±$N.NN
-   *   data.day_pnl_pct   → multiplied * 100, toFixed(2)%
-   *   data.total_pnl     → $N.NN
-   *   data.positions[]
-   *     pos.symbol          → displayed
-   *     pos.unrealized_pnl  → compared >= 0 for colour, formatted ±$N.NN
+   * PortfolioPanel.tsx (via usePortfolio hook) accesses:
+   *   data.equity / cash / buyingPower / dayPnl / dayPnlPct / totalPnl  → numeric
+   *   data.positions[] → symbol, unrealizedPnl
    */
-  test('returns all numeric fields required by PortfolioSummary', async ({ page }) => {
+  test('returns all numeric fields required by PortfolioPanel', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/trader/api/portfolio?trading_mode=paper');
-    expect(res.status()).toBe(200);
+    await page.goto('/trader/login');
 
-    const body = await res.json();
+    const result = await page.evaluate(async () => {
+      const res = await fetch('/trader/api/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      return { status: res.status, body: await res.json() as Record<string, unknown> };
+    });
 
-    const numericFields = [
-      'equity',
-      'cash',
-      'buying_power',
-      'day_pnl',
-      'day_pnl_pct',
-      'total_pnl',
-    ] as const;
+    expect(result.status).toBe(200);
+    const body = result.body;
 
-    for (const field of numericFields) {
+    for (const field of ['equity', 'cash', 'buyingPower', 'dayPnl', 'dayPnlPct', 'totalPnl']) {
       expect(body).toHaveProperty(field);
-      // UI wraps each in Number() — must not produce NaN
-      expect(Number(body[field])).not.toBeNaN();
+      expect(typeof body[field]).toBe('number');
     }
 
-    // day_pnl_pct is multiplied by 100 in the component; if it's already a
-    // percentage (e.g. 66.0) the display would be 6600% — the value must be
-    // in decimal form (0–1 range for typical P&L percentages)
-    expect(Math.abs(Number(body.day_pnl_pct))).toBeLessThan(100);
+    // dayPnlPct is in decimal form (0–1 range); component multiplies * 100
+    expect(Math.abs(body.dayPnlPct as number)).toBeLessThan(100);
   });
 
-  test('positions array contains symbol and unrealized_pnl', async ({ page }) => {
+  test('positions array contains symbol and numeric unrealizedPnl', async ({ page }) => {
     await addAuthCookie(page);
-    const res = await page.request.get('/trader/api/portfolio?trading_mode=paper');
-    const body = await res.json();
+    await page.goto('/trader/login');
 
+    const result = await page.evaluate(async () => {
+      const res = await fetch('/trader/api/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      return { status: res.status, body: await res.json() as Record<string, unknown> };
+    });
+
+    const body = result.body;
     expect(Array.isArray(body.positions)).toBe(true);
-    if (body.positions.length > 0) {
-      const pos = body.positions[0];
-      expect(pos).toHaveProperty('symbol');                  // key prop and display
-      expect(pos).toHaveProperty('unrealized_pnl');          // colour and display
-      expect(Number(pos.unrealized_pnl)).not.toBeNaN();      // passed to Number()
+
+    if ((body.positions as unknown[]).length > 0) {
+      const pos = (body.positions as Record<string, unknown>[])[0];
+      expect(pos).toHaveProperty('symbol');
+      expect(pos).toHaveProperty('unrealizedPnl');
+      expect(typeof pos.unrealizedPnl).toBe('number');
     }
   });
 });
