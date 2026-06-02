@@ -97,3 +97,15 @@
   - `docker-compose.yml` `xstockstrat-indicators` block (lines 260–286) does not use `*db-url` merge anchor and has no timescaledb/db-migrator depends_on — both must be added (Step 4).
   - `DATABASE_URL` is absent from `xstockstrat-indicators` envs in `.do/app.dev.yaml` and `.do/app.yaml` — must be added (Step 4).
   - The old `xstockstrat-insights` docker-compose block (line 457) still carries `INDICATORS_ENDPOINT` — no deployment file change needed for Steps 7–12 until 045's deployment wiring is also complete.
+
+## Session 2026-06-02T00:01:00Z — sdd-execute
+
+### Step 1 — proto: Add author to RegisterFormulaRequest and add ListFormulas, UpdateFormula, DeleteFormula RPCs [done]
+- Added `author = 6` to `RegisterFormulaRequest`; added `ListFormulas`, `UpdateFormula`, `DeleteFormula` RPCs to `IndicatorsService`; appended 6 new messages after `GetFormulaRequest`.
+- Files modified: `packages/proto/indicators/v1/indicators.proto`
+- Deviations: `buf` not installed — verified proto syntax with `grpc_tools.protoc` and confirmed no lines removed (purely additive change). Documented as deviation per phase3-deviations.md precedent.
+
+**Steps this session**: [1]
+**Progress**: 1 done / 12 total
+**Stopped at**: Step 1 complete — PR created
+**Next**: /sdd-execute formula-management-ui next

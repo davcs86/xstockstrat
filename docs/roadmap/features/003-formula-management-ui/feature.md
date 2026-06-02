@@ -1,9 +1,9 @@
 # Feature: formula-management-ui
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/formula-management-ui`
 **Created**: 2026-05-10
-**Last Updated**: 2026-06-01
+**Last Updated**: 2026-06-02
 
 ---
 
@@ -16,6 +16,7 @@
 | 2026-05-10 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 | 2026-06-01 | `implementation-ready` (spec updated) | /sdd-review | Added to Stream 2 after 045; FR-13 corrected to gRPC + xstockstrat-ui target; impl spec Steps 6–10 flagged for regeneration after 044+045 land. |
 | 2026-06-02 | `implementation-ready` (spec regenerated) | /sdd-spec | Re-ran sdd-spec after 044+045+046 merged; all 12 steps regenerated targeting xstockstrat-ui with gRPC+connect-query pattern; Steps 1-5 carry forward from original spec with minor corrections (author field added to RegisterFormulaRequest in proto). |
+| 2026-06-02 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — proto RPCs and author field added |
 
 ---
 

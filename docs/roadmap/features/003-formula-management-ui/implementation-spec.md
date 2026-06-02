@@ -1,6 +1,6 @@
 # Implementation Spec: formula-management-ui
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-06-02 (regenerated — replaces 2026-05-10 version)
 **Feature**: `docs/roadmap/features/003-formula-management-ui/feature.md`
 **Total Steps**: 12
@@ -28,7 +28,7 @@ Work begins in `packages/proto` (Step 1 — add new messages and RPCs, plus `aut
 
 ### Step 1 — proto: Add author to RegisterFormulaRequest and add ListFormulas, UpdateFormula, DeleteFormula RPCs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/indicators/v1/indicators.proto` — modify
@@ -989,4 +989,7 @@ cd services/xstockstrat-insights && pnpm run lint
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 1 — proto
+**Spec said**: run `cd packages/proto && buf lint && buf breaking --against '.git#branch=main-dev'`
+**Actual**: `buf` not installed in environment; validated proto syntax with `python3 -m grpc_tools.protoc` (exit 0) and confirmed no lines removed (purely additive change).
+**Reason**: `buf` unavailable in this remote execution environment — same fallback used in phase3-deviations.md.
