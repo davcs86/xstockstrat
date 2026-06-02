@@ -81,3 +81,19 @@
 - **Action**: after 044+045+046 merge to `main-dev`, rebase `feature/formula-management-ui` on `main-dev`, then re-run `/sdd-spec formula-management-ui` to regenerate the impl spec end-to-end against the consolidated service.
 - @monaco-editor/react: the re-spec will include it in the `xstockstrat-ui/package.json` at Step 1 (alongside the connect-query-es deps from 044).
 - Execution position in Stream 2: 044 → 046 → 045 → **003** → 019 → 016.
+
+## Session 2026-06-02T00:00:00Z — sdd-spec (regeneration)
+
+- Regenerated implementation-spec.md with 12 steps. Status remains `implementation-ready`.
+- All 12 steps now target the post-consolidation `xstockstrat-ui` service and use the gRPC + connect-query-es pattern from feature 044.
+- Key codebase findings:
+  - `services/xstockstrat-ui` now exists with insights under `src/app/insights/`. The consolidated BFF pattern uses `createConnectRouter` in `src/lib/insightsBff.ts` — `IndicatorsService` is absent from it and must be registered (Step 7).
+  - `services/xstockstrat-ui/src/lib/connectClients.ts` does not yet import `IndicatorsService` or define `INDICATORS_ENDPOINT` (Step 7).
+  - Browser client pattern: `createConnectTransport({ baseUrl: '/insights/api' })` in `src/lib/browserClients/analysisClient.ts` — indicatorsClient follows this same pattern (Step 8).
+  - Hook pattern: `useQuery`/`useMutation` from `@tanstack/react-query` in `src/hooks/useStrategies.ts` — confirmed, useFormulas.ts follows it (Step 8).
+  - `@monaco-editor/react` absent from `services/xstockstrat-ui/package.json` — must add as `^4.6.0` (Step 10). Use `dynamic(() => import('@monaco-editor/react'), { ssr: false })` to avoid SSR issues.
+  - `RegisterFormulaRequest` in the proto does NOT have an `author` field (only in `FormulaDefinition`). Step 1 adds `author = 6` to `RegisterFormulaRequest` — BFF overwrites it with `claims.user_id` in Step 7, preventing caller spoofing.
+  - `services/xstockstrat-indicators/migrations/` directory does NOT exist — NNN starts at `001` (Step 3).
+  - `docker-compose.yml` `xstockstrat-indicators` block (lines 260–286) does not use `*db-url` merge anchor and has no timescaledb/db-migrator depends_on — both must be added (Step 4).
+  - `DATABASE_URL` is absent from `xstockstrat-indicators` envs in `.do/app.dev.yaml` and `.do/app.yaml` — must be added (Step 4).
+  - The old `xstockstrat-insights` docker-compose block (line 457) still carries `INDICATORS_ENDPOINT` — no deployment file change needed for Steps 7–12 until 045's deployment wiring is also complete.
