@@ -124,7 +124,7 @@
 **Stopped at**: Step 1 complete
 **Next**: /sdd-execute ui-consolidation-nextjs next
 
-## Session 2026-06-01T00:03:00Z — sdd-execute Step 2
+## Session 2026-06-01T00:03:00Z — sdd-execute Steps 2–3
 
 ### Step 2 — Create Dockerfile and update docker-compose + DO app specs [done]
 - Created `services/xstockstrat-ui/Dockerfile` (4-stage: base/deps/builder/runner, matching trader pattern).
@@ -132,3 +132,13 @@
 - Updated `.do/app.dev.yaml` and `.do/app.yaml`: updated ingress rules (nginx → agent+ui rules), removed 4 old service blocks, added `xstockstrat-ui` block. Dev uses `basic-xs`, prod uses `professional-xs`.
 - Files modified: `services/xstockstrat-ui/Dockerfile`, `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`
 - Deviations: Docker build verification skipped — Docker daemon not running in execution environment. Grep verifications passed (no old service names remain; `xstockstrat-ui` present in all 3 files).
+
+### Step 3 — Migrate e2e tests into `services/xstockstrat-ui` [done]
+- Created `playwright.config.ts` — consolidated config on port 3000, 3 env sets for 3 mock ports, all 9 endpoint vars.
+- Created `e2e/mock-backend.ts` — merged 3 source mock-backend.ts files into separate http2 servers on 9091/9092/9093; shared `identityHandlers` object since all three IdentityService mocks are identical.
+- Created `e2e/global-setup.ts` and `e2e/global-teardown.ts`.
+- Copied 6 trader specs (no URL changes needed — already on port 3000 with `/trader/...` paths).
+- Copied 4 insights specs with `BASE_URL` updated: `http://localhost:3001` → `http://localhost:3000`.
+- Copied 5 config-ui specs with `BASE_URL` updated: `http://localhost:3002` → `http://localhost:3000`.
+- Files modified: `services/xstockstrat-ui/playwright.config.ts`, `services/xstockstrat-ui/e2e/` (18 files)
+- Deviations: `pnpm test:e2e` full run not attempted — no display server/Playwright browsers in environment. TypeScript check (`npx tsc --noEmit`) passed with zero errors. Next.js build still passes.
