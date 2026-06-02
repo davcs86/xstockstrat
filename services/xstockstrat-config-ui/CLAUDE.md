@@ -85,3 +85,19 @@ pnpm run dev
 - This service does NOT subscribe to xstockstrat-config via WatchConfig — it is a management UI, not a service consumer.
 - Secret values (`is_secret=true`) are displayed as `[secret]` and cannot be edited via the UI.
 - All edits are written via `SetConfig` RPC with `author=config-ui` and a reason string.
+
+## E2E Backend Mock
+
+Playwright e2e tests run against a real H2C gRPC mock server (`e2e/mock-backend.ts`) that
+registers the same service descriptors (`ConfigService`, `IngestService`, `IdentityService`)
+as the production BFF. The mock starts in `e2e/global-setup.ts` on port 9093 before the Next.js
+dev server.
+
+`playwright.config.ts` `webServer.env` sets every `*_ENDPOINT` to `127.0.0.1:9093`, so the BFF's
+`createGrpcTransport` clients dial the mock exactly as they would dial real backends. No production
+code is modified.
+
+- `CONFIG_ENDPOINT`, `INGEST_ENDPOINT`, `IDENTITY_ENDPOINT` → all `127.0.0.1:9093`
+- The `audit` route bypasses the mock — it queries `config.config_audit` via `DATABASE_URL` directly
+  and is not covered by the gRPC mock.
+- Do not use `*_HTTP_ENDPOINT` — that env var is not read by any runtime code.
