@@ -1,6 +1,6 @@
 # Client API Pattern
 
-Every Next.js frontend (`trader`, `insights`, `config-ui`) uses this pattern for all client-side data access. All reads go through `useQuery` hooks; all writes go through `useMutation` hooks. Components never import `browserClients.ts` directly.
+The `xstockstrat-ui` consolidated Next.js frontend uses this pattern for all client-side data access. All reads go through `useQuery` hooks; all writes go through `useMutation` hooks. Components never import browser client files directly.
 
 This follows feature `044-client-api-pattern`.
 
@@ -20,40 +20,40 @@ This follows feature `044-client-api-pattern`.
 
 ## Directory Structure
 
-### Services with `src/` layout (`xstockstrat-trader`, `xstockstrat-insights`)
+`xstockstrat-ui` uses a single `src/` tree. Shared hooks (used across segments) live in `src/hooks/`; segment-specific hooks co-locate with their segment under `src/app/<segment>/hooks/`.
 
 ```
 src/
-  hooks/
-    useOrders.ts          # one file per domain — exports named hooks only
+  hooks/                        # shared cross-segment hooks
+    useOrders.ts
     usePortfolio.ts
-    usePlaceOrder.ts       # mutations follow the same pattern
-  lib/
-    queryClient.ts         # createQueryClient() + normalizerConfig
-    browserClients.ts      # Connect clients — never imported from components
+    usePlaceOrder.ts
+    useStrategies.ts
+    useAccountPortfolios.ts
+    useBacktest.ts
   app/
-    providers.tsx          # 'use client' wrapper — QueryClientProvider + QueryNormalizerProvider
-    layout.tsx             # Server Component — renders <Providers>{children}</Providers>
-```
-
-### `xstockstrat-config-ui` (flat `app/` layout, no `src/`)
-
-```
-app/
-  hooks/
-    useConfigKeys.ts
-    useSetConfig.ts
-    useAuditLog.ts
-    useSignalSources.ts
-    useSignalSourceMutations.ts
+    trader/                     # trader segment
+    insights/                   # insights segment
+    config-ui/
+      hooks/                    # config-ui segment hooks (co-located)
+        useConfigKeys.ts
+        useSetConfig.ts
+        useAuditLog.ts
+        useSignalSources.ts
+        useSignalSourceMutations.ts
+    providers.tsx               # 'use client' — QueryClientProvider + QueryNormalizerProvider
+    layout.tsx                  # Server Component — renders <Providers>{children}</Providers>
   lib/
-    queryClient.ts
-    browserClients.ts
-  providers.tsx
-  layout.tsx
+    queryClient.ts              # createQueryClient() + normalizerConfig
+    browserClients/             # per-service Connect clients (never imported from components)
+      tradingClient.ts
+      portfolioClient.ts
+      analysisClient.ts
+      configClient.ts
+      ingestClient.ts
+      marketDataClient.ts
+      notifyClient.ts
 ```
-
-Note: config-ui's `tsconfig.json` maps `@/*` → `./*` (root), so import paths use `@/app/lib/browserClients` (not `@/lib/browserClients`).
 
 ---
 
@@ -119,7 +119,7 @@ import { Providers } from './providers';
 
 ## Query Hook Example
 
-Reference implementation: `services/xstockstrat-insights/src/hooks/useStrategies.ts`
+Reference implementation: `services/xstockstrat-ui/src/hooks/useStrategies.ts`
 
 ```ts
 import { useQuery } from '@tanstack/react-query';
@@ -149,7 +149,7 @@ Key rules:
 
 ## Mutation Hook Example
 
-Reference implementation: `services/xstockstrat-trader/src/hooks/usePlaceOrder.ts`
+Reference implementation: `services/xstockstrat-ui/src/hooks/usePlaceOrder.ts`
 
 ```ts
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -187,7 +187,7 @@ Normy propagates entity updates across all cached queries that contain a matchin
 
 ### Current normalized keys
 
-Defined in `queryClient.ts` in all three services:
+Defined in `src/lib/queryClient.ts` in `xstockstrat-ui`:
 
 | Field | Key prefix | Example |
 |---|---|---|
@@ -196,14 +196,12 @@ Defined in `queryClient.ts` in all three services:
 
 ### Adding a new key
 
-1. Open `src/lib/queryClient.ts` (or `app/lib/queryClient.ts` for config-ui) in each service that needs it
+1. Open `services/xstockstrat-ui/src/lib/queryClient.ts`
 2. Add a branch to `getNormalizationObjectKey`:
 
 ```ts
 if (typeof obj.portfolioId === 'string' && obj.portfolioId) return `portfolio:${obj.portfolioId}`;
 ```
-
-3. Update the same function in all services that share entity data (trader and insights both track portfolios)
 
 ### Deferred fields
 
@@ -233,12 +231,11 @@ These rules enforce FR-3, FR-4, and FR-10 of feature `044-client-api-pattern`.
 
 ---
 
-## Reference Implementations
+## Reference Implementation
 
-| Service | Hooks directory | Provider/config |
-|---|---|---|
-| `xstockstrat-trader` | `services/xstockstrat-trader/src/hooks/` | `src/lib/queryClient.ts`, `src/app/providers.tsx` |
-| `xstockstrat-insights` | `services/xstockstrat-insights/src/hooks/` | `src/lib/queryClient.ts`, `src/app/providers.tsx` |
-| `xstockstrat-config-ui` | `services/xstockstrat-config-ui/app/hooks/` | `app/lib/queryClient.ts`, `app/providers.tsx` |
-
-Each service's `CLAUDE.md` contains a Client Hooks table listing every hook file, its exported hook names, and the query keys it uses.
+| Location | Purpose |
+|---|---|
+| `services/xstockstrat-ui/src/hooks/` | Shared hooks (orders, portfolio, strategies, backtest, account portfolios) |
+| `services/xstockstrat-ui/src/app/config-ui/hooks/` | Config-UI segment hooks (config keys, audit log, signal sources) |
+| `services/xstockstrat-ui/src/lib/queryClient.ts` | `createQueryClient()` + `normalizerConfig` |
+| `services/xstockstrat-ui/src/app/providers.tsx` | `QueryClientProvider` + `QueryNormalizerProvider` wrapper |
