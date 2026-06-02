@@ -153,6 +153,19 @@
 - Files modified: none (verification-only step)
 - Deviations: Docker/curl/e2e runtime checks not runnable — Docker daemon unavailable, POSTGRES_PASSWORD not set. Marked done as all static checks pass; runtime verification deferred to CI and post-integration-PR manual test.
 
+### Step 8 — Update root CLAUDE.md service registry, language map, and inter-service dependency graph [done]
+- Service Registry: replaced 4 rows (trader, insights, config-ui, nginx) with single `xstockstrat-ui` row.
+- Language Map: `Next.js → xstockstrat-ui` (was three services).
+- Nginx Reverse Proxy section: replaced with "Frontend Ingress" section describing DO App Platform route rules and docker-compose port.
+- Frontend Authentication Pattern: updated reference implementation pointer to `services/xstockstrat-ui/src/`.
+- Inter-Service Dependencies graph: merged trader/insights into single `xstockstrat-ui (UI)` root node.
+- Implementation Roadmap Status: Phase 5 description updated to note consolidation.
+- Key File Paths: `Next.js UIs` row → `services/xstockstrat-ui/`; nginx config row removed.
+- Context Guide: nginx-routing entry marked deprecated.
+- Verification: `grep -n "xstockstrat-trader|xstockstrat-insights|xstockstrat-config-ui|xstockstrat-nginx" CLAUDE.md` — zero matches (pass).
+- Files modified: `CLAUDE.md`
+- Deviations: none
+
 ### Step 7 — Update runbook and pattern docs to remove nginx references [done]
 - Updated `docs/patterns/nginx-routing.md`: added deprecation banner at top.
 - Updated `docs/roadmap/phase5-deviations.md`: appended Post-Phase-5 Consolidation note.
