@@ -40,11 +40,12 @@ export default defineConfig({
     url: 'http://localhost:3001/insights/api/health',
     reuseExistingServer: !process.env.CI,
     env: {
-      ANALYSIS_ENDPOINT: '127.0.0.1:9092',
-      IDENTITY_ENDPOINT: '127.0.0.1:9092',
-      TRADING_ENDPOINT: '127.0.0.1:9092',
-      PORTFOLIO_ENDPOINT: '127.0.0.1:9092',
-      JWT_SECRET: 'test-jwt-secret-for-e2e-tests-min32c',
+      ANALYSIS_ENDPOINT:   '127.0.0.1:9092',
+      MARKETDATA_ENDPOINT: '127.0.0.1:9092',
+      IDENTITY_ENDPOINT:   '127.0.0.1:9092',
+      TRADING_ENDPOINT:    '127.0.0.1:9092',
+      PORTFOLIO_ENDPOINT:  '127.0.0.1:9092',
+      JWT_SECRET:          'test-jwt-secret-for-e2e-tests-min32c',
     },
   },
 });
