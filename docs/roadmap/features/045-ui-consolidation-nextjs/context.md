@@ -153,14 +153,6 @@
 - Files modified: none (verification-only step)
 - Deviations: Docker/curl/e2e runtime checks not runnable — Docker daemon unavailable, POSTGRES_PASSWORD not set. Marked done as all static checks pass; runtime verification deferred to CI and post-integration-PR manual test.
 
-### Step 7 — Update runbook and pattern docs to remove nginx references [done]
-- Updated `docs/patterns/nginx-routing.md`: added deprecation banner at top.
-- Updated `docs/roadmap/phase5-deviations.md`: appended Post-Phase-5 Consolidation note.
-- Gap (Option A — fix now): Step 7 **Files** section was incomplete. Also updated `docs/patterns/client-api-pattern.md`, `docs/patterns/frontend-auth.md`, `docs/patterns/nextjs-frontends.md`, `docs/runbooks/reviewer-registry.md`, `docs/patterns/docker-build.md`, `docs/runbooks/approval-flow.md`, `docs/runbooks/feature-workflow.md`, `docs/setup/digitalocean.md`, `docs/setup/grafana-cloud.md`, `docs/setup/getting-started.md` — all active pattern and setup docs updated to reference `xstockstrat-ui` instead of old service names. Historical files (`roadmap/implementation-roadmap.md`, `launch-pdfs/`, launched feature specs) left unchanged.
-- Verification: `grep` finds zero active-doc references to old service names (pass).
-- Files modified: `docs/patterns/nginx-routing.md`, `docs/roadmap/phase5-deviations.md`, `docs/patterns/client-api-pattern.md`, `docs/patterns/frontend-auth.md`, `docs/patterns/nextjs-frontends.md`, `docs/patterns/docker-build.md`, `docs/runbooks/reviewer-registry.md`, `docs/runbooks/approval-flow.md`, `docs/runbooks/feature-workflow.md`, `docs/setup/digitalocean.md`, `docs/setup/grafana-cloud.md`, `docs/setup/getting-started.md`
-- Deviations: Scope expanded (Option A) — 10 additional docs updated beyond the 2 listed in spec **Files** section.
-
 ### Step 6 — Remove obsolete service directories and nginx artifacts [done]
 - Deleted `services/xstockstrat-trader/`, `services/xstockstrat-insights/`, `services/xstockstrat-config-ui/`, `services/xstockstrat-nginx/` via `git rm -r`; residual gitignored files (`node_modules/`, `test-results/`, `tsconfig.tsbuildinfo`) removed with `rm -rf`.
 - Deleted `nginx.conf` from repo root via `git rm`.
