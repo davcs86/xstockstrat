@@ -19,7 +19,7 @@ import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
 import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
-import { NotifyService } from '@xstockstrat/proto/notify/v1/notify_pb';
+import { NotifyService, type Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 
@@ -127,6 +127,17 @@ export async function startMockBackend(): Promise<void> {
       });
 
       router.service(NotifyService, {
+        async *streamAlerts(): AsyncGenerator<Alert> {
+          const alerts: Alert[] = [
+            { alertId: 'alert-stream-001', severity: 2, category: 'RISK', title: 'Position limit approaching', body: 'AAPL position is at 80% of max allowed.', sourceService: 'trading' } as Alert,
+            { alertId: 'alert-stream-002', severity: 4, category: 'SYSTEM', title: 'Order rejected', body: 'Insufficient buying power for TSLA order.', sourceService: 'trading' } as Alert,
+            { alertId: 'alert-stream-003', severity: 1, category: 'TRADE', title: 'Order filled', body: 'AAPL market order for 10 shares filled at $189.80.', sourceService: 'trading' } as Alert,
+          ];
+          for (const alert of alerts) {
+            yield alert;
+          }
+          // Stream ends cleanly — no hang in tests.
+        },
         async listAlerts() {
           return {
             alerts: [
