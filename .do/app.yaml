@@ -228,8 +228,6 @@ services:
       repository: xstockstrat/xstockstrat-agent
       tag: "YOUR_IMAGE_TAG"
     http_port: 8090
-    internal_ports:
-      - 9000
     instance_count: 1
     instance_size_slug: professional-xs
     envs:
