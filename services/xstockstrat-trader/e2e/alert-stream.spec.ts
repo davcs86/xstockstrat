@@ -41,15 +41,18 @@ test.describe('AlertStream', () => {
   test('badge shows 3 after stream completes', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/trader');
-    // Mock streams 3 bounded alerts then ends — badge shows count 3
-    await expect(page.locator('span').filter({ hasText: '3' })).toBeVisible({ timeout: 10000 });
+    // Mock streams 3 bounded alerts then ends — badge shows count 3.
+    // Use exact-match regex to avoid matching numeric substrings in portfolio/order spans.
+    await expect(page.locator('span').filter({ hasText: /^3$/ })).toBeVisible({ timeout: 10000 });
   });
 
   test('opening the sheet shows at least one alert title', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/trader');
-    await expect(page.locator('span').filter({ hasText: '3' })).toBeVisible({ timeout: 10000 });
-    await page.locator('button').filter({ has: page.locator('svg') }).first().click();
+    const badge = page.locator('span').filter({ hasText: /^3$/ });
+    await expect(badge).toBeVisible({ timeout: 10000 });
+    // Click the bell button — it is the direct parent of the badge span.
+    await badge.locator('..').click();
     // alert-stream-002 has title 'Order rejected' (severity CRITICAL)
     await expect(page.getByText('Order rejected')).toBeVisible();
   });
@@ -64,10 +67,12 @@ test.describe('AlertStream', () => {
   test('Clear all button resets the badge', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/trader');
-    await expect(page.locator('span').filter({ hasText: '3' })).toBeVisible({ timeout: 10000 });
-    await page.locator('button').filter({ has: page.locator('svg') }).first().click();
+    const badge = page.locator('span').filter({ hasText: /^3$/ });
+    await expect(badge).toBeVisible({ timeout: 10000 });
+    // Click the bell button — it is the direct parent of the badge span.
+    await badge.locator('..').click();
     await page.getByRole('button', { name: 'Clear all' }).click();
     // Badge disappears after clearing alerts
-    await expect(page.locator('span').filter({ hasText: '3' })).not.toBeVisible();
+    await expect(page.locator('span').filter({ hasText: /^3$/ })).not.toBeVisible();
   });
 });

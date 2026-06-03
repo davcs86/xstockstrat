@@ -14,6 +14,7 @@ import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { SignJWT } from 'jose';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
+import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 
@@ -49,6 +50,21 @@ export async function startMockBackend(): Promise<void> {
         async scoreStrategy() {
           return { overallScore: 0.5, rating: 'C' };
         },
+        async runBacktest() {
+          return {
+            backtestId: 'bt-001',
+            strategyId: 'strat-high-001',
+            totalReturn: 0.15,
+            totalTrades: 2,
+            trades: [
+              { symbol: 'AAPL', side: 'BUY', qty: 10, entryPrice: 180.0, exitPrice: 195.0, pnl: 150.0 },
+              { symbol: 'AAPL', side: 'SELL', qty: 10, entryPrice: 195.0, exitPrice: 190.0, pnl: -50.0 },
+            ],
+          };
+        },
+        async getStrategyReport() {
+          return { strategyId: 'strat-high-001' };
+        },
       });
 
       router.service(IdentityService, {
@@ -75,8 +91,8 @@ export async function startMockBackend(): Promise<void> {
         async listBrokerAccounts() {
           return {
             accounts: [
-              { accountId: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true },
-              { accountId: 'ibkr-001', displayName: 'IBKR Paper', brokerType: 2, isPaper: true, isActive: true },
+              { id: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true },
+              { id: 'ibkr-001', displayName: 'IBKR Paper', brokerType: 2, isPaper: true, isActive: true },
             ],
           };
         },
@@ -88,6 +104,21 @@ export async function startMockBackend(): Promise<void> {
             portfolios: [
               { portfolioId: 'port-001', accountId: 'alpaca-default', equity: 50000, cash: 20000, dayPnl: 150, dayPnlPct: 0.003, totalPnl: 1500, positions: [] },
               { portfolioId: 'port-002', accountId: 'ibkr-001', equity: 30000, cash: 10000, dayPnl: -50, dayPnlPct: -0.0017, totalPnl: 800, positions: [] },
+            ],
+          };
+        },
+      });
+
+      router.service(MarketDataService, {
+        async getBars() {
+          return {
+            bars: [
+              { symbol: 'AAPL', open: 188.0, high: 190.5, low: 187.2, close: 189.8,
+                volume: BigInt(45000000), vwap: 189.1, tradeCount: 120000,
+                timeframe: '1Day', source: 'alpaca' },
+              { symbol: 'AAPL', open: 189.8, high: 192.0, low: 188.5, close: 191.5,
+                volume: BigInt(38000000), vwap: 190.5, tradeCount: 98000,
+                timeframe: '1Day', source: 'alpaca' },
             ],
           };
         },
