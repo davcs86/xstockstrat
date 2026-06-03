@@ -2,7 +2,7 @@
 name: sdd-execute
 description: Phase 3 of SDD — execute implementation steps with mandatory codebase discovery and explicit user confirmation before any writes. Usage: /sdd-execute <feature-slug> [step-number|next|all]. Re-reads context.md at every session start so prior decisions carry forward.
 argument-hint: <feature-slug> [step-number|next|all]
-allowed-tools: Read Write Edit Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(python *) Bash(buf *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
+allowed-tools: Read Write Edit Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(golangci-lint *) Bash(python *) Bash(ruff *) Bash(pnpm *) Bash(buf *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
 effort: high
 ---
 
@@ -357,7 +357,7 @@ After the last step in the requested range (or on any stop):
 - **Never target `main-dev` or `main` in a step PR.** Always target the `**Development Branch**` from `feature.md`.
 - **Never stage files outside the step's `**Files**` section plus `implementation-spec.md`, `feature.md`, and `context.md`.**
 - **Never edit a `.up.sql` migration that has been committed to `main-dev`.** Add a new numbered migration instead.
-- **Never make changes outside the current step's scope** — no opportunistic cleanup, no refactoring, no extra files.
+- **Never make changes outside the current step's scope** — no opportunistic cleanup, no refactoring, no extra files. (Exception: making the code the step *itself* introduced pass the step's lint/format Verification — e.g. `ruff format`, gofmt, or fixing a `golangci-lint`/`pnpm run lint` finding on the step's own changed lines — is in scope, not cleanup. Do not reformat or lint-fix code the step did not touch.)
 - **`implementation-spec.md` step bodies are immutable during execution.** The only permitted change to a step entry is flipping `**Status**` from `pending` to `done` (or `blocked`/`skipped`). The `**Instructions**`, `**Codebase Evidence**`, `**Verification**`, `**Files**`, and `**Reviewers**` fields must never be edited — they are the permanent record of the original plan. All divergence from that plan belongs exclusively in the `## Deviation Log` section.
 
 ---
@@ -375,3 +375,5 @@ After the last step in the requested range (or on any stop):
 - **After proto changes**: run `./scripts/buf-gen.sh` to regenerate stubs; include generated files in the commit.
 - **Config keys**: format is `<service-short-name>.<category>.<key>` — verify before writing.
 - **Never edit applied migrations**: any applied `.up.sql` file (committed to main-dev) is immutable; add a new numbered migration for corrections.
+- **Lint gate**: a `service` step's `**Verification**` (or its paired `test` step's) includes the language's lint command — Go `GOWORK=off golangci-lint run --modules-download-mode=mod`, Python `ruff check . && ruff format --check .`, Node/Next `pnpm run lint` (sdd-spec §5c). Phase 3 runs it like any other Verification; a lint/format failure on the step's own code must be fixed (see HARD CONSTRAINTS carve-out) and re-run before the step is marked `done`.
+- **Header propagation**: any new outbound gRPC call added by a step must forward `x-user-id` / `x-access-scope` / `x-trace-id` via the service's existing mechanism (`docs/patterns/header-propagation.md`). Confirm in Phase 1 discovery; do not introduce a bare client that drops them.

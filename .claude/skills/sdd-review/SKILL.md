@@ -271,6 +271,8 @@ For each numbered step in `implementation-spec.md`, apply:
 | Proto steps: field numbers stated | Field numbers not specified for new fields |
 | `service` steps: deployment files | A `service` step whose `**Instructions**` introduce a new environment variable or port does not list all three of `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml` in `**Files**` |
 | `test` steps: threshold explicit | A `test` step's `**Verification**` is absent, is prose-only with no bash command, or does not state the specific coverage threshold (`--cov-fail-under=N` for Python/Node, or `≥ N%` assertion for Go) |
+| `service` steps: lint gate | A `service` step that creates/modifies source has no lint command (`golangci-lint run` for Go, `ruff check`/`ruff format --check` for Python, `pnpm run lint` for Node/Next) in its own or its paired `test` step's `**Verification**` (per sdd-spec §5c) |
+| Outbound gRPC: header propagation | A step adds a new outbound gRPC call to another backend service (Instructions mention a new client stub call, `grpc.Dial`/`NewClient`, or a new RPC on an existing client) but neither `**Codebase Evidence**` nor `**Instructions**` addresses forwarding `x-user-id` / `x-access-scope` / `x-trace-id` (per `docs/patterns/header-propagation.md`) |
 
 WARN (advisory):
 - `**Instructions**` are verbose but complete
