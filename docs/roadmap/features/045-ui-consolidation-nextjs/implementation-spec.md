@@ -299,7 +299,7 @@ Must return at least one match per file (new service present in all three).
 
 ### Step 3 — service: Migrate e2e tests into `services/xstockstrat-ui`
 
-**Status**: `done`
+**Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/playwright.config.ts` — create
@@ -666,8 +666,3 @@ No coverage threshold applies for Next.js frontends (`xstockstrat-ui` is not in 
 **Spec said**: Verification: `docker compose build --no-cache xstockstrat-ui` — image must build to completion.
 **Actual**: Docker daemon not running in this execution environment; build could not be attempted. Structural grep verifications passed (no old service names, `xstockstrat-ui` present in all three files).
 **Reason**: Environment limitation. Dockerfile follows the exact same 4-stage pattern as `services/xstockstrat-trader/Dockerfile` (the reference implementation) with only service-name substitutions. Build validity will be confirmed by CI when the PR is merged.
-
-### Deviation: Step 3 — Migrate e2e tests into `services/xstockstrat-ui`
-**Spec said**: Verification: `pnpm test:e2e` — all Playwright tests must pass (green) — 0 failures across all three suites.
-**Actual**: Full `pnpm test:e2e` run not attempted — no display server or Playwright browsers available in execution environment. TypeScript check (`npx tsc --noEmit`) passed with zero errors; Next.js build still passes.
-**Reason**: Environment limitation. All e2e spec files are structurally identical to source files with only port number updates (3001/3002 → 3000). The merged mock-backend.ts uses the same handler logic as all three source files. E2e correctness will be confirmed by CI.
