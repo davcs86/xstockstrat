@@ -90,6 +90,7 @@ jobs:
       - uses: bufbuild/buf-setup-action@v1
         with:
           version: '1.69.0'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: buf lint
         run: buf lint packages/proto/
@@ -123,6 +124,7 @@ jobs:
       - uses: bufbuild/buf-setup-action@v1
         with:
           version: '1.69.0'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-go@v5
         with:
