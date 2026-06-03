@@ -169,7 +169,9 @@ jobs:
     name: Go lint and test (${{ matrix.service }})
     needs: changes
     if: >-
-      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-trading') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-marketdata') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-portfolio') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'go-shared') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
@@ -257,7 +259,9 @@ jobs:
     name: Python lint (${{ matrix.service }})
     needs: changes
     if: >-
-      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-indicators') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ingest') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-analysis') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
@@ -293,7 +297,9 @@ jobs:
     name: Python test and coverage (${{ matrix.service }})
     needs: changes
     if: >-
-      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-indicators') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ingest') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-analysis') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
@@ -343,7 +349,13 @@ jobs:
     name: Node lint (${{ matrix.service }})
     needs: changes
     if: >-
-      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-config') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ledger') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-identity') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-notify') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-trader') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-insights') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-config-ui') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
@@ -384,7 +396,9 @@ jobs:
     name: Frontend E2E (${{ matrix.service }})
     needs: changes
     if: >-
-      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-trader') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-insights') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-config-ui') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
@@ -447,7 +461,10 @@ jobs:
     name: Node test and coverage (${{ matrix.service }})
     needs: changes
     if: >-
-      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-config') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ledger') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-identity') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-notify') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
