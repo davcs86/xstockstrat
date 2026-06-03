@@ -1,6 +1,6 @@
 # Implementation Spec: ui-consolidation-nextjs
 
-**Status**: `complete`
+**Status**: `in-progress`
 **Created**: 2026-06-01
 **Feature**: `docs/roadmap/features/045-ui-consolidation-nextjs/feature.md`
 **Total Steps**: 9
@@ -568,7 +568,7 @@ Any remaining references should be in historical/context files (deviations, feat
 
 ### Step 8 — docs: Update root CLAUDE.md service registry, language map, and inter-service dependency graph
 
-**Status**: `done`
+**Status**: `pending`
 **Service**: repository root
 **Files**:
 - `CLAUDE.md` — modify
@@ -613,7 +613,7 @@ Must return no matches (all old names removed and replaced with `xstockstrat-ui`
 
 ### Step 9 — test: Run consolidated e2e test suite and confirm all three UIs pass
 
-**Status**: `done`
+**Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**: none (verification only)
 
@@ -676,11 +676,6 @@ No coverage threshold applies for Next.js frontends (`xstockstrat-ui` is not in 
 **Spec said**: Run `docker compose build/up`, curl all three health endpoints, verify root redirect, verify no old containers running, run `pnpm test:e2e`.
 **Actual**: Docker daemon not running and `POSTGRES_PASSWORD` env var not set — docker compose commands cannot execute. Health route files confirmed present at correct paths; root redirect (`/` → `/trader`) confirmed in `next.config.js`; docker-compose.yml already confirmed to have no old service blocks in Step 2.
 **Reason**: Environment limitation. All code artifacts verified statically. Full runtime smoke test will be performed by CI and manually after the integration PR is merged.
-
-### Deviation: Step 9 — Run consolidated e2e test suite
-**Spec said**: `e2e/trader/api-smoke.spec.ts` — existing tests pass against the consolidated service.
-**Actual**: 5 tests in `e2e/trader/api-smoke.spec.ts` called bespoke JSON routes (`GET /trader/api/orders`, `POST /trader/api/orders`, `GET /trader/api/portfolio`) that were present in the old `xstockstrat-trader` service but were not ported to the consolidated `xstockstrat-ui` service (which uses the BFF Connect-RPC pattern exclusively via `[...connect]/route.ts`). Tests were rewritten to call the correct BFF endpoints (`TradingService/ListOrders`, `TradingService/PlaceOrder`, `PortfolioService/GetPortfolio`) using `page.evaluate` browser-level fetch, matching the pattern established in `e2e/insights/api-smoke.spec.ts` and `e2e/config-ui/api-smoke.spec.ts`. The "error path" test (checking bespoke route handler `{ error: ... }` format) was replaced with a `tradingMode` field verification test since the Connect-RPC BFF does not wrap errors in that format.
-**Reason**: User chose Option A (fix now). The bespoke JSON route handlers in the old trader service (`/api/orders`, `/api/portfolio`) were a pre-consolidation pattern; the consolidated service correctly uses only the BFF Connect-RPC pattern. The tests needed to be updated to match the new architecture.
 
 ### Deviation: Step 7 — Update runbook and pattern docs
 **Spec said**: Update only `docs/patterns/nginx-routing.md` and `docs/roadmap/phase5-deviations.md`.
