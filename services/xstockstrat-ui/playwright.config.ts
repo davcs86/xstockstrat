@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright configuration for xstockstrat-insights (port 3001).
+ * Playwright configuration for xstockstrat-ui (port 3000).
  *
  * globalSetup starts a mock gRPC server (connectNodeAdapter + http2) on port
  * 9092 before the Next.js dev server, so tests run without real backend services.
@@ -18,7 +18,7 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
   use: {
-    baseURL: 'http://localhost:3001',
+    baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -37,7 +37,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'pnpm dev',
-    url: 'http://localhost:3001/insights/api/health',
+    url: 'http://localhost:3000/insights/api/health',
     reuseExistingServer: !process.env.CI,
     env: {
       ANALYSIS_ENDPOINT:   '127.0.0.1:9092',
