@@ -56,10 +56,7 @@ jobs:
             xstockstrat-ledger:     ['services/xstockstrat-ledger/**']
             xstockstrat-identity:   ['services/xstockstrat-identity/**']
             xstockstrat-notify:     ['services/xstockstrat-notify/**']
-            xstockstrat-trader:     ['services/xstockstrat-trader/**']
-            xstockstrat-insights:   ['services/xstockstrat-insights/**']
-            xstockstrat-config-ui:  ['services/xstockstrat-config-ui/**']
-            xstockstrat-nginx:      ['services/xstockstrat-nginx/**', 'nginx.conf']
+            xstockstrat-ui:         ['services/xstockstrat-ui/**']
             dockerfiles:
               - '**/Dockerfile*'
               - '.hadolint.yaml'
@@ -359,9 +356,7 @@ jobs:
           - xstockstrat-ledger
           - xstockstrat-identity
           - xstockstrat-notify
-          - xstockstrat-trader
-          - xstockstrat-insights
-          - xstockstrat-config-ui
+          - xstockstrat-ui
     steps:
       - uses: actions/checkout@v6
 
@@ -398,9 +393,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - service: xstockstrat-trader
-          - service: xstockstrat-insights
-          - service: xstockstrat-config-ui
+          - service: xstockstrat-ui
     defaults:
       run:
         working-directory: services/${{ matrix.service }}

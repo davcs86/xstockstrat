@@ -1,6 +1,20 @@
 #!/bin/bash
 set -euo pipefail
 
+# ---------------------------------------------------------------------------
+# Playwright browser setup — ensure Chromium + Firefox are available for E2E.
+# Chromium ships pre-installed in the container image; Firefox must be fetched.
+# PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers is set by the environment so all
+# playwright install/show commands resolve against that directory.
+# ---------------------------------------------------------------------------
+_PW_BROWSERS="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
+_UI_DIR="${CLAUDE_PROJECT_DIR:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)}/services/xstockstrat-ui"
+
+if [ -d "$_UI_DIR/node_modules/.bin" ] && ! ls "$_PW_BROWSERS"/firefox-* 2>/dev/null | grep -q .; then
+  echo "[session-start] Installing Playwright Firefox for E2E tests..."
+  (cd "$_UI_DIR" && pnpm exec playwright install firefox --with-deps 2>&1) | grep -E "download|install|Firefox" | head -5 || true
+fi
+
 SKILLS_DIR="${CLAUDE_PROJECT_DIR:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)}/.claude/skills"
 
 [ -d "$SKILLS_DIR" ] || exit 0
