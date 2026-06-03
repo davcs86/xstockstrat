@@ -91,8 +91,8 @@ export async function startMockBackend(): Promise<void> {
         async listBrokerAccounts() {
           return {
             accounts: [
-              { accountId: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true },
-              { accountId: 'ibkr-001', displayName: 'IBKR Paper', brokerType: 2, isPaper: true, isActive: true },
+              { id: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true },
+              { id: 'ibkr-001', displayName: 'IBKR Paper', brokerType: 2, isPaper: true, isActive: true },
             ],
           };
         },
