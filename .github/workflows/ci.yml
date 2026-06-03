@@ -25,12 +25,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           # Each filter name is referenced verbatim by downstream `if:` gates.
           # Service filter names MUST match the matrix.service values exactly.
-          # paths-filter@v3 emits a default `changes` output: a JSON array of
+          # paths-filter@v4 emits a default `changes` output: a JSON array of
           # filter names that matched. That array is what downstream jobs read
           # via needs.changes.outputs.matched — no extra jq step required.
           filters: |
