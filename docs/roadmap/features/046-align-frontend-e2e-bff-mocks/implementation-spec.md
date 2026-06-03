@@ -1,6 +1,6 @@
 # Implementation Spec: align-frontend-e2e-bff-mocks
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-06-01
 **Feature**: `docs/roadmap/features/046-align-frontend-e2e-bff-mocks/feature.md`
 **Total Steps**: 8
@@ -319,7 +319,7 @@ All tests passed, 0 failed.
 
 ### Step 4 — service: xstockstrat-insights mock — add `MarketDataService` and `MARKETDATA_ENDPOINT`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**:
 - `services/xstockstrat-insights/e2e/mock-backend.ts` — modify
@@ -419,7 +419,7 @@ Confirms import and `router.service(MarketDataService, ...)` present.
 
 ### Step 5 — test: xstockstrat-insights — CI threshold compliance
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-insights`
 **Files**: none (verification only)
 
@@ -442,7 +442,7 @@ All tests passed, 0 failed.
 
 ### Step 6 — service: xstockstrat-config-ui — fix stale global-setup comment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-config-ui/e2e/global-setup.ts` — modify
@@ -488,7 +488,7 @@ Confirm JSDoc comment is present.
 
 ### Step 7 — docs: add e2e mock wiring note to each frontend's CLAUDE.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**:
 - `services/xstockstrat-trader/CLAUDE.md` — modify
@@ -580,7 +580,7 @@ Confirms all three CLAUDE.md files contain the section.
 
 ### Step 8 — test: cross-frontend CI validation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`
 **Files**: none (verification only)
 
