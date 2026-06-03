@@ -210,7 +210,9 @@ class TestComputeSignalScoreWithWeights:
         bar = _make_bar(1704067200)
         sig = _make_signal("buy", 0.8)
         score_no_weight = _compute_signal_score({"uw": [sig]}, bar, ["uw"])
-        score_weight_one = _compute_signal_score({"uw": [sig]}, bar, ["uw"], source_weights={"uw": 1.0})
+        score_weight_one = _compute_signal_score(
+            {"uw": [sig]}, bar, ["uw"], source_weights={"uw": 1.0}
+        )
         assert score_no_weight == pytest.approx(score_weight_one, abs=1e-9)
 
     def test_weight_zero_silences_source(self):
@@ -283,7 +285,9 @@ class TestComputeSignalScoreWithWeights:
         for weights in [{"a": 0.0}, {"a": 1.0}, {"a": 0.5}, {}]:
             for sig, direction in [(sig_buy, "buy"), (sig_sell, "sell")]:
                 score = _compute_signal_score({"a": [sig]}, bar, ["a"], source_weights=weights)
-                assert 0.0 <= score <= 1.0, f"score={score} out of range for weights={weights}, direction={direction}"
+                assert 0.0 <= score <= 1.0, (
+                    f"score={score} out of range for weights={weights}, direction={direction}"
+                )
 
     def test_mixed_weighted_sources(self):
         """Two sources with different weights and opposite signals."""

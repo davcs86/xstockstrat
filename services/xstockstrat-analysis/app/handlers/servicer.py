@@ -306,7 +306,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 tech_signal = 0.0
 
             # Signal score from newsletter signals active on this bar's date
-            signal_score = _compute_signal_score(signals_map, bar, signal_sources, source_weights=source_weights)
+            signal_score = _compute_signal_score(
+                signals_map, bar, signal_sources, source_weights=source_weights
+            )
 
             # Combined conviction
             if signal_weight > 0 and signals_map:
@@ -503,7 +505,9 @@ def _unwrap_value(v):
     return None
 
 
-def _compute_signal_score(signals_map: dict, bar, signal_sources: list, source_weights: dict | None = None) -> float:
+def _compute_signal_score(
+    signals_map: dict, bar, signal_sources: list, source_weights: dict | None = None
+) -> float:
     """Return a 0.0–1.0 signal score from active newsletter signals for this bar."""
     if not signals_map or not signal_sources:
         return 0.5

@@ -13,7 +13,6 @@ from app.extractors.base import (
 from app.extractors.example_simple_email import ExampleSimpleEmailExtractor
 from app.extractors.noop import NoopExtractor
 
-
 # ---------------------------------------------------------------------------
 # ExampleSimpleEmailExtractor
 # ---------------------------------------------------------------------------

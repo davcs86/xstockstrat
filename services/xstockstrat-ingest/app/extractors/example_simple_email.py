@@ -2,7 +2,8 @@
 extractor_module: app.extractors.example_simple_email
 """
 import re
-from app.extractors.base import BaseExtractor, SimpleEmailInput, RawInput
+
+from app.extractors.base import BaseExtractor, RawInput, SimpleEmailInput
 
 
 class ExampleSimpleEmailExtractor(BaseExtractor):

@@ -18,7 +18,6 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from app.config.watcher import ConfigWatcher
 from app.repositories.signal_sources import (
     deactivate_source,
-    get_active_source,
     list_all_sources,
     upsert_source,
     validate_config_json,
@@ -39,7 +38,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         self._cfg = config_watcher
         self._marketdata = marketdata_pb2_grpc.MarketDataServiceStub(marketdata_channel)
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
-        self._identity = identity_pb2_grpc.IdentityServiceStub(identity_channel) if identity_channel else None
+        self._identity = (
+            identity_pb2_grpc.IdentityServiceStub(identity_channel) if identity_channel else None
+        )
         self._db = db_pool
         self._jobs: dict[str, ingest_pb2.BackfillJob] = {}
 
@@ -394,6 +395,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             return
         rows = await list_all_sources(self._db, include_inactive=request.include_inactive)
         import json
+
         from google.protobuf.struct_pb2 import Struct
         sources = []
         for row in rows:
@@ -458,6 +460,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             )
             return
         import json
+
         from google.protobuf.struct_pb2 import Struct
         cfg_out = Struct()
         if row["config_json"]:

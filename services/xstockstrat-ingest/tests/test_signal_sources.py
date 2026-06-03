@@ -12,7 +12,6 @@ from app.repositories.signal_sources import (
     validate_config_json,
 )
 
-
 # ---------------------------------------------------------------------------
 # validate_config_json — sync helper, no DB needed
 # ---------------------------------------------------------------------------
@@ -129,7 +128,9 @@ class TestValidateConfigJson:
         assert validate_config_json("mediated_simple_email", cfg) is None
 
     def test_mediated_simple_email_missing_sender(self):
-        assert validate_config_json("mediated_simple_email", {"subject_patterns": ["Alert"]}) is not None
+        assert validate_config_json(
+            "mediated_simple_email", {"subject_patterns": ["Alert"]}
+        ) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +144,8 @@ class TestGetActiveSource:
         db = MagicMock()
         db.fetchrow = AsyncMock(
             return_value={"slug": "uw", "display_name": "Unusual Whales", "active": True,
-                          "source_type": "simple_email", "extractor_module": "app.extractors.example_simple_email",
+                          "source_type": "simple_email",
+                          "extractor_module": "app.extractors.example_simple_email",
                           "credentials_ref": None, "config_json": None}
         )
         result = await get_active_source(db, "uw")

@@ -24,13 +24,16 @@ set -euo pipefail
 QUIET=0
 for arg in "$@"; do
   case "$arg" in
-    --quiet) QUIET=1 ;;
-    *) echo "Unknown argument: $arg" >&2; exit 1 ;;
+  --quiet) QUIET=1 ;;
+  *)
+    echo "Unknown argument: $arg" >&2
+    exit 1
+    ;;
   esac
 done
 
-log()  { [ "$QUIET" -eq 0 ] && echo "$*" || true; }
-ok()   { log "  ✓ $*"; }
+log() { if [ "$QUIET" -eq 0 ]; then echo "$*"; fi; }
+ok() { log "  ✓ $*"; }
 warn() { log "  ⚠ $*"; }
 fail() { log "  ✗ $*"; }
 
@@ -43,8 +46,8 @@ REQUIRED_PNPM="9.15.0"
 
 major() { echo "$1" | grep -oE '^[0-9]+' | head -1; }
 
-MISSING=0       # hard — exits 1
-MISSING_SOFT=0  # soft — warns only
+MISSING=0      # hard — exits 1
+MISSING_SOFT=0 # soft — warns only
 
 # ── Hard: docker ──────────────────────────────────────────────────────────────
 check_docker() {
@@ -100,11 +103,11 @@ check_docker
 log ""
 log "Checking language toolchains (needed for local tests and linters)..."
 log ""
-check_soft "go"            "$REQUIRED_GO"       "brew install go"                 "go version"
-check_soft "golangci-lint" "$REQUIRED_GOLANGCI" "brew install golangci-lint"       "golangci-lint --version"
-check_soft "python3"       "$REQUIRED_PYTHON"   "brew install python@3.12"         "python3 --version"
-check_soft "node"          "$REQUIRED_NODE"     "brew install node@22"             "node --version"
-check_soft "pnpm"          "$REQUIRED_PNPM"     "brew install pnpm"                "pnpm --version"
+check_soft "go" "$REQUIRED_GO" "brew install go" "go version"
+check_soft "golangci-lint" "$REQUIRED_GOLANGCI" "brew install golangci-lint" "golangci-lint --version"
+check_soft "python3" "$REQUIRED_PYTHON" "brew install python@3.12" "python3 --version"
+check_soft "node" "$REQUIRED_NODE" "brew install node@22" "node --version"
+check_soft "pnpm" "$REQUIRED_PNPM" "brew install pnpm" "pnpm --version"
 
 log ""
 

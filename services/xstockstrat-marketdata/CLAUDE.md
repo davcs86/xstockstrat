@@ -10,9 +10,11 @@ Go gRPC service that is the **sole integration point for Alpaca's market data AP
 **API boundary**: This service owns Alpaca's **market data APIs** (`data.alpaca.markets` — bars, quotes, streaming). No other service may call these. `xstockstrat-trading` separately owns Alpaca's **broker/order APIs** (`paper-api.alpaca.markets` / `api.alpaca.markets` — order submission and cancellation). Both services use the same `ALPACA_API_KEY` / `ALPACA_API_SECRET` credentials.
 
 ## Language
+
 Go 1.22
 
 ## Docker Build Pattern
+
 Go pattern — see `docs/patterns/docker-build.md` for multi-stage builder, static binary compilation (`CGO_ENABLED=0`), and distroless final images.
 
 ## Ports
@@ -67,7 +69,7 @@ Namespace: `marketdata`
 
 Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_ENV` and `NODE_ENV` come from `.env.local` (committed). `DATABASE_URL` is constructed by docker-compose from `POSTGRES_PASSWORD` in `.env`. `ALPACA_API_KEY` and `ALPACA_API_SECRET` come from `.env` (see `.env.example`).
 
-```
+```text
 GRPC_PORT=50053
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
