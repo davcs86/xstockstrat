@@ -68,7 +68,7 @@ Body: { "approved_by": "user@example.com", "reason": "reviewed and approved" }
 - Payload: `{ "order_id": "...", "approved_by": "...", "reason": "..." }`
 - Agent or external caller: receives approval notification → reviewer approves → posts to webhook
 
-### 3. xstockstrat-trader UI
+### 3. xstockstrat-ui Trader segment
 - Pending approvals appear in the Orders tab with status `PENDING_APPROVAL`
 - Approvers with the `orders:approve` scope see an **Approve / Reject** button
 - Action calls `POST /api/orders/{id}/approve` Route Handler
@@ -109,7 +109,7 @@ Approval of orders above `5× notional threshold` requires **two approvers** (ap
 When you receive an approval alert:
 - [ ] Verify order parameters (symbol, side, qty, notional)
 - [ ] Check current portfolio exposure in xstockstrat-portfolio
-- [ ] Review strategy signal in xstockstrat-insights
+- [ ] Review strategy signal in xstockstrat-ui insights segment
 - [ ] Check market conditions in xstockstrat-marketdata
 - [ ] Approve or reject via one of the mechanisms above
 - [ ] If rejecting, provide a reason (written to ledger)

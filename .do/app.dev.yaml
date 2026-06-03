@@ -10,7 +10,12 @@ region: nyc
 ingress:
   rules:
     - component:
-        name: xstockstrat-nginx
+        name: xstockstrat-agent
+      match:
+        path:
+          prefix: /agent
+    - component:
+        name: xstockstrat-ui
       match:
         path:
           prefix: /
@@ -365,37 +370,15 @@ services:
       - key: SERVICE_NAME
         value: config
 
-  # ── Next.js frontends ──────────────────────────────────────────────────────
+  # ── Consolidated Frontend ──────────────────────────────────────────────────
 
-  # ── Nginx Reverse Proxy (new HTTP ingress) ────────────────────────────────
-
-  - name: xstockstrat-nginx
+  - name: xstockstrat-ui
     image:
       registry_type: GHCR
       registry: YOUR_GITHUB_ORG
-      repository: xstockstrat/xstockstrat-nginx
+      repository: xstockstrat/xstockstrat-ui
       tag: "YOUR_IMAGE_TAG"
-    http_port: 80
-    instance_count: 1
-    instance_size_slug: basic-xs
-    envs:
-      - key: XSTOCKSTRAT_TRADER_PRIVATE_URL
-        value: ${xstockstrat-trader.PRIVATE_DOMAIN}
-      - key: XSTOCKSTRAT_INSIGHTS_PRIVATE_URL
-        value: ${xstockstrat-insights.PRIVATE_DOMAIN}
-      - key: XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL
-        value: ${xstockstrat-config-ui.PRIVATE_DOMAIN}
-      - key: XSTOCKSTRAT_AGENT_PRIVATE_URL
-        value: ${xstockstrat-agent.PRIVATE_DOMAIN}
-
-  - name: xstockstrat-trader
-    image:
-      registry_type: GHCR
-      registry: YOUR_GITHUB_ORG
-      repository: xstockstrat/xstockstrat-trader
-      tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 3000
+    http_port: 3000
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
@@ -409,64 +392,12 @@ services:
         value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: MARKETDATA_ENDPOINT
         value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
-      - key: APP_URL
-        value: ${APP_URL}
-      - key: JWT_SECRET
-        scope: RUN_TIME
-        value: YOUR_DEV_JWT_SECRET
-        type: SECRET
-      - key: SERVICE_NAME
-        value: trader
-
-  - name: xstockstrat-insights
-    image:
-      registry_type: GHCR
-      registry: YOUR_GITHUB_ORG
-      repository: xstockstrat/xstockstrat-insights
-      tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 3001
-    instance_count: 1
-    instance_size_slug: basic-xs
-    envs:
       - key: ANALYSIS_ENDPOINT
         value: ${xstockstrat-analysis.PRIVATE_DOMAIN}:50056
       - key: INDICATORS_ENDPOINT
         value: ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
-      - key: MARKETDATA_ENDPOINT
-        value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
-      - key: PORTFOLIO_ENDPOINT
-        value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
-      - key: TRADING_ENDPOINT
-        value: ${xstockstrat-trading.PRIVATE_DOMAIN}:50051
-      - key: NOTIFY_ENDPOINT
-        value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
-      - key: IDENTITY_ENDPOINT
-        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
-      - key: APP_URL
-        value: ${APP_URL}
-      - key: JWT_SECRET
-        scope: RUN_TIME
-        value: YOUR_DEV_JWT_SECRET
-        type: SECRET
-      - key: SERVICE_NAME
-        value: insights
-
-  - name: xstockstrat-config-ui
-    image:
-      registry_type: GHCR
-      registry: YOUR_GITHUB_ORG
-      repository: xstockstrat/xstockstrat-config-ui
-      tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 3002
-    instance_count: 1
-    instance_size_slug: basic-xs
-    envs:
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
-      - key: IDENTITY_ENDPOINT
-        value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: INGEST_ENDPOINT
         value: ${xstockstrat-ingest.PRIVATE_DOMAIN}:50055
       - key: APP_URL
@@ -476,7 +407,10 @@ services:
         value: YOUR_DEV_JWT_SECRET
         type: SECRET
       - key: SERVICE_NAME
-        value: config-ui
+        value: xstockstrat-ui
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${xstockstrat.DATABASE_URL}
 
 jobs:
   # Runs golang-migrate against all service schemas before services start.

@@ -171,14 +171,12 @@ cd services/xstockstrat-notify   && pnpm run lint && pnpm run test:coverage
 cd services/xstockstrat-config   && pnpm run lint && pnpm run test:coverage
 ```
 
-#### Next.js frontends — lint + E2E (trader, insights, config-ui)
+#### Next.js frontend — lint + E2E (xstockstrat-ui)
 
 E2E tests require all services running (`docker compose up -d` first):
 
 ```bash
-cd services/xstockstrat-trader     && pnpm run lint && pnpm exec playwright test
-cd services/xstockstrat-insights   && pnpm run lint && pnpm exec playwright test
-cd services/xstockstrat-config-ui  && pnpm run lint && pnpm exec playwright test
+cd services/xstockstrat-ui && pnpm run lint && pnpm exec playwright test
 ```
 
 ### Step 7 — Next steps
@@ -230,14 +228,12 @@ In Docker Compose, `depends_on` enforces startup order. If the config service cr
 ### Service Dependency Graph
 
 ```
-xstockstrat-trader (UI, port 3000)
-  └── xstockstrat-trading (gRPC 50051)
-        ├── xstockstrat-marketdata (gRPC 50053)
-        ├── xstockstrat-portfolio (gRPC 50052)
-        ├── xstockstrat-indicators (gRPC 50054)
-        └── xstockstrat-ledger (gRPC 50057)
-
-xstockstrat-insights (UI, port 3001)
+xstockstrat-ui (UI, port 3000 — trader/insights/config-ui segments)
+  ├── xstockstrat-trading (gRPC 50051)
+  │     ├── xstockstrat-marketdata (gRPC 50053)
+  │     ├── xstockstrat-portfolio (gRPC 50052)
+  │     ├── xstockstrat-indicators (gRPC 50054)
+  │     └── xstockstrat-ledger (gRPC 50057)
   └── xstockstrat-analysis (gRPC 50056)
         ├── xstockstrat-marketdata (gRPC 50053)
         ├── xstockstrat-indicators (gRPC 50054)
