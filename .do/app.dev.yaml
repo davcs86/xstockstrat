@@ -227,8 +227,7 @@ services:
       registry: YOUR_GITHUB_ORG
       repository: xstockstrat/xstockstrat-agent
       tag: "YOUR_IMAGE_TAG"
-    internal_ports:
-      - 9000
+    http_port: 9000
     instance_count: 1
     instance_size_slug: basic-xs
     envs:
