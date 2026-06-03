@@ -384,7 +384,7 @@ All Playwright tests must pass (green) — 0 failures across trader, insights, a
 
 ### Step 4 — service: Update CI workflow to reference `xstockstrat-ui`
 
-**Status**: `done`
+**Status**: `pending`
 **Service**: CI configuration
 **Files**:
 - `.github/workflows/ci.yml` — modify
@@ -441,7 +441,7 @@ Must return at least 3 matches (filter entry, lint matrix, e2e matrix).
 
 ### Step 5 — test: Smoke verify the consolidated service locally
 
-**Status**: `done`
+**Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**: none (verification only)
 
@@ -671,8 +671,3 @@ No coverage threshold applies for Next.js frontends (`xstockstrat-ui` is not in 
 **Spec said**: Verification: `pnpm test:e2e` — all Playwright tests must pass (green) — 0 failures across all three suites.
 **Actual**: Full `pnpm test:e2e` run not attempted — no display server or Playwright browsers available in execution environment. TypeScript check (`npx tsc --noEmit`) passed with zero errors; Next.js build still passes.
 **Reason**: Environment limitation. All e2e spec files are structurally identical to source files with only port number updates (3001/3002 → 3000). The merged mock-backend.ts uses the same handler logic as all three source files. E2e correctness will be confirmed by CI.
-
-### Deviation: Step 5 — Smoke verify the consolidated service locally
-**Spec said**: Run `docker compose build/up`, curl all three health endpoints, verify root redirect, verify no old containers running, run `pnpm test:e2e`.
-**Actual**: Docker daemon not running and `POSTGRES_PASSWORD` env var not set — docker compose commands cannot execute. Health route files confirmed present at correct paths; root redirect (`/` → `/trader`) confirmed in `next.config.js`; docker-compose.yml already confirmed to have no old service blocks in Step 2.
-**Reason**: Environment limitation. All code artifacts verified statically. Full runtime smoke test will be performed by CI and manually after the integration PR is merged.
