@@ -64,6 +64,13 @@ jobs:
               TODAY=$(date +%Y-%m-%d)
               PROMOTION_PR=$(echo "$COMMIT_MSG" | sed -E 's/.*\(#([0-9]+)\).*/\1/' | head -1)
 
+              # Switch to main-dev before modifying files.
+              # Direct push to main is blocked by branch protection (changes must go through a PR).
+              git config user.name "GitHub Actions"
+              git config user.email "actions@github.com"
+              git fetch origin '+refs/heads/main-dev:refs/remotes/origin/main-dev'
+              git checkout -B main-dev origin/main-dev
+
               for feature_dir in "${PROMOTED_FEATURES[@]}"; do
                 feature_md="$feature_dir/feature.md"
                 context_md="$feature_dir/context.md"
@@ -103,12 +110,25 @@ jobs:
                 } >> "$context_md"
               done
 
-              # Commit and push changes
-              git config user.name "GitHub Actions"
-              git config user.email "actions@github.com"
               git add docs/roadmap/features/*/feature.md docs/roadmap/features/*/context.md
               git commit -m "chore: auto-update feature statuses for promotion PR #$PROMOTION_PR" || true
-              git push
+
+              # Push with retry — handles race with concurrent sync-main-to-maindev workflow
+              for attempt in 1 2 3 4; do
+                if git push origin main-dev; then
+                  break
+                fi
+                if [ "$attempt" -lt 4 ]; then
+                  backoff=$((2 ** attempt))
+                  echo "::warning::Push failed (attempt $attempt/4). Retrying in ${backoff}s..."
+                  sleep "$backoff"
+                  git fetch origin '+refs/heads/main-dev:refs/remotes/origin/main-dev'
+                  git rebase origin/main-dev
+                else
+                  echo "::error::Push to main-dev failed after 4 attempts."
+                  exit 1
+                fi
+              done
 
               echo ""
               echo "✓ Feature statuses updated successfully"
