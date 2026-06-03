@@ -147,8 +147,3 @@
 - Updated `.github/workflows/ci.yml`: replaced 4 filter entries (trader/insights/config-ui/nginx) with single `xstockstrat-ui` entry; replaced 3-entry `frontend-lint` matrix with single `xstockstrat-ui`; replaced 3-entry `frontend-e2e` matrix with single `xstockstrat-ui`.
 - Files modified: `.github/workflows/ci.yml`
 - Deviations: none
-
-### Step 5 — Smoke verify the consolidated service locally [done]
-- Static checks performed: all three health routes confirmed present (`src/app/{trader,insights,config-ui}/api/health/route.ts`); root redirect (`/` → `/trader`) confirmed in `next.config.js`; docker-compose.yml confirmed free of old service blocks (verified in Step 2).
-- Files modified: none (verification-only step)
-- Deviations: Docker/curl/e2e runtime checks not runnable — Docker daemon unavailable, POSTGRES_PASSWORD not set. Marked done as all static checks pass; runtime verification deferred to CI and post-integration-PR manual test.
