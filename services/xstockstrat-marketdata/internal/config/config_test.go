@@ -90,7 +90,7 @@ func newTestWatcher(snapshot map[string]*configv1.ConfigValue) *Watcher {
 
 func TestWatcher_GetString(t *testing.T) {
 	w := newTestWatcher(map[string]*configv1.ConfigValue{
-		"my.key": {Value: &configv1.ConfigValue_StringVal{StringVal: "hello"}},
+		"my.key":  {Value: &configv1.ConfigValue_StringVal{StringVal: "hello"}},
 		"int.key": {Value: &configv1.ConfigValue_IntVal{IntVal: 42}},
 	})
 
