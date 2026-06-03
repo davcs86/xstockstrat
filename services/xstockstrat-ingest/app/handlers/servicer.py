@@ -52,7 +52,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         auth = metadata.get("authorization", "")
         if not auth.startswith("Bearer "):
             return False
-        api_key = auth[len("Bearer "):]
+        api_key = auth[len("Bearer ") :]
         try:
             claims = await self._identity.ValidateApiKey(
                 identity_pb2.ValidateApiKeyRequest(api_key=api_key)
@@ -397,23 +397,27 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         import json
 
         from google.protobuf.struct_pb2 import Struct
+
         sources = []
         for row in rows:
             cfg = Struct()
             if row["config_json"]:
                 cfg.update(
-                    row["config_json"] if isinstance(row["config_json"], dict)
+                    row["config_json"]
+                    if isinstance(row["config_json"], dict)
                     else json.loads(row["config_json"])
                 )
-            sources.append(ingest_pb2.SignalSource(
-                slug=row["slug"],
-                display_name=row["display_name"],
-                source_type=row["source_type"],
-                extractor_module=row["extractor_module"],
-                active=row["active"],
-                has_credentials=(row["credentials_ref"] is not None),
-                config_json=cfg,
-            ))
+            sources.append(
+                ingest_pb2.SignalSource(
+                    slug=row["slug"],
+                    display_name=row["display_name"],
+                    source_type=row["source_type"],
+                    extractor_module=row["extractor_module"],
+                    active=row["active"],
+                    has_credentials=(row["credentials_ref"] is not None),
+                    config_json=cfg,
+                )
+            )
         return ingest_pb2.ListSignalSourcesResponse(sources=sources)
 
     async def ManageSignalSource(self, request, context):
@@ -462,10 +466,12 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         import json
 
         from google.protobuf.struct_pb2 import Struct
+
         cfg_out = Struct()
         if row["config_json"]:
             cfg_out.update(
-                row["config_json"] if isinstance(row["config_json"], dict)
+                row["config_json"]
+                if isinstance(row["config_json"], dict)
                 else json.loads(str(row["config_json"]))
             )
         result = ingest_pb2.SignalSource(

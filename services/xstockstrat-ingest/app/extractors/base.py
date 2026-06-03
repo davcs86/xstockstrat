@@ -1,4 +1,5 @@
 """BaseExtractor — abstract interface all signal source extractors must implement."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

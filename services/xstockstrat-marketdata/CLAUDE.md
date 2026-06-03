@@ -1,7 +1,9 @@
 # xstockstrat-marketdata — CLAUDE.md
 
 ## Role
+
 Go gRPC service that is the **sole integration point for Alpaca's market data APIs**. Responsible for:
+
 - Streaming real-time OHLCV bars and NBBO quotes from Alpaca WebSocket
 - Storing bars and quotes in TimescaleDB hypertables
 - Serving historical bar queries to other services

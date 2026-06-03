@@ -231,12 +231,10 @@ class TestComputeSignalScoreWithWeights:
         sig_b = _make_signal("buy", 0.8)
         # Both sources, source_b halved
         score_both_full = _compute_signal_score(
-            {"a": [sig_a], "b": [sig_b]}, bar, ["a", "b"],
-            source_weights={"a": 1.0, "b": 1.0}
+            {"a": [sig_a], "b": [sig_b]}, bar, ["a", "b"], source_weights={"a": 1.0, "b": 1.0}
         )
         score_b_half = _compute_signal_score(
-            {"a": [sig_a], "b": [sig_b]}, bar, ["a", "b"],
-            source_weights={"a": 1.0, "b": 0.5}
+            {"a": [sig_a], "b": [sig_b]}, bar, ["a", "b"], source_weights={"a": 1.0, "b": 0.5}
         )
         # Both scores are above 0.5 (buy signals), but b_half < both_full is not
         # guaranteed due to count normalization. What IS guaranteed: both > 0.5
@@ -260,9 +258,7 @@ class TestComputeSignalScoreWithWeights:
         score_clamped = _compute_signal_score(
             {"uw": [sig]}, bar, ["uw"], source_weights={"uw": 5.0}
         )
-        score_one = _compute_signal_score(
-            {"uw": [sig]}, bar, ["uw"], source_weights={"uw": 1.0}
-        )
+        score_one = _compute_signal_score({"uw": [sig]}, bar, ["uw"], source_weights={"uw": 1.0})
         assert score_clamped == pytest.approx(score_one, abs=1e-9)
 
     def test_weight_clamped_below_zero(self):
@@ -272,9 +268,7 @@ class TestComputeSignalScoreWithWeights:
         score_clamped = _compute_signal_score(
             {"uw": [sig]}, bar, ["uw"], source_weights={"uw": -1.0}
         )
-        score_zero = _compute_signal_score(
-            {"uw": [sig]}, bar, ["uw"], source_weights={"uw": 0.0}
-        )
+        score_zero = _compute_signal_score({"uw": [sig]}, bar, ["uw"], source_weights={"uw": 0.0})
         assert score_clamped == pytest.approx(score_zero, abs=1e-9)
 
     def test_signal_score_always_in_range(self):

@@ -52,10 +52,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         slippage = self._cfg.get_float("analysis.backtest.default_slippage_pct", 0.0005)
         _weights_raw = self._cfg.get_str("analysis.signals.source_weights", default="{}")
         try:
-            source_weights = {
-                k: max(0.0, min(1.0, float(v)))
-                for k, v in json.loads(_weights_raw).items()
-            } if _weights_raw else {}
+            source_weights = (
+                {k: max(0.0, min(1.0, float(v))) for k, v in json.loads(_weights_raw).items()}
+                if _weights_raw
+                else {}
+            )
         except (ValueError, TypeError):
             log.warning("analysis.signals.source_weights is not valid JSON — using empty weights")
             source_weights = {}
