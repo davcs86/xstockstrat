@@ -109,3 +109,27 @@
 - Additional fix during this step: `mock-backend.ts` had pre-existing `accountId` → `id` bug in `TradingService.listBrokerAccounts` (same bug as trader Step 3). The `AccountPortfolioSelector` component keyed accounts by `account.id`; with `accountId` the key was always `""` causing React duplicate-key crash and Next.js error overlay blocking all dashboard tests. Fixed `accountId` → `id` in insights mock.
 - Files modified: `services/xstockstrat-insights/e2e/mock-backend.ts`
 - Deviations: Applied `accountId` → `id` fix to insights mock (same proto field correction as Step 3 for trader mock). This was undetected in Step 4 because Step 4 verification only checked for the presence of `MarketDataService` imports, not a full suite run.
+
+### Step 6 — config-ui: fix stale global-setup comment [done]
+- Added JSDoc comment to `services/xstockstrat-config-ui/e2e/global-setup.ts` before `export default async function globalSetup()` documenting the *_ENDPOINT env var wiring pattern.
+- Files modified: `services/xstockstrat-config-ui/e2e/global-setup.ts`
+- Deviations: none
+
+### Step 7 — docs: add E2E Backend Mock section to all three frontend CLAUDE.md files [done]
+- Appended `## E2E Backend Mock` section to `services/xstockstrat-trader/CLAUDE.md`, `services/xstockstrat-insights/CLAUDE.md`, `services/xstockstrat-config-ui/CLAUDE.md`.
+- Each section documents: mock port, registered services, `*_ENDPOINT` values, and the `*_HTTP_ENDPOINT` exclusion note.
+- Files modified: `services/xstockstrat-trader/CLAUDE.md`, `services/xstockstrat-insights/CLAUDE.md`, `services/xstockstrat-config-ui/CLAUDE.md`
+- Deviations: none
+
+### Step 8 — test: cross-frontend CI validation [done]
+- Ran all three e2e suites with `CI=true --project=chromium`: trader 36/36, insights 22/22, config-ui 31/31 — all pass, 0 failed.
+- Confirmed no `*_HTTP_ENDPOINT` in any `playwright.config.ts` (AC-3 passes).
+- All acceptance criteria satisfied: (1) suites pass without real backends; (2) trader AlertStream receives alerts via connect-web streaming; (3) no `*_HTTP_ENDPOINT` in playwright configs.
+- Files modified: none (verification only)
+- Deviations: Playwright teardown hangs in all three suites (same as Step 3) — killed SIGKILL after all test dots confirmed. All 36/22/31 dots = all passed (github CI reporter uses one dot per passing test, failures shown explicitly).
+
+## Session 2026-06-01 — sdd-execute
+**Steps this session**: 5, 6, 7, 8
+**Progress**: 8 done / 8 total
+**Stopped at**: all complete
+**Next**: /sdd-execute align-frontend-e2e-bff-mocks next (open final integration PR)
