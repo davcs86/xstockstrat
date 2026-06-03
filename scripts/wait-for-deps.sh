@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 # wait-for-deps.sh — probe TCP endpoints before starting a service.
 #
 # Usage:
@@ -24,18 +24,18 @@ WAIT_ARGS=""
 # Parse positional HOST:PORT args; stop at -- and leave remaining as CMD
 while [ $# -gt 0 ]; do
   case "$1" in
-    --)
-      shift
-      break
-      ;;
-    *:*)
-      WAIT_ARGS="${WAIT_ARGS} $1"
-      shift
-      ;;
-    *)
-      printf 'Usage: %s HOST:PORT [HOST:PORT ...] [-- COMMAND [ARGS...]]\n' "$0" >&2
-      exit 1
-      ;;
+  --)
+    shift
+    break
+    ;;
+  *:*)
+    WAIT_ARGS="${WAIT_ARGS} $1"
+    shift
+    ;;
+  *)
+    printf 'Usage: %s HOST:PORT [HOST:PORT ...] [-- COMMAND [ARGS...]]\n' "$0" >&2
+    exit 1
+    ;;
   esac
 done
 

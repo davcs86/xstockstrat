@@ -47,7 +47,7 @@ async def serve():
     log.info("config snapshot received")
 
     # Open asyncpg connection pool for signal persistence
-    _ssl_ctx: "_ssl.SSLContext | None" = None
+    _ssl_ctx: _ssl.SSLContext | None = None
     if "sslmode=disable" not in DATABASE_URL:
         _ssl_ctx = _ssl.create_default_context()
         _ssl_ctx.check_hostname = False

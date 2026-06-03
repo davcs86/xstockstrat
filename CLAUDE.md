@@ -3,6 +3,7 @@
 ## Project Overview
 
 **xstockstrat** (Cross Stock Strategies) is a monorepo stock strategy platform built on the **Spine pattern**. The root owns:
+
 - `packages/proto/` — single source of truth for all gRPC/Protobuf contracts
 - `docs/` — runbooks, setup guides, and implementation roadmap
 - `scripts/` — codegen, bootstrap, and CI helpers
@@ -67,7 +68,7 @@ to the frontends, nginx, and the agent.
 
 ## Language Map
 
-```
+```text
 Go        → xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata
 Python    → xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis, xstockstrat-agent
 Node.js   → xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, xstockstrat-config
@@ -95,6 +96,7 @@ Next.js   → xstockstrat-ui
 **Important Go build note**: CI runs all Go jobs with `GOWORK=off`. When running Go commands locally for a single service (e.g., `go test`, `go mod download`), set `GOWORK=off` or `cd services/<service>` and rely on the local `go.mod`.
 
 **macOS is the primary developer platform; Linux is optional.** All bash commands in `.md` files (docs, runbooks, setup guides) must be macOS/Homebrew-compatible:
+
 - Use `brew install <tool>` as the primary install instruction; add Linux alternatives in an "Other" column or parenthetical — not the other way around
 - Avoid GNU-only flags; prefer options that work on both BSD (macOS) and GNU tools (e.g. `grep -oE` works on both; `grep -P` does not)
 - Never use bare `pip` — use `python3 -m pip` (bare `pip` resolves to pip2 on stock macOS)
@@ -103,6 +105,7 @@ Next.js   → xstockstrat-ui
 ### Version Bump Workflow
 
 To change a language or tool version:
+
 1. **Update this table first** (CLAUDE.md §Language Versions & Tooling) — this is the soft source of truth
 2. **Update `Dockerfile.codegen`** — the proto-gen container
 3. **Propagate** to all other pinned locations:
@@ -114,7 +117,7 @@ To change a language or tool version:
 | Node.js | `.github/workflows/ci.yml` (`node-version`), Node/Next service Dockerfiles (`FROM node:X-alpine`) |
 | pnpm | `package.json` (`packageManager`), `.github/workflows/ci.yml` (`pnpm@X`), Node service Dockerfiles |
 
-4. Open a PR — CI will catch any missed files.
+1. Open a PR — CI will catch any missed files.
 
 ---
 
@@ -152,6 +155,7 @@ All inter-service connection env vars follow these patterns. **Never invent new 
 | `XSTOCKSTRAT_<SERVICE>_PRIVATE_URL` | `PRIVATE_DOMAIN` on DO (e.g. `svc.internal`), bare container name in Compose | **nginx container only** — `envsubst` upstream resolution; entrypoint strips `http://` prefix just in case, but the nginx template already appends `:PORT` so `PRIVATE_URL` (which includes the port) must not be used here | `XSTOCKSTRAT_AGENT_PRIVATE_URL=xstockstrat-agent` |
 
 **Rules:**
+
 - All backend services are gRPC-only, so all inter-service connection vars use the `_ENDPOINT` (gRPC `host:port`) form. The legacy `<SERVICE>_HTTP_ENDPOINT` form was removed when the backend HTTP/Connect-RPC (80xx) servers were deleted — do not reintroduce it (test-only Playwright mocks may still set it, but no runtime code reads it).
 - No `XSTOCKSTRAT_` prefix except for nginx `PRIVATE_URL` vars.
 - No `_URL` suffix on inter-service connection vars — always `_ENDPOINT`.
@@ -176,7 +180,7 @@ gRPC stubs / `@connectrpc/connect-node` gRPC transport on the 50xx ports. There 
 all callers migrated to gRPC. Signal ingestion, alert emission, and backtest triggering are
 plain gRPC RPCs (`IngestSignal`, `EmitAlert`, `RunBacktest`, …) invoked directly by the agent.
 
-```
+```text
 Agent / Frontend → gRPC RPC (50xx) → target backend service
 ```
 
@@ -245,6 +249,7 @@ When modifying a service's `Dockerfile`, update the complete chain:
    - CI validates: Docker builds, lint checks, and documentation links
 
 **Common updates:**
+
 - **Base image version bump** (Node 22 → 23, Python 3.12 → 3.13, etc.) → update the Dockerfile + version table in root CLAUDE.md + all affected service Dockerfiles
 - **Lock file tooling change** (pnpm@9 → pnpm@10) → update root CLAUDE.md version table + all Node service Dockerfiles + all Node service lock files
 - **Dependency strategy change** (e.g., switching from `--no-frozen-lockfile` to `--frozen-lockfile`) → update Dockerfile + service CLAUDE.md + `docs/patterns/docker-build.md`
@@ -261,7 +266,7 @@ CI runs on every PR to `main-dev` or `main`. Coverage thresholds: Go/Python/Node
 
 ## Inter-Service Dependencies
 
-```
+```text
 xstockstrat-ui (UI — trader/insights/config-ui segments)
   ├── xstockstrat-trading (gRPC)
   │     ├── xstockstrat-marketdata (gRPC)
@@ -337,6 +342,7 @@ Deviation notes for completed phases: `docs/roadmap/phase[3-6]-deviations.md`.
 ## Feature Roadmap
 
 Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number auto-assigned in creation order. Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
+
 - `feature.md` — lifecycle status (`idea`/`draft`/`spec-ready`/`implementation-ready`/`in-progress`/`code-completed`/`launched`/`rolled-back`/`demoted/canceled`), links to all artifacts
 - `product-spec.md` — requirements, affected services, governance gates
 - `implementation-spec.md` — numbered steps with concrete code references and statuses
@@ -350,6 +356,7 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 | `004-make-repo-public-secure` | `launched` | `feature/make-repo-public-secure` | — promoted to production via PR #158 |
 
 **When starting any session involving an in-progress feature:**
+
 1. Run `/sdd-status` to see all features and their lifecycle status.
 2. Read `docs/roadmap/features/<NNN-slug>/context.md` before touching any related files — it contains critical decisions from prior sessions.
 3. Do NOT rely on conversation context from a previous session. Always re-read context.md.

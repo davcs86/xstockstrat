@@ -1,12 +1,15 @@
 # xstockstrat-ledger — CLAUDE.md
 
 ## Role
+
 Node.js gRPC service implementing an **append-only event store**. Every service in the platform writes domain events here. Events are **immutable** — no UPDATE or DELETE is permitted at the database level (enforced via PostgreSQL rules). Supports live streaming via pg LISTEN/NOTIFY.
 
 ## Language
+
 Node.js 20 + TypeScript
 
 ## Docker Build Pattern
+
 Backend pattern — see `docs/patterns/docker-build.md` for the base stage, proto stub timing, and `pnpm deploy` approach.
 
 ## Ports
@@ -70,7 +73,7 @@ _No webhooks. Call the gRPC RPCs on port 50057 directly._
 
 ## Environment Variables
 
-```
+```text
 GRPC_PORT=50057
 CONFIG_ENDPOINT=xstockstrat-config:50060
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env

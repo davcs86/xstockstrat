@@ -1,18 +1,22 @@
 # xstockstrat-analysis — CLAUDE.md
 
 ## Role
+
 Python gRPC service for strategy backtesting, scoring, and report generation. Reads historical market data from xstockstrat-marketdata and computed indicators from xstockstrat-indicators. Optionally fetches newsletter signals from xstockstrat-ingest for signal-weighted strategies. Writes backtest results to xstockstrat-ledger.
 
 As of Phase 3, RunBacktest executes a real SMA crossover engine (no more synthetic stubs) that:
+
 1. Fetches OHLCV bars via `MarketDataService.GetBars`
 2. Computes fast/slow SMAs via `IndicatorsService.ComputeIndicator`
 3. Optionally calls `IngestService.QuerySignals` for newsletter signal weighting
 4. Simulates trades bar-by-bar and computes Sharpe, drawdown, win rate, profit factor
 
 ## Language
+
 Python 3.12 (asyncio, grpc.aio)
 
 ## Docker Build Pattern
+
 Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
 
 ## Ports
@@ -39,11 +43,13 @@ triggers backtests via the `RunBacktest` gRPC RPC. The former HTTP/Connect-RPC s
 ## Backtesting Strategy
 
 Default: **SMA crossover** (fast=20, slow=50)
+
 - Buy when fast SMA crosses above slow SMA (golden cross) and combined conviction >= threshold
 - Sell when fast SMA crosses below slow SMA (death cross)
 - Position sizing: 95% of current equity per symbol
 
 Signal-weighted mode (set via `strategy_params`):
+
 - `signal_sources`: list of ingest source names (e.g. `["unusual_whales"]`)
 - `signal_weight`: 0.0–1.0 (share of score from newsletter signals; rest from technicals)
 - `technical_weight`: 0.0–1.0 (complement of signal_weight)
@@ -83,7 +89,7 @@ After any change to `pyproject.toml`, run `uv lock` and commit the updated `uv.l
 
 ## Environment Variables
 
-```
+```text
 GRPC_PORT=50056
 CONFIG_ENDPOINT=xstockstrat-config:50060
 MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
