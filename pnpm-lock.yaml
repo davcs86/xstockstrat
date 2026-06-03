@@ -109,133 +109,6 @@ importers:
         specifier: ^5.4.5
         version: 5.9.3
 
-  services/xstockstrat-config-ui:
-    dependencies:
-      '@bufbuild/protobuf':
-        specifier: ^2.0.0
-        version: 2.12.0
-      '@connectrpc/connect':
-        specifier: ^2.1.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect-node':
-        specifier: ^2.1.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
-      '@connectrpc/connect-query':
-        specifier: ^2.2.0
-        version: 2.2.0(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))(@tanstack/query-core@5.100.14)(@tanstack/react-query@5.100.14(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@connectrpc/connect-web':
-        specifier: ^2.1.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
-      '@normy/react-query':
-        specifier: ^0.21.0
-        version: 0.21.0(@tanstack/query-core@5.100.14)(@tanstack/react-query@5.100.14(react@18.3.1))
-      '@opentelemetry/exporter-trace-otlp-http':
-        specifier: ^0.218.0
-        version: 0.218.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/resources':
-        specifier: ^2.7.1
-        version: 2.7.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-node':
-        specifier: ^0.218.0
-        version: 0.218.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/semantic-conventions':
-        specifier: ^1.41.1
-        version: 1.41.1
-      '@radix-ui/react-dialog':
-        specifier: ^1.1.2
-        version: 1.1.15(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@radix-ui/react-select':
-        specifier: ^2.1.2
-        version: 2.2.6(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@radix-ui/react-separator':
-        specifier: ^1.1.0
-        version: 1.1.8(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@radix-ui/react-slot':
-        specifier: ^1.1.0
-        version: 1.2.4(@types/react@18.3.28)(react@18.3.1)
-      '@tanstack/react-query':
-        specifier: ^5.62.0
-        version: 5.100.14(react@18.3.1)
-      '@xstockstrat/proto':
-        specifier: workspace:*
-        version: link:../../packages/proto/gen/ts
-      class-variance-authority:
-        specifier: ^0.7.1
-        version: 0.7.1
-      clsx:
-        specifier: ^2.1.1
-        version: 2.1.1
-      date-fns:
-        specifier: ^3.6.0
-        version: 3.6.0
-      jose:
-        specifier: ^5.0.0
-        version: 5.10.0
-      lucide-react:
-        specifier: ^0.460.0
-        version: 0.460.0(react@18.3.1)
-      next:
-        specifier: ^15.5.15
-        version: 15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      pg:
-        specifier: ^8.11.5
-        version: 8.20.0
-      react:
-        specifier: ^18.3.1
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.3.1
-        version: 18.3.1(react@18.3.1)
-      tailwind-merge:
-        specifier: ^2.5.4
-        version: 2.6.1
-    devDependencies:
-      '@playwright/test':
-        specifier: ^1.44.0
-        version: 1.59.1
-      '@types/node':
-        specifier: ^20
-        version: 20.19.39
-      '@types/pg':
-        specifier: ^8.11.0
-        version: 8.20.0
-      '@types/react':
-        specifier: ^18
-        version: 18.3.28
-      '@types/react-dom':
-        specifier: ^18
-        version: 18.3.7(@types/react@18.3.28)
-      '@typescript-eslint/eslint-plugin':
-        specifier: ^7.0.0
-        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
-      '@typescript-eslint/parser':
-        specifier: ^7.0.0
-        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
-      autoprefixer:
-        specifier: ^10.4.19
-        version: 10.5.0(postcss@8.5.13)
-      eslint-config-next:
-        specifier: ^15
-        version: 15.5.15(eslint@8.57.1)(typescript@5.9.3)
-      eslint-config-prettier:
-        specifier: ^9.1.0
-        version: 9.1.2(eslint@8.57.1)
-      postcss:
-        specifier: ^8.4.38
-        version: 8.5.13
-      prettier:
-        specifier: ^3.3.0
-        version: 3.8.3
-      tailwindcss:
-        specifier: ^3.4.3
-        version: 3.4.19(yaml@2.9.0)
-      tailwindcss-animate:
-        specifier: ^1.0.7
-        version: 1.0.7(tailwindcss@3.4.19(yaml@2.9.0))
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
   services/xstockstrat-identity:
     dependencies:
       '@bufbuild/protobuf':
@@ -325,136 +198,6 @@ importers:
         version: 10.9.2(@types/node@20.19.39)(typescript@5.9.3)
       typescript:
         specifier: ^5.4.5
-        version: 5.9.3
-
-  services/xstockstrat-insights:
-    dependencies:
-      '@bufbuild/protobuf':
-        specifier: ^2.0.0
-        version: 2.12.0
-      '@connectrpc/connect':
-        specifier: ^2.1.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)
-      '@connectrpc/connect-node':
-        specifier: ^2.1.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
-      '@connectrpc/connect-query':
-        specifier: ^2.2.0
-        version: 2.2.0(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))(@tanstack/query-core@5.100.14)(@tanstack/react-query@5.100.14(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@connectrpc/connect-web':
-        specifier: ^2.1.0
-        version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
-      '@normy/react-query':
-        specifier: ^0.21.0
-        version: 0.21.0(@tanstack/query-core@5.100.14)(@tanstack/react-query@5.100.14(react@18.3.1))
-      '@opentelemetry/exporter-trace-otlp-http':
-        specifier: ^0.218.0
-        version: 0.218.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/resources':
-        specifier: ^2.7.1
-        version: 2.7.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-node':
-        specifier: ^0.218.0
-        version: 0.218.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/semantic-conventions':
-        specifier: ^1.41.1
-        version: 1.41.1
-      '@radix-ui/react-dialog':
-        specifier: ^1.1.2
-        version: 1.1.15(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@radix-ui/react-select':
-        specifier: ^2.1.2
-        version: 2.2.6(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@radix-ui/react-separator':
-        specifier: ^1.1.0
-        version: 1.1.8(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@radix-ui/react-slot':
-        specifier: ^1.1.0
-        version: 1.2.4(@types/react@18.3.28)(react@18.3.1)
-      '@tanstack/react-query':
-        specifier: ^5.62.0
-        version: 5.100.14(react@18.3.1)
-      '@xstockstrat/proto':
-        specifier: workspace:*
-        version: link:../../packages/proto/gen/ts
-      class-variance-authority:
-        specifier: ^0.7.1
-        version: 0.7.1
-      clsx:
-        specifier: ^2.1.1
-        version: 2.1.1
-      date-fns:
-        specifier: ^3.6.0
-        version: 3.6.0
-      jose:
-        specifier: ^5.0.0
-        version: 5.10.0
-      lightweight-charts:
-        specifier: ^4.1.3
-        version: 4.2.3
-      lucide-react:
-        specifier: ^0.460.0
-        version: 0.460.0(react@18.3.1)
-      next:
-        specifier: ^15.5.15
-        version: 15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      react:
-        specifier: ^18.3.1
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.3.1
-        version: 18.3.1(react@18.3.1)
-      recharts:
-        specifier: ^2.12.7
-        version: 2.15.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      tailwind-merge:
-        specifier: ^2.5.4
-        version: 2.6.1
-      zustand:
-        specifier: ^4.5.2
-        version: 4.5.7(@types/react@18.3.28)(react@18.3.1)
-    devDependencies:
-      '@playwright/test':
-        specifier: ^1.44.0
-        version: 1.59.1
-      '@types/node':
-        specifier: ^20
-        version: 20.19.39
-      '@types/react':
-        specifier: ^18
-        version: 18.3.28
-      '@types/react-dom':
-        specifier: ^18
-        version: 18.3.7(@types/react@18.3.28)
-      '@typescript-eslint/eslint-plugin':
-        specifier: ^7.0.0
-        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
-      '@typescript-eslint/parser':
-        specifier: ^7.0.0
-        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
-      autoprefixer:
-        specifier: ^10.4.19
-        version: 10.5.0(postcss@8.5.13)
-      eslint-config-next:
-        specifier: ^15
-        version: 15.5.15(eslint@8.57.1)(typescript@5.9.3)
-      eslint-config-prettier:
-        specifier: ^9.1.0
-        version: 9.1.2(eslint@8.57.1)
-      postcss:
-        specifier: ^8.4.38
-        version: 8.5.13
-      prettier:
-        specifier: ^3.3.0
-        version: 3.8.3
-      tailwindcss:
-        specifier: ^3.4.3
-        version: 3.4.19(yaml@2.9.0)
-      tailwindcss-animate:
-        specifier: ^1.0.7
-        version: 1.0.7(tailwindcss@3.4.19(yaml@2.9.0))
-      typescript:
-        specifier: ^5
         version: 5.9.3
 
   services/xstockstrat-ledger:
@@ -627,7 +370,7 @@ importers:
         specifier: ^5.4.5
         version: 5.9.3
 
-  services/xstockstrat-trader:
+  services/xstockstrat-ui:
     dependencies:
       '@bufbuild/protobuf':
         specifier: ^2.0.0
@@ -698,6 +441,9 @@ importers:
       next:
         specifier: ^15.5.15
         version: 15.5.15(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      pg:
+        specifier: ^8.11.5
+        version: 8.20.0
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -720,6 +466,9 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.39
+      '@types/pg':
+        specifier: ^8.11.0
+        version: 8.20.0
       '@types/react':
         specifier: ^18
         version: 18.3.28

@@ -52,10 +52,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         slippage = self._cfg.get_float("analysis.backtest.default_slippage_pct", 0.0005)
         _weights_raw = self._cfg.get_str("analysis.signals.source_weights", default="{}")
         try:
-            source_weights = {
-                k: max(0.0, min(1.0, float(v)))
-                for k, v in json.loads(_weights_raw).items()
-            } if _weights_raw else {}
+            source_weights = (
+                {k: max(0.0, min(1.0, float(v))) for k, v in json.loads(_weights_raw).items()}
+                if _weights_raw
+                else {}
+            )
         except (ValueError, TypeError):
             log.warning("analysis.signals.source_weights is not valid JSON — using empty weights")
             source_weights = {}
@@ -306,7 +307,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 tech_signal = 0.0
 
             # Signal score from newsletter signals active on this bar's date
-            signal_score = _compute_signal_score(signals_map, bar, signal_sources, source_weights=source_weights)
+            signal_score = _compute_signal_score(
+                signals_map, bar, signal_sources, source_weights=source_weights
+            )
 
             # Combined conviction
             if signal_weight > 0 and signals_map:
@@ -503,7 +506,9 @@ def _unwrap_value(v):
     return None
 
 
-def _compute_signal_score(signals_map: dict, bar, signal_sources: list, source_weights: dict | None = None) -> float:
+def _compute_signal_score(
+    signals_map: dict, bar, signal_sources: list, source_weights: dict | None = None
+) -> float:
     """Return a 0.0–1.0 signal score from active newsletter signals for this bar."""
     if not signals_map or not signal_sources:
         return 0.5

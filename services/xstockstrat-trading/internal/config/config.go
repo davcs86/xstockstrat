@@ -16,13 +16,13 @@ import (
 
 // Config holds all runtime config for the trading service.
 type Config struct {
-	GRPCPort             string
-	ConfigEndpoint       string
-	LedgerEndpoint       string
-	PortfolioEndpoint    string
-	IndicatorsEndpoint   string
-	NotifyEndpoint       string
-	DBConnStr            string
+	GRPCPort                    string
+	ConfigEndpoint              string
+	LedgerEndpoint              string
+	PortfolioEndpoint           string
+	IndicatorsEndpoint          string
+	NotifyEndpoint              string
+	DBConnStr                   string
 	RequireApprovalAbove        float64 // order qty threshold requiring manual approval
 	BrokerAccountsEncryptionKey string  // hex-encoded 32-byte key; required when broker_accounts table is in use
 	TradingMode                 string  // "paper" | "live"

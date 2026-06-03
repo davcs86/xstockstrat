@@ -1,12 +1,15 @@
 # xstockstrat-notify — CLAUDE.md
 
 ## Role
+
 Node.js gRPC service providing **server-streaming alert delivery**. Services emit alerts via `EmitAlert` RPC; frontends and monitoring clients subscribe via the `StreamAlerts` server-streaming RPC and receive alerts in real time as they are emitted. Alert fan-out is in-process (no message broker required for small clusters).
 
 ## Language
+
 Node.js 20 + TypeScript
 
 ## Docker Build Pattern
+
 Backend pattern — see `docs/patterns/docker-build.md` for the base stage, proto stub timing, and `pnpm deploy` approach.
 
 ## Ports
@@ -48,7 +51,7 @@ Namespace: `notify`
 
 ## Environment Variables
 
-```
+```text
 GRPC_PORT=50059
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057

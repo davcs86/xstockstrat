@@ -25,12 +25,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           # Each filter name is referenced verbatim by downstream `if:` gates.
           # Service filter names MUST match the matrix.service values exactly.
-          # paths-filter@v3 emits a default `changes` output: a JSON array of
+          # paths-filter@v4 emits a default `changes` output: a JSON array of
           # filter names that matched. That array is what downstream jobs read
           # via needs.changes.outputs.matched — no extra jq step required.
           filters: |
@@ -56,10 +56,7 @@ jobs:
             xstockstrat-ledger:     ['services/xstockstrat-ledger/**']
             xstockstrat-identity:   ['services/xstockstrat-identity/**']
             xstockstrat-notify:     ['services/xstockstrat-notify/**']
-            xstockstrat-trader:     ['services/xstockstrat-trader/**']
-            xstockstrat-insights:   ['services/xstockstrat-insights/**']
-            xstockstrat-config-ui:  ['services/xstockstrat-config-ui/**']
-            xstockstrat-nginx:      ['services/xstockstrat-nginx/**', 'nginx.conf']
+            xstockstrat-ui:         ['services/xstockstrat-ui/**']
             dockerfiles:
               - '**/Dockerfile*'
               - '.hadolint.yaml'
@@ -93,6 +90,7 @@ jobs:
       - uses: bufbuild/buf-setup-action@v1
         with:
           version: '1.69.0'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: buf lint
         run: buf lint packages/proto/
@@ -126,6 +124,7 @@ jobs:
       - uses: bufbuild/buf-setup-action@v1
         with:
           version: '1.69.0'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-go@v5
         with:
@@ -135,7 +134,7 @@ jobs:
       - name: Install Go proto plugins
         run: |
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
           go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.19.2
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
@@ -172,7 +171,9 @@ jobs:
     name: Go lint and test (${{ matrix.service }})
     needs: changes
     if: >-
-      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-trading') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-marketdata') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-portfolio') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'go-shared') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
@@ -260,7 +261,9 @@ jobs:
     name: Python lint (${{ matrix.service }})
     needs: changes
     if: >-
-      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-indicators') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ingest') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-analysis') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
@@ -296,7 +299,9 @@ jobs:
     name: Python test and coverage (${{ matrix.service }})
     needs: changes
     if: >-
-      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-indicators') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ingest') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-analysis') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
@@ -346,7 +351,13 @@ jobs:
     name: Node lint (${{ matrix.service }})
     needs: changes
     if: >-
-      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-config') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ledger') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-identity') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-notify') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-trader') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-insights') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-config-ui') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
@@ -359,9 +370,7 @@ jobs:
           - xstockstrat-ledger
           - xstockstrat-identity
           - xstockstrat-notify
-          - xstockstrat-trader
-          - xstockstrat-insights
-          - xstockstrat-config-ui
+          - xstockstrat-ui
     steps:
       - uses: actions/checkout@v6
 
@@ -389,7 +398,9 @@ jobs:
     name: Frontend E2E (${{ matrix.service }})
     needs: changes
     if: >-
-      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-trader') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-insights') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-config-ui') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
@@ -398,9 +409,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - service: xstockstrat-trader
-          - service: xstockstrat-insights
-          - service: xstockstrat-config-ui
+          - service: xstockstrat-ui
     defaults:
       run:
         working-directory: services/${{ matrix.service }}
@@ -454,7 +463,10 @@ jobs:
     name: Node test and coverage (${{ matrix.service }})
     needs: changes
     if: >-
-      contains(fromJson(needs.changes.outputs.matched), matrix.service) ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-config') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ledger') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-identity') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-notify') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')

@@ -51,18 +51,21 @@ Additional fields present in bug `feature.md` files:
 Every `feature.md` contains required headers plus optional tracking fields:
 
 **Required fields (all features):**
+
 - `**Lifecycle Status**` — current status (`idea`, `draft`, `spec-ready`, `implementation-ready`, `in-progress`, `code-completed`, `launched`, etc.)
 - `**Development Branch**` — git branch name (`feature/<slug>`)
 - `**Created**` — date feature was created (YYYY-MM-DD)
 - `**Last Updated**` — date file was last modified (YYYY-MM-DD)
 
 **Tracking fields (auto-populated by CI on promotion to production):**
+
 - `**Committed to main**` — commit SHA when feature was merged to the `main` branch (e.g., `95860d0`)
 - `**Launched date**` — calendar date when feature status became `launched` (YYYY-MM-DD)
 
 These tracking fields make production audits easy: you can always see exactly which commit and date a feature shipped to production.
 
 **For bugs only:**
+
 - `**Type**` — always `bug` (features omit this field or set it to `feature`)
 - `**Severity**` — `SEV-1`, `SEV-2`, or `SEV-3`
 - `**GitHub Issue**` — link to the originating GitHub issue
@@ -98,6 +101,7 @@ Three complementary mechanisms keep feature statuses in sync with production rea
 ### 1. Enhanced `/promote` Skill (P7)
 
 When you run `/promote` to create a promotion PR from `main-dev` to `main`, the skill now:
+
 - Detects features at `code-completed` that are being promoted
 - Marks them as `code-completed` (unchanged during PR creation)
 - Creates a promotion PR with links to all affected features
@@ -105,6 +109,7 @@ When you run `/promote` to create a promotion PR from `main-dev` to `main`, the 
 ### 2. CI Validation Workflow (`ci-validate-feature-status.yml`)
 
 **Automatically runs on every push to `main`.** After a promotion PR merges:
+
 1. Detects the merge commit by looking for "release: promote" in the message
 2. Finds all features that were promoted in that PR
 3. For each feature, **automatically**:
@@ -120,6 +125,7 @@ This means **you never manually update feature statuses after promotion** — it
 ### 3. Structural Tracking (commit SHA + date)
 
 Every `launched` feature now has:
+
 - `**Committed to main**: <commit-sha>` — makes the git ref explicit
 - `**Launched date**: YYYY-MM-DD` — makes promotion timing explicit
 

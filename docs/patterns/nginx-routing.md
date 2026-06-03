@@ -1,5 +1,11 @@
 # Nginx Reverse Proxy — Routing Reference
 
+> **Deprecated as of feature 045 (ui-consolidation-nextjs).**
+> The nginx reverse proxy has been removed. Frontends are now served from the single
+> `xstockstrat-ui` Next.js service. This document is retained as a historical reference only.
+> For the current frontend pattern, see `docs/patterns/nextjs-frontends.md` and
+> `docs/patterns/frontend-auth.md`.
+
 The **xstockstrat-nginx** service (port 80) proxies all frontend requests to the three Next.js UIs.
 
 - **Local dev** (`docker-compose.yml`): nginx resolves upstream services via Docker DNS container names (e.g., `xstockstrat-trader:3000`)
