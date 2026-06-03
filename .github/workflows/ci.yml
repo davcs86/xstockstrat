@@ -355,9 +355,7 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ledger') ||
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-identity') ||
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-notify') ||
-      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-trader') ||
-      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-insights') ||
-      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-config-ui') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ui') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
@@ -398,9 +396,7 @@ jobs:
     name: Frontend E2E (${{ matrix.service }})
     needs: changes
     if: >-
-      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-trader') ||
-      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-insights') ||
-      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-config-ui') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ui') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
