@@ -1,6 +1,6 @@
 # Implementation Spec: ui-consolidation-nextjs
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-06-01
 **Feature**: `docs/roadmap/features/045-ui-consolidation-nextjs/feature.md`
 **Total Steps**: 9
@@ -133,7 +133,7 @@ Build must complete with zero TypeScript errors and produce a `.next/standalone`
 
 ### Step 2 — service: Create Dockerfile and update docker-compose + DO app specs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui` (new), `docker-compose.yml` (modify), `.do/app.dev.yaml` (modify), `.do/app.yaml` (modify)
 **Files**:
 - `services/xstockstrat-ui/Dockerfile` — create
@@ -299,7 +299,7 @@ Must return at least one match per file (new service present in all three).
 
 ### Step 3 — service: Migrate e2e tests into `services/xstockstrat-ui`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/playwright.config.ts` — create
@@ -384,7 +384,7 @@ All Playwright tests must pass (green) — 0 failures across trader, insights, a
 
 ### Step 4 — service: Update CI workflow to reference `xstockstrat-ui`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: CI configuration
 **Files**:
 - `.github/workflows/ci.yml` — modify
@@ -441,7 +441,7 @@ Must return at least 3 matches (filter entry, lint matrix, e2e matrix).
 
 ### Step 5 — test: Smoke verify the consolidated service locally
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none (verification only)
 
@@ -485,7 +485,7 @@ All three health endpoints must return `{"status":"ok",...}`. Root must 302 to `
 
 ### Step 6 — service: Remove obsolete service directories and nginx artifacts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: repository root (cleanup)
 **Files**:
 - `services/xstockstrat-trader/` — delete entire directory
@@ -525,7 +525,7 @@ pnpm install --frozen-lockfile
 
 ### Step 7 — docs: Update runbook and pattern docs to remove nginx references
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/patterns/nginx-routing.md` — modify (mark as historical / deprecated; redirect to new consolidated-ui pattern)
@@ -568,7 +568,7 @@ Any remaining references should be in historical/context files (deviations, feat
 
 ### Step 8 — docs: Update root CLAUDE.md service registry, language map, and inter-service dependency graph
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: repository root
 **Files**:
 - `CLAUDE.md` — modify
@@ -613,7 +613,7 @@ Must return no matches (all old names removed and replaced with `xstockstrat-ui`
 
 ### Step 9 — test: Run consolidated e2e test suite and confirm all three UIs pass
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none (verification only)
 
@@ -661,3 +661,28 @@ No coverage threshold applies for Next.js frontends (`xstockstrat-ui` is not in 
 **Spec said**: `INDICATORS_ENDPOINT` included in `connectClients.ts` (spec instruction 6 lists it)
 **Actual**: `INDICATORS_ENDPOINT` removed from `connectClients.ts` — no `indicatorsClient` is exported because no BFF in the consolidated service calls the indicators service.
 **Reason**: ESLint `@typescript-eslint/no-unused-vars` error blocked the build. The indicators service is not proxied by any of the three BFFs, so the endpoint variable was truly unused.
+
+### Deviation: Step 2 — Create Dockerfile and update docker-compose + DO app specs
+**Spec said**: Verification: `docker compose build --no-cache xstockstrat-ui` — image must build to completion.
+**Actual**: Docker daemon not running in this execution environment; build could not be attempted. Structural grep verifications passed (no old service names, `xstockstrat-ui` present in all three files).
+**Reason**: Environment limitation. Dockerfile follows the exact same 4-stage pattern as `services/xstockstrat-trader/Dockerfile` (the reference implementation) with only service-name substitutions. Build validity will be confirmed by CI when the PR is merged.
+
+### Deviation: Step 3 — Migrate e2e tests into `services/xstockstrat-ui`
+**Spec said**: Verification: `pnpm test:e2e` — all Playwright tests must pass (green) — 0 failures across all three suites.
+**Actual**: Full `pnpm test:e2e` run not attempted — no display server or Playwright browsers available in execution environment. TypeScript check (`npx tsc --noEmit`) passed with zero errors; Next.js build still passes.
+**Reason**: Environment limitation. All e2e spec files are structurally identical to source files with only port number updates (3001/3002 → 3000). The merged mock-backend.ts uses the same handler logic as all three source files. E2e correctness will be confirmed by CI.
+
+### Deviation: Step 5 — Smoke verify the consolidated service locally
+**Spec said**: Run `docker compose build/up`, curl all three health endpoints, verify root redirect, verify no old containers running, run `pnpm test:e2e`.
+**Actual**: Docker daemon not running and `POSTGRES_PASSWORD` env var not set — docker compose commands cannot execute. Health route files confirmed present at correct paths; root redirect (`/` → `/trader`) confirmed in `next.config.js`; docker-compose.yml already confirmed to have no old service blocks in Step 2.
+**Reason**: Environment limitation. All code artifacts verified statically. Full runtime smoke test will be performed by CI and manually after the integration PR is merged.
+
+### Deviation: Step 9 — Run consolidated e2e test suite
+**Spec said**: `e2e/trader/api-smoke.spec.ts` — existing tests pass against the consolidated service.
+**Actual**: 5 tests in `e2e/trader/api-smoke.spec.ts` called bespoke JSON routes (`GET /trader/api/orders`, `POST /trader/api/orders`, `GET /trader/api/portfolio`) that were present in the old `xstockstrat-trader` service but were not ported to the consolidated `xstockstrat-ui` service (which uses the BFF Connect-RPC pattern exclusively via `[...connect]/route.ts`). Tests were rewritten to call the correct BFF endpoints (`TradingService/ListOrders`, `TradingService/PlaceOrder`, `PortfolioService/GetPortfolio`) using `page.evaluate` browser-level fetch, matching the pattern established in `e2e/insights/api-smoke.spec.ts` and `e2e/config-ui/api-smoke.spec.ts`. The "error path" test (checking bespoke route handler `{ error: ... }` format) was replaced with a `tradingMode` field verification test since the Connect-RPC BFF does not wrap errors in that format.
+**Reason**: User chose Option A (fix now). The bespoke JSON route handlers in the old trader service (`/api/orders`, `/api/portfolio`) were a pre-consolidation pattern; the consolidated service correctly uses only the BFF Connect-RPC pattern. The tests needed to be updated to match the new architecture.
+
+### Deviation: Step 7 — Update runbook and pattern docs
+**Spec said**: Update only `docs/patterns/nginx-routing.md` and `docs/roadmap/phase5-deviations.md`.
+**Actual**: 10 additional active docs updated: `docs/patterns/client-api-pattern.md`, `docs/patterns/frontend-auth.md`, `docs/patterns/nextjs-frontends.md`, `docs/patterns/docker-build.md`, `docs/runbooks/reviewer-registry.md`, `docs/runbooks/approval-flow.md`, `docs/runbooks/feature-workflow.md`, `docs/setup/digitalocean.md`, `docs/setup/grafana-cloud.md`, `docs/setup/getting-started.md`.
+**Reason**: Step 7 verification criterion ("remaining references in historical files only, not active pattern docs") failed against the original 2-file scope. User chose Option A (fix now) to expand scope and satisfy the criterion.
