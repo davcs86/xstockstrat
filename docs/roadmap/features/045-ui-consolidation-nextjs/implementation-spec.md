@@ -485,7 +485,7 @@ All three health endpoints must return `{"status":"ok",...}`. Root must 302 to `
 
 ### Step 6 — service: Remove obsolete service directories and nginx artifacts
 
-**Status**: `done`
+**Status**: `pending`
 **Service**: repository root (cleanup)
 **Files**:
 - `services/xstockstrat-trader/` — delete entire directory
@@ -525,7 +525,7 @@ pnpm install --frozen-lockfile
 
 ### Step 7 — docs: Update runbook and pattern docs to remove nginx references
 
-**Status**: `done`
+**Status**: `pending`
 **Service**: `docs/`
 **Files**:
 - `docs/patterns/nginx-routing.md` — modify (mark as historical / deprecated; redirect to new consolidated-ui pattern)
@@ -676,8 +676,3 @@ No coverage threshold applies for Next.js frontends (`xstockstrat-ui` is not in 
 **Spec said**: Run `docker compose build/up`, curl all three health endpoints, verify root redirect, verify no old containers running, run `pnpm test:e2e`.
 **Actual**: Docker daemon not running and `POSTGRES_PASSWORD` env var not set — docker compose commands cannot execute. Health route files confirmed present at correct paths; root redirect (`/` → `/trader`) confirmed in `next.config.js`; docker-compose.yml already confirmed to have no old service blocks in Step 2.
 **Reason**: Environment limitation. All code artifacts verified statically. Full runtime smoke test will be performed by CI and manually after the integration PR is merged.
-
-### Deviation: Step 7 — Update runbook and pattern docs
-**Spec said**: Update only `docs/patterns/nginx-routing.md` and `docs/roadmap/phase5-deviations.md`.
-**Actual**: 10 additional active docs updated: `docs/patterns/client-api-pattern.md`, `docs/patterns/frontend-auth.md`, `docs/patterns/nextjs-frontends.md`, `docs/patterns/docker-build.md`, `docs/runbooks/reviewer-registry.md`, `docs/runbooks/approval-flow.md`, `docs/runbooks/feature-workflow.md`, `docs/setup/digitalocean.md`, `docs/setup/grafana-cloud.md`, `docs/setup/getting-started.md`.
-**Reason**: Step 7 verification criterion ("remaining references in historical files only, not active pattern docs") failed against the original 2-file scope. User chose Option A (fix now) to expand scope and satisfy the criterion.
