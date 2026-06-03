@@ -14,7 +14,11 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  reporter: process.env.CI ? 'github' : 'html',
+  timeout: 10_000,
+  expect: { timeout: 5_000 },
+  reporter: process.env.CI
+    ? [['github'], ['html', { open: 'never' }]]
+    : 'html',
   globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
   use: {
