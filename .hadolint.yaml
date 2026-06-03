@@ -1,4 +1,3 @@
 failure-threshold: warning
 ignore:
-  - DL3007  # using :latest on distroless base images is intentional
   - DL3059  # multiple RUN commands — too noisy in multi-stage builds
