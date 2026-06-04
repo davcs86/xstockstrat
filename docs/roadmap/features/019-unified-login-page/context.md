@@ -96,3 +96,9 @@
 - Files modified: `src/middleware.ts`.
 - Verification: `tsc --noEmit` clean; `pnpm run lint` clean; 0 per-basePath login refs; /auth/login + /api/auth/refresh present.
 - Deviations: none.
+
+### Step 4 — service: Remove per-basePath login pages [done]
+- Deleted `src/app/{trader,insights,config-ui}/login/page.tsx`. Only `src/app/auth/login/page.tsx` (+ oauth-login) remain.
+- Files modified: deleted 3 per-basePath login pages.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean; `pnpm run build` exit 0; no stale imports.
+- Deviations: none.

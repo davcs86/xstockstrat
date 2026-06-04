@@ -146,7 +146,7 @@ grep -n "/api/auth/refresh" services/xstockstrat-ui/src/middleware.ts           
 
 ### Step 4 — service: Remove per-basePath login pages from `xstockstrat-ui`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/login/page.tsx` — delete
