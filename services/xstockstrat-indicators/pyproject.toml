@@ -12,6 +12,7 @@ dependencies = [
   "opentelemetry-sdk>=1.25.0",
   "opentelemetry-exporter-otlp-proto-grpc>=1.25.0",
   "opentelemetry-instrumentation-grpc>=0.46b0",
+  "asyncpg>=0.29.0",
 ]
 
 [build-system]
@@ -30,9 +31,10 @@ select = ["E", "F", "I", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0.0", "pytest-cov>=5.0.0"]
+dev = ["pytest>=8.0.0", "pytest-cov>=5.0.0", "pytest-asyncio>=0.23.0"]
 
 [tool.coverage.run]
 omit = [

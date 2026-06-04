@@ -26,6 +26,17 @@ service IndicatorsService {
 
   // Get a registered formula
   rpc GetFormula(GetFormulaRequest) returns (FormulaDefinition);
+
+  // List formula definitions with optional author filter and pagination
+  rpc ListFormulas(ListFormulasRequest) returns (ListFormulasResponse);
+
+  // Update a formula's name, description, source, or is_public flag
+  // Returns PERMISSION_DENIED if user_id does not match author
+  rpc UpdateFormula(UpdateFormulaRequest) returns (UpdateFormulaResponse);
+
+  // Delete a formula by ID
+  // Returns PERMISSION_DENIED if user_id does not match author
+  rpc DeleteFormula(DeleteFormulaRequest) returns (DeleteFormulaResponse);
 }
 
 message ComputeIndicatorRequest {
@@ -109,6 +120,7 @@ message RegisterFormulaRequest {
   string source = 3;
   bool is_public = 4;
   map<string, string> input_schema = 5;
+  string author = 6;  // set by BFF from JWT claims; stored immutably
 }
 
 message RegisterFormulaResponse {
@@ -117,4 +129,38 @@ message RegisterFormulaResponse {
 
 message GetFormulaRequest {
   string formula_id = 1;
+}
+
+message ListFormulasRequest {
+  string author_filter = 1;  // if non-empty, return only formulas where author == author_filter
+  bool include_public = 2;   // if true, include all public formulas regardless of author_filter
+  int32 page_size = 3;       // default 0 = no limit
+  int32 page_offset = 4;     // default 0
+}
+
+message ListFormulasResponse {
+  repeated FormulaDefinition formulas = 1;
+  int32 total_count = 2;
+}
+
+message UpdateFormulaRequest {
+  string formula_id = 1;
+  string user_id = 2;        // must match formula.author; returns PERMISSION_DENIED otherwise
+  string name = 3;
+  string description = 4;
+  string source = 5;
+  bool is_public = 6;
+}
+
+message UpdateFormulaResponse {
+  FormulaDefinition formula = 1;
+}
+
+message DeleteFormulaRequest {
+  string formula_id = 1;
+  string user_id = 2;        // must match formula.author; returns PERMISSION_DENIED otherwise
+}
+
+message DeleteFormulaResponse {
+  bool success = 1;
 }

@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: indicators/v1/indicators.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IndicatorsServiceClient = exports.IndicatorsServiceService = exports.GetFormulaRequest = exports.RegisterFormulaResponse = exports.RegisterFormulaRequest_InputSchemaEntry = exports.RegisterFormulaRequest = exports.IndicatorMeta = exports.ListIndicatorsResponse = exports.ListIndicatorsRequest = exports.FormulaDefinition_InputSchemaEntry = exports.FormulaDefinition = exports.ExecuteFormulaResponse = exports.ExecuteFormulaRequest_EnvEntry = exports.ExecuteFormulaRequest = exports.IndicatorPoint_ExtraEntry = exports.IndicatorPoint = exports.ComputeIndicatorResponse_ParamsUsedEntry = exports.ComputeIndicatorResponse = exports.ComputeIndicatorRequest_ParamsEntry = exports.ComputeIndicatorRequest = exports.SandboxExitReason = exports.protobufPackage = void 0;
+exports.IndicatorsServiceClient = exports.IndicatorsServiceService = exports.DeleteFormulaResponse = exports.DeleteFormulaRequest = exports.UpdateFormulaResponse = exports.UpdateFormulaRequest = exports.ListFormulasResponse = exports.ListFormulasRequest = exports.GetFormulaRequest = exports.RegisterFormulaResponse = exports.RegisterFormulaRequest_InputSchemaEntry = exports.RegisterFormulaRequest = exports.IndicatorMeta = exports.ListIndicatorsResponse = exports.ListIndicatorsRequest = exports.FormulaDefinition_InputSchemaEntry = exports.FormulaDefinition = exports.ExecuteFormulaResponse = exports.ExecuteFormulaRequest_EnvEntry = exports.ExecuteFormulaRequest = exports.IndicatorPoint_ExtraEntry = exports.IndicatorPoint = exports.ComputeIndicatorResponse_ParamsUsedEntry = exports.ComputeIndicatorResponse = exports.ComputeIndicatorRequest_ParamsEntry = exports.ComputeIndicatorRequest = exports.SandboxExitReason = exports.protobufPackage = void 0;
 exports.sandboxExitReasonFromJSON = sandboxExitReasonFromJSON;
 exports.sandboxExitReasonToJSON = sandboxExitReasonToJSON;
 exports.sandboxExitReasonToNumber = sandboxExitReasonToNumber;
@@ -1572,7 +1572,7 @@ exports.IndicatorMeta = {
     },
 };
 function createBaseRegisterFormulaRequest() {
-    return { name: "", description: "", source: "", isPublic: false, inputSchema: {} };
+    return { name: "", description: "", source: "", isPublic: false, inputSchema: {}, author: "" };
 }
 exports.RegisterFormulaRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -1591,6 +1591,9 @@ exports.RegisterFormulaRequest = {
         globalThis.Object.entries(message.inputSchema).forEach(([key, value]) => {
             exports.RegisterFormulaRequest_InputSchemaEntry.encode({ key: key, value }, writer.uint32(42).fork()).join();
         });
+        if (message.author !== "") {
+            writer.uint32(50).string(message.author);
+        }
         return writer;
     },
     decode(input, length) {
@@ -1638,6 +1641,13 @@ exports.RegisterFormulaRequest = {
                     }
                     continue;
                 }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.author = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1667,6 +1677,7 @@ exports.RegisterFormulaRequest = {
                         return acc;
                     }, {})
                     : {},
+            author: isSet(object.author) ? globalThis.String(object.author) : "",
         };
     },
     toJSON(message) {
@@ -1692,6 +1703,9 @@ exports.RegisterFormulaRequest = {
                 });
             }
         }
+        if (message.author !== "") {
+            obj.author = message.author;
+        }
         return obj;
     },
     create(base) {
@@ -1709,6 +1723,7 @@ exports.RegisterFormulaRequest = {
             }
             return acc;
         }, {});
+        message.author = object.author ?? "";
         return message;
     },
 };
@@ -1894,6 +1909,514 @@ exports.GetFormulaRequest = {
         return message;
     },
 };
+function createBaseListFormulasRequest() {
+    return { authorFilter: "", includePublic: false, pageSize: 0, pageOffset: 0 };
+}
+exports.ListFormulasRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.authorFilter !== "") {
+            writer.uint32(10).string(message.authorFilter);
+        }
+        if (message.includePublic !== false) {
+            writer.uint32(16).bool(message.includePublic);
+        }
+        if (message.pageSize !== 0) {
+            writer.uint32(24).int32(message.pageSize);
+        }
+        if (message.pageOffset !== 0) {
+            writer.uint32(32).int32(message.pageOffset);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListFormulasRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.authorFilter = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.includePublic = reader.bool();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.pageSize = reader.int32();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.pageOffset = reader.int32();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            authorFilter: isSet(object.authorFilter)
+                ? globalThis.String(object.authorFilter)
+                : isSet(object.author_filter)
+                    ? globalThis.String(object.author_filter)
+                    : "",
+            includePublic: isSet(object.includePublic)
+                ? globalThis.Boolean(object.includePublic)
+                : isSet(object.include_public)
+                    ? globalThis.Boolean(object.include_public)
+                    : false,
+            pageSize: isSet(object.pageSize)
+                ? globalThis.Number(object.pageSize)
+                : isSet(object.page_size)
+                    ? globalThis.Number(object.page_size)
+                    : 0,
+            pageOffset: isSet(object.pageOffset)
+                ? globalThis.Number(object.pageOffset)
+                : isSet(object.page_offset)
+                    ? globalThis.Number(object.page_offset)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.authorFilter !== "") {
+            obj.authorFilter = message.authorFilter;
+        }
+        if (message.includePublic !== false) {
+            obj.includePublic = message.includePublic;
+        }
+        if (message.pageSize !== 0) {
+            obj.pageSize = Math.round(message.pageSize);
+        }
+        if (message.pageOffset !== 0) {
+            obj.pageOffset = Math.round(message.pageOffset);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListFormulasRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListFormulasRequest();
+        message.authorFilter = object.authorFilter ?? "";
+        message.includePublic = object.includePublic ?? false;
+        message.pageSize = object.pageSize ?? 0;
+        message.pageOffset = object.pageOffset ?? 0;
+        return message;
+    },
+};
+function createBaseListFormulasResponse() {
+    return { formulas: [], totalCount: 0 };
+}
+exports.ListFormulasResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.formulas) {
+            exports.FormulaDefinition.encode(v, writer.uint32(10).fork()).join();
+        }
+        if (message.totalCount !== 0) {
+            writer.uint32(16).int32(message.totalCount);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListFormulasResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.formulas.push(exports.FormulaDefinition.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.totalCount = reader.int32();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            formulas: globalThis.Array.isArray(object?.formulas)
+                ? object.formulas.map((e) => exports.FormulaDefinition.fromJSON(e))
+                : [],
+            totalCount: isSet(object.totalCount)
+                ? globalThis.Number(object.totalCount)
+                : isSet(object.total_count)
+                    ? globalThis.Number(object.total_count)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.formulas?.length) {
+            obj.formulas = message.formulas.map((e) => exports.FormulaDefinition.toJSON(e));
+        }
+        if (message.totalCount !== 0) {
+            obj.totalCount = Math.round(message.totalCount);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListFormulasResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListFormulasResponse();
+        message.formulas = object.formulas?.map((e) => exports.FormulaDefinition.fromPartial(e)) || [];
+        message.totalCount = object.totalCount ?? 0;
+        return message;
+    },
+};
+function createBaseUpdateFormulaRequest() {
+    return { formulaId: "", userId: "", name: "", description: "", source: "", isPublic: false };
+}
+exports.UpdateFormulaRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.formulaId !== "") {
+            writer.uint32(10).string(message.formulaId);
+        }
+        if (message.userId !== "") {
+            writer.uint32(18).string(message.userId);
+        }
+        if (message.name !== "") {
+            writer.uint32(26).string(message.name);
+        }
+        if (message.description !== "") {
+            writer.uint32(34).string(message.description);
+        }
+        if (message.source !== "") {
+            writer.uint32(42).string(message.source);
+        }
+        if (message.isPublic !== false) {
+            writer.uint32(48).bool(message.isPublic);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUpdateFormulaRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.formulaId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.name = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.description = reader.string();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.source = reader.string();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 48) {
+                        break;
+                    }
+                    message.isPublic = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            formulaId: isSet(object.formulaId)
+                ? globalThis.String(object.formulaId)
+                : isSet(object.formula_id)
+                    ? globalThis.String(object.formula_id)
+                    : "",
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            name: isSet(object.name) ? globalThis.String(object.name) : "",
+            description: isSet(object.description) ? globalThis.String(object.description) : "",
+            source: isSet(object.source) ? globalThis.String(object.source) : "",
+            isPublic: isSet(object.isPublic)
+                ? globalThis.Boolean(object.isPublic)
+                : isSet(object.is_public)
+                    ? globalThis.Boolean(object.is_public)
+                    : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.formulaId !== "") {
+            obj.formulaId = message.formulaId;
+        }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.name !== "") {
+            obj.name = message.name;
+        }
+        if (message.description !== "") {
+            obj.description = message.description;
+        }
+        if (message.source !== "") {
+            obj.source = message.source;
+        }
+        if (message.isPublic !== false) {
+            obj.isPublic = message.isPublic;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.UpdateFormulaRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUpdateFormulaRequest();
+        message.formulaId = object.formulaId ?? "";
+        message.userId = object.userId ?? "";
+        message.name = object.name ?? "";
+        message.description = object.description ?? "";
+        message.source = object.source ?? "";
+        message.isPublic = object.isPublic ?? false;
+        return message;
+    },
+};
+function createBaseUpdateFormulaResponse() {
+    return { formula: undefined };
+}
+exports.UpdateFormulaResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.formula !== undefined) {
+            exports.FormulaDefinition.encode(message.formula, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUpdateFormulaResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.formula = exports.FormulaDefinition.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { formula: isSet(object.formula) ? exports.FormulaDefinition.fromJSON(object.formula) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.formula !== undefined) {
+            obj.formula = exports.FormulaDefinition.toJSON(message.formula);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.UpdateFormulaResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUpdateFormulaResponse();
+        message.formula = (object.formula !== undefined && object.formula !== null)
+            ? exports.FormulaDefinition.fromPartial(object.formula)
+            : undefined;
+        return message;
+    },
+};
+function createBaseDeleteFormulaRequest() {
+    return { formulaId: "", userId: "" };
+}
+exports.DeleteFormulaRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.formulaId !== "") {
+            writer.uint32(10).string(message.formulaId);
+        }
+        if (message.userId !== "") {
+            writer.uint32(18).string(message.userId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseDeleteFormulaRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.formulaId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            formulaId: isSet(object.formulaId)
+                ? globalThis.String(object.formulaId)
+                : isSet(object.formula_id)
+                    ? globalThis.String(object.formula_id)
+                    : "",
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.formulaId !== "") {
+            obj.formulaId = message.formulaId;
+        }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.DeleteFormulaRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseDeleteFormulaRequest();
+        message.formulaId = object.formulaId ?? "";
+        message.userId = object.userId ?? "";
+        return message;
+    },
+};
+function createBaseDeleteFormulaResponse() {
+    return { success: false };
+}
+exports.DeleteFormulaResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.success !== false) {
+            writer.uint32(8).bool(message.success);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseDeleteFormulaResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.success = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { success: isSet(object.success) ? globalThis.Boolean(object.success) : false };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.success !== false) {
+            obj.success = message.success;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.DeleteFormulaResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseDeleteFormulaResponse();
+        message.success = object.success ?? false;
+        return message;
+    },
+};
 exports.IndicatorsServiceService = {
     /** Compute a built-in indicator (e.g. SMA, EMA, RSI, MACD, BB) */
     computeIndicator: {
@@ -1947,6 +2470,42 @@ exports.IndicatorsServiceService = {
         requestDeserialize: (value) => exports.GetFormulaRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.FormulaDefinition.encode(value).finish()),
         responseDeserialize: (value) => exports.FormulaDefinition.decode(value),
+    },
+    /** List formula definitions with optional author filter and pagination */
+    listFormulas: {
+        path: "/xstockstrat.indicators.v1.IndicatorsService/ListFormulas",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListFormulasRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListFormulasRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListFormulasResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListFormulasResponse.decode(value),
+    },
+    /**
+     * Update a formula's name, description, source, or is_public flag
+     * Returns PERMISSION_DENIED if user_id does not match author
+     */
+    updateFormula: {
+        path: "/xstockstrat.indicators.v1.IndicatorsService/UpdateFormula",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.UpdateFormulaRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.UpdateFormulaRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.UpdateFormulaResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.UpdateFormulaResponse.decode(value),
+    },
+    /**
+     * Delete a formula by ID
+     * Returns PERMISSION_DENIED if user_id does not match author
+     */
+    deleteFormula: {
+        path: "/xstockstrat.indicators.v1.IndicatorsService/DeleteFormula",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.DeleteFormulaRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.DeleteFormulaRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.DeleteFormulaResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.DeleteFormulaResponse.decode(value),
     },
 };
 exports.IndicatorsServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.IndicatorsServiceService, "xstockstrat.indicators.v1.IndicatorsService");

@@ -20,6 +20,7 @@
     "@connectrpc/connect-node": "^2.1.0",
     "@connectrpc/connect-query": "^2.2.0",
     "@connectrpc/connect-web": "^2.1.0",
+    "@monaco-editor/react": "^4.6.0",
     "@normy/react-query": "^0.21.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
     "@opentelemetry/resources": "^2.7.1",
