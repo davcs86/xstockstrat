@@ -13,9 +13,24 @@ jobs:
   validate-and-update-feature-status:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          # PAT required to push status-update commits and delete remote branches without
+          # hitting protected-branch restrictions and to trigger downstream workflows.
+          # Falls back to GITHUB_TOKEN if PAT is not configured.
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Verify GH_PAT is configured
+        run: |
+          if [ -z "${{ secrets.GH_PAT }}" ]; then
+            echo "::warning::GH_PAT secret is not set — falling back to GITHUB_TOKEN, which cannot push to protected branches. Configure a PAT with repo write access."
+          fi
 
       - name: Check for promotion PR merge and update feature statuses
         run: |
@@ -104,8 +119,6 @@ jobs:
               done
 
               # Commit and push changes
-              git config user.name "GitHub Actions"
-              git config user.email "actions@github.com"
               git add docs/roadmap/features/*/feature.md docs/roadmap/features/*/context.md
               git commit -m "chore: auto-update feature statuses for promotion PR #$PROMOTION_PR" || true
               git push

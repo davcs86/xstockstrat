@@ -1,14 +1,18 @@
 # xstockstrat-indicators — CLAUDE.md
 
 ## Role
+
 Python gRPC service providing two capabilities:
+
 1. **Built-in indicator engine** — vectorized computation of SMA, EMA, RSI, MACD, BB, ATR, VWAP, STOCH
 2. **Sandboxed Python formula execution** — user-defined formulas run in subprocess isolation with configurable timeout and memory cap
 
 ## Language
+
 Python 3.12 (asyncio, grpc.aio)
 
 ## Docker Build Pattern
+
 Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
 
 ## Ports
@@ -64,7 +68,7 @@ _No webhooks. Call the gRPC RPCs on port 50054 directly._
 
 ## Environment Variables
 
-```
+```text
 GRPC_PORT=50054
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057

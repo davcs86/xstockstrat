@@ -110,3 +110,72 @@
 - W4 (RefreshTokenResponse field names): executor greps generated stub at step start.
 - W5 (Step 10 typed `service` but docs-only): advisory only; no spec change.
 - W6 (003 overlap on xstockstrat-insights/package.json): execution order (044 before 003) enforces this; no merge-order entry needed beyond existing sequence.
+
+### Step 4 — Migrate SWR call sites to typed hooks in xstockstrat-trader [done]
+- Created `src/hooks/useOrders.ts` (`useOrders`, `useOrder`), `src/hooks/usePortfolio.ts` (`usePortfolio`, `usePortfolios`, `usePositions`), `src/hooks/usePlaceOrder.ts`.
+- Migrated all `useSWR` calls in `OrderBook.tsx`, `PortfolioPanel.tsx`, `orders/[id]/page.tsx`, `positions/page.tsx`. Migrated `OrderForm.tsx` to `useMutation` via `usePlaceOrder`.
+- Also applied step-1 files (`queryClient.ts`, `providers.tsx`, `layout.tsx`, `package.json`) to this branch since steps 1–3 PRs were not yet merged into `feature/client-api-pattern` when step-4 branch was created.
+- Files modified: `src/hooks/useOrders.ts`, `src/hooks/usePortfolio.ts`, `src/hooks/usePlaceOrder.ts`, `src/lib/queryClient.ts`, `src/app/providers.tsx`, `src/app/layout.tsx`, `src/components/OrderBook.tsx`, `src/components/PortfolioPanel.tsx`, `src/app/orders/[id]/page.tsx`, `src/app/positions/page.tsx`, `src/components/OrderForm.tsx`, `package.json`
+- Deviations: `PartialMessage<PlaceOrderRequest>` not available in protobuf-es v2 → used `Parameters<typeof tradingClient.placeOrder>[0]`; package.json and step-1 files included because steps 1–3 PRs not merged.
+
+### Step 5 — Migrate SWR call sites to typed hooks in xstockstrat-insights [done]
+- Created `src/hooks/useStrategies.ts` (`useStrategies`, `useStrategyReport`), `src/hooks/useBacktest.ts` (`useRunBacktest`), `src/hooks/useAccountPortfolios.ts`.
+- Migrated `useSWR` in `page.tsx`, `strategies/page.tsx`, `strategies/[id]/page.tsx`, `AccountPortfolioSelector.tsx`.
+- `strategies/[id]/page.tsx`: replaced manual async `runBacktest()` + three useState vars with `useRunBacktest()` mutation; derived `runError` from `runErrorObj`.
+- Step-5 branch rebased onto step-4 (sequential PR chain per user instruction).
+- Files modified: `src/hooks/useStrategies.ts`, `src/hooks/useBacktest.ts`, `src/hooks/useAccountPortfolios.ts`, `src/lib/queryClient.ts`, `src/app/providers.tsx`, `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/strategies/page.tsx`, `src/app/strategies/[id]/page.tsx`, `src/components/AccountPortfolioSelector.tsx`, `package.json`
+- Deviations: hook types use `Awaited<ReturnType<...>>`; step-2 deps included; sequential chain used.
+
+### Step 6 — Migrate useEffect+fetch data-loading to typed hooks in xstockstrat-config-ui [done]
+- Created `app/hooks/useConfigKeys.ts`, `app/hooks/useSetConfig.ts`, `app/hooks/useAuditLog.ts`, `app/hooks/useSignalSources.ts`, `app/hooks/useSignalSourceMutations.ts`.
+- Migrated `useEffect` data-loading in `app/[namespace]/page.tsx`, `app/audit/page.tsx`, `app/sources/page.tsx` to typed hooks.
+- Applied step-3 provider files: `app/lib/queryClient.ts`, `app/providers.tsx`, `app/layout.tsx` (Providers wrapper), `package.json` (@tanstack/react-query + @normy/react-query, remove swr).
+- Files modified: `app/hooks/useConfigKeys.ts`, `app/hooks/useSetConfig.ts`, `app/hooks/useAuditLog.ts`, `app/hooks/useSignalSources.ts`, `app/hooks/useSignalSourceMutations.ts`, `app/lib/queryClient.ts`, `app/providers.tsx`, `app/layout.tsx`, `app/[namespace]/page.tsx`, `app/audit/page.tsx`, `app/sources/page.tsx`, `package.json`
+- Deviations: enum short names fixed (`Environment.PRODUCTION` not `ENVIRONMENT_PRODUCTION`); `Parameters<...>[0]` for mutation types; `QueryNormalizerProvider` not `NormalizationProvider`; `@normy/react-query ^0.21.0` not `^1.1.0`.
+
+### Step 7 — Eliminate any from hook files and component internals [done]
+- Fixed `any` in `insights/src/app/page.tsx`: `StrategyScore` type, typed `ratingVariant` return, `formatter` uses `unknown`, `chartData` parameter typed.
+- Fixed `any` in `insights/src/app/strategies/page.tsx`: `StrategyScore` type on map.
+- Fixed `any` in `insights/src/app/strategies/[id]/page.tsx`: `TradeRecord` type on map, `formatter` uses `unknown`.
+- Fixed `any` in all three `auth/login/route.ts`: removed `as any` cast on `authenticateUser()` return, use `data.accessToken`/`data.refreshToken` directly.
+- Fixed `any` in all three `identity.ts`: imported `AuthTokenResponse`, removed `as any` and snake_case field fallbacks; `claims` cast as `unknown as JwtClaims`.
+- Fixed `catch (err: any)` in `config-ui/app/api/audit/route.ts`: changed to `catch (err: unknown)`.
+- Files modified: `insights/src/app/page.tsx`, `insights/src/app/strategies/page.tsx`, `insights/src/app/strategies/[id]/page.tsx`, `trader/src/app/api/auth/login/route.ts`, `insights/src/app/api/auth/login/route.ts`, `config-ui/app/api/auth/login/route.ts`, `trader/src/lib/identity.ts`, `insights/src/lib/identity.ts`, `config-ui/app/lib/identity.ts`, `config-ui/app/api/audit/route.ts`
+- Deviations: `AuthTokenResponse` not `AuthenticateUserResponse`/`RefreshTokenResponse`; `claims` cast via `unknown`.
+
+### Step 10 — Update CLAUDE.md files to reflect new client-side architecture [done]
+- trader/CLAUDE.md: replaced "SWR-wrapped unary" with "TanStack Query hooks"; added Client Hooks section.
+- insights/CLAUDE.md: replaced SWR architecture diagram with connect-web + TanStack Query; added Client Hooks section.
+- config-ui/CLAUDE.md: updated architecture diagram to show hook layer; added Client Hooks section.
+- Files modified: `services/xstockstrat-trader/CLAUDE.md`, `services/xstockstrat-insights/CLAUDE.md`, `services/xstockstrat-config-ui/CLAUDE.md`
+- Deviations: none.
+
+### Step 9 — Verify tsc and SWR removal for xstockstrat-insights and xstockstrat-config-ui [done]
+- insights tsc --noEmit: 0 errors ✓; no swr, no catch any, no any in hooks ✓
+- config-ui tsc --noEmit: 0 errors ✓; no swr, no catch any, no any in hooks ✓
+- E2E tests: skipped (no running backend in execution environment)
+- Files modified: (spec/context only)
+- Deviations: E2E tests require live backend; all static checks pass.
+
+### Step 8 — Verify tsc and SWR removal for xstockstrat-trader [done]
+- tsc --noEmit: 0 errors ✓
+- No `swr` in src/ or package.json ✓
+- No `catch (err: any)` in src/ ✓
+- No `: any` in src/hooks/ or src/lib/queryClient.ts ✓
+- E2E tests: fail with exit code 1 (no running backend in execution environment) — deviation noted.
+- Files modified: (spec/context only)
+- Deviations: E2E tests require live backend; all static checks pass.
+
+### Step 11 — docs: Create docs/patterns/client-api-pattern.md [done]
+- Created `docs/patterns/client-api-pattern.md` covering: library stack, directory structure (src/ vs flat app/), shared provider/config template, query hook example (useStrategies), mutation hook example (usePlaceOrder), cache-normalization extension guide (current keys: orderId, strategyId; deferred: symbol, key, portfolioId), rules (FR-3/FR-4/FR-10), reference implementations.
+- Files modified: `docs/patterns/client-api-pattern.md`
+- Deviations: none.
+
+## Session 2026-06-01T00:02:00Z — sdd-execute
+**Steps this session**: [11]
+**Progress**: 11 done / 11 total
+**Stopped at**: Step 11 (all complete)
+**Next**: Integration PR — `feature/client-api-pattern` → `main-dev`
+
+## Open Items
+_(none)_

@@ -1,12 +1,15 @@
 # xstockstrat-config — CLAUDE.md
 
 ## Role
+
 Node.js gRPC service that is the **central configuration authority** for the entire platform. Provides a `WatchConfig` server-streaming RPC that all services subscribe to at startup. Config changes propagate live to all subscribers via the persistent gRPC stream. Config values are scoped by **environment** (`dev`/`production`) and **trading_mode** (`paper`/`live`/`all`).
 
 ## Language
+
 Node.js 20 + TypeScript
 
 ## Docker Build Pattern
+
 Backend pattern — see `docs/patterns/docker-build.md` for the base stage, proto stub timing, and `pnpm deploy` approach.
 
 ## Ports
@@ -36,7 +39,7 @@ startup; the Docker healthcheck probes `50060` directly.
 
 ## WatchConfig Flow
 
-```
+```text
 Service startup
   └── ConfigWatcher.WaitForSnapshot()
         └── gRPC WatchConfig(namespace="<service>") → streams ConfigSnapshot
@@ -63,13 +66,14 @@ _No webhooks. Mutate config via the `SetConfig` gRPC RPC on port 50060._
 ## Config Governance
 
 All config changes must comply with the governance rules in the root `CLAUDE.md`. Key rules:
+
 - New keys require PR to `packages/proto/` (for type documentation)
 - Sensitive keys (`is_secret=true`) values are never stored as plaintext
 - All changes are written to `config.config_audit` automatically
 
 ## Environment Variables
 
-```
+```text
 GRPC_PORT=50060
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 APPLICATION_ENV=development  # development | production — default scope for this instance

@@ -308,9 +308,7 @@ Use these exact service names when querying by `service.name` or `service_name` 
 | xstockstrat-identity | `identity` |
 | xstockstrat-notify | `notify` |
 | xstockstrat-config | `config` |
-| xstockstrat-trader | `trader` |
-| xstockstrat-insights | `insights` |
-| xstockstrat-config-ui | `config-ui` |
+| xstockstrat-ui | `ui` |
 | otel-collector | `otel-collector` (local dev only) |
 
 ---

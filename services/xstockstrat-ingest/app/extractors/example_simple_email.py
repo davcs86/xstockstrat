@@ -1,8 +1,10 @@
 """Reference extractor for source_type=simple_email.
 extractor_module: app.extractors.example_simple_email
 """
+
 import re
-from app.extractors.base import BaseExtractor, SimpleEmailInput, RawInput
+
+from app.extractors.base import BaseExtractor, RawInput, SimpleEmailInput
 
 
 class ExampleSimpleEmailExtractor(BaseExtractor):
@@ -15,12 +17,14 @@ class ExampleSimpleEmailExtractor(BaseExtractor):
             return []
         signals = []
         for match in re.finditer(
-            r'\b(BUY|SELL|HOLD|WATCHLIST)\s+([A-Z]{1,5})\b',
+            r"\b(BUY|SELL|HOLD|WATCHLIST)\s+([A-Z]{1,5})\b",
             raw.body_text.upper(),
         ):
-            signals.append({
-                "direction": match.group(1).lower(),
-                "symbol": match.group(2),
-                "headline": f"Extracted from email: {match.group(0)}",
-            })
+            signals.append(
+                {
+                    "direction": match.group(1).lower(),
+                    "symbol": match.group(2),
+                    "headline": f"Extracted from email: {match.group(0)}",
+                }
+            )
         return signals

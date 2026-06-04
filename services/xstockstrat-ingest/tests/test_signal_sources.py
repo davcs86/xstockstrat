@@ -12,7 +12,6 @@ from app.repositories.signal_sources import (
     validate_config_json,
 )
 
-
 # ---------------------------------------------------------------------------
 # validate_config_json — sync helper, no DB needed
 # ---------------------------------------------------------------------------
@@ -129,7 +128,10 @@ class TestValidateConfigJson:
         assert validate_config_json("mediated_simple_email", cfg) is None
 
     def test_mediated_simple_email_missing_sender(self):
-        assert validate_config_json("mediated_simple_email", {"subject_patterns": ["Alert"]}) is not None
+        assert (
+            validate_config_json("mediated_simple_email", {"subject_patterns": ["Alert"]})
+            is not None
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -142,9 +144,15 @@ class TestGetActiveSource:
     async def test_returns_dict_when_row_found(self):
         db = MagicMock()
         db.fetchrow = AsyncMock(
-            return_value={"slug": "uw", "display_name": "Unusual Whales", "active": True,
-                          "source_type": "simple_email", "extractor_module": "app.extractors.example_simple_email",
-                          "credentials_ref": None, "config_json": None}
+            return_value={
+                "slug": "uw",
+                "display_name": "Unusual Whales",
+                "active": True,
+                "source_type": "simple_email",
+                "extractor_module": "app.extractors.example_simple_email",
+                "credentials_ref": None,
+                "config_json": None,
+            }
         )
         result = await get_active_source(db, "uw")
         assert result["slug"] == "uw"
@@ -167,11 +175,20 @@ class TestListAllSources:
     @pytest.mark.asyncio
     async def test_active_only_by_default(self):
         db = MagicMock()
-        db.fetch = AsyncMock(return_value=[
-            {"slug": "uw", "active": True, "display_name": "UW", "source_type": "simple_email",
-             "extractor_module": "app.extractors.noop", "credentials_ref": None,
-             "config_json": None, "created_at": None}
-        ])
+        db.fetch = AsyncMock(
+            return_value=[
+                {
+                    "slug": "uw",
+                    "active": True,
+                    "display_name": "UW",
+                    "source_type": "simple_email",
+                    "extractor_module": "app.extractors.noop",
+                    "credentials_ref": None,
+                    "config_json": None,
+                    "created_at": None,
+                }
+            ]
+        )
         result = await list_all_sources(db)
         assert len(result) == 1
         sql_call = db.fetch.call_args[0][0]
@@ -195,14 +212,26 @@ class TestUpsertSource:
     @pytest.mark.asyncio
     async def test_calls_insert_on_conflict(self):
         db = MagicMock()
-        db.fetchrow = AsyncMock(return_value={
-            "slug": "uw", "display_name": "UW", "source_type": "simple_email",
-            "extractor_module": "app.extractors.noop", "credentials_ref": None,
-            "active": True, "config_json": None, "created_at": None,
-        })
+        db.fetchrow = AsyncMock(
+            return_value={
+                "slug": "uw",
+                "display_name": "UW",
+                "source_type": "simple_email",
+                "extractor_module": "app.extractors.noop",
+                "credentials_ref": None,
+                "active": True,
+                "config_json": None,
+                "created_at": None,
+            }
+        )
         result = await upsert_source(
-            db, slug="uw", display_name="UW", source_type="simple_email",
-            extractor_module="app.extractors.noop", credentials_ref=None, config_json=None,
+            db,
+            slug="uw",
+            display_name="UW",
+            source_type="simple_email",
+            extractor_module="app.extractors.noop",
+            credentials_ref=None,
+            config_json=None,
         )
         assert result["slug"] == "uw"
         sql_call = db.fetchrow.call_args[0][0]
@@ -226,10 +255,17 @@ class TestDeactivateSource:
     @pytest.mark.asyncio
     async def test_returns_row_when_deactivated(self):
         db = MagicMock()
-        db.fetchrow = AsyncMock(return_value={
-            "slug": "uw", "active": False, "display_name": "UW",
-            "source_type": "simple_email", "extractor_module": "app.extractors.noop",
-            "credentials_ref": None, "config_json": None, "created_at": None,
-        })
+        db.fetchrow = AsyncMock(
+            return_value={
+                "slug": "uw",
+                "active": False,
+                "display_name": "UW",
+                "source_type": "simple_email",
+                "extractor_module": "app.extractors.noop",
+                "credentials_ref": None,
+                "config_json": None,
+                "created_at": None,
+            }
+        )
         result = await deactivate_source(db, "uw")
         assert result["active"] is False

@@ -1,6 +1,6 @@
 # Implementation Spec: ui-consolidation-nextjs
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-06-01
 **Feature**: `docs/roadmap/features/045-ui-consolidation-nextjs/feature.md`
 **Total Steps**: 9
@@ -27,7 +27,7 @@ The consolidation proceeds in four logical phases: (1) scaffold the new `xstocks
 
 ### Step 1 — service: Create `services/xstockstrat-ui` consolidated Next.js service
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui` (new — does not yet exist in the repository)
 **Files**:
 - `services/xstockstrat-ui/package.json` — create
@@ -133,7 +133,7 @@ Build must complete with zero TypeScript errors and produce a `.next/standalone`
 
 ### Step 2 — service: Create Dockerfile and update docker-compose + DO app specs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui` (new), `docker-compose.yml` (modify), `.do/app.dev.yaml` (modify), `.do/app.yaml` (modify)
 **Files**:
 - `services/xstockstrat-ui/Dockerfile` — create
@@ -642,4 +642,27 @@ No coverage threshold applies for Next.js frontends (`xstockstrat-ui` is not in 
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 1 — Create `services/xstockstrat-ui`
+**Spec said**: `src/lib/browserClients.ts` — create (single flat file for all browser clients)
+**Actual**: Per-service browser client files created instead: `src/lib/browserClients/tradingClient.ts`, `portfolioClient.ts`, `marketDataClient.ts`, `notifyClient.ts`, `analysisClient.ts`, `configClient.ts`, `ingestClient.ts`. Each file is self-contained with its own inline transport and exports a single named client.
+**Reason**: User adjusted the plan during Phase 2 to use the per-service file pattern (`lib/browserClients/{service}Client.ts`) to avoid a monolithic browser clients file and make dependencies per-component clearer.
+
+### Deviation: Step 1 — Create `services/xstockstrat-ui`
+**Spec said**: `src/lib/connectTransport.ts` — create (shared connect-web transport)
+**Actual**: No shared transport file created — each per-service browser client file creates its own inline `createConnectTransport({ baseUrl: '/segment/api' })`. No shared transport is needed since each segment uses a different baseUrl.
+**Reason**: Follows from the per-service client pattern above — a single shared transport doesn't make sense when each client targets a different BFF basePath.
+
+### Deviation: Step 1 — Create `services/xstockstrat-ui`
+**Spec said**: `pnpm install --frozen-lockfile && pnpm run build` as verification
+**Actual**: Ran `pnpm install` (without `--frozen-lockfile`) first to generate the lockfile for the new service, then `pnpm run build`. The `--frozen-lockfile` flag requires a pre-existing lockfile; a new service has none.
+**Reason**: `services/xstockstrat-ui` is a brand-new package not previously tracked in `pnpm-lock.yaml`. The lockfile must be generated before it can be frozen. The important verification (`pnpm run build` passes with zero TypeScript errors) was performed and succeeded.
+
+### Deviation: Step 1 — Create `services/xstockstrat-ui`
+**Spec said**: `INDICATORS_ENDPOINT` included in `connectClients.ts` (spec instruction 6 lists it)
+**Actual**: `INDICATORS_ENDPOINT` removed from `connectClients.ts` — no `indicatorsClient` is exported because no BFF in the consolidated service calls the indicators service.
+**Reason**: ESLint `@typescript-eslint/no-unused-vars` error blocked the build. The indicators service is not proxied by any of the three BFFs, so the endpoint variable was truly unused.
+
+### Deviation: Step 2 — Create Dockerfile and update docker-compose + DO app specs
+**Spec said**: Verification: `docker compose build --no-cache xstockstrat-ui` — image must build to completion.
+**Actual**: Docker daemon not running in this execution environment; build could not be attempted. Structural grep verifications passed (no old service names, `xstockstrat-ui` present in all three files).
+**Reason**: Environment limitation. Dockerfile follows the exact same 4-stage pattern as `services/xstockstrat-trader/Dockerfile` (the reference implementation) with only service-name substitutions. Build validity will be confirmed by CI when the PR is merged.

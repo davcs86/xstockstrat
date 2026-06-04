@@ -41,18 +41,12 @@ jobs:
             dockerfile: services/xstockstrat-ledger/Dockerfile
           - service: xstockstrat-config
             dockerfile: services/xstockstrat-config/Dockerfile
-          - service: xstockstrat-nginx
-            dockerfile: services/xstockstrat-nginx/Dockerfile
           - service: xstockstrat-identity
             dockerfile: services/xstockstrat-identity/Dockerfile
           - service: xstockstrat-notify
             dockerfile: services/xstockstrat-notify/Dockerfile
-          - service: xstockstrat-trader
-            dockerfile: services/xstockstrat-trader/Dockerfile
-          - service: xstockstrat-insights
-            dockerfile: services/xstockstrat-insights/Dockerfile
-          - service: xstockstrat-config-ui
-            dockerfile: services/xstockstrat-config-ui/Dockerfile
+          - service: xstockstrat-ui
+            dockerfile: services/xstockstrat-ui/Dockerfile
     steps:
       - uses: actions/checkout@v6
 

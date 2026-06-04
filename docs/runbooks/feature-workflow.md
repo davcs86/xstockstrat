@@ -159,8 +159,8 @@ push to main-dev
 Verify the deployment:
 - Check DigitalOcean App Platform dashboard for deploy status.
 - Smoke-test on the dev endpoints (ports 80XX for gRPC/Connect-RPC, 300X for UIs).
-- Monitor paper trades through xstockstrat-trader UI at the dev app URL.
-- Review ledger events and config state via the dev config-ui.
+- Monitor paper trades through the xstockstrat-ui trader segment at the dev app URL.
+- Review ledger events and config state via the xstockstrat-ui config-ui segment.
 
 Config changes needed for the feature (new keys, updated defaults):
 follow `docs/runbooks/config-rollout.md` against the dev config service.

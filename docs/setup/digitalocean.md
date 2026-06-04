@@ -497,7 +497,7 @@ doctl apps logs $DO_DEV_APP_ID --component xstockstrat-config --follow
 1. `xstockstrat-config` starts first and connects to TimescaleDB
 2. All other services start and call `WatchConfig` — they block until the handshake completes
 3. `xstockstrat-marketdata` connects to Alpaca WebSocket and begins streaming
-4. Frontend services (`xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui`) become available
+4. `xstockstrat-ui` (consolidated frontend — trader, insights, config-ui segments) becomes available
 
 Check public URLs for each service in: **DO console → App → service component → URL**.
 
