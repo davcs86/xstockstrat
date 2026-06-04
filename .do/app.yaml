@@ -253,6 +253,8 @@ services:
       - key: MCP_AGENT_SECRET
         scope: RUN_TIME
         type: SECRET
+      - key: UI_BASE_URL
+        value: ${APP_URL}
 
   # ── Node.js services ───────────────────────────────────────────────────────
 

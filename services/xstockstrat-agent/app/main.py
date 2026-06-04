@@ -23,6 +23,11 @@ log = logging.getLogger(__name__)
 
 MCP_TRANSPORT = os.environ.get("MCP_TRANSPORT", "stdio")
 MCP_SSE_PORT = int(os.environ.get("MCP_SSE_PORT", "9000"))
+# Browser base URL for redirecting the OAuth login flow to the unified login page.
+UI_BASE_URL = os.environ.get("UI_BASE_URL", "http://localhost:3000")
+# TODO(019): when feature 018's /oauth/authorize handler lands, redirect the browser to
+# f"{UI_BASE_URL}/auth/oauth-login?redirect_uri={redirect_uri}&state={state}" instead of the
+# old identity HTTP login URL.
 
 
 def create_server() -> FastMCP:

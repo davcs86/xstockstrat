@@ -17,9 +17,10 @@ This doc covers the **auth-specific** rules. For general Next.js patterns (baseP
 | `src/app/api/[...connect]/route.ts` | Node | BFF catch-all — `export GET/POST = dispatchConnect` |
 | `src/lib/connectTransport.ts` | **Browser** | `browserTransport` — connect-web to BFF (`baseUrl: '/<basePath>/api'`) |
 | `src/lib/browserClients.ts` | **Browser** | typed connect-web clients on `browserTransport` — the only client import allowed in Client Components |
-| `src/middleware.ts` | **Edge runtime** | Auth gate, redirects to `/login`, near-expiry refresh |
-| `src/app/login/page.tsx` | Browser | Login form |
-| `src/app/api/auth/login/route.ts` | Node | `AuthenticateUser` → sets cookies |
+| `src/middleware.ts` | **Edge runtime** | Auth gate, redirects to `/auth/login`, near-expiry refresh |
+| `src/app/auth/login/page.tsx` | Browser | **Unified** login form, served at the domain root (outside every basePath). The former per-basePath `src/app/<segment>/login/page.tsx` files were removed by feature 019. |
+| `src/app/auth/oauth-login/page.tsx` | Browser | OAuth agent login form (separate from operator login); redirects the browser to the agent `redirect_uri` with `state` on success |
+| `src/app/api/auth/login/route.ts` | Node | **Single consolidated** `AuthenticateUser` → sets cookies (one set of `/api/auth/{login,logout,refresh}` for all basePaths) |
 | `src/app/api/auth/refresh/route.ts` | Node | `RefreshToken` (calls `identity.ts`) |
 | `src/app/api/auth/logout/route.ts` | Node | `RevokeToken` + clears cookies (calls `identity.ts`) |
 
@@ -105,11 +106,11 @@ export async function revokeToken(token: string): Promise<void>;
 
 ## `middleware.ts` — required behaviour
 
-- Protect all routes **except** `/login`, `/api/auth/login`, `/api/health`, `/health`, and Next.js asset paths.
+- Protect all routes **except** `/auth/login`, `/auth/oauth-login`, `/api/auth/login`, `/api/health`, `/health`, and Next.js asset paths.
 - **Matcher must include `/` explicitly** — the regex `/((?!...).*)` does not match the bare root. See `docs/patterns/nextjs-frontends.md` for the canonical matcher.
 - If `getSessionFromRequest` returns claims → allow request, inject `x-trace-id` upstream.
 - If access token is within `ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS` of expiry → call `/api/auth/refresh` via `fetch` (do NOT statically import `refreshSession` — that would re-trigger the Edge trap).
-- Otherwise → redirect to `/login?redirect=<encoded pathname>`.
+- Otherwise → redirect to `/auth/login?redirect=<encoded pathname>`. The redirect target is the **unified** login page at the domain root, so build it with `new URL('/auth/login', req.url)` — do **not** clone `req.nextUrl` and set `pathname`, because `req.nextUrl` carries the basePath and would yield `/trader/auth/login`.
 
 ---
 
@@ -268,5 +269,5 @@ Middleware only catches **browser navigations**, not direct `curl` calls. The `/
 4. Every new API route under `/<segment>/api/*` calls `getSessionFromRequest` + 401-on-null before touching a backend.
 5. Every outbound call uses the typed gRPC client with `Headers` propagation and `connectCodeToHttp` on `ConnectError`.
 6. DO App Platform ingress routes are configured in `.do/app.yaml` and `.do/app.dev.yaml` — no nginx involved.
-7. In `app/<segment>/login/page.tsx`, use the full segment-prefixed path in the login `fetch`: `fetch('/<segment>/api/auth/login', ...)`. A bare `fetch('/api/auth/login')` resolves from the document root and silently returns HTML — see `docs/patterns/nextjs-frontends.md` §1.
+7. Login is **unified** (feature 019): there is a single `app/auth/login/page.tsx` at the domain root and a single consolidated `app/api/auth/{login,logout,refresh}/route.ts`. The unified page `fetch('/api/auth/login', ...)` — this is correct because `/auth/login` lives outside every basePath, so the bare path resolves against the consolidated route. Do **not** recreate per-basePath `app/<segment>/login/page.tsx` or `app/<segment>/api/auth/*` routes.
 8. **Run `pnpm --filter xstockstrat-ui build` locally before opening a PR.** The Edge-runtime trap is invisible in source review — only a build catches it.
