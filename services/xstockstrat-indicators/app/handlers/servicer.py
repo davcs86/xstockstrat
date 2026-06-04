@@ -10,14 +10,18 @@ from google.protobuf.struct_pb2 import Struct
 
 from app.config.watcher import ConfigWatcher
 from app.services import indicators_engine, sandbox
+from app.services.formulas_repository import FormulasRepository
 
 log = logging.getLogger(__name__)
 
 
 class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
-    def __init__(self, config_watcher: ConfigWatcher):
+    def __init__(self, config_watcher: ConfigWatcher, db_pool=None):
         self._cfg = config_watcher
         self._formulas: dict[str, indicators_pb2.FormulaDefinition] = {}
+        self._repo: FormulasRepository | None = (
+            FormulasRepository(db_pool) if db_pool is not None else None
+        )
 
     async def ComputeIndicator(self, request, context):
         try:
@@ -52,6 +56,11 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         # Resolve source
         if request.formula_id:
             formula = self._formulas.get(request.formula_id)
+            if formula is None and self._repo is not None:
+                row = await self._repo.get_by_id(request.formula_id)
+                if row is not None:
+                    formula = _row_to_formula(row)
+                    self._formulas[request.formula_id] = formula
             if formula is None:
                 await context.abort(
                     grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
@@ -132,24 +141,128 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         now = Timestamp()
         now.GetCurrentTime()
 
+        author = request.author if request.author else "dev-user"
         formula = indicators_pb2.FormulaDefinition(
             formula_id=formula_id,
             name=request.name,
             description=request.description,
             source=request.source,
+            author=author,
             is_public=request.is_public,
             created_at=now,
             updated_at=now,
             input_schema=dict(request.input_schema),
         )
         self._formulas[formula_id] = formula
+        if self._repo is not None:
+            await self._repo.create(
+                formula_id=formula_id,
+                name=request.name,
+                description=request.description,
+                source=request.source,
+                author=author,
+                is_public=request.is_public,
+                input_schema=dict(request.input_schema),
+            )
         return indicators_pb2.RegisterFormulaResponse(formula_id=formula_id)
 
     async def GetFormula(self, request, context):
         formula = self._formulas.get(request.formula_id)
+        if formula is None and self._repo is not None:
+            row = await self._repo.get_by_id(request.formula_id)
+            if row is not None:
+                formula = _row_to_formula(row)
+                self._formulas[request.formula_id] = formula  # cache
         if formula is None:
             await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
             )
             return
         return formula
+
+    async def ListFormulas(self, request, context):
+        if self._repo is None:
+            formulas = list(self._formulas.values())
+            return indicators_pb2.ListFormulasResponse(
+                formulas=formulas,
+                total_count=len(formulas),
+            )
+        rows, total = await self._repo.list(
+            author_filter=request.author_filter,
+            include_public=request.include_public,
+            page_size=request.page_size,
+            page_offset=request.page_offset,
+        )
+        return indicators_pb2.ListFormulasResponse(
+            formulas=[_row_to_formula(r) for r in rows],
+            total_count=total,
+        )
+
+    async def UpdateFormula(self, request, context):
+        if self._repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "DB not available")
+            return
+        row = await self._repo.get_by_id(request.formula_id)
+        if row is None:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
+            )
+            return
+        if row["author"] != request.user_id:
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED, "user_id does not match formula author"
+            )
+            return
+        updated = await self._repo.update(
+            formula_id=request.formula_id,
+            name=request.name,
+            description=request.description,
+            source=request.source,
+            is_public=request.is_public,
+        )
+        self._formulas.pop(request.formula_id, None)
+        return indicators_pb2.UpdateFormulaResponse(formula=_row_to_formula(updated))
+
+    async def DeleteFormula(self, request, context):
+        if self._repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "DB not available")
+            return
+        row = await self._repo.get_by_id(request.formula_id)
+        if row is None:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
+            )
+            return
+        if row["author"] != request.user_id:
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED, "user_id does not match formula author"
+            )
+            return
+        success = await self._repo.delete(request.formula_id)
+        self._formulas.pop(request.formula_id, None)
+        return indicators_pb2.DeleteFormulaResponse(success=success)
+
+
+def _row_to_formula(row: dict) -> "indicators_pb2.FormulaDefinition":
+    """Convert a DB row dict from indicators.formulas to FormulaDefinition proto."""
+    import datetime
+
+    from google.protobuf.timestamp_pb2 import Timestamp
+
+    def dt_to_ts(dt) -> Timestamp:
+        ts = Timestamp()
+        if dt is not None:
+            ts.FromDatetime(dt if dt.tzinfo else dt.replace(tzinfo=datetime.UTC))
+        return ts
+
+    return indicators_pb2.FormulaDefinition(
+        formula_id=str(row["formula_id"]),
+        name=row["name"],
+        description=row["description"] or "",
+        source=row["source"],
+        author=row["author"],
+        is_public=row["is_public"],
+        created_at=dt_to_ts(row.get("created_at")),
+        updated_at=dt_to_ts(row.get("updated_at")),
+        input_schema=dict(row["input_schema"]) if row.get("input_schema") else {},
+    )

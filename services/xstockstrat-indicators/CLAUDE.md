@@ -32,6 +32,14 @@ HTTP/Connect-RPC server on `8054` was removed.
 | xstockstrat-config | gRPC WatchConfig | **Sandbox limits sourced from config** |
 | xstockstrat-ledger | gRPC write | Emit formula execution events |
 | xstockstrat-notify | gRPC write | Alert on sandbox limit breaches |
+| TimescaleDB | asyncpg pool | Persist formula definitions to `indicators.formulas` |
+
+## Database
+
+- Schema: `indicators`
+- Table: `indicators.formulas` — stores formula definitions, scoped by `author`
+- Migration: `migrations/001_formulas.up.sql` / `migrations/001_formulas.down.sql`
+- Pool: `asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)` created in `app/main.py`
 
 ## Config Keys Consumed
 
@@ -73,6 +81,7 @@ GRPC_PORT=50054
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
+DATABASE_URL=postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
 ```

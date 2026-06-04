@@ -78,6 +78,17 @@ export function AppShell({ children, title = 'xstockstrat Insights', actions }: 
             >
               Strategies
             </Link>
+            <Link
+              href="/insights/formulas"
+              className={cn(
+                'px-3 py-1.5 rounded-md text-sm transition-colors',
+                pathname?.startsWith('/insights/formulas')
+                  ? 'text-foreground font-medium'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
+              )}
+            >
+              Formulas
+            </Link>
           </nav>
 
           {/* Right actions */}
@@ -120,6 +131,9 @@ export function AppShell({ children, title = 'xstockstrat Insights', actions }: 
                   </Link>
                   <Link href="/insights/strategies" className={cn('px-3 py-2.5 rounded-md text-sm transition-colors', pathname?.startsWith('/insights/strategies') ? 'bg-accent text-foreground font-medium' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50')}>
                     Strategies
+                  </Link>
+                  <Link href="/insights/formulas" className={cn('px-3 py-2.5 rounded-md text-sm transition-colors', pathname?.startsWith('/insights/formulas') ? 'bg-accent text-foreground font-medium' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50')}>
+                    Formulas
                   </Link>
                 </nav>
               </SheetContent>
