@@ -130,3 +130,9 @@
 - Created `app/services/formulas_repository.py` (asyncpg CRUD with `$1::uuid` casts + JSONB encode/decode); added `asyncpg>=0.29.0` to `pyproject.toml` + regenerated `uv.lock`; wired DB pool in `app/main.py` (DATABASE_URL env, `create_pool`, pass `db_pool=` to servicer, close on shutdown); docker-compose indicators block now merges `*db-url` + depends_on timescaledb/db-migrator; added `DATABASE_URL` to indicators block in both `.do/app.dev.yaml` and `.do/app.yaml`.
 - Files modified: `app/services/formulas_repository.py`, `app/main.py`, `pyproject.toml`, `uv.lock`, `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`.
 - Deviations: added `uv.lock` to scope (CLAUDE.md sync rule / CI `uv lock --check`); repo `::uuid` cast + JSONB handling implementation detail. Detail in Deviation Log.
+
+### Step 5 — service: Add DB persistence and new CRUD RPCs to IndicatorsServicer [done]
+- Servicer constructor takes `db_pool`; `RegisterFormula` sets author + persists to DB; `GetFormula`/`ExecuteFormula` fall back to DB on cache miss; added `ListFormulas`/`UpdateFormula`/`DeleteFormula` (PERMISSION_DENIED on author mismatch, UNAVAILABLE when no repo); added module-level `_row_to_formula`.
+- Files modified: `app/handlers/servicer.py`.
+- Verification: `from app.handlers.servicer import IndicatorsServicer, _row_to_formula` → OK (with proto pkg installed + gen symlink, both temporary). ruff clean.
+- Deviations: set `author` on the cached FormulaDefinition; ruff UP017 `datetime.UTC`. Detail in Deviation Log.

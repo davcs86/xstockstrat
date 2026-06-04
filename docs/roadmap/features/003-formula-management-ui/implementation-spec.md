@@ -287,7 +287,7 @@ Expected: each file shows `DATABASE_URL` in context near `xstockstrat-indicators
 
 ### Step 5 — service: Add DB persistence and new CRUD RPCs to IndicatorsServicer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/handlers/servicer.py` — modify
@@ -1038,3 +1038,10 @@ cd services/xstockstrat-ui && pnpm run lint
 1. Also regenerated and staged `services/xstockstrat-indicators/uv.lock` (added `asyncpg 0.31.0`). The root CLAUDE.md "Python uv lock rule" requires `uv.lock` to be committed in the same PR as any `pyproject.toml` dependency change (CI `uv lock --check` enforces it), so adding `asyncpg` to `pyproject.toml` without updating the lock would have failed CI. Expanded the step scope to include it (the "fix now" choice).
 2. `formulas_repository.py` casts `formula_id` with `$1::uuid` (the servicer generates a string UUID via `uuid.uuid4()`, which asyncpg's strict UUID binding would otherwise reject) and JSON-encodes/decodes the `input_schema` JSONB column inside the repo (`json.dumps` on write, `json.loads` on read via `_to_dict`), so the Step 5 `_row_to_formula` helper always receives a plain `dict`. Kept `main.py`'s pool call exactly as specified (no `init=` codec), confining JSONB handling to the repository.
 **Reason**: keep `pyproject.toml`/`uv.lock` in sync per CLAUDE.md; correct asyncpg UUID/JSONB typing for a working CRUD path without deviating from the spec's `main.py` snippet.
+
+### Deviation: Step 5 — service (author on cached formula + ruff UP017)
+**Spec said**: instruction #3 adds only the DB `create(...)` block after `self._formulas[formula_id] = formula`; instruction #7's `_row_to_formula` uses `datetime.timezone.utc`.
+**Actual**:
+1. Also set `author = request.author if request.author else "dev-user"` and added `author=author` to the in-memory `FormulaDefinition` in `RegisterFormula` (the spec's existing snippet omitted `author`). Without this, a `GetFormula` served from the in-memory cache immediately after registration would return an empty author while a DB-fallback read would return the real one — an inconsistency. The same `author` value is passed to `self._repo.create(...)`.
+2. `ruff check` (rule UP017, in the service's `select` set) required `datetime.UTC` instead of `datetime.timezone.utc` in `_row_to_formula`; applied `ruff --fix` on the step's own lines per the lint-gate carve-out.
+**Reason**: correctness of the author-scoping invariant and passing the service's own lint gate; both confined to lines this step introduced.
