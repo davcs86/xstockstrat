@@ -238,6 +238,7 @@ export async function startMockBackend(): Promise<void> {
               { key: 'platform.log_level', description: 'Global log level for all services', defaultValue: 'info', isSecret: false, consumingService: 'all', environment: 1, tradingMode: 0 },
               { key: 'platform.maintenance_mode', description: 'Halts all trading operations when true', defaultValue: 'false', isSecret: false, consumingService: 'all', environment: 1, tradingMode: 0 },
               { key: 'secret.alpaca_api_key', description: 'Alpaca API key for live trading', defaultValue: '[secret]', isSecret: true, consumingService: 'trading', environment: 2, tradingMode: 2 },
+              { key: 'analysis.signals.source_weights', description: 'JSON weight map for signal sources', defaultValue: '{}', isSecret: false, consumingService: 'xstockstrat-analysis', environment: 1, tradingMode: 0, validation: { valueType: 1, minValue: 0.0, maxValue: 1.0 } },
             ],
           };
         },
