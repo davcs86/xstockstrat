@@ -62,36 +62,36 @@ migrate_service() {
   url="$(service_db_url "$schema")"
   echo "  → $svc (schema: $schema)"
   case "$COMMAND" in
-    up)
-      # If a previous run failed mid-migration the state table is marked dirty.
-      # Force to version 0 (schema baseline) so migrate up re-runs from scratch.
-      # All migrations use IF NOT EXISTS / if_not_exists => TRUE so re-running is safe.
-      if migrate -path "$dir" -database "$url" version 2>&1 | grep -q "dirty"; then
-        echo "  [dirty] force-resetting $svc to version 0"
-        migrate -path "$dir" -database "$url" force 0
-      fi
-      migrate -path "$dir" -database "$url" up
-      ;;
-    version)
-      local ver
-      ver=$(migrate -path "$dir" -database "$url" version 2>&1 || true)
-      echo "    version: $ver"
-      ;;
-    force)
-      # Count .up.sql files to determine the highest version in this service
-      local highest
-      highest=$(ls "$dir"/*.up.sql 2>/dev/null | sed 's/.*\/\([0-9]*\)_.*/\1/' | sort -n | tail -1 | sed 's/^0*//')
-      if [ -n "$highest" ]; then
-        echo "    forcing version $highest"
-        migrate -path "$dir" -database "$url" force "$highest"
-      else
-        echo "    [skip] no migrations found"
-      fi
-      ;;
-    *)
-      echo "  Unknown command: $COMMAND. Use: up | version | force"
-      exit 1
-      ;;
+  up)
+    # If a previous run failed mid-migration the state table is marked dirty.
+    # Force to version 0 (schema baseline) so migrate up re-runs from scratch.
+    # All migrations use IF NOT EXISTS / if_not_exists => TRUE so re-running is safe.
+    if migrate -path "$dir" -database "$url" version 2>&1 | grep -q "dirty"; then
+      echo "  [dirty] force-resetting $svc to version 0"
+      migrate -path "$dir" -database "$url" force 0
+    fi
+    migrate -path "$dir" -database "$url" up
+    ;;
+  version)
+    local ver
+    ver=$(migrate -path "$dir" -database "$url" version 2>&1 || true)
+    echo "    version: $ver"
+    ;;
+  force)
+    # Count .up.sql files to determine the highest version in this service
+    local highest
+    highest=$(find "$dir" -maxdepth 1 -name "*.up.sql" 2>/dev/null | sed 's/.*\/\([0-9]*\)_.*/\1/' | sort -n | tail -1 | sed 's/^0*//')
+    if [ -n "$highest" ]; then
+      echo "    forcing version $highest"
+      migrate -path "$dir" -database "$url" force "$highest"
+    else
+      echo "    [skip] no migrations found"
+    fi
+    ;;
+  *)
+    echo "  Unknown command: $COMMAND. Use: up | version | force"
+    exit 1
+    ;;
   esac
 }
 
@@ -100,7 +100,7 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS timescaledb
 echo ""
 
 echo "==> Creating schemas (idempotent)..."
-psql "$DB_URL" -v ON_ERROR_STOP=1 << 'SQL'
+psql "$DB_URL" -v ON_ERROR_STOP=1 <<'SQL'
 CREATE SCHEMA IF NOT EXISTS config;
 CREATE SCHEMA IF NOT EXISTS ledger;
 CREATE SCHEMA IF NOT EXISTS identity;
@@ -118,32 +118,32 @@ echo "==> Running migrations (command: $COMMAND, dependency order)..."
 echo ""
 
 # 1. Config first — all services depend on it
-migrate_service "xstockstrat-config"     "config"
+migrate_service "xstockstrat-config" "config"
 
 # 2. Ledger — all services write here
-migrate_service "xstockstrat-ledger"     "ledger"
+migrate_service "xstockstrat-ledger" "ledger"
 
 # 3. Identity — auth dependency
-migrate_service "xstockstrat-identity"   "identity"
+migrate_service "xstockstrat-identity" "identity"
 
 # 4. MarketData — trading and analysis depend on it
 migrate_service "xstockstrat-marketdata" "marketdata"
 
 # 5. Trading
-migrate_service "xstockstrat-trading"    "trading"
+migrate_service "xstockstrat-trading" "trading"
 
 # 6. Portfolio
-migrate_service "xstockstrat-portfolio"  "portfolio"
+migrate_service "xstockstrat-portfolio" "portfolio"
 
 # 7. Notify
-migrate_service "xstockstrat-notify"     "notify"
+migrate_service "xstockstrat-notify" "notify"
 
 # 8. Ingest (Python service, raw SQL migrations)
-migrate_service "xstockstrat-ingest"     "ingest"
+migrate_service "xstockstrat-ingest" "ingest"
 
 # indicators and analysis have no migrations dir yet
 migrate_service "xstockstrat-indicators" "indicators"
-migrate_service "xstockstrat-analysis"   "analysis"
+migrate_service "xstockstrat-analysis" "analysis"
 
 echo ""
 echo "==> All migrations complete (command: $COMMAND)."

@@ -16,12 +16,15 @@ set -euo pipefail
 NO_FETCH=0
 for arg in "$@"; do
   case "$arg" in
-    --no-fetch) NO_FETCH=1 ;;
-    -h|--help)
-      sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
-      exit 0
-      ;;
-    *) echo "Unknown argument: $arg" >&2; exit 1 ;;
+  --no-fetch) NO_FETCH=1 ;;
+  -h | --help)
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+    ;;
+  *)
+    echo "Unknown argument: $arg" >&2
+    exit 1
+    ;;
   esac
 done
 
@@ -54,7 +57,7 @@ for entry in "${PATTERNS[@]}"; do
   if [ -n "$matches" ]; then
     FOUND=1
     echo "  ✗ $label — matches found:"
-    echo "$matches" | sed 's/^/      /'
+    while IFS= read -r line; do echo "      $line"; done <<<"$matches"
     echo ""
   else
     echo "  ✓ $label — no matches"

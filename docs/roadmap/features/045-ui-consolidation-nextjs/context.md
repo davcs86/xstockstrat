@@ -123,3 +123,19 @@
 **Progress**: 1 done / 9 total
 **Stopped at**: Step 1 complete
 **Next**: /sdd-execute ui-consolidation-nextjs next
+
+## Session 2026-06-01T00:03:00Z — sdd-execute Step 2
+
+### Step 2 — Create Dockerfile and update docker-compose + DO app specs [done]
+- Created `services/xstockstrat-ui/Dockerfile` (4-stage: base/deps/builder/runner, matching trader pattern).
+- Updated `docker-compose.yml`: removed trader/insights/config-ui/nginx blocks; added `xstockstrat-ui` block with all 9 gRPC endpoints, `*db-url` anchor, and service_healthy/service_started `depends_on` conditions.
+- Updated `.do/app.dev.yaml` and `.do/app.yaml`: updated ingress rules (nginx → agent+ui rules), removed 4 old service blocks, added `xstockstrat-ui` block. Dev uses `basic-xs`, prod uses `professional-xs`.
+- Files modified: `services/xstockstrat-ui/Dockerfile`, `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`
+- Deviations: Docker build verification skipped — Docker daemon not running in execution environment. Grep verifications passed (no old service names remain; `xstockstrat-ui` present in all 3 files).
+
+## Session 2026-06-04 (CI: feature status automation)
+
+- Promotion PR #523 merged to main
+- Feature promoted and committed: edf803cb8942cee14abc604d1ed95c11b79d8445
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-04

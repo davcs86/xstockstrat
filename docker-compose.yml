@@ -424,122 +424,51 @@ services:
       xstockstrat-portfolio:
         condition: service_started
 
-  # ── Trader Frontend ─────────────────────────────────────────────────────
-  xstockstrat-trader:
+  # ── Consolidated Frontend ───────────────────────────────────────────────
+  xstockstrat-ui:
     <<: *svc
     build:
       context: .
-      dockerfile: services/xstockstrat-trader/Dockerfile
-    image: ghcr.io/davcs86/xstockstrat/xstockstrat-trader:latest-dev
-    container_name: xstockstrat-trader
-    env_file: [".env.local", ".env.fe.local"]
-    environment:
-      <<: *common-env
-      # gRPC endpoints (host:port, no protocol) — server-side only
-      TRADING_ENDPOINT: xstockstrat-trading:50051
-      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
-      NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      IDENTITY_ENDPOINT: xstockstrat-identity:50058
-      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      SERVICE_NAME: trader
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-    ports:
-      - "3000:3000"
-    depends_on:
-      - xstockstrat-trading
-      - xstockstrat-portfolio
-      - xstockstrat-notify
-      - xstockstrat-identity
-      - xstockstrat-marketdata
-
-  # ── Insights Frontend ───────────────────────────────────────────────────
-  xstockstrat-insights:
-    <<: *svc
-    build:
-      context: .
-      dockerfile: services/xstockstrat-insights/Dockerfile
-    image: ghcr.io/davcs86/xstockstrat/xstockstrat-insights:latest-dev
-    container_name: xstockstrat-insights
-    env_file: [".env.local", ".env.fe.local"]
-    environment:
-      <<: *common-env
-      # gRPC endpoints (host:port, no protocol) — server-side only
-      ANALYSIS_ENDPOINT: xstockstrat-analysis:50056
-      INDICATORS_ENDPOINT: xstockstrat-indicators:50054
-      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
-      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
-      TRADING_ENDPOINT: xstockstrat-trading:50051
-      NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      IDENTITY_ENDPOINT: xstockstrat-identity:50058
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      SERVICE_NAME: insights
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-    ports:
-      - "3001:3001"
-    depends_on:
-      - xstockstrat-analysis
-      - xstockstrat-indicators
-      - xstockstrat-marketdata
-
-  # ── Config UI ───────────────────────────────────────────────────────────
-  xstockstrat-config-ui:
-    <<: *svc
-    build:
-      context: .
-      dockerfile: services/xstockstrat-config-ui/Dockerfile
-    image: ghcr.io/davcs86/xstockstrat/xstockstrat-config-ui:latest-dev
-    container_name: xstockstrat-config-ui
+      dockerfile: services/xstockstrat-ui/Dockerfile
+    image: ghcr.io/davcs86/xstockstrat/xstockstrat-ui:latest-dev
+    container_name: xstockstrat-ui
     env_file: [".env.local", ".env.fe.local"]
     environment:
       <<: [*common-env, *db-url]
       # gRPC endpoints (host:port, no protocol) — server-side only
-      CONFIG_ENDPOINT: xstockstrat-config:50060
+      TRADING_ENDPOINT: xstockstrat-trading:50051
+      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      NOTIFY_ENDPOINT: xstockstrat-notify:50059
       IDENTITY_ENDPOINT: xstockstrat-identity:50058
+      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
+      ANALYSIS_ENDPOINT: xstockstrat-analysis:50056
+      INDICATORS_ENDPOINT: xstockstrat-indicators:50054
+      CONFIG_ENDPOINT: xstockstrat-config:50060
       INGEST_ENDPOINT: xstockstrat-ingest:50055
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      SERVICE_NAME: config-ui
+      SERVICE_NAME: xstockstrat-ui
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
-      - "3002:3002"
+      - "3000:3000"
     depends_on:
       timescaledb:
         condition: service_healthy
       db-migrator:
         condition: service_completed_successfully
-      xstockstrat-config:
-        condition: service_healthy
+      xstockstrat-trading:
+        condition: service_started
+      xstockstrat-portfolio:
+        condition: service_started
+      xstockstrat-notify:
+        condition: service_started
       xstockstrat-identity:
         condition: service_healthy
-
-  # ── Reverse Proxy ───────────────────────────────────────────────────────
-  # Single public entry point that routes /trader, /insights, /config-ui to
-  # their respective Next.js frontends. Service-to-service Connect-RPC calls
-  # remain on the internal network and do NOT flow through nginx.
-  nginx:
-    <<: *svc
-    build:
-      context: .
-      dockerfile: services/xstockstrat-nginx/Dockerfile
-    image: ghcr.io/davcs86/xstockstrat/xstockstrat-nginx:latest-dev
-    container_name: xstockstrat-nginx
-    environment:
-      - XSTOCKSTRAT_TRADER_PRIVATE_URL=xstockstrat-trader
-      - XSTOCKSTRAT_INSIGHTS_PRIVATE_URL=xstockstrat-insights
-      - XSTOCKSTRAT_CONFIG_UI_PRIVATE_URL=xstockstrat-config-ui
-      - XSTOCKSTRAT_AGENT_PRIVATE_URL=xstockstrat-agent
-    ports:
-      - "80:80"
-    depends_on:
-      - xstockstrat-trader
-      - xstockstrat-insights
-      - xstockstrat-config-ui
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 10s
-      timeout: 3s
-      start_period: 5s
-      retries: 3
+      xstockstrat-marketdata:
+        condition: service_started
+      xstockstrat-analysis:
+        condition: service_started
+      xstockstrat-config:
+        condition: service_healthy
 
   # ── Agent MCP Server ────────────────────────────────────────────────────
   xstockstrat-agent:

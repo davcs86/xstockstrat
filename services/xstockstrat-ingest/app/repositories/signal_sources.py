@@ -71,21 +71,29 @@ def validate_config_json(source_type: str, config_json: dict | None) -> str | No
     cfg = config_json or {}
 
     if source_type in (
-        "simple_email", "email_attachment", "linked_email",
-        "mediated_simple_email", "mediated_email_attachment", "mediated_linked_email",
+        "simple_email",
+        "email_attachment",
+        "linked_email",
+        "mediated_simple_email",
+        "mediated_email_attachment",
+        "mediated_linked_email",
     ):
         if not cfg.get("sender_patterns"):
             return f"{source_type} requires non-empty sender_patterns in config_json"
         if not cfg.get("subject_patterns"):
             return f"{source_type} requires non-empty subject_patterns in config_json"
-        if source_type in ("email_attachment", "mediated_email_attachment") and not cfg.get("attachment_mime_types"):
+        if source_type in ("email_attachment", "mediated_email_attachment") and not cfg.get(
+            "attachment_mime_types"
+        ):
             return f"{source_type} requires non-empty attachment_mime_types in config_json"
         if source_type in ("linked_email", "mediated_linked_email") and not cfg.get("url_patterns"):
             return f"{source_type} requires non-empty url_patterns in config_json"
 
     elif source_type in (
-        "simple_website", "authenticated_website",
-        "mediated_simple_website", "mediated_authenticated_website",
+        "simple_website",
+        "authenticated_website",
+        "mediated_simple_website",
+        "mediated_authenticated_website",
     ):
         if not cfg.get("url"):
             return f"{source_type} requires non-empty url in config_json"

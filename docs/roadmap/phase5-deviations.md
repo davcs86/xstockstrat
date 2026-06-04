@@ -105,3 +105,10 @@ Used manual service descriptors with `MethodKind.Unary` (from `@bufbuild/protobu
 | Trader: portfolio summary | ✅ | `GET /api/portfolio` → `GetPortfolio` (10s SWR refresh) |
 | Trader: alert SSE stream | ✅ | `GET /api/alerts/stream` → polling `ListAlerts` every 5s |
 | Trader: paper/live mode toggle | ✅ | Mode passed in all requests as `trading_mode` |
+
+## Post-Phase-5 Consolidation (feature 045)
+
+Feature 045 (`ui-consolidation-nextjs`) merged all three Phase 5 services into a single
+`xstockstrat-ui` service and removed `xstockstrat-nginx`. The deviations documented above
+remain accurate as the historical record of how each service was originally built; the
+consolidated service inherits those same patterns unchanged.

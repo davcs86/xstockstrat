@@ -1,14 +1,17 @@
 # xstockstrat-ingest — CLAUDE.md
 
 ## Role
+
 Python gRPC service that orchestrates historical data backfills, normalises raw data payloads, and **persists newsletter/external signals** to TimescaleDB. Does **not** call Alpaca directly — delegates all market data fetching to xstockstrat-marketdata. Publishes job lifecycle events to xstockstrat-ledger.
 
 As of Phase 3, ingest owns a database schema (`ingest`) and is no longer stateless — it persists newsletter signals to the `ingest.newsletter_signals` hypertable for consumption by indicators and analysis.
 
 ## Language
+
 Python 3.12 (asyncio, grpc.aio)
 
 ## Docker Build Pattern
+
 Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
 
 ## Ports
@@ -81,7 +84,7 @@ After any change to `pyproject.toml`, run `uv lock` and commit the updated `uv.l
 
 ## Environment Variables
 
-```
+```text
 GRPC_PORT=50055
 CONFIG_ENDPOINT=xstockstrat-config:50060
 MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053

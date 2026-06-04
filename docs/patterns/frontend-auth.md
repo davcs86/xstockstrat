@@ -1,6 +1,6 @@
 # Frontend Authentication Pattern
 
-Every Next.js frontend (`trader`, `insights`, `config-ui`, and future siblings) **must** implement this auth pattern. Reference implementation: `services/xstockstrat-trader/`.
+The `xstockstrat-ui` consolidated Next.js service implements this auth pattern. Reference implementation: `services/xstockstrat-ui/src/`.
 
 This doc covers the **auth-specific** rules. For general Next.js patterns (basePath, middleware matcher, Suspense fallbacks, Radix hydration, app icons), read `docs/patterns/nextjs-frontends.md`.
 
@@ -260,14 +260,13 @@ Middleware only catches **browser navigations**, not direct `curl` calls. The `/
 
 ---
 
-## Adding a new frontend service — checklist
+## Adding a new segment to `xstockstrat-ui` — checklist
 
-1. Copy `auth.ts`, `identity.ts`, `connectClients.ts`, `middleware.ts`, and `app/login/`, `app/api/auth/*` from `xstockstrat-trader`.
-2. In `connectClients.ts`, add only the gRPC clients your frontend actually calls. Use `createGrpcTransport` + `*_ENDPOINT` vars. See `docs/patterns/nextjs-frontends.md` §10 for the hard transport rule.
-3. Add `JWT_SECRET` and `IDENTITY_ENDPOINT` (format: `host:port`) to `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`. Add `http2_ports: [50058]` to the identity service block in both DO app specs.
-4. Add `xstockstrat-identity` to `depends_on` in `docker-compose.yml`.
-5. Every new API route under `/api/*` calls `getSessionFromRequest` + 401-on-null before touching a backend.
-6. Every outbound call uses the typed gRPC client with `Headers` propagation and `connectCodeToHttp` on `ConnectError`.
-7. Follow `docs/patterns/nginx-routing.md` for the nginx upstream and location.
-8. In `app/login/page.tsx`, use the full basePath-prefixed path in the login `fetch`: `fetch('/mybasepath/api/auth/login', ...)`. A bare `fetch('/api/auth/login')` resolves from the document root, hits nginx with no matching route, and silently returns HTML — see `docs/patterns/nextjs-frontends.md` §1.
-9. **Run `pnpm --filter <new-service> build` locally before opening a PR.** The Edge-runtime trap is invisible in source review — only a build catches it.
+1. Reference `services/xstockstrat-ui/src/` — `auth.ts`, `identity.ts`, `connectClients.ts`, and `middleware.ts` are shared across all segments; do not duplicate them.
+2. Add segment-specific gRPC clients to `src/lib/browserClients/<service>Client.ts` and wire them in the segment's BFF file (`src/lib/<segment>Bff.ts`). Use `createGrpcTransport` + `*_ENDPOINT` vars. See `docs/patterns/nextjs-frontends.md` §10 for the hard transport rule.
+3. New env vars go into `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml` under the `xstockstrat-ui` block. Add `http2_ports: [<port>]` to the identity/backend service block in both DO app specs.
+4. Every new API route under `/<segment>/api/*` calls `getSessionFromRequest` + 401-on-null before touching a backend.
+5. Every outbound call uses the typed gRPC client with `Headers` propagation and `connectCodeToHttp` on `ConnectError`.
+6. DO App Platform ingress routes are configured in `.do/app.yaml` and `.do/app.dev.yaml` — no nginx involved.
+7. In `app/<segment>/login/page.tsx`, use the full segment-prefixed path in the login `fetch`: `fetch('/<segment>/api/auth/login', ...)`. A bare `fetch('/api/auth/login')` resolves from the document root and silently returns HTML — see `docs/patterns/nextjs-frontends.md` §1.
+8. **Run `pnpm --filter xstockstrat-ui build` locally before opening a PR.** The Edge-runtime trap is invisible in source review — only a build catches it.

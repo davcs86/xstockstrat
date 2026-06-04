@@ -71,7 +71,7 @@ find gen/python -type d | while read -r dir; do
 done
 
 # Write a minimal setup.py so pip install -e . works
-cat > gen/python/setup.py << 'PYSETUP'
+cat >gen/python/setup.py <<'PYSETUP'
 from setuptools import setup, find_packages
 setup(
     name="xstockstrat-proto",

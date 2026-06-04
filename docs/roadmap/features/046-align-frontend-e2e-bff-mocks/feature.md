@@ -1,6 +1,8 @@
 # Feature: align-frontend-e2e-bff-mocks
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: edf803cb8942cee14abc604d1ed95c11b79d8445
+**Launched date**: 2026-06-04
 **Development Branch**: `feature/align-frontend-e2e-bff-mocks`
 **Created**: 2026-05-31
 **Last Updated**: 2026-06-01
@@ -17,6 +19,7 @@
 | 2026-06-01 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — streamAlerts added to trader mock. |
 | 2026-06-01 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done — all three frontend e2e suites pass CI (trader 36/36, insights 22/22, config-ui 31/31). |
 
+| 2026-06-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #523; committed edf803cb8942cee14abc604d1ed95c11b79d8445 |
 ---
 
 ## Artifacts

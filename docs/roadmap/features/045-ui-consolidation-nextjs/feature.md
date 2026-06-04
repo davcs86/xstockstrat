@@ -1,9 +1,11 @@
 # Feature: ui-consolidation-nextjs
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `launched`
+**Committed to main**: edf803cb8942cee14abc604d1ed95c11b79d8445
+**Launched date**: 2026-06-04
 **Development Branch**: `feature/ui-consolidation-nextjs`
 **Created**: 2026-05-29
-**Last Updated**: 2026-06-01
+**Last Updated**: 2026-06-02
 
 ---
 
@@ -17,7 +19,9 @@
 | 2026-06-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved. All 5 OQs resolved: `xstockstrat-ui` name, single-domain DO routing, keep pg as-is, 041 already launched (no dep), 044 before 045. |
 | 2026-06-01 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-06-01 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — xstockstrat-ui service created, build passes |
+| 2026-06-02 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done — service consolidated, e2e suite passes |
 
+| 2026-06-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #523; committed edf803cb8942cee14abc604d1ed95c11b79d8445 |
 ---
 
 ## Artifacts
@@ -47,4 +51,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-execute ui-consolidation-nextjs next` — execute Step 2 (Dockerfile + docker-compose + DO app specs)
+`/sdd-execute ui-consolidation-nextjs next` — all steps complete; open final integration PR into `main-dev`

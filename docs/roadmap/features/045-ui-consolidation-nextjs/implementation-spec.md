@@ -133,7 +133,7 @@ Build must complete with zero TypeScript errors and produce a `.next/standalone`
 
 ### Step 2 — service: Create Dockerfile and update docker-compose + DO app specs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui` (new), `docker-compose.yml` (modify), `.do/app.dev.yaml` (modify), `.do/app.yaml` (modify)
 **Files**:
 - `services/xstockstrat-ui/Dockerfile` — create
@@ -661,3 +661,8 @@ No coverage threshold applies for Next.js frontends (`xstockstrat-ui` is not in 
 **Spec said**: `INDICATORS_ENDPOINT` included in `connectClients.ts` (spec instruction 6 lists it)
 **Actual**: `INDICATORS_ENDPOINT` removed from `connectClients.ts` — no `indicatorsClient` is exported because no BFF in the consolidated service calls the indicators service.
 **Reason**: ESLint `@typescript-eslint/no-unused-vars` error blocked the build. The indicators service is not proxied by any of the three BFFs, so the endpoint variable was truly unused.
+
+### Deviation: Step 2 — Create Dockerfile and update docker-compose + DO app specs
+**Spec said**: Verification: `docker compose build --no-cache xstockstrat-ui` — image must build to completion.
+**Actual**: Docker daemon not running in this execution environment; build could not be attempted. Structural grep verifications passed (no old service names, `xstockstrat-ui` present in all three files).
+**Reason**: Environment limitation. Dockerfile follows the exact same 4-stage pattern as `services/xstockstrat-trader/Dockerfile` (the reference implementation) with only service-name substitutions. Build validity will be confirmed by CI when the PR is merged.
