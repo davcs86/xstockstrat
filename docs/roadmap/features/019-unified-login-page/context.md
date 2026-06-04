@@ -90,3 +90,9 @@
 - Files modified: created 3 consolidated routes; deleted 9 per-basePath routes.
 - Verification: `tsc --noEmit` clean; `pnpm run lint` clean; exactly one `authenticateUser` (consolidated login); only 3 auth routes remain.
 - Deviations: none (matches re-spec'd Files list).
+
+### Step 3 — service: Update src/middleware.ts [done]
+- Unauthenticated block now redirects to `new URL('/auth/login', req.url)` (allows /auth/login + /auth/oauth-login through); refresh block uses `/api/auth/refresh` and redirects to `/auth/login` on failure; matcher excludes `auth/login|auth/oauth-login`.
+- Files modified: `src/middleware.ts`.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean; 0 per-basePath login refs; /auth/login + /api/auth/refresh present.
+- Deviations: none.

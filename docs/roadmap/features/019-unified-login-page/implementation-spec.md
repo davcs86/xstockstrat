@@ -110,7 +110,7 @@ find services/xstockstrat-ui/src/app -path "*api/auth*" -name route.ts | sort   
 
 ### Step 3 — service: Update `src/middleware.ts` to redirect to `/auth/login` and refresh via `/api/auth/refresh`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/middleware.ts` — modify
