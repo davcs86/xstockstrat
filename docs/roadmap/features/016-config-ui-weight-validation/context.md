@@ -67,3 +67,9 @@
   - Step 5 → `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx` (now uses TanStack Query hooks `useConfigKeys`/`useSetConfig`; `keys` is an inline-typed array, not a named `ConfigKey` interface; `handleSave(key)` calls `setConfigMutate`). Re-spec adapts the validation logic (validateFloatMap, validationError state, Input onBlur, handleSave guard, inline error, disable Save) to this structure.
   - Step 6 → `services/xstockstrat-ui/e2e/config-ui/api-smoke.spec.ts` + shared `services/xstockstrat-ui/e2e/mock-backend.ts` (config-ui ConfigService.listKeys mock at L234–240, port 9093).
 - Steps 1–4 (proto ValidationRule + xstockstrat-config service/test) target paths that still exist — unchanged.
+
+### Step 1 — proto: Add ValidationRule message + validation field [done]
+- Added `ValueType` enum + `ValidationRule` message after `ConfigUpdateType`; added `ValidationRule validation = 8` to `ConfigKeyMeta`.
+- Files modified: `packages/proto/config/v1/config.proto`.
+- Verification: `buf lint` exit 0; `buf breaking` (repo-root .git + subdir) exit 0.
+- Deviations: buf breaking path form (monorepo). Detail in Deviation Log.

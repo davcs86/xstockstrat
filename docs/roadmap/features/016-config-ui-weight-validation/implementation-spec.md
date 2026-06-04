@@ -40,7 +40,7 @@ the consolidated service.
 
 ### Step 1 — proto: Add ValidationRule message and validation field to ConfigKeyMeta
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/config/v1/config.proto` — modify
@@ -462,3 +462,8 @@ No coverage threshold applies to Next.js frontends — E2E verification is suffi
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 1 — buf breaking invocation path
+**Spec said**: `buf breaking --against ".git#branch=main-dev"` (run from `packages/proto`).
+**Actual**: that path resolves `packages/proto/.git`, which does not exist (the repo `.git` is at the root). Ran `buf breaking --against "<repo-root>/.git#branch=main-dev,subdir=packages/proto"` (the same form `scripts/buf-gen.sh` uses). Result: exit 0 (additive, non-breaking). `buf lint` also exit 0.
+**Reason**: correct git-ref form for a monorepo where `.git` is at the root, not under `packages/proto`.
