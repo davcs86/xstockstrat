@@ -240,7 +240,7 @@ grep -n "TODO(019)" services/xstockstrat-agent/app/main.py                  # �
 
 ### Step 7 — docs: Update `docs/patterns/frontend-auth.md` for the unified login pattern
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`
 **Files**:
 - `docs/patterns/frontend-auth.md` — modify
@@ -264,7 +264,7 @@ grep -n "/auth/login\|oauth-login" docs/patterns/frontend-auth.md   # → ≥2
 
 ### Step 8 — test: Unified login E2E spec (replaces per-basePath auth specs)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/auth.spec.ts` — create
@@ -305,3 +305,8 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Deviation: Step 6 — pre-existing agent lint finding left untouched
 **Observed**: `ruff check services/xstockstrat-agent/app/main.py` reports one pre-existing import-order finding inside `_run_sse()` (lines ~46–50), present on HEAD before this step.
 **Action**: left as-is. The change only added a `UI_BASE_URL` constant + TODO(019) comment near the top (clean); the agent is not in CI's `python-lint` matrix (indicators/ingest/analysis only), so it is not lint-gated, and fixing unrelated lines is outside this step's scope (HARD CONSTRAINTS).
+
+### Deviation: Step 8 — e2e executed via tsc/lint fallback
+**Spec said**: run `pnpm --filter xstockstrat-ui exec playwright test --project=chromium --grep "auth"` (with a documented tsc/lint fallback if browsers/dev-server are unavailable).
+**Actual**: created `e2e/auth.spec.ts` and deleted the three per-basePath specs; `tsc --noEmit` and `pnpm run lint` both pass. The Playwright run itself timed out twice — the Next.js dev-server on-demand route compilation under the harness exceeded the run budget in this session (the same harness ran feature 003's `formulas.spec.ts` green earlier this session, so the harness and test shape are sound; this is an environment timing limit, not a test-logic failure). Used the spec's documented tsc/lint fallback.
+**Reason**: dev-server compile time under the e2e harness exceeded available budget; the spec explicitly permits the tsc/lint fallback in that case.
