@@ -12,6 +12,7 @@ dependencies = [
   "opentelemetry-sdk>=1.25.0",
   "opentelemetry-exporter-otlp-proto-grpc>=1.25.0",
   "opentelemetry-instrumentation-grpc>=0.46b0",
+  "asyncpg>=0.29.0",
 ]
 
 [build-system]

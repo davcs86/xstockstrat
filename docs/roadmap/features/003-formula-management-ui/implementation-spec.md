@@ -211,7 +211,7 @@ Expected: no error on the indicators migration; `migrate_service "xstockstrat-in
 
 ### Step 4 — service: Add FormulasRepository and DB pool wiring to xstockstrat-indicators
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/formulas_repository.py` — create
@@ -1031,3 +1031,10 @@ cd services/xstockstrat-ui && pnpm run lint
 **Spec said**: verify with `./scripts/db-migrate.sh up`.
 **Actual**: `db-migrate.sh` requires the `migrate` (golang-migrate) binary + a running TimescaleDB (normally the `db-migrator` container), neither of which is available in this environment. Verified instead by applying both `001_formulas.up.sql` and `001_formulas.down.sql` against a throwaway `postgres:16-alpine` container via `psql -v ON_ERROR_STOP=1`: UP created the `indicators.formulas` table with all 9 columns, the PK, and both indexes (`formulas_author_idx`, partial `formulas_is_public_idx`); DOWN dropped the table and schema cleanly. `gen_random_uuid()` resolved without a `pgcrypto` extension (built-in since PostgreSQL 13).
 **Reason**: golang-migrate binary unavailable; direct `psql` apply against the same PG16 engine TimescaleDB is built on exercises the identical DDL and is a stronger check than a syntax-only validation.
+
+### Deviation: Step 4 — service (uv.lock + repo implementation detail)
+**Spec said**: Files list = `formulas_repository.py`, `main.py`, `pyproject.toml`, `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`. Repository SQL described at a high level; `main.py` pool created with `asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)`.
+**Actual**:
+1. Also regenerated and staged `services/xstockstrat-indicators/uv.lock` (added `asyncpg 0.31.0`). The root CLAUDE.md "Python uv lock rule" requires `uv.lock` to be committed in the same PR as any `pyproject.toml` dependency change (CI `uv lock --check` enforces it), so adding `asyncpg` to `pyproject.toml` without updating the lock would have failed CI. Expanded the step scope to include it (the "fix now" choice).
+2. `formulas_repository.py` casts `formula_id` with `$1::uuid` (the servicer generates a string UUID via `uuid.uuid4()`, which asyncpg's strict UUID binding would otherwise reject) and JSON-encodes/decodes the `input_schema` JSONB column inside the repo (`json.dumps` on write, `json.loads` on read via `_to_dict`), so the Step 5 `_row_to_formula` helper always receives a plain `dict`. Kept `main.py`'s pool call exactly as specified (no `init=` codec), confining JSONB handling to the repository.
+**Reason**: keep `pyproject.toml`/`uv.lock` in sync per CLAUDE.md; correct asyncpg UUID/JSONB typing for a working CRUD path without deviating from the spec's `main.py` snippet.

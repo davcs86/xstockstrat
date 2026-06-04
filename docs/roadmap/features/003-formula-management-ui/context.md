@@ -125,3 +125,8 @@
 - Created `migrations/001_formulas.up.sql` (schema + `indicators.formulas` table + author/partial-is_public indexes) and `001_formulas.down.sql`.
 - Files modified: `services/xstockstrat-indicators/migrations/001_formulas.{up,down}.sql`.
 - Deviations: `migrate` binary + TimescaleDB unavailable, so verified by applying both migrations against a throwaway `postgres:16-alpine` container (UP + DOWN both clean). Detail in Deviation Log.
+
+### Step 4 — service: Add FormulasRepository and DB pool wiring [done]
+- Created `app/services/formulas_repository.py` (asyncpg CRUD with `$1::uuid` casts + JSONB encode/decode); added `asyncpg>=0.29.0` to `pyproject.toml` + regenerated `uv.lock`; wired DB pool in `app/main.py` (DATABASE_URL env, `create_pool`, pass `db_pool=` to servicer, close on shutdown); docker-compose indicators block now merges `*db-url` + depends_on timescaledb/db-migrator; added `DATABASE_URL` to indicators block in both `.do/app.dev.yaml` and `.do/app.yaml`.
+- Files modified: `app/services/formulas_repository.py`, `app/main.py`, `pyproject.toml`, `uv.lock`, `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`.
+- Deviations: added `uv.lock` to scope (CLAUDE.md sync rule / CI `uv lock --check`); repo `::uuid` cast + JSONB handling implementation detail. Detail in Deviation Log.
