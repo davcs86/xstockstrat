@@ -40,3 +40,23 @@
     `/agent/oauth/` proxied to agent's `/oauth/`.
   - `AGENT_PUBLIC_URL` is a new env var needed in the metadata document to build absolute
     `authorization_endpoint` and `token_endpoint` URLs.
+
+## Session 2026-06-04 — "501 endpoints" audit + revised plan (no code change)
+
+- Triggered by a request to "find all 501 not implemented endpoints and write a plan." Audited the
+  whole platform: all 61 declared gRPC RPCs across the 10 backend services are implemented (nothing
+  falls through to the `Unimplemented*` embeds → no runtime 501s). The only genuinely unimplemented
+  endpoints are this feature's OAuth HTTP endpoints, which never executed.
+- **The on-disk impl-spec is STALE** and must not be executed verbatim. Three reconciliations,
+  caused by features that landed after 2026-05-25, are documented in the new revised plan:
+  - **nginx removed (045):** Step 5 (`nginx.conf`) is obsolete → replace with a DO App Platform
+    path rule mapping `/.well-known/oauth-authorization-server` to the agent.
+  - **gRPC-only backends:** Steps 2/3 call identity over HTTP Connect-RPC (`IDENTITY_HTTP_ENDPOINT`,
+    port 8058) — that port is gone. Use `IDENTITY_ENDPOINT` gRPC (`AuthenticateUser`/`ValidateToken`/
+    `CreateApiKey`). Do NOT reintroduce `IDENTITY_HTTP_ENDPOINT`.
+  - **Unified login (019 launched):** the agent must NOT serve its own login form (FR-9 obsolete).
+    It redirects to `{UI_BASE_URL}/auth/oauth-login`. A NEW `GET /oauth/callback` step is required so
+    the agent regains control after login to mint the API key and issue the auth `code` (the live
+    `/auth/oauth-login` page currently redirects back with `state` only, no `code`).
+- Revised 8-step plan written at `docs/roadmap/501-endpoints-implementation-plan.md`. This feature
+  stays `implementation-ready`; update Step 2/3/5 + the Deviation Log here when `/sdd-execute` runs.
