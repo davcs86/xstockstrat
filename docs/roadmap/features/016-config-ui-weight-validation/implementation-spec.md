@@ -148,7 +148,7 @@ grep "ValidationRule\|ValueType\|GetValidation" packages/proto/gen/go/config/v1/
 
 ### Step 3 — service: Populate validation field in listKeys response (xstockstrat-config)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify

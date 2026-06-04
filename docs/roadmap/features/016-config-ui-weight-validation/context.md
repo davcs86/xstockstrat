@@ -79,3 +79,9 @@
 - Files modified: `packages/proto/gen/{go,python,ts,ts/dist}/config/v1/*`.
 - Verification: diff scoped to config stubs only (no version drift); TS 15 matches, Go 38 matches for ValidationRule/ValueType/validation.
 - Deviations: none.
+
+### Step 3 — service: Populate validation in listKeys (xstockstrat-config) [done]
+- Imported `ValueType`; added `WEIGHT_KEY_REGISTRY` ({'analysis.signals.source_weights': [0,1]}); listKeys now sets `validation: {value_type: FLOAT_MAP, min_value, max_value}` for registry keys, `undefined` otherwise (FR-5).
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`.
+- Verification: `pnpm --filter xstockstrat-config run build` exit 0; lint exit 0 (26 pre-existing `any` warnings, none in added lines).
+- Deviations: none.
