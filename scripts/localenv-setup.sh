@@ -22,9 +22,9 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-info()    { echo -e "${CYAN}[INFO]${NC}  $*"; }
-ok()      { echo -e "${GREEN}[OK]${NC}    $*"; }
-err()     { echo -e "${RED}[ERROR]${NC} $*" >&2; }
+info() { echo -e "${CYAN}[INFO]${NC}  $*"; }
+ok() { echo -e "${GREEN}[OK]${NC}    $*"; }
+err() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 section() { echo -e "\n${BOLD}${CYAN}===> $*${NC}"; }
 
 # ── Require Docker ─────────────────────────────────────────────────────────────
@@ -42,8 +42,11 @@ fi
 BUILD_ARGS=()
 for arg in "$@"; do
   case "$arg" in
-    --no-cache) BUILD_ARGS+=(--no-cache) ;;
-    *) err "Unknown argument: $arg"; exit 1 ;;
+  --no-cache) BUILD_ARGS+=(--no-cache) ;;
+  *)
+    err "Unknown argument: $arg"
+    exit 1
+    ;;
   esac
 done
 

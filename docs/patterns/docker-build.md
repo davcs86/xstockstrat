@@ -79,7 +79,7 @@ After pnpm deploy --prod:     ~100MB (80% reduction)
 
 ## Next.js Frontend Pattern
 
-**Services:** xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
+**Services:** xstockstrat-ui
 
 **Characteristics:**
 - Multi-stage: `base` → `deps` → `builder` → `runner`

@@ -1,0 +1,107 @@
+import { test, expect, type Page } from '@playwright/test';
+import { SignJWT } from 'jose';
+
+/**
+ * E2E tests for AccountSelector and AccountManagementPanel.
+ *
+ * ListBrokerAccounts and RegisterBrokerAccount are intercepted via page.route on
+ * the BFF Connect paths (glob: "**TradingService/ListBrokerAccounts", etc.) rather than
+ * the non-existent /trader/api/accounts REST route. The Connect JSON response uses
+ * camelCase proto field names (id, displayName, brokerType, isPaper, isActive).
+ */
+
+const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
+const BASE_URL = 'http://localhost:3000';
+
+async function addAuthCookie(page: Page): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  const token = await new SignJWT({
+    user_id: 'test-user-001',
+    email: 'test@example.com',
+    roles: [],
+    issued_at: now,
+    expires_at: now + 3600,
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime('1h')
+    .sign(new TextEncoder().encode(TEST_JWT_SECRET));
+
+  await page.context().addCookies([
+    { name: 'access_token', value: token, url: BASE_URL, httpOnly: true, sameSite: 'Lax' },
+  ]);
+}
+
+test.describe('AccountSelector', () => {
+  test('Account Selector is visible in the header', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader');
+    await expect(page.getByRole('combobox').first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('Place Order button is disabled when no account is selected', async ({ page }) => {
+    await page.route('**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ accounts: [] }),
+      });
+    });
+    await addAuthCookie(page);
+    await page.goto('/trader');
+    const submitBtn = page.getByRole('button', { name: /buy|sell/i }).last();
+    await expect(submitBtn).toBeDisabled({ timeout: 5000 });
+  });
+
+  test('Place Order button is enabled when an account is selected', async ({ page }) => {
+    await page.route('**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          accounts: [{ id: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true }],
+        }),
+      });
+    });
+    await addAuthCookie(page);
+    await page.goto('/trader');
+    const submitBtn = page.getByRole('button', { name: /buy|sell/i }).last();
+    await expect(submitBtn).toBeEnabled({ timeout: 5000 });
+  });
+
+  test('Account Management Panel opens via gear icon', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader');
+    await page.getByRole('button', { name: /manage accounts/i }).click();
+    await expect(page.getByRole('heading', { name: 'Add Account' })).toBeVisible({ timeout: 3000 });
+  });
+
+  test('Add Account form clears credential fields on success', async ({ page }) => {
+    await page.route('**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          accounts: [{ id: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true }],
+        }),
+      });
+    });
+    await page.route('**/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          account: { id: 'new-account-001', displayName: 'New', brokerType: 1, isPaper: true, isActive: true },
+        }),
+      });
+    });
+    await addAuthCookie(page);
+    await page.goto('/trader');
+    await page.getByRole('button', { name: /manage accounts/i }).click();
+    await page.getByPlaceholder('Display name').fill('Test Account');
+    await page.getByPlaceholder('API Key').fill('test-key-123');
+    await page.getByPlaceholder('API Secret').fill('test-secret-456');
+    await page.getByRole('button', { name: /add account/i }).click();
+    // Credential fields should be cleared after successful registration
+    await expect(page.getByPlaceholder('API Key')).toHaveValue('', { timeout: 5000 });
+  });
+});

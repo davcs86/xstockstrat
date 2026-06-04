@@ -20,9 +20,7 @@ list — this drives AI review focus, not notifications.
 | `xstockstrat-identity` | JWT expiry and rotation, API key scoping, secret store integration (never plaintext secrets in config) |
 | `xstockstrat-notify` | Stream delivery guarantees, backpressure handling, alert deduplication |
 | `xstockstrat-config` | Config key naming (`<service>.<category>.<key>`), environment/trading_mode scoping, WatchConfig stream stability |
-| `xstockstrat-trader` | Trading UI correctness, Connect-RPC call safety, no direct DB access from frontend |
-| `xstockstrat-insights` | Analytics display accuracy, SSE polling resilience, read-only access pattern |
-| `xstockstrat-config-ui` | Config mutation safety, environment scope correctness, no secret values rendered in UI |
+| `xstockstrat-ui` | Trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access (except audit log) |
 | `packages/proto` | Field number uniqueness, backward compatibility (no field removal or type change without deprecation), naming conventions |
 
 ---

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # scripts/manage-users.sh
 # Manage identity service users: reset passwords and create new users.
 #
@@ -24,7 +24,10 @@ BCRYPT_ROUNDS=10
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
-die() { echo "ERROR: $*" >&2; exit 1; }
+die() {
+  echo "ERROR: $*" >&2
+  exit 1
+}
 
 usage() {
   cat >&2 <<EOF
@@ -92,8 +95,7 @@ psql_exec() {
 
 reset_password() {
   local email="$1" hash="$2"
-  local rows
-  rows=$(psql_exec "UPDATE identity.users SET password_hash = '$hash', updated_at = NOW() WHERE email = '$email'; SELECT ROW_COUNT();")
+  psql_exec "UPDATE identity.users SET password_hash = '$hash', updated_at = NOW() WHERE email = '$email';" >/dev/null
   # psql returns affected row count on UPDATE
   local affected
   affected=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -t -A -c \
@@ -129,8 +131,8 @@ ACTION="$1"
 EMAIL="$2"
 
 case "$ACTION" in
-  reset-password|create-user) ;;
-  *) usage ;;
+reset-password | create-user) ;;
+*) usage ;;
 esac
 
 ROLES="${3:-trader}"
@@ -164,6 +166,6 @@ if [ -z "$HASH" ]; then
 fi
 
 case "$ACTION" in
-  reset-password) reset_password "$EMAIL" "$HASH" ;;
-  create-user)    create_user    "$EMAIL" "$HASH" "$ROLES" ;;
+reset-password) reset_password "$EMAIL" "$HASH" ;;
+create-user) create_user "$EMAIL" "$HASH" "$ROLES" ;;
 esac
