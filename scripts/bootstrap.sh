@@ -71,7 +71,7 @@ echo ""
 if command -v pnpm &>/dev/null; then
   echo "==> Installing Node.js dependencies (for local test/lint)..."
   for svc in xstockstrat-ledger xstockstrat-identity xstockstrat-notify xstockstrat-config \
-              xstockstrat-trader xstockstrat-insights xstockstrat-config-ui; do
+    xstockstrat-trader xstockstrat-insights xstockstrat-config-ui; do
     echo "  → $svc"
     (cd "$REPO_ROOT/services/$svc" && pnpm install --frozen-lockfile)
   done

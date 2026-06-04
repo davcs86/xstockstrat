@@ -11,6 +11,7 @@ Local environment bootstrap and external service setup. Start with `getting-star
 | `n8n.md` | **Deprecated** — n8n is no longer used; see 009-agent-mcp-server. This file is a stub with the surviving webhook path table. |
 
 **Setup order for a new environment:**
+
 1. `getting-started.md` — local environment (everyone runs this first)
 2. `alpaca.md` — credentials needed by all trading services
 3. `digitalocean.md` — cloud deployment

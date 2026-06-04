@@ -200,3 +200,78 @@ func TestNewClient_DefaultHTTPTimeout(t *testing.T) {
 		t.Fatal("expected non-nil client")
 	}
 }
+
+func TestListAssets_Success(t *testing.T) {
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/assets" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+			{"symbol": "AAPL", "exchange": "NASDAQ", "class": "us_equity", "tradable": true},
+			{"symbol": "SKIP", "exchange": "NYSE", "class": "us_equity", "tradable": false},
+			{"symbol": "MSFT", "exchange": "NASDAQ", "class": "us_equity", "tradable": true},
+		})
+	})
+	defer srv.Close()
+
+	c := alpaca.NewClient(alpaca.ClientConfig{
+		APIKey:  "k",
+		BaseURL: srv.URL,
+	})
+
+	assets, err := c.ListAssets(context.Background(), "")
+	if err != nil {
+		t.Fatalf("ListAssets failed: %v", err)
+	}
+	if len(assets) != 2 {
+		t.Errorf("expected 2 tradable assets, got %d", len(assets))
+	}
+	if assets[0].Symbol != "AAPL" {
+		t.Errorf("expected first asset AAPL, got %s", assets[0].Symbol)
+	}
+}
+
+func TestListAssets_WithAssetClass(t *testing.T) {
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("asset_class") != "crypto" {
+			t.Errorf("expected asset_class=crypto, got %q", r.URL.Query().Get("asset_class"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+			{"symbol": "BTCUSD", "exchange": "CBSE", "class": "crypto", "tradable": true},
+		})
+	})
+	defer srv.Close()
+
+	c := alpaca.NewClient(alpaca.ClientConfig{
+		APIKey:  "k",
+		BaseURL: srv.URL,
+	})
+
+	assets, err := c.ListAssets(context.Background(), "crypto")
+	if err != nil {
+		t.Fatalf("ListAssets with class failed: %v", err)
+	}
+	if len(assets) != 1 || assets[0].Symbol != "BTCUSD" {
+		t.Errorf("unexpected assets: %+v", assets)
+	}
+}
+
+func TestListAssets_HTTPError(t *testing.T) {
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message":"forbidden"}`))
+	})
+	defer srv.Close()
+
+	c := alpaca.NewClient(alpaca.ClientConfig{
+		APIKey:  "bad",
+		BaseURL: srv.URL,
+	})
+
+	_, err := c.ListAssets(context.Background(), "")
+	if err == nil {
+		t.Fatal("expected error for 403 response, got nil")
+	}
+}
