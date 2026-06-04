@@ -892,7 +892,7 @@ Expected: one line with the version.
 
 ### Step 11 — docs: Update xstockstrat-indicators CLAUDE.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify

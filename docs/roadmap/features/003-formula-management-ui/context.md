@@ -166,3 +166,9 @@
 - Files modified: `package.json`, `pnpm-lock.yaml`, `src/components/insights/FormulaEditor.tsx`, `src/app/insights/formulas/{page,new/page,[id]/page}.tsx`.
 - Verification: `tsc --noEmit` clean; `pnpm run lint` clean.
 - Deviations: added pnpm-lock.yaml to scope (frozen-lockfile CI). Detail in Deviation Log.
+
+### Step 11 — docs: Update xstockstrat-indicators CLAUDE.md [done]
+- Added TimescaleDB dependency row, a new ## Database section, and DATABASE_URL to the Environment Variables block.
+- Files modified: `services/xstockstrat-indicators/CLAUDE.md`.
+- Verification: grep confirms DATABASE_URL/TimescaleDB/indicators.formulas present.
+- Deviations: none.
