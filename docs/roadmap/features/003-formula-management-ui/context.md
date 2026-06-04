@@ -160,3 +160,9 @@
 - Files modified: `src/components/insights/AppShell.tsx`.
 - Verification: `pnpm run lint` clean; 5 formulas matches.
 - Deviations: omitted the `Code2` import (unused → would fail lint); links are icon-less like Dashboard/Strategies. Detail in Deviation Log.
+
+### Step 10 — service: FormulaEditor + formula pages [done]
+- Added `@monaco-editor/react@^4.6.0` (+ pnpm-lock.yaml); created `FormulaEditor.tsx` (dynamic ssr:false Monaco), `formulas/page.tsx` (list + New button), `formulas/new/page.tsx` (create form), `formulas/[id]/page.tsx` (view/edit/delete + JSON test-execute).
+- Files modified: `package.json`, `pnpm-lock.yaml`, `src/components/insights/FormulaEditor.tsx`, `src/app/insights/formulas/{page,new/page,[id]/page}.tsx`.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean.
+- Deviations: added pnpm-lock.yaml to scope (frozen-lockfile CI). Detail in Deviation Log.

@@ -797,7 +797,7 @@ Expected: at least 2 matches (desktop + mobile nav links).
 
 ### Step 10 — service: Add FormulaEditor component and formula pages to xstockstrat-ui insights
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/package.json` — modify
@@ -1067,3 +1067,8 @@ cd services/xstockstrat-ui && pnpm run lint
 **Spec said**: instruction #1 adds `Code2` to the `lucide-react` import; instructions #2/#3 add icon-less `Formulas` `<Link>`s.
 **Actual**: did not add the `Code2` import. The Formulas nav links (like the existing Dashboard/Strategies in-app links) render text only — the spec's link markup never references `Code2`, so importing it would leave an unused symbol and fail `pnpm run lint` (`@typescript-eslint/no-unused-vars`). Kept the links icon-less for consistency with their siblings.
 **Reason**: an imported-but-unused `Code2` breaks the lint gate; omitting it is lint-clean and visually consistent with the adjacent in-app nav links.
+
+### Deviation: Step 10 — service (pnpm-lock.yaml)
+**Spec said**: Files list includes `services/xstockstrat-ui/package.json` (add `@monaco-editor/react`) but not the lockfile.
+**Actual**: also updated the workspace root `pnpm-lock.yaml` (via `pnpm --filter xstockstrat-ui add @monaco-editor/react@^4.6.0`). CI's `node-lint`/build jobs run `pnpm install --frozen-lockfile`, which fails if `package.json` and `pnpm-lock.yaml` are out of sync — so the lockfile must ship in the same PR.
+**Reason**: keep the pnpm lockfile in sync with the new dependency (same rationale as the uv-lock steps). `tsc --noEmit` and `pnpm run lint` both clean.
