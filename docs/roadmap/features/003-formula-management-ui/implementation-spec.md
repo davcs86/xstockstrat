@@ -464,7 +464,7 @@ Expected: prints `servicer import OK`.
 
 ### Step 6 — test: Add unit tests for FormulasRepository and indicators servicer CRUD methods
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_formulas.py` — create
@@ -1045,3 +1045,10 @@ cd services/xstockstrat-ui && pnpm run lint
 1. Also set `author = request.author if request.author else "dev-user"` and added `author=author` to the in-memory `FormulaDefinition` in `RegisterFormula` (the spec's existing snippet omitted `author`). Without this, a `GetFormula` served from the in-memory cache immediately after registration would return an empty author while a DB-fallback read would return the real one — an inconsistency. The same `author` value is passed to `self._repo.create(...)`.
 2. `ruff check` (rule UP017, in the service's `select` set) required `datetime.UTC` instead of `datetime.timezone.utc` in `_row_to_formula`; applied `ruff --fix` on the step's own lines per the lint-gate carve-out.
 **Reason**: correctness of the author-scoping invariant and passing the service's own lint gate; both confined to lines this step introduced.
+
+### Deviation: Step 6 — test (conftest.py + uv.lock)
+**Spec said**: Files list = `tests/test_formulas.py`, `pyproject.toml`. `TestIndicatorsServicerCRUD` constructs `IndicatorsServicer` (which does `from gen.indicators.v1 import ...`).
+**Actual**: also created `services/xstockstrat-indicators/tests/conftest.py` and regenerated `uv.lock`.
+1. `conftest.py`: the indicators service had **no** conftest, unlike its Python siblings `xstockstrat-ingest` and `xstockstrat-analysis`, which both ship an identical `conftest.py` that registers `../../packages/proto/gen/python` as the `gen` namespace package. CI's `python-test` job runs only `pip install -e ".[dev]"` + `pytest` (it does not install the proto stubs), so without this conftest the new `TestIndicatorsServicerCRUD` import (`from app.handlers.servicer import IndicatorsServicer` → `from gen.indicators.v1 import ...`) would raise `ModuleNotFoundError` at collection time in CI. Copied the exact sibling conftest (the "fix now" choice).
+2. `uv.lock`: regenerated after adding `pytest-asyncio>=0.23.0` to `pyproject.toml` dev deps, per the CLAUDE.md uv-lock rule (same rationale as Step 4).
+**Reason**: the spec's own `TestIndicatorsServicerCRUD` cannot pass in CI without the gen-path conftest that every other Python service already uses; lockfile kept in sync. Result: `uv run pytest --cov=app --cov-fail-under=50` → 22 passed, 81.9% coverage.

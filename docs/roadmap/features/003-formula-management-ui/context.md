@@ -136,3 +136,9 @@
 - Files modified: `app/handlers/servicer.py`.
 - Verification: `from app.handlers.servicer import IndicatorsServicer, _row_to_formula` → OK (with proto pkg installed + gen symlink, both temporary). ruff clean.
 - Deviations: set `author` on the cached FormulaDefinition; ruff UP017 `datetime.UTC`. Detail in Deviation Log.
+
+### Step 6 — test: Unit tests for FormulasRepository and servicer CRUD [done]
+- Added `tests/test_formulas.py` (5 repository tests with mocked asyncpg pool + 3 servicer in-memory-fallback tests); added `pytest-asyncio>=0.23.0` + `asyncio_mode = "auto"`; created `tests/conftest.py` (gen-path setup, mirrors ingest/analysis); regenerated `uv.lock`.
+- Files modified: `tests/test_formulas.py`, `tests/conftest.py`, `pyproject.toml`, `uv.lock`.
+- Verification: `uv run pytest --cov=app --cov-fail-under=50` → 22 passed, coverage 81.9%; ruff clean.
+- Deviations: added `conftest.py` (required for servicer import in CI; sibling pattern) + `uv.lock`. Detail in Deviation Log.
