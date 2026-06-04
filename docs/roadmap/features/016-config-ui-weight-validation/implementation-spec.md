@@ -222,7 +222,7 @@ pnpm run build
 
 ### Step 4 — test: Unit test for listKeys validation field population (xstockstrat-config)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/configWatcher.test.ts` — modify (add listKeys validation test)

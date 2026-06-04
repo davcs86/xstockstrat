@@ -85,3 +85,9 @@
 - Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`.
 - Verification: `pnpm --filter xstockstrat-config run build` exit 0; lint exit 0 (26 pre-existing `any` warnings, none in added lines).
 - Deviations: none.
+
+### Step 4 — test: Unit test for listKeys validation (xstockstrat-config) [done]
+- Created `src/__tests__/configServiceImpl.test.ts` (node:test): mocks the pg pool, asserts validation populated for the weight key (value_type=1, [0,1]) and absent for non-weight keys.
+- Files modified: `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts`.
+- Verification: `pnpm run test:coverage` exit 0; 7 tests pass (5 existing + 2 new). (c8 reports 0% under --experimental-strip-types — established behavior of the existing CI script; threshold check exits 0.)
+- Deviations: none.
