@@ -166,3 +166,32 @@ test.describe('POST /api/config — inline edit save flow', () => {
     expect(body).not.toHaveProperty('error');
   });
 });
+
+test.describe('validation field in ListKeysResponse', () => {
+  test('weight key has validation.valueType=1 and correct bounds', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/config-ui/login');
+    const { status, body } = await callBff(page, CONFIG_BFF, { namespace: 'analysis', environment: 1, tradingMode: 0 });
+    expect(status).toBe(200);
+    const keys = body.keys as Array<Record<string, unknown>>;
+    const weightKey = keys.find((k) => k.key === 'analysis.signals.source_weights');
+    expect(weightKey).toBeDefined();
+    const v = weightKey!.validation as Record<string, unknown>;
+    expect(v).toBeDefined();
+    expect(v.valueType).toBe(1);
+    expect(Number(v.minValue)).toBeCloseTo(0.0);
+    expect(Number(v.maxValue)).toBeCloseTo(1.0);
+  });
+
+  test('non-weight key has no validation field', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/config-ui/login');
+    const { status, body } = await callBff(page, CONFIG_BFF, { namespace: 'platform', environment: 1, tradingMode: 0 });
+    expect(status).toBe(200);
+    const keys = body.keys as Array<Record<string, unknown>>;
+    const logLevel = keys.find((k) => k.key === 'platform.log_level');
+    expect(logLevel).toBeDefined();
+    // validation absent means no validation applied (FR-5)
+    expect(logLevel!.validation).toBeUndefined();
+  });
+});

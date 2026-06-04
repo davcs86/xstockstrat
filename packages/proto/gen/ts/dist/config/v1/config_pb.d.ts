@@ -154,6 +154,32 @@ export type ConfigValue = Message<"xstockstrat.config.v1.ConfigValue"> & {
  */
 export declare const ConfigValueSchema: GenMessage<ConfigValue>;
 /**
+ * Validation constraints declared by the config service for a key.
+ * When value_type == VALUE_TYPE_FLOAT_MAP, every numeric leaf in the JSON value
+ * must satisfy [min_value, max_value]. Absent or VALUE_TYPE_UNSPECIFIED = no validation.
+ *
+ * @generated from message xstockstrat.config.v1.ValidationRule
+ */
+export type ValidationRule = Message<"xstockstrat.config.v1.ValidationRule"> & {
+    /**
+     * @generated from field: xstockstrat.config.v1.ValueType value_type = 1;
+     */
+    valueType: ValueType;
+    /**
+     * @generated from field: float min_value = 2;
+     */
+    minValue: number;
+    /**
+     * @generated from field: float max_value = 3;
+     */
+    maxValue: number;
+};
+/**
+ * Describes the message xstockstrat.config.v1.ValidationRule.
+ * Use `create(ValidationRuleSchema)` to create a new message.
+ */
+export declare const ValidationRuleSchema: GenMessage<ValidationRule>;
+/**
  * @generated from message xstockstrat.config.v1.GetConfigRequest
  */
 export type GetConfigRequest = Message<"xstockstrat.config.v1.GetConfigRequest"> & {
@@ -299,6 +325,12 @@ export type ConfigKeyMeta = Message<"xstockstrat.config.v1.ConfigKeyMeta"> & {
      * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 7;
      */
     tradingMode: TradingMode;
+    /**
+     * optional; absent = no validation
+     *
+     * @generated from field: xstockstrat.config.v1.ValidationRule validation = 8;
+     */
+    validation?: ValidationRule | undefined;
 };
 /**
  * Describes the message xstockstrat.config.v1.ConfigKeyMeta.
@@ -336,6 +368,23 @@ export declare enum ConfigUpdateType {
  * Describes the enum xstockstrat.config.v1.ConfigUpdateType.
  */
 export declare const ConfigUpdateTypeSchema: GenEnum<ConfigUpdateType>;
+/**
+ * @generated from enum xstockstrat.config.v1.ValueType
+ */
+export declare enum ValueType {
+    /**
+     * @generated from enum value: VALUE_TYPE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: VALUE_TYPE_FLOAT_MAP = 1;
+     */
+    FLOAT_MAP = 1
+}
+/**
+ * Describes the enum xstockstrat.config.v1.ValueType.
+ */
+export declare const ValueTypeSchema: GenEnum<ValueType>;
 /**
  * ConfigService — live configuration via server-streaming WatchConfig.
  * All services call WatchConfig at startup and stream config updates.
