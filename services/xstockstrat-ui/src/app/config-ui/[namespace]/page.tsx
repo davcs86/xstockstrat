@@ -21,6 +21,26 @@ function errMessage(err: unknown): string {
   return err instanceof ConnectError ? err.rawMessage : (err as Error).message;
 }
 
+// FR-3/FR-4: every numeric leaf in the JSON weight map must lie within [min, max].
+function validateFloatMap(json: string, min: number, max: number): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return 'Value must be valid JSON';
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return 'Value must be a JSON object';
+  }
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    const n = Number(v);
+    if (isNaN(n) || n < min || n > max) {
+      return `Key "${k}": ${v} is outside [${min}, ${max}]`;
+    }
+  }
+  return null;
+}
+
 type Props = {
   params: Promise<{ namespace: string }>;
   searchParams: Promise<{ env?: string; mode?: string }>;
@@ -34,6 +54,7 @@ export default function NamespacePage({ params, searchParams }: Props) {
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const { data: keysData, isLoading: loading, error: keysError } = useConfigKeys(namespace, env, mode);
   const { mutate: setConfigMutate, isPending: saving, error: saveError } = useSetConfig(namespace, env, mode);
@@ -46,9 +67,19 @@ export default function NamespacePage({ params, searchParams }: Props) {
     consumingService: string;
     environment: number;
     tradingMode: number;
+    validation?: { valueType: number; minValue: number; maxValue: number };
   }[];
 
   function handleSave(key: string) {
+    const meta = keys.find((kk) => kk.key === key);
+    if (meta?.validation?.valueType === 1) {
+      const err = validateFloatMap(editValue, meta.validation.minValue, meta.validation.maxValue);
+      if (err) {
+        setValidationError(err);
+        return; // FR-6: no SetConfig call when validation fails
+      }
+    }
+    setValidationError(null);
     setConfigMutate(
       {
         namespace,
@@ -58,7 +89,7 @@ export default function NamespacePage({ params, searchParams }: Props) {
         environment: envToProto(env),
         tradingMode: modeToProto(mode),
       },
-      { onSuccess: () => setEditingKey(null) },
+      { onSuccess: () => { setEditingKey(null); setValidationError(null); } },
     );
   }
 
@@ -101,12 +132,24 @@ export default function NamespacePage({ params, searchParams }: Props) {
                     <TableCell className="font-mono text-primary">{k.key}</TableCell>
                     <TableCell className="font-mono">
                       {editingKey === k.key ? (
-                        <Input
-                          className="h-7 text-xs w-40"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          autoFocus
-                        />
+                        <>
+                          <Input
+                            className="h-7 text-xs w-40"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onBlur={() => {
+                              if (k.validation?.valueType === 1) {
+                                setValidationError(
+                                  validateFloatMap(editValue, k.validation.minValue, k.validation.maxValue),
+                                );
+                              }
+                            }}
+                            autoFocus
+                          />
+                          {validationError && editingKey === k.key && (
+                            <p className="text-destructive text-xs mt-0.5">{validationError}</p>
+                          )}
+                        </>
                       ) : k.isSecret ? (
                         <span className="text-muted-foreground italic text-xs">[secret]</span>
                       ) : (
@@ -132,7 +175,7 @@ export default function NamespacePage({ params, searchParams }: Props) {
                               variant="default"
                               size="sm"
                               onClick={() => handleSave(k.key)}
-                              disabled={saving}
+                              disabled={saving || (editingKey === k.key && !!validationError)}
                               className="h-7 px-2 text-xs"
                             >
                               {saving ? 'Saving…' : 'Save'}
@@ -140,7 +183,7 @@ export default function NamespacePage({ params, searchParams }: Props) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => setEditingKey(null)}
+                              onClick={() => { setEditingKey(null); setValidationError(null); }}
                               className="h-7 px-2 text-xs text-muted-foreground"
                             >
                               Cancel

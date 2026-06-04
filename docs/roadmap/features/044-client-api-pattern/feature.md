@@ -1,9 +1,11 @@
 # Feature: client-api-pattern
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
 **Development Branch**: `feature/client-api-pattern`
 **Created**: 2026-05-28
-**Last Updated**: 2026-06-01
+**Last Updated**: 2026-06-04
+**Committed to main**: pending
+**Launched date**: 2026-06-04
 ---
 
 ## Status History
@@ -16,6 +18,7 @@
 | 2026-06-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 overlap warnings — advisory only). Library stack resolved: connect-query-es + TanStack Query v5 + normy. |
 | 2026-06-01 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps. |
 | 2026-06-01 | `implementation-ready` → `code-completed` | /sdd-execute | All 11 steps done — SWR replaced, hooks created, any eliminated, CLAUDE.md and pattern doc updated. |
+| 2026-06-04 | `code-completed` → `launched` | Manual | Feature marked as launched. |
 
 ---
 
@@ -45,4 +48,4 @@ _(Finalized by /sdd-spec 2026-06-01. Covers all distinct reviewers across 11 ste
 
 ## Next Action
 
-Open integration PR: `feature/client-api-pattern` → `main-dev`
+Feature launched. No further action required.

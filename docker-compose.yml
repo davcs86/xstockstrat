@@ -266,7 +266,7 @@ services:
     container_name: xstockstrat-indicators
     env_file: [".env.local"]
     environment:
-      <<: *common-env
+      <<: [*common-env, *db-url]
       GRPC_PORT: "50054"
       CONFIG_ENDPOINT: xstockstrat-config:50060
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
@@ -284,6 +284,10 @@ services:
         condition: service_healthy
       xstockstrat-ledger:
         condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+      db-migrator:
+        condition: service_completed_successfully
 
   # ── Ingest Service ──────────────────────────────────────────────────────
   xstockstrat-ingest:
@@ -490,6 +494,7 @@ services:
       MCP_TRANSPORT: sse
       MCP_SSE_PORT: "9000"
       MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
+      UI_BASE_URL: http://localhost:3000
     ports:
       - "9000:9000"
     healthcheck:

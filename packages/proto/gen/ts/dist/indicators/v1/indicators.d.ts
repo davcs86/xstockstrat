@@ -125,6 +125,8 @@ export interface RegisterFormulaRequest {
     inputSchema: {
         [key: string]: string;
     };
+    /** set by BFF from JWT claims; stored immutably */
+    author: string;
 }
 export interface RegisterFormulaRequest_InputSchemaEntry {
     key: string;
@@ -135,6 +137,40 @@ export interface RegisterFormulaResponse {
 }
 export interface GetFormulaRequest {
     formulaId: string;
+}
+export interface ListFormulasRequest {
+    /** if non-empty, return only formulas where author == author_filter */
+    authorFilter: string;
+    /** if true, include all public formulas regardless of author_filter */
+    includePublic: boolean;
+    /** default 0 = no limit */
+    pageSize: number;
+    /** default 0 */
+    pageOffset: number;
+}
+export interface ListFormulasResponse {
+    formulas: FormulaDefinition[];
+    totalCount: number;
+}
+export interface UpdateFormulaRequest {
+    formulaId: string;
+    /** must match formula.author; returns PERMISSION_DENIED otherwise */
+    userId: string;
+    name: string;
+    description: string;
+    source: string;
+    isPublic: boolean;
+}
+export interface UpdateFormulaResponse {
+    formula?: FormulaDefinition | undefined;
+}
+export interface DeleteFormulaRequest {
+    formulaId: string;
+    /** must match formula.author; returns PERMISSION_DENIED otherwise */
+    userId: string;
+}
+export interface DeleteFormulaResponse {
+    success: boolean;
 }
 export declare const ComputeIndicatorRequest: MessageFns<ComputeIndicatorRequest>;
 export declare const ComputeIndicatorRequest_ParamsEntry: MessageFns<ComputeIndicatorRequest_ParamsEntry>;
@@ -154,6 +190,12 @@ export declare const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest>;
 export declare const RegisterFormulaRequest_InputSchemaEntry: MessageFns<RegisterFormulaRequest_InputSchemaEntry>;
 export declare const RegisterFormulaResponse: MessageFns<RegisterFormulaResponse>;
 export declare const GetFormulaRequest: MessageFns<GetFormulaRequest>;
+export declare const ListFormulasRequest: MessageFns<ListFormulasRequest>;
+export declare const ListFormulasResponse: MessageFns<ListFormulasResponse>;
+export declare const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest>;
+export declare const UpdateFormulaResponse: MessageFns<UpdateFormulaResponse>;
+export declare const DeleteFormulaRequest: MessageFns<DeleteFormulaRequest>;
+export declare const DeleteFormulaResponse: MessageFns<DeleteFormulaResponse>;
 /**
  * IndicatorsService — formula engine and sandboxed Python execution.
  * Sandbox timeout and memory limits are configured via xstockstrat-config.
@@ -213,6 +255,42 @@ export declare const IndicatorsServiceService: {
         readonly responseSerialize: (value: FormulaDefinition) => Buffer;
         readonly responseDeserialize: (value: Buffer) => FormulaDefinition;
     };
+    /** List formula definitions with optional author filter and pagination */
+    readonly listFormulas: {
+        readonly path: "/xstockstrat.indicators.v1.IndicatorsService/ListFormulas";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListFormulasRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListFormulasRequest;
+        readonly responseSerialize: (value: ListFormulasResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListFormulasResponse;
+    };
+    /**
+     * Update a formula's name, description, source, or is_public flag
+     * Returns PERMISSION_DENIED if user_id does not match author
+     */
+    readonly updateFormula: {
+        readonly path: "/xstockstrat.indicators.v1.IndicatorsService/UpdateFormula";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: UpdateFormulaRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => UpdateFormulaRequest;
+        readonly responseSerialize: (value: UpdateFormulaResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => UpdateFormulaResponse;
+    };
+    /**
+     * Delete a formula by ID
+     * Returns PERMISSION_DENIED if user_id does not match author
+     */
+    readonly deleteFormula: {
+        readonly path: "/xstockstrat.indicators.v1.IndicatorsService/DeleteFormula";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: DeleteFormulaRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => DeleteFormulaRequest;
+        readonly responseSerialize: (value: DeleteFormulaResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => DeleteFormulaResponse;
+    };
 };
 export interface IndicatorsServiceServer extends UntypedServiceImplementation {
     /** Compute a built-in indicator (e.g. SMA, EMA, RSI, MACD, BB) */
@@ -228,6 +306,18 @@ export interface IndicatorsServiceServer extends UntypedServiceImplementation {
     registerFormula: handleUnaryCall<RegisterFormulaRequest, RegisterFormulaResponse>;
     /** Get a registered formula */
     getFormula: handleUnaryCall<GetFormulaRequest, FormulaDefinition>;
+    /** List formula definitions with optional author filter and pagination */
+    listFormulas: handleUnaryCall<ListFormulasRequest, ListFormulasResponse>;
+    /**
+     * Update a formula's name, description, source, or is_public flag
+     * Returns PERMISSION_DENIED if user_id does not match author
+     */
+    updateFormula: handleUnaryCall<UpdateFormulaRequest, UpdateFormulaResponse>;
+    /**
+     * Delete a formula by ID
+     * Returns PERMISSION_DENIED if user_id does not match author
+     */
+    deleteFormula: handleUnaryCall<DeleteFormulaRequest, DeleteFormulaResponse>;
 }
 export interface IndicatorsServiceClient extends Client {
     /** Compute a built-in indicator (e.g. SMA, EMA, RSI, MACD, BB) */
@@ -253,6 +343,24 @@ export interface IndicatorsServiceClient extends Client {
     getFormula(request: GetFormulaRequest, callback: (error: ServiceError | null, response: FormulaDefinition) => void): ClientUnaryCall;
     getFormula(request: GetFormulaRequest, metadata: Metadata, callback: (error: ServiceError | null, response: FormulaDefinition) => void): ClientUnaryCall;
     getFormula(request: GetFormulaRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: FormulaDefinition) => void): ClientUnaryCall;
+    /** List formula definitions with optional author filter and pagination */
+    listFormulas(request: ListFormulasRequest, callback: (error: ServiceError | null, response: ListFormulasResponse) => void): ClientUnaryCall;
+    listFormulas(request: ListFormulasRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListFormulasResponse) => void): ClientUnaryCall;
+    listFormulas(request: ListFormulasRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListFormulasResponse) => void): ClientUnaryCall;
+    /**
+     * Update a formula's name, description, source, or is_public flag
+     * Returns PERMISSION_DENIED if user_id does not match author
+     */
+    updateFormula(request: UpdateFormulaRequest, callback: (error: ServiceError | null, response: UpdateFormulaResponse) => void): ClientUnaryCall;
+    updateFormula(request: UpdateFormulaRequest, metadata: Metadata, callback: (error: ServiceError | null, response: UpdateFormulaResponse) => void): ClientUnaryCall;
+    updateFormula(request: UpdateFormulaRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: UpdateFormulaResponse) => void): ClientUnaryCall;
+    /**
+     * Delete a formula by ID
+     * Returns PERMISSION_DENIED if user_id does not match author
+     */
+    deleteFormula(request: DeleteFormulaRequest, callback: (error: ServiceError | null, response: DeleteFormulaResponse) => void): ClientUnaryCall;
+    deleteFormula(request: DeleteFormulaRequest, metadata: Metadata, callback: (error: ServiceError | null, response: DeleteFormulaResponse) => void): ClientUnaryCall;
+    deleteFormula(request: DeleteFormulaRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: DeleteFormulaResponse) => void): ClientUnaryCall;
 }
 export declare const IndicatorsServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): IndicatorsServiceClient;

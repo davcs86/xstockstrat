@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file config/v1/config.proto.
  */
 export const file_config_v1_config: GenFile = /*@__PURE__*/
-  fileDesc("ChZjb25maWcvdjEvY29uZmlnLnByb3RvEhV4c3RvY2tzdHJhdC5jb25maWcudjEivgEKEldhdGNoQ29uZmlnUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSEQoJY2xpZW50X2lkGAIgASgJEg8KB3ZlcnNpb24YAyABKAkSNwoLZW52aXJvbm1lbnQYBCABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuRW52aXJvbm1lbnQSOAoMdHJhZGluZ19tb2RlGAUgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlIsEDCg5Db25maWdTbmFwc2hvdBIRCgluYW1lc3BhY2UYASABKAkSDwoHdmVyc2lvbhgCIAEoCRIuCgp1cGRhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBJBCgZ2YWx1ZXMYBCADKAsyMS54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnU25hcHNob3QuVmFsdWVzRW50cnkSPAoLdXBkYXRlX3R5cGUYBSABKA4yJy54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnVXBkYXRlVHlwZRIUCgxjaGFuZ2VkX2tleXMYBiADKAkSNwoLZW52aXJvbm1lbnQYByABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuRW52aXJvbm1lbnQSOAoMdHJhZGluZ19tb2RlGAggASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlGlEKC1ZhbHVlc0VudHJ5EgsKA2tleRgBIAEoCRIxCgV2YWx1ZRgCIAEoCzIiLnhzdG9ja3N0cmF0LmNvbmZpZy52MS5Db25maWdWYWx1ZToCOAEi1AEKC0NvbmZpZ1ZhbHVlEhQKCnN0cmluZ192YWwYASABKAlIABIRCgdpbnRfdmFsGAIgASgDSAASEwoJZmxvYXRfdmFsGAMgASgBSAASEgoIYm9vbF92YWwYBCABKAhIABIrCghqc29uX3ZhbBgFIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3RIABIRCglpc19zZWNyZXQYBiABKAgSEwoLZGVzY3JpcHRpb24YByABKAkSFQoNZGVmYXVsdF92YWx1ZRgIIAEoCUIHCgV2YWx1ZSKYAQoQR2V0Q29uZmlnUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSNwoLZW52aXJvbm1lbnQYAiABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuRW52aXJvbm1lbnQSOAoMdHJhZGluZ19tb2RlGAMgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlIvgBChBTZXRDb25maWdSZXF1ZXN0EhEKCW5hbWVzcGFjZRgBIAEoCRILCgNrZXkYAiABKAkSMQoFdmFsdWUYAyABKAsyIi54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnVmFsdWUSDgoGYXV0aG9yGAQgASgJEg4KBnJlYXNvbhgFIAEoCRI3CgtlbnZpcm9ubWVudBgGIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5FbnZpcm9ubWVudBI4Cgx0cmFkaW5nX21vZGUYByABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUiVAoRU2V0Q29uZmlnUmVzcG9uc2USDwoHdmVyc2lvbhgBIAEoCRIuCgp1cGRhdGVkX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKXAQoPTGlzdEtleXNSZXF1ZXN0EhEKCW5hbWVzcGFjZRgBIAEoCRI3CgtlbnZpcm9ubWVudBgCIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5FbnZpcm9ubWVudBI4Cgx0cmFkaW5nX21vZGUYAyABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUiRgoQTGlzdEtleXNSZXNwb25zZRIyCgRrZXlzGAEgAygLMiQueHN0b2Nrc3RyYXQuY29uZmlnLnYxLkNvbmZpZ0tleU1ldGEi6QEKDUNvbmZpZ0tleU1ldGESCwoDa2V5GAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEhUKDWRlZmF1bHRfdmFsdWUYAyABKAkSEQoJaXNfc2VjcmV0GAQgASgIEhkKEWNvbnN1bWluZ19zZXJ2aWNlGAUgASgJEjcKC2Vudmlyb25tZW50GAYgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkVudmlyb25tZW50EjgKDHRyYWRpbmdfbW9kZRgHIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UcmFkaW5nTW9kZSqUAQoQQ29uZmlnVXBkYXRlVHlwZRIiCh5DT05GSUdfVVBEQVRFX1RZUEVfVU5TUEVDSUZJRUQQABIfChtDT05GSUdfVVBEQVRFX1RZUEVfU05BUFNIT1QQARIcChhDT05GSUdfVVBEQVRFX1RZUEVfREVMVEEQAhIdChlDT05GSUdfVVBEQVRFX1RZUEVfUkVMT0FEEAMyjAMKDUNvbmZpZ1NlcnZpY2USYQoLV2F0Y2hDb25maWcSKS54c3RvY2tzdHJhdC5jb25maWcudjEuV2F0Y2hDb25maWdSZXF1ZXN0GiUueHN0b2Nrc3RyYXQuY29uZmlnLnYxLkNvbmZpZ1NuYXBzaG90MAESWwoJR2V0Q29uZmlnEicueHN0b2Nrc3RyYXQuY29uZmlnLnYxLkdldENvbmZpZ1JlcXVlc3QaJS54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnU25hcHNob3QSXgoJU2V0Q29uZmlnEicueHN0b2Nrc3RyYXQuY29uZmlnLnYxLlNldENvbmZpZ1JlcXVlc3QaKC54c3RvY2tzdHJhdC5jb25maWcudjEuU2V0Q29uZmlnUmVzcG9uc2USWwoITGlzdEtleXMSJi54c3RvY2tzdHJhdC5jb25maWcudjEuTGlzdEtleXNSZXF1ZXN0GicueHN0b2Nrc3RyYXQuY29uZmlnLnYxLkxpc3RLZXlzUmVzcG9uc2VCPFo6Z2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
+  fileDesc("ChZjb25maWcvdjEvY29uZmlnLnByb3RvEhV4c3RvY2tzdHJhdC5jb25maWcudjEivgEKEldhdGNoQ29uZmlnUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSEQoJY2xpZW50X2lkGAIgASgJEg8KB3ZlcnNpb24YAyABKAkSNwoLZW52aXJvbm1lbnQYBCABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuRW52aXJvbm1lbnQSOAoMdHJhZGluZ19tb2RlGAUgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlIsEDCg5Db25maWdTbmFwc2hvdBIRCgluYW1lc3BhY2UYASABKAkSDwoHdmVyc2lvbhgCIAEoCRIuCgp1cGRhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBJBCgZ2YWx1ZXMYBCADKAsyMS54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnU25hcHNob3QuVmFsdWVzRW50cnkSPAoLdXBkYXRlX3R5cGUYBSABKA4yJy54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnVXBkYXRlVHlwZRIUCgxjaGFuZ2VkX2tleXMYBiADKAkSNwoLZW52aXJvbm1lbnQYByABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuRW52aXJvbm1lbnQSOAoMdHJhZGluZ19tb2RlGAggASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlGlEKC1ZhbHVlc0VudHJ5EgsKA2tleRgBIAEoCRIxCgV2YWx1ZRgCIAEoCzIiLnhzdG9ja3N0cmF0LmNvbmZpZy52MS5Db25maWdWYWx1ZToCOAEi1AEKC0NvbmZpZ1ZhbHVlEhQKCnN0cmluZ192YWwYASABKAlIABIRCgdpbnRfdmFsGAIgASgDSAASEwoJZmxvYXRfdmFsGAMgASgBSAASEgoIYm9vbF92YWwYBCABKAhIABIrCghqc29uX3ZhbBgFIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3RIABIRCglpc19zZWNyZXQYBiABKAgSEwoLZGVzY3JpcHRpb24YByABKAkSFQoNZGVmYXVsdF92YWx1ZRgIIAEoCUIHCgV2YWx1ZSJsCg5WYWxpZGF0aW9uUnVsZRI0Cgp2YWx1ZV90eXBlGAEgASgOMiAueHN0b2Nrc3RyYXQuY29uZmlnLnYxLlZhbHVlVHlwZRIRCgltaW5fdmFsdWUYAiABKAISEQoJbWF4X3ZhbHVlGAMgASgCIpgBChBHZXRDb25maWdSZXF1ZXN0EhEKCW5hbWVzcGFjZRgBIAEoCRI3CgtlbnZpcm9ubWVudBgCIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5FbnZpcm9ubWVudBI4Cgx0cmFkaW5nX21vZGUYAyABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUi+AEKEFNldENvbmZpZ1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJEgsKA2tleRgCIAEoCRIxCgV2YWx1ZRgDIAEoCzIiLnhzdG9ja3N0cmF0LmNvbmZpZy52MS5Db25maWdWYWx1ZRIOCgZhdXRob3IYBCABKAkSDgoGcmVhc29uGAUgASgJEjcKC2Vudmlyb25tZW50GAYgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkVudmlyb25tZW50EjgKDHRyYWRpbmdfbW9kZRgHIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UcmFkaW5nTW9kZSJUChFTZXRDb25maWdSZXNwb25zZRIPCgd2ZXJzaW9uGAEgASgJEi4KCnVwZGF0ZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIpcBCg9MaXN0S2V5c1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJEjcKC2Vudmlyb25tZW50GAIgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkVudmlyb25tZW50EjgKDHRyYWRpbmdfbW9kZRgDIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UcmFkaW5nTW9kZSJGChBMaXN0S2V5c1Jlc3BvbnNlEjIKBGtleXMYASADKAsyJC54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnS2V5TWV0YSKkAgoNQ29uZmlnS2V5TWV0YRILCgNrZXkYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSFQoNZGVmYXVsdF92YWx1ZRgDIAEoCRIRCglpc19zZWNyZXQYBCABKAgSGQoRY29uc3VtaW5nX3NlcnZpY2UYBSABKAkSNwoLZW52aXJvbm1lbnQYBiABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuRW52aXJvbm1lbnQSOAoMdHJhZGluZ19tb2RlGAcgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEjkKCnZhbGlkYXRpb24YCCABKAsyJS54c3RvY2tzdHJhdC5jb25maWcudjEuVmFsaWRhdGlvblJ1bGUqlAEKEENvbmZpZ1VwZGF0ZVR5cGUSIgoeQ09ORklHX1VQREFURV9UWVBFX1VOU1BFQ0lGSUVEEAASHwobQ09ORklHX1VQREFURV9UWVBFX1NOQVBTSE9UEAESHAoYQ09ORklHX1VQREFURV9UWVBFX0RFTFRBEAISHQoZQ09ORklHX1VQREFURV9UWVBFX1JFTE9BRBADKkEKCVZhbHVlVHlwZRIaChZWQUxVRV9UWVBFX1VOU1BFQ0lGSUVEEAASGAoUVkFMVUVfVFlQRV9GTE9BVF9NQVAQATKMAwoNQ29uZmlnU2VydmljZRJhCgtXYXRjaENvbmZpZxIpLnhzdG9ja3N0cmF0LmNvbmZpZy52MS5XYXRjaENvbmZpZ1JlcXVlc3QaJS54c3RvY2tzdHJhdC5jb25maWcudjEuQ29uZmlnU25hcHNob3QwARJbCglHZXRDb25maWcSJy54c3RvY2tzdHJhdC5jb25maWcudjEuR2V0Q29uZmlnUmVxdWVzdBolLnhzdG9ja3N0cmF0LmNvbmZpZy52MS5Db25maWdTbmFwc2hvdBJeCglTZXRDb25maWcSJy54c3RvY2tzdHJhdC5jb25maWcudjEuU2V0Q29uZmlnUmVxdWVzdBooLnhzdG9ja3N0cmF0LmNvbmZpZy52MS5TZXRDb25maWdSZXNwb25zZRJbCghMaXN0S2V5cxImLnhzdG9ja3N0cmF0LmNvbmZpZy52MS5MaXN0S2V5c1JlcXVlc3QaJy54c3RvY2tzdHJhdC5jb25maWcudjEuTGlzdEtleXNSZXNwb25zZUI8WjpnaXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.config.v1.WatchConfigRequest
@@ -182,6 +182,37 @@ export const ConfigValueSchema: GenMessage<ConfigValue> = /*@__PURE__*/
   messageDesc(file_config_v1_config, 2);
 
 /**
+ * Validation constraints declared by the config service for a key.
+ * When value_type == VALUE_TYPE_FLOAT_MAP, every numeric leaf in the JSON value
+ * must satisfy [min_value, max_value]. Absent or VALUE_TYPE_UNSPECIFIED = no validation.
+ *
+ * @generated from message xstockstrat.config.v1.ValidationRule
+ */
+export type ValidationRule = Message<"xstockstrat.config.v1.ValidationRule"> & {
+  /**
+   * @generated from field: xstockstrat.config.v1.ValueType value_type = 1;
+   */
+  valueType: ValueType;
+
+  /**
+   * @generated from field: float min_value = 2;
+   */
+  minValue: number;
+
+  /**
+   * @generated from field: float max_value = 3;
+   */
+  maxValue: number;
+};
+
+/**
+ * Describes the message xstockstrat.config.v1.ValidationRule.
+ * Use `create(ValidationRuleSchema)` to create a new message.
+ */
+export const ValidationRuleSchema: GenMessage<ValidationRule> = /*@__PURE__*/
+  messageDesc(file_config_v1_config, 3);
+
+/**
  * @generated from message xstockstrat.config.v1.GetConfigRequest
  */
 export type GetConfigRequest = Message<"xstockstrat.config.v1.GetConfigRequest"> & {
@@ -206,7 +237,7 @@ export type GetConfigRequest = Message<"xstockstrat.config.v1.GetConfigRequest">
  * Use `create(GetConfigRequestSchema)` to create a new message.
  */
 export const GetConfigRequestSchema: GenMessage<GetConfigRequest> = /*@__PURE__*/
-  messageDesc(file_config_v1_config, 3);
+  messageDesc(file_config_v1_config, 4);
 
 /**
  * @generated from message xstockstrat.config.v1.SetConfigRequest
@@ -253,7 +284,7 @@ export type SetConfigRequest = Message<"xstockstrat.config.v1.SetConfigRequest">
  * Use `create(SetConfigRequestSchema)` to create a new message.
  */
 export const SetConfigRequestSchema: GenMessage<SetConfigRequest> = /*@__PURE__*/
-  messageDesc(file_config_v1_config, 4);
+  messageDesc(file_config_v1_config, 5);
 
 /**
  * @generated from message xstockstrat.config.v1.SetConfigResponse
@@ -275,7 +306,7 @@ export type SetConfigResponse = Message<"xstockstrat.config.v1.SetConfigResponse
  * Use `create(SetConfigResponseSchema)` to create a new message.
  */
 export const SetConfigResponseSchema: GenMessage<SetConfigResponse> = /*@__PURE__*/
-  messageDesc(file_config_v1_config, 5);
+  messageDesc(file_config_v1_config, 6);
 
 /**
  * @generated from message xstockstrat.config.v1.ListKeysRequest
@@ -302,7 +333,7 @@ export type ListKeysRequest = Message<"xstockstrat.config.v1.ListKeysRequest"> &
  * Use `create(ListKeysRequestSchema)` to create a new message.
  */
 export const ListKeysRequestSchema: GenMessage<ListKeysRequest> = /*@__PURE__*/
-  messageDesc(file_config_v1_config, 6);
+  messageDesc(file_config_v1_config, 7);
 
 /**
  * @generated from message xstockstrat.config.v1.ListKeysResponse
@@ -319,7 +350,7 @@ export type ListKeysResponse = Message<"xstockstrat.config.v1.ListKeysResponse">
  * Use `create(ListKeysResponseSchema)` to create a new message.
  */
 export const ListKeysResponseSchema: GenMessage<ListKeysResponse> = /*@__PURE__*/
-  messageDesc(file_config_v1_config, 7);
+  messageDesc(file_config_v1_config, 8);
 
 /**
  * @generated from message xstockstrat.config.v1.ConfigKeyMeta
@@ -359,6 +390,13 @@ export type ConfigKeyMeta = Message<"xstockstrat.config.v1.ConfigKeyMeta"> & {
    * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 7;
    */
   tradingMode: TradingMode;
+
+  /**
+   * optional; absent = no validation
+   *
+   * @generated from field: xstockstrat.config.v1.ValidationRule validation = 8;
+   */
+  validation?: ValidationRule | undefined;
 };
 
 /**
@@ -366,7 +404,7 @@ export type ConfigKeyMeta = Message<"xstockstrat.config.v1.ConfigKeyMeta"> & {
  * Use `create(ConfigKeyMetaSchema)` to create a new message.
  */
 export const ConfigKeyMetaSchema: GenMessage<ConfigKeyMeta> = /*@__PURE__*/
-  messageDesc(file_config_v1_config, 8);
+  messageDesc(file_config_v1_config, 9);
 
 /**
  * @generated from enum xstockstrat.config.v1.ConfigUpdateType
@@ -404,6 +442,27 @@ export enum ConfigUpdateType {
  */
 export const ConfigUpdateTypeSchema: GenEnum<ConfigUpdateType> = /*@__PURE__*/
   enumDesc(file_config_v1_config, 0);
+
+/**
+ * @generated from enum xstockstrat.config.v1.ValueType
+ */
+export enum ValueType {
+  /**
+   * @generated from enum value: VALUE_TYPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: VALUE_TYPE_FLOAT_MAP = 1;
+   */
+  FLOAT_MAP = 1,
+}
+
+/**
+ * Describes the enum xstockstrat.config.v1.ValueType.
+ */
+export const ValueTypeSchema: GenEnum<ValueType> = /*@__PURE__*/
+  enumDesc(file_config_v1_config, 1);
 
 /**
  * ConfigService — live configuration via server-streaming WatchConfig.

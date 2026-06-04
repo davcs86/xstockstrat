@@ -27,7 +27,7 @@ from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 from common.v1 import common_pb2 as common_dot_v1_dot_common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16\x63onfig/v1/config.proto\x12\x15xstockstrat.config.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x16\x63ommon/v1/common.proto\"\xbe\x01\n\x12WatchConfigRequest\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x11\n\tclient_id\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\x12\x37\n\x0b\x65nvironment\x18\x04 \x01(\x0e\x32\".xstockstrat.common.v1.Environment\x12\x38\n\x0ctrading_mode\x18\x05 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\"\xc1\x03\n\x0e\x43onfigSnapshot\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x0f\n\x07version\x18\x02 \x01(\t\x12.\n\nupdated_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x41\n\x06values\x18\x04 \x03(\x0b\x32\x31.xstockstrat.config.v1.ConfigSnapshot.ValuesEntry\x12<\n\x0bupdate_type\x18\x05 \x01(\x0e\x32\'.xstockstrat.config.v1.ConfigUpdateType\x12\x14\n\x0c\x63hanged_keys\x18\x06 \x03(\t\x12\x37\n\x0b\x65nvironment\x18\x07 \x01(\x0e\x32\".xstockstrat.common.v1.Environment\x12\x38\n\x0ctrading_mode\x18\x08 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\x1aQ\n\x0bValuesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x31\n\x05value\x18\x02 \x01(\x0b\x32\".xstockstrat.config.v1.ConfigValue:\x02\x38\x01\"\xd4\x01\n\x0b\x43onfigValue\x12\x14\n\nstring_val\x18\x01 \x01(\tH\x00\x12\x11\n\x07int_val\x18\x02 \x01(\x03H\x00\x12\x13\n\tfloat_val\x18\x03 \x01(\x01H\x00\x12\x12\n\x08\x62ool_val\x18\x04 \x01(\x08H\x00\x12+\n\x08json_val\x18\x05 \x01(\x0b\x32\x17.google.protobuf.StructH\x00\x12\x11\n\tis_secret\x18\x06 \x01(\x08\x12\x13\n\x0b\x64\x65scription\x18\x07 \x01(\t\x12\x15\n\rdefault_value\x18\x08 \x01(\tB\x07\n\x05value\"\x98\x01\n\x10GetConfigRequest\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x37\n\x0b\x65nvironment\x18\x02 \x01(\x0e\x32\".xstockstrat.common.v1.Environment\x12\x38\n\x0ctrading_mode\x18\x03 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\"\xf8\x01\n\x10SetConfigRequest\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x0b\n\x03key\x18\x02 \x01(\t\x12\x31\n\x05value\x18\x03 \x01(\x0b\x32\".xstockstrat.config.v1.ConfigValue\x12\x0e\n\x06\x61uthor\x18\x04 \x01(\t\x12\x0e\n\x06reason\x18\x05 \x01(\t\x12\x37\n\x0b\x65nvironment\x18\x06 \x01(\x0e\x32\".xstockstrat.common.v1.Environment\x12\x38\n\x0ctrading_mode\x18\x07 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\"T\n\x11SetConfigResponse\x12\x0f\n\x07version\x18\x01 \x01(\t\x12.\n\nupdated_at\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x97\x01\n\x0fListKeysRequest\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x37\n\x0b\x65nvironment\x18\x02 \x01(\x0e\x32\".xstockstrat.common.v1.Environment\x12\x38\n\x0ctrading_mode\x18\x03 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\"F\n\x10ListKeysResponse\x12\x32\n\x04keys\x18\x01 \x03(\x0b\x32$.xstockstrat.config.v1.ConfigKeyMeta\"\xe9\x01\n\rConfigKeyMeta\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x15\n\rdefault_value\x18\x03 \x01(\t\x12\x11\n\tis_secret\x18\x04 \x01(\x08\x12\x19\n\x11\x63onsuming_service\x18\x05 \x01(\t\x12\x37\n\x0b\x65nvironment\x18\x06 \x01(\x0e\x32\".xstockstrat.common.v1.Environment\x12\x38\n\x0ctrading_mode\x18\x07 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode*\x94\x01\n\x10\x43onfigUpdateType\x12\"\n\x1e\x43ONFIG_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n\x1b\x43ONFIG_UPDATE_TYPE_SNAPSHOT\x10\x01\x12\x1c\n\x18\x43ONFIG_UPDATE_TYPE_DELTA\x10\x02\x12\x1d\n\x19\x43ONFIG_UPDATE_TYPE_RELOAD\x10\x03\x32\x8c\x03\n\rConfigService\x12\x61\n\x0bWatchConfig\x12).xstockstrat.config.v1.WatchConfigRequest\x1a%.xstockstrat.config.v1.ConfigSnapshot0\x01\x12[\n\tGetConfig\x12\'.xstockstrat.config.v1.GetConfigRequest\x1a%.xstockstrat.config.v1.ConfigSnapshot\x12^\n\tSetConfig\x12\'.xstockstrat.config.v1.SetConfigRequest\x1a(.xstockstrat.config.v1.SetConfigResponse\x12[\n\x08ListKeys\x12&.xstockstrat.config.v1.ListKeysRequest\x1a\'.xstockstrat.config.v1.ListKeysResponseB<Z:github.com/xstockstrat/contracts/gen/go/config/v1;configv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16\x63onfig/v1/config.proto\x12\x15xstockstrat.config.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x16\x63ommon/v1/common.proto\"\xbe\x01\n\x12WatchConfigRequest\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x11\n\tclient_id\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\x12\x37\n\x0b\x65nvironment\x18\x04 \x01(\x0e\x32\".xstockstrat.common.v1.Environment\x12\x38\n\x0ctrading_mode\x18\x05 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\"\xc1\x03\n\x0e\x43onfigSnapshot\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x0f\n\x07version\x18\x02 \x01(\t\x12.\n\nupdated_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x41\n\x06values\x18\x04 \x03(\x0b\x32\x31.xstockstrat.config.v1.ConfigSnapshot.ValuesEntry\x12<\n\x0bupdate_type\x18\x05 \x01(\x0e\x32\'.xstockstrat.config.v1.ConfigUpdateType\x12\x14\n\x0c\x63hanged_keys\x18\x06 \x03(\t\x12\x37\n\x0b\x65nvironment\x18\x07 \x01(\x0e\x32\".xstockstrat.common.v1.Environment\x12\x38\n\x0ctrading_mode\x18\x08 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\x1aQ\n\x0bValuesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x31\n\x05value\x18\x02 \x01(\x0b\x32\".xstockstrat.config.v1.ConfigValue:\x02\x38\x01\"\xd4\x01\n\x0b\x43onfigValue\x12\x14\n\nstring_val\x18\x01 \x01(\tH\x00\x12\x11\n\x07int_val\x18\x02 \x01(\x03H\x00\x12\x13\n\tfloat_val\x18\x03 \x01(\x01H\x00\x12\x12\n\x08\x62ool_val\x18\x04 \x01(\x08H\x00\x12+\n\x08json_val\x18\x05 \x01(\x0b\x32\x17.google.protobuf.StructH\x00\x12\x11\n\tis_secret\x18\x06 \x01(\x08\x12\x13\n\x0b\x64\x65scription\x18\x07 \x01(\t\x12\x15\n\rdefault_value\x18\x08 \x01(\tB\x07\n\x05value\"l\n\x0eValidationRule\x12\x34\n\nvalue_type\x18\x01 \x01(\x0e\x32 .xstockstrat.config.v1.ValueType\x12\x11\n\tmin_value\x18\x02 \x01(\x02\x12\x11\n\tmax_value\x18\x03 \x01(\x02\"\x98\x01\n\x10GetConfigRequest\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x37\n\x0b\x65nvironment\x18\x02 \x01(\x0e\x32\".xstockstrat.common.v1.Environment\x12\x38\n\x0ctrading_mode\x18\x03 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\"\xf8\x01\n\x10SetConfigRequest\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x0b\n\x03key\x18\x02 \x01(\t\x12\x31\n\x05value\x18\x03 \x01(\x0b\x32\".xstockstrat.config.v1.ConfigValue\x12\x0e\n\x06\x61uthor\x18\x04 \x01(\t\x12\x0e\n\x06reason\x18\x05 \x01(\t\x12\x37\n\x0b\x65nvironment\x18\x06 \x01(\x0e\x32\".xstockstrat.common.v1.Environment\x12\x38\n\x0ctrading_mode\x18\x07 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\"T\n\x11SetConfigResponse\x12\x0f\n\x07version\x18\x01 \x01(\t\x12.\n\nupdated_at\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x97\x01\n\x0fListKeysRequest\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x37\n\x0b\x65nvironment\x18\x02 \x01(\x0e\x32\".xstockstrat.common.v1.Environment\x12\x38\n\x0ctrading_mode\x18\x03 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\"F\n\x10ListKeysResponse\x12\x32\n\x04keys\x18\x01 \x03(\x0b\x32$.xstockstrat.config.v1.ConfigKeyMeta\"\xa4\x02\n\rConfigKeyMeta\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x15\n\rdefault_value\x18\x03 \x01(\t\x12\x11\n\tis_secret\x18\x04 \x01(\x08\x12\x19\n\x11\x63onsuming_service\x18\x05 \x01(\t\x12\x37\n\x0b\x65nvironment\x18\x06 \x01(\x0e\x32\".xstockstrat.common.v1.Environment\x12\x38\n\x0ctrading_mode\x18\x07 \x01(\x0e\x32\".xstockstrat.common.v1.TradingMode\x12\x39\n\nvalidation\x18\x08 \x01(\x0b\x32%.xstockstrat.config.v1.ValidationRule*\x94\x01\n\x10\x43onfigUpdateType\x12\"\n\x1e\x43ONFIG_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n\x1b\x43ONFIG_UPDATE_TYPE_SNAPSHOT\x10\x01\x12\x1c\n\x18\x43ONFIG_UPDATE_TYPE_DELTA\x10\x02\x12\x1d\n\x19\x43ONFIG_UPDATE_TYPE_RELOAD\x10\x03*A\n\tValueType\x12\x1a\n\x16VALUE_TYPE_UNSPECIFIED\x10\x00\x12\x18\n\x14VALUE_TYPE_FLOAT_MAP\x10\x01\x32\x8c\x03\n\rConfigService\x12\x61\n\x0bWatchConfig\x12).xstockstrat.config.v1.WatchConfigRequest\x1a%.xstockstrat.config.v1.ConfigSnapshot0\x01\x12[\n\tGetConfig\x12\'.xstockstrat.config.v1.GetConfigRequest\x1a%.xstockstrat.config.v1.ConfigSnapshot\x12^\n\tSetConfig\x12\'.xstockstrat.config.v1.SetConfigRequest\x1a(.xstockstrat.config.v1.SetConfigResponse\x12[\n\x08ListKeys\x12&.xstockstrat.config.v1.ListKeysRequest\x1a\'.xstockstrat.config.v1.ListKeysResponseB<Z:github.com/xstockstrat/contracts/gen/go/config/v1;configv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -37,8 +37,10 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._serialized_options = b'Z:github.com/xstockstrat/contracts/gen/go/config/v1;configv1'
   _globals['_CONFIGSNAPSHOT_VALUESENTRY']._loaded_options = None
   _globals['_CONFIGSNAPSHOT_VALUESENTRY']._serialized_options = b'8\001'
-  _globals['_CONFIGUPDATETYPE']._serialized_start=1951
-  _globals['_CONFIGUPDATETYPE']._serialized_end=2099
+  _globals['_CONFIGUPDATETYPE']._serialized_start=2120
+  _globals['_CONFIGUPDATETYPE']._serialized_end=2268
+  _globals['_VALUETYPE']._serialized_start=2270
+  _globals['_VALUETYPE']._serialized_end=2335
   _globals['_WATCHCONFIGREQUEST']._serialized_start=137
   _globals['_WATCHCONFIGREQUEST']._serialized_end=327
   _globals['_CONFIGSNAPSHOT']._serialized_start=330
@@ -47,18 +49,20 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_CONFIGSNAPSHOT_VALUESENTRY']._serialized_end=779
   _globals['_CONFIGVALUE']._serialized_start=782
   _globals['_CONFIGVALUE']._serialized_end=994
-  _globals['_GETCONFIGREQUEST']._serialized_start=997
-  _globals['_GETCONFIGREQUEST']._serialized_end=1149
-  _globals['_SETCONFIGREQUEST']._serialized_start=1152
-  _globals['_SETCONFIGREQUEST']._serialized_end=1400
-  _globals['_SETCONFIGRESPONSE']._serialized_start=1402
-  _globals['_SETCONFIGRESPONSE']._serialized_end=1486
-  _globals['_LISTKEYSREQUEST']._serialized_start=1489
-  _globals['_LISTKEYSREQUEST']._serialized_end=1640
-  _globals['_LISTKEYSRESPONSE']._serialized_start=1642
-  _globals['_LISTKEYSRESPONSE']._serialized_end=1712
-  _globals['_CONFIGKEYMETA']._serialized_start=1715
-  _globals['_CONFIGKEYMETA']._serialized_end=1948
-  _globals['_CONFIGSERVICE']._serialized_start=2102
-  _globals['_CONFIGSERVICE']._serialized_end=2498
+  _globals['_VALIDATIONRULE']._serialized_start=996
+  _globals['_VALIDATIONRULE']._serialized_end=1104
+  _globals['_GETCONFIGREQUEST']._serialized_start=1107
+  _globals['_GETCONFIGREQUEST']._serialized_end=1259
+  _globals['_SETCONFIGREQUEST']._serialized_start=1262
+  _globals['_SETCONFIGREQUEST']._serialized_end=1510
+  _globals['_SETCONFIGRESPONSE']._serialized_start=1512
+  _globals['_SETCONFIGRESPONSE']._serialized_end=1596
+  _globals['_LISTKEYSREQUEST']._serialized_start=1599
+  _globals['_LISTKEYSREQUEST']._serialized_end=1750
+  _globals['_LISTKEYSRESPONSE']._serialized_start=1752
+  _globals['_LISTKEYSRESPONSE']._serialized_end=1822
+  _globals['_CONFIGKEYMETA']._serialized_start=1825
+  _globals['_CONFIGKEYMETA']._serialized_end=2117
+  _globals['_CONFIGSERVICE']._serialized_start=2338
+  _globals['_CONFIGSERVICE']._serialized_end=2734
 # @@protoc_insertion_point(module_scope)

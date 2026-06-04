@@ -1,30 +1,47 @@
 'use client';
 import { Suspense, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-function LoginForm() {
-  const router = useRouter();
+function OAuthLoginForm() {
   const searchParams = useSearchParams();
+  const redirectUri = searchParams.get('redirect_uri');
+  const state = searchParams.get('state');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  if (!redirectUri || !state) {
+    return (
+      <div className="min-h-screen bg-background font-sans flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm">
+          <CardHeader>
+            <CardTitle className="text-2xl">Authorize Agent Access</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-destructive">Invalid OAuth authorization request.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/trader/api/auth/login', {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
       if (res.ok) {
-        router.push(searchParams.get('redirect') ?? '/');
+        // redirect_uri is an external OAuth callback — not subject to the basePath allowlist.
+        window.location.href = `${redirectUri}?state=${encodeURIComponent(state!)}`;
       } else {
         const data = await res.json().catch(() => ({}));
         setError(data.error ?? 'Login failed. Please check your credentials.');
@@ -40,7 +57,7 @@ function LoginForm() {
     <div className="min-h-screen bg-background font-sans flex items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">xstockstrat Trader</CardTitle>
+          <CardTitle className="text-2xl">xstockstrat Platform — Authorize Agent Access</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -66,7 +83,7 @@ function LoginForm() {
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Signing in…' : 'Sign in'}
+              {loading ? 'Authorizing…' : 'Authorize'}
             </Button>
           </form>
         </CardContent>
@@ -75,29 +92,10 @@ function LoginForm() {
   );
 }
 
-function LoginSkeleton() {
+export default function OAuthLoginPage() {
   return (
-    <div className="min-h-screen bg-background font-sans flex items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">xstockstrat Trader</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="h-10 rounded-md bg-secondary animate-pulse" />
-            <div className="h-10 rounded-md bg-secondary animate-pulse" />
-            <div className="h-10 rounded-md bg-secondary/80 animate-pulse" />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={<LoginSkeleton />}>
-      <LoginForm />
+    <Suspense fallback={null}>
+      <OAuthLoginForm />
     </Suspense>
   );
 }

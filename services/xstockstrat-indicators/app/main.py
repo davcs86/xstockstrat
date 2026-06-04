@@ -13,6 +13,7 @@ import logging
 import os
 import signal
 
+import asyncpg
 import grpc
 from gen.indicators.v1 import indicators_pb2_grpc
 from gen.indicators.v1.indicators_pb2 import DESCRIPTOR as INDICATORS_DESCRIPTOR
@@ -30,6 +31,9 @@ log = logging.getLogger(__name__)
 
 GRPC_PORT = os.environ.get("GRPC_PORT", "50054")
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", "postgres://xstockstrat:devpassword@localhost:5432/xstockstrat"
+)
 
 
 async def serve():
@@ -41,7 +45,10 @@ async def serve():
     await config_watcher.wait_for_snapshot(timeout_seconds=90)
     log.info("config snapshot received")
 
-    servicer = IndicatorsServicer(config_watcher=config_watcher)
+    db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
+    log.info("database pool established")
+
+    servicer = IndicatorsServicer(config_watcher=config_watcher, db_pool=db_pool)
 
     # ── gRPC server (internal, port 50054) ────────────────────────────────
     grpc_server = grpc.aio.server()
@@ -60,6 +67,7 @@ async def serve():
     def handle_shutdown(sig, frame):
         log.info("received signal %s, shutting down", sig)
         asyncio.get_event_loop().create_task(grpc_server.stop(grace=5))
+        asyncio.get_event_loop().create_task(db_pool.close())
 
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)

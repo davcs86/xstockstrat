@@ -65,6 +65,20 @@ enum ConfigUpdateType {
   CONFIG_UPDATE_TYPE_RELOAD = 3;    // force full reload signal
 }
 
+enum ValueType {
+  VALUE_TYPE_UNSPECIFIED = 0;
+  VALUE_TYPE_FLOAT_MAP = 1;
+}
+
+// Validation constraints declared by the config service for a key.
+// When value_type == VALUE_TYPE_FLOAT_MAP, every numeric leaf in the JSON value
+// must satisfy [min_value, max_value]. Absent or VALUE_TYPE_UNSPECIFIED = no validation.
+message ValidationRule {
+  ValueType value_type = 1;
+  float min_value = 2;
+  float max_value = 3;
+}
+
 message GetConfigRequest {
   string namespace = 1;
   xstockstrat.common.v1.Environment environment = 2;
@@ -104,4 +118,5 @@ message ConfigKeyMeta {
   string consuming_service = 5;
   xstockstrat.common.v1.Environment environment = 6;
   xstockstrat.common.v1.TradingMode trading_mode = 7;
+  ValidationRule validation = 8;  // optional; absent = no validation
 }

@@ -50,6 +50,9 @@ export default defineConfig({
       IDENTITY_ENDPOINT:   '127.0.0.1:9092',
       TRADING_ENDPOINT:    '127.0.0.1:9092',
       PORTFOLIO_ENDPOINT:  '127.0.0.1:9092',
+      // config-ui segment: ConfigService + IngestService are mocked on port 9093
+      CONFIG_ENDPOINT:     '127.0.0.1:9093',
+      INGEST_ENDPOINT:     '127.0.0.1:9093',
       JWT_SECRET:          'test-jwt-secret-for-e2e-tests-min32c',
     },
   },
