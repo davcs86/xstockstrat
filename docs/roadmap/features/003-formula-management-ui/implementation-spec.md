@@ -116,7 +116,7 @@ Expected: no output (exit code 0).
 
 ### Step 2 — proto-gen: Regenerate proto stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/python/indicators/v1/indicators_pb2.py` — modify (regenerated)
@@ -1021,3 +1021,8 @@ cd services/xstockstrat-ui && pnpm run lint
 **Spec said**: run `cd packages/proto && buf lint && buf breaking --against '.git#branch=main-dev'`
 **Actual**: `buf` not installed in environment; validated proto syntax with `python3 -m grpc_tools.protoc` (exit 0) and confirmed no lines removed (purely additive change).
 **Reason**: `buf` unavailable in this remote execution environment — same fallback used in phase3-deviations.md.
+
+### Deviation: Step 2 — proto-gen
+**Spec said**: run `./scripts/buf-gen.sh` (intended via the `Dockerfile.codegen` container per `scripts/localenv-setup.sh`).
+**Actual**: the Docker codegen container could not be built (Docker Hub returned HTTP 429 unauthenticated-pull rate limit on `golang:1.25-trixie`). Installed the codegen toolchain directly on the host instead, pinned to the **CI `proto-freshness` job versions** in `.github/workflows/ci.yml` (the authoritative gate) rather than the stale pins in `Dockerfile.codegen`: `buf 1.69.0`, `protoc-gen-go@v1.36.11`, `protoc-gen-go-grpc@v1.6.2`, `protoc-gen-connect-go@v1.19.2`, `grpcio-tools==1.80.0` + `protobuf==6.31.1`, and TS plugins from the committed lockfile (`protoc-gen-es@2.12.0`, `protoc-gen-connect-es@1.7.0`, `ts-proto@2.11.8`). Ran `./scripts/buf-gen.sh` unchanged. Verified the resulting `git diff packages/proto/gen/` is limited to the 12 indicators stub files (no version-header drift in sibling services), i.e. CI's `git diff --exit-code` would pass.
+**Reason**: Docker Hub rate limit blocked the sanctioned container path; matching the CI toolchain on the host produces byte-identical output to what `proto-freshness` regenerates. Note for a follow-up: `Dockerfile.codegen` pins `protoc-gen-go-grpc@v1.6.1`/`protoc-gen-connect-go@v1.19.2` while CI and the committed stubs use `v1.6.2`/`v1.19.2` — the Dockerfile go-grpc pin is stale, but that is outside this step's scope.

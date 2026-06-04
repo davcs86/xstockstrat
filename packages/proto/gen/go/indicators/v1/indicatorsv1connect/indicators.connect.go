@@ -48,6 +48,15 @@ const (
 	// IndicatorsServiceGetFormulaProcedure is the fully-qualified name of the IndicatorsService's
 	// GetFormula RPC.
 	IndicatorsServiceGetFormulaProcedure = "/xstockstrat.indicators.v1.IndicatorsService/GetFormula"
+	// IndicatorsServiceListFormulasProcedure is the fully-qualified name of the IndicatorsService's
+	// ListFormulas RPC.
+	IndicatorsServiceListFormulasProcedure = "/xstockstrat.indicators.v1.IndicatorsService/ListFormulas"
+	// IndicatorsServiceUpdateFormulaProcedure is the fully-qualified name of the IndicatorsService's
+	// UpdateFormula RPC.
+	IndicatorsServiceUpdateFormulaProcedure = "/xstockstrat.indicators.v1.IndicatorsService/UpdateFormula"
+	// IndicatorsServiceDeleteFormulaProcedure is the fully-qualified name of the IndicatorsService's
+	// DeleteFormula RPC.
+	IndicatorsServiceDeleteFormulaProcedure = "/xstockstrat.indicators.v1.IndicatorsService/DeleteFormula"
 )
 
 // IndicatorsServiceClient is a client for the xstockstrat.indicators.v1.IndicatorsService service.
@@ -63,6 +72,14 @@ type IndicatorsServiceClient interface {
 	RegisterFormula(context.Context, *connect.Request[v1.RegisterFormulaRequest]) (*connect.Response[v1.RegisterFormulaResponse], error)
 	// Get a registered formula
 	GetFormula(context.Context, *connect.Request[v1.GetFormulaRequest]) (*connect.Response[v1.FormulaDefinition], error)
+	// List formula definitions with optional author filter and pagination
+	ListFormulas(context.Context, *connect.Request[v1.ListFormulasRequest]) (*connect.Response[v1.ListFormulasResponse], error)
+	// Update a formula's name, description, source, or is_public flag
+	// Returns PERMISSION_DENIED if user_id does not match author
+	UpdateFormula(context.Context, *connect.Request[v1.UpdateFormulaRequest]) (*connect.Response[v1.UpdateFormulaResponse], error)
+	// Delete a formula by ID
+	// Returns PERMISSION_DENIED if user_id does not match author
+	DeleteFormula(context.Context, *connect.Request[v1.DeleteFormulaRequest]) (*connect.Response[v1.DeleteFormulaResponse], error)
 }
 
 // NewIndicatorsServiceClient constructs a client for the
@@ -107,6 +124,24 @@ func NewIndicatorsServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(indicatorsServiceMethods.ByName("GetFormula")),
 			connect.WithClientOptions(opts...),
 		),
+		listFormulas: connect.NewClient[v1.ListFormulasRequest, v1.ListFormulasResponse](
+			httpClient,
+			baseURL+IndicatorsServiceListFormulasProcedure,
+			connect.WithSchema(indicatorsServiceMethods.ByName("ListFormulas")),
+			connect.WithClientOptions(opts...),
+		),
+		updateFormula: connect.NewClient[v1.UpdateFormulaRequest, v1.UpdateFormulaResponse](
+			httpClient,
+			baseURL+IndicatorsServiceUpdateFormulaProcedure,
+			connect.WithSchema(indicatorsServiceMethods.ByName("UpdateFormula")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteFormula: connect.NewClient[v1.DeleteFormulaRequest, v1.DeleteFormulaResponse](
+			httpClient,
+			baseURL+IndicatorsServiceDeleteFormulaProcedure,
+			connect.WithSchema(indicatorsServiceMethods.ByName("DeleteFormula")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -117,6 +152,9 @@ type indicatorsServiceClient struct {
 	listIndicators   *connect.Client[v1.ListIndicatorsRequest, v1.ListIndicatorsResponse]
 	registerFormula  *connect.Client[v1.RegisterFormulaRequest, v1.RegisterFormulaResponse]
 	getFormula       *connect.Client[v1.GetFormulaRequest, v1.FormulaDefinition]
+	listFormulas     *connect.Client[v1.ListFormulasRequest, v1.ListFormulasResponse]
+	updateFormula    *connect.Client[v1.UpdateFormulaRequest, v1.UpdateFormulaResponse]
+	deleteFormula    *connect.Client[v1.DeleteFormulaRequest, v1.DeleteFormulaResponse]
 }
 
 // ComputeIndicator calls xstockstrat.indicators.v1.IndicatorsService.ComputeIndicator.
@@ -144,6 +182,21 @@ func (c *indicatorsServiceClient) GetFormula(ctx context.Context, req *connect.R
 	return c.getFormula.CallUnary(ctx, req)
 }
 
+// ListFormulas calls xstockstrat.indicators.v1.IndicatorsService.ListFormulas.
+func (c *indicatorsServiceClient) ListFormulas(ctx context.Context, req *connect.Request[v1.ListFormulasRequest]) (*connect.Response[v1.ListFormulasResponse], error) {
+	return c.listFormulas.CallUnary(ctx, req)
+}
+
+// UpdateFormula calls xstockstrat.indicators.v1.IndicatorsService.UpdateFormula.
+func (c *indicatorsServiceClient) UpdateFormula(ctx context.Context, req *connect.Request[v1.UpdateFormulaRequest]) (*connect.Response[v1.UpdateFormulaResponse], error) {
+	return c.updateFormula.CallUnary(ctx, req)
+}
+
+// DeleteFormula calls xstockstrat.indicators.v1.IndicatorsService.DeleteFormula.
+func (c *indicatorsServiceClient) DeleteFormula(ctx context.Context, req *connect.Request[v1.DeleteFormulaRequest]) (*connect.Response[v1.DeleteFormulaResponse], error) {
+	return c.deleteFormula.CallUnary(ctx, req)
+}
+
 // IndicatorsServiceHandler is an implementation of the xstockstrat.indicators.v1.IndicatorsService
 // service.
 type IndicatorsServiceHandler interface {
@@ -158,6 +211,14 @@ type IndicatorsServiceHandler interface {
 	RegisterFormula(context.Context, *connect.Request[v1.RegisterFormulaRequest]) (*connect.Response[v1.RegisterFormulaResponse], error)
 	// Get a registered formula
 	GetFormula(context.Context, *connect.Request[v1.GetFormulaRequest]) (*connect.Response[v1.FormulaDefinition], error)
+	// List formula definitions with optional author filter and pagination
+	ListFormulas(context.Context, *connect.Request[v1.ListFormulasRequest]) (*connect.Response[v1.ListFormulasResponse], error)
+	// Update a formula's name, description, source, or is_public flag
+	// Returns PERMISSION_DENIED if user_id does not match author
+	UpdateFormula(context.Context, *connect.Request[v1.UpdateFormulaRequest]) (*connect.Response[v1.UpdateFormulaResponse], error)
+	// Delete a formula by ID
+	// Returns PERMISSION_DENIED if user_id does not match author
+	DeleteFormula(context.Context, *connect.Request[v1.DeleteFormulaRequest]) (*connect.Response[v1.DeleteFormulaResponse], error)
 }
 
 // NewIndicatorsServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -197,6 +258,24 @@ func NewIndicatorsServiceHandler(svc IndicatorsServiceHandler, opts ...connect.H
 		connect.WithSchema(indicatorsServiceMethods.ByName("GetFormula")),
 		connect.WithHandlerOptions(opts...),
 	)
+	indicatorsServiceListFormulasHandler := connect.NewUnaryHandler(
+		IndicatorsServiceListFormulasProcedure,
+		svc.ListFormulas,
+		connect.WithSchema(indicatorsServiceMethods.ByName("ListFormulas")),
+		connect.WithHandlerOptions(opts...),
+	)
+	indicatorsServiceUpdateFormulaHandler := connect.NewUnaryHandler(
+		IndicatorsServiceUpdateFormulaProcedure,
+		svc.UpdateFormula,
+		connect.WithSchema(indicatorsServiceMethods.ByName("UpdateFormula")),
+		connect.WithHandlerOptions(opts...),
+	)
+	indicatorsServiceDeleteFormulaHandler := connect.NewUnaryHandler(
+		IndicatorsServiceDeleteFormulaProcedure,
+		svc.DeleteFormula,
+		connect.WithSchema(indicatorsServiceMethods.ByName("DeleteFormula")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.indicators.v1.IndicatorsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IndicatorsServiceComputeIndicatorProcedure:
@@ -209,6 +288,12 @@ func NewIndicatorsServiceHandler(svc IndicatorsServiceHandler, opts ...connect.H
 			indicatorsServiceRegisterFormulaHandler.ServeHTTP(w, r)
 		case IndicatorsServiceGetFormulaProcedure:
 			indicatorsServiceGetFormulaHandler.ServeHTTP(w, r)
+		case IndicatorsServiceListFormulasProcedure:
+			indicatorsServiceListFormulasHandler.ServeHTTP(w, r)
+		case IndicatorsServiceUpdateFormulaProcedure:
+			indicatorsServiceUpdateFormulaHandler.ServeHTTP(w, r)
+		case IndicatorsServiceDeleteFormulaProcedure:
+			indicatorsServiceDeleteFormulaHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -236,4 +321,16 @@ func (UnimplementedIndicatorsServiceHandler) RegisterFormula(context.Context, *c
 
 func (UnimplementedIndicatorsServiceHandler) GetFormula(context.Context, *connect.Request[v1.GetFormulaRequest]) (*connect.Response[v1.FormulaDefinition], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.indicators.v1.IndicatorsService.GetFormula is not implemented"))
+}
+
+func (UnimplementedIndicatorsServiceHandler) ListFormulas(context.Context, *connect.Request[v1.ListFormulasRequest]) (*connect.Response[v1.ListFormulasResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.indicators.v1.IndicatorsService.ListFormulas is not implemented"))
+}
+
+func (UnimplementedIndicatorsServiceHandler) UpdateFormula(context.Context, *connect.Request[v1.UpdateFormulaRequest]) (*connect.Response[v1.UpdateFormulaResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.indicators.v1.IndicatorsService.UpdateFormula is not implemented"))
+}
+
+func (UnimplementedIndicatorsServiceHandler) DeleteFormula(context.Context, *connect.Request[v1.DeleteFormulaRequest]) (*connect.Response[v1.DeleteFormulaResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.indicators.v1.IndicatorsService.DeleteFormula is not implemented"))
 }

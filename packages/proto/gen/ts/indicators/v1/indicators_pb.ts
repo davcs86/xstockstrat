@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file indicators/v1/indicators.proto.
  */
 export const file_indicators_v1_indicators: GenFile = /*@__PURE__*/
-  fileDesc("Ch5pbmRpY2F0b3JzL3YxL2luZGljYXRvcnMucHJvdG8SGXhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEijwIKF0NvbXB1dGVJbmRpY2F0b3JSZXF1ZXN0EhEKCWluZGljYXRvchgBIAEoCRIOCgZ2YWx1ZXMYAiADKAESTgoGcGFyYW1zGAMgAygLMj4ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Db21wdXRlSW5kaWNhdG9yUmVxdWVzdC5QYXJhbXNFbnRyeRIvCgVyYW5nZRgEIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USDgoGc3ltYm9sGAUgASgJEhEKCXRpbWVmcmFtZRgGIAEoCRotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAE6AjgBIvUBChhDb21wdXRlSW5kaWNhdG9yUmVzcG9uc2USOQoGcmVzdWx0GAEgAygLMikueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JQb2ludBIRCglpbmRpY2F0b3IYAiABKAkSWAoLcGFyYW1zX3VzZWQYAyADKAsyQy54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkNvbXB1dGVJbmRpY2F0b3JSZXNwb25zZS5QYXJhbXNVc2VkRW50cnkaMQoPUGFyYW1zVXNlZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEivAEKDkluZGljYXRvclBvaW50EigKBHRpbWUYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBXZhbHVlGAIgASgBEkMKBWV4dHJhGAMgAygLMjQueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JQb2ludC5FeHRyYUVudHJ5GiwKCkV4dHJhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASKgAgoVRXhlY3V0ZUZvcm11bGFSZXF1ZXN0EhIKCmZvcm11bGFfaWQYASABKAkSFgoOZm9ybXVsYV9zb3VyY2UYAiABKAkSKwoKaW5wdXRfZGF0YRgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSRgoDZW52GAQgAygLMjkueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5FeGVjdXRlRm9ybXVsYVJlcXVlc3QuRW52RW50cnkSGwoTdGltZW91dF9tc19vdmVycmlkZRgFIAEoBRIdChVtZW1vcnlfYnl0ZXNfb3ZlcnJpZGUYBiABKAMaKgoIRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASL1AQoWRXhlY3V0ZUZvcm11bGFSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEicKBm91dHB1dBgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSDgoGc3Rkb3V0GAMgASgJEg4KBnN0ZGVychgEIAEoCRIUCgxleGVjdXRpb25fbXMYBSABKAMSGQoRbWVtb3J5X3VzZWRfYnl0ZXMYBiABKAMSDQoFZXJyb3IYByABKAkSQQoLZXhpdF9yZWFzb24YCCABKA4yLC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLlNhbmRib3hFeGl0UmVhc29uIuYCChFGb3JtdWxhRGVmaW5pdGlvbhISCgpmb3JtdWxhX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSDgoGc291cmNlGAQgASgJEg4KBmF1dGhvchgFIAEoCRIuCgpjcmVhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglpc19wdWJsaWMYCCABKAgSUwoMaW5wdXRfc2NoZW1hGAkgAygLMj0ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhRGVmaW5pdGlvbi5JbnB1dFNjaGVtYUVudHJ5GjIKEElucHV0U2NoZW1hRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASIXChVMaXN0SW5kaWNhdG9yc1JlcXVlc3QiVgoWTGlzdEluZGljYXRvcnNSZXNwb25zZRI8CgppbmRpY2F0b3JzGAEgAygLMigueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JNZXRhImQKDUluZGljYXRvck1ldGESDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIXCg9yZXF1aXJlZF9wYXJhbXMYAyADKAkSFwoPb3B0aW9uYWxfcGFyYW1zGAQgAygJIuwBChZSZWdpc3RlckZvcm11bGFSZXF1ZXN0EgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDgoGc291cmNlGAMgASgJEhEKCWlzX3B1YmxpYxgEIAEoCBJYCgxpbnB1dF9zY2hlbWEYBSADKAsyQi54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLlJlZ2lzdGVyRm9ybXVsYVJlcXVlc3QuSW5wdXRTY2hlbWFFbnRyeRoyChBJbnB1dFNjaGVtYUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiLQoXUmVnaXN0ZXJGb3JtdWxhUmVzcG9uc2USEgoKZm9ybXVsYV9pZBgBIAEoCSInChFHZXRGb3JtdWxhUmVxdWVzdBISCgpmb3JtdWxhX2lkGAEgASgJKvIBChFTYW5kYm94RXhpdFJlYXNvbhIjCh9TQU5EQk9YX0VYSVRfUkVBU09OX1VOU1BFQ0lGSUVEEAASHwobU0FOREJPWF9FWElUX1JFQVNPTl9TVUNDRVNTEAESHwobU0FOREJPWF9FWElUX1JFQVNPTl9USU1FT1VUEAISJwojU0FOREJPWF9FWElUX1JFQVNPTl9NRU1PUllfRVhDRUVERUQQAxIlCiFTQU5EQk9YX0VYSVRfUkVBU09OX1JVTlRJTUVfRVJST1IQBBImCiJTQU5EQk9YX0VYSVRfUkVBU09OX0lNUE9SVF9CTE9DS0VEEAUy4gQKEUluZGljYXRvcnNTZXJ2aWNlEnsKEENvbXB1dGVJbmRpY2F0b3ISMi54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkNvbXB1dGVJbmRpY2F0b3JSZXF1ZXN0GjMueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Db21wdXRlSW5kaWNhdG9yUmVzcG9uc2USdQoORXhlY3V0ZUZvcm11bGESMC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkV4ZWN1dGVGb3JtdWxhUmVxdWVzdBoxLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRXhlY3V0ZUZvcm11bGFSZXNwb25zZRJ1Cg5MaXN0SW5kaWNhdG9ycxIwLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuTGlzdEluZGljYXRvcnNSZXF1ZXN0GjEueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5MaXN0SW5kaWNhdG9yc1Jlc3BvbnNlEngKD1JlZ2lzdGVyRm9ybXVsYRIxLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuUmVnaXN0ZXJGb3JtdWxhUmVxdWVzdBoyLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuUmVnaXN0ZXJGb3JtdWxhUmVzcG9uc2USaAoKR2V0Rm9ybXVsYRIsLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuR2V0Rm9ybXVsYVJlcXVlc3QaLC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkZvcm11bGFEZWZpbml0aW9uQkRaQmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9pbmRpY2F0b3JzL3YxO2luZGljYXRvcnN2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
+  fileDesc("Ch5pbmRpY2F0b3JzL3YxL2luZGljYXRvcnMucHJvdG8SGXhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEijwIKF0NvbXB1dGVJbmRpY2F0b3JSZXF1ZXN0EhEKCWluZGljYXRvchgBIAEoCRIOCgZ2YWx1ZXMYAiADKAESTgoGcGFyYW1zGAMgAygLMj4ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Db21wdXRlSW5kaWNhdG9yUmVxdWVzdC5QYXJhbXNFbnRyeRIvCgVyYW5nZRgEIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USDgoGc3ltYm9sGAUgASgJEhEKCXRpbWVmcmFtZRgGIAEoCRotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAE6AjgBIvUBChhDb21wdXRlSW5kaWNhdG9yUmVzcG9uc2USOQoGcmVzdWx0GAEgAygLMikueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JQb2ludBIRCglpbmRpY2F0b3IYAiABKAkSWAoLcGFyYW1zX3VzZWQYAyADKAsyQy54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkNvbXB1dGVJbmRpY2F0b3JSZXNwb25zZS5QYXJhbXNVc2VkRW50cnkaMQoPUGFyYW1zVXNlZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEivAEKDkluZGljYXRvclBvaW50EigKBHRpbWUYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBXZhbHVlGAIgASgBEkMKBWV4dHJhGAMgAygLMjQueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JQb2ludC5FeHRyYUVudHJ5GiwKCkV4dHJhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASKgAgoVRXhlY3V0ZUZvcm11bGFSZXF1ZXN0EhIKCmZvcm11bGFfaWQYASABKAkSFgoOZm9ybXVsYV9zb3VyY2UYAiABKAkSKwoKaW5wdXRfZGF0YRgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSRgoDZW52GAQgAygLMjkueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5FeGVjdXRlRm9ybXVsYVJlcXVlc3QuRW52RW50cnkSGwoTdGltZW91dF9tc19vdmVycmlkZRgFIAEoBRIdChVtZW1vcnlfYnl0ZXNfb3ZlcnJpZGUYBiABKAMaKgoIRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASL1AQoWRXhlY3V0ZUZvcm11bGFSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEicKBm91dHB1dBgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSDgoGc3Rkb3V0GAMgASgJEg4KBnN0ZGVychgEIAEoCRIUCgxleGVjdXRpb25fbXMYBSABKAMSGQoRbWVtb3J5X3VzZWRfYnl0ZXMYBiABKAMSDQoFZXJyb3IYByABKAkSQQoLZXhpdF9yZWFzb24YCCABKA4yLC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLlNhbmRib3hFeGl0UmVhc29uIuYCChFGb3JtdWxhRGVmaW5pdGlvbhISCgpmb3JtdWxhX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSDgoGc291cmNlGAQgASgJEg4KBmF1dGhvchgFIAEoCRIuCgpjcmVhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglpc19wdWJsaWMYCCABKAgSUwoMaW5wdXRfc2NoZW1hGAkgAygLMj0ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhRGVmaW5pdGlvbi5JbnB1dFNjaGVtYUVudHJ5GjIKEElucHV0U2NoZW1hRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASIXChVMaXN0SW5kaWNhdG9yc1JlcXVlc3QiVgoWTGlzdEluZGljYXRvcnNSZXNwb25zZRI8CgppbmRpY2F0b3JzGAEgAygLMigueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JNZXRhImQKDUluZGljYXRvck1ldGESDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIXCg9yZXF1aXJlZF9wYXJhbXMYAyADKAkSFwoPb3B0aW9uYWxfcGFyYW1zGAQgAygJIvwBChZSZWdpc3RlckZvcm11bGFSZXF1ZXN0EgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDgoGc291cmNlGAMgASgJEhEKCWlzX3B1YmxpYxgEIAEoCBJYCgxpbnB1dF9zY2hlbWEYBSADKAsyQi54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLlJlZ2lzdGVyRm9ybXVsYVJlcXVlc3QuSW5wdXRTY2hlbWFFbnRyeRIOCgZhdXRob3IYBiABKAkaMgoQSW5wdXRTY2hlbWFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIi0KF1JlZ2lzdGVyRm9ybXVsYVJlc3BvbnNlEhIKCmZvcm11bGFfaWQYASABKAkiJwoRR2V0Rm9ybXVsYVJlcXVlc3QSEgoKZm9ybXVsYV9pZBgBIAEoCSJsChNMaXN0Rm9ybXVsYXNSZXF1ZXN0EhUKDWF1dGhvcl9maWx0ZXIYASABKAkSFgoOaW5jbHVkZV9wdWJsaWMYAiABKAgSEQoJcGFnZV9zaXplGAMgASgFEhMKC3BhZ2Vfb2Zmc2V0GAQgASgFImsKFExpc3RGb3JtdWxhc1Jlc3BvbnNlEj4KCGZvcm11bGFzGAEgAygLMiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhRGVmaW5pdGlvbhITCgt0b3RhbF9jb3VudBgCIAEoBSKBAQoUVXBkYXRlRm9ybXVsYVJlcXVlc3QSEgoKZm9ybXVsYV9pZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSDgoGc291cmNlGAUgASgJEhEKCWlzX3B1YmxpYxgGIAEoCCJWChVVcGRhdGVGb3JtdWxhUmVzcG9uc2USPQoHZm9ybXVsYRgBIAEoCzIsLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRm9ybXVsYURlZmluaXRpb24iOwoURGVsZXRlRm9ybXVsYVJlcXVlc3QSEgoKZm9ybXVsYV9pZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJIigKFURlbGV0ZUZvcm11bGFSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIKvIBChFTYW5kYm94RXhpdFJlYXNvbhIjCh9TQU5EQk9YX0VYSVRfUkVBU09OX1VOU1BFQ0lGSUVEEAASHwobU0FOREJPWF9FWElUX1JFQVNPTl9TVUNDRVNTEAESHwobU0FOREJPWF9FWElUX1JFQVNPTl9USU1FT1VUEAISJwojU0FOREJPWF9FWElUX1JFQVNPTl9NRU1PUllfRVhDRUVERUQQAxIlCiFTQU5EQk9YX0VYSVRfUkVBU09OX1JVTlRJTUVfRVJST1IQBBImCiJTQU5EQk9YX0VYSVRfUkVBU09OX0lNUE9SVF9CTE9DS0VEEAUyuwcKEUluZGljYXRvcnNTZXJ2aWNlEnsKEENvbXB1dGVJbmRpY2F0b3ISMi54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkNvbXB1dGVJbmRpY2F0b3JSZXF1ZXN0GjMueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Db21wdXRlSW5kaWNhdG9yUmVzcG9uc2USdQoORXhlY3V0ZUZvcm11bGESMC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkV4ZWN1dGVGb3JtdWxhUmVxdWVzdBoxLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRXhlY3V0ZUZvcm11bGFSZXNwb25zZRJ1Cg5MaXN0SW5kaWNhdG9ycxIwLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuTGlzdEluZGljYXRvcnNSZXF1ZXN0GjEueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5MaXN0SW5kaWNhdG9yc1Jlc3BvbnNlEngKD1JlZ2lzdGVyRm9ybXVsYRIxLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuUmVnaXN0ZXJGb3JtdWxhUmVxdWVzdBoyLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuUmVnaXN0ZXJGb3JtdWxhUmVzcG9uc2USaAoKR2V0Rm9ybXVsYRIsLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuR2V0Rm9ybXVsYVJlcXVlc3QaLC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkZvcm11bGFEZWZpbml0aW9uEm8KDExpc3RGb3JtdWxhcxIuLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuTGlzdEZvcm11bGFzUmVxdWVzdBovLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuTGlzdEZvcm11bGFzUmVzcG9uc2UScgoNVXBkYXRlRm9ybXVsYRIvLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuVXBkYXRlRm9ybXVsYVJlcXVlc3QaMC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLlVwZGF0ZUZvcm11bGFSZXNwb25zZRJyCg1EZWxldGVGb3JtdWxhEi8ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5EZWxldGVGb3JtdWxhUmVxdWVzdBowLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRGVsZXRlRm9ybXVsYVJlc3BvbnNlQkRaQmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9pbmRpY2F0b3JzL3YxO2luZGljYXRvcnN2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.indicators.v1.ComputeIndicatorRequest
@@ -375,6 +375,13 @@ export type RegisterFormulaRequest = Message<"xstockstrat.indicators.v1.Register
    * @generated from field: map<string, string> input_schema = 5;
    */
   inputSchema: { [key: string]: string };
+
+  /**
+   * set by BFF from JWT claims; stored immutably
+   *
+   * @generated from field: string author = 6;
+   */
+  author: string;
 };
 
 /**
@@ -417,6 +424,170 @@ export type GetFormulaRequest = Message<"xstockstrat.indicators.v1.GetFormulaReq
  */
 export const GetFormulaRequestSchema: GenMessage<GetFormulaRequest> = /*@__PURE__*/
   messageDesc(file_indicators_v1_indicators, 11);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.ListFormulasRequest
+ */
+export type ListFormulasRequest = Message<"xstockstrat.indicators.v1.ListFormulasRequest"> & {
+  /**
+   * if non-empty, return only formulas where author == author_filter
+   *
+   * @generated from field: string author_filter = 1;
+   */
+  authorFilter: string;
+
+  /**
+   * if true, include all public formulas regardless of author_filter
+   *
+   * @generated from field: bool include_public = 2;
+   */
+  includePublic: boolean;
+
+  /**
+   * default 0 = no limit
+   *
+   * @generated from field: int32 page_size = 3;
+   */
+  pageSize: number;
+
+  /**
+   * default 0
+   *
+   * @generated from field: int32 page_offset = 4;
+   */
+  pageOffset: number;
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.ListFormulasRequest.
+ * Use `create(ListFormulasRequestSchema)` to create a new message.
+ */
+export const ListFormulasRequestSchema: GenMessage<ListFormulasRequest> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 12);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.ListFormulasResponse
+ */
+export type ListFormulasResponse = Message<"xstockstrat.indicators.v1.ListFormulasResponse"> & {
+  /**
+   * @generated from field: repeated xstockstrat.indicators.v1.FormulaDefinition formulas = 1;
+   */
+  formulas: FormulaDefinition[];
+
+  /**
+   * @generated from field: int32 total_count = 2;
+   */
+  totalCount: number;
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.ListFormulasResponse.
+ * Use `create(ListFormulasResponseSchema)` to create a new message.
+ */
+export const ListFormulasResponseSchema: GenMessage<ListFormulasResponse> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 13);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.UpdateFormulaRequest
+ */
+export type UpdateFormulaRequest = Message<"xstockstrat.indicators.v1.UpdateFormulaRequest"> & {
+  /**
+   * @generated from field: string formula_id = 1;
+   */
+  formulaId: string;
+
+  /**
+   * must match formula.author; returns PERMISSION_DENIED otherwise
+   *
+   * @generated from field: string user_id = 2;
+   */
+  userId: string;
+
+  /**
+   * @generated from field: string name = 3;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string description = 4;
+   */
+  description: string;
+
+  /**
+   * @generated from field: string source = 5;
+   */
+  source: string;
+
+  /**
+   * @generated from field: bool is_public = 6;
+   */
+  isPublic: boolean;
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.UpdateFormulaRequest.
+ * Use `create(UpdateFormulaRequestSchema)` to create a new message.
+ */
+export const UpdateFormulaRequestSchema: GenMessage<UpdateFormulaRequest> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 14);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.UpdateFormulaResponse
+ */
+export type UpdateFormulaResponse = Message<"xstockstrat.indicators.v1.UpdateFormulaResponse"> & {
+  /**
+   * @generated from field: xstockstrat.indicators.v1.FormulaDefinition formula = 1;
+   */
+  formula?: FormulaDefinition | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.UpdateFormulaResponse.
+ * Use `create(UpdateFormulaResponseSchema)` to create a new message.
+ */
+export const UpdateFormulaResponseSchema: GenMessage<UpdateFormulaResponse> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 15);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.DeleteFormulaRequest
+ */
+export type DeleteFormulaRequest = Message<"xstockstrat.indicators.v1.DeleteFormulaRequest"> & {
+  /**
+   * @generated from field: string formula_id = 1;
+   */
+  formulaId: string;
+
+  /**
+   * must match formula.author; returns PERMISSION_DENIED otherwise
+   *
+   * @generated from field: string user_id = 2;
+   */
+  userId: string;
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.DeleteFormulaRequest.
+ * Use `create(DeleteFormulaRequestSchema)` to create a new message.
+ */
+export const DeleteFormulaRequestSchema: GenMessage<DeleteFormulaRequest> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 16);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.DeleteFormulaResponse
+ */
+export type DeleteFormulaResponse = Message<"xstockstrat.indicators.v1.DeleteFormulaResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.DeleteFormulaResponse.
+ * Use `create(DeleteFormulaResponseSchema)` to create a new message.
+ */
+export const DeleteFormulaResponseSchema: GenMessage<DeleteFormulaResponse> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 17);
 
 /**
  * @generated from enum xstockstrat.indicators.v1.SandboxExitReason
@@ -516,6 +687,38 @@ export const IndicatorsService: GenService<{
     methodKind: "unary";
     input: typeof GetFormulaRequestSchema;
     output: typeof FormulaDefinitionSchema;
+  },
+  /**
+   * List formula definitions with optional author filter and pagination
+   *
+   * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ListFormulas
+   */
+  listFormulas: {
+    methodKind: "unary";
+    input: typeof ListFormulasRequestSchema;
+    output: typeof ListFormulasResponseSchema;
+  },
+  /**
+   * Update a formula's name, description, source, or is_public flag
+   * Returns PERMISSION_DENIED if user_id does not match author
+   *
+   * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.UpdateFormula
+   */
+  updateFormula: {
+    methodKind: "unary";
+    input: typeof UpdateFormulaRequestSchema;
+    output: typeof UpdateFormulaResponseSchema;
+  },
+  /**
+   * Delete a formula by ID
+   * Returns PERMISSION_DENIED if user_id does not match author
+   *
+   * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.DeleteFormula
+   */
+  deleteFormula: {
+    methodKind: "unary";
+    input: typeof DeleteFormulaRequestSchema;
+    output: typeof DeleteFormulaResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_indicators_v1_indicators, 0);

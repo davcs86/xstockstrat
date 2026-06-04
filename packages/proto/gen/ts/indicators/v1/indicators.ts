@@ -212,6 +212,8 @@ export interface RegisterFormulaRequest {
   source: string;
   isPublic: boolean;
   inputSchema: { [key: string]: string };
+  /** set by BFF from JWT claims; stored immutably */
+  author: string;
 }
 
 export interface RegisterFormulaRequest_InputSchemaEntry {
@@ -225,6 +227,46 @@ export interface RegisterFormulaResponse {
 
 export interface GetFormulaRequest {
   formulaId: string;
+}
+
+export interface ListFormulasRequest {
+  /** if non-empty, return only formulas where author == author_filter */
+  authorFilter: string;
+  /** if true, include all public formulas regardless of author_filter */
+  includePublic: boolean;
+  /** default 0 = no limit */
+  pageSize: number;
+  /** default 0 */
+  pageOffset: number;
+}
+
+export interface ListFormulasResponse {
+  formulas: FormulaDefinition[];
+  totalCount: number;
+}
+
+export interface UpdateFormulaRequest {
+  formulaId: string;
+  /** must match formula.author; returns PERMISSION_DENIED otherwise */
+  userId: string;
+  name: string;
+  description: string;
+  source: string;
+  isPublic: boolean;
+}
+
+export interface UpdateFormulaResponse {
+  formula?: FormulaDefinition | undefined;
+}
+
+export interface DeleteFormulaRequest {
+  formulaId: string;
+  /** must match formula.author; returns PERMISSION_DENIED otherwise */
+  userId: string;
+}
+
+export interface DeleteFormulaResponse {
+  success: boolean;
 }
 
 function createBaseComputeIndicatorRequest(): ComputeIndicatorRequest {
@@ -1896,7 +1938,7 @@ export const IndicatorMeta: MessageFns<IndicatorMeta> = {
 };
 
 function createBaseRegisterFormulaRequest(): RegisterFormulaRequest {
-  return { name: "", description: "", source: "", isPublic: false, inputSchema: {} };
+  return { name: "", description: "", source: "", isPublic: false, inputSchema: {}, author: "" };
 }
 
 export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
@@ -1916,6 +1958,9 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
     globalThis.Object.entries(message.inputSchema).forEach(([key, value]: [string, string]) => {
       RegisterFormulaRequest_InputSchemaEntry.encode({ key: key as any, value }, writer.uint32(42).fork()).join();
     });
+    if (message.author !== "") {
+      writer.uint32(50).string(message.author);
+    }
     return writer;
   },
 
@@ -1969,6 +2014,14 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
           }
           continue;
         }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.author = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2005,6 +2058,7 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
           {},
         )
         : {},
+      author: isSet(object.author) ? globalThis.String(object.author) : "",
     };
   },
 
@@ -2031,6 +2085,9 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
         });
       }
     }
+    if (message.author !== "") {
+      obj.author = message.author;
+    }
     return obj;
   },
 
@@ -2052,6 +2109,7 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
       },
       {},
     );
+    message.author = object.author ?? "";
     return message;
   },
 };
@@ -2264,6 +2322,566 @@ export const GetFormulaRequest: MessageFns<GetFormulaRequest> = {
   },
 };
 
+function createBaseListFormulasRequest(): ListFormulasRequest {
+  return { authorFilter: "", includePublic: false, pageSize: 0, pageOffset: 0 };
+}
+
+export const ListFormulasRequest: MessageFns<ListFormulasRequest> = {
+  encode(message: ListFormulasRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.authorFilter !== "") {
+      writer.uint32(10).string(message.authorFilter);
+    }
+    if (message.includePublic !== false) {
+      writer.uint32(16).bool(message.includePublic);
+    }
+    if (message.pageSize !== 0) {
+      writer.uint32(24).int32(message.pageSize);
+    }
+    if (message.pageOffset !== 0) {
+      writer.uint32(32).int32(message.pageOffset);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListFormulasRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListFormulasRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.authorFilter = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.includePublic = reader.bool();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.pageSize = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.pageOffset = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListFormulasRequest {
+    return {
+      authorFilter: isSet(object.authorFilter)
+        ? globalThis.String(object.authorFilter)
+        : isSet(object.author_filter)
+        ? globalThis.String(object.author_filter)
+        : "",
+      includePublic: isSet(object.includePublic)
+        ? globalThis.Boolean(object.includePublic)
+        : isSet(object.include_public)
+        ? globalThis.Boolean(object.include_public)
+        : false,
+      pageSize: isSet(object.pageSize)
+        ? globalThis.Number(object.pageSize)
+        : isSet(object.page_size)
+        ? globalThis.Number(object.page_size)
+        : 0,
+      pageOffset: isSet(object.pageOffset)
+        ? globalThis.Number(object.pageOffset)
+        : isSet(object.page_offset)
+        ? globalThis.Number(object.page_offset)
+        : 0,
+    };
+  },
+
+  toJSON(message: ListFormulasRequest): unknown {
+    const obj: any = {};
+    if (message.authorFilter !== "") {
+      obj.authorFilter = message.authorFilter;
+    }
+    if (message.includePublic !== false) {
+      obj.includePublic = message.includePublic;
+    }
+    if (message.pageSize !== 0) {
+      obj.pageSize = Math.round(message.pageSize);
+    }
+    if (message.pageOffset !== 0) {
+      obj.pageOffset = Math.round(message.pageOffset);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListFormulasRequest>, I>>(base?: I): ListFormulasRequest {
+    return ListFormulasRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListFormulasRequest>, I>>(object: I): ListFormulasRequest {
+    const message = createBaseListFormulasRequest();
+    message.authorFilter = object.authorFilter ?? "";
+    message.includePublic = object.includePublic ?? false;
+    message.pageSize = object.pageSize ?? 0;
+    message.pageOffset = object.pageOffset ?? 0;
+    return message;
+  },
+};
+
+function createBaseListFormulasResponse(): ListFormulasResponse {
+  return { formulas: [], totalCount: 0 };
+}
+
+export const ListFormulasResponse: MessageFns<ListFormulasResponse> = {
+  encode(message: ListFormulasResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.formulas) {
+      FormulaDefinition.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.totalCount !== 0) {
+      writer.uint32(16).int32(message.totalCount);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListFormulasResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListFormulasResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.formulas.push(FormulaDefinition.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.totalCount = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListFormulasResponse {
+    return {
+      formulas: globalThis.Array.isArray(object?.formulas)
+        ? object.formulas.map((e: any) => FormulaDefinition.fromJSON(e))
+        : [],
+      totalCount: isSet(object.totalCount)
+        ? globalThis.Number(object.totalCount)
+        : isSet(object.total_count)
+        ? globalThis.Number(object.total_count)
+        : 0,
+    };
+  },
+
+  toJSON(message: ListFormulasResponse): unknown {
+    const obj: any = {};
+    if (message.formulas?.length) {
+      obj.formulas = message.formulas.map((e) => FormulaDefinition.toJSON(e));
+    }
+    if (message.totalCount !== 0) {
+      obj.totalCount = Math.round(message.totalCount);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListFormulasResponse>, I>>(base?: I): ListFormulasResponse {
+    return ListFormulasResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListFormulasResponse>, I>>(object: I): ListFormulasResponse {
+    const message = createBaseListFormulasResponse();
+    message.formulas = object.formulas?.map((e) => FormulaDefinition.fromPartial(e)) || [];
+    message.totalCount = object.totalCount ?? 0;
+    return message;
+  },
+};
+
+function createBaseUpdateFormulaRequest(): UpdateFormulaRequest {
+  return { formulaId: "", userId: "", name: "", description: "", source: "", isPublic: false };
+}
+
+export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
+  encode(message: UpdateFormulaRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.formulaId !== "") {
+      writer.uint32(10).string(message.formulaId);
+    }
+    if (message.userId !== "") {
+      writer.uint32(18).string(message.userId);
+    }
+    if (message.name !== "") {
+      writer.uint32(26).string(message.name);
+    }
+    if (message.description !== "") {
+      writer.uint32(34).string(message.description);
+    }
+    if (message.source !== "") {
+      writer.uint32(42).string(message.source);
+    }
+    if (message.isPublic !== false) {
+      writer.uint32(48).bool(message.isPublic);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateFormulaRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateFormulaRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.formulaId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.description = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.source = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.isPublic = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdateFormulaRequest {
+    return {
+      formulaId: isSet(object.formulaId)
+        ? globalThis.String(object.formulaId)
+        : isSet(object.formula_id)
+        ? globalThis.String(object.formula_id)
+        : "",
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      description: isSet(object.description) ? globalThis.String(object.description) : "",
+      source: isSet(object.source) ? globalThis.String(object.source) : "",
+      isPublic: isSet(object.isPublic)
+        ? globalThis.Boolean(object.isPublic)
+        : isSet(object.is_public)
+        ? globalThis.Boolean(object.is_public)
+        : false,
+    };
+  },
+
+  toJSON(message: UpdateFormulaRequest): unknown {
+    const obj: any = {};
+    if (message.formulaId !== "") {
+      obj.formulaId = message.formulaId;
+    }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.description !== "") {
+      obj.description = message.description;
+    }
+    if (message.source !== "") {
+      obj.source = message.source;
+    }
+    if (message.isPublic !== false) {
+      obj.isPublic = message.isPublic;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdateFormulaRequest>, I>>(base?: I): UpdateFormulaRequest {
+    return UpdateFormulaRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateFormulaRequest>, I>>(object: I): UpdateFormulaRequest {
+    const message = createBaseUpdateFormulaRequest();
+    message.formulaId = object.formulaId ?? "";
+    message.userId = object.userId ?? "";
+    message.name = object.name ?? "";
+    message.description = object.description ?? "";
+    message.source = object.source ?? "";
+    message.isPublic = object.isPublic ?? false;
+    return message;
+  },
+};
+
+function createBaseUpdateFormulaResponse(): UpdateFormulaResponse {
+  return { formula: undefined };
+}
+
+export const UpdateFormulaResponse: MessageFns<UpdateFormulaResponse> = {
+  encode(message: UpdateFormulaResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.formula !== undefined) {
+      FormulaDefinition.encode(message.formula, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateFormulaResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateFormulaResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.formula = FormulaDefinition.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdateFormulaResponse {
+    return { formula: isSet(object.formula) ? FormulaDefinition.fromJSON(object.formula) : undefined };
+  },
+
+  toJSON(message: UpdateFormulaResponse): unknown {
+    const obj: any = {};
+    if (message.formula !== undefined) {
+      obj.formula = FormulaDefinition.toJSON(message.formula);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdateFormulaResponse>, I>>(base?: I): UpdateFormulaResponse {
+    return UpdateFormulaResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateFormulaResponse>, I>>(object: I): UpdateFormulaResponse {
+    const message = createBaseUpdateFormulaResponse();
+    message.formula = (object.formula !== undefined && object.formula !== null)
+      ? FormulaDefinition.fromPartial(object.formula)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseDeleteFormulaRequest(): DeleteFormulaRequest {
+  return { formulaId: "", userId: "" };
+}
+
+export const DeleteFormulaRequest: MessageFns<DeleteFormulaRequest> = {
+  encode(message: DeleteFormulaRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.formulaId !== "") {
+      writer.uint32(10).string(message.formulaId);
+    }
+    if (message.userId !== "") {
+      writer.uint32(18).string(message.userId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteFormulaRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDeleteFormulaRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.formulaId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DeleteFormulaRequest {
+    return {
+      formulaId: isSet(object.formulaId)
+        ? globalThis.String(object.formulaId)
+        : isSet(object.formula_id)
+        ? globalThis.String(object.formula_id)
+        : "",
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+    };
+  },
+
+  toJSON(message: DeleteFormulaRequest): unknown {
+    const obj: any = {};
+    if (message.formulaId !== "") {
+      obj.formulaId = message.formulaId;
+    }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DeleteFormulaRequest>, I>>(base?: I): DeleteFormulaRequest {
+    return DeleteFormulaRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteFormulaRequest>, I>>(object: I): DeleteFormulaRequest {
+    const message = createBaseDeleteFormulaRequest();
+    message.formulaId = object.formulaId ?? "";
+    message.userId = object.userId ?? "";
+    return message;
+  },
+};
+
+function createBaseDeleteFormulaResponse(): DeleteFormulaResponse {
+  return { success: false };
+}
+
+export const DeleteFormulaResponse: MessageFns<DeleteFormulaResponse> = {
+  encode(message: DeleteFormulaResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.success !== false) {
+      writer.uint32(8).bool(message.success);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteFormulaResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDeleteFormulaResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.success = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DeleteFormulaResponse {
+    return { success: isSet(object.success) ? globalThis.Boolean(object.success) : false };
+  },
+
+  toJSON(message: DeleteFormulaResponse): unknown {
+    const obj: any = {};
+    if (message.success !== false) {
+      obj.success = message.success;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DeleteFormulaResponse>, I>>(base?: I): DeleteFormulaResponse {
+    return DeleteFormulaResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteFormulaResponse>, I>>(object: I): DeleteFormulaResponse {
+    const message = createBaseDeleteFormulaResponse();
+    message.success = object.success ?? false;
+    return message;
+  },
+};
+
 /**
  * IndicatorsService — formula engine and sandboxed Python execution.
  * Sandbox timeout and memory limits are configured via xstockstrat-config.
@@ -2331,6 +2949,45 @@ export const IndicatorsServiceService = {
     responseSerialize: (value: FormulaDefinition): Buffer => Buffer.from(FormulaDefinition.encode(value).finish()),
     responseDeserialize: (value: Buffer): FormulaDefinition => FormulaDefinition.decode(value),
   },
+  /** List formula definitions with optional author filter and pagination */
+  listFormulas: {
+    path: "/xstockstrat.indicators.v1.IndicatorsService/ListFormulas" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListFormulasRequest): Buffer => Buffer.from(ListFormulasRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListFormulasRequest => ListFormulasRequest.decode(value),
+    responseSerialize: (value: ListFormulasResponse): Buffer =>
+      Buffer.from(ListFormulasResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListFormulasResponse => ListFormulasResponse.decode(value),
+  },
+  /**
+   * Update a formula's name, description, source, or is_public flag
+   * Returns PERMISSION_DENIED if user_id does not match author
+   */
+  updateFormula: {
+    path: "/xstockstrat.indicators.v1.IndicatorsService/UpdateFormula" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: UpdateFormulaRequest): Buffer => Buffer.from(UpdateFormulaRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateFormulaRequest => UpdateFormulaRequest.decode(value),
+    responseSerialize: (value: UpdateFormulaResponse): Buffer =>
+      Buffer.from(UpdateFormulaResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): UpdateFormulaResponse => UpdateFormulaResponse.decode(value),
+  },
+  /**
+   * Delete a formula by ID
+   * Returns PERMISSION_DENIED if user_id does not match author
+   */
+  deleteFormula: {
+    path: "/xstockstrat.indicators.v1.IndicatorsService/DeleteFormula" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: DeleteFormulaRequest): Buffer => Buffer.from(DeleteFormulaRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DeleteFormulaRequest => DeleteFormulaRequest.decode(value),
+    responseSerialize: (value: DeleteFormulaResponse): Buffer =>
+      Buffer.from(DeleteFormulaResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DeleteFormulaResponse => DeleteFormulaResponse.decode(value),
+  },
 } as const;
 
 export interface IndicatorsServiceServer extends UntypedServiceImplementation {
@@ -2347,6 +3004,18 @@ export interface IndicatorsServiceServer extends UntypedServiceImplementation {
   registerFormula: handleUnaryCall<RegisterFormulaRequest, RegisterFormulaResponse>;
   /** Get a registered formula */
   getFormula: handleUnaryCall<GetFormulaRequest, FormulaDefinition>;
+  /** List formula definitions with optional author filter and pagination */
+  listFormulas: handleUnaryCall<ListFormulasRequest, ListFormulasResponse>;
+  /**
+   * Update a formula's name, description, source, or is_public flag
+   * Returns PERMISSION_DENIED if user_id does not match author
+   */
+  updateFormula: handleUnaryCall<UpdateFormulaRequest, UpdateFormulaResponse>;
+  /**
+   * Delete a formula by ID
+   * Returns PERMISSION_DENIED if user_id does not match author
+   */
+  deleteFormula: handleUnaryCall<DeleteFormulaRequest, DeleteFormulaResponse>;
 }
 
 export interface IndicatorsServiceClient extends Client {
@@ -2432,6 +3101,60 @@ export interface IndicatorsServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: FormulaDefinition) => void,
+  ): ClientUnaryCall;
+  /** List formula definitions with optional author filter and pagination */
+  listFormulas(
+    request: ListFormulasRequest,
+    callback: (error: ServiceError | null, response: ListFormulasResponse) => void,
+  ): ClientUnaryCall;
+  listFormulas(
+    request: ListFormulasRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListFormulasResponse) => void,
+  ): ClientUnaryCall;
+  listFormulas(
+    request: ListFormulasRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListFormulasResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Update a formula's name, description, source, or is_public flag
+   * Returns PERMISSION_DENIED if user_id does not match author
+   */
+  updateFormula(
+    request: UpdateFormulaRequest,
+    callback: (error: ServiceError | null, response: UpdateFormulaResponse) => void,
+  ): ClientUnaryCall;
+  updateFormula(
+    request: UpdateFormulaRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: UpdateFormulaResponse) => void,
+  ): ClientUnaryCall;
+  updateFormula(
+    request: UpdateFormulaRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: UpdateFormulaResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Delete a formula by ID
+   * Returns PERMISSION_DENIED if user_id does not match author
+   */
+  deleteFormula(
+    request: DeleteFormulaRequest,
+    callback: (error: ServiceError | null, response: DeleteFormulaResponse) => void,
+  ): ClientUnaryCall;
+  deleteFormula(
+    request: DeleteFormulaRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DeleteFormulaResponse) => void,
+  ): ClientUnaryCall;
+  deleteFormula(
+    request: DeleteFormulaRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DeleteFormulaResponse) => void,
   ): ClientUnaryCall;
 }
 
