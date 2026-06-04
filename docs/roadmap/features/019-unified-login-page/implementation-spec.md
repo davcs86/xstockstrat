@@ -31,7 +31,7 @@ Steps 1–4 add the unified `/auth/login` + `/auth/oauth-login` pages, create th
 
 ### Step 1 — service: Add unified `/auth/login` and `/auth/oauth-login` pages to `xstockstrat-ui`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/auth/login/page.tsx` — create

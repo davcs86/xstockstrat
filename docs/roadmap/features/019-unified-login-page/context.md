@@ -78,3 +78,9 @@
 - **Blocker found + user decision**: the 2026-06-01 spec assumed a single consolidated `src/app/api/auth/*` route and a single `e2e/auth.spec.ts`. Reality on main-dev: a single `src/middleware.ts` routing to **per-basePath** login pages (`src/app/{trader,insights,config-ui}/login/page.tsx`), **per-basePath** auth routes (`src/app/{seg}/api/auth/{login,logout,refresh}/route.ts`, 9 files), and **per-basePath** e2e specs (`e2e/{seg}/auth.spec.ts`). User approved a targeted re-spec, **including creating the consolidated auth routes + unified login page in scope**.
 - Re-spec'd: Step 1 (evidence→ui paths), Step 2 (now: create 3 consolidated `/api/auth/*` routes + delete 9 per-basePath copies), Step 3 (single `src/middleware.ts`: redirect→`/auth/login`, refresh→`/api/auth/refresh`, matcher), Step 4 (delete 3 per-basePath login pages), Step 6 (UI_BASE_URL wiring; 018 not landed → TODO only, no oauth handler), Step 8 (create unified `e2e/auth.spec.ts` + delete 3 per-basePath auth specs). Steps 5 (identity gRPC-only verify) and 7 (docs) unchanged in substance.
 - 018 (agent-mcp-oauth) has NOT landed: agent `app/main.py` has no `/oauth/authorize` handler. Step 6 wires the env var and leaves a TODO; no redirect-target code yet.
+
+### Step 1 — service: Add unified /auth/login and /auth/oauth-login pages [done]
+- Created `src/app/auth/login/page.tsx` (Suspense + LoginForm, POST `/api/auth/login`, FR-3 safeRedirect allowlist → default `/trader`) and `src/app/auth/oauth-login/page.tsx` (reads redirect_uri+state, POST `/api/auth/login`, on success `window.location.href = redirect_uri?state=…`; invalid-request guard).
+- Files modified: `src/app/auth/login/page.tsx`, `src/app/auth/oauth-login/page.tsx`.
+- Verification: `tsc --noEmit` clean (after clearing stale .next cache from prior branch), `pnpm run lint` clean.
+- Deviations: none.
