@@ -16,6 +16,23 @@ Each entry corresponds to one `main-dev → main` PR merge.
 ## 2026-06-04
 
 ### Features
+- formula-management-ui: Persist indicator formulas to TimescaleDB so they survive service restarts, scope them to the owning user (`author = user_id`), and add a full CRUD management UI inside `xstockstrat-insights`.
+- config-ui-weight-validation: Add client-side validation to the config-ui weight editor so that JSON weight map keys (e.g. `analysis.signals.source_weights`) reject values outside `[0.0, 1.0]` before calling `SetConfig`, giving operators immediate feedback instead of silently-clamped server-side results.
+- unified-login-page: Replaces the three per-basePath login pages in the consolidated `xstockstrat-ui` (after 045) with a single shared login page at `/auth/login`, redirecting all unauthenticated requests regardless of which basePath they originate from, and adapting identity's OAuth login form (from 018) to use the unified page.
+- upgrade-nextjs15: Upgrade `xstockstrat-insights` and `xstockstrat-config-ui` from Next.js 14.2.x to Next.js 15.x (the version already used by `xstockstrat-trader`). The current workaround for the pnpm workspace standalone path issue (subdirectory CMD and static COPY paths) works correctly but leaves two services on an older, unsupported Next.js major version. Upgrading aligns all three frontends on the same major version and eliminates the version split.
+
+### Proto Changes
+- config/v1/config.proto
+- indicators/v1/indicators.proto
+
+### Summary
+-4 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-06-04
+
+### Features
 - upgrade-nextjs15: Upgrade `xstockstrat-insights` and `xstockstrat-config-ui` from Next.js 14.2.x to Next.js 15.x (the version already used by `xstockstrat-trader`). The current workaround for the pnpm workspace standalone path issue (subdirectory CMD and static COPY paths) works correctly but leaves two services on an older, unsupported Next.js major version. Upgrading aligns all three frontends on the same major version and eliminates the version split.
 - client-api-pattern: Standardise the **client-side** API layer across all three Next.js frontends (xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui): replace SWR with a single typed data-fetching + cache-normalization stack (library choice deferred to review), wrap every read and write in named typed hooks backed by generated `@xstockstrat/proto` types, and eliminate `any` from request/response boundaries. The server-side Connect-RPC clients are already typed with `@xstockstrat/proto`, so this feature is scoped to the client→route-handler boundary only.
 - ui-consolidation-nextjs: Consolidate the three Next.js frontend services (trader, insights, config-ui) into a single Next.js service and remove the nginx reverse proxy, reducing infrastructure costs from 4 containers to 1 while preserving all existing basePaths, auth, observability, and agent SSE proxying.
