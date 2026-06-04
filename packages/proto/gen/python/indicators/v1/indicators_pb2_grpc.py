@@ -61,6 +61,21 @@ class IndicatorsServiceStub(object):
                 request_serializer=indicators_dot_v1_dot_indicators__pb2.GetFormulaRequest.SerializeToString,
                 response_deserializer=indicators_dot_v1_dot_indicators__pb2.FormulaDefinition.FromString,
                 _registered_method=True)
+        self.ListFormulas = channel.unary_unary(
+                '/xstockstrat.indicators.v1.IndicatorsService/ListFormulas',
+                request_serializer=indicators_dot_v1_dot_indicators__pb2.ListFormulasRequest.SerializeToString,
+                response_deserializer=indicators_dot_v1_dot_indicators__pb2.ListFormulasResponse.FromString,
+                _registered_method=True)
+        self.UpdateFormula = channel.unary_unary(
+                '/xstockstrat.indicators.v1.IndicatorsService/UpdateFormula',
+                request_serializer=indicators_dot_v1_dot_indicators__pb2.UpdateFormulaRequest.SerializeToString,
+                response_deserializer=indicators_dot_v1_dot_indicators__pb2.UpdateFormulaResponse.FromString,
+                _registered_method=True)
+        self.DeleteFormula = channel.unary_unary(
+                '/xstockstrat.indicators.v1.IndicatorsService/DeleteFormula',
+                request_serializer=indicators_dot_v1_dot_indicators__pb2.DeleteFormulaRequest.SerializeToString,
+                response_deserializer=indicators_dot_v1_dot_indicators__pb2.DeleteFormulaResponse.FromString,
+                _registered_method=True)
 
 
 class IndicatorsServiceServicer(object):
@@ -104,6 +119,29 @@ class IndicatorsServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListFormulas(self, request, context):
+        """List formula definitions with optional author filter and pagination
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateFormula(self, request, context):
+        """Update a formula's name, description, source, or is_public flag
+        Returns PERMISSION_DENIED if user_id does not match author
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteFormula(self, request, context):
+        """Delete a formula by ID
+        Returns PERMISSION_DENIED if user_id does not match author
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_IndicatorsServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -131,6 +169,21 @@ def add_IndicatorsServiceServicer_to_server(servicer, server):
                     servicer.GetFormula,
                     request_deserializer=indicators_dot_v1_dot_indicators__pb2.GetFormulaRequest.FromString,
                     response_serializer=indicators_dot_v1_dot_indicators__pb2.FormulaDefinition.SerializeToString,
+            ),
+            'ListFormulas': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListFormulas,
+                    request_deserializer=indicators_dot_v1_dot_indicators__pb2.ListFormulasRequest.FromString,
+                    response_serializer=indicators_dot_v1_dot_indicators__pb2.ListFormulasResponse.SerializeToString,
+            ),
+            'UpdateFormula': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateFormula,
+                    request_deserializer=indicators_dot_v1_dot_indicators__pb2.UpdateFormulaRequest.FromString,
+                    response_serializer=indicators_dot_v1_dot_indicators__pb2.UpdateFormulaResponse.SerializeToString,
+            ),
+            'DeleteFormula': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteFormula,
+                    request_deserializer=indicators_dot_v1_dot_indicators__pb2.DeleteFormulaRequest.FromString,
+                    response_serializer=indicators_dot_v1_dot_indicators__pb2.DeleteFormulaResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -270,6 +323,87 @@ class IndicatorsService(object):
             '/xstockstrat.indicators.v1.IndicatorsService/GetFormula',
             indicators_dot_v1_dot_indicators__pb2.GetFormulaRequest.SerializeToString,
             indicators_dot_v1_dot_indicators__pb2.FormulaDefinition.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListFormulas(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.indicators.v1.IndicatorsService/ListFormulas',
+            indicators_dot_v1_dot_indicators__pb2.ListFormulasRequest.SerializeToString,
+            indicators_dot_v1_dot_indicators__pb2.ListFormulasResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateFormula(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.indicators.v1.IndicatorsService/UpdateFormula',
+            indicators_dot_v1_dot_indicators__pb2.UpdateFormulaRequest.SerializeToString,
+            indicators_dot_v1_dot_indicators__pb2.UpdateFormulaResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteFormula(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.indicators.v1.IndicatorsService/DeleteFormula',
+            indicators_dot_v1_dot_indicators__pb2.DeleteFormulaRequest.SerializeToString,
+            indicators_dot_v1_dot_indicators__pb2.DeleteFormulaResponse.FromString,
             options,
             channel_credentials,
             insecure,
