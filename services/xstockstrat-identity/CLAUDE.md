@@ -1,12 +1,15 @@
 # xstockstrat-identity — CLAUDE.md
 
 ## Role
+
 Node.js gRPC service for authentication, JWT management, and API key lifecycle. All services validate tokens against this service. Issues short-lived access JWTs and longer-lived refresh tokens. API keys are hashed before storage.
 
 ## Language
+
 Node.js 22 + TypeScript
 
 ## Docker Build Pattern
+
 Backend pattern — see `docs/patterns/docker-build.md` for the base stage, proto stub timing, and `pnpm deploy` approach.
 
 ## Ports
@@ -47,7 +50,7 @@ _No webhooks. Call the gRPC RPCs on port 50058 directly._
 
 Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_ENV` and `NODE_ENV` come from `.env.local` (committed). `DATABASE_URL` is constructed by docker-compose from `POSTGRES_PASSWORD` in `.env`. `JWT_SECRET` comes from `.env` (see `.env.example`).
 
-```
+```text
 GRPC_PORT=50058
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057

@@ -6,7 +6,8 @@ RUN go mod download
 COPY services/xstockstrat-trading/ .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o service ./cmd/server
 
-FROM gcr.io/distroless/static-debian12
+# hadolint ignore=DL3007
+FROM gcr.io/distroless/static-debian12:latest
 WORKDIR /app
 COPY --from=builder /app/service .
 EXPOSE 50051

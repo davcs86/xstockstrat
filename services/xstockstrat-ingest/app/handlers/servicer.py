@@ -18,7 +18,6 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from app.config.watcher import ConfigWatcher
 from app.repositories.signal_sources import (
     deactivate_source,
-    get_active_source,
     list_all_sources,
     upsert_source,
     validate_config_json,
@@ -39,7 +38,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         self._cfg = config_watcher
         self._marketdata = marketdata_pb2_grpc.MarketDataServiceStub(marketdata_channel)
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
-        self._identity = identity_pb2_grpc.IdentityServiceStub(identity_channel) if identity_channel else None
+        self._identity = (
+            identity_pb2_grpc.IdentityServiceStub(identity_channel) if identity_channel else None
+        )
         self._db = db_pool
         self._jobs: dict[str, ingest_pb2.BackfillJob] = {}
 
@@ -51,7 +52,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         auth = metadata.get("authorization", "")
         if not auth.startswith("Bearer "):
             return False
-        api_key = auth[len("Bearer "):]
+        api_key = auth[len("Bearer ") :]
         try:
             claims = await self._identity.ValidateApiKey(
                 identity_pb2.ValidateApiKeyRequest(api_key=api_key)
@@ -394,24 +395,29 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             return
         rows = await list_all_sources(self._db, include_inactive=request.include_inactive)
         import json
+
         from google.protobuf.struct_pb2 import Struct
+
         sources = []
         for row in rows:
             cfg = Struct()
             if row["config_json"]:
                 cfg.update(
-                    row["config_json"] if isinstance(row["config_json"], dict)
+                    row["config_json"]
+                    if isinstance(row["config_json"], dict)
                     else json.loads(row["config_json"])
                 )
-            sources.append(ingest_pb2.SignalSource(
-                slug=row["slug"],
-                display_name=row["display_name"],
-                source_type=row["source_type"],
-                extractor_module=row["extractor_module"],
-                active=row["active"],
-                has_credentials=(row["credentials_ref"] is not None),
-                config_json=cfg,
-            ))
+            sources.append(
+                ingest_pb2.SignalSource(
+                    slug=row["slug"],
+                    display_name=row["display_name"],
+                    source_type=row["source_type"],
+                    extractor_module=row["extractor_module"],
+                    active=row["active"],
+                    has_credentials=(row["credentials_ref"] is not None),
+                    config_json=cfg,
+                )
+            )
         return ingest_pb2.ListSignalSourcesResponse(sources=sources)
 
     async def ManageSignalSource(self, request, context):
@@ -458,11 +464,14 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             )
             return
         import json
+
         from google.protobuf.struct_pb2 import Struct
+
         cfg_out = Struct()
         if row["config_json"]:
             cfg_out.update(
-                row["config_json"] if isinstance(row["config_json"], dict)
+                row["config_json"]
+                if isinstance(row["config_json"], dict)
                 else json.loads(str(row["config_json"]))
             )
         result = ingest_pb2.SignalSource(

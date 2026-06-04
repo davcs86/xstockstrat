@@ -26,9 +26,9 @@ import (
 type MarketDataService struct {
 	registry *source.Registry
 	repo     *repository.MarketDataRepo
-	cfg    *config.Watcher
-	ledger ledgerv1.LedgerServiceClient
-	notify notifyv1.NotifyServiceClient
+	cfg      *config.Watcher
+	ledger   ledgerv1.LedgerServiceClient
+	notify   notifyv1.NotifyServiceClient
 
 	// subscribers maps subscriber ID → channel for streaming bars
 	mu        sync.RWMutex

@@ -27,6 +27,7 @@ RUN pnpm --filter xstockstrat-identity run build
 RUN pnpm deploy --filter xstockstrat-identity --prod /deploy
 
 FROM node:22-alpine AS runner
+# hadolint ignore=DL3018
 RUN apk add --no-cache postgresql-client
 WORKDIR /app
 ENV NODE_ENV=production

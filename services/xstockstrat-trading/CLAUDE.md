@@ -1,6 +1,7 @@
 # xstockstrat-trading — CLAUDE.md
 
 ## Role
+
 Go gRPC service responsible for order execution and trade lifecycle management. Submits orders to Alpaca's broker REST API (paper or live). Writes all order events to xstockstrat-ledger.
 
 **Alpaca API ownership**: `xstockstrat-trading` is the sole integration point for Alpaca's **broker/order APIs** (`/v2/orders`, `/v2/account`). `xstockstrat-marketdata` owns Alpaca's **market data APIs** — these are separate API surfaces and separate responsibilities.
@@ -8,9 +9,11 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 **Paper vs live**: Mode is resolved per order. Priority: `PlaceOrderRequest.trading_mode` > `trading.broker.paper` (live config) > `ALPACA_PAPER` (env). Paper routes to `https://paper-api.alpaca.markets`; live routes to `https://api.alpaca.markets`.
 
 ## Language
+
 Go 1.22
 
 ## Docker Build Pattern
+
 Go pattern — see `docs/patterns/docker-build.md` for multi-stage builder, static binary compilation (`CGO_ENABLED=0`), and distroless final images.
 
 ## Ports
@@ -83,7 +86,7 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 
 ## Environment Variables
 
-```
+```text
 GRPC_PORT=50051
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057

@@ -68,11 +68,20 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-log()  { echo -e "${CYAN}[TEST]${NC} $*"; }
-ok()   { echo -e "${GREEN}[PASS]${NC} $*"; PASS=$((PASS + 1)); }
-fail() { echo -e "${RED}[FAIL]${NC} $*"; FAIL=$((FAIL + 1)); }
-skip() { echo -e "${YELLOW}[SKIP]${NC} $*"; SKIP=$((SKIP + 1)); }
-sep()  { echo -e "\n${CYAN}───────────────────────────────────────────────────${NC}"; }
+log() { echo -e "${CYAN}[TEST]${NC} $*"; }
+ok() {
+  echo -e "${GREEN}[PASS]${NC} $*"
+  PASS=$((PASS + 1))
+}
+fail() {
+  echo -e "${RED}[FAIL]${NC} $*"
+  FAIL=$((FAIL + 1))
+}
+skip() {
+  echo -e "${YELLOW}[SKIP]${NC} $*"
+  SKIP=$((SKIP + 1))
+}
+sep() { echo -e "\n${CYAN}───────────────────────────────────────────────────${NC}"; }
 
 # check <description> <expected_pattern> <command...>
 # Runs the command and checks stdout against expected_pattern (grep -q).
@@ -107,6 +116,7 @@ post() {
 }
 
 # post_raw — same as post but without -f (so we can inspect error responses)
+# shellcheck disable=SC2317
 post_raw() {
   curl -s -X POST "$1" \
     -H "Content-Type: application/json" \
@@ -115,6 +125,7 @@ post_raw() {
 }
 
 # get <url> — GET with optional auth
+# shellcheck disable=SC2317
 get() {
   curl -sf "$1" \
     ${TOKEN:+-H "Authorization: Bearer ${TOKEN}"}
@@ -150,19 +161,19 @@ section_0_health() {
   sep
   log "SECTION 0 — Health checks"
 
-  check "config health"      '"status"'  curl -sf "${CONFIG_URL}/health"
-  check "ledger health"      '"status"'  curl -sf "${LEDGER_URL}/health"
-  check "identity health"    '"status"'  curl -sf "${IDENTITY_URL}/health"
-  check "notify health"      '"status"'  curl -sf "${NOTIFY_URL}/health"
-  check "trading health"     '"status"'  curl -sf "${TRADING_URL}/health"
-  check "portfolio health"   '"status"'  curl -sf "${PORTFOLIO_URL}/health"
-  check "marketdata health"  '"status"'  curl -sf "${MARKETDATA_URL}/health"
-  check "indicators health"  '"status"'  curl -sf "${INDICATORS_URL}/health"
-  check "ingest health"      '"status"'  curl -sf "${INGEST_URL}/health"
-  check "analysis health"    '"status"'  curl -sf "${ANALYSIS_URL}/health"
-  check "trader UI health"      '"status"'  curl -sf "${TRADER_UI_URL}/health"
-  check "insights UI health"    '"status"'  curl -sf "${INSIGHTS_UI_URL}/health"
-  check "config-ui health"      '"status"'  curl -sf "${CONFIG_UI_URL}/health"
+  check "config health" '"status"' curl -sf "${CONFIG_URL}/health"
+  check "ledger health" '"status"' curl -sf "${LEDGER_URL}/health"
+  check "identity health" '"status"' curl -sf "${IDENTITY_URL}/health"
+  check "notify health" '"status"' curl -sf "${NOTIFY_URL}/health"
+  check "trading health" '"status"' curl -sf "${TRADING_URL}/health"
+  check "portfolio health" '"status"' curl -sf "${PORTFOLIO_URL}/health"
+  check "marketdata health" '"status"' curl -sf "${MARKETDATA_URL}/health"
+  check "indicators health" '"status"' curl -sf "${INDICATORS_URL}/health"
+  check "ingest health" '"status"' curl -sf "${INGEST_URL}/health"
+  check "analysis health" '"status"' curl -sf "${ANALYSIS_URL}/health"
+  check "trader UI health" '"status"' curl -sf "${TRADER_UI_URL}/health"
+  check "insights UI health" '"status"' curl -sf "${INSIGHTS_UI_URL}/health"
+  check "config-ui health" '"status"' curl -sf "${CONFIG_UI_URL}/health"
 }
 
 section_1_auth() {
@@ -175,8 +186,8 @@ section_1_auth() {
     "{\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}")
 
   if echo "$resp" | grep -q "access_token"; then
-    TOKEN=$(echo "$resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('access_token',''))" 2>/dev/null || \
-            echo "$resp" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+    TOKEN=$(echo "$resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('access_token',''))" 2>/dev/null ||
+      echo "$resp" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
     if [ -n "$TOKEN" ]; then
       ok "AuthenticateUser — token received"
     else
@@ -293,8 +304,8 @@ section_6_backfill() {
     "{\"symbol\":\"${TEST_SYMBOL}\",\"start\":\"2024-07-01T00:00:00Z\",\"end\":\"2024-12-31T00:00:00Z\",\"timeframe\":\"1Day\"}")
 
   if echo "$backfill_resp" | grep -q "job_id"; then
-    JOB_ID=$(echo "$backfill_resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('job_id',''))" 2>/dev/null || \
-             echo "$backfill_resp" | grep -o '"job_id":"[^"]*"' | cut -d'"' -f4)
+    JOB_ID=$(echo "$backfill_resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('job_id',''))" 2>/dev/null ||
+      echo "$backfill_resp" | grep -o '"job_id":"[^"]*"' | cut -d'"' -f4)
     ok "TriggerBackfill — job_id=${JOB_ID}"
   else
     fail "TriggerBackfill — unexpected response"
@@ -338,8 +349,8 @@ section_8_place_order() {
     }")
 
   if echo "$order_resp" | grep -q "order_id"; then
-    ORDER_ID=$(echo "$order_resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('order_id',''))" 2>/dev/null || \
-               echo "$order_resp" | grep -o '"order_id":"[^"]*"' | cut -d'"' -f4)
+    ORDER_ID=$(echo "$order_resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('order_id',''))" 2>/dev/null ||
+      echo "$order_resp" | grep -o '"order_id":"[^"]*"' | cut -d'"' -f4)
     ok "PlaceOrder — order_id=${ORDER_ID}"
   else
     fail "PlaceOrder — unexpected response"
@@ -412,7 +423,7 @@ section_13_maintenance_mode() {
   post_raw \
     "${CONFIG_URL}/xstockstrat.config.v1.ConfigService/SetConfig" \
     '{"key":"platform.maintenance_mode","value":{"bool_val":true},"environment":"DEV","trading_mode":"ALL"}' \
-    > /dev/null 2>&1 || true
+    >/dev/null 2>&1 || true
 
   log "  Waiting 3s for WatchConfig propagation..."
   sleep 3
@@ -439,7 +450,7 @@ section_13_maintenance_mode() {
   post_raw \
     "${CONFIG_URL}/xstockstrat.config.v1.ConfigService/SetConfig" \
     '{"key":"platform.maintenance_mode","value":{"bool_val":false},"environment":"DEV","trading_mode":"ALL"}' \
-    > /dev/null 2>&1 || true
+    >/dev/null 2>&1 || true
 
   log "  Maintenance mode cleared."
 }

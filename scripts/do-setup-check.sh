@@ -11,9 +11,12 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-ok()      { echo "  ✓ $*"; }
-warn()    { echo "  ✗ $*"; }
-section() { echo ""; echo "$*"; }
+ok() { echo "  ✓ $*"; }
+warn() { echo "  ✗ $*"; }
+section() {
+  echo ""
+  echo "$*"
+}
 
 section "=== DigitalOcean Setup State Check ==="
 
@@ -94,8 +97,8 @@ fi
 section "Repository:"
 
 GH_ORG=""
-GH_ORG=$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null \
-  | sed -E 's|.*github\.com[:/]([^/]+)/.*|\1|' || true)
+GH_ORG=$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null |
+  sed -E 's|.*github\.com[:/]([^/]+)/.*|\1|' || true)
 if [ -n "$GH_ORG" ]; then
   ok "GitHub org: ${GH_ORG}"
 else
@@ -135,7 +138,7 @@ elif [ "$DB_FOUND" -eq 0 ]; then
   echo "  → Phase 2: Create managed PostgreSQL database"
 elif [ "$APPS_FOUND" -eq 0 ]; then
   echo "  → Phase 4: Create dev and prod apps on DigitalOcean"
-elif [ "${#MISSING_SECRETS[@]:-0}" -gt 0 ]; then
+elif [ "${#MISSING_SECRETS[@]}" -gt 0 ]; then
   echo "  → Phase 8: Configure GitHub Actions secrets"
 else
   echo "  → Phase 9: Verify first deployment"

@@ -1,6 +1,6 @@
 # Next.js Frontend Patterns
 
-General-purpose Next.js conventions for `trader`, `insights`, `config-ui`, and future frontends. For auth specifically (middleware, route handlers, Connect-RPC client), read `docs/patterns/frontend-auth.md`. This file covers everything else.
+General-purpose Next.js conventions for the `xstockstrat-ui` consolidated frontend (segments: `trader`, `insights`, `config-ui`). For auth specifically (middleware, route handlers, Connect-RPC client), read `docs/patterns/frontend-auth.md`. This file covers everything else.
 
 Each section pairs a rule with a real bug that motivated it (PR link), so future sessions can verify the rule still holds.
 
@@ -79,9 +79,9 @@ If you add an `app/icon.svg` (or `apple-icon.png`) for Next.js' metadata file co
 Next.js' metadata file convention auto-emits `<link rel="icon" href="/<basePath>/icon.svg">` when you place an `icon.svg` at `app/icon.svg`. No manual `<head>` editing required.
 
 ```
-services/xstockstrat-trader/src/app/icon.svg     # cyan Activity glyph
-services/xstockstrat-insights/src/app/icon.svg   # violet bar chart
-services/xstockstrat-config-ui/app/icon.svg      # green layers
+services/xstockstrat-ui/src/app/trader/icon.svg     # cyan Activity glyph
+services/xstockstrat-ui/src/app/insights/icon.svg   # violet bar chart
+services/xstockstrat-ui/src/app/config-ui/icon.svg  # green layers
 ```
 
 **Bug avoided** ([PR #402](https://github.com/davcs86/xstockstrat/pull/402)): none of the three frontends had an icon, so browsers got HTML 200 or 404 for `/favicon.ico` requests and the tab icon was empty. `/trader/icon.svg` 307'd to `/login` because the middleware matcher didn't exclude it.
@@ -179,11 +179,11 @@ The child renders until Radix matches a `SelectItem`; pick labels identical to t
 | Click a row to drill in (e.g. Order book row → detail) | Component | `<Link href={`/orders/${id}`}>` |
 | Empty-state CTA ("Run a backtest") | Component | `<Link href="/strategies">` |
 
-The bare domain (no basePath) should redirect to the primary app:
+The bare domain (no basePath) should redirect to the primary app. In `xstockstrat-ui` this is wired in `next.config.js` as a permanent redirect:
 
-```nginx
-location = / {
-    return 302 /trader;
+```js
+async redirects() {
+  return [{ source: '/', destination: '/trader', permanent: false }];
 }
 ```
 
@@ -196,7 +196,7 @@ See [PR #403](https://github.com/davcs86/xstockstrat/pull/403).
 The Edge-runtime constraint described in `frontend-auth.md` is **invisible in source review**. The only reliable way to catch it is to run the build:
 
 ```bash
-pnpm --filter xstockstrat-<service> build
+pnpm --filter xstockstrat-ui build
 ```
 
 If you've modified **any** of these, the build is mandatory before pushing:
@@ -247,7 +247,7 @@ Type error: Route "src/app/api/orders/[id]/route.ts" has an invalid "GET" export
   Type "{ params: { id: string; }; }" is not a valid type for the function's second argument.
 ```
 
-The rule applies to every dynamic segment — `[id]`, `[symbol]`, `[namespace]`, `[...slug]`. All other trader/insights/config-ui routes already use the `Promise<{...}>` shape; new code must match.
+The rule applies to every dynamic segment — `[id]`, `[symbol]`, `[namespace]`, `[...slug]`. All existing `xstockstrat-ui` routes already use the `Promise<{...}>` shape; new code must match.
 
 ---
 
@@ -394,7 +394,7 @@ This is exactly the gap that let [PR #451](https://github.com/davcs86/xstockstra
 
 ## Next.js 15 Migration Reference
 
-All three frontends (`trader`, `insights`, `config-ui`) are on **Next.js 15.5.15** as of feature `041-upgrade-nextjs15`. Key breaking changes and their fixes:
+`xstockstrat-ui` (consolidating `trader`, `insights`, and `config-ui`) is on **Next.js 15.5.15** as of feature `041-upgrade-nextjs15`. Key breaking changes and their fixes:
 
 ### 1. `serverExternalPackages` rename
 

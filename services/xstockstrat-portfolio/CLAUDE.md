@@ -1,14 +1,17 @@
 # xstockstrat-portfolio — CLAUDE.md
 
 ## Role
+
 Go gRPC service that tracks open positions, portfolio equity, and P&L. Maintains portfolio snapshots in TimescaleDB. All portfolio state changes are sourced from ledger events (order fills, manual adjustments).
 
 **Paper vs Live separation**: Positions and P&L are tracked independently per `TradingMode` (PAPER / LIVE). Callers can filter by `trading_mode` on `ListPositions`, `GetPortfolio`, `GetPnL`, and `StreamPortfolioUpdates`. Paper positions and P&L never mix with live figures.
 
 ## Language
+
 Go 1.22
 
 ## Docker Build Pattern
+
 Go pattern — see `docs/patterns/docker-build.md` for multi-stage builder, static binary compilation (`CGO_ENABLED=0`), and distroless final images.
 
 ## Ports
@@ -59,7 +62,7 @@ Namespace: `portfolio`
 
 ## Environment Variables
 
-```
+```text
 GRPC_PORT=50052
 CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057

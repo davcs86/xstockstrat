@@ -3,6 +3,7 @@
 ## Project Overview
 
 **xstockstrat** (Cross Stock Strategies) is a monorepo stock strategy platform built on the **Spine pattern**. The root owns:
+
 - `packages/proto/` — single source of truth for all gRPC/Protobuf contracts
 - `docs/` — runbooks, setup guides, and implementation roadmap
 - `scripts/` — codegen, bootstrap, and CI helpers
@@ -20,7 +21,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 |---|---|
 | Building or modifying a Next.js frontend | `docs/patterns/frontend-auth.md` |
 | Other Next.js patterns (basePath, BFF connect-web call chain + handler-map basePath gotcha, browser typed-client data shape, BFF route verification, Suspense fallbacks, Radix hydration, middleware matcher, app icons) | `docs/patterns/nextjs-frontends.md` |
-| Adding nginx routing for a new frontend | `docs/patterns/nginx-routing.md` |
+| Nginx routing pattern (deprecated — nginx removed) | `docs/patterns/nginx-routing.md` (historical reference) |
 | Adding a new backend service (any language) | `docs/patterns/header-propagation.md` |
 | Docker build patterns (Node.js, Next.js, Python, Go) | `docs/patterns/docker-build.md` |
 | Service healthchecks, `WAIT_FOR` entrypoint, `depends_on` conditions | `docs/patterns/docker-build.md` |
@@ -60,21 +61,18 @@ to the frontends, nginx, and the agent.
 | xstockstrat-identity | Node.js | Auth, API keys, JWT | 50058 | — |
 | xstockstrat-notify | Node.js | gRPC streaming alert delivery | 50059 | — |
 | xstockstrat-config | Node.js | Live config WatchConfig stream | 50060 | — |
-| xstockstrat-trader | Next.js | Trading UI frontend | — | 3000 |
-| xstockstrat-insights | Next.js | Analytics/insights dashboard | — | 3001 |
-| xstockstrat-config-ui | Next.js | Config management UI | — | 3002 |
-| xstockstrat-nginx | Nginx | HTTP reverse proxy, unified frontend ingress | — | 80 |
+| xstockstrat-ui | Next.js | Consolidated UI: trader dashboard, insights analytics, config management | — | 3000 |
 | xstockstrat-agent | Python | MCP server — AI agent tools for signal ingestion, alerting, backtesting | — | 9000 (SSE) |
 
 ---
 
 ## Language Map
 
-```
+```text
 Go        → xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata
 Python    → xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis, xstockstrat-agent
 Node.js   → xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, xstockstrat-config
-Next.js   → xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
+Next.js   → xstockstrat-ui
 ```
 
 ---
@@ -98,6 +96,7 @@ Next.js   → xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
 **Important Go build note**: CI runs all Go jobs with `GOWORK=off`. When running Go commands locally for a single service (e.g., `go test`, `go mod download`), set `GOWORK=off` or `cd services/<service>` and rely on the local `go.mod`.
 
 **macOS is the primary developer platform; Linux is optional.** All bash commands in `.md` files (docs, runbooks, setup guides) must be macOS/Homebrew-compatible:
+
 - Use `brew install <tool>` as the primary install instruction; add Linux alternatives in an "Other" column or parenthetical — not the other way around
 - Avoid GNU-only flags; prefer options that work on both BSD (macOS) and GNU tools (e.g. `grep -oE` works on both; `grep -P` does not)
 - Never use bare `pip` — use `python3 -m pip` (bare `pip` resolves to pip2 on stock macOS)
@@ -106,6 +105,7 @@ Next.js   → xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui
 ### Version Bump Workflow
 
 To change a language or tool version:
+
 1. **Update this table first** (CLAUDE.md §Language Versions & Tooling) — this is the soft source of truth
 2. **Update `Dockerfile.codegen`** — the proto-gen container
 3. **Propagate** to all other pinned locations:
@@ -117,7 +117,7 @@ To change a language or tool version:
 | Node.js | `.github/workflows/ci.yml` (`node-version`), Node/Next service Dockerfiles (`FROM node:X-alpine`) |
 | pnpm | `package.json` (`packageManager`), `.github/workflows/ci.yml` (`pnpm@X`), Node service Dockerfiles |
 
-4. Open a PR — CI will catch any missed files.
+1. Open a PR — CI will catch any missed files.
 
 ---
 
@@ -155,6 +155,7 @@ All inter-service connection env vars follow these patterns. **Never invent new 
 | `XSTOCKSTRAT_<SERVICE>_PRIVATE_URL` | `PRIVATE_DOMAIN` on DO (e.g. `svc.internal`), bare container name in Compose | **nginx container only** — `envsubst` upstream resolution; entrypoint strips `http://` prefix just in case, but the nginx template already appends `:PORT` so `PRIVATE_URL` (which includes the port) must not be used here | `XSTOCKSTRAT_AGENT_PRIVATE_URL=xstockstrat-agent` |
 
 **Rules:**
+
 - All backend services are gRPC-only, so all inter-service connection vars use the `_ENDPOINT` (gRPC `host:port`) form. The legacy `<SERVICE>_HTTP_ENDPOINT` form was removed when the backend HTTP/Connect-RPC (80xx) servers were deleted — do not reintroduce it (test-only Playwright mocks may still set it, but no runtime code reads it).
 - No `XSTOCKSTRAT_` prefix except for nginx `PRIVATE_URL` vars.
 - No `_URL` suffix on inter-service connection vars — always `_ENDPOINT`.
@@ -179,7 +180,7 @@ gRPC stubs / `@connectrpc/connect-node` gRPC transport on the 50xx ports. There 
 all callers migrated to gRPC. Signal ingestion, alert emission, and backtest triggering are
 plain gRPC RPCs (`IngestSignal`, `EmitAlert`, `RunBacktest`, …) invoked directly by the agent.
 
-```
+```text
 Agent / Frontend → gRPC RPC (50xx) → target backend service
 ```
 
@@ -193,19 +194,17 @@ OTel SDK → OTLP → Grafana Cloud. Toggle: `OTEL_ENABLED=true`. OTel init erro
 
 ---
 
-## Nginx Reverse Proxy
+## Frontend Ingress
 
-`xstockstrat-nginx` (port 80) proxies all frontend requests to the three Next.js UIs via upstream blocks in `nginx.conf`. Routes: `/trader/*` → port 3000, `/insights/*` → 3001, `/config-ui/*` → 3002. Health: `GET /health`.
-
-**Adding a new frontend or changing nginx routing** → read `docs/patterns/nginx-routing.md` for the full 8-step procedure (nginx.conf, docker-entrypoint.sh, DO specs, docker-compose, next.config.js, auth wiring).
+`xstockstrat-ui` (port 3000) serves all three frontend segments under their respective path prefixes (`/trader`, `/insights`, `/config-ui`). In the DO App Platform, path-based route rules direct `/agent` to `xstockstrat-agent` and `/` (catch-all) to `xstockstrat-ui`. In local docker-compose, `xstockstrat-ui` is exposed directly on port 3000. The nginx reverse proxy was removed by feature 045 (`ui-consolidation-nextjs`).
 
 ---
 
 ## Frontend Authentication Pattern
 
-Every new Next.js frontend **must** implement JWT auth via `lib/auth.ts` (Edge Runtime, `jose`), `middleware.ts` (route protection + trace ID injection), `/api/auth/{login,refresh,logout}` routes, and forward `x-user-id` / `x-access-scope` / `x-trace-id` on all outbound calls. Required env vars: `JWT_SECRET`, `IDENTITY_ENDPOINT` (gRPC `host:port`).
+The `xstockstrat-ui` service implements JWT auth via `src/lib/auth.ts` (Edge Runtime, `jose`), `src/middleware.ts` (route protection + trace ID injection), per-segment `/api/auth/{login,refresh,logout}` routes, and forwards `x-user-id` / `x-access-scope` / `x-trace-id` on all outbound calls. Required env vars: `JWT_SECRET`, `IDENTITY_ENDPOINT` (gRPC `host:port`).
 
-**Full pattern, required files, and code snippets** → read `docs/patterns/frontend-auth.md`. Reference implementation: `services/xstockstrat-trader/`.
+**Full pattern, required files, and code snippets** → read `docs/patterns/frontend-auth.md`. Reference implementation: `services/xstockstrat-ui/src/`.
 
 ---
 
@@ -250,6 +249,7 @@ When modifying a service's `Dockerfile`, update the complete chain:
    - CI validates: Docker builds, lint checks, and documentation links
 
 **Common updates:**
+
 - **Base image version bump** (Node 22 → 23, Python 3.12 → 3.13, etc.) → update the Dockerfile + version table in root CLAUDE.md + all affected service Dockerfiles
 - **Lock file tooling change** (pnpm@9 → pnpm@10) → update root CLAUDE.md version table + all Node service Dockerfiles + all Node service lock files
 - **Dependency strategy change** (e.g., switching from `--no-frozen-lockfile` to `--frozen-lockfile`) → update Dockerfile + service CLAUDE.md + `docs/patterns/docker-build.md`
@@ -266,15 +266,13 @@ CI runs on every PR to `main-dev` or `main`. Coverage thresholds: Go/Python/Node
 
 ## Inter-Service Dependencies
 
-```
-xstockstrat-trader (UI)
-  └── xstockstrat-trading (gRPC)
-        ├── xstockstrat-marketdata (gRPC)
-        ├── xstockstrat-portfolio (gRPC)
-        ├── xstockstrat-indicators (gRPC)
-        └── xstockstrat-ledger (gRPC write)
-
-xstockstrat-insights (UI)
+```text
+xstockstrat-ui (UI — trader/insights/config-ui segments)
+  ├── xstockstrat-trading (gRPC)
+  │     ├── xstockstrat-marketdata (gRPC)
+  │     ├── xstockstrat-portfolio (gRPC)
+  │     ├── xstockstrat-indicators (gRPC)
+  │     └── xstockstrat-ledger (gRPC write)
   └── xstockstrat-analysis (gRPC)
         ├── xstockstrat-marketdata (gRPC)
         ├── xstockstrat-indicators (gRPC)
@@ -333,7 +331,7 @@ Active phases and their current status. See `docs/roadmap/implementation-roadmap
 | Phase 2 | Data layer: marketdata, portfolio | Pending |
 | Phase 3 | Processing: indicators, ingest, analysis | **DONE** |
 | Phase 4 | Trading core | **DONE** |
-| Phase 5 | UI layer: trader, insights, config-ui | **DONE** |
+| Phase 5 | UI layer: trader, insights, config-ui → consolidated as `xstockstrat-ui` (feature 045) | **DONE** |
 | Phase 6 | Integration & webhook wiring | **DONE** |
 | Phase 7 | Observability: OTel + Grafana Cloud | Pending |
 
@@ -344,6 +342,7 @@ Deviation notes for completed phases: `docs/roadmap/phase[3-6]-deviations.md`.
 ## Feature Roadmap
 
 Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number auto-assigned in creation order. Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
+
 - `feature.md` — lifecycle status (`idea`/`draft`/`spec-ready`/`implementation-ready`/`in-progress`/`code-completed`/`launched`/`rolled-back`/`demoted/canceled`), links to all artifacts
 - `product-spec.md` — requirements, affected services, governance gates
 - `implementation-spec.md` — numbered steps with concrete code references and statuses
@@ -357,6 +356,7 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 | `004-make-repo-public-secure` | `launched` | `feature/make-repo-public-secure` | — promoted to production via PR #158 |
 
 **When starting any session involving an in-progress feature:**
+
 1. Run `/sdd-status` to see all features and their lifecycle status.
 2. Read `docs/roadmap/features/<NNN-slug>/context.md` before touching any related files — it contains critical decisions from prior sessions.
 3. Do NOT rely on conversation context from a previous session. Always re-read context.md.
@@ -378,15 +378,14 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sd
 | Go services | `services/xstockstrat-{trading,portfolio,marketdata}/` |
 | Python services | `services/xstockstrat-{indicators,ingest,analysis}/` |
 | Node.js services | `services/xstockstrat-{ledger,identity,notify,config}/` |
-| Next.js UIs | `services/xstockstrat-{trader,insights,config-ui}/` |
+| Next.js UI | `services/xstockstrat-ui/` |
 | Docker Compose | `docker-compose.yml` |
 | OTel Collector config | `packages/otel/otel-collector-config.yaml` |
 | DO prod app spec | `.do/app.yaml` |
 | DO dev app spec | `.do/app.dev.yaml` |
-| Nginx config | `nginx.conf` (root), `services/xstockstrat-nginx/Dockerfile`, `services/xstockstrat-nginx/docker-entrypoint.sh` |
 | Frontend auth pattern | `docs/patterns/frontend-auth.md` — required for all Next.js services |
 | Backend propagation pattern | `docs/patterns/header-propagation.md` — required for all backend services |
-| Nginx routing pattern | `docs/patterns/nginx-routing.md` — required when adding a new frontend |
+| Nginx routing pattern (deprecated) | `docs/patterns/nginx-routing.md` — historical reference; nginx removed by feature 045 |
 | Local env setup script | `scripts/localenv-setup.sh` |
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
