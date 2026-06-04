@@ -148,3 +148,9 @@
 - Files modified: `src/lib/connectClients.ts`, `src/lib/insightsBff.ts`.
 - Verification: `pnpm run lint` clean; `tsc --noEmit` clean; grep confirms symbols.
 - Deviations: merged `indicatorsClient` into existing connectClients import (avoids ESLint no-duplicates). Detail in Deviation Log.
+
+### Step 8 — service: indicators browser client + formula hooks [done]
+- Created `src/lib/browserClients/indicatorsClient.ts` (connect-web transport → `/insights/api`) and `src/hooks/useFormulas.ts` (useFormulas/useFormula/useRegisterFormula/useUpdateFormula/useDeleteFormula/useExecuteFormula, TanStack Query with cache invalidation).
+- Files modified: `src/lib/browserClients/indicatorsClient.ts`, `src/hooks/useFormulas.ts`.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean.
+- Deviations: typed `inputData` cast (vs `as any`); dropped unused `DeleteFormulaRequest` type import. Detail in Deviation Log.

@@ -618,7 +618,7 @@ Expected: both files show the new symbol.
 
 ### Step 8 — service: Add indicators browser client and formula hooks to xstockstrat-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/browserClients/indicatorsClient.ts` — create
@@ -1057,3 +1057,8 @@ cd services/xstockstrat-ui && pnpm run lint
 **Spec said**: instruction #2 adds `import { indicatorsClient } from '@/lib/connectClients';` as a separate import line in `insightsBff.ts`.
 **Actual**: merged `indicatorsClient` into the existing `import { analysisClient, marketDataClient, portfolioClient, tradingClient } from '@/lib/connectClients';` line instead of adding a second import from the same module.
 **Reason**: two imports from the same module path would be flagged by ESLint (`import/no-duplicates`) and fail `pnpm run lint`; merging is the lint-clean equivalent. `pnpm run lint` → no warnings/errors; `tsc --noEmit` clean.
+
+### Deviation: Step 8 — service (typed cast + unused type import)
+**Spec said**: `useExecuteFormula` casts `inputData: req.inputData as any`; the type-import block lists `ListFormulasRequest, RegisterFormulaRequest, UpdateFormulaRequest, DeleteFormulaRequest`.
+**Actual**: cast `inputData` as `Record<string, never>` (the protoc-gen-es `Struct`-init shape) instead of `as any`, and dropped the unused `DeleteFormulaRequest` type import (`useDeleteFormula` takes a plain `{ formulaId, userId }` object, so the proto type is not referenced).
+**Reason**: `as any` trips `@typescript-eslint/no-explicit-any` and an unused import trips `@typescript-eslint/no-unused-vars` — both fail `pnpm run lint`. The typed cast and trimmed import are lint-clean and `tsc --noEmit` passes.
