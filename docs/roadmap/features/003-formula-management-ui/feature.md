@@ -1,6 +1,8 @@
 # Feature: formula-management-ui
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 88268b2e90af291f3326d918d35f0c4986f92dcf
+**Launched date**: 2026-06-04
 **Development Branch**: `feature/formula-management-ui`
 **Created**: 2026-05-10
 **Last Updated**: 2026-06-04
@@ -20,6 +22,7 @@
 | 2026-06-04 | `in-progress` (Step 12 re-spec) | /sdd-execute | Merged current main-dev; targeted re-spec of Step 12 e2e path (xstockstrat-insights → xstockstrat-ui/e2e/insights) after unified-FE-E2E consolidation. Steps 1–11 reconfirmed valid. |
 | 2026-06-04 | `in-progress` → `code-completed` | /sdd-execute | Steps 2–12 executed (Step 1 already done). Per-step PRs #525–#535 stacked sequentially. All verifications pass (proto regen, migration up/down on PG16, 22 pytest @ 81.9% cov, ui lint/tsc clean, formulas e2e 2 passed). |
 
+| 2026-06-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #554; committed 88268b2e90af291f3326d918d35f0c4986f92dcf |
 ---
 
 ## Artifacts

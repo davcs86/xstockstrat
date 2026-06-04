@@ -183,3 +183,10 @@
 - All 12 steps done. Spec header → complete; feature → code-completed.
 - Per-step stacked PRs: #525 (s2) → #526 (s3) → #527 (s4) → #528 (s5) → #529 (s6) → #530 (s7) → #531 (s8) → #532 (s9) → #533 (s10) → #534 (s11) → #535 (s12). Each step branch based on the prior step branch.
 - Next: open the final integration PR feature/formula-management-ui → main-dev after the step PRs merge (check merge-order.md).
+
+## Session 2026-06-04 (CI: feature status automation)
+
+- Promotion PR #554 merged to main
+- Feature promoted and committed: 88268b2e90af291f3326d918d35f0c4986f92dcf
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-04

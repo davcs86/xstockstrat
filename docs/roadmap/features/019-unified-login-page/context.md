@@ -135,3 +135,10 @@
 ## Session 2026-06-04 — CI fix (#551 Frontend E2E)
 - Frontend E2E on #551 failed deterministically on `e2e/auth.spec.ts` "GET /config-ui/ redirects to /auth/login": received 308 (Next.js trailing-slash normalization `/config-ui/` → `/config-ui`) before the auth redirect, so `[302,307]` + location `/auth/login` both failed. The trader/insights paths (no trailing slash) passed.
 - Fix: dropped the trailing slash — `/config-ui/` → `/config-ui` in the redirect-paths loop, matching the other two paths, so the request hits the auth redirect (307 → /auth/login) directly. (#553 config-ui 503 fix is already on this branch.)
+
+## Session 2026-06-04 (CI: feature status automation)
+
+- Promotion PR #554 merged to main
+- Feature promoted and committed: 88268b2e90af291f3326d918d35f0c4986f92dcf
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-04

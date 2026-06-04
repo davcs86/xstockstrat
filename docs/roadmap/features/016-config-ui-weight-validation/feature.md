@@ -1,6 +1,8 @@
 # Feature: config-ui-weight-validation
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 88268b2e90af291f3326d918d35f0c4986f92dcf
+**Launched date**: 2026-06-04
 **Development Branch**: `feature/config-ui-weight-validation`
 **Created**: 2026-05-23
 **Last Updated**: 2026-06-04
@@ -18,6 +20,7 @@
 | 2026-06-04 | `implementation-ready` (Steps 5–6 re-spec) | /sdd-execute | Merged current main-dev; re-spec'd Steps 5–6 from the deleted `xstockstrat-config-ui` to the consolidated `xstockstrat-ui` (namespace page now uses 044 hooks; e2e under `e2e/config-ui/` + shared `e2e/mock-backend.ts`). Steps 1–4 (proto + xstockstrat-config) unchanged. |
 | 2026-06-04 | `implementation-ready` → `code-completed` | /sdd-execute | All 6 steps executed as stacked PRs #544–#549. buf lint/breaking green, config build+test (7 pass), proto stubs regenerated, UI tsc/lint clean. Step 6 e2e via tsc/lint fallback (dev-server compile timed out under the harness). |
 
+| 2026-06-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #554; committed 88268b2e90af291f3326d918d35f0c4986f92dcf |
 ---
 
 ## Artifacts

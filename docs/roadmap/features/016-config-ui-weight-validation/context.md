@@ -108,3 +108,10 @@
 - All 6 steps done. Feature → code-completed.
 - Stacked per-step PRs: #544 (s1) → #545 (s2) → #546 (s3) → #547 (s4) → #548 (s5) → #549 (s6). Each step branch based on the prior.
 - Next: open final integration PR feature/config-ui-weight-validation → main-dev after the stack merges (merge-order.md has no blocking entry).
+
+## Session 2026-06-04 (CI: feature status automation)
+
+- Promotion PR #554 merged to main
+- Feature promoted and committed: 88268b2e90af291f3326d918d35f0c4986f92dcf
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-04

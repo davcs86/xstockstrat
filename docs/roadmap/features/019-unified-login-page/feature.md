@@ -1,6 +1,8 @@
 # Feature: unified-login-page
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 88268b2e90af291f3326d918d35f0c4986f92dcf
+**Launched date**: 2026-06-04
 **Development Branch**: `feature/unified-login-page`
 **Created**: 2026-05-25
 **Last Updated**: 2026-06-04
@@ -18,6 +20,7 @@
 | 2026-06-04 | `implementation-ready` (spec re-spec) | /sdd-execute | Merged current main-dev; re-spec'd Steps 1–4, 6, 8 to the actual post-045 structure (single `src/middleware.ts` + per-basePath login pages/auth routes/e2e specs). User-approved scope: create consolidated `/api/auth/*` routes + unified `/auth/login` page; delete per-basePath copies. |
 | 2026-06-04 | `implementation-ready` → `code-completed` | /sdd-execute | All 8 steps executed as stacked PRs #536–#543. tsc/lint/build green; identity confirmed gRPC-only; UI_BASE_URL wired (018 not landed → TODO). Step 8 e2e via tsc/lint fallback (dev-server compile timed out under the harness). |
 
+| 2026-06-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #554; committed 88268b2e90af291f3326d918d35f0c4986f92dcf |
 ---
 
 ## Artifacts
