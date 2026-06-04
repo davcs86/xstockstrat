@@ -102,3 +102,32 @@
 - Files modified: deleted 3 per-basePath login pages.
 - Verification: `tsc --noEmit` clean; `pnpm run lint` clean; `pnpm run build` exit 0; no stale imports.
 - Deviations: none.
+
+### Step 5 — service: Verify identity is gRPC-only (FR-8) [done]
+- Verification-only: `grep express|app.get|app.post|createServer|http.listen|HTTP_PORT src/index.ts` → 0; no `express` dep in package.json. FR-8 already satisfied; no code change.
+- Files modified: none (spec/context only).
+- Verification: `pnpm --filter xstockstrat-identity run build` exit 0.
+- Deviations: none.
+
+### Step 6 — service: Add UI_BASE_URL to xstockstrat-agent [done]
+- Added `UI_BASE_URL` to agent env in docker-compose (`http://localhost:3000`) and both `.do` specs (`${APP_URL}`); added `UI_BASE_URL` constant + TODO(019) in `app/main.py` (018 not landed → no /oauth/authorize handler to update yet).
+- Files modified: `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`, `services/xstockstrat-agent/app/main.py`.
+- Verification: UI_BASE_URL present in all 3 deploy files; no `_ENDPOINT` misuse; TODO(019) present; YAML valid.
+- Deviations: left a pre-existing agent ruff import-order finding untouched (not CI-gated; outside step scope). See Deviation Log.
+
+### Step 7 — docs: Update frontend-auth.md [done]
+- Updated required-files table (unified `auth/login` + `auth/oauth-login` pages; single consolidated `/api/auth/*`; per-basePath login pages removed), middleware section (redirect to `/auth/login` via `new URL('/auth/login', req.url)`), and the new-frontend checklist (unified login, no per-basePath login pages/routes).
+- Files modified: `docs/patterns/frontend-auth.md`.
+- Verification: grep `/auth/login|oauth-login` → 9 matches.
+- Deviations: none.
+
+### Step 8 — test: Unified login E2E spec [done]
+- Created `e2e/auth.spec.ts` (POST /api/auth/login valid/invalid, redirects from all 3 basePaths → /auth/login, per-basePath login pages gone, logout clears cookies); deleted `e2e/{trader,insights,config-ui}/auth.spec.ts`.
+- Files modified: created `e2e/auth.spec.ts`; deleted 3 per-basePath auth specs.
+- Verification: `tsc --noEmit` + `pnpm run lint` clean. Playwright run timed out twice (dev-server compile under harness); used the spec's documented tsc/lint fallback. Detail in Deviation Log.
+- Deviations: e2e fallback.
+
+## Session 2026-06-04 — sdd-execute (019 code-completed)
+- All 8 steps done. Spec header status remains per-step; feature → code-completed.
+- Stacked per-step PRs: #536 (s1) → #537 (s2) → #538 (s3) → #539 (s4) → #540 (s5) → #541 (s6) → #542 (s7) → #543 (s8). Each step branch based on the prior.
+- Next: open final integration PR feature/unified-login-page → main-dev after the stack merges (check merge-order.md — no blocking entry).
