@@ -319,7 +319,7 @@ cd services/xstockstrat-config && pnpm run test:coverage
 
 ### Step 5 — service: Add weight validation to NamespacePage editor (xstockstrat-ui)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx` — modify

@@ -91,3 +91,9 @@
 - Files modified: `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts`.
 - Verification: `pnpm run test:coverage` exit 0; 7 tests pass (5 existing + 2 new). (c8 reports 0% under --experimental-strip-types — established behavior of the existing CI script; threshold check exits 0.)
 - Deviations: none.
+
+### Step 5 — service: Add weight validation to NamespacePage editor (xstockstrat-ui) [done]
+- In `src/app/config-ui/[namespace]/page.tsx`: added `validateFloatMap`, `validationError` state, `validation?` on the inline keys type, Input `onBlur` validation, inline error display, Save disabled on error, Cancel clears error, and a `handleSave` guard (no SetConfig when invalid — FR-6). camelCase proto fields (`valueType`/`minValue`/`maxValue`).
+- Files modified: `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx`.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean.
+- Deviations: none (adapted to the 044 hook-based page per the Steps 5–6 re-spec).
