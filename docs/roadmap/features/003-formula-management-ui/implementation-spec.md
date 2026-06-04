@@ -1,6 +1,6 @@
 # Implementation Spec: formula-management-ui
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-06-02 (regenerated — replaces 2026-05-10 version)
 **Feature**: `docs/roadmap/features/003-formula-management-ui/feature.md`
 **Total Steps**: 12
@@ -937,7 +937,7 @@ Expected: each string appears at least once.
 
 ### Step 12 — test: E2E smoke test for formula management UI pages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/formulas.spec.ts` — create
