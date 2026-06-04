@@ -76,6 +76,52 @@ func (ConfigUpdateType) EnumDescriptor() ([]byte, []int) {
 	return file_config_v1_config_proto_rawDescGZIP(), []int{0}
 }
 
+type ValueType int32
+
+const (
+	ValueType_VALUE_TYPE_UNSPECIFIED ValueType = 0
+	ValueType_VALUE_TYPE_FLOAT_MAP   ValueType = 1
+)
+
+// Enum value maps for ValueType.
+var (
+	ValueType_name = map[int32]string{
+		0: "VALUE_TYPE_UNSPECIFIED",
+		1: "VALUE_TYPE_FLOAT_MAP",
+	}
+	ValueType_value = map[string]int32{
+		"VALUE_TYPE_UNSPECIFIED": 0,
+		"VALUE_TYPE_FLOAT_MAP":   1,
+	}
+)
+
+func (x ValueType) Enum() *ValueType {
+	p := new(ValueType)
+	*p = x
+	return p
+}
+
+func (x ValueType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ValueType) Descriptor() protoreflect.EnumDescriptor {
+	return file_config_v1_config_proto_enumTypes[1].Descriptor()
+}
+
+func (ValueType) Type() protoreflect.EnumType {
+	return &file_config_v1_config_proto_enumTypes[1]
+}
+
+func (x ValueType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ValueType.Descriptor instead.
+func (ValueType) EnumDescriptor() ([]byte, []int) {
+	return file_config_v1_config_proto_rawDescGZIP(), []int{1}
+}
+
 type WatchConfigRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`                                                                // e.g. "indicators", "trading", "platform"
@@ -406,6 +452,69 @@ func (*ConfigValue_BoolVal) isConfigValue_Value() {}
 
 func (*ConfigValue_JsonVal) isConfigValue_Value() {}
 
+// Validation constraints declared by the config service for a key.
+// When value_type == VALUE_TYPE_FLOAT_MAP, every numeric leaf in the JSON value
+// must satisfy [min_value, max_value]. Absent or VALUE_TYPE_UNSPECIFIED = no validation.
+type ValidationRule struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ValueType     ValueType              `protobuf:"varint,1,opt,name=value_type,json=valueType,proto3,enum=xstockstrat.config.v1.ValueType" json:"value_type,omitempty"`
+	MinValue      float32                `protobuf:"fixed32,2,opt,name=min_value,json=minValue,proto3" json:"min_value,omitempty"`
+	MaxValue      float32                `protobuf:"fixed32,3,opt,name=max_value,json=maxValue,proto3" json:"max_value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidationRule) Reset() {
+	*x = ValidationRule{}
+	mi := &file_config_v1_config_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidationRule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidationRule) ProtoMessage() {}
+
+func (x *ValidationRule) ProtoReflect() protoreflect.Message {
+	mi := &file_config_v1_config_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidationRule.ProtoReflect.Descriptor instead.
+func (*ValidationRule) Descriptor() ([]byte, []int) {
+	return file_config_v1_config_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ValidationRule) GetValueType() ValueType {
+	if x != nil {
+		return x.ValueType
+	}
+	return ValueType_VALUE_TYPE_UNSPECIFIED
+}
+
+func (x *ValidationRule) GetMinValue() float32 {
+	if x != nil {
+		return x.MinValue
+	}
+	return 0
+}
+
+func (x *ValidationRule) GetMaxValue() float32 {
+	if x != nil {
+		return x.MaxValue
+	}
+	return 0
+}
+
 type GetConfigRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
@@ -417,7 +526,7 @@ type GetConfigRequest struct {
 
 func (x *GetConfigRequest) Reset() {
 	*x = GetConfigRequest{}
-	mi := &file_config_v1_config_proto_msgTypes[3]
+	mi := &file_config_v1_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -429,7 +538,7 @@ func (x *GetConfigRequest) String() string {
 func (*GetConfigRequest) ProtoMessage() {}
 
 func (x *GetConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_config_v1_config_proto_msgTypes[3]
+	mi := &file_config_v1_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -442,7 +551,7 @@ func (x *GetConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConfigRequest.ProtoReflect.Descriptor instead.
 func (*GetConfigRequest) Descriptor() ([]byte, []int) {
-	return file_config_v1_config_proto_rawDescGZIP(), []int{3}
+	return file_config_v1_config_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetConfigRequest) GetNamespace() string {
@@ -481,7 +590,7 @@ type SetConfigRequest struct {
 
 func (x *SetConfigRequest) Reset() {
 	*x = SetConfigRequest{}
-	mi := &file_config_v1_config_proto_msgTypes[4]
+	mi := &file_config_v1_config_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -493,7 +602,7 @@ func (x *SetConfigRequest) String() string {
 func (*SetConfigRequest) ProtoMessage() {}
 
 func (x *SetConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_config_v1_config_proto_msgTypes[4]
+	mi := &file_config_v1_config_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -506,7 +615,7 @@ func (x *SetConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetConfigRequest.ProtoReflect.Descriptor instead.
 func (*SetConfigRequest) Descriptor() ([]byte, []int) {
-	return file_config_v1_config_proto_rawDescGZIP(), []int{4}
+	return file_config_v1_config_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SetConfigRequest) GetNamespace() string {
@@ -568,7 +677,7 @@ type SetConfigResponse struct {
 
 func (x *SetConfigResponse) Reset() {
 	*x = SetConfigResponse{}
-	mi := &file_config_v1_config_proto_msgTypes[5]
+	mi := &file_config_v1_config_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -580,7 +689,7 @@ func (x *SetConfigResponse) String() string {
 func (*SetConfigResponse) ProtoMessage() {}
 
 func (x *SetConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_config_v1_config_proto_msgTypes[5]
+	mi := &file_config_v1_config_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -593,7 +702,7 @@ func (x *SetConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetConfigResponse.ProtoReflect.Descriptor instead.
 func (*SetConfigResponse) Descriptor() ([]byte, []int) {
-	return file_config_v1_config_proto_rawDescGZIP(), []int{5}
+	return file_config_v1_config_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SetConfigResponse) GetVersion() string {
@@ -621,7 +730,7 @@ type ListKeysRequest struct {
 
 func (x *ListKeysRequest) Reset() {
 	*x = ListKeysRequest{}
-	mi := &file_config_v1_config_proto_msgTypes[6]
+	mi := &file_config_v1_config_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -633,7 +742,7 @@ func (x *ListKeysRequest) String() string {
 func (*ListKeysRequest) ProtoMessage() {}
 
 func (x *ListKeysRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_config_v1_config_proto_msgTypes[6]
+	mi := &file_config_v1_config_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -646,7 +755,7 @@ func (x *ListKeysRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListKeysRequest.ProtoReflect.Descriptor instead.
 func (*ListKeysRequest) Descriptor() ([]byte, []int) {
-	return file_config_v1_config_proto_rawDescGZIP(), []int{6}
+	return file_config_v1_config_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListKeysRequest) GetNamespace() string {
@@ -679,7 +788,7 @@ type ListKeysResponse struct {
 
 func (x *ListKeysResponse) Reset() {
 	*x = ListKeysResponse{}
-	mi := &file_config_v1_config_proto_msgTypes[7]
+	mi := &file_config_v1_config_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -691,7 +800,7 @@ func (x *ListKeysResponse) String() string {
 func (*ListKeysResponse) ProtoMessage() {}
 
 func (x *ListKeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_config_v1_config_proto_msgTypes[7]
+	mi := &file_config_v1_config_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -704,7 +813,7 @@ func (x *ListKeysResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListKeysResponse.ProtoReflect.Descriptor instead.
 func (*ListKeysResponse) Descriptor() ([]byte, []int) {
-	return file_config_v1_config_proto_rawDescGZIP(), []int{7}
+	return file_config_v1_config_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListKeysResponse) GetKeys() []*ConfigKeyMeta {
@@ -723,13 +832,14 @@ type ConfigKeyMeta struct {
 	ConsumingService string                 `protobuf:"bytes,5,opt,name=consuming_service,json=consumingService,proto3" json:"consuming_service,omitempty"`
 	Environment      v1.Environment         `protobuf:"varint,6,opt,name=environment,proto3,enum=xstockstrat.common.v1.Environment" json:"environment,omitempty"`
 	TradingMode      v1.TradingMode         `protobuf:"varint,7,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
+	Validation       *ValidationRule        `protobuf:"bytes,8,opt,name=validation,proto3" json:"validation,omitempty"` // optional; absent = no validation
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ConfigKeyMeta) Reset() {
 	*x = ConfigKeyMeta{}
-	mi := &file_config_v1_config_proto_msgTypes[8]
+	mi := &file_config_v1_config_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -741,7 +851,7 @@ func (x *ConfigKeyMeta) String() string {
 func (*ConfigKeyMeta) ProtoMessage() {}
 
 func (x *ConfigKeyMeta) ProtoReflect() protoreflect.Message {
-	mi := &file_config_v1_config_proto_msgTypes[8]
+	mi := &file_config_v1_config_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -754,7 +864,7 @@ func (x *ConfigKeyMeta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigKeyMeta.ProtoReflect.Descriptor instead.
 func (*ConfigKeyMeta) Descriptor() ([]byte, []int) {
-	return file_config_v1_config_proto_rawDescGZIP(), []int{8}
+	return file_config_v1_config_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ConfigKeyMeta) GetKey() string {
@@ -806,6 +916,13 @@ func (x *ConfigKeyMeta) GetTradingMode() v1.TradingMode {
 	return v1.TradingMode(0)
 }
 
+func (x *ConfigKeyMeta) GetValidation() *ValidationRule {
+	if x != nil {
+		return x.Validation
+	}
+	return nil
+}
+
 var File_config_v1_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_config_proto_rawDesc = "" +
@@ -841,7 +958,12 @@ const file_config_v1_config_proto_rawDesc = "" +
 	"\tis_secret\x18\x06 \x01(\bR\bisSecret\x12 \n" +
 	"\vdescription\x18\a \x01(\tR\vdescription\x12#\n" +
 	"\rdefault_value\x18\b \x01(\tR\fdefaultValueB\a\n" +
-	"\x05value\"\xbd\x01\n" +
+	"\x05value\"\x8b\x01\n" +
+	"\x0eValidationRule\x12?\n" +
+	"\n" +
+	"value_type\x18\x01 \x01(\x0e2 .xstockstrat.config.v1.ValueTypeR\tvalueType\x12\x1b\n" +
+	"\tmin_value\x18\x02 \x01(\x02R\bminValue\x12\x1b\n" +
+	"\tmax_value\x18\x03 \x01(\x02R\bmaxValue\"\xbd\x01\n" +
 	"\x10GetConfigRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12D\n" +
 	"\venvironment\x18\x02 \x01(\x0e2\".xstockstrat.common.v1.EnvironmentR\venvironment\x12E\n" +
@@ -863,7 +985,7 @@ const file_config_v1_config_proto_rawDesc = "" +
 	"\venvironment\x18\x02 \x01(\x0e2\".xstockstrat.common.v1.EnvironmentR\venvironment\x12E\n" +
 	"\ftrading_mode\x18\x03 \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\"L\n" +
 	"\x10ListKeysResponse\x128\n" +
-	"\x04keys\x18\x01 \x03(\v2$.xstockstrat.config.v1.ConfigKeyMetaR\x04keys\"\xbf\x02\n" +
+	"\x04keys\x18\x01 \x03(\v2$.xstockstrat.config.v1.ConfigKeyMetaR\x04keys\"\x86\x03\n" +
 	"\rConfigKeyMeta\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12#\n" +
@@ -871,12 +993,18 @@ const file_config_v1_config_proto_rawDesc = "" +
 	"\tis_secret\x18\x04 \x01(\bR\bisSecret\x12+\n" +
 	"\x11consuming_service\x18\x05 \x01(\tR\x10consumingService\x12D\n" +
 	"\venvironment\x18\x06 \x01(\x0e2\".xstockstrat.common.v1.EnvironmentR\venvironment\x12E\n" +
-	"\ftrading_mode\x18\a \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode*\x94\x01\n" +
+	"\ftrading_mode\x18\a \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\x12E\n" +
+	"\n" +
+	"validation\x18\b \x01(\v2%.xstockstrat.config.v1.ValidationRuleR\n" +
+	"validation*\x94\x01\n" +
 	"\x10ConfigUpdateType\x12\"\n" +
 	"\x1eCONFIG_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bCONFIG_UPDATE_TYPE_SNAPSHOT\x10\x01\x12\x1c\n" +
 	"\x18CONFIG_UPDATE_TYPE_DELTA\x10\x02\x12\x1d\n" +
-	"\x19CONFIG_UPDATE_TYPE_RELOAD\x10\x032\x8c\x03\n" +
+	"\x19CONFIG_UPDATE_TYPE_RELOAD\x10\x03*A\n" +
+	"\tValueType\x12\x1a\n" +
+	"\x16VALUE_TYPE_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14VALUE_TYPE_FLOAT_MAP\x10\x012\x8c\x03\n" +
 	"\rConfigService\x12a\n" +
 	"\vWatchConfig\x12).xstockstrat.config.v1.WatchConfigRequest\x1a%.xstockstrat.config.v1.ConfigSnapshot0\x01\x12[\n" +
 	"\tGetConfig\x12'.xstockstrat.config.v1.GetConfigRequest\x1a%.xstockstrat.config.v1.ConfigSnapshot\x12^\n" +
@@ -895,59 +1023,63 @@ func file_config_v1_config_proto_rawDescGZIP() []byte {
 	return file_config_v1_config_proto_rawDescData
 }
 
-var file_config_v1_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_config_v1_config_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_config_v1_config_proto_goTypes = []any{
 	(ConfigUpdateType)(0),         // 0: xstockstrat.config.v1.ConfigUpdateType
-	(*WatchConfigRequest)(nil),    // 1: xstockstrat.config.v1.WatchConfigRequest
-	(*ConfigSnapshot)(nil),        // 2: xstockstrat.config.v1.ConfigSnapshot
-	(*ConfigValue)(nil),           // 3: xstockstrat.config.v1.ConfigValue
-	(*GetConfigRequest)(nil),      // 4: xstockstrat.config.v1.GetConfigRequest
-	(*SetConfigRequest)(nil),      // 5: xstockstrat.config.v1.SetConfigRequest
-	(*SetConfigResponse)(nil),     // 6: xstockstrat.config.v1.SetConfigResponse
-	(*ListKeysRequest)(nil),       // 7: xstockstrat.config.v1.ListKeysRequest
-	(*ListKeysResponse)(nil),      // 8: xstockstrat.config.v1.ListKeysResponse
-	(*ConfigKeyMeta)(nil),         // 9: xstockstrat.config.v1.ConfigKeyMeta
-	nil,                           // 10: xstockstrat.config.v1.ConfigSnapshot.ValuesEntry
-	(v1.Environment)(0),           // 11: xstockstrat.common.v1.Environment
-	(v1.TradingMode)(0),           // 12: xstockstrat.common.v1.TradingMode
-	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),       // 14: google.protobuf.Struct
+	(ValueType)(0),                // 1: xstockstrat.config.v1.ValueType
+	(*WatchConfigRequest)(nil),    // 2: xstockstrat.config.v1.WatchConfigRequest
+	(*ConfigSnapshot)(nil),        // 3: xstockstrat.config.v1.ConfigSnapshot
+	(*ConfigValue)(nil),           // 4: xstockstrat.config.v1.ConfigValue
+	(*ValidationRule)(nil),        // 5: xstockstrat.config.v1.ValidationRule
+	(*GetConfigRequest)(nil),      // 6: xstockstrat.config.v1.GetConfigRequest
+	(*SetConfigRequest)(nil),      // 7: xstockstrat.config.v1.SetConfigRequest
+	(*SetConfigResponse)(nil),     // 8: xstockstrat.config.v1.SetConfigResponse
+	(*ListKeysRequest)(nil),       // 9: xstockstrat.config.v1.ListKeysRequest
+	(*ListKeysResponse)(nil),      // 10: xstockstrat.config.v1.ListKeysResponse
+	(*ConfigKeyMeta)(nil),         // 11: xstockstrat.config.v1.ConfigKeyMeta
+	nil,                           // 12: xstockstrat.config.v1.ConfigSnapshot.ValuesEntry
+	(v1.Environment)(0),           // 13: xstockstrat.common.v1.Environment
+	(v1.TradingMode)(0),           // 14: xstockstrat.common.v1.TradingMode
+	(*timestamppb.Timestamp)(nil), // 15: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),       // 16: google.protobuf.Struct
 }
 var file_config_v1_config_proto_depIdxs = []int32{
-	11, // 0: xstockstrat.config.v1.WatchConfigRequest.environment:type_name -> xstockstrat.common.v1.Environment
-	12, // 1: xstockstrat.config.v1.WatchConfigRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	13, // 2: xstockstrat.config.v1.ConfigSnapshot.updated_at:type_name -> google.protobuf.Timestamp
-	10, // 3: xstockstrat.config.v1.ConfigSnapshot.values:type_name -> xstockstrat.config.v1.ConfigSnapshot.ValuesEntry
+	13, // 0: xstockstrat.config.v1.WatchConfigRequest.environment:type_name -> xstockstrat.common.v1.Environment
+	14, // 1: xstockstrat.config.v1.WatchConfigRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	15, // 2: xstockstrat.config.v1.ConfigSnapshot.updated_at:type_name -> google.protobuf.Timestamp
+	12, // 3: xstockstrat.config.v1.ConfigSnapshot.values:type_name -> xstockstrat.config.v1.ConfigSnapshot.ValuesEntry
 	0,  // 4: xstockstrat.config.v1.ConfigSnapshot.update_type:type_name -> xstockstrat.config.v1.ConfigUpdateType
-	11, // 5: xstockstrat.config.v1.ConfigSnapshot.environment:type_name -> xstockstrat.common.v1.Environment
-	12, // 6: xstockstrat.config.v1.ConfigSnapshot.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	14, // 7: xstockstrat.config.v1.ConfigValue.json_val:type_name -> google.protobuf.Struct
-	11, // 8: xstockstrat.config.v1.GetConfigRequest.environment:type_name -> xstockstrat.common.v1.Environment
-	12, // 9: xstockstrat.config.v1.GetConfigRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	3,  // 10: xstockstrat.config.v1.SetConfigRequest.value:type_name -> xstockstrat.config.v1.ConfigValue
-	11, // 11: xstockstrat.config.v1.SetConfigRequest.environment:type_name -> xstockstrat.common.v1.Environment
-	12, // 12: xstockstrat.config.v1.SetConfigRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	13, // 13: xstockstrat.config.v1.SetConfigResponse.updated_at:type_name -> google.protobuf.Timestamp
-	11, // 14: xstockstrat.config.v1.ListKeysRequest.environment:type_name -> xstockstrat.common.v1.Environment
-	12, // 15: xstockstrat.config.v1.ListKeysRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	9,  // 16: xstockstrat.config.v1.ListKeysResponse.keys:type_name -> xstockstrat.config.v1.ConfigKeyMeta
-	11, // 17: xstockstrat.config.v1.ConfigKeyMeta.environment:type_name -> xstockstrat.common.v1.Environment
-	12, // 18: xstockstrat.config.v1.ConfigKeyMeta.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	3,  // 19: xstockstrat.config.v1.ConfigSnapshot.ValuesEntry.value:type_name -> xstockstrat.config.v1.ConfigValue
-	1,  // 20: xstockstrat.config.v1.ConfigService.WatchConfig:input_type -> xstockstrat.config.v1.WatchConfigRequest
-	4,  // 21: xstockstrat.config.v1.ConfigService.GetConfig:input_type -> xstockstrat.config.v1.GetConfigRequest
-	5,  // 22: xstockstrat.config.v1.ConfigService.SetConfig:input_type -> xstockstrat.config.v1.SetConfigRequest
-	7,  // 23: xstockstrat.config.v1.ConfigService.ListKeys:input_type -> xstockstrat.config.v1.ListKeysRequest
-	2,  // 24: xstockstrat.config.v1.ConfigService.WatchConfig:output_type -> xstockstrat.config.v1.ConfigSnapshot
-	2,  // 25: xstockstrat.config.v1.ConfigService.GetConfig:output_type -> xstockstrat.config.v1.ConfigSnapshot
-	6,  // 26: xstockstrat.config.v1.ConfigService.SetConfig:output_type -> xstockstrat.config.v1.SetConfigResponse
-	8,  // 27: xstockstrat.config.v1.ConfigService.ListKeys:output_type -> xstockstrat.config.v1.ListKeysResponse
-	24, // [24:28] is the sub-list for method output_type
-	20, // [20:24] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	13, // 5: xstockstrat.config.v1.ConfigSnapshot.environment:type_name -> xstockstrat.common.v1.Environment
+	14, // 6: xstockstrat.config.v1.ConfigSnapshot.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	16, // 7: xstockstrat.config.v1.ConfigValue.json_val:type_name -> google.protobuf.Struct
+	1,  // 8: xstockstrat.config.v1.ValidationRule.value_type:type_name -> xstockstrat.config.v1.ValueType
+	13, // 9: xstockstrat.config.v1.GetConfigRequest.environment:type_name -> xstockstrat.common.v1.Environment
+	14, // 10: xstockstrat.config.v1.GetConfigRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	4,  // 11: xstockstrat.config.v1.SetConfigRequest.value:type_name -> xstockstrat.config.v1.ConfigValue
+	13, // 12: xstockstrat.config.v1.SetConfigRequest.environment:type_name -> xstockstrat.common.v1.Environment
+	14, // 13: xstockstrat.config.v1.SetConfigRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	15, // 14: xstockstrat.config.v1.SetConfigResponse.updated_at:type_name -> google.protobuf.Timestamp
+	13, // 15: xstockstrat.config.v1.ListKeysRequest.environment:type_name -> xstockstrat.common.v1.Environment
+	14, // 16: xstockstrat.config.v1.ListKeysRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	11, // 17: xstockstrat.config.v1.ListKeysResponse.keys:type_name -> xstockstrat.config.v1.ConfigKeyMeta
+	13, // 18: xstockstrat.config.v1.ConfigKeyMeta.environment:type_name -> xstockstrat.common.v1.Environment
+	14, // 19: xstockstrat.config.v1.ConfigKeyMeta.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	5,  // 20: xstockstrat.config.v1.ConfigKeyMeta.validation:type_name -> xstockstrat.config.v1.ValidationRule
+	4,  // 21: xstockstrat.config.v1.ConfigSnapshot.ValuesEntry.value:type_name -> xstockstrat.config.v1.ConfigValue
+	2,  // 22: xstockstrat.config.v1.ConfigService.WatchConfig:input_type -> xstockstrat.config.v1.WatchConfigRequest
+	6,  // 23: xstockstrat.config.v1.ConfigService.GetConfig:input_type -> xstockstrat.config.v1.GetConfigRequest
+	7,  // 24: xstockstrat.config.v1.ConfigService.SetConfig:input_type -> xstockstrat.config.v1.SetConfigRequest
+	9,  // 25: xstockstrat.config.v1.ConfigService.ListKeys:input_type -> xstockstrat.config.v1.ListKeysRequest
+	3,  // 26: xstockstrat.config.v1.ConfigService.WatchConfig:output_type -> xstockstrat.config.v1.ConfigSnapshot
+	3,  // 27: xstockstrat.config.v1.ConfigService.GetConfig:output_type -> xstockstrat.config.v1.ConfigSnapshot
+	8,  // 28: xstockstrat.config.v1.ConfigService.SetConfig:output_type -> xstockstrat.config.v1.SetConfigResponse
+	10, // 29: xstockstrat.config.v1.ConfigService.ListKeys:output_type -> xstockstrat.config.v1.ListKeysResponse
+	26, // [26:30] is the sub-list for method output_type
+	22, // [22:26] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_config_v1_config_proto_init() }
@@ -967,8 +1099,8 @@ func file_config_v1_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_config_v1_config_proto_rawDesc), len(file_config_v1_config_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   10,
+			NumEnums:      2,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

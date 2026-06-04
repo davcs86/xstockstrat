@@ -73,3 +73,9 @@
 - Files modified: `packages/proto/config/v1/config.proto`.
 - Verification: `buf lint` exit 0; `buf breaking` (repo-root .git + subdir) exit 0.
 - Deviations: buf breaking path form (monorepo). Detail in Deviation Log.
+
+### Step 2 — proto-gen: Regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh` (CI-pinned toolchain: buf 1.69.0, protobuf 6.31.1, go plugins). Regenerated config stubs (go/python/ts/dist) with ValueType/ValidationRule/validation.
+- Files modified: `packages/proto/gen/{go,python,ts,ts/dist}/config/v1/*`.
+- Verification: diff scoped to config stubs only (no version drift); TS 15 matches, Go 38 matches for ValidationRule/ValueType/validation.
+- Deviations: none.

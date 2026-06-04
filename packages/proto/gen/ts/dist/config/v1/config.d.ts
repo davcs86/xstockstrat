@@ -15,6 +15,14 @@ export declare enum ConfigUpdateType {
 export declare function configUpdateTypeFromJSON(object: any): ConfigUpdateType;
 export declare function configUpdateTypeToJSON(object: ConfigUpdateType): string;
 export declare function configUpdateTypeToNumber(object: ConfigUpdateType): number;
+export declare enum ValueType {
+    VALUE_TYPE_UNSPECIFIED = "VALUE_TYPE_UNSPECIFIED",
+    VALUE_TYPE_FLOAT_MAP = "VALUE_TYPE_FLOAT_MAP",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function valueTypeFromJSON(object: any): ValueType;
+export declare function valueTypeToJSON(object: ValueType): string;
+export declare function valueTypeToNumber(object: ValueType): number;
 export interface WatchConfigRequest {
     /** e.g. "indicators", "trading", "platform" */
     namespace: string;
@@ -57,6 +65,16 @@ export interface ConfigValue {
     description: string;
     defaultValue: string;
 }
+/**
+ * Validation constraints declared by the config service for a key.
+ * When value_type == VALUE_TYPE_FLOAT_MAP, every numeric leaf in the JSON value
+ * must satisfy [min_value, max_value]. Absent or VALUE_TYPE_UNSPECIFIED = no validation.
+ */
+export interface ValidationRule {
+    valueType: ValueType;
+    minValue: number;
+    maxValue: number;
+}
 export interface GetConfigRequest {
     namespace: string;
     environment: Environment;
@@ -91,11 +109,14 @@ export interface ConfigKeyMeta {
     consumingService: string;
     environment: Environment;
     tradingMode: TradingMode;
+    /** optional; absent = no validation */
+    validation?: ValidationRule | undefined;
 }
 export declare const WatchConfigRequest: MessageFns<WatchConfigRequest>;
 export declare const ConfigSnapshot: MessageFns<ConfigSnapshot>;
 export declare const ConfigSnapshot_ValuesEntry: MessageFns<ConfigSnapshot_ValuesEntry>;
 export declare const ConfigValue: MessageFns<ConfigValue>;
+export declare const ValidationRule: MessageFns<ValidationRule>;
 export declare const GetConfigRequest: MessageFns<GetConfigRequest>;
 export declare const SetConfigRequest: MessageFns<SetConfigRequest>;
 export declare const SetConfigResponse: MessageFns<SetConfigResponse>;

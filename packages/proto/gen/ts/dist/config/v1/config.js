@@ -5,10 +5,13 @@
 //   protoc               unknown
 // source: config/v1/config.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ConfigServiceClient = exports.ConfigServiceService = exports.ConfigKeyMeta = exports.ListKeysResponse = exports.ListKeysRequest = exports.SetConfigResponse = exports.SetConfigRequest = exports.GetConfigRequest = exports.ConfigValue = exports.ConfigSnapshot_ValuesEntry = exports.ConfigSnapshot = exports.WatchConfigRequest = exports.ConfigUpdateType = exports.protobufPackage = void 0;
+exports.ConfigServiceClient = exports.ConfigServiceService = exports.ConfigKeyMeta = exports.ListKeysResponse = exports.ListKeysRequest = exports.SetConfigResponse = exports.SetConfigRequest = exports.GetConfigRequest = exports.ValidationRule = exports.ConfigValue = exports.ConfigSnapshot_ValuesEntry = exports.ConfigSnapshot = exports.WatchConfigRequest = exports.ValueType = exports.ConfigUpdateType = exports.protobufPackage = void 0;
 exports.configUpdateTypeFromJSON = configUpdateTypeFromJSON;
 exports.configUpdateTypeToJSON = configUpdateTypeToJSON;
 exports.configUpdateTypeToNumber = configUpdateTypeToNumber;
+exports.valueTypeFromJSON = valueTypeFromJSON;
+exports.valueTypeToJSON = valueTypeToJSON;
+exports.valueTypeToNumber = valueTypeToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -73,6 +76,48 @@ function configUpdateTypeToNumber(object) {
         case ConfigUpdateType.CONFIG_UPDATE_TYPE_RELOAD:
             return 3;
         case ConfigUpdateType.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+var ValueType;
+(function (ValueType) {
+    ValueType["VALUE_TYPE_UNSPECIFIED"] = "VALUE_TYPE_UNSPECIFIED";
+    ValueType["VALUE_TYPE_FLOAT_MAP"] = "VALUE_TYPE_FLOAT_MAP";
+    ValueType["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(ValueType || (exports.ValueType = ValueType = {}));
+function valueTypeFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "VALUE_TYPE_UNSPECIFIED":
+            return ValueType.VALUE_TYPE_UNSPECIFIED;
+        case 1:
+        case "VALUE_TYPE_FLOAT_MAP":
+            return ValueType.VALUE_TYPE_FLOAT_MAP;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return ValueType.UNRECOGNIZED;
+    }
+}
+function valueTypeToJSON(object) {
+    switch (object) {
+        case ValueType.VALUE_TYPE_UNSPECIFIED:
+            return "VALUE_TYPE_UNSPECIFIED";
+        case ValueType.VALUE_TYPE_FLOAT_MAP:
+            return "VALUE_TYPE_FLOAT_MAP";
+        case ValueType.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function valueTypeToNumber(object) {
+    switch (object) {
+        case ValueType.VALUE_TYPE_UNSPECIFIED:
+            return 0;
+        case ValueType.VALUE_TYPE_FLOAT_MAP:
+            return 1;
+        case ValueType.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -671,6 +716,101 @@ exports.ConfigValue = {
         return message;
     },
 };
+function createBaseValidationRule() {
+    return { valueType: ValueType.VALUE_TYPE_UNSPECIFIED, minValue: 0, maxValue: 0 };
+}
+exports.ValidationRule = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.valueType !== ValueType.VALUE_TYPE_UNSPECIFIED) {
+            writer.uint32(8).int32(valueTypeToNumber(message.valueType));
+        }
+        if (message.minValue !== 0) {
+            writer.uint32(21).float(message.minValue);
+        }
+        if (message.maxValue !== 0) {
+            writer.uint32(29).float(message.maxValue);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseValidationRule();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.valueType = valueTypeFromJSON(reader.int32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 21) {
+                        break;
+                    }
+                    message.minValue = reader.float();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 29) {
+                        break;
+                    }
+                    message.maxValue = reader.float();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            valueType: isSet(object.valueType)
+                ? valueTypeFromJSON(object.valueType)
+                : isSet(object.value_type)
+                    ? valueTypeFromJSON(object.value_type)
+                    : ValueType.VALUE_TYPE_UNSPECIFIED,
+            minValue: isSet(object.minValue)
+                ? globalThis.Number(object.minValue)
+                : isSet(object.min_value)
+                    ? globalThis.Number(object.min_value)
+                    : 0,
+            maxValue: isSet(object.maxValue)
+                ? globalThis.Number(object.maxValue)
+                : isSet(object.max_value)
+                    ? globalThis.Number(object.max_value)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.valueType !== ValueType.VALUE_TYPE_UNSPECIFIED) {
+            obj.valueType = valueTypeToJSON(message.valueType);
+        }
+        if (message.minValue !== 0) {
+            obj.minValue = message.minValue;
+        }
+        if (message.maxValue !== 0) {
+            obj.maxValue = message.maxValue;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ValidationRule.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseValidationRule();
+        message.valueType = object.valueType ?? ValueType.VALUE_TYPE_UNSPECIFIED;
+        message.minValue = object.minValue ?? 0;
+        message.maxValue = object.maxValue ?? 0;
+        return message;
+    },
+};
 function createBaseGetConfigRequest() {
     return {
         namespace: "",
@@ -1150,6 +1290,7 @@ function createBaseConfigKeyMeta() {
         consumingService: "",
         environment: common_1.Environment.ENVIRONMENT_UNSPECIFIED,
         tradingMode: common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
+        validation: undefined,
     };
 }
 exports.ConfigKeyMeta = {
@@ -1174,6 +1315,9 @@ exports.ConfigKeyMeta = {
         }
         if (message.tradingMode !== common_1.TradingMode.TRADING_MODE_UNSPECIFIED) {
             writer.uint32(56).int32((0, common_1.tradingModeToNumber)(message.tradingMode));
+        }
+        if (message.validation !== undefined) {
+            exports.ValidationRule.encode(message.validation, writer.uint32(66).fork()).join();
         }
         return writer;
     },
@@ -1233,6 +1377,13 @@ exports.ConfigKeyMeta = {
                     message.tradingMode = (0, common_1.tradingModeFromJSON)(reader.int32());
                     continue;
                 }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.validation = exports.ValidationRule.decode(reader, reader.uint32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1268,6 +1419,7 @@ exports.ConfigKeyMeta = {
                 : isSet(object.trading_mode)
                     ? (0, common_1.tradingModeFromJSON)(object.trading_mode)
                     : common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
+            validation: isSet(object.validation) ? exports.ValidationRule.fromJSON(object.validation) : undefined,
         };
     },
     toJSON(message) {
@@ -1293,6 +1445,9 @@ exports.ConfigKeyMeta = {
         if (message.tradingMode !== common_1.TradingMode.TRADING_MODE_UNSPECIFIED) {
             obj.tradingMode = (0, common_1.tradingModeToJSON)(message.tradingMode);
         }
+        if (message.validation !== undefined) {
+            obj.validation = exports.ValidationRule.toJSON(message.validation);
+        }
         return obj;
     },
     create(base) {
@@ -1307,6 +1462,9 @@ exports.ConfigKeyMeta = {
         message.consumingService = object.consumingService ?? "";
         message.environment = object.environment ?? common_1.Environment.ENVIRONMENT_UNSPECIFIED;
         message.tradingMode = object.tradingMode ?? common_1.TradingMode.TRADING_MODE_UNSPECIFIED;
+        message.validation = (object.validation !== undefined && object.validation !== null)
+            ? exports.ValidationRule.fromPartial(object.validation)
+            : undefined;
         return message;
     },
 };

@@ -103,7 +103,7 @@ for `buf breaking` — comparing against the feature branch itself is a no-op (s
 
 ### Step 2 — proto-gen: Regenerate stubs after ValidationRule addition
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/ts/config/v1/config_pb.ts` — modify (regenerated)
