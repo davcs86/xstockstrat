@@ -1,9 +1,9 @@
 # Feature: strategy-engine
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/strategy-engine`
 **Created**: 2026-06-01
-**Last Updated**: 2026-06-01
+**Last Updated**: 2026-06-04
 
 ---
 
@@ -13,6 +13,7 @@
 |---|---|---|---|
 | 2026-06-01 | `idea` → `draft` | /sdd-story | Product spec generated (originally `mcp-management-tools`) |
 | 2026-06-01 | `draft` (revamp) | /sdd-story | Renamed `mcp-management-tools` → `strategy-engine`; rescoped to a first-class composable Strategy model + backtest integration + management tools. Continuous live→alert runtime split out to feature `048-live-strategy-alert-engine`. Renumbered 046→047 (046 taken by `align-frontend-e2e-bff-mocks`). |
+| 2026-06-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings — advisory). All 7 open questions resolved: JSON condition tree rule model, evaluator in xstockstrat-analysis, both strategy_id+inline_definition for RunBacktest, ListStrategyDefinitions added, signals-as-rule-term deferred, ListFormulas from feature 003, agent reviewer-registry gap noted. |
 
 ---
 
@@ -52,4 +53,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review strategy-engine product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec strategy-engine` — generate implementation spec from the approved product spec

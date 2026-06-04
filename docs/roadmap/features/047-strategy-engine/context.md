@@ -36,3 +36,20 @@
 - Key design principle carried into the spec: a **single shared evaluator** is the source of truth
   for strategy behavior so backtest (047) and live (048) cannot diverge. Rule representation and
   evaluator placement left as Open Questions for `/sdd-spec`.
+
+## Session 2026-06-04 — sdd-review product-spec
+
+- Product spec approved. Status: `draft` → `spec-ready`.
+- All 7 open questions resolved:
+  - **Rule representation**: structured JSON condition tree (machine-validatable, UI-renderable). See FR-3.
+  - **Evaluator placement**: standalone Python module inside `xstockstrat-analysis`; feature 048 imports it directly.
+  - **Backtest reference shape**: both `strategy_id` (resolve from DB) and `inline_definition` (one-off); inline takes precedence. See FR-7.
+  - **ListStrategies reconciliation**: add `ListStrategyDefinitions` for stored definitions; existing `ListStrategies` (StrategyScore) unchanged. See FR-9.
+  - **Signals as rule term**: deferred to feature 048 or a follow-up. Signals remain a separate weighting layer (FR-4) outside the rule grammar. Evaluator interface must be designed to accommodate a future signal term without breaking change.
+  - **ListFormulas RPC**: feature 003 (`formula-management-ui`) delivers it; this feature consumes it. See FR-11.
+  - **Agent reviewer-registry gap**: noted; separate docs PR to add `xstockstrat-agent` to `docs/runbooks/reviewer-registry.md`. Not a blocker.
+- Advisory warnings (no action required):
+  - FR-3 testability depends on resolved rule representation (now resolved).
+  - `packages/proto` removed from Affected Services bullet list; moved to a note under the section.
+  - AC-5 strengthened to a concrete, observable acceptance criterion.
+  - Overlap WARNs: features 003 (xstockstrat-indicators), 007 (xstockstrat-analysis), 008 (xstockstrat-ingest dependency), 009 (xstockstrat-agent), 018 (xstockstrat-agent) — coordinate merge order; no FAIL-level conflicts.
