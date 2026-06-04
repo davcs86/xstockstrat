@@ -172,3 +172,14 @@
 - Files modified: `services/xstockstrat-indicators/CLAUDE.md`.
 - Verification: grep confirms DATABASE_URL/TimescaleDB/indicators.formulas present.
 - Deviations: none.
+
+### Step 12 — test: E2E smoke test for formula management UI pages [done]
+- Created `services/xstockstrat-ui/e2e/insights/formulas.spec.ts` (re-spec'd path) — list-page-renders + new-page-form tests using auth-cookie + page.route() stub of ListFormulas.
+- Files modified: `services/xstockstrat-ui/e2e/insights/formulas.spec.ts`.
+- Verification: `pnpm run lint` clean; **`npx playwright test --project=chromium --grep "Formula management"` → 2 passed** (real Next dev server + mock gRPC backend + Chromium installed locally).
+- Deviations: none (ran the full e2e rather than the lint-only fallback).
+
+## Session 2026-06-04 — sdd-execute (003 code-completed)
+- All 12 steps done. Spec header → complete; feature → code-completed.
+- Per-step stacked PRs: #525 (s2) → #526 (s3) → #527 (s4) → #528 (s5) → #529 (s6) → #530 (s7) → #531 (s8) → #532 (s9) → #533 (s10) → #534 (s11) → #535 (s12). Each step branch based on the prior step branch.
+- Next: open the final integration PR feature/formula-management-ui → main-dev after the step PRs merge (check merge-order.md).
