@@ -109,3 +109,9 @@
 **Progress**: 1 done / 12 total
 **Stopped at**: Step 1 complete — PR created
 **Next**: /sdd-execute formula-management-ui next
+
+## Session 2026-06-04T00:00:00Z — sdd-execute (re-spec + resume)
+
+- Merged current `origin/main-dev` into `feature/formula-management-ui` (`merge -X ours`), bringing the unified-FE-E2E consolidation (PRs #513/#518/#520/#521) and feature 044 launch. `services/xstockstrat-insights/` no longer exists; insights e2e suite now lives at `services/xstockstrat-ui/e2e/insights/` (port 3000, mock gRPC on 9092).
+- **Re-spec (targeted, "re-spec if needed")**: Step 12 was the only stale step — it targeted the deleted `services/xstockstrat-insights/e2e/formulas.spec.ts`. Rewrote Step 12 to target `services/xstockstrat-ui/e2e/insights/formulas.spec.ts`, modeled on the consolidated `dashboard.spec.ts` pattern (jose-signed `access_token` cookie + `page.route()` browser-level stub of `IndicatorsService/ListFormulas`, since `mock-backend.ts` does not mock IndicatorsService). Steps 1–11 verified still accurate against current main-dev (all `xstockstrat-ui` file paths confirmed present; `INDICATORS_ENDPOINT` already wired into ui docker-compose + DO specs by 045).
+- Step 1 (proto) confirmed intact after merge.

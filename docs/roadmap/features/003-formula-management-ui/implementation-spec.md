@@ -940,49 +940,77 @@ Expected: each string appears at least once.
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-insights/e2e/formulas.spec.ts` — create
+- `services/xstockstrat-ui/e2e/insights/formulas.spec.ts` — create
 
 **Reviewers**: `xstockstrat-insights` owner — analytics display accuracy, SSE polling resilience, read-only access pattern
 
-**Codebase Evidence**:
-- Confirmed `services/xstockstrat-insights/e2e/` directory exists with: `account-portfolio.spec.ts`, `api-smoke.spec.ts`, `auth.spec.ts`, `dashboard.spec.ts`, `global-setup.ts`, `global-teardown.ts`, `mock-backend.ts`. The `xstockstrat-insights` service retains its e2e tests directory even after consolidation into `xstockstrat-ui` (the insights e2e suite targets port 3001 which the consolidated `xstockstrat-ui` service now owns).
-- Note: `xstockstrat-ui` does not yet have a `playwright.config.ts` — the insights e2e suite still targets `http://localhost:3001`. Adding the test to the existing insights e2e directory is the correct approach until a dedicated `xstockstrat-ui` e2e setup is established by a separate step.
-- Confirmed `services/xstockstrat-insights/e2e/api-smoke.spec.ts` pattern: `test` from `@playwright/test`, `page.goto(...)`, `expect(page).toHaveURL(...)`, `expect(response.status()).toBe(200)`.
+**Codebase Evidence** _(re-spec 2026-06-04 — original Step 12 targeted the now-deleted `services/xstockstrat-insights/e2e/`; the insights e2e suite was consolidated into `services/xstockstrat-ui/e2e/insights/` by the unified-FE-E2E work (PRs #513/#518/#520) that landed on main-dev after the 2026-06-02 re-spec)_:
+- Confirmed via `ls services/xstockstrat-ui/e2e/insights/`: `account-portfolio.spec.ts`, `api-smoke.spec.ts`, `auth.spec.ts`, `dashboard.spec.ts`. Shared fixtures live one level up: `services/xstockstrat-ui/e2e/global-setup.ts`, `global-teardown.ts`, `mock-backend.ts`. The old `services/xstockstrat-insights/` service no longer exists (removed by 045 consolidation + unified-E2E follow-up).
+- Confirmed via read of `services/xstockstrat-ui/playwright.config.ts`: `testDir: './e2e'`, `baseURL: 'http://localhost:3000'`, `globalSetup` starts a mock gRPC server on port 9092. The `webServer.env` block wires `ANALYSIS/MARKETDATA/IDENTITY/TRADING/PORTFOLIO_ENDPOINT` to `127.0.0.1:9092` plus `JWT_SECRET=test-jwt-secret-for-e2e-tests-min32c`. `INDICATORS_ENDPOINT` is NOT in that env block and `mock-backend.ts` does NOT mock `IndicatorsService` — so the formulas BFF call must be stubbed at the browser level with `page.route()` rather than relying on the mock backend.
+- Confirmed via read of `services/xstockstrat-ui/e2e/insights/dashboard.spec.ts`: the page-navigation pattern is `addAuthCookie(page)` (signs an HS256 JWT with `jose` using `TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c'` and sets the `access_token` cookie so middleware does not redirect to `/auth/login`) followed by `page.route('**/<Service>/<Method>', ...)` to fulfill the Connect-RPC call, then `page.goto('/insights/...')`. The formulas spec follows this exact pattern.
+- Confirmed `services/xstockstrat-ui/package.json`: `"test:e2e": "playwright test"`, `"lint": "next lint"`.
 - CI threshold for frontend services: no coverage threshold — E2E tests apply (`pnpm test:e2e`).
 
 **Instructions**:
-1. Create `services/xstockstrat-insights/e2e/formulas.spec.ts`:
+1. Create `services/xstockstrat-ui/e2e/insights/formulas.spec.ts`, modeled on `dashboard.spec.ts` (auth-cookie injection + `page.route()` browser-level stub of the IndicatorsService BFF call, since the mock backend does not handle it):
    ```typescript
-   import { test, expect } from '@playwright/test';
+   import { test, expect, type Page } from '@playwright/test';
+   import { SignJWT } from 'jose';
 
-   test('formulas list page loads', async ({ page }) => {
-     await page.goto('/insights/formulas');
-     await expect(page.locator('h1, [data-testid="formulas-heading"]')).toContainText(/[Ff]ormulas/);
-   });
+   const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
+   const BASE_URL = 'http://localhost:3000';
 
-   test('new formula page renders form with editor', async ({ page }) => {
-     await page.goto('/insights/formulas/new');
-     // Monaco editor mounts as a div with class .monaco-editor or an iframe
-     await expect(page.locator('input[placeholder], input[name="name"]').first()).toBeVisible({ timeout: 10000 });
-   });
+   async function addAuthCookie(page: Page): Promise<void> {
+     const now = Math.floor(Date.now() / 1000);
+     const token = await new SignJWT({
+       user_id: 'test-user-001',
+       email: 'test@example.com',
+       roles: [],
+       issued_at: now,
+       expires_at: now + 3600,
+     })
+       .setProtectedHeader({ alg: 'HS256' })
+       .setExpirationTime('1h')
+       .sign(new TextEncoder().encode(TEST_JWT_SECRET));
+     await page.context().addCookies([
+       { name: 'access_token', value: token, url: BASE_URL, httpOnly: true, sameSite: 'Lax' },
+     ]);
+   }
 
-   test('formulas API route returns JSON', async ({ request }) => {
-     const res = await request.get('/insights/api/xstockstrat.indicators.v1.IndicatorsService/ListFormulas', {
-       headers: { 'Content-Type': 'application/connect+json' },
-       data: '{}',
+   const MOCK_FORMULAS = [
+     { formulaId: 'f-001', name: 'RSI Divergence', author: 'test-user-001', isPublic: true },
+     { formulaId: 'f-002', name: 'MACD Cross', author: 'test-user-001', isPublic: false },
+   ];
+
+   test.describe('Formula management UI', () => {
+     test('formulas list page renders returned formulas', async ({ page }) => {
+       await addAuthCookie(page);
+       await page.route('**/xstockstrat.indicators.v1.IndicatorsService/ListFormulas', async (route) => {
+         await route.fulfill({
+           status: 200,
+           contentType: 'application/json',
+           body: JSON.stringify({ formulas: MOCK_FORMULAS, totalCount: MOCK_FORMULAS.length }),
+         });
+       });
+       await page.goto('/insights/formulas');
+       await expect(page.getByText('RSI Divergence')).toBeVisible();
      });
-     // May return 401 Unauthenticated without a valid token — that is still a valid JSON connect response
-     expect([200, 401]).toContain(res.status());
+
+     test('new formula page renders the create form', async ({ page }) => {
+       await addAuthCookie(page);
+       await page.goto('/insights/formulas/new');
+       await expect(page.locator('input[name="name"], input[placeholder]').first()).toBeVisible({ timeout: 10000 });
+     });
    });
    ```
 
 **Verification**:
 ```bash
-cd services/xstockstrat-insights && pnpm test:e2e --grep formulas
+cd services/xstockstrat-ui && pnpm test:e2e --grep "Formula management"
 ```
-Expected: formulas list and new page tests pass (may require local stack running). If no local stack available, confirm the test file is valid TypeScript:
+Expected: both formulas tests pass (requires the Playwright browsers + dev server from `playwright.config.ts`). If browsers/dev-server are unavailable in the execution environment, confirm the test file is valid TypeScript/lint-clean:
 ```bash
-cd services/xstockstrat-insights && pnpm run lint
+cd services/xstockstrat-ui && pnpm run lint
 ```
 
 ---
