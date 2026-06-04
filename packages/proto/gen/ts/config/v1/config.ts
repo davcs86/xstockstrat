@@ -99,6 +99,51 @@ export function configUpdateTypeToNumber(object: ConfigUpdateType): number {
   }
 }
 
+export enum ValueType {
+  VALUE_TYPE_UNSPECIFIED = "VALUE_TYPE_UNSPECIFIED",
+  VALUE_TYPE_FLOAT_MAP = "VALUE_TYPE_FLOAT_MAP",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function valueTypeFromJSON(object: any): ValueType {
+  switch (object) {
+    case 0:
+    case "VALUE_TYPE_UNSPECIFIED":
+      return ValueType.VALUE_TYPE_UNSPECIFIED;
+    case 1:
+    case "VALUE_TYPE_FLOAT_MAP":
+      return ValueType.VALUE_TYPE_FLOAT_MAP;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return ValueType.UNRECOGNIZED;
+  }
+}
+
+export function valueTypeToJSON(object: ValueType): string {
+  switch (object) {
+    case ValueType.VALUE_TYPE_UNSPECIFIED:
+      return "VALUE_TYPE_UNSPECIFIED";
+    case ValueType.VALUE_TYPE_FLOAT_MAP:
+      return "VALUE_TYPE_FLOAT_MAP";
+    case ValueType.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function valueTypeToNumber(object: ValueType): number {
+  switch (object) {
+    case ValueType.VALUE_TYPE_UNSPECIFIED:
+      return 0;
+    case ValueType.VALUE_TYPE_FLOAT_MAP:
+      return 1;
+    case ValueType.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export interface WatchConfigRequest {
   /** e.g. "indicators", "trading", "platform" */
   namespace: string;
@@ -143,6 +188,17 @@ export interface ConfigValue {
   defaultValue: string;
 }
 
+/**
+ * Validation constraints declared by the config service for a key.
+ * When value_type == VALUE_TYPE_FLOAT_MAP, every numeric leaf in the JSON value
+ * must satisfy [min_value, max_value]. Absent or VALUE_TYPE_UNSPECIFIED = no validation.
+ */
+export interface ValidationRule {
+  valueType: ValueType;
+  minValue: number;
+  maxValue: number;
+}
+
 export interface GetConfigRequest {
   namespace: string;
   environment: Environment;
@@ -182,6 +238,8 @@ export interface ConfigKeyMeta {
   consumingService: string;
   environment: Environment;
   tradingMode: TradingMode;
+  /** optional; absent = no validation */
+  validation?: ValidationRule | undefined;
 }
 
 function createBaseWatchConfigRequest(): WatchConfigRequest {
@@ -831,6 +889,110 @@ export const ConfigValue: MessageFns<ConfigValue> = {
   },
 };
 
+function createBaseValidationRule(): ValidationRule {
+  return { valueType: ValueType.VALUE_TYPE_UNSPECIFIED, minValue: 0, maxValue: 0 };
+}
+
+export const ValidationRule: MessageFns<ValidationRule> = {
+  encode(message: ValidationRule, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.valueType !== ValueType.VALUE_TYPE_UNSPECIFIED) {
+      writer.uint32(8).int32(valueTypeToNumber(message.valueType));
+    }
+    if (message.minValue !== 0) {
+      writer.uint32(21).float(message.minValue);
+    }
+    if (message.maxValue !== 0) {
+      writer.uint32(29).float(message.maxValue);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ValidationRule {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseValidationRule();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.valueType = valueTypeFromJSON(reader.int32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 21) {
+            break;
+          }
+
+          message.minValue = reader.float();
+          continue;
+        }
+        case 3: {
+          if (tag !== 29) {
+            break;
+          }
+
+          message.maxValue = reader.float();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ValidationRule {
+    return {
+      valueType: isSet(object.valueType)
+        ? valueTypeFromJSON(object.valueType)
+        : isSet(object.value_type)
+        ? valueTypeFromJSON(object.value_type)
+        : ValueType.VALUE_TYPE_UNSPECIFIED,
+      minValue: isSet(object.minValue)
+        ? globalThis.Number(object.minValue)
+        : isSet(object.min_value)
+        ? globalThis.Number(object.min_value)
+        : 0,
+      maxValue: isSet(object.maxValue)
+        ? globalThis.Number(object.maxValue)
+        : isSet(object.max_value)
+        ? globalThis.Number(object.max_value)
+        : 0,
+    };
+  },
+
+  toJSON(message: ValidationRule): unknown {
+    const obj: any = {};
+    if (message.valueType !== ValueType.VALUE_TYPE_UNSPECIFIED) {
+      obj.valueType = valueTypeToJSON(message.valueType);
+    }
+    if (message.minValue !== 0) {
+      obj.minValue = message.minValue;
+    }
+    if (message.maxValue !== 0) {
+      obj.maxValue = message.maxValue;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ValidationRule>, I>>(base?: I): ValidationRule {
+    return ValidationRule.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ValidationRule>, I>>(object: I): ValidationRule {
+    const message = createBaseValidationRule();
+    message.valueType = object.valueType ?? ValueType.VALUE_TYPE_UNSPECIFIED;
+    message.minValue = object.minValue ?? 0;
+    message.maxValue = object.maxValue ?? 0;
+    return message;
+  },
+};
+
 function createBaseGetConfigRequest(): GetConfigRequest {
   return {
     namespace: "",
@@ -1356,6 +1518,7 @@ function createBaseConfigKeyMeta(): ConfigKeyMeta {
     consumingService: "",
     environment: Environment.ENVIRONMENT_UNSPECIFIED,
     tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED,
+    validation: undefined,
   };
 }
 
@@ -1381,6 +1544,9 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
     }
     if (message.tradingMode !== TradingMode.TRADING_MODE_UNSPECIFIED) {
       writer.uint32(56).int32(tradingModeToNumber(message.tradingMode));
+    }
+    if (message.validation !== undefined) {
+      ValidationRule.encode(message.validation, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -1448,6 +1614,14 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
           message.tradingMode = tradingModeFromJSON(reader.int32());
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.validation = ValidationRule.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1484,6 +1658,7 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
         : isSet(object.trading_mode)
         ? tradingModeFromJSON(object.trading_mode)
         : TradingMode.TRADING_MODE_UNSPECIFIED,
+      validation: isSet(object.validation) ? ValidationRule.fromJSON(object.validation) : undefined,
     };
   },
 
@@ -1510,6 +1685,9 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
     if (message.tradingMode !== TradingMode.TRADING_MODE_UNSPECIFIED) {
       obj.tradingMode = tradingModeToJSON(message.tradingMode);
     }
+    if (message.validation !== undefined) {
+      obj.validation = ValidationRule.toJSON(message.validation);
+    }
     return obj;
   },
 
@@ -1525,6 +1703,9 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
     message.consumingService = object.consumingService ?? "";
     message.environment = object.environment ?? Environment.ENVIRONMENT_UNSPECIFIED;
     message.tradingMode = object.tradingMode ?? TradingMode.TRADING_MODE_UNSPECIFIED;
+    message.validation = (object.validation !== undefined && object.validation !== null)
+      ? ValidationRule.fromPartial(object.validation)
+      : undefined;
     return message;
   },
 };

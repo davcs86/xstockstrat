@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { getLogger } from '../services/logger';
-import { ConfigUpdateType } from '@xstockstrat/proto/config/v1/config';
+import { ConfigUpdateType, ValueType } from '@xstockstrat/proto/config/v1/config';
 import { Environment, TradingMode } from '@xstockstrat/proto/common/v1/common';
 
 const log = getLogger('config:impl');
@@ -79,6 +79,12 @@ interface Subscriber {
   call: any;
   lastVersion: string;
 }
+
+// Known weight-map keys and their [min, max] bounds. Validation is keyed on the
+// config key path (semantic type), not the DB `value_type` storage column.
+const WEIGHT_KEY_REGISTRY: Record<string, { minValue: number; maxValue: number }> = {
+  'analysis.signals.source_weights': { minValue: 0.0, maxValue: 1.0 },
+};
 
 export class ConfigServiceImpl {
   private subscribers: Map<string, Subscriber> = new Map();
@@ -278,15 +284,25 @@ export class ConfigServiceImpl {
         [call.request.namespace, env, mode]
       );
       callback(null, {
-        keys: result.rows.map((r) => ({
-          key: r.key,
-          description: r.description ?? '',
-          default_value: r.default_value ?? '',
-          is_secret: r.is_secret,
-          consuming_service: r.consuming_service ?? '',
-          environment: r.environment === 'production' ? 2 : 1,
-          trading_mode: r.trading_mode === 'live' ? 2 : r.trading_mode === 'paper' ? 1 : 0,
-        })),
+        keys: result.rows.map((r) => {
+          const weightBounds = WEIGHT_KEY_REGISTRY[r.key];
+          return {
+            key: r.key,
+            description: r.description ?? '',
+            default_value: r.default_value ?? '',
+            is_secret: r.is_secret,
+            consuming_service: r.consuming_service ?? '',
+            environment: r.environment === 'production' ? 2 : 1,
+            trading_mode: r.trading_mode === 'live' ? 2 : r.trading_mode === 'paper' ? 1 : 0,
+            validation: weightBounds
+              ? {
+                  value_type: ValueType.VALUE_TYPE_FLOAT_MAP,
+                  min_value: weightBounds.minValue,
+                  max_value: weightBounds.maxValue,
+                }
+              : undefined,
+          };
+        }),
       });
     } catch (err: any) {
       callback({ code: 13, message: err.message });
