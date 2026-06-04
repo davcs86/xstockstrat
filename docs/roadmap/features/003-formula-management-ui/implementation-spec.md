@@ -511,7 +511,7 @@ Expected: ruff passes and coverage ≥ 50%.
 
 ### Step 7 — service: Wire IndicatorsService into xstockstrat-ui BFF and server-side client
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/connectClients.ts` — modify
@@ -1052,3 +1052,8 @@ cd services/xstockstrat-ui && pnpm run lint
 1. `conftest.py`: the indicators service had **no** conftest, unlike its Python siblings `xstockstrat-ingest` and `xstockstrat-analysis`, which both ship an identical `conftest.py` that registers `../../packages/proto/gen/python` as the `gen` namespace package. CI's `python-test` job runs only `pip install -e ".[dev]"` + `pytest` (it does not install the proto stubs), so without this conftest the new `TestIndicatorsServicerCRUD` import (`from app.handlers.servicer import IndicatorsServicer` → `from gen.indicators.v1 import ...`) would raise `ModuleNotFoundError` at collection time in CI. Copied the exact sibling conftest (the "fix now" choice).
 2. `uv.lock`: regenerated after adding `pytest-asyncio>=0.23.0` to `pyproject.toml` dev deps, per the CLAUDE.md uv-lock rule (same rationale as Step 4).
 **Reason**: the spec's own `TestIndicatorsServicerCRUD` cannot pass in CI without the gen-path conftest that every other Python service already uses; lockfile kept in sync. Result: `uv run pytest --cov=app --cov-fail-under=50` → 22 passed, 81.9% coverage.
+
+### Deviation: Step 7 — service (import merge)
+**Spec said**: instruction #2 adds `import { indicatorsClient } from '@/lib/connectClients';` as a separate import line in `insightsBff.ts`.
+**Actual**: merged `indicatorsClient` into the existing `import { analysisClient, marketDataClient, portfolioClient, tradingClient } from '@/lib/connectClients';` line instead of adding a second import from the same module.
+**Reason**: two imports from the same module path would be flagged by ESLint (`import/no-duplicates`) and fail `pnpm run lint`; merging is the lint-clean equivalent. `pnpm run lint` → no warnings/errors; `tsc --noEmit` clean.

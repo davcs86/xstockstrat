@@ -3,6 +3,7 @@ import { createGrpcTransport } from '@connectrpc/connect-node';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
+import { IndicatorsService } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 import { NotifyService } from '@xstockstrat/proto/notify/v1/notify_pb';
@@ -18,6 +19,7 @@ const IDENTITY_ENDPOINT = process.env.IDENTITY_ENDPOINT ?? 'xstockstrat-identity
 const ANALYSIS_ENDPOINT = process.env.ANALYSIS_ENDPOINT ?? 'xstockstrat-analysis:50056';
 const CONFIG_ENDPOINT = process.env.CONFIG_ENDPOINT ?? 'xstockstrat-config:50060';
 const INGEST_ENDPOINT = process.env.INGEST_ENDPOINT ?? 'xstockstrat-ingest:50055';
+const INDICATORS_ENDPOINT = process.env.INDICATORS_ENDPOINT ?? 'xstockstrat-indicators:50054';
 
 function makeTransport(endpoint: string) {
   return createGrpcTransport({ baseUrl: `http://${endpoint}` });
@@ -32,6 +34,7 @@ export const identityClient = createClient(IdentityService, makeTransport(IDENTI
 export const analysisClient = createClient(AnalysisService, makeTransport(ANALYSIS_ENDPOINT));
 export const configClient = createClient(ConfigService, makeTransport(CONFIG_ENDPOINT));
 export const ingestClient = createClient(IngestService, makeTransport(INGEST_ENDPOINT));
+export const indicatorsClient = createClient(IndicatorsService, makeTransport(INDICATORS_ENDPOINT));
 
 // ── Connect-Code → HTTP status helper ──────────────────────────────────────
 export function connectCodeToHttp(code: Code): number {

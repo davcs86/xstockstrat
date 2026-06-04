@@ -142,3 +142,9 @@
 - Files modified: `tests/test_formulas.py`, `tests/conftest.py`, `pyproject.toml`, `uv.lock`.
 - Verification: `uv run pytest --cov=app --cov-fail-under=50` → 22 passed, coverage 81.9%; ruff clean.
 - Deviations: added `conftest.py` (required for servicer import in CI; sibling pattern) + `uv.lock`. Detail in Deviation Log.
+
+### Step 7 — service: Wire IndicatorsService into xstockstrat-ui BFF [done]
+- Added `INDICATORS_ENDPOINT` + `indicatorsClient` to `connectClients.ts`; registered `IndicatorsService` in `insightsBff.ts` (8 RPCs; BFF overwrites `author`/`userId` from JWT claims; reuses `backendHeaders` for x-user-id/x-access-scope/x-trace-id propagation).
+- Files modified: `src/lib/connectClients.ts`, `src/lib/insightsBff.ts`.
+- Verification: `pnpm run lint` clean; `tsc --noEmit` clean; grep confirms symbols.
+- Deviations: merged `indicatorsClient` into existing connectClients import (avoids ESLint no-duplicates). Detail in Deviation Log.
