@@ -154,3 +154,32 @@
 - Files modified: `src/lib/browserClients/indicatorsClient.ts`, `src/hooks/useFormulas.ts`.
 - Verification: `tsc --noEmit` clean; `pnpm run lint` clean.
 - Deviations: typed `inputData` cast (vs `as any`); dropped unused `DeleteFormulaRequest` type import. Detail in Deviation Log.
+
+### Step 9 — service: Add Formulas nav link to insights AppShell [done]
+- Added `/insights/formulas` nav links to both desktop and mobile nav in `AppShell.tsx`, after Strategies, matching the active-state styling of siblings.
+- Files modified: `src/components/insights/AppShell.tsx`.
+- Verification: `pnpm run lint` clean; 5 formulas matches.
+- Deviations: omitted the `Code2` import (unused → would fail lint); links are icon-less like Dashboard/Strategies. Detail in Deviation Log.
+
+### Step 10 — service: FormulaEditor + formula pages [done]
+- Added `@monaco-editor/react@^4.6.0` (+ pnpm-lock.yaml); created `FormulaEditor.tsx` (dynamic ssr:false Monaco), `formulas/page.tsx` (list + New button), `formulas/new/page.tsx` (create form), `formulas/[id]/page.tsx` (view/edit/delete + JSON test-execute).
+- Files modified: `package.json`, `pnpm-lock.yaml`, `src/components/insights/FormulaEditor.tsx`, `src/app/insights/formulas/{page,new/page,[id]/page}.tsx`.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean.
+- Deviations: added pnpm-lock.yaml to scope (frozen-lockfile CI). Detail in Deviation Log.
+
+### Step 11 — docs: Update xstockstrat-indicators CLAUDE.md [done]
+- Added TimescaleDB dependency row, a new ## Database section, and DATABASE_URL to the Environment Variables block.
+- Files modified: `services/xstockstrat-indicators/CLAUDE.md`.
+- Verification: grep confirms DATABASE_URL/TimescaleDB/indicators.formulas present.
+- Deviations: none.
+
+### Step 12 — test: E2E smoke test for formula management UI pages [done]
+- Created `services/xstockstrat-ui/e2e/insights/formulas.spec.ts` (re-spec'd path) — list-page-renders + new-page-form tests using auth-cookie + page.route() stub of ListFormulas.
+- Files modified: `services/xstockstrat-ui/e2e/insights/formulas.spec.ts`.
+- Verification: `pnpm run lint` clean; **`npx playwright test --project=chromium --grep "Formula management"` → 2 passed** (real Next dev server + mock gRPC backend + Chromium installed locally).
+- Deviations: none (ran the full e2e rather than the lint-only fallback).
+
+## Session 2026-06-04 — sdd-execute (003 code-completed)
+- All 12 steps done. Spec header → complete; feature → code-completed.
+- Per-step stacked PRs: #525 (s2) → #526 (s3) → #527 (s4) → #528 (s5) → #529 (s6) → #530 (s7) → #531 (s8) → #532 (s9) → #533 (s10) → #534 (s11) → #535 (s12). Each step branch based on the prior step branch.
+- Next: open the final integration PR feature/formula-management-ui → main-dev after the step PRs merge (check merge-order.md).
