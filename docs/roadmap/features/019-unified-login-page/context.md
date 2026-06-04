@@ -72,3 +72,9 @@
 - W5 (Step 5 typed `service` but NO-OP): advisory; no spec change.
 - W6 (xstockstrat-agent no paired test): advisory; env var wiring is minimal risk.
 - Hard dependency: execute after 045 is merged. Execution position: 044 → 046 → 045 → 003 → **019** → 016.
+
+## Session 2026-06-04 — sdd-execute (re-spec)
+- Merged current `origin/main-dev` into `feature/unified-login-page` (`merge -X ours`), bringing the post-045 consolidated `xstockstrat-ui`.
+- **Blocker found + user decision**: the 2026-06-01 spec assumed a single consolidated `src/app/api/auth/*` route and a single `e2e/auth.spec.ts`. Reality on main-dev: a single `src/middleware.ts` routing to **per-basePath** login pages (`src/app/{trader,insights,config-ui}/login/page.tsx`), **per-basePath** auth routes (`src/app/{seg}/api/auth/{login,logout,refresh}/route.ts`, 9 files), and **per-basePath** e2e specs (`e2e/{seg}/auth.spec.ts`). User approved a targeted re-spec, **including creating the consolidated auth routes + unified login page in scope**.
+- Re-spec'd: Step 1 (evidence→ui paths), Step 2 (now: create 3 consolidated `/api/auth/*` routes + delete 9 per-basePath copies), Step 3 (single `src/middleware.ts`: redirect→`/auth/login`, refresh→`/api/auth/refresh`, matcher), Step 4 (delete 3 per-basePath login pages), Step 6 (UI_BASE_URL wiring; 018 not landed → TODO only, no oauth handler), Step 8 (create unified `e2e/auth.spec.ts` + delete 3 per-basePath auth specs). Steps 5 (identity gRPC-only verify) and 7 (docs) unchanged in substance.
+- 018 (agent-mcp-oauth) has NOT landed: agent `app/main.py` has no `/oauth/authorize` handler. Step 6 wires the env var and leaves a TODO; no redirect-target code yet.

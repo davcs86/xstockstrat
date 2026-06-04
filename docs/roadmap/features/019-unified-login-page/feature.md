@@ -3,7 +3,7 @@
 **Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/unified-login-page`
 **Created**: 2026-05-25
-**Last Updated**: 2026-06-01
+**Last Updated**: 2026-06-04
 
 ---
 
@@ -15,6 +15,7 @@
 | 2026-06-01 | `idea` → `draft` | /sdd-story | Product spec formalized from preliminary idea capture |
 | 2026-06-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved. 3 OQs resolved: single platform-wide JWT, separate /auth/oauth-login route for OAuth, identity HTTP server removed (gRPC-only). |
 | 2026-06-01 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
+| 2026-06-04 | `implementation-ready` (spec re-spec) | /sdd-execute | Merged current main-dev; re-spec'd Steps 1–4, 6, 8 to the actual post-045 structure (single `src/middleware.ts` + per-basePath login pages/auth routes/e2e specs). User-approved scope: create consolidated `/api/auth/*` routes + unified `/auth/login` page; delete per-basePath copies. |
 
 ---
 
