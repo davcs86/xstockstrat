@@ -53,3 +53,29 @@
   - `packages/proto` removed from Affected Services bullet list; moved to a note under the section.
   - AC-5 strengthened to a concrete, observable acceptance criterion.
   - Overlap WARNs: features 003 (xstockstrat-indicators), 007 (xstockstrat-analysis), 008 (xstockstrat-ingest dependency), 009 (xstockstrat-agent), 018 (xstockstrat-agent) — coordinate merge order; no FAIL-level conflicts.
+
+## Session 2026-06-04T00:00:00Z — sdd-spec
+
+- Generated implementation-spec.md with 14 steps. Status → implementation-ready.
+- Key codebase findings:
+  - `analysis.strategies` is the first migration for xstockstrat-analysis; no migrations directory exists yet. Last migration file confirmed absent via `find services/xstockstrat-analysis -name "*.sql"` → no results. First migration uses `001_` prefix.
+  - `AnalysisServicer` at `servicer.py:L32` has no DB pool or identity channel today; both must be added (DB pool wiring follows indicators pattern at `indicators/app/main.py`; `asyncpg>=0.29.0` is already in `pyproject.toml`; `DATABASE_URL` is already in docker-compose via `*db-url` anchor and in app.dev/prod.yaml).
+  - `IDENTITY_ENDPOINT` is **absent** from the analysis service docker-compose environment block and from the analysis `envs:` blocks in both app.dev.yaml and app.yaml — must be added in Step 6.
+  - `INDICATORS_ENDPOINT` is **absent** from the agent's docker-compose environment block and app.yaml/app.dev.yaml agent envs — must be added in Step 8 for the new `manage_formula` client helper.
+  - `RunBacktestRequest` fields 1–5 are in use; new `strategy_id_ref` (field 6) and `inline_definition` (field 7) are additive. Field 1 (`strategy_id`) remains the result label, distinct from the DB lookup key (field 6).
+  - `db-migrate.sh` already creates the `analysis` schema (L113) and already runs `migrate_service "xstockstrat-analysis" "analysis"` (L146) — no change needed to the migration script.
+  - The `StrategyEvaluator` must reside in `app/services/evaluator.py` (directory does not exist yet) with no backtest-only imports/side-effects — design constraint for feature 048 reuse.
+  - Admin gating for `manage_strategy` tool: SSE-layer auth enforces API key for all MCP tool callers; backend `ManageStrategy` RPC adds defense-in-depth. Admin key must be forwarded as gRPC metadata `authorization: Bearer <key>`. New `_admin_metadata(api_key)` helper in client.py combines `x-mcp-secret` + `authorization`.
+  - `credentials_ref` must never appear in the return dict of `manage_signal_source` (FR-12); the client helper omits it; the tool docstring documents this.
+
+## Session 2026-06-04T00:01:00Z — sdd-spec (re-run)
+
+- Re-generated implementation-spec.md with 14 steps (same count). Status remains implementation-ready.
+- Fresh codebase evidence corrections from this session:
+  - `INGEST_ENDPOINT` is defined in `services/xstockstrat-analysis/app/main.py` L29 and passed to `AnalysisServicer` at L44, but is **absent** from the `xstockstrat-analysis` environment block in `docker-compose.yml` (L329–360) and from the analysis envs blocks in both `.do/app.dev.yaml` and `.do/app.yaml`. Step 4 now includes adding this missing env var as a required file change.
+  - `IDENTITY_ENDPOINT` absence from analysis docker-compose block and DO app specs re-confirmed fresh (Step 6 unchanged but evidence updated).
+  - `INDICATORS_ENDPOINT` absence from agent docker-compose block and DO app specs re-confirmed fresh (Step 8 unchanged but evidence updated).
+  - `services/xstockstrat-agent/claude_mcp_config.json` does NOT enumerate tool names — it only contains connection config (mcpServers, endpoints). Step 10 updated: only the module docstring in `tools.py` needs updating, not the JSON config file.
+  - `AnalysisServicer.__init__` confirmed at `servicer.py` L33 with 5 parameters; `RunBacktest` at L49; `propagation_meta` at L71-75; `_backtest_symbol` at L188.
+  - `formulas_repository.py` methods confirmed: `__init__` L32, `create` L35, `get_by_id` L62, `list` L69, `update` L95, `delete` L118 — reference for `StrategiesRepository` pattern.
+  - `make_servicer()` factory at `test_analysis_servicer.py` L20 confirmed — needs update to accept `db_pool` and `identity_channel` for new management RPC tests.
