@@ -5,6 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
+// FR-3: only allow redirects back into one of the known basePaths.
+function safeRedirect(target: string | null): string {
+  if (target && (target.startsWith('/trader') || target.startsWith('/insights') || target.startsWith('/config-ui'))) {
+    return target;
+  }
+  return '/trader';
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -18,13 +26,13 @@ function LoginForm() {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/config-ui/api/auth/login', {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
       if (res.ok) {
-        router.push(searchParams.get('redirect') ?? '/config-ui');
+        router.push(safeRedirect(searchParams.get('redirect')));
       } else {
         const data = await res.json().catch(() => ({}));
         setError(data.error ?? 'Login failed. Please check your credentials.');
@@ -40,7 +48,7 @@ function LoginForm() {
     <div className="min-h-screen bg-background font-sans flex items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">xstockstrat Config</CardTitle>
+          <CardTitle className="text-2xl">xstockstrat Platform</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -80,7 +88,7 @@ function LoginSkeleton() {
     <div className="min-h-screen bg-background font-sans flex items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">xstockstrat Config</CardTitle>
+          <CardTitle className="text-2xl">xstockstrat Platform</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
