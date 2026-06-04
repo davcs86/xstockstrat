@@ -108,3 +108,9 @@
 - Files modified: none (spec/context only).
 - Verification: `pnpm --filter xstockstrat-identity run build` exit 0.
 - Deviations: none.
+
+### Step 6 — service: Add UI_BASE_URL to xstockstrat-agent [done]
+- Added `UI_BASE_URL` to agent env in docker-compose (`http://localhost:3000`) and both `.do` specs (`${APP_URL}`); added `UI_BASE_URL` constant + TODO(019) in `app/main.py` (018 not landed → no /oauth/authorize handler to update yet).
+- Files modified: `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`, `services/xstockstrat-agent/app/main.py`.
+- Verification: UI_BASE_URL present in all 3 deploy files; no `_ENDPOINT` misuse; TODO(019) present; YAML valid.
+- Deviations: left a pre-existing agent ruff import-order finding untouched (not CI-gated; outside step scope). See Deviation Log.

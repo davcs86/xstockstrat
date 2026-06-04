@@ -199,7 +199,7 @@ pnpm --filter xstockstrat-identity run build
 
 ### Step 6 — service: Add `UI_BASE_URL` to `xstockstrat-agent`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `docker-compose.yml` — modify (add `UI_BASE_URL` to the agent `environment:` block)
@@ -301,3 +301,7 @@ pnpm --filter xstockstrat-ui exec playwright test --project=chromium --grep "aut
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 6 — pre-existing agent lint finding left untouched
+**Observed**: `ruff check services/xstockstrat-agent/app/main.py` reports one pre-existing import-order finding inside `_run_sse()` (lines ~46–50), present on HEAD before this step.
+**Action**: left as-is. The change only added a `UI_BASE_URL` constant + TODO(019) comment near the top (clean); the agent is not in CI's `python-lint` matrix (indicators/ingest/analysis only), so it is not lint-gated, and fixing unrelated lines is outside this step's scope (HARD CONSTRAINTS).
