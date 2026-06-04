@@ -102,3 +102,9 @@
 - Files modified: deleted 3 per-basePath login pages.
 - Verification: `tsc --noEmit` clean; `pnpm run lint` clean; `pnpm run build` exit 0; no stale imports.
 - Deviations: none.
+
+### Step 5 — service: Verify identity is gRPC-only (FR-8) [done]
+- Verification-only: `grep express|app.get|app.post|createServer|http.listen|HTTP_PORT src/index.ts` → 0; no `express` dep in package.json. FR-8 already satisfied; no code change.
+- Files modified: none (spec/context only).
+- Verification: `pnpm --filter xstockstrat-identity run build` exit 0.
+- Deviations: none.

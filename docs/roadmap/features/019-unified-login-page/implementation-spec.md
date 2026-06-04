@@ -173,7 +173,7 @@ pnpm --filter xstockstrat-ui run build
 
 ### Step 5 — service: Verify identity is gRPC-only (FR-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/index.ts` — verify (no change expected)
