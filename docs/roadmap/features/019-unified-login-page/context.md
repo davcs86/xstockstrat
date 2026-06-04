@@ -131,3 +131,7 @@
 - All 8 steps done. Spec header status remains per-step; feature → code-completed.
 - Stacked per-step PRs: #536 (s1) → #537 (s2) → #538 (s3) → #539 (s4) → #540 (s5) → #541 (s6) → #542 (s7) → #543 (s8). Each step branch based on the prior.
 - Next: open final integration PR feature/unified-login-page → main-dev after the stack merges (check merge-order.md — no blocking entry).
+
+## Session 2026-06-04 — CI fix (#551 Frontend E2E)
+- Frontend E2E on #551 failed deterministically on `e2e/auth.spec.ts` "GET /config-ui/ redirects to /auth/login": received 308 (Next.js trailing-slash normalization `/config-ui/` → `/config-ui`) before the auth redirect, so `[302,307]` + location `/auth/login` both failed. The trader/insights paths (no trailing slash) passed.
+- Fix: dropped the trailing slash — `/config-ui/` → `/config-ui` in the redirect-paths loop, matching the other two paths, so the request hits the auth redirect (307 → /auth/login) directly. (#553 config-ui 503 fix is already on this branch.)

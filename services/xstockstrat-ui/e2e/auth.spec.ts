@@ -34,7 +34,7 @@ test.describe('Unified auth — POST /api/auth/login', () => {
 });
 
 test.describe('Unified auth — protected routes redirect to /auth/login', () => {
-  for (const path of ['/trader/api/orders?trading_mode=paper', '/insights/strategies', '/config-ui/']) {
+  for (const path of ['/trader/api/orders?trading_mode=paper', '/insights/strategies', '/config-ui']) {
     test(`GET ${path} without a session redirects to /auth/login`, async ({ page }) => {
       const res = await page.request.get(path, { maxRedirects: 0 });
       expect([302, 307]).toContain(res.status());
