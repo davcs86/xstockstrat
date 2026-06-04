@@ -160,7 +160,7 @@ Expected: each grep returns multiple lines containing the new message and RPC na
 
 ### Step 3 — migration: Create indicators.formulas table migration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/migrations/001_formulas.up.sql` — create
@@ -1026,3 +1026,8 @@ cd services/xstockstrat-ui && pnpm run lint
 **Spec said**: run `./scripts/buf-gen.sh` (intended via the `Dockerfile.codegen` container per `scripts/localenv-setup.sh`).
 **Actual**: the Docker codegen container could not be built (Docker Hub returned HTTP 429 unauthenticated-pull rate limit on `golang:1.25-trixie`). Installed the codegen toolchain directly on the host instead, pinned to the **CI `proto-freshness` job versions** in `.github/workflows/ci.yml` (the authoritative gate) rather than the stale pins in `Dockerfile.codegen`: `buf 1.69.0`, `protoc-gen-go@v1.36.11`, `protoc-gen-go-grpc@v1.6.2`, `protoc-gen-connect-go@v1.19.2`, `grpcio-tools==1.80.0` + `protobuf==6.31.1`, and TS plugins from the committed lockfile (`protoc-gen-es@2.12.0`, `protoc-gen-connect-es@1.7.0`, `ts-proto@2.11.8`). Ran `./scripts/buf-gen.sh` unchanged. Verified the resulting `git diff packages/proto/gen/` is limited to the 12 indicators stub files (no version-header drift in sibling services), i.e. CI's `git diff --exit-code` would pass.
 **Reason**: Docker Hub rate limit blocked the sanctioned container path; matching the CI toolchain on the host produces byte-identical output to what `proto-freshness` regenerates. Note for a follow-up: `Dockerfile.codegen` pins `protoc-gen-go-grpc@v1.6.1`/`protoc-gen-connect-go@v1.19.2` while CI and the committed stubs use `v1.6.2`/`v1.19.2` — the Dockerfile go-grpc pin is stale, but that is outside this step's scope.
+
+### Deviation: Step 3 — migration
+**Spec said**: verify with `./scripts/db-migrate.sh up`.
+**Actual**: `db-migrate.sh` requires the `migrate` (golang-migrate) binary + a running TimescaleDB (normally the `db-migrator` container), neither of which is available in this environment. Verified instead by applying both `001_formulas.up.sql` and `001_formulas.down.sql` against a throwaway `postgres:16-alpine` container via `psql -v ON_ERROR_STOP=1`: UP created the `indicators.formulas` table with all 9 columns, the PK, and both indexes (`formulas_author_idx`, partial `formulas_is_public_idx`); DOWN dropped the table and schema cleanly. `gen_random_uuid()` resolved without a `pgcrypto` extension (built-in since PostgreSQL 13).
+**Reason**: golang-migrate binary unavailable; direct `psql` apply against the same PG16 engine TimescaleDB is built on exercises the identical DDL and is a stronger check than a syntax-only validation.

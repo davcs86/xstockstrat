@@ -120,3 +120,8 @@
 - Ran `./scripts/buf-gen.sh`; regenerated Go/Python/TS stubs + compiled TS dist. Verified new RPCs (`ListFormulas`/`UpdateFormula`/`DeleteFormula`) and `author=6` on `RegisterFormulaRequest` in all three languages.
 - Files modified: 12 indicators stub files under `packages/proto/gen/{go,python,ts,ts/dist}/indicators/v1/`.
 - Deviations: Docker codegen container blocked by Docker Hub 429 rate limit; installed the CI `proto-freshness` toolchain on the host (buf 1.69.0, protoc-gen-go@v1.36.11, protoc-gen-go-grpc@v1.6.2, protoc-gen-connect-go@v1.19.2, grpcio-tools==1.80.0 + protobuf==6.31.1). Confirmed diff scoped to indicators only — CI proto-freshness `git diff --exit-code` would pass. Full detail in Deviation Log.
+
+### Step 3 — migration: Create indicators.formulas table migration [done]
+- Created `migrations/001_formulas.up.sql` (schema + `indicators.formulas` table + author/partial-is_public indexes) and `001_formulas.down.sql`.
+- Files modified: `services/xstockstrat-indicators/migrations/001_formulas.{up,down}.sql`.
+- Deviations: `migrate` binary + TimescaleDB unavailable, so verified by applying both migrations against a throwaway `postgres:16-alpine` container (UP + DOWN both clean). Detail in Deviation Log.
