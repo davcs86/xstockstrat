@@ -1,10 +1,11 @@
 import { createConnectRouter, ConnectError, Code, type HandlerContext } from '@connectrpc/connect';
 import { compressionGzip, compressionBrotli } from '@connectrpc/connect-node';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { IndicatorsService } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
-import { analysisClient, marketDataClient, portfolioClient, tradingClient } from '@/lib/connectClients';
+import { analysisClient, indicatorsClient, marketDataClient, portfolioClient, tradingClient } from '@/lib/connectClients';
 import { verifyAccessToken, rolesToAccessScope, generateTraceId, type JwtClaims } from '@/lib/auth';
 
 function parseCookieValue(cookieHeader: string, name: string): string | undefined {
@@ -70,6 +71,52 @@ router.service(TradingService, {
   async listBrokerAccounts(req, ctx) {
     const claims = await requireSession(ctx);
     return tradingClient.listBrokerAccounts(req, { headers: backendHeaders(claims, ctx) });
+  },
+});
+
+router.service(IndicatorsService, {
+  async registerFormula(req, ctx) {
+    const claims = await requireSession(ctx);
+    // Set author from JWT claims — overrides any caller-supplied value
+    return indicatorsClient.registerFormula(
+      { ...req, author: claims.user_id },
+      { headers: backendHeaders(claims, ctx) },
+    );
+  },
+  async getFormula(req, ctx) {
+    const claims = await requireSession(ctx);
+    return indicatorsClient.getFormula(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async listFormulas(req, ctx) {
+    const claims = await requireSession(ctx);
+    return indicatorsClient.listFormulas(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async updateFormula(req, ctx) {
+    const claims = await requireSession(ctx);
+    // Enforce user_id from JWT — caller cannot impersonate another user
+    return indicatorsClient.updateFormula(
+      { ...req, userId: claims.user_id },
+      { headers: backendHeaders(claims, ctx) },
+    );
+  },
+  async deleteFormula(req, ctx) {
+    const claims = await requireSession(ctx);
+    return indicatorsClient.deleteFormula(
+      { ...req, userId: claims.user_id },
+      { headers: backendHeaders(claims, ctx) },
+    );
+  },
+  async executeFormula(req, ctx) {
+    const claims = await requireSession(ctx);
+    return indicatorsClient.executeFormula(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async computeIndicator(req, ctx) {
+    const claims = await requireSession(ctx);
+    return indicatorsClient.computeIndicator(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async listIndicators(req, ctx) {
+    const claims = await requireSession(ctx);
+    return indicatorsClient.listIndicators(req, { headers: backendHeaders(claims, ctx) });
   },
 });
 

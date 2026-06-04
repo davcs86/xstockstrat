@@ -1,6 +1,6 @@
 # Feature: formula-management-ui
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/formula-management-ui`
 **Created**: 2026-05-10
 **Last Updated**: 2026-06-04
@@ -18,6 +18,7 @@
 | 2026-06-02 | `implementation-ready` (spec regenerated) | /sdd-spec | Re-ran sdd-spec after 044+045+046 merged; all 12 steps regenerated targeting xstockstrat-ui with gRPC+connect-query pattern; Steps 1-5 carry forward from original spec with minor corrections (author field added to RegisterFormulaRequest in proto). |
 | 2026-06-02 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — proto RPCs and author field added |
 | 2026-06-04 | `in-progress` (Step 12 re-spec) | /sdd-execute | Merged current main-dev; targeted re-spec of Step 12 e2e path (xstockstrat-insights → xstockstrat-ui/e2e/insights) after unified-FE-E2E consolidation. Steps 1–11 reconfirmed valid. |
+| 2026-06-04 | `in-progress` → `code-completed` | /sdd-execute | Steps 2–12 executed (Step 1 already done). Per-step PRs #525–#535 stacked sequentially. All verifications pass (proto regen, migration up/down on PG16, 22 pytest @ 81.9% cov, ui lint/tsc clean, formulas e2e 2 passed). |
 
 ---
 

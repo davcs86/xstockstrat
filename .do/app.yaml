@@ -152,6 +152,9 @@ services:
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: SERVICE_NAME
         value: indicators
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${xstockstrat.DATABASE_URL}
 
   - name: xstockstrat-ingest
     image:
