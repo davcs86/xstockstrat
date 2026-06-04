@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ComputeIndicatorRequest, ComputeIndicatorResponse, ExecuteFormulaRequest, ExecuteFormulaResponse, FormulaDefinition, GetFormulaRequest, ListIndicatorsRequest, ListIndicatorsResponse, RegisterFormulaRequest, RegisterFormulaResponse } from "./indicators_pb.js";
+import { ComputeIndicatorRequest, ComputeIndicatorResponse, DeleteFormulaRequest, DeleteFormulaResponse, ExecuteFormulaRequest, ExecuteFormulaResponse, FormulaDefinition, GetFormulaRequest, ListFormulasRequest, ListFormulasResponse, ListIndicatorsRequest, ListIndicatorsResponse, RegisterFormulaRequest, RegisterFormulaResponse, UpdateFormulaRequest, UpdateFormulaResponse } from "./indicators_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -69,6 +69,41 @@ export const IndicatorsService = {
       name: "GetFormula",
       I: GetFormulaRequest,
       O: FormulaDefinition,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * List formula definitions with optional author filter and pagination
+     *
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ListFormulas
+     */
+    listFormulas: {
+      name: "ListFormulas",
+      I: ListFormulasRequest,
+      O: ListFormulasResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Update a formula's name, description, source, or is_public flag
+     * Returns PERMISSION_DENIED if user_id does not match author
+     *
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.UpdateFormula
+     */
+    updateFormula: {
+      name: "UpdateFormula",
+      I: UpdateFormulaRequest,
+      O: UpdateFormulaResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Delete a formula by ID
+     * Returns PERMISSION_DENIED if user_id does not match author
+     *
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.DeleteFormula
+     */
+    deleteFormula: {
+      name: "DeleteFormula",
+      I: DeleteFormulaRequest,
+      O: DeleteFormulaResponse,
       kind: MethodKind.Unary,
     },
   }

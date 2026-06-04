@@ -24,6 +24,9 @@ const (
 	IndicatorsService_ListIndicators_FullMethodName   = "/xstockstrat.indicators.v1.IndicatorsService/ListIndicators"
 	IndicatorsService_RegisterFormula_FullMethodName  = "/xstockstrat.indicators.v1.IndicatorsService/RegisterFormula"
 	IndicatorsService_GetFormula_FullMethodName       = "/xstockstrat.indicators.v1.IndicatorsService/GetFormula"
+	IndicatorsService_ListFormulas_FullMethodName     = "/xstockstrat.indicators.v1.IndicatorsService/ListFormulas"
+	IndicatorsService_UpdateFormula_FullMethodName    = "/xstockstrat.indicators.v1.IndicatorsService/UpdateFormula"
+	IndicatorsService_DeleteFormula_FullMethodName    = "/xstockstrat.indicators.v1.IndicatorsService/DeleteFormula"
 )
 
 // IndicatorsServiceClient is the client API for IndicatorsService service.
@@ -44,6 +47,14 @@ type IndicatorsServiceClient interface {
 	RegisterFormula(ctx context.Context, in *RegisterFormulaRequest, opts ...grpc.CallOption) (*RegisterFormulaResponse, error)
 	// Get a registered formula
 	GetFormula(ctx context.Context, in *GetFormulaRequest, opts ...grpc.CallOption) (*FormulaDefinition, error)
+	// List formula definitions with optional author filter and pagination
+	ListFormulas(ctx context.Context, in *ListFormulasRequest, opts ...grpc.CallOption) (*ListFormulasResponse, error)
+	// Update a formula's name, description, source, or is_public flag
+	// Returns PERMISSION_DENIED if user_id does not match author
+	UpdateFormula(ctx context.Context, in *UpdateFormulaRequest, opts ...grpc.CallOption) (*UpdateFormulaResponse, error)
+	// Delete a formula by ID
+	// Returns PERMISSION_DENIED if user_id does not match author
+	DeleteFormula(ctx context.Context, in *DeleteFormulaRequest, opts ...grpc.CallOption) (*DeleteFormulaResponse, error)
 }
 
 type indicatorsServiceClient struct {
@@ -104,6 +115,36 @@ func (c *indicatorsServiceClient) GetFormula(ctx context.Context, in *GetFormula
 	return out, nil
 }
 
+func (c *indicatorsServiceClient) ListFormulas(ctx context.Context, in *ListFormulasRequest, opts ...grpc.CallOption) (*ListFormulasResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListFormulasResponse)
+	err := c.cc.Invoke(ctx, IndicatorsService_ListFormulas_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *indicatorsServiceClient) UpdateFormula(ctx context.Context, in *UpdateFormulaRequest, opts ...grpc.CallOption) (*UpdateFormulaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateFormulaResponse)
+	err := c.cc.Invoke(ctx, IndicatorsService_UpdateFormula_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *indicatorsServiceClient) DeleteFormula(ctx context.Context, in *DeleteFormulaRequest, opts ...grpc.CallOption) (*DeleteFormulaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteFormulaResponse)
+	err := c.cc.Invoke(ctx, IndicatorsService_DeleteFormula_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IndicatorsServiceServer is the server API for IndicatorsService service.
 // All implementations should embed UnimplementedIndicatorsServiceServer
 // for forward compatibility.
@@ -122,6 +163,14 @@ type IndicatorsServiceServer interface {
 	RegisterFormula(context.Context, *RegisterFormulaRequest) (*RegisterFormulaResponse, error)
 	// Get a registered formula
 	GetFormula(context.Context, *GetFormulaRequest) (*FormulaDefinition, error)
+	// List formula definitions with optional author filter and pagination
+	ListFormulas(context.Context, *ListFormulasRequest) (*ListFormulasResponse, error)
+	// Update a formula's name, description, source, or is_public flag
+	// Returns PERMISSION_DENIED if user_id does not match author
+	UpdateFormula(context.Context, *UpdateFormulaRequest) (*UpdateFormulaResponse, error)
+	// Delete a formula by ID
+	// Returns PERMISSION_DENIED if user_id does not match author
+	DeleteFormula(context.Context, *DeleteFormulaRequest) (*DeleteFormulaResponse, error)
 }
 
 // UnimplementedIndicatorsServiceServer should be embedded to have
@@ -145,6 +194,15 @@ func (UnimplementedIndicatorsServiceServer) RegisterFormula(context.Context, *Re
 }
 func (UnimplementedIndicatorsServiceServer) GetFormula(context.Context, *GetFormulaRequest) (*FormulaDefinition, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetFormula not implemented")
+}
+func (UnimplementedIndicatorsServiceServer) ListFormulas(context.Context, *ListFormulasRequest) (*ListFormulasResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListFormulas not implemented")
+}
+func (UnimplementedIndicatorsServiceServer) UpdateFormula(context.Context, *UpdateFormulaRequest) (*UpdateFormulaResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateFormula not implemented")
+}
+func (UnimplementedIndicatorsServiceServer) DeleteFormula(context.Context, *DeleteFormulaRequest) (*DeleteFormulaResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteFormula not implemented")
 }
 func (UnimplementedIndicatorsServiceServer) testEmbeddedByValue() {}
 
@@ -256,6 +314,60 @@ func _IndicatorsService_GetFormula_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IndicatorsService_ListFormulas_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListFormulasRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IndicatorsServiceServer).ListFormulas(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IndicatorsService_ListFormulas_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IndicatorsServiceServer).ListFormulas(ctx, req.(*ListFormulasRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IndicatorsService_UpdateFormula_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateFormulaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IndicatorsServiceServer).UpdateFormula(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IndicatorsService_UpdateFormula_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IndicatorsServiceServer).UpdateFormula(ctx, req.(*UpdateFormulaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IndicatorsService_DeleteFormula_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteFormulaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IndicatorsServiceServer).DeleteFormula(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IndicatorsService_DeleteFormula_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IndicatorsServiceServer).DeleteFormula(ctx, req.(*DeleteFormulaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IndicatorsService_ServiceDesc is the grpc.ServiceDesc for IndicatorsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -282,6 +394,18 @@ var IndicatorsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetFormula",
 			Handler:    _IndicatorsService_GetFormula_Handler,
+		},
+		{
+			MethodName: "ListFormulas",
+			Handler:    _IndicatorsService_ListFormulas_Handler,
+		},
+		{
+			MethodName: "UpdateFormula",
+			Handler:    _IndicatorsService_UpdateFormula_Handler,
+		},
+		{
+			MethodName: "DeleteFormula",
+			Handler:    _IndicatorsService_DeleteFormula_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
