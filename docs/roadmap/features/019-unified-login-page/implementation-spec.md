@@ -240,7 +240,7 @@ grep -n "TODO(019)" services/xstockstrat-agent/app/main.py                  # �
 
 ### Step 7 — docs: Update `docs/patterns/frontend-auth.md` for the unified login pattern
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`
 **Files**:
 - `docs/patterns/frontend-auth.md` — modify

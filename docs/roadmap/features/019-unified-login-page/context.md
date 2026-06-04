@@ -114,3 +114,9 @@
 - Files modified: `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`, `services/xstockstrat-agent/app/main.py`.
 - Verification: UI_BASE_URL present in all 3 deploy files; no `_ENDPOINT` misuse; TODO(019) present; YAML valid.
 - Deviations: left a pre-existing agent ruff import-order finding untouched (not CI-gated; outside step scope). See Deviation Log.
+
+### Step 7 — docs: Update frontend-auth.md [done]
+- Updated required-files table (unified `auth/login` + `auth/oauth-login` pages; single consolidated `/api/auth/*`; per-basePath login pages removed), middleware section (redirect to `/auth/login` via `new URL('/auth/login', req.url)`), and the new-frontend checklist (unified login, no per-basePath login pages/routes).
+- Files modified: `docs/patterns/frontend-auth.md`.
+- Verification: grep `/auth/login|oauth-login` → 9 matches.
+- Deviations: none.
