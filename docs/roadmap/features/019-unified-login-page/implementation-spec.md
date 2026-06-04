@@ -68,7 +68,7 @@ ls services/xstockstrat-ui/src/app/auth/login/page.tsx services/xstockstrat-ui/s
 
 ### Step 2 — service: Create consolidated `/api/auth/{login,logout,refresh}` routes and remove the per-basePath copies
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/api/auth/login/route.ts` — create

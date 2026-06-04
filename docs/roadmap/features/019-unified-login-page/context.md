@@ -84,3 +84,9 @@
 - Files modified: `src/app/auth/login/page.tsx`, `src/app/auth/oauth-login/page.tsx`.
 - Verification: `tsc --noEmit` clean (after clearing stale .next cache from prior branch), `pnpm run lint` clean.
 - Deviations: none.
+
+### Step 2 — service: Consolidated /api/auth/* routes + delete per-basePath copies [done]
+- Created `src/app/api/auth/{login,logout,refresh}/route.ts` (copied verbatim from trader variants — `@/lib/*` aliases need no edits). Deleted all nine `src/app/{trader,insights,config-ui}/api/auth/*` route files. Non-auth per-basePath api routes ([...connect], health, audit) untouched.
+- Files modified: created 3 consolidated routes; deleted 9 per-basePath routes.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean; exactly one `authenticateUser` (consolidated login); only 3 auth routes remain.
+- Deviations: none (matches re-spec'd Files list).
