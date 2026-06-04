@@ -1,6 +1,8 @@
 # Feature: ui-consolidation-nextjs
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: edf803cb8942cee14abc604d1ed95c11b79d8445
+**Launched date**: 2026-06-04
 **Development Branch**: `feature/ui-consolidation-nextjs`
 **Created**: 2026-05-29
 **Last Updated**: 2026-06-02
@@ -19,6 +21,7 @@
 | 2026-06-01 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — xstockstrat-ui service created, build passes |
 | 2026-06-02 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done — service consolidated, e2e suite passes |
 
+| 2026-06-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #523; committed edf803cb8942cee14abc604d1ed95c11b79d8445 |
 ---
 
 ## Artifacts

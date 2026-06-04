@@ -132,3 +132,10 @@
 - Updated `.do/app.dev.yaml` and `.do/app.yaml`: updated ingress rules (nginx → agent+ui rules), removed 4 old service blocks, added `xstockstrat-ui` block. Dev uses `basic-xs`, prod uses `professional-xs`.
 - Files modified: `services/xstockstrat-ui/Dockerfile`, `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`
 - Deviations: Docker build verification skipped — Docker daemon not running in execution environment. Grep verifications passed (no old service names remain; `xstockstrat-ui` present in all 3 files).
+
+## Session 2026-06-04 (CI: feature status automation)
+
+- Promotion PR #523 merged to main
+- Feature promoted and committed: edf803cb8942cee14abc604d1ed95c11b79d8445
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-04

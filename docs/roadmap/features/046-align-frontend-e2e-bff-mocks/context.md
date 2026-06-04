@@ -133,3 +133,10 @@
 **Progress**: 8 done / 8 total
 **Stopped at**: all complete
 **Next**: /sdd-execute align-frontend-e2e-bff-mocks next (open final integration PR)
+
+## Session 2026-06-04 (CI: feature status automation)
+
+- Promotion PR #523 merged to main
+- Feature promoted and committed: edf803cb8942cee14abc604d1ed95c11b79d8445
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-04
