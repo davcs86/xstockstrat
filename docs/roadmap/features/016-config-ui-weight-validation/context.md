@@ -60,3 +60,10 @@
 - W3 (Steps 5–6 retarget): **Decision: rebase and re-spec after 045 merges.** Steps 5–6 currently target `services/xstockstrat-config-ui/` — after 045 they must target `services/xstockstrat-ui/src/app/config-ui/`. After 045 merges to `main-dev`, rebase `feature/config-ui-weight-validation` on `main-dev` and re-run `/sdd-spec config-ui-weight-validation` to regenerate Steps 5–6 with accurate xstockstrat-ui paths. Steps 1–4 (proto, stubs, config service, unit tests) are stable and do not need re-spec.
 - W4 (mock-backend.ts overlap with 019): execution order (019 before 016) enforces this; coordinate at Step 6 to include both features' mock additions.
 - Execution position in Stream 2: 044 → 046 → 045 → 003 → 019 → **016**.
+
+## Session 2026-06-04 — sdd-execute (Steps 5–6 re-spec)
+- Merged current `origin/main-dev` into `feature/config-ui-weight-validation`.
+- **Re-spec (task-directed, "re-spec Steps 5–6 first")**: Steps 5–6 targeted the deleted `services/xstockstrat-config-ui/`. 045 consolidated it into `services/xstockstrat-ui/`:
+  - Step 5 → `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx` (now uses TanStack Query hooks `useConfigKeys`/`useSetConfig`; `keys` is an inline-typed array, not a named `ConfigKey` interface; `handleSave(key)` calls `setConfigMutate`). Re-spec adapts the validation logic (validateFloatMap, validationError state, Input onBlur, handleSave guard, inline error, disable Save) to this structure.
+  - Step 6 → `services/xstockstrat-ui/e2e/config-ui/api-smoke.spec.ts` + shared `services/xstockstrat-ui/e2e/mock-backend.ts` (config-ui ConfigService.listKeys mock at L234–240, port 9093).
+- Steps 1–4 (proto ValidationRule + xstockstrat-config service/test) target paths that still exist — unchanged.
