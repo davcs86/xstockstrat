@@ -313,6 +313,12 @@ export type RegisterFormulaRequest = Message<"xstockstrat.indicators.v1.Register
     inputSchema: {
         [key: string]: string;
     };
+    /**
+     * set by BFF from JWT claims; stored immutably
+     *
+     * @generated from field: string author = 6;
+     */
+    author: string;
 };
 /**
  * Describes the message xstockstrat.indicators.v1.RegisterFormulaRequest.
@@ -347,6 +353,142 @@ export type GetFormulaRequest = Message<"xstockstrat.indicators.v1.GetFormulaReq
  * Use `create(GetFormulaRequestSchema)` to create a new message.
  */
 export declare const GetFormulaRequestSchema: GenMessage<GetFormulaRequest>;
+/**
+ * @generated from message xstockstrat.indicators.v1.ListFormulasRequest
+ */
+export type ListFormulasRequest = Message<"xstockstrat.indicators.v1.ListFormulasRequest"> & {
+    /**
+     * if non-empty, return only formulas where author == author_filter
+     *
+     * @generated from field: string author_filter = 1;
+     */
+    authorFilter: string;
+    /**
+     * if true, include all public formulas regardless of author_filter
+     *
+     * @generated from field: bool include_public = 2;
+     */
+    includePublic: boolean;
+    /**
+     * default 0 = no limit
+     *
+     * @generated from field: int32 page_size = 3;
+     */
+    pageSize: number;
+    /**
+     * default 0
+     *
+     * @generated from field: int32 page_offset = 4;
+     */
+    pageOffset: number;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.ListFormulasRequest.
+ * Use `create(ListFormulasRequestSchema)` to create a new message.
+ */
+export declare const ListFormulasRequestSchema: GenMessage<ListFormulasRequest>;
+/**
+ * @generated from message xstockstrat.indicators.v1.ListFormulasResponse
+ */
+export type ListFormulasResponse = Message<"xstockstrat.indicators.v1.ListFormulasResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.indicators.v1.FormulaDefinition formulas = 1;
+     */
+    formulas: FormulaDefinition[];
+    /**
+     * @generated from field: int32 total_count = 2;
+     */
+    totalCount: number;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.ListFormulasResponse.
+ * Use `create(ListFormulasResponseSchema)` to create a new message.
+ */
+export declare const ListFormulasResponseSchema: GenMessage<ListFormulasResponse>;
+/**
+ * @generated from message xstockstrat.indicators.v1.UpdateFormulaRequest
+ */
+export type UpdateFormulaRequest = Message<"xstockstrat.indicators.v1.UpdateFormulaRequest"> & {
+    /**
+     * @generated from field: string formula_id = 1;
+     */
+    formulaId: string;
+    /**
+     * must match formula.author; returns PERMISSION_DENIED otherwise
+     *
+     * @generated from field: string user_id = 2;
+     */
+    userId: string;
+    /**
+     * @generated from field: string name = 3;
+     */
+    name: string;
+    /**
+     * @generated from field: string description = 4;
+     */
+    description: string;
+    /**
+     * @generated from field: string source = 5;
+     */
+    source: string;
+    /**
+     * @generated from field: bool is_public = 6;
+     */
+    isPublic: boolean;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.UpdateFormulaRequest.
+ * Use `create(UpdateFormulaRequestSchema)` to create a new message.
+ */
+export declare const UpdateFormulaRequestSchema: GenMessage<UpdateFormulaRequest>;
+/**
+ * @generated from message xstockstrat.indicators.v1.UpdateFormulaResponse
+ */
+export type UpdateFormulaResponse = Message<"xstockstrat.indicators.v1.UpdateFormulaResponse"> & {
+    /**
+     * @generated from field: xstockstrat.indicators.v1.FormulaDefinition formula = 1;
+     */
+    formula?: FormulaDefinition | undefined;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.UpdateFormulaResponse.
+ * Use `create(UpdateFormulaResponseSchema)` to create a new message.
+ */
+export declare const UpdateFormulaResponseSchema: GenMessage<UpdateFormulaResponse>;
+/**
+ * @generated from message xstockstrat.indicators.v1.DeleteFormulaRequest
+ */
+export type DeleteFormulaRequest = Message<"xstockstrat.indicators.v1.DeleteFormulaRequest"> & {
+    /**
+     * @generated from field: string formula_id = 1;
+     */
+    formulaId: string;
+    /**
+     * must match formula.author; returns PERMISSION_DENIED otherwise
+     *
+     * @generated from field: string user_id = 2;
+     */
+    userId: string;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.DeleteFormulaRequest.
+ * Use `create(DeleteFormulaRequestSchema)` to create a new message.
+ */
+export declare const DeleteFormulaRequestSchema: GenMessage<DeleteFormulaRequest>;
+/**
+ * @generated from message xstockstrat.indicators.v1.DeleteFormulaResponse
+ */
+export type DeleteFormulaResponse = Message<"xstockstrat.indicators.v1.DeleteFormulaResponse"> & {
+    /**
+     * @generated from field: bool success = 1;
+     */
+    success: boolean;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.DeleteFormulaResponse.
+ * Use `create(DeleteFormulaResponseSchema)` to create a new message.
+ */
+export declare const DeleteFormulaResponseSchema: GenMessage<DeleteFormulaResponse>;
 /**
  * @generated from enum xstockstrat.indicators.v1.SandboxExitReason
  */
@@ -437,5 +579,37 @@ export declare const IndicatorsService: GenService<{
         methodKind: "unary";
         input: typeof GetFormulaRequestSchema;
         output: typeof FormulaDefinitionSchema;
+    };
+    /**
+     * List formula definitions with optional author filter and pagination
+     *
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.ListFormulas
+     */
+    listFormulas: {
+        methodKind: "unary";
+        input: typeof ListFormulasRequestSchema;
+        output: typeof ListFormulasResponseSchema;
+    };
+    /**
+     * Update a formula's name, description, source, or is_public flag
+     * Returns PERMISSION_DENIED if user_id does not match author
+     *
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.UpdateFormula
+     */
+    updateFormula: {
+        methodKind: "unary";
+        input: typeof UpdateFormulaRequestSchema;
+        output: typeof UpdateFormulaResponseSchema;
+    };
+    /**
+     * Delete a formula by ID
+     * Returns PERMISSION_DENIED if user_id does not match author
+     *
+     * @generated from rpc xstockstrat.indicators.v1.IndicatorsService.DeleteFormula
+     */
+    deleteFormula: {
+        methodKind: "unary";
+        input: typeof DeleteFormulaRequestSchema;
+        output: typeof DeleteFormulaResponseSchema;
     };
 }>;
