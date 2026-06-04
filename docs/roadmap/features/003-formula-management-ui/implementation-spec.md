@@ -1,6 +1,6 @@
 # Implementation Spec: formula-management-ui
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-06-02 (regenerated — replaces 2026-05-10 version)
 **Feature**: `docs/roadmap/features/003-formula-management-ui/feature.md`
 **Total Steps**: 12
@@ -892,7 +892,7 @@ Expected: one line with the version.
 
 ### Step 11 — docs: Update xstockstrat-indicators CLAUDE.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
@@ -937,7 +937,7 @@ Expected: each string appears at least once.
 
 ### Step 12 — test: E2E smoke test for formula management UI pages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/formulas.spec.ts` — create
