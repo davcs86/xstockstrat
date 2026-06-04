@@ -154,3 +154,9 @@
 - Files modified: `src/lib/browserClients/indicatorsClient.ts`, `src/hooks/useFormulas.ts`.
 - Verification: `tsc --noEmit` clean; `pnpm run lint` clean.
 - Deviations: typed `inputData` cast (vs `as any`); dropped unused `DeleteFormulaRequest` type import. Detail in Deviation Log.
+
+### Step 9 — service: Add Formulas nav link to insights AppShell [done]
+- Added `/insights/formulas` nav links to both desktop and mobile nav in `AppShell.tsx`, after Strategies, matching the active-state styling of siblings.
+- Files modified: `src/components/insights/AppShell.tsx`.
+- Verification: `pnpm run lint` clean; 5 formulas matches.
+- Deviations: omitted the `Code2` import (unused → would fail lint); links are icon-less like Dashboard/Strategies. Detail in Deviation Log.

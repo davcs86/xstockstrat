@@ -744,7 +744,7 @@ Expected: both files show the expected exports.
 
 ### Step 9 — service: Add Formulas nav link to insights AppShell
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/AppShell.tsx` — modify
@@ -1062,3 +1062,8 @@ cd services/xstockstrat-ui && pnpm run lint
 **Spec said**: `useExecuteFormula` casts `inputData: req.inputData as any`; the type-import block lists `ListFormulasRequest, RegisterFormulaRequest, UpdateFormulaRequest, DeleteFormulaRequest`.
 **Actual**: cast `inputData` as `Record<string, never>` (the protoc-gen-es `Struct`-init shape) instead of `as any`, and dropped the unused `DeleteFormulaRequest` type import (`useDeleteFormula` takes a plain `{ formulaId, userId }` object, so the proto type is not referenced).
 **Reason**: `as any` trips `@typescript-eslint/no-explicit-any` and an unused import trips `@typescript-eslint/no-unused-vars` — both fail `pnpm run lint`. The typed cast and trimmed import are lint-clean and `tsc --noEmit` passes.
+
+### Deviation: Step 9 — service (Code2 import omitted)
+**Spec said**: instruction #1 adds `Code2` to the `lucide-react` import; instructions #2/#3 add icon-less `Formulas` `<Link>`s.
+**Actual**: did not add the `Code2` import. The Formulas nav links (like the existing Dashboard/Strategies in-app links) render text only — the spec's link markup never references `Code2`, so importing it would leave an unused symbol and fail `pnpm run lint` (`@typescript-eslint/no-unused-vars`). Kept the links icon-less for consistency with their siblings.
+**Reason**: an imported-but-unused `Code2` breaks the lint gate; omitting it is lint-clean and visually consistent with the adjacent in-app nav links.
