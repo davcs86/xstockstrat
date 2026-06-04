@@ -1,6 +1,6 @@
 # Implementation Spec: formula-management-ui
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-06-02 (regenerated — replaces 2026-05-10 version)
 **Feature**: `docs/roadmap/features/003-formula-management-ui/feature.md`
 **Total Steps**: 12
@@ -511,7 +511,7 @@ Expected: ruff passes and coverage ≥ 50%.
 
 ### Step 7 — service: Wire IndicatorsService into xstockstrat-ui BFF and server-side client
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/connectClients.ts` — modify
@@ -618,7 +618,7 @@ Expected: both files show the new symbol.
 
 ### Step 8 — service: Add indicators browser client and formula hooks to xstockstrat-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/browserClients/indicatorsClient.ts` — create
@@ -744,7 +744,7 @@ Expected: both files show the expected exports.
 
 ### Step 9 — service: Add Formulas nav link to insights AppShell
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/AppShell.tsx` — modify
@@ -797,7 +797,7 @@ Expected: at least 2 matches (desktop + mobile nav links).
 
 ### Step 10 — service: Add FormulaEditor component and formula pages to xstockstrat-ui insights
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/package.json` — modify
@@ -892,7 +892,7 @@ Expected: one line with the version.
 
 ### Step 11 — docs: Update xstockstrat-indicators CLAUDE.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
@@ -937,7 +937,7 @@ Expected: each string appears at least once.
 
 ### Step 12 — test: E2E smoke test for formula management UI pages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/formulas.spec.ts` — create
@@ -1052,3 +1052,23 @@ cd services/xstockstrat-ui && pnpm run lint
 1. `conftest.py`: the indicators service had **no** conftest, unlike its Python siblings `xstockstrat-ingest` and `xstockstrat-analysis`, which both ship an identical `conftest.py` that registers `../../packages/proto/gen/python` as the `gen` namespace package. CI's `python-test` job runs only `pip install -e ".[dev]"` + `pytest` (it does not install the proto stubs), so without this conftest the new `TestIndicatorsServicerCRUD` import (`from app.handlers.servicer import IndicatorsServicer` → `from gen.indicators.v1 import ...`) would raise `ModuleNotFoundError` at collection time in CI. Copied the exact sibling conftest (the "fix now" choice).
 2. `uv.lock`: regenerated after adding `pytest-asyncio>=0.23.0` to `pyproject.toml` dev deps, per the CLAUDE.md uv-lock rule (same rationale as Step 4).
 **Reason**: the spec's own `TestIndicatorsServicerCRUD` cannot pass in CI without the gen-path conftest that every other Python service already uses; lockfile kept in sync. Result: `uv run pytest --cov=app --cov-fail-under=50` → 22 passed, 81.9% coverage.
+
+### Deviation: Step 7 — service (import merge)
+**Spec said**: instruction #2 adds `import { indicatorsClient } from '@/lib/connectClients';` as a separate import line in `insightsBff.ts`.
+**Actual**: merged `indicatorsClient` into the existing `import { analysisClient, marketDataClient, portfolioClient, tradingClient } from '@/lib/connectClients';` line instead of adding a second import from the same module.
+**Reason**: two imports from the same module path would be flagged by ESLint (`import/no-duplicates`) and fail `pnpm run lint`; merging is the lint-clean equivalent. `pnpm run lint` → no warnings/errors; `tsc --noEmit` clean.
+
+### Deviation: Step 8 — service (typed cast + unused type import)
+**Spec said**: `useExecuteFormula` casts `inputData: req.inputData as any`; the type-import block lists `ListFormulasRequest, RegisterFormulaRequest, UpdateFormulaRequest, DeleteFormulaRequest`.
+**Actual**: cast `inputData` as `Record<string, never>` (the protoc-gen-es `Struct`-init shape) instead of `as any`, and dropped the unused `DeleteFormulaRequest` type import (`useDeleteFormula` takes a plain `{ formulaId, userId }` object, so the proto type is not referenced).
+**Reason**: `as any` trips `@typescript-eslint/no-explicit-any` and an unused import trips `@typescript-eslint/no-unused-vars` — both fail `pnpm run lint`. The typed cast and trimmed import are lint-clean and `tsc --noEmit` passes.
+
+### Deviation: Step 9 — service (Code2 import omitted)
+**Spec said**: instruction #1 adds `Code2` to the `lucide-react` import; instructions #2/#3 add icon-less `Formulas` `<Link>`s.
+**Actual**: did not add the `Code2` import. The Formulas nav links (like the existing Dashboard/Strategies in-app links) render text only — the spec's link markup never references `Code2`, so importing it would leave an unused symbol and fail `pnpm run lint` (`@typescript-eslint/no-unused-vars`). Kept the links icon-less for consistency with their siblings.
+**Reason**: an imported-but-unused `Code2` breaks the lint gate; omitting it is lint-clean and visually consistent with the adjacent in-app nav links.
+
+### Deviation: Step 10 — service (pnpm-lock.yaml)
+**Spec said**: Files list includes `services/xstockstrat-ui/package.json` (add `@monaco-editor/react`) but not the lockfile.
+**Actual**: also updated the workspace root `pnpm-lock.yaml` (via `pnpm --filter xstockstrat-ui add @monaco-editor/react@^4.6.0`). CI's `node-lint`/build jobs run `pnpm install --frozen-lockfile`, which fails if `package.json` and `pnpm-lock.yaml` are out of sync — so the lockfile must ship in the same PR.
+**Reason**: keep the pnpm lockfile in sync with the new dependency (same rationale as the uv-lock steps). `tsc --noEmit` and `pnpm run lint` both clean.
