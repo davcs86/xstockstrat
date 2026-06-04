@@ -1,6 +1,6 @@
 # Feature: config-ui-weight-validation
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/config-ui-weight-validation`
 **Created**: 2026-05-23
 **Last Updated**: 2026-06-04
@@ -16,6 +16,7 @@
 | 2026-06-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved. 3 OQs resolved: Option B (proto-declared ValidationRule), key detection N/A, must follow 045 (targets xstockstrat-ui). |
 | 2026-06-01 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-06-04 | `implementation-ready` (Steps 5–6 re-spec) | /sdd-execute | Merged current main-dev; re-spec'd Steps 5–6 from the deleted `xstockstrat-config-ui` to the consolidated `xstockstrat-ui` (namespace page now uses 044 hooks; e2e under `e2e/config-ui/` + shared `e2e/mock-backend.ts`). Steps 1–4 (proto + xstockstrat-config) unchanged. |
+| 2026-06-04 | `implementation-ready` → `code-completed` | /sdd-execute | All 6 steps executed as stacked PRs #544–#549. buf lint/breaking green, config build+test (7 pass), proto stubs regenerated, UI tsc/lint clean. Step 6 e2e via tsc/lint fallback (dev-server compile timed out under the harness). |
 
 ---
 

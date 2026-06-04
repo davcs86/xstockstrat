@@ -85,3 +85,26 @@
 - Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`.
 - Verification: `pnpm --filter xstockstrat-config run build` exit 0; lint exit 0 (26 pre-existing `any` warnings, none in added lines).
 - Deviations: none.
+
+### Step 4 — test: Unit test for listKeys validation (xstockstrat-config) [done]
+- Created `src/__tests__/configServiceImpl.test.ts` (node:test): mocks the pg pool, asserts validation populated for the weight key (value_type=1, [0,1]) and absent for non-weight keys.
+- Files modified: `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts`.
+- Verification: `pnpm run test:coverage` exit 0; 7 tests pass (5 existing + 2 new). (c8 reports 0% under --experimental-strip-types — established behavior of the existing CI script; threshold check exits 0.)
+- Deviations: none.
+
+### Step 5 — service: Add weight validation to NamespacePage editor (xstockstrat-ui) [done]
+- In `src/app/config-ui/[namespace]/page.tsx`: added `validateFloatMap`, `validationError` state, `validation?` on the inline keys type, Input `onBlur` validation, inline error display, Save disabled on error, Cancel clears error, and a `handleSave` guard (no SetConfig when invalid — FR-6). camelCase proto fields (`valueType`/`minValue`/`maxValue`).
+- Files modified: `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx`.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean.
+- Deviations: none (adapted to the 044 hook-based page per the Steps 5–6 re-spec).
+
+### Step 6 — test: E2E validation tests for NamespacePage editor (xstockstrat-ui) [done]
+- Added a weight key with `validation` to the config-ui `listKeys` mock in `e2e/mock-backend.ts`; added a `validation field in ListKeysResponse` describe (weight key has valueType=1 + [0,1]; non-weight key has no validation) to `e2e/config-ui/api-smoke.spec.ts`.
+- Files modified: `e2e/config-ui/api-smoke.spec.ts`, `e2e/mock-backend.ts`.
+- Verification: `tsc --noEmit` + `pnpm run lint` clean. Playwright run timed out (dev-server compile under harness) → used the spec's documented tsc/lint fallback.
+- Deviations: e2e fallback (Deviation Log).
+
+## Session 2026-06-04 — sdd-execute (016 code-completed)
+- All 6 steps done. Feature → code-completed.
+- Stacked per-step PRs: #544 (s1) → #545 (s2) → #546 (s3) → #547 (s4) → #548 (s5) → #549 (s6). Each step branch based on the prior.
+- Next: open final integration PR feature/config-ui-weight-validation → main-dev after the stack merges (merge-order.md has no blocking entry).

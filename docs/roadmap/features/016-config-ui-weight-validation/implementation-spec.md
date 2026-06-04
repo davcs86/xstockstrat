@@ -222,7 +222,7 @@ pnpm run build
 
 ### Step 4 — test: Unit test for listKeys validation field population (xstockstrat-config)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/configWatcher.test.ts` — modify (add listKeys validation test)
@@ -319,7 +319,7 @@ cd services/xstockstrat-config && pnpm run test:coverage
 
 ### Step 5 — service: Add weight validation to NamespacePage editor (xstockstrat-ui)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx` — modify
@@ -423,7 +423,7 @@ pnpm --filter xstockstrat-ui run lint
 
 ### Step 6 — test: E2E validation tests for NamespacePage editor (xstockstrat-ui)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/api-smoke.spec.ts` — modify (add validation contract tests)
@@ -467,3 +467,8 @@ _Populated by /sdd-execute as implementation proceeds._
 **Spec said**: `buf breaking --against ".git#branch=main-dev"` (run from `packages/proto`).
 **Actual**: that path resolves `packages/proto/.git`, which does not exist (the repo `.git` is at the root). Ran `buf breaking --against "<repo-root>/.git#branch=main-dev,subdir=packages/proto"` (the same form `scripts/buf-gen.sh` uses). Result: exit 0 (additive, non-breaking). `buf lint` also exit 0.
 **Reason**: correct git-ref form for a monorepo where `.git` is at the root, not under `packages/proto`.
+
+### Deviation: Step 6 — e2e executed via tsc/lint fallback
+**Spec said**: `pnpm --filter xstockstrat-ui exec playwright test --project=chromium e2e/config-ui/api-smoke.spec.ts` (with the tsc/lint fallback explicitly permitted).
+**Actual**: added the validation tests + mock weight key; `tsc --noEmit` and `pnpm run lint` both pass. The Playwright run timed out (Next.js dev-server on-demand compile under the harness exceeded the budget this session — the same harness ran feature 003's e2e green earlier, so the test shape is sound). Used the documented tsc/lint fallback.
+**Reason**: dev-server compile time under the e2e harness exceeded available budget; the spec permits the tsc/lint fallback.
