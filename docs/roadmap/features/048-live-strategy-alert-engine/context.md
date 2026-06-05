@@ -160,3 +160,16 @@ captured above.
   new AnalysisService block (listStrategyDefinitions; setStrategyLive with server-side admin-scope gate
   → ConnectError PermissionDenied). All forward backendHeaders (x-user-id/x-access-scope/x-trace-id).
 - Verification: greps pass; ListAlerts RPC exists in notify proto; `pnpm exec tsc --noEmit` exit 0.
+
+### Step 10 — service: LiveStrategiesPanel + hooks [done]
+- Created traderAnalysisClient.ts (/trader/api), useLiveStrategies.ts (useLiveStrategyDefinitions,
+  useSetStrategyLive, useStrategyAlerts [filters by `strategy_id:<id>` tag — robust vs Struct introspection],
+  useIsAdmin), LiveStrategiesPanel.tsx (table + live badge + admin-only toggle + per-strategy alert feed),
+  and wired <LiveStrategiesPanel isAdmin> into trader/page.tsx.
+- DEVIATION: spec assumed trader/page.tsx is a server component using getSession() — it is actually a
+  'use client' component and getSession() does not exist (only getSessionFromRequest). Added a small
+  GET /api/auth/me route (derives isAdmin from the session cookie) + a useIsAdmin() hook so the client
+  page can gate the admin toggle. Defense-in-depth: the BFF (Step 9) also enforces admin server-side.
+  Alert feed shows title + timestamp (title already encodes trigger+symbol) rather than Struct
+  introspection, for protobuf-es v2 robustness.
+- Verification: `pnpm exec tsc --noEmit` clean; `pnpm run lint` (next lint) clean; greps pass.

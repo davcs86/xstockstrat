@@ -660,7 +660,7 @@ grep -n "PermissionDenied\|ADMIN_BIT\|rolesToAccessScope" \
 
 ### Step 10 — service: Create LiveStrategiesPanel component and hooks
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/LiveStrategiesPanel.tsx` — create

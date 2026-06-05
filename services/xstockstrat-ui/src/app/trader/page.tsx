@@ -7,12 +7,15 @@ import { AlertStream } from '@/components/trader/AlertStream';
 import { AccountSelector } from '@/components/trader/AccountSelector';
 import { TradingModeBadge } from '@/components/shared/TradingModeBadge';
 import { ChartPanel } from '@/components/trader/ChartPanel';
+import { LiveStrategiesPanel } from '@/components/trader/LiveStrategiesPanel';
 import { useAccountContext } from '@/context/AccountContext';
+import { useIsAdmin } from '@/hooks/useLiveStrategies';
 
 export type TradingMode = 'paper' | 'live';
 
 export default function TradingDashboard() {
   const { environmentMode } = useAccountContext();
+  const { data: isAdmin } = useIsAdmin();
   // Mode is fixed by the deployment environment — the user cannot switch it.
   // Default to 'paper' until the environment is known (safer than defaulting live).
   const mode: TradingMode = environmentMode ?? 'paper';
@@ -41,6 +44,7 @@ export default function TradingDashboard() {
           </div>
         </div>
         <ChartPanel />
+        <LiveStrategiesPanel isAdmin={isAdmin ?? false} />
       </div>
     </AppShell>
   );
