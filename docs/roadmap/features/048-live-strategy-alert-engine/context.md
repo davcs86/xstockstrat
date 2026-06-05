@@ -110,3 +110,11 @@ captured above.
   BOOLEAN NOT NULL DEFAULT FALSE / DROP COLUMN IF EXISTS).
 - Verification: applied 001+002 up then 002 down on ephemeral postgres 16 — column present then removed
   (CI-equivalent fallback; docker unavailable).
+
+### Step 4 — service: Add SetStrategyLive RPC [done]
+- servicer.py: imported notify_pb2_grpc; __init__ gains notify_channel=None → self._notify; added
+  SetStrategyLive (x-access-scope ADMIN-bit role check → PERMISSION_DENIED; repo.set_live_enabled;
+  NOT_FOUND; best-effort live_toggled ledger event; returns SetStrategyLiveResponse).
+- repositories/strategies.py: added set_live_enabled (UPDATE ... RETURNING *).
+- main.py: NOTIFY_ENDPOINT + notify_channel wired.
+- Verification: ruff clean; SetStrategyLive + set_live_enabled import OK; greps pass.

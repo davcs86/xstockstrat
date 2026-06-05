@@ -156,7 +156,7 @@ psql "$DATABASE_URL" -c "\d analysis.strategies"
 
 ### Step 4 — service: Add SetStrategyLive RPC to AnalysisServicer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
