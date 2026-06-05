@@ -100,3 +100,12 @@ grpcio-tools==1.80.0 in a venv) per sequential-mode CI-equivalent fallback. `pnp
 - Files modified: `packages/proto/analysis/v1/analysis.proto`
 - Verification: `buf lint` + `buf breaking --against main-dev` both exit 0 (all additive, no breaking).
 - Deviations: none (toolchain install logged in Deviation Log as CI-equivalent fallback).
+
+### Step 2 — proto-gen: Regenerate stubs after analysis.proto changes [done]
+- Ran `./scripts/buf-gen.sh` with CI-pinned toolchain. Regenerated Go (analysis.pb.go,
+  analysis_grpc.pb.go, analysisv1connect/analysis.connect.go), Python (analysis_pb2.py,
+  analysis_pb2_grpc.py), and TS (analysis.ts/_pb.ts/_connect.ts + dist/) stubs.
+- Files modified: 12 generated stub files under `packages/proto/gen/{go,python,ts}/analysis/v1/`.
+- Verification: `git status packages/proto/gen/` scoped to analysis only; new `StrategyDefinition`/
+  `ManageStrategy` symbols present in `analysis_pb2.py`. No lockfile drift.
+- Deviations: none beyond the toolchain CI-equivalent fallback already logged.
