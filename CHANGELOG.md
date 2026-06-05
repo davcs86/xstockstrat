@@ -16,6 +16,16 @@ Each entry corresponds to one `main-dev → main` PR merge.
 ## 2026-06-04
 
 ### Features
+- upgrade-nextjs15: Upgrade `xstockstrat-insights` and `xstockstrat-config-ui` from Next.js 14.2.x to Next.js 15.x (the version already used by `xstockstrat-trader`). The current workaround for the pnpm workspace standalone path issue (subdirectory CMD and static COPY paths) works correctly but leaves two services on an older, unsupported Next.js major version. Upgrading aligns all three frontends on the same major version and eliminates the version split.
+
+### Summary
+-3 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-06-04
+
+### Features
 - formula-management-ui: Persist indicator formulas to TimescaleDB so they survive service restarts, scope them to the owning user (`author = user_id`), and add a full CRUD management UI inside `xstockstrat-insights`.
 - config-ui-weight-validation: Add client-side validation to the config-ui weight editor so that JSON weight map keys (e.g. `analysis.signals.source_weights`) reject values outside `[0.0, 1.0]` before calling `SetConfig`, giving operators immediate feedback instead of silently-clamped server-side results.
 - unified-login-page: Replaces the three per-basePath login pages in the consolidated `xstockstrat-ui` (after 045) with a single shared login page at `/auth/login`, redirecting all unauthenticated requests regardless of which basePath they originate from, and adapting identity's OAuth login form (from 018) to use the unified page.

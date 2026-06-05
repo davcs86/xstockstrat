@@ -6,4 +6,6 @@ Implements step <N> of feature `<slug>`.
 
 **Verification:** `<verification command>` passed.
 
-_Merge this PR, then run `/sdd-execute <slug> next` to continue._
+<!-- Closing line — pick ONE based on mode: -->
+<!-- default modes: --> _Merge this PR, then run `/sdd-execute <slug> next` to continue._
+<!-- sequential mode (omit the line above): --> _Stacked on #<prior-step-PR> (`docs/patterns/nextjs-frontends.md §8`); auto-retargets to `<dev-branch>` when its base merges._
