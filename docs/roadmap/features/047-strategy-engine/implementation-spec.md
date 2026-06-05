@@ -574,7 +574,7 @@ python3 -c "from app.services.evaluator import StrategyEvaluator, _validate_defi
 
 ### Step 6 — service: Add ManageStrategy/GetStrategy/ListStrategyDefinitions RPCs and rework RunBacktest
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify

@@ -147,3 +147,22 @@ grpcio-tools==1.80.0 in a venv) per sequential-mode CI-equivalent fallback. `pnp
   `_validate_definition` OK via the conftest-style `gen` namespace shim.
 - Deviations: ruff format wrapped two long `raise ValueError(...)` lines onto their own lines to satisfy
   E501 (line-length 100) — formatting only, no behavior change.
+
+### Step 6 — service: ManageStrategy/GetStrategy/ListStrategyDefinitions + RunBacktest rework [done]
+- `servicer.py`: imported identity stubs + json_format + StrategyEvaluator/_validate_definition;
+  `__init__` now takes `identity_channel=None` → `self._identity`. Added `_validate_admin_token`
+  (ingest pattern, with header propagation on ValidateApiKey), `_validate_definition_proto`,
+  `ManageStrategy` (register/update/deactivate, admin-gated), `GetStrategy`, `ListStrategyDefinitions`,
+  and `_backtest_symbol_evaluated` (drives entry/exit from StrategyEvaluator decisions). RunBacktest
+  resolves inline_definition > strategy_id_ref (NOT_FOUND if missing) and routes to the evaluator path;
+  legacy strategy_params SMA path unchanged (FR-8). Module helper `_row_to_strategy_definition`
+  round-trips the JSONB definition via google.protobuf.json_format.
+- `main.py`: added `IDENTITY_ENDPOINT`, pass `identity_channel`.
+- Added `IDENTITY_ENDPOINT` to analysis block in docker-compose + both `.do` specs.
+- Files modified: `app/handlers/servicer.py`, `app/main.py`, `docker-compose.yml`, `.do/app.dev.yaml`,
+  `.do/app.yaml`.
+- Verification: `ruff check`/`format --check` clean; servicer imports + all new methods present;
+  `_row_to_strategy_definition` round-trip verified (components/entry_rule preserved); env greps present.
+- Deviations: definition persisted as a single JSONB via `json_format.MessageToDict(...,
+  preserving_proto_field_name=True)` and rebuilt with `ParseDict` (clean enum/Struct round-trip) — the
+  spec left the JSON shape open; this is the chosen encoding.

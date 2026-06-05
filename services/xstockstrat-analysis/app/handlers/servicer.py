@@ -18,14 +18,17 @@ import uuid
 import grpc
 import numpy as np
 from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc
+from gen.identity.v1 import identity_pb2, identity_pb2_grpc
 from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc
 from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc
 from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
 from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc
+from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
 from app.repositories.strategies import StrategiesRepository
+from app.services.evaluator import StrategyEvaluator, _validate_definition
 
 log = logging.getLogger(__name__)
 
@@ -39,15 +42,49 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         ingest_channel,
         ledger_channel,
         db_pool=None,
+        identity_channel=None,
     ):
         self._cfg = config_watcher
         self._marketdata = marketdata_pb2_grpc.MarketDataServiceStub(marketdata_channel)
         self._indicators = indicators_pb2_grpc.IndicatorsServiceStub(indicators_channel)
         self._ingest = ingest_pb2_grpc.IngestServiceStub(ingest_channel)
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
+        self._identity = (
+            identity_pb2_grpc.IdentityServiceStub(identity_channel) if identity_channel else None
+        )
         self._backtests: dict[str, analysis_pb2.BacktestResult] = {}
         self._strategies: dict[str, analysis_pb2.StrategyScore] = {}
         self._strategies_repo = StrategiesRepository(db_pool) if db_pool else None
+
+    async def _validate_admin_token(self, context) -> bool:
+        """Returns True if the Authorization header carries a valid admin API key."""
+        if self._identity is None:
+            return False
+        metadata = dict(context.invocation_metadata())
+        auth = metadata.get("authorization", "")
+        if not auth.startswith("Bearer "):
+            return False
+        api_key = auth[len("Bearer ") :]
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+        try:
+            claims = await self._identity.ValidateApiKey(
+                identity_pb2.ValidateApiKeyRequest(api_key=api_key),
+                metadata=propagation_meta,
+            )
+            return "admin" in claims.roles
+        except Exception:
+            return False
+
+    async def _validate_definition_proto(self, definition, context) -> None:
+        """Validate a StrategyDefinition; abort INVALID_ARGUMENT on failure."""
+        try:
+            _validate_definition(definition)
+        except ValueError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
 
     async def RunBacktest(self, request, context):
         backtest_id = str(uuid.uuid4())
@@ -111,6 +148,23 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             signal_weight /= total_weight
             technical_weight /= total_weight
 
+        # Resolve strategy definition: inline takes precedence over strategy_id_ref (FR-7).
+        # If neither is supplied, fall through to the legacy SMA-crossover path (FR-8).
+        active_definition = None
+        if request.HasField("inline_definition"):
+            active_definition = request.inline_definition
+        elif request.strategy_id_ref:
+            if self._strategies_repo:
+                row = await self._strategies_repo.get_by_id(request.strategy_id_ref)
+                if row:
+                    active_definition = _row_to_strategy_definition(row)
+                else:
+                    await context.abort(
+                        grpc.StatusCode.NOT_FOUND,
+                        f"strategy '{request.strategy_id_ref}' not found",
+                    )
+                    return
+
         all_trades: list[analysis_pb2.TradeRecord] = []
         equity = float(request.initial_capital) if request.initial_capital > 0 else 100_000.0
         initial_equity = equity
@@ -118,21 +172,32 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         for symbol in request.symbols:
             try:
-                trades, equity, daily_eq = await self._backtest_symbol(
-                    symbol=symbol,
-                    range_msg=request.range,
-                    fast_period=fast_period,
-                    slow_period=slow_period,
-                    signal_sources=signal_sources,
-                    signal_weight=signal_weight,
-                    technical_weight=technical_weight,
-                    min_conviction=min_conviction,
-                    initial_equity=equity,
-                    commission=commission,
-                    slippage=slippage,
-                    source_weights=source_weights,
-                    propagation_meta=propagation_meta,
-                )
+                if active_definition is not None:
+                    trades, equity, daily_eq = await self._backtest_symbol_evaluated(
+                        symbol=symbol,
+                        range_msg=request.range,
+                        definition=active_definition,
+                        initial_equity=equity,
+                        commission=commission,
+                        slippage=slippage,
+                        propagation_meta=propagation_meta,
+                    )
+                else:
+                    trades, equity, daily_eq = await self._backtest_symbol(
+                        symbol=symbol,
+                        range_msg=request.range,
+                        fast_period=fast_period,
+                        slow_period=slow_period,
+                        signal_sources=signal_sources,
+                        signal_weight=signal_weight,
+                        technical_weight=technical_weight,
+                        min_conviction=min_conviction,
+                        initial_equity=equity,
+                        commission=commission,
+                        slippage=slippage,
+                        source_weights=source_weights,
+                        propagation_meta=propagation_meta,
+                    )
                 all_trades.extend(trades)
                 daily_equity.extend(daily_eq)
             except grpc.RpcError as e:
@@ -396,6 +461,112 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         return trades, equity, daily_equity
 
+    async def _backtest_symbol_evaluated(
+        self,
+        symbol,
+        range_msg,
+        definition,
+        initial_equity,
+        commission,
+        slippage,
+        propagation_meta=(),
+    ):
+        """Run a stored/inline StrategyDefinition for one symbol via the shared evaluator.
+
+        Drives entry/exit from StrategyEvaluator decisions (backtest/live parity).
+        Returns (trades, final_equity, daily_equity).
+        """
+        bars_resp = await self._marketdata.GetBars(
+            marketdata_pb2.GetBarsRequest(
+                symbol=symbol,
+                timeframe="1Day",
+                range=range_msg,
+            ),
+            metadata=propagation_meta,
+        )
+        bars = list(bars_resp.bars)
+        if len(bars) < 2:
+            log.warning("symbol %s has insufficient bars (%d)", symbol, len(bars))
+            return [], initial_equity, [initial_equity]
+
+        evaluator = StrategyEvaluator(self._indicators, propagation_meta)
+        decisions = await evaluator.evaluate(definition, bars, None)
+
+        trades = []
+        equity = initial_equity
+        position = 0.0
+        entry_price = 0.0
+        entry_time = None
+        daily_equity = [equity]
+
+        for i in range(1, len(bars)):
+            bar = bars[i]
+            price = bar.close
+            decision = decisions[i]
+
+            if position == 0.0 and decision.entry:
+                fill_price = price * (1 + slippage)
+                shares = (equity * 0.95) / fill_price
+                cost = shares * fill_price * (1 + commission)
+                if cost <= equity:
+                    position = shares
+                    entry_price = fill_price
+                    entry_time = bar.timestamp
+                    equity -= cost
+            elif position > 0.0 and decision.exit:
+                fill_price = price * (1 - slippage)
+                proceeds = position * fill_price * (1 - commission)
+                pnl = proceeds - (position * entry_price * (1 + commission))
+                exit_ts = Timestamp()
+                exit_ts.CopyFrom(bar.timestamp)
+                entry_ts = Timestamp()
+                entry_ts.CopyFrom(entry_time)
+                trades.append(
+                    analysis_pb2.TradeRecord(
+                        symbol=symbol,
+                        side="long",
+                        qty=position,
+                        entry_price=entry_price,
+                        exit_price=fill_price,
+                        pnl=pnl,
+                        entry_time=entry_ts,
+                        exit_time=exit_ts,
+                    )
+                )
+                equity += proceeds
+                position = 0.0
+                entry_price = 0.0
+                entry_time = None
+
+            daily_equity.append(equity + position * price)
+
+        # Close any open position at the last bar price
+        if position > 0.0 and bars:
+            last_bar = bars[-1]
+            fill_price = last_bar.close * (1 - slippage)
+            proceeds = position * fill_price * (1 - commission)
+            pnl = proceeds - (position * entry_price * (1 + commission))
+            now_ts = Timestamp()
+            now_ts.CopyFrom(last_bar.timestamp)
+            entry_ts2 = Timestamp()
+            entry_ts2.CopyFrom(entry_time)
+            trades.append(
+                analysis_pb2.TradeRecord(
+                    symbol=symbol,
+                    side="long",
+                    qty=position,
+                    entry_price=entry_price,
+                    exit_price=fill_price,
+                    pnl=pnl,
+                    entry_time=entry_ts2,
+                    exit_time=now_ts,
+                )
+            )
+            equity += proceeds
+            daily_equity[-1] = equity
+
+        return trades, equity, daily_equity
+
     async def ScoreStrategy(self, request, context):
         propagation_meta = [
             (k, v)
@@ -489,8 +660,93 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             latest_backtest=result,
         )
 
+    async def ManageStrategy(self, request, context):
+        is_admin = await self._validate_admin_token(context)
+        if not is_admin:
+            await context.abort(grpc.StatusCode.UNAUTHENTICATED, "admin API key required")
+            return
+        if self._strategies_repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
+            return
+
+        definition = request.definition
+        op = request.operation
+
+        if op == analysis_pb2.STRATEGY_OPERATION_REGISTER:
+            await self._validate_definition_proto(definition, context)
+            definition_json = json_format.MessageToDict(
+                definition, preserving_proto_field_name=True
+            )
+            row = await self._strategies_repo.create(
+                definition.strategy_id, definition.display_name, definition_json
+            )
+            return _row_to_strategy_definition(row)
+        if op == analysis_pb2.STRATEGY_OPERATION_UPDATE:
+            await self._validate_definition_proto(definition, context)
+            definition_json = json_format.MessageToDict(
+                definition, preserving_proto_field_name=True
+            )
+            row = await self._strategies_repo.update(
+                definition.strategy_id, definition.display_name, definition_json
+            )
+            if row is None:
+                await context.abort(
+                    grpc.StatusCode.NOT_FOUND,
+                    f"strategy '{definition.strategy_id}' not found",
+                )
+                return
+            return _row_to_strategy_definition(row)
+        if op == analysis_pb2.STRATEGY_OPERATION_DEACTIVATE:
+            row = await self._strategies_repo.deactivate(definition.strategy_id)
+            if row is None:
+                await context.abort(
+                    grpc.StatusCode.NOT_FOUND,
+                    f"strategy '{definition.strategy_id}' not found",
+                )
+                return
+            return _row_to_strategy_definition(row)
+        await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "unknown strategy operation")
+
+    async def GetStrategy(self, request, context):
+        if self._strategies_repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
+            return
+        row = await self._strategies_repo.get_by_id(request.strategy_id)
+        if row is None:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"strategy '{request.strategy_id}' not found"
+            )
+            return
+        return _row_to_strategy_definition(row)
+
+    async def ListStrategyDefinitions(self, request, context):
+        if self._strategies_repo is None:
+            return analysis_pb2.ListStrategyDefinitionsResponse()
+        rows, total = await self._strategies_repo.list(
+            include_inactive=request.include_inactive,
+            page_size=request.page_size,
+            page_offset=request.page_offset,
+        )
+        return analysis_pb2.ListStrategyDefinitionsResponse(
+            definitions=[_row_to_strategy_definition(r) for r in rows],
+            total_count=total,
+        )
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _row_to_strategy_definition(row: dict) -> "analysis_pb2.StrategyDefinition":
+    """Convert an analysis.strategies row (definition_json JSONB) to a StrategyDefinition proto."""
+    definition_json = row.get("definition_json") or {}
+    definition = json_format.ParseDict(
+        definition_json, analysis_pb2.StrategyDefinition(), ignore_unknown_fields=True
+    )
+    # Column values are authoritative over the embedded JSON copy.
+    definition.strategy_id = row["strategy_id"]
+    definition.display_name = row["display_name"]
+    definition.active = row["active"]
+    return definition
 
 
 def _unwrap_value(v):
