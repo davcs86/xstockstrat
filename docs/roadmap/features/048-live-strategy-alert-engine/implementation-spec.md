@@ -246,7 +246,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 5 — service: Add live evaluation loop to xstockstrat-analysis
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/__init__.py` — create (empty)

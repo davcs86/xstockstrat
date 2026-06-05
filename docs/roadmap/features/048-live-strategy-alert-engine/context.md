@@ -118,3 +118,14 @@ captured above.
 - repositories/strategies.py: added set_live_enabled (UPDATE ... RETURNING *).
 - main.py: NOTIFY_ENDPOINT + notify_channel wired.
 - Verification: ruff clean; SetStrategyLive + set_live_enabled import OK; greps pass.
+
+### Step 5 — service: live evaluation loop [done]
+- Created app/engine/__init__.py + app/engine/live_loop.py (LiveEvaluationLoop: run_forever single-flight
+  via asyncio.Lock; _run_cycle reads live_enabled+active strategies; edge-triggered entry/exit alerts via
+  notify EmitAlert with category="strategy", tags, context Struct; alert throttle; per-pair isolation;
+  ledger analysis.strategy.triggered). Imports 047 evaluator from app.services.evaluator + reuses
+  _row_to_strategy_definition. No trading imports (FR-6).
+- main.py: starts the loop (only if db_pool) with StrategyEvaluator(servicer._indicators, ()).
+- Design note (Open Item): StrategyDefinition has no symbols field; loop reads per-strategy symbols from
+  signal_params.symbols. Documented as a deviation.
+- Verification: ruff clean; import OK; FR-6 grep finds no trading imports.

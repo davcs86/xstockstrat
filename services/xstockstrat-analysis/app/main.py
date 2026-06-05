@@ -77,6 +77,23 @@ async def serve():
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)
 
+    # ── Live strategy→alert evaluation loop (feature 048) ─────────────────
+    if db_pool is not None:
+        from app.engine.live_loop import LiveEvaluationLoop
+        from app.services.evaluator import StrategyEvaluator
+
+        live_loop = LiveEvaluationLoop(
+            config_watcher=cfg_watcher,
+            db_pool=db_pool,
+            marketdata_stub=servicer._marketdata,
+            ingest_stub=servicer._ingest,
+            notify_stub=servicer._notify,
+            ledger_stub=servicer._ledger,
+            evaluator=StrategyEvaluator(servicer._indicators, ()),
+        )
+        asyncio.get_event_loop().create_task(live_loop.run_forever())
+        log.info("live evaluation loop started")
+
     await grpc_server.wait_for_termination()
 
 
