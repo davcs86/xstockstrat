@@ -790,7 +790,7 @@ grep -n "isAdmin\|PermissionDenied\|liveEnabled" \
 
 ### Step 11 — service: Add AnalysisService and NotifyService mocks for trader segment in mock-backend.ts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify

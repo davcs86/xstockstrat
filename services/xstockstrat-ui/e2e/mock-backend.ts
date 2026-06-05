@@ -149,7 +149,25 @@ export async function startMockBackend(): Promise<void> {
             alerts: [
               { alertId: 'alert-001', severity: 2, category: 'RISK', title: 'Position limit approaching', body: 'AAPL position is at 80% of max allowed.', sourceService: 'trading' },
               { alertId: 'alert-002', severity: 4, category: 'SYSTEM', title: 'Order rejected', body: 'Insufficient buying power for TSLA order.', sourceService: 'trading' },
+              { alertId: 'alert-strat-001', severity: 1, category: 'strategy', title: 'Entry trigger: Live Test Strategy', body: 'AAPL entry triggered (conviction 0.82)', sourceService: 'xstockstrat-analysis', tags: ['strategy_id:strat-live-001'] },
             ],
+          };
+        },
+      });
+
+      router.service(AnalysisService, {
+        async listStrategyDefinitions() {
+          return {
+            definitions: [
+              { strategyId: 'strat-live-001', displayName: 'Live Test Strategy', active: true, liveEnabled: true },
+              { strategyId: 'strat-live-002', displayName: 'Inactive Strategy', active: true, liveEnabled: false },
+            ],
+            totalCount: 2,
+          };
+        },
+        async setStrategyLive(req) {
+          return {
+            definition: { strategyId: req.strategyId, displayName: 'Live Test Strategy', active: true, liveEnabled: req.liveEnabled },
           };
         },
       });

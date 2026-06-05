@@ -173,3 +173,10 @@ captured above.
   Alert feed shows title + timestamp (title already encodes trigger+symbol) rather than Struct
   introspection, for protobuf-es v2 robustness.
 - Verification: `pnpm exec tsc --noEmit` clean; `pnpm run lint` (next lint) clean; greps pass.
+
+### Step 11 — service: trader-segment mocks [done]
+- mock-backend.ts (port 9091): added AnalysisService block (listStrategyDefinitions → strat-live-001 live
+  + strat-live-002 not-live; setStrategyLive echoes liveEnabled); added a strategy-category alert
+  (tags=['strategy_id:strat-live-001']) to the existing NotifyService.listAlerts so useStrategyAlerts
+  (tag filter) finds it. Omitted the fragile Struct `context` (hook uses tags) for protobuf-es v2 safety.
+- Verification: `pnpm exec tsc --noEmit` clean; greps pass.
