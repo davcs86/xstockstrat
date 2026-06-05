@@ -168,7 +168,7 @@ test.describe('POST /api/config — inline edit save flow', () => {
 });
 
 test.describe('validation field in ListKeysResponse', () => {
-  test('weight key has validation.valueType=1 and correct bounds', async ({ page }) => {
+  test('weight key has validation.valueType=VALUE_TYPE_FLOAT_MAP and correct bounds', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/config-ui/login');
     const { status, body } = await callBff(page, CONFIG_BFF, { namespace: 'analysis', environment: 1, tradingMode: 0 });
@@ -178,8 +178,12 @@ test.describe('validation field in ListKeysResponse', () => {
     expect(weightKey).toBeDefined();
     const v = weightKey!.validation as Record<string, unknown>;
     expect(v).toBeDefined();
-    expect(v.valueType).toBe(1);
-    expect(Number(v.minValue)).toBeCloseTo(0.0);
+    // Connect JSON (protobuf-es) serializes enum fields as their proto name, not
+    // the numeric value — see e2e/trader/api-smoke.spec.ts. ValueType 1 == FLOAT_MAP.
+    expect(v.valueType).toBe('VALUE_TYPE_FLOAT_MAP');
+    // proto3 JSON omits zero-valued scalars, so a minValue of 0.0 is absent from
+    // the response (which is semantically still 0). Treat the omission as 0.
+    expect(Number(v.minValue ?? 0)).toBeCloseTo(0.0);
     expect(Number(v.maxValue)).toBeCloseTo(1.0);
   });
 
