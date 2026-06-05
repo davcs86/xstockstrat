@@ -25,6 +25,7 @@ from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
+from app.repositories.strategies import StrategiesRepository
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         indicators_channel,
         ingest_channel,
         ledger_channel,
+        db_pool=None,
     ):
         self._cfg = config_watcher
         self._marketdata = marketdata_pb2_grpc.MarketDataServiceStub(marketdata_channel)
@@ -45,6 +47,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
         self._backtests: dict[str, analysis_pb2.BacktestResult] = {}
         self._strategies: dict[str, analysis_pb2.StrategyScore] = {}
+        self._strategies_repo = StrategiesRepository(db_pool) if db_pool else None
 
     async def RunBacktest(self, request, context):
         backtest_id = str(uuid.uuid4())

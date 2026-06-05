@@ -120,3 +120,19 @@ grpcio-tools==1.80.0 in a venv) per sequential-mode CI-equivalent fallback. `pnp
   (initdb as unprivileged user). UP created the exact table+index; DOWN dropped it (`dropped = t`).
 - Deviations: DB verified via local ephemeral postgres instead of docker postgres:16 / db-migrate.sh
   (CI-equivalent fallback; logged in Deviation Log).
+
+### Step 4 — service: Wire asyncpg pool and strategy repository into AnalysisServicer [done]
+- `main.py`: added `import asyncpg`, `DATABASE_URL` env, optional `asyncpg.create_pool(...)` ("analysis
+  DB pool created" log), pass `db_pool=db_pool` to servicer.
+- Created `app/repositories/__init__.py` + `app/repositories/strategies.py` (`StrategiesRepository`
+  with create/get_by_id/update/deactivate/list; JSONB `definition_json`; mirrors FormulasRepository).
+- `servicer.py`: `__init__` now accepts `db_pool=None`, sets `self._strategies_repo =
+  StrategiesRepository(db_pool) if db_pool else None`.
+- Added missing `INGEST_ENDPOINT` to analysis block in `docker-compose.yml` and the analysis envs in
+  `.do/app.dev.yaml` + `.do/app.yaml`.
+- Files modified: `app/main.py`, `app/handlers/servicer.py`, `app/repositories/__init__.py`,
+  `app/repositories/strategies.py`, `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`.
+- Verification: `ruff check` + `ruff format --check` clean; env greps present in all 3 files; modules
+  parse. `docker compose up` pool-log check via CI-equivalent fallback (no full stack here).
+- Deviations: `import asyncpg` placed at top of file (with other third-party imports) rather than
+  literally "after L30", matching the indicators reference and satisfying ruff E402. No behavior change.

@@ -10,6 +10,7 @@ import logging
 import os
 import signal
 
+import asyncpg
 import grpc
 from gen.analysis.v1 import analysis_pb2_grpc
 from gen.analysis.v1.analysis_pb2 import DESCRIPTOR as ANALYSIS_DESCRIPTOR
@@ -28,6 +29,7 @@ MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketd
 INDICATORS_ENDPOINT = os.environ.get("INDICATORS_ENDPOINT", "xstockstrat-indicators:50054")
 INGEST_ENDPOINT = os.environ.get("INGEST_ENDPOINT", "xstockstrat-ingest:50055")
 LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 
 async def serve():
@@ -37,12 +39,18 @@ async def serve():
     await cfg_watcher.wait_for_snapshot(timeout_seconds=90)
     log.info("config snapshot received")
 
+    db_pool = None
+    if DATABASE_URL:
+        db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
+        log.info("analysis DB pool created")
+
     servicer = AnalysisServicer(
         config_watcher=cfg_watcher,
         marketdata_channel=grpc.aio.insecure_channel(MARKETDATA_ENDPOINT),
         indicators_channel=grpc.aio.insecure_channel(INDICATORS_ENDPOINT),
         ingest_channel=grpc.aio.insecure_channel(INGEST_ENDPOINT),
         ledger_channel=grpc.aio.insecure_channel(LEDGER_ENDPOINT),
+        db_pool=db_pool,
     )
 
     # ── gRPC server (internal, port 50056) ────────────────────────────────

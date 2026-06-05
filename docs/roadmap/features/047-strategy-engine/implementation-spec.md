@@ -231,7 +231,7 @@ psql "$DATABASE_URL" -c "\di analysis.idx_strategies_active"
 
 ### Step 4 — service: Wire asyncpg pool and strategy repository into AnalysisServicer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/main.py` — modify
