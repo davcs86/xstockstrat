@@ -22,12 +22,11 @@ import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_p
 import { NotifyService, type Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { TEST_JWT_SECRET } from './helpers/auth';
 
 export const TRADER_MOCK_PORT = 9091;
 export const INSIGHTS_MOCK_PORT = 9092;
 export const CONFIG_UI_MOCK_PORT = 9093;
-
-const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
 
 let traderServer: http2.Http2Server | null = null;
 let insightsServer: http2.Http2Server | null = null;
