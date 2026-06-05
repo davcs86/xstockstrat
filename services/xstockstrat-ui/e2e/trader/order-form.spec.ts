@@ -110,7 +110,10 @@ test.describe('OrderForm', () => {
   });
 
   test('PAPER or LIVE badge is shown in the global header', async ({ page }) => {
-    const modeBadge = page.getByText(/^PAPER$|^LIVE$/);
+    // The header TradingModeBadge (#575) renders the mode as lowercase text
+    // ("paper"/"live") and uppercases it via CSS only; getByText matches the DOM
+    // text node, so the locator must be case-insensitive.
+    const modeBadge = page.getByText(/^(paper|live)$/i);
     await expect(modeBadge.first()).toBeVisible();
   });
 });
