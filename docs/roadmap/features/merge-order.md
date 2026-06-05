@@ -17,9 +17,8 @@ cannot open its final integration PR to `main-dev` until the feature in the
 | Feature | Must wait for | Reason | Resolved |
 |---|---|---|---|
 | `broker-accounts-ui` | `add-ikbr-account-support` | Consumes proto stubs and backend RPCs (`ListBrokerAccounts`, `ListPortfolios`, `RegisterBrokerAccount`, `DeregisterBrokerAccount`) defined by that feature | Yes |
-
-_No blocking dependencies registered. If `/sdd-review` detects a hard conflict between
-two active features, it will propose adding a row here._
+| `strategy-engine` | `agent-mcp-server` | Steps 8–11 modify `client.py`, `tools.py`, `test_client.py`, `test_tools.py` — all four are **created** by `agent-mcp-server` (feature 009); they must exist before strategy-engine modifies them | No |
+| `live-strategy-alert-engine` | `strategy-engine` | Hard dependency: requires `StrategyDefinition` model, `analysis.strategies` table, and `StrategyEvaluator` module delivered by `strategy-engine` (feature 047) | No |
 
 ---
 
