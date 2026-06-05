@@ -109,3 +109,14 @@ grpcio-tools==1.80.0 in a venv) per sequential-mode CI-equivalent fallback. `pnp
 - Verification: `git status packages/proto/gen/` scoped to analysis only; new `StrategyDefinition`/
   `ManageStrategy` symbols present in `analysis_pb2.py`. No lockfile drift.
 - Deviations: none beyond the toolchain CI-equivalent fallback already logged.
+
+### Step 3 — migration: Create analysis.strategies table [done]
+- Created `services/xstockstrat-analysis/migrations/001_strategies.{up,down}.sql` (first migration for
+  this service; `001_` prefix correct). Table: `strategy_id` TEXT PK, `display_name` TEXT NOT NULL,
+  `definition_json` JSONB NOT NULL, `active` BOOL DEFAULT TRUE, `created_at`/`updated_at` TIMESTAMPTZ;
+  `idx_strategies_active` index. Not a hypertable (FR-1).
+- Files created: `migrations/001_strategies.up.sql`, `migrations/001_strategies.down.sql`.
+- Verification: Docker daemon unavailable → applied up+down on a local ephemeral postgres 16 cluster
+  (initdb as unprivileged user). UP created the exact table+index; DOWN dropped it (`dropped = t`).
+- Deviations: DB verified via local ephemeral postgres instead of docker postgres:16 / db-migrate.sh
+  (CI-equivalent fallback; logged in Deviation Log).

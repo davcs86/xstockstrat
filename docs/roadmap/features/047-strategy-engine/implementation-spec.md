@@ -180,7 +180,7 @@ git diff packages/proto/gen/
 
 ### Step 3 — migration: Create analysis.strategies table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/001_strategies.up.sql` — create
