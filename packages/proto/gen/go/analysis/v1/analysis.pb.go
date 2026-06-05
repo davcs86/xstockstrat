@@ -864,6 +864,7 @@ type StrategyDefinition struct {
 	ExitRule      string                 `protobuf:"bytes,5,opt,name=exit_rule,json=exitRule,proto3" json:"exit_rule,omitempty"`    // JSON-encoded condition tree
 	SignalParams  *structpb.Struct       `protobuf:"bytes,6,opt,name=signal_params,json=signalParams,proto3" json:"signal_params,omitempty"`
 	Active        bool                   `protobuf:"varint,7,opt,name=active,proto3" json:"active,omitempty"`
+	LiveEnabled   bool                   `protobuf:"varint,8,opt,name=live_enabled,json=liveEnabled,proto3" json:"live_enabled,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -943,6 +944,13 @@ func (x *StrategyDefinition) GetSignalParams() *structpb.Struct {
 func (x *StrategyDefinition) GetActive() bool {
 	if x != nil {
 		return x.Active
+	}
+	return false
+}
+
+func (x *StrategyDefinition) GetLiveEnabled() bool {
+	if x != nil {
+		return x.LiveEnabled
 	}
 	return false
 }
@@ -1155,6 +1163,102 @@ func (x *ListStrategyDefinitionsResponse) GetTotalCount() int32 {
 	return 0
 }
 
+type SetStrategyLiveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	StrategyId    string                 `protobuf:"bytes,1,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"`
+	LiveEnabled   bool                   `protobuf:"varint,2,opt,name=live_enabled,json=liveEnabled,proto3" json:"live_enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetStrategyLiveRequest) Reset() {
+	*x = SetStrategyLiveRequest{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetStrategyLiveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetStrategyLiveRequest) ProtoMessage() {}
+
+func (x *SetStrategyLiveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetStrategyLiveRequest.ProtoReflect.Descriptor instead.
+func (*SetStrategyLiveRequest) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *SetStrategyLiveRequest) GetStrategyId() string {
+	if x != nil {
+		return x.StrategyId
+	}
+	return ""
+}
+
+func (x *SetStrategyLiveRequest) GetLiveEnabled() bool {
+	if x != nil {
+		return x.LiveEnabled
+	}
+	return false
+}
+
+type SetStrategyLiveResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Definition    *StrategyDefinition    `protobuf:"bytes,1,opt,name=definition,proto3" json:"definition,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetStrategyLiveResponse) Reset() {
+	*x = SetStrategyLiveResponse{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetStrategyLiveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetStrategyLiveResponse) ProtoMessage() {}
+
+func (x *SetStrategyLiveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetStrategyLiveResponse.ProtoReflect.Descriptor instead.
+func (*SetStrategyLiveResponse) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *SetStrategyLiveResponse) GetDefinition() *StrategyDefinition {
+	if x != nil {
+		return x.Definition
+	}
+	return nil
+}
+
 var File_analysis_v1_analysis_proto protoreflect.FileDescriptor
 
 const file_analysis_v1_analysis_proto_rawDesc = "" +
@@ -1235,7 +1339,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x06params\x18\x05 \x03(\v26.xstockstrat.analysis.v1.StrategyComponent.ParamsEntryR\x06params\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\xb6\x02\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\xd9\x02\n" +
 	"\x12StrategyDefinition\x12\x1f\n" +
 	"\vstrategy_id\x18\x01 \x01(\tR\n" +
 	"strategyId\x12!\n" +
@@ -1247,7 +1351,8 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"entry_rule\x18\x04 \x01(\tR\tentryRule\x12\x1b\n" +
 	"\texit_rule\x18\x05 \x01(\tR\bexitRule\x12<\n" +
 	"\rsignal_params\x18\x06 \x01(\v2\x17.google.protobuf.StructR\fsignalParams\x12\x16\n" +
-	"\x06active\x18\a \x01(\bR\x06active\"\xae\x01\n" +
+	"\x06active\x18\a \x01(\bR\x06active\x12!\n" +
+	"\flive_enabled\x18\b \x01(\bR\vliveEnabled\"\xae\x01\n" +
 	"\x15ManageStrategyRequest\x12H\n" +
 	"\toperation\x18\x01 \x01(\x0e2*.xstockstrat.analysis.v1.StrategyOperationR\toperation\x12K\n" +
 	"\n" +
@@ -1264,7 +1369,15 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x1fListStrategyDefinitionsResponse\x12M\n" +
 	"\vdefinitions\x18\x01 \x03(\v2+.xstockstrat.analysis.v1.StrategyDefinitionR\vdefinitions\x12\x1f\n" +
 	"\vtotal_count\x18\x02 \x01(\x05R\n" +
-	"totalCount*x\n" +
+	"totalCount\"\\\n" +
+	"\x16SetStrategyLiveRequest\x12\x1f\n" +
+	"\vstrategy_id\x18\x01 \x01(\tR\n" +
+	"strategyId\x12!\n" +
+	"\flive_enabled\x18\x02 \x01(\bR\vliveEnabled\"f\n" +
+	"\x17SetStrategyLiveResponse\x12K\n" +
+	"\n" +
+	"definition\x18\x01 \x01(\v2+.xstockstrat.analysis.v1.StrategyDefinitionR\n" +
+	"definition*x\n" +
 	"\rComponentKind\x12\x1e\n" +
 	"\x1aCOMPONENT_KIND_UNSPECIFIED\x10\x00\x12$\n" +
 	" COMPONENT_KIND_BUILTIN_INDICATOR\x10\x01\x12!\n" +
@@ -1273,7 +1386,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x1eSTRATEGY_OPERATION_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bSTRATEGY_OPERATION_REGISTER\x10\x01\x12\x1d\n" +
 	"\x19STRATEGY_OPERATION_UPDATE\x10\x02\x12!\n" +
-	"\x1dSTRATEGY_OPERATION_DEACTIVATE\x10\x032\xa9\x06\n" +
+	"\x1dSTRATEGY_OPERATION_DEACTIVATE\x10\x032\x9f\a\n" +
 	"\x0fAnalysisService\x12c\n" +
 	"\vRunBacktest\x12+.xstockstrat.analysis.v1.RunBacktestRequest\x1a'.xstockstrat.analysis.v1.BacktestResult\x12f\n" +
 	"\rScoreStrategy\x12-.xstockstrat.analysis.v1.ScoreStrategyRequest\x1a&.xstockstrat.analysis.v1.StrategyScore\x12q\n" +
@@ -1281,7 +1394,8 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x11GetStrategyReport\x121.xstockstrat.analysis.v1.GetStrategyReportRequest\x1a'.xstockstrat.analysis.v1.StrategyReport\x12m\n" +
 	"\x0eManageStrategy\x12..xstockstrat.analysis.v1.ManageStrategyRequest\x1a+.xstockstrat.analysis.v1.StrategyDefinition\x12g\n" +
 	"\vGetStrategy\x12+.xstockstrat.analysis.v1.GetStrategyRequest\x1a+.xstockstrat.analysis.v1.StrategyDefinition\x12\x8c\x01\n" +
-	"\x17ListStrategyDefinitions\x127.xstockstrat.analysis.v1.ListStrategyDefinitionsRequest\x1a8.xstockstrat.analysis.v1.ListStrategyDefinitionsResponseB@Z>github.com/xstockstrat/contracts/gen/go/analysis/v1;analysisv1b\x06proto3"
+	"\x17ListStrategyDefinitions\x127.xstockstrat.analysis.v1.ListStrategyDefinitionsRequest\x1a8.xstockstrat.analysis.v1.ListStrategyDefinitionsResponse\x12t\n" +
+	"\x0fSetStrategyLive\x12/.xstockstrat.analysis.v1.SetStrategyLiveRequest\x1a0.xstockstrat.analysis.v1.SetStrategyLiveResponseB@Z>github.com/xstockstrat/contracts/gen/go/analysis/v1;analysisv1b\x06proto3"
 
 var (
 	file_analysis_v1_analysis_proto_rawDescOnce sync.Once
@@ -1296,7 +1410,7 @@ func file_analysis_v1_analysis_proto_rawDescGZIP() []byte {
 }
 
 var file_analysis_v1_analysis_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_analysis_v1_analysis_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_analysis_v1_analysis_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_analysis_v1_analysis_proto_goTypes = []any{
 	(ComponentKind)(0),                      // 0: xstockstrat.analysis.v1.ComponentKind
 	(StrategyOperation)(0),                  // 1: xstockstrat.analysis.v1.StrategyOperation
@@ -1315,56 +1429,61 @@ var file_analysis_v1_analysis_proto_goTypes = []any{
 	(*GetStrategyRequest)(nil),              // 14: xstockstrat.analysis.v1.GetStrategyRequest
 	(*ListStrategyDefinitionsRequest)(nil),  // 15: xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
 	(*ListStrategyDefinitionsResponse)(nil), // 16: xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
-	nil,                                     // 17: xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
-	nil,                                     // 18: xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
-	(*v1.TimeRange)(nil),                    // 19: xstockstrat.common.v1.TimeRange
-	(*structpb.Struct)(nil),                 // 20: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),           // 21: google.protobuf.Timestamp
-	(*v1.PageRequest)(nil),                  // 22: xstockstrat.common.v1.PageRequest
-	(*v1.PageResponse)(nil),                 // 23: xstockstrat.common.v1.PageResponse
+	(*SetStrategyLiveRequest)(nil),          // 17: xstockstrat.analysis.v1.SetStrategyLiveRequest
+	(*SetStrategyLiveResponse)(nil),         // 18: xstockstrat.analysis.v1.SetStrategyLiveResponse
+	nil,                                     // 19: xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
+	nil,                                     // 20: xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
+	(*v1.TimeRange)(nil),                    // 21: xstockstrat.common.v1.TimeRange
+	(*structpb.Struct)(nil),                 // 22: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),           // 23: google.protobuf.Timestamp
+	(*v1.PageRequest)(nil),                  // 24: xstockstrat.common.v1.PageRequest
+	(*v1.PageResponse)(nil),                 // 25: xstockstrat.common.v1.PageResponse
 }
 var file_analysis_v1_analysis_proto_depIdxs = []int32{
-	19, // 0: xstockstrat.analysis.v1.RunBacktestRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	20, // 1: xstockstrat.analysis.v1.RunBacktestRequest.strategy_params:type_name -> google.protobuf.Struct
+	21, // 0: xstockstrat.analysis.v1.RunBacktestRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	22, // 1: xstockstrat.analysis.v1.RunBacktestRequest.strategy_params:type_name -> google.protobuf.Struct
 	12, // 2: xstockstrat.analysis.v1.RunBacktestRequest.inline_definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
-	21, // 3: xstockstrat.analysis.v1.BacktestResult.completed_at:type_name -> google.protobuf.Timestamp
+	23, // 3: xstockstrat.analysis.v1.BacktestResult.completed_at:type_name -> google.protobuf.Timestamp
 	4,  // 4: xstockstrat.analysis.v1.BacktestResult.trades:type_name -> xstockstrat.analysis.v1.TradeRecord
-	21, // 5: xstockstrat.analysis.v1.TradeRecord.entry_time:type_name -> google.protobuf.Timestamp
-	21, // 6: xstockstrat.analysis.v1.TradeRecord.exit_time:type_name -> google.protobuf.Timestamp
-	19, // 7: xstockstrat.analysis.v1.ScoreStrategyRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	17, // 8: xstockstrat.analysis.v1.StrategyScore.component_scores:type_name -> xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
+	23, // 5: xstockstrat.analysis.v1.TradeRecord.entry_time:type_name -> google.protobuf.Timestamp
+	23, // 6: xstockstrat.analysis.v1.TradeRecord.exit_time:type_name -> google.protobuf.Timestamp
+	21, // 7: xstockstrat.analysis.v1.ScoreStrategyRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	19, // 8: xstockstrat.analysis.v1.StrategyScore.component_scores:type_name -> xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
 	3,  // 9: xstockstrat.analysis.v1.StrategyReport.latest_backtest:type_name -> xstockstrat.analysis.v1.BacktestResult
 	6,  // 10: xstockstrat.analysis.v1.StrategyReport.score:type_name -> xstockstrat.analysis.v1.StrategyScore
-	20, // 11: xstockstrat.analysis.v1.StrategyReport.metadata:type_name -> google.protobuf.Struct
-	22, // 12: xstockstrat.analysis.v1.ListStrategiesRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	22, // 11: xstockstrat.analysis.v1.StrategyReport.metadata:type_name -> google.protobuf.Struct
+	24, // 12: xstockstrat.analysis.v1.ListStrategiesRequest.page:type_name -> xstockstrat.common.v1.PageRequest
 	6,  // 13: xstockstrat.analysis.v1.ListStrategiesResponse.strategies:type_name -> xstockstrat.analysis.v1.StrategyScore
-	23, // 14: xstockstrat.analysis.v1.ListStrategiesResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	25, // 14: xstockstrat.analysis.v1.ListStrategiesResponse.page:type_name -> xstockstrat.common.v1.PageResponse
 	0,  // 15: xstockstrat.analysis.v1.StrategyComponent.kind:type_name -> xstockstrat.analysis.v1.ComponentKind
-	18, // 16: xstockstrat.analysis.v1.StrategyComponent.params:type_name -> xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
+	20, // 16: xstockstrat.analysis.v1.StrategyComponent.params:type_name -> xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
 	11, // 17: xstockstrat.analysis.v1.StrategyDefinition.components:type_name -> xstockstrat.analysis.v1.StrategyComponent
-	20, // 18: xstockstrat.analysis.v1.StrategyDefinition.signal_params:type_name -> google.protobuf.Struct
+	22, // 18: xstockstrat.analysis.v1.StrategyDefinition.signal_params:type_name -> google.protobuf.Struct
 	1,  // 19: xstockstrat.analysis.v1.ManageStrategyRequest.operation:type_name -> xstockstrat.analysis.v1.StrategyOperation
 	12, // 20: xstockstrat.analysis.v1.ManageStrategyRequest.definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
 	12, // 21: xstockstrat.analysis.v1.ListStrategyDefinitionsResponse.definitions:type_name -> xstockstrat.analysis.v1.StrategyDefinition
-	2,  // 22: xstockstrat.analysis.v1.AnalysisService.RunBacktest:input_type -> xstockstrat.analysis.v1.RunBacktestRequest
-	5,  // 23: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:input_type -> xstockstrat.analysis.v1.ScoreStrategyRequest
-	8,  // 24: xstockstrat.analysis.v1.AnalysisService.ListStrategies:input_type -> xstockstrat.analysis.v1.ListStrategiesRequest
-	10, // 25: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:input_type -> xstockstrat.analysis.v1.GetStrategyReportRequest
-	13, // 26: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:input_type -> xstockstrat.analysis.v1.ManageStrategyRequest
-	14, // 27: xstockstrat.analysis.v1.AnalysisService.GetStrategy:input_type -> xstockstrat.analysis.v1.GetStrategyRequest
-	15, // 28: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:input_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
-	3,  // 29: xstockstrat.analysis.v1.AnalysisService.RunBacktest:output_type -> xstockstrat.analysis.v1.BacktestResult
-	6,  // 30: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:output_type -> xstockstrat.analysis.v1.StrategyScore
-	9,  // 31: xstockstrat.analysis.v1.AnalysisService.ListStrategies:output_type -> xstockstrat.analysis.v1.ListStrategiesResponse
-	7,  // 32: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:output_type -> xstockstrat.analysis.v1.StrategyReport
-	12, // 33: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
-	12, // 34: xstockstrat.analysis.v1.AnalysisService.GetStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
-	16, // 35: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:output_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
-	29, // [29:36] is the sub-list for method output_type
-	22, // [22:29] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	12, // 22: xstockstrat.analysis.v1.SetStrategyLiveResponse.definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
+	2,  // 23: xstockstrat.analysis.v1.AnalysisService.RunBacktest:input_type -> xstockstrat.analysis.v1.RunBacktestRequest
+	5,  // 24: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:input_type -> xstockstrat.analysis.v1.ScoreStrategyRequest
+	8,  // 25: xstockstrat.analysis.v1.AnalysisService.ListStrategies:input_type -> xstockstrat.analysis.v1.ListStrategiesRequest
+	10, // 26: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:input_type -> xstockstrat.analysis.v1.GetStrategyReportRequest
+	13, // 27: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:input_type -> xstockstrat.analysis.v1.ManageStrategyRequest
+	14, // 28: xstockstrat.analysis.v1.AnalysisService.GetStrategy:input_type -> xstockstrat.analysis.v1.GetStrategyRequest
+	15, // 29: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:input_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
+	17, // 30: xstockstrat.analysis.v1.AnalysisService.SetStrategyLive:input_type -> xstockstrat.analysis.v1.SetStrategyLiveRequest
+	3,  // 31: xstockstrat.analysis.v1.AnalysisService.RunBacktest:output_type -> xstockstrat.analysis.v1.BacktestResult
+	6,  // 32: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:output_type -> xstockstrat.analysis.v1.StrategyScore
+	9,  // 33: xstockstrat.analysis.v1.AnalysisService.ListStrategies:output_type -> xstockstrat.analysis.v1.ListStrategiesResponse
+	7,  // 34: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:output_type -> xstockstrat.analysis.v1.StrategyReport
+	12, // 35: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
+	12, // 36: xstockstrat.analysis.v1.AnalysisService.GetStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
+	16, // 37: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:output_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
+	18, // 38: xstockstrat.analysis.v1.AnalysisService.SetStrategyLive:output_type -> xstockstrat.analysis.v1.SetStrategyLiveResponse
+	31, // [31:39] is the sub-list for method output_type
+	23, // [23:31] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_analysis_v1_analysis_proto_init() }
@@ -1378,7 +1497,7 @@ func file_analysis_v1_analysis_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_analysis_v1_analysis_proto_rawDesc), len(file_analysis_v1_analysis_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   17,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

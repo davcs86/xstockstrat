@@ -84,7 +84,7 @@ Both commands must exit with code 0. `buf breaking` must report no breaking chan
 
 ### Step 2 — proto-gen: Regenerate stubs after analysis.proto changes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/python/analysis/v1/analysis_pb2.py` — modify (regenerated)

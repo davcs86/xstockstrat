@@ -100,3 +100,7 @@ captured above.
   `SetStrategyLiveResponse` messages, and `SetStrategyLive` RPC (all additive on top of 047).
 - Files: `packages/proto/analysis/v1/analysis.proto`.
 - Verification: `buf lint` + `buf breaking --against main-dev` clean (additive).
+
+### Step 2 — proto-gen: Regenerate stubs [done]
+- Ran buf-gen.sh; analysis Go/Python/TS stubs regenerated with SetStrategyLive + live_enabled. Diff
+  scoped to analysis only; no lockfile drift.

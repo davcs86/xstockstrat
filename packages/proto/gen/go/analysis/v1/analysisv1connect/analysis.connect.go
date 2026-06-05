@@ -54,6 +54,9 @@ const (
 	// AnalysisServiceListStrategyDefinitionsProcedure is the fully-qualified name of the
 	// AnalysisService's ListStrategyDefinitions RPC.
 	AnalysisServiceListStrategyDefinitionsProcedure = "/xstockstrat.analysis.v1.AnalysisService/ListStrategyDefinitions"
+	// AnalysisServiceSetStrategyLiveProcedure is the fully-qualified name of the AnalysisService's
+	// SetStrategyLive RPC.
+	AnalysisServiceSetStrategyLiveProcedure = "/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive"
 )
 
 // AnalysisServiceClient is a client for the xstockstrat.analysis.v1.AnalysisService service.
@@ -65,6 +68,7 @@ type AnalysisServiceClient interface {
 	ManageStrategy(context.Context, *connect.Request[v1.ManageStrategyRequest]) (*connect.Response[v1.StrategyDefinition], error)
 	GetStrategy(context.Context, *connect.Request[v1.GetStrategyRequest]) (*connect.Response[v1.StrategyDefinition], error)
 	ListStrategyDefinitions(context.Context, *connect.Request[v1.ListStrategyDefinitionsRequest]) (*connect.Response[v1.ListStrategyDefinitionsResponse], error)
+	SetStrategyLive(context.Context, *connect.Request[v1.SetStrategyLiveRequest]) (*connect.Response[v1.SetStrategyLiveResponse], error)
 }
 
 // NewAnalysisServiceClient constructs a client for the xstockstrat.analysis.v1.AnalysisService
@@ -120,6 +124,12 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(analysisServiceMethods.ByName("ListStrategyDefinitions")),
 			connect.WithClientOptions(opts...),
 		),
+		setStrategyLive: connect.NewClient[v1.SetStrategyLiveRequest, v1.SetStrategyLiveResponse](
+			httpClient,
+			baseURL+AnalysisServiceSetStrategyLiveProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("SetStrategyLive")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -132,6 +142,7 @@ type analysisServiceClient struct {
 	manageStrategy          *connect.Client[v1.ManageStrategyRequest, v1.StrategyDefinition]
 	getStrategy             *connect.Client[v1.GetStrategyRequest, v1.StrategyDefinition]
 	listStrategyDefinitions *connect.Client[v1.ListStrategyDefinitionsRequest, v1.ListStrategyDefinitionsResponse]
+	setStrategyLive         *connect.Client[v1.SetStrategyLiveRequest, v1.SetStrategyLiveResponse]
 }
 
 // RunBacktest calls xstockstrat.analysis.v1.AnalysisService.RunBacktest.
@@ -169,6 +180,11 @@ func (c *analysisServiceClient) ListStrategyDefinitions(ctx context.Context, req
 	return c.listStrategyDefinitions.CallUnary(ctx, req)
 }
 
+// SetStrategyLive calls xstockstrat.analysis.v1.AnalysisService.SetStrategyLive.
+func (c *analysisServiceClient) SetStrategyLive(ctx context.Context, req *connect.Request[v1.SetStrategyLiveRequest]) (*connect.Response[v1.SetStrategyLiveResponse], error) {
+	return c.setStrategyLive.CallUnary(ctx, req)
+}
+
 // AnalysisServiceHandler is an implementation of the xstockstrat.analysis.v1.AnalysisService
 // service.
 type AnalysisServiceHandler interface {
@@ -179,6 +195,7 @@ type AnalysisServiceHandler interface {
 	ManageStrategy(context.Context, *connect.Request[v1.ManageStrategyRequest]) (*connect.Response[v1.StrategyDefinition], error)
 	GetStrategy(context.Context, *connect.Request[v1.GetStrategyRequest]) (*connect.Response[v1.StrategyDefinition], error)
 	ListStrategyDefinitions(context.Context, *connect.Request[v1.ListStrategyDefinitionsRequest]) (*connect.Response[v1.ListStrategyDefinitionsResponse], error)
+	SetStrategyLive(context.Context, *connect.Request[v1.SetStrategyLiveRequest]) (*connect.Response[v1.SetStrategyLiveResponse], error)
 }
 
 // NewAnalysisServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -230,6 +247,12 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		connect.WithSchema(analysisServiceMethods.ByName("ListStrategyDefinitions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	analysisServiceSetStrategyLiveHandler := connect.NewUnaryHandler(
+		AnalysisServiceSetStrategyLiveProcedure,
+		svc.SetStrategyLive,
+		connect.WithSchema(analysisServiceMethods.ByName("SetStrategyLive")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.analysis.v1.AnalysisService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AnalysisServiceRunBacktestProcedure:
@@ -246,6 +269,8 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 			analysisServiceGetStrategyHandler.ServeHTTP(w, r)
 		case AnalysisServiceListStrategyDefinitionsProcedure:
 			analysisServiceListStrategyDefinitionsHandler.ServeHTTP(w, r)
+		case AnalysisServiceSetStrategyLiveProcedure:
+			analysisServiceSetStrategyLiveHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -281,4 +306,8 @@ func (UnimplementedAnalysisServiceHandler) GetStrategy(context.Context, *connect
 
 func (UnimplementedAnalysisServiceHandler) ListStrategyDefinitions(context.Context, *connect.Request[v1.ListStrategyDefinitionsRequest]) (*connect.Response[v1.ListStrategyDefinitionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) SetStrategyLive(context.Context, *connect.Request[v1.SetStrategyLiveRequest]) (*connect.Response[v1.SetStrategyLiveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.SetStrategyLive is not implemented"))
 }
