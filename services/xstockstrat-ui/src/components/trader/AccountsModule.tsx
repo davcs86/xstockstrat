@@ -21,7 +21,6 @@ import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Search } from 'lucide-react';
 
 type BrokerFilter = 'all' | 'alpaca' | 'ibkr';
-type ModeFilter = 'all' | 'paper' | 'live';
 type StatusFilter = 'all' | 'ok' | 'unknown' | 'invalid';
 
 function brokerLabel(brokerType: BrokerType): string {
@@ -134,7 +133,6 @@ export function AccountsModule() {
   // Filter state
   const [search, setSearch] = React.useState('');
   const [brokerFilter, setBrokerFilter] = React.useState<BrokerFilter>('all');
-  const [modeFilter, setModeFilter] = React.useState<ModeFilter>('all');
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>('all');
 
   // Account action state
@@ -155,8 +153,6 @@ export function AccountsModule() {
     if (search && !a.displayName.toLowerCase().includes(search.toLowerCase())) return false;
     if (brokerFilter === 'alpaca' && a.brokerType !== BrokerType.ALPACA) return false;
     if (brokerFilter === 'ibkr' && a.brokerType !== BrokerType.IBKR) return false;
-    if (modeFilter === 'paper' && !a.isPaper) return false;
-    if (modeFilter === 'live' && a.isPaper) return false;
     if (statusFilter === 'ok' && a.credentialStatus !== CredentialStatus.OK) return false;
     if (statusFilter === 'unknown' && a.credentialStatus !== CredentialStatus.UNKNOWN) return false;
     if (statusFilter === 'invalid' && a.credentialStatus !== CredentialStatus.INVALID) return false;
@@ -201,7 +197,6 @@ export function AccountsModule() {
 
   const activeFilterCount = [
     brokerFilter !== 'all',
-    modeFilter !== 'all',
     statusFilter !== 'all',
     search !== '',
   ].filter(Boolean).length;
@@ -238,7 +233,7 @@ export function AccountsModule() {
                 variant="ghost"
                 size="sm"
                 className="text-xs h-7"
-                onClick={() => { setSearch(''); setBrokerFilter('all'); setModeFilter('all'); setStatusFilter('all'); }}
+                onClick={() => { setSearch(''); setBrokerFilter('all'); setStatusFilter('all'); }}
               >
                 Clear filters
               </Button>
@@ -267,17 +262,7 @@ export function AccountsModule() {
                 <SelectItem value="ibkr">IBKR</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={modeFilter} onValueChange={(v) => setModeFilter(v as ModeFilter)}>
-              <SelectTrigger className="w-[100px] h-8 text-sm">
-                <SelectValue placeholder="Mode" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All modes</SelectItem>
-                <SelectItem value="paper">Paper</SelectItem>
-                <SelectItem value="live">Live</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+<Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
               <SelectTrigger className="w-[120px] h-8 text-sm">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
