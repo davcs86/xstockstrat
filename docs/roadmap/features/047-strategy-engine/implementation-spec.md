@@ -31,7 +31,7 @@ Steps 1–2 (proto) must complete before Steps 3–11 (service/agent) because al
 
 ### Step 1 — proto: Add strategy messages and RPCs to analysis.proto
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -1038,4 +1038,14 @@ grep -n "StrategyDefinition\|manage_strategy\|evaluator" \
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Toolchain — proto codegen tools installed on host (CI-equivalent fallback)
+**Spec said**: Steps 1–2 run `buf lint` / `buf breaking` / `./scripts/buf-gen.sh` assuming the proto toolchain is present.
+**Actual**: `buf` and `protoc` were absent in the execution environment. Installed CI-pinned versions per the sequential-mode verification fallback: buf 1.69.0, protoc-gen-go@v1.36.11, protoc-gen-go-grpc@v1.6.2, protoc-gen-connect-go@v1.19.2, grpcio-tools==1.80.0 (venv); `pnpm install --frozen-lockfile` for TS plugins. Versions match `.github/workflows/ci.yml` proto-freshness job exactly.
+**Reason**: Run codegen/verification with the same tool versions CI uses so generated stubs match.
+**Disposition**: CI-equivalent fallback.
+
+### Deviation: Steps that require a running multi-service stack — verified via CI-equivalent fallback
+**Spec said**: Step 3 verification runs `./scripts/db-migrate.sh up` + `psql`; Step 4 confirms a live `docker compose up xstockstrat-analysis` "analysis DB pool created" log; Step 14 runs `./scripts/integration-test.sh`.
+**Actual**: The full multi-service stack (config/identity/etc. dependencies, healthchecks) cannot be brought up in this environment. Migrations are verified up+down against a throwaway `postgres:16` container; service-start and integration-test sections are validated structurally (lint + import + script syntax) and rely on CI for live execution.
+**Reason**: No full compose stack available; matches the documented sequential-mode fallbacks.
+**Disposition**: CI-equivalent fallback.

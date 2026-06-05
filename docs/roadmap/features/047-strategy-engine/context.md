@@ -79,3 +79,24 @@
   - `AnalysisServicer.__init__` confirmed at `servicer.py` L33 with 5 parameters; `RunBacktest` at L49; `propagation_meta` at L71-75; `_backtest_symbol` at L188.
   - `formulas_repository.py` methods confirmed: `__init__` L32, `create` L35, `get_by_id` L62, `list` L69, `update` L95, `delete` L118 — reference for `StrategiesRepository` pattern.
   - `make_servicer()` factory at `test_analysis_servicer.py` L20 confirmed — needs update to accept `db_pool` and `identity_channel` for new management RPC tests.
+
+## Session 2026-06-05 — sdd-execute (sequential)
+
+Running `/sdd-execute "strategy-engine > live-strategy-alert-engine" sequential` (047 then 048).
+Branch strategy: strict SDD stacked per-step PRs (user-authorized override of harness single-branch
+mandate). Re-spec gate for 047: directive `none` — all 14 steps' codebase evidence re-validated
+against current `feature/strategy-engine` (= main-dev) and matched; **no re-spec applied**.
+
+Toolchain: `buf` and `protoc` absent on host → installed CI-pinned versions (buf 1.69.0,
+protoc-gen-go@v1.36.11, protoc-gen-go-grpc@v1.6.2, protoc-gen-connect-go@v1.19.2,
+grpcio-tools==1.80.0 in a venv) per sequential-mode CI-equivalent fallback. `pnpm install
+--frozen-lockfile` for TS proto plugins.
+
+### Step 1 — proto: Add strategy messages and RPCs to analysis.proto [done]
+- Added `ComponentKind`/`StrategyOperation` enums, `StrategyComponent`/`StrategyDefinition`/
+  `ManageStrategyRequest`/`GetStrategyRequest`/`ListStrategyDefinitions{Request,Response}` messages,
+  two additive `RunBacktestRequest` fields (`strategy_id_ref`=6, `inline_definition`=7), and three
+  additive RPCs (`ManageStrategy`/`GetStrategy`/`ListStrategyDefinitions`).
+- Files modified: `packages/proto/analysis/v1/analysis.proto`
+- Verification: `buf lint` + `buf breaking --against main-dev` both exit 0 (all additive, no breaking).
+- Deviations: none (toolchain install logged in Deviation Log as CI-equivalent fallback).

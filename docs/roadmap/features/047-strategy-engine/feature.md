@@ -1,9 +1,9 @@
 # Feature: strategy-engine
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/strategy-engine`
 **Created**: 2026-06-01
-**Last Updated**: 2026-06-04
+**Last Updated**: 2026-06-05
 
 ---
 
@@ -16,6 +16,7 @@
 | 2026-06-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings — advisory). All 7 open questions resolved: JSON condition tree rule model, evaluator in xstockstrat-analysis, both strategy_id+inline_definition for RunBacktest, ListStrategyDefinitions added, signals-as-rule-term deferred, ListFormulas from feature 003, agent reviewer-registry gap noted. |
 | 2026-06-04 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 14 steps. |
 | 2026-06-04 | `implementation-ready` (re-spec) | /sdd-spec | Implementation spec refreshed with updated codebase evidence: INGEST_ENDPOINT absent from analysis docker-compose/DO specs added to Step 4; IDENTITY_ENDPOINT and IDENTITY_ENDPOINT absence confirmed fresh; claude_mcp_config.json does not enumerate tool names (Step 10 corrected); line number references updated from live codebase reads. |
+| 2026-06-05 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 — proto messages/RPCs added to analysis.proto; buf lint + breaking clean). |
 
 ---
 
