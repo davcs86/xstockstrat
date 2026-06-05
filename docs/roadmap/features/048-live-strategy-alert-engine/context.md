@@ -59,3 +59,15 @@
 - Resolved deferred proto question: `StrategyDefinition` gets `bool live_enabled = 8;` (additive) — required for the UI to render per-strategy status from `ListStrategyDefinitions` without N+1 calls.
 - Affected Services: `xstockstrat-ui` added. BFF routes needed: strategy list, SetStrategyLive toggle, alert feed.
 - Status reverted to `draft` for re-review. `xstockstrat-ui` reviewer added to feature.md.
+
+## Session 2026-06-05T00:00:00Z — sdd-spec
+
+- Generated implementation-spec.md with 13 steps. Status → implementation-ready.
+- Key codebase findings:
+  - `services/xstockstrat-analysis/migrations/` does not exist yet — 047 creates it with `001_strategies.up.sql`; this feature creates `002_strategy_live_enabled.up.sql` (sequential, no conflict).
+  - `NOTIFY_ENDPOINT` is already in the analysis docker-compose block (L344) and DO app specs — no new env var addition needed in deployment files; however, `NOTIFY_ENDPOINT` is **absent** from `app/main.py` (confirmed L26–30) and `notify_channel` is not passed to `AnalysisServicer` — Step 4 adds both.
+  - `AnalysisService` is only registered in `insightsBff.ts` today, not in `traderBff.ts` — Step 9 adds a partial registration for `listStrategyDefinitions`, `setStrategyLive` with admin gate, and `listAlerts`.
+  - Mock-backend `AnalysisService` mock lives only on port 9092 (insights); port 9091 (trader) needs new handlers — Step 11.
+  - No `services/xstockstrat-agent/CLAUDE.md` file found — Step 13 notes to create if absent.
+  - 047's `StrategyDefinition` uses fields 1–7 (`active = 7`); `bool live_enabled = 8` is the next available field — additive, no collision.
+  - `app/engine/` directory does not yet exist in analysis service — 047 creates it for the evaluator; this feature adds `live_loop.py` to the same package.
