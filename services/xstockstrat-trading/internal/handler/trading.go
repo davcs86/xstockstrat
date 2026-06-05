@@ -216,6 +216,28 @@ func (h *TradingHandler) DeregisterBrokerAccount(
 	return connect.NewResponse(&tradingv1.DeregisterBrokerAccountResponse{}), nil
 }
 
+func (h *TradingHandler) UpdateBrokerAccountCredentials(
+	ctx context.Context,
+	req *connect.Request[tradingv1.UpdateBrokerAccountCredentialsRequest],
+) (*connect.Response[tradingv1.UpdateBrokerAccountCredentialsResponse], error) {
+	if req.Msg.AccountId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("account_id is required"))
+	}
+	userID := extractUserID(ctx)
+	account, err := h.svc.UpdateBrokerAccountCredentials(ctx, req.Msg.AccountId, userID, req.Msg.CredentialsJson)
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return connect.NewResponse(&tradingv1.UpdateBrokerAccountCredentialsResponse{Account: account}), nil
+}
+
+func (h *TradingHandler) GetTradingEnvironment(
+	ctx context.Context,
+	_ *connect.Request[tradingv1.GetTradingEnvironmentRequest],
+) (*connect.Response[tradingv1.GetTradingEnvironmentResponse], error) {
+	return connect.NewResponse(h.svc.GetTradingEnvironment(ctx)), nil
+}
+
 func (a *grpcTradingAdapter) RegisterBrokerAccount(ctx context.Context, req *tradingv1.RegisterBrokerAccountRequest) (*tradingv1.RegisterBrokerAccountResponse, error) {
 	resp, err := a.h.RegisterBrokerAccount(ctx, connect.NewRequest(req))
 	if err != nil {
@@ -234,6 +256,22 @@ func (a *grpcTradingAdapter) ListBrokerAccounts(ctx context.Context, req *tradin
 
 func (a *grpcTradingAdapter) DeregisterBrokerAccount(ctx context.Context, req *tradingv1.DeregisterBrokerAccountRequest) (*tradingv1.DeregisterBrokerAccountResponse, error) {
 	resp, err := a.h.DeregisterBrokerAccount(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcTradingAdapter) UpdateBrokerAccountCredentials(ctx context.Context, req *tradingv1.UpdateBrokerAccountCredentialsRequest) (*tradingv1.UpdateBrokerAccountCredentialsResponse, error) {
+	resp, err := a.h.UpdateBrokerAccountCredentials(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcTradingAdapter) GetTradingEnvironment(ctx context.Context, req *tradingv1.GetTradingEnvironmentRequest) (*tradingv1.GetTradingEnvironmentResponse, error) {
+	resp, err := a.h.GetTradingEnvironment(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

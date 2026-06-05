@@ -23,8 +23,12 @@ type BrokerAccountRecord struct {
 	IsActive       bool
 	UserID         string
 	CredentialsEnc []byte // AES-256-GCM encrypted JSON blob
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// CredentialStatus matches the trading.v1.CredentialStatus proto enum:
+	// 0=UNSPECIFIED, 1=OK, 2=INVALID, 3=UNKNOWN.
+	CredentialStatus    int32
+	CredentialCheckedAt *time.Time // nil until first validation
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 // AccountRepository defines CRUD operations for broker_accounts.
@@ -34,6 +38,10 @@ type AccountRepository interface {
 	GetBrokerAccount(ctx context.Context, id string) (*BrokerAccountRecord, error)
 	DeactivateBrokerAccount(ctx context.Context, id string) error
 	ListActiveBrokerAccounts(ctx context.Context) ([]*BrokerAccountRecord, error)
+	// UpdateCredentials replaces the encrypted credential blob for an account.
+	UpdateCredentials(ctx context.Context, id string, credentialsEnc []byte) error
+	// UpdateCredentialStatus records the outcome of a credential validation.
+	UpdateCredentialStatus(ctx context.Context, id string, status int32, checkedAt time.Time) error
 }
 
 type pgAccountRepo struct {
@@ -66,7 +74,7 @@ func (r *pgAccountRepo) CreateBrokerAccount(ctx context.Context, rec *BrokerAcco
 func (r *pgAccountRepo) ListBrokerAccounts(ctx context.Context, userID string) ([]*BrokerAccountRecord, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, display_name, broker_type, is_paper, is_active, user_id,
-		       credentials_enc, created_at, updated_at
+		       credentials_enc, credential_status, credential_checked_at, created_at, updated_at
 		FROM trading.broker_accounts
 		WHERE user_id = $1
 		ORDER BY created_at ASC
@@ -81,7 +89,7 @@ func (r *pgAccountRepo) ListBrokerAccounts(ctx context.Context, userID string) (
 func (r *pgAccountRepo) GetBrokerAccount(ctx context.Context, id string) (*BrokerAccountRecord, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, display_name, broker_type, is_paper, is_active, user_id,
-		       credentials_enc, created_at, updated_at
+		       credentials_enc, credential_status, credential_checked_at, created_at, updated_at
 		FROM trading.broker_accounts
 		WHERE id = $1
 	`, id)
@@ -104,7 +112,7 @@ func (r *pgAccountRepo) DeactivateBrokerAccount(ctx context.Context, id string) 
 func (r *pgAccountRepo) ListActiveBrokerAccounts(ctx context.Context) ([]*BrokerAccountRecord, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, display_name, broker_type, is_paper, is_active, user_id,
-		       credentials_enc, created_at, updated_at
+		       credentials_enc, credential_status, credential_checked_at, created_at, updated_at
 		FROM trading.broker_accounts
 		WHERE is_active = TRUE
 		ORDER BY created_at ASC
@@ -114,6 +122,27 @@ func (r *pgAccountRepo) ListActiveBrokerAccounts(ctx context.Context) ([]*Broker
 	}
 	defer rows.Close()
 	return scanBrokerAccounts(rows)
+}
+
+// UpdateCredentials replaces the encrypted credential blob for an account and
+// resets its credential status to UNSPECIFIED (0) pending re-validation.
+func (r *pgAccountRepo) UpdateCredentials(ctx context.Context, id string, credentialsEnc []byte) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE trading.broker_accounts
+		SET credentials_enc = $2, credential_status = 0, credential_checked_at = NULL, updated_at = NOW()
+		WHERE id = $1
+	`, id, credentialsEnc)
+	return err
+}
+
+// UpdateCredentialStatus records the outcome of a credential validation.
+func (r *pgAccountRepo) UpdateCredentialStatus(ctx context.Context, id string, status int32, checkedAt time.Time) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE trading.broker_accounts
+		SET credential_status = $2, credential_checked_at = $3
+		WHERE id = $1
+	`, id, status, checkedAt)
+	return err
 }
 
 // ── scan helpers ──────────────────────────────────────────────────────────────
@@ -127,7 +156,8 @@ func scanBrokerAccount(row rowScanner) (*BrokerAccountRecord, error) {
 	err := row.Scan(
 		&rec.ID, &rec.DisplayName, &rec.BrokerType,
 		&rec.IsPaper, &rec.IsActive, &rec.UserID,
-		&rec.CredentialsEnc, &rec.CreatedAt, &rec.UpdatedAt,
+		&rec.CredentialsEnc, &rec.CredentialStatus, &rec.CredentialCheckedAt,
+		&rec.CreatedAt, &rec.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err

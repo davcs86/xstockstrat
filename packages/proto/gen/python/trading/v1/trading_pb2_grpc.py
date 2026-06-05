@@ -74,6 +74,16 @@ class TradingServiceStub(object):
                 request_serializer=trading_dot_v1_dot_trading__pb2.DeregisterBrokerAccountRequest.SerializeToString,
                 response_deserializer=trading_dot_v1_dot_trading__pb2.DeregisterBrokerAccountResponse.FromString,
                 _registered_method=True)
+        self.UpdateBrokerAccountCredentials = channel.unary_unary(
+                '/xstockstrat.trading.v1.TradingService/UpdateBrokerAccountCredentials',
+                request_serializer=trading_dot_v1_dot_trading__pb2.UpdateBrokerAccountCredentialsRequest.SerializeToString,
+                response_deserializer=trading_dot_v1_dot_trading__pb2.UpdateBrokerAccountCredentialsResponse.FromString,
+                _registered_method=True)
+        self.GetTradingEnvironment = channel.unary_unary(
+                '/xstockstrat.trading.v1.TradingService/GetTradingEnvironment',
+                request_serializer=trading_dot_v1_dot_trading__pb2.GetTradingEnvironmentRequest.SerializeToString,
+                response_deserializer=trading_dot_v1_dot_trading__pb2.GetTradingEnvironmentResponse.FromString,
+                _registered_method=True)
 
 
 class TradingServiceServicer(object):
@@ -127,6 +137,22 @@ class TradingServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def UpdateBrokerAccountCredentials(self, request, context):
+        """UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+        account, re-validates them against the broker, and refreshes credential_status.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetTradingEnvironment(self, request, context):
+        """GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+        switch between paper and live — the environment owns this decision.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_TradingServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -169,6 +195,16 @@ def add_TradingServiceServicer_to_server(servicer, server):
                     servicer.DeregisterBrokerAccount,
                     request_deserializer=trading_dot_v1_dot_trading__pb2.DeregisterBrokerAccountRequest.FromString,
                     response_serializer=trading_dot_v1_dot_trading__pb2.DeregisterBrokerAccountResponse.SerializeToString,
+            ),
+            'UpdateBrokerAccountCredentials': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateBrokerAccountCredentials,
+                    request_deserializer=trading_dot_v1_dot_trading__pb2.UpdateBrokerAccountCredentialsRequest.FromString,
+                    response_serializer=trading_dot_v1_dot_trading__pb2.UpdateBrokerAccountCredentialsResponse.SerializeToString,
+            ),
+            'GetTradingEnvironment': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetTradingEnvironment,
+                    request_deserializer=trading_dot_v1_dot_trading__pb2.GetTradingEnvironmentRequest.FromString,
+                    response_serializer=trading_dot_v1_dot_trading__pb2.GetTradingEnvironmentResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -387,6 +423,60 @@ class TradingService(object):
             '/xstockstrat.trading.v1.TradingService/DeregisterBrokerAccount',
             trading_dot_v1_dot_trading__pb2.DeregisterBrokerAccountRequest.SerializeToString,
             trading_dot_v1_dot_trading__pb2.DeregisterBrokerAccountResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateBrokerAccountCredentials(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.trading.v1.TradingService/UpdateBrokerAccountCredentials',
+            trading_dot_v1_dot_trading__pb2.UpdateBrokerAccountCredentialsRequest.SerializeToString,
+            trading_dot_v1_dot_trading__pb2.UpdateBrokerAccountCredentialsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetTradingEnvironment(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.trading.v1.TradingService/GetTradingEnvironment',
+            trading_dot_v1_dot_trading__pb2.GetTradingEnvironmentRequest.SerializeToString,
+            trading_dot_v1_dot_trading__pb2.GetTradingEnvironmentResponse.FromString,
             options,
             channel_credentials,
             insecure,
