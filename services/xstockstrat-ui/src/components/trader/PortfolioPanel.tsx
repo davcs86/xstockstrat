@@ -1,6 +1,5 @@
 'use client';
 
-import type { TradingMode } from '@/app/trader/page';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePortfolios } from '@/hooks/usePortfolio';
 import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
@@ -20,7 +19,7 @@ function Stat({ label, value, valueClass = 'text-foreground' }: { label: string;
   );
 }
 
-export function PortfolioPanel({ mode }: { mode: TradingMode }) {
+export function PortfolioPanel() {
   const { accounts, selectedAccountId } = useAccountContext();
   const { data, isLoading, error } = usePortfolios(selectedAccountId);
 
@@ -52,16 +51,11 @@ export function PortfolioPanel({ mode }: { mode: TradingMode }) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">{account?.displayName ?? selectedAccountId}</CardTitle>
-            <div className="flex items-center gap-1">
-              {account && (
-                <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
-                  {brokerLabel(account.brokerType)}
-                </Badge>
-              )}
-              <Badge variant={mode === 'paper' ? 'paper' : 'live'}>
-                {mode === 'paper' ? 'PAPER' : 'LIVE'}
+            {account && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
+                {brokerLabel(account.brokerType)}
               </Badge>
-            </div>
+            )}
           </div>
         </CardHeader>
         {portfolio ? (

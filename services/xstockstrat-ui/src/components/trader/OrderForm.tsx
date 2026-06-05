@@ -10,7 +10,6 @@ import { ConnectError } from '@connectrpc/connect';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 type OrderSide = 'buy' | 'sell';
@@ -77,12 +76,7 @@ export function OrderForm({ mode }: OrderFormProps) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Place Order</CardTitle>
-          <Badge variant={mode === 'paper' ? 'paper' : 'live'}>
-            {mode === 'paper' ? 'PAPER' : 'LIVE'}
-          </Badge>
-        </div>
+        <CardTitle>Place Order</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-3">
