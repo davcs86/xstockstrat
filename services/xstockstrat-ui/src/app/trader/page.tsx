@@ -1,26 +1,28 @@
 'use client';
-import { useState } from 'react';
 import { AppShell } from '@/components/trader/AppShell';
 import { OrderForm } from '@/components/trader/OrderForm';
 import { OrderBook } from '@/components/trader/OrderBook';
 import { PortfolioPanel } from '@/components/trader/PortfolioPanel';
 import { AlertStream } from '@/components/trader/AlertStream';
 import { AccountSelector } from '@/components/trader/AccountSelector';
-import { Button } from '@/components/ui/button';
+import { TradingModeBadge } from '@/components/shared/TradingModeBadge';
 import { ChartPanel } from '@/components/trader/ChartPanel';
+import { useAccountContext } from '@/context/AccountContext';
 
 export type TradingMode = 'paper' | 'live';
 
 export default function TradingDashboard() {
-  const [mode, setMode] = useState<TradingMode>('paper');
+  const { environmentMode } = useAccountContext();
+  // Mode is fixed by the deployment environment — the user cannot switch it.
+  // Default to 'paper' until the environment is known (safer than defaulting live).
+  const mode: TradingMode = environmentMode ?? 'paper';
 
   return (
     <AppShell
-      title="xstockstrat Trader"
       actions={
         <div className="flex items-center gap-2">
+          <TradingModeBadge mode={environmentMode} />
           <AccountSelector />
-          <ModeToggle mode={mode} onChange={setMode} />
           <AlertStream />
         </div>
       }
@@ -41,29 +43,5 @@ export default function TradingDashboard() {
         <ChartPanel />
       </div>
     </AppShell>
-  );
-}
-
-function ModeToggle({ mode, onChange }: { mode: TradingMode; onChange: (m: TradingMode) => void }) {
-  return (
-    <div className="flex items-center gap-1 rounded-lg bg-secondary p-1">
-      {(['paper', 'live'] as TradingMode[]).map((m) => (
-        <Button
-          key={m}
-          size="sm"
-          variant="ghost"
-          onClick={() => onChange(m)}
-          className={
-            mode === m
-              ? m === 'paper'
-                ? 'bg-paper/20 text-paper hover:bg-paper/30 h-7 px-3'
-                : 'bg-buy/20 text-buy hover:bg-buy/30 h-7 px-3'
-              : 'text-muted-foreground hover:text-foreground h-7 px-3'
-          }
-        >
-          {m === 'paper' ? 'PAPER' : 'LIVE'}
-        </Button>
-      ))}
-    </div>
   );
 }

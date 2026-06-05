@@ -243,6 +243,31 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 	return positions, nil
 }
 
+// ValidateCredentials confirms the API key/secret still authenticate by calling
+// GET /v2/account. A 401/403 maps to ErrInvalidCredentials; other non-200
+// responses and transport errors are returned as transient (wrapped) errors.
+func (c *Client) ValidateCredentials(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL()+"/v2/account", nil)
+	if err != nil {
+		return fmt.Errorf("alpaca ValidateCredentials: build request: %w", err)
+	}
+	c.setAuthHeaders(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("alpaca ValidateCredentials: http: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		return nil
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return ErrInvalidCredentials
+	default:
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("alpaca ValidateCredentials: status %d: %s", resp.StatusCode, body)
+	}
+}
+
 func (c *Client) setAuthHeaders(req *http.Request) {
 	req.Header.Set("APCA-API-KEY-ID", c.cfg.APIKey)
 	req.Header.Set("APCA-API-SECRET-KEY", c.cfg.APISecret)

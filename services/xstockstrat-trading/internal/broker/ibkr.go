@@ -268,6 +268,33 @@ func (c *IBKRClient) GetPositions(ctx context.Context) ([]BrokerPosition, error)
 	return positions, nil
 }
 
+// ValidateCredentials confirms the OAuth credentials still authenticate by
+// calling GET /portfolio/accounts. A 401/403 maps to ErrInvalidCredentials;
+// other non-200 responses and transport errors are returned as transient errors.
+func (c *IBKRClient) ValidateCredentials(ctx context.Context) error {
+	endpoint := fmt.Sprintf("%s/portfolio/accounts", c.baseURL)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("ibkr ValidateCredentials: build request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", c.signRequest(http.MethodGet, endpoint))
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("ibkr ValidateCredentials: http: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		return nil
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return ErrInvalidCredentials
+	default:
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("ibkr ValidateCredentials: status %d: %s", resp.StatusCode, body)
+	}
+}
+
 // signRequest generates an OAuth 1.0a Authorization header using HMAC-SHA256.
 func (c *IBKRClient) signRequest(method, rawURL string) string {
 	nonce := make([]byte, 16)

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -587,12 +588,11 @@ func (s *TradingService) syncPositions(ctx context.Context) {
 }
 
 // RegisterBrokerAccount registers a new broker account, encrypts credentials, and adds it to the pool.
+// Paper vs. live is derived from the deployment environment (req.IsPaper is ignored)
+// so users cannot register an account in a mode the environment does not allow.
 func (s *TradingService) RegisterBrokerAccount(ctx context.Context, req *tradingv1.RegisterBrokerAccountRequest, userID string) (*tradingv1.BrokerAccount, error) {
 	if !json.Valid([]byte(req.CredentialsJson)) {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "credentials_json is not valid JSON")
-	}
-	if s.cfg.ApplicationEnv == "development" && !req.IsPaper {
-		return nil, grpcstatus.Errorf(codes.InvalidArgument, "only paper accounts are permitted in the dev environment")
 	}
 
 	encCreds, err := repository.EncryptCredentials(s.encKey, []byte(req.CredentialsJson))
@@ -605,7 +605,7 @@ func (s *TradingService) RegisterBrokerAccount(ctx context.Context, req *trading
 		ID:             accountID,
 		DisplayName:    req.DisplayName,
 		BrokerType:     int32(req.BrokerType),
-		IsPaper:        req.IsPaper,
+		IsPaper:        s.environmentIsPaper(),
 		IsActive:       true,
 		UserID:         userID,
 		CredentialsEnc: encCreds,
@@ -621,16 +621,124 @@ func (s *TradingService) RegisterBrokerAccount(ctx context.Context, req *trading
 		s.brokersMu.Lock()
 		s.brokers[accountID] = brokerPoolEntry{client: b, brokerType: int32(req.BrokerType)}
 		s.brokersMu.Unlock()
+		// Validate immediately so the UI gets an accurate status without waiting
+		// for the next health poll. Best-effort: failures only affect status.
+		rec.CredentialStatus, rec.CredentialCheckedAt = s.validateAndRecordCredential(ctx, accountID, b)
 	}
 
-	return &tradingv1.BrokerAccount{
-		Id:          accountID,
-		DisplayName: req.DisplayName,
-		BrokerType:  req.BrokerType,
-		IsPaper:     req.IsPaper,
-		UserId:      userID,
-		IsActive:    true,
-	}, nil
+	return recordToProtoAccount(rec), nil
+}
+
+// UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+// account, re-instantiates its broker client, and re-validates the credentials.
+func (s *TradingService) UpdateBrokerAccountCredentials(ctx context.Context, accountID, callerUserID, credentialsJSON string) (*tradingv1.BrokerAccount, error) {
+	if !json.Valid([]byte(credentialsJSON)) {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "credentials_json is not valid JSON")
+	}
+	rec, err := s.accountRepo.GetBrokerAccount(ctx, accountID)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.NotFound, "account %s not found: %v", accountID, err)
+	}
+	if rec.UserID != callerUserID {
+		return nil, grpcstatus.Errorf(codes.PermissionDenied, "account %s does not belong to caller", accountID)
+	}
+
+	encCreds, err := repository.EncryptCredentials(s.encKey, []byte(credentialsJSON))
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "encrypt credentials: %v", err)
+	}
+	if err := s.accountRepo.UpdateCredentials(ctx, accountID, encCreds); err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "update credentials: %v", err)
+	}
+	rec.CredentialsEnc = encCreds
+	rec.CredentialStatus = 0
+	rec.CredentialCheckedAt = nil
+
+	b, err := s.instantiateBrokerLocked(rec, []byte(credentialsJSON))
+	if err != nil {
+		slog.Warn("UpdateBrokerAccountCredentials: broker instantiation failed", "account_id", accountID, "error", err)
+	} else {
+		s.brokersMu.Lock()
+		s.brokers[accountID] = brokerPoolEntry{client: b, brokerType: rec.BrokerType}
+		s.brokersMu.Unlock()
+		rec.CredentialStatus, rec.CredentialCheckedAt = s.validateAndRecordCredential(ctx, accountID, b)
+	}
+
+	return recordToProtoAccount(rec), nil
+}
+
+// GetTradingEnvironment reports the deployment-fixed trading mode so the UI can
+// display it and avoid offering a paper/live choice.
+func (s *TradingService) GetTradingEnvironment(_ context.Context) *tradingv1.GetTradingEnvironmentResponse {
+	mode := commonv1.TradingMode_TRADING_MODE_LIVE
+	if s.environmentIsPaper() {
+		mode = commonv1.TradingMode_TRADING_MODE_PAPER
+	}
+	return &tradingv1.GetTradingEnvironmentResponse{
+		TradingMode:    mode,
+		ApplicationEnv: s.cfg.ApplicationEnv,
+	}
+}
+
+// environmentIsPaper resolves whether this deployment routes to paper trading.
+// Priority: live config key trading.broker.paper > TRADING_MODE env default.
+func (s *TradingService) environmentIsPaper() bool {
+	return s.cfgW.GetBool("trading.broker.paper", s.cfg.TradingMode == "paper")
+}
+
+// validateAndRecordCredential validates a broker client's credentials, persists
+// the resulting status, and returns it along with the check time. Best-effort:
+// persistence failures are logged but do not surface to the caller.
+func (s *TradingService) validateAndRecordCredential(ctx context.Context, accountID string, b broker.Broker) (int32, *time.Time) {
+	valCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	status := credentialStatusFromError(b.ValidateCredentials(valCtx))
+	checkedAt := time.Now().UTC()
+	if err := s.accountRepo.UpdateCredentialStatus(context.Background(), accountID, status, checkedAt); err != nil {
+		slog.Warn("validateAndRecordCredential: persist status failed", "account_id", accountID, "error", err)
+	}
+	return status, &checkedAt
+}
+
+// StartCredentialHealthPoller periodically re-validates every registered broker
+// account's credentials and records the result, so the UI can surface accounts
+// whose secrets stopped working. Interval is live-reloaded from config key
+// trading.credential_health.interval_ms (default 300000 ms).
+func (s *TradingService) StartCredentialHealthPoller(ctx context.Context) {
+	const defaultIntervalMs = 300000.0
+	currentInterval := time.Duration(defaultIntervalMs) * time.Millisecond
+	ticker := time.NewTicker(currentInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.checkCredentialHealth(ctx)
+			intervalMs := s.cfgW.GetFloat("trading.credential_health.interval_ms", defaultIntervalMs)
+			if intervalMs > 0 {
+				newInterval := time.Duration(intervalMs) * time.Millisecond
+				if newInterval != currentInterval {
+					currentInterval = newInterval
+					ticker.Reset(currentInterval)
+				}
+			}
+		}
+	}
+}
+
+func (s *TradingService) checkCredentialHealth(ctx context.Context) {
+	s.brokersMu.RLock()
+	brokerMap := make(map[string]broker.Broker, len(s.brokers))
+	for id, e := range s.brokers {
+		brokerMap[id] = e.client
+	}
+	s.brokersMu.RUnlock()
+
+	for accountID, b := range brokerMap {
+		s.validateAndRecordCredential(ctx, accountID, b)
+	}
 }
 
 // ListBrokerAccountsSvc returns all broker accounts for the given user.
@@ -641,16 +749,40 @@ func (s *TradingService) ListBrokerAccountsSvc(ctx context.Context, userID strin
 	}
 	accounts := make([]*tradingv1.BrokerAccount, 0, len(recs))
 	for _, r := range recs {
-		accounts = append(accounts, &tradingv1.BrokerAccount{
-			Id:          r.ID,
-			DisplayName: r.DisplayName,
-			BrokerType:  commonv1.BrokerType(r.BrokerType),
-			IsPaper:     r.IsPaper,
-			UserId:      r.UserID,
-			IsActive:    r.IsActive,
-		})
+		accounts = append(accounts, recordToProtoAccount(r))
 	}
 	return accounts, nil
+}
+
+// recordToProtoAccount maps a stored account record to its proto representation.
+// Credentials are never included.
+func recordToProtoAccount(r *repository.BrokerAccountRecord) *tradingv1.BrokerAccount {
+	acct := &tradingv1.BrokerAccount{
+		Id:               r.ID,
+		DisplayName:      r.DisplayName,
+		BrokerType:       commonv1.BrokerType(r.BrokerType),
+		IsPaper:          r.IsPaper,
+		UserId:           r.UserID,
+		IsActive:         r.IsActive,
+		CredentialStatus: tradingv1.CredentialStatus(r.CredentialStatus),
+	}
+	if r.CredentialCheckedAt != nil {
+		acct.CredentialCheckedAt = timestamppb.New(*r.CredentialCheckedAt)
+	}
+	return acct
+}
+
+// credentialStatusFromError maps a ValidateCredentials result to a proto
+// CredentialStatus enum value (returned as int32 for repository persistence).
+func credentialStatusFromError(err error) int32 {
+	switch {
+	case err == nil:
+		return int32(tradingv1.CredentialStatus_CREDENTIAL_STATUS_OK)
+	case errors.Is(err, broker.ErrInvalidCredentials):
+		return int32(tradingv1.CredentialStatus_CREDENTIAL_STATUS_INVALID)
+	default:
+		return int32(tradingv1.CredentialStatus_CREDENTIAL_STATUS_UNKNOWN)
+	}
 }
 
 // DeregisterBrokerAccountSvc deactivates a broker account and removes it from the pool.

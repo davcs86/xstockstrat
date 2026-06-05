@@ -8,6 +8,10 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 **Paper vs live**: Mode is resolved per order. Priority: `PlaceOrderRequest.trading_mode` > `trading.broker.paper` (live config) > `ALPACA_PAPER` (env). Paper routes to `https://paper-api.alpaca.markets`; live routes to `https://api.alpaca.markets`.
 
+**Broker account registration mode is environment-owned**: `RegisterBrokerAccount` ignores the (deprecated) `is_paper` request field and derives the account's mode from the environment (`trading.broker.paper` config / `TRADING_MODE` env), so users cannot register an account in a mode the deployment does not run. The UI reads `GetTradingEnvironment` to display the fixed mode instead of offering a paper/live choice.
+
+**Credential health**: every registered account's API secrets are validated against the broker (Alpaca `GET /v2/account`, IBKR `GET /portfolio/accounts`) on register, on credential update (`UpdateBrokerAccountCredentials`), and periodically by a background poller. The latest `CredentialStatus` (OK / INVALID / UNKNOWN) is persisted on `trading.broker_accounts` and returned by `ListBrokerAccounts` so the UI can surface accounts whose secrets stopped working.
+
 ## Language
 
 Go 1.22
@@ -51,8 +55,9 @@ All config values are served by **xstockstrat-config** namespace `trading`.
 | `trading.maintenance_mode` | bool | `false` | If true, reject all new orders |
 | `platform.ledger_endpoint` | string | — | xstockstrat-ledger address |
 | `platform.maintenance_mode` | bool | `false` | Platform-wide halt |
-| `trading.broker.paper` | bool | `true` | Route orders to paper API when true; live API when false |
+| `trading.broker.paper` | bool | `true` | Route orders to paper API when true; live API when false. Also the source of truth for the mode new broker accounts are registered in. |
 | `trading.broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout |
+| `trading.credential_health.interval_ms` | int | `300000` | Interval for the background poller that re-validates each broker account's API secrets |
 
 ## Webhooks
 

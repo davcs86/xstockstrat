@@ -4,6 +4,7 @@ import React from 'react';
 import { useAccountContext } from '@/context/AccountContext';
 import { tradingClient } from '@/lib/browserClients/tradingClient';
 import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
+import type { BrokerAccount } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -14,55 +15,186 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select';
+import { CredentialStatusBadge } from './CredentialStatusBadge';
 
 function brokerLabel(brokerType: BrokerType): string {
   return brokerType === BrokerType.IBKR ? 'IBKR' : 'Alpaca';
 }
 
+/** Builds the broker-type-specific credentials_json blob from form state. */
+function buildCredentialsJson(brokerType: BrokerType, creds: CredentialState): string {
+  return brokerType === BrokerType.IBKR
+    ? JSON.stringify({
+        consumer_key: creds.consumerKey,
+        access_token: creds.accessToken,
+        access_token_secret: creds.accessTokenSecret,
+        ibkr_account_id: creds.ibkrAccountId,
+      })
+    : JSON.stringify({ api_key: creds.apiKey, api_secret: creds.apiSecret });
+}
+
+interface CredentialState {
+  apiKey: string;
+  apiSecret: string;
+  consumerKey: string;
+  accessToken: string;
+  accessTokenSecret: string;
+  ibkrAccountId: string;
+}
+
+const EMPTY_CREDENTIALS: CredentialState = {
+  apiKey: '',
+  apiSecret: '',
+  consumerKey: '',
+  accessToken: '',
+  accessTokenSecret: '',
+  ibkrAccountId: '',
+};
+
+/** Broker-type-specific secret inputs, shared by the add and edit forms. */
+function CredentialFields({
+  brokerType,
+  creds,
+  onChange,
+}: {
+  brokerType: BrokerType;
+  creds: CredentialState;
+  onChange: (next: CredentialState) => void;
+}) {
+  const set = (patch: Partial<CredentialState>) => onChange({ ...creds, ...patch });
+
+  if (brokerType === BrokerType.IBKR) {
+    return (
+      <>
+        <Input
+          type="password"
+          placeholder="Consumer Key"
+          value={creds.consumerKey}
+          onChange={(e) => set({ consumerKey: e.target.value })}
+          required
+        />
+        <Input
+          type="password"
+          placeholder="Access Token"
+          value={creds.accessToken}
+          onChange={(e) => set({ accessToken: e.target.value })}
+          required
+        />
+        <Input
+          type="password"
+          placeholder="Access Token Secret"
+          value={creds.accessTokenSecret}
+          onChange={(e) => set({ accessTokenSecret: e.target.value })}
+          required
+        />
+        <Input
+          placeholder="IBKR Account ID"
+          value={creds.ibkrAccountId}
+          onChange={(e) => set({ ibkrAccountId: e.target.value })}
+          required
+        />
+      </>
+    );
+  }
+  return (
+    <>
+      <Input
+        type="password"
+        placeholder="API Key"
+        value={creds.apiKey}
+        onChange={(e) => set({ apiKey: e.target.value })}
+        required
+      />
+      <Input
+        type="password"
+        placeholder="API Secret"
+        value={creds.apiSecret}
+        onChange={(e) => set({ apiSecret: e.target.value })}
+        required
+      />
+    </>
+  );
+}
+
+/** Inline form to replace the stored API secrets for an existing account. */
+function EditCredentialsForm({
+  account,
+  onDone,
+}: {
+  account: BrokerAccount;
+  onDone: () => void;
+}) {
+  const { refreshAccounts } = useAccountContext();
+  const [creds, setCreds] = React.useState<CredentialState>(EMPTY_CREDENTIALS);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => () => setCreds(EMPTY_CREDENTIALS), []);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await tradingClient.updateBrokerAccountCredentials({
+        accountId: account.id,
+        credentialsJson: buildCredentialsJson(account.brokerType, creds),
+      });
+      setCreds(EMPTY_CREDENTIALS);
+      await refreshAccounts();
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update credentials');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-2 space-y-2 rounded-md border border-dashed p-2">
+      <p className="text-xs text-muted-foreground">
+        Enter new {brokerLabel(account.brokerType)} secrets to replace the stored ones. They are
+        validated against the broker on save.
+      </p>
+      <CredentialFields brokerType={account.brokerType} creds={creds} onChange={setCreds} />
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <div className="flex gap-1">
+        <Button type="submit" size="sm" disabled={submitting}>
+          {submitting ? 'Saving...' : 'Save keys'}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={onDone} disabled={submitting}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export function AccountManagementPanel() {
-  const { accounts, selectedAccountId, setSelectedAccountId, refreshAccounts } =
-    useAccountContext();
+  const {
+    accounts,
+    selectedAccountId,
+    setSelectedAccountId,
+    refreshAccounts,
+    environmentMode,
+  } = useAccountContext();
 
   const [confirmingId, setConfirmingId] = React.useState<string | null>(null);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
   const [removing, setRemoving] = React.useState(false);
 
   const [displayName, setDisplayName] = React.useState('');
   const [brokerType, setBrokerType] = React.useState<string>('1');
-  const [isPaper, setIsPaper] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
+  const [creds, setCreds] = React.useState<CredentialState>(EMPTY_CREDENTIALS);
 
-  // Alpaca credential fields
-  const [apiKey, setApiKey] = React.useState('');
-  const [apiSecret, setApiSecret] = React.useState('');
-
-  // IBKR credential fields
-  const [consumerKey, setConsumerKey] = React.useState('');
-  const [accessToken, setAccessToken] = React.useState('');
-  const [accessTokenSecret, setAccessTokenSecret] = React.useState('');
-  const [ibkrAccountId, setIbkrAccountId] = React.useState('');
-
-  const clearCredentials = React.useCallback(() => {
-    setApiKey('');
-    setApiSecret('');
-    setConsumerKey('');
-    setAccessToken('');
-    setAccessTokenSecret('');
-    setIbkrAccountId('');
-  }, []);
-
-  React.useEffect(() => {
-    return () => {
-      clearCredentials();
-    };
-  }, [clearCredentials]);
+  React.useEffect(() => () => setCreds(EMPTY_CREDENTIALS), []);
 
   async function handleRemove(accountId: string) {
     setRemoving(true);
     try {
       await tradingClient.deregisterBrokerAccount({ accountId });
-      const remaining = accounts.find(
-        (a) => a.isActive && a.id !== accountId,
-      );
+      const remaining = accounts.find((a) => a.isActive && a.id !== accountId);
       await refreshAccounts();
       if (selectedAccountId === accountId) {
         setSelectedAccountId(remaining?.id ?? null);
@@ -78,21 +210,11 @@ export function AccountManagementPanel() {
     setSubmitting(true);
     try {
       const brokerTypeNum = parseInt(brokerType, 10) as BrokerType;
-      const credentialsJson =
-        brokerTypeNum === BrokerType.IBKR
-          ? JSON.stringify({
-              consumer_key: consumerKey,
-              access_token: accessToken,
-              access_token_secret: accessTokenSecret,
-              ibkr_account_id: ibkrAccountId,
-            })
-          : JSON.stringify({ api_key: apiKey, api_secret: apiSecret });
-
+      // is_paper is omitted — the server derives it from the deployment environment.
       const { account } = await tradingClient.registerBrokerAccount({
         displayName,
         brokerType: brokerTypeNum,
-        isPaper,
-        credentialsJson,
+        credentialsJson: buildCredentialsJson(brokerTypeNum, creds),
       });
       await refreshAccounts();
       if (account?.id) {
@@ -100,8 +222,7 @@ export function AccountManagementPanel() {
       }
       setDisplayName('');
       setBrokerType('1');
-      setIsPaper(true);
-      clearCredentials();
+      setCreds(EMPTY_CREDENTIALS);
     } finally {
       setSubmitting(false);
     }
@@ -109,6 +230,17 @@ export function AccountManagementPanel() {
 
   return (
     <div className="space-y-6 py-4">
+      {/* Environment trading mode — fixed, not selectable */}
+      {environmentMode && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>Environment mode:</span>
+          <Badge variant={environmentMode === 'live' ? 'live' : 'paper'} className="uppercase">
+            {environmentMode}
+          </Badge>
+          <span>— new accounts are registered in this mode.</span>
+        </div>
+      )}
+
       {/* Account list */}
       <div>
         <h3 className="text-sm font-semibold mb-3">Registered Accounts</h3>
@@ -119,48 +251,63 @@ export function AccountManagementPanel() {
             {accounts.map((account) => (
               <div
                 key={account.id}
-                className={`flex items-center justify-between gap-2 p-2 rounded-md border${!account.isActive ? ' opacity-50' : ''}`}
+                className={`rounded-md border p-2${!account.isActive ? ' opacity-50' : ''}`}
               >
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-sm font-medium truncate">{account.displayName}</span>
-                  <Badge variant="secondary">{brokerLabel(account.brokerType)}</Badge>
-                  <Badge variant="secondary">{account.isPaper ? 'Paper' : 'Live'}</Badge>
-                </div>
-                {account.isActive &&
-                  (confirmingId === account.id ? (
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <p className="text-xs text-destructive text-right max-w-[160px]">
-                        Deregister {account.displayName}? In-flight orders will complete but no new orders can be placed.
-                      </p>
-                      <div className="flex gap-1">
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleRemove(account.id)}
-                          disabled={removing}
-                        >
-                          Confirm
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setConfirmingId(null)}
-                          disabled={removing}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                    <span className="text-sm font-medium truncate">{account.displayName}</span>
+                    <Badge variant="secondary">{brokerLabel(account.brokerType)}</Badge>
+                    <Badge variant="secondary">{account.isPaper ? 'Paper' : 'Live'}</Badge>
+                    <CredentialStatusBadge status={account.credentialStatus} />
+                  </div>
+                  {account.isActive && confirmingId !== account.id && (
+                    <div className="flex gap-1 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setEditingId((id) => (id === account.id ? null : account.id))
+                        }
+                      >
+                        Edit keys
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setConfirmingId(account.id)}>
+                        Remove
+                      </Button>
                     </div>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="shrink-0"
-                      onClick={() => setConfirmingId(account.id)}
-                    >
-                      Remove
-                    </Button>
-                  ))}
+                  )}
+                </div>
+
+                {account.isActive && confirmingId === account.id && (
+                  <div className="mt-2 flex flex-col items-end gap-1">
+                    <p className="text-xs text-destructive text-right">
+                      Deregister {account.displayName}? In-flight orders will complete but no new
+                      orders can be placed.
+                    </p>
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleRemove(account.id)}
+                        disabled={removing}
+                      >
+                        Confirm
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setConfirmingId(null)}
+                        disabled={removing}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {account.isActive && editingId === account.id && (
+                  <EditCredentialsForm account={account} onDone={() => setEditingId(null)} />
+                )}
               </div>
             ))}
           </div>
@@ -177,7 +324,13 @@ export function AccountManagementPanel() {
             onChange={(e) => setDisplayName(e.target.value)}
             required
           />
-          <Select value={brokerType} onValueChange={setBrokerType}>
+          <Select
+            value={brokerType}
+            onValueChange={(v) => {
+              setBrokerType(v);
+              setCreds(EMPTY_CREDENTIALS);
+            }}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Broker" />
             </SelectTrigger>
@@ -186,74 +339,12 @@ export function AccountManagementPanel() {
               <SelectItem value="2">IBKR</SelectItem>
             </SelectContent>
           </Select>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Mode:</span>
-            <Button
-              type="button"
-              size="sm"
-              variant={isPaper ? 'default' : 'ghost'}
-              onClick={() => setIsPaper(true)}
-            >
-              Paper
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={!isPaper ? 'default' : 'ghost'}
-              onClick={() => setIsPaper(false)}
-            >
-              Live
-            </Button>
-          </div>
 
-          {brokerType === '1' ? (
-            <>
-              <Input
-                type="password"
-                placeholder="API Key"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                required
-              />
-              <Input
-                type="password"
-                placeholder="API Secret"
-                value={apiSecret}
-                onChange={(e) => setApiSecret(e.target.value)}
-                required
-              />
-            </>
-          ) : (
-            <>
-              <Input
-                type="password"
-                placeholder="Consumer Key"
-                value={consumerKey}
-                onChange={(e) => setConsumerKey(e.target.value)}
-                required
-              />
-              <Input
-                type="password"
-                placeholder="Access Token"
-                value={accessToken}
-                onChange={(e) => setAccessToken(e.target.value)}
-                required
-              />
-              <Input
-                type="password"
-                placeholder="Access Token Secret"
-                value={accessTokenSecret}
-                onChange={(e) => setAccessTokenSecret(e.target.value)}
-                required
-              />
-              <Input
-                placeholder="IBKR Account ID"
-                value={ibkrAccountId}
-                onChange={(e) => setIbkrAccountId(e.target.value)}
-                required
-              />
-            </>
-          )}
+          <CredentialFields
+            brokerType={parseInt(brokerType, 10) as BrokerType}
+            creds={creds}
+            onChange={setCreds}
+          />
 
           <Button type="submit" className="w-full" disabled={submitting}>
             {submitting ? 'Adding...' : 'Add Account'}
