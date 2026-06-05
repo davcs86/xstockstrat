@@ -13,6 +13,8 @@
 |---|---|---|---|
 | 2026-06-01 | `idea` → `draft` | /sdd-story | Split out from `047-strategy-engine` revamp — the continuous live evaluation runtime |
 | 2026-06-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings — advisory). All 5 OQs resolved: asyncio background task in analysis, polling cadence, in-memory dedup, live_enabled column + SetStrategyLive RPC, sequential evaluation cap. |
+| 2026-06-05 | `spec-ready` → `draft` | scope change | Added UI scope: Live Strategies panel (FR-10, FR-11) in xstockstrat-ui /trader segment with admin toggle and strategy alert feed. Requires re-review. |
+| 2026-06-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved after UI scope addition (4 warnings — advisory). All overlap warnings advisory; 047/019 merge-order already recorded. |
 
 ---
 
@@ -50,9 +52,10 @@ change types. Finalized at /sdd-spec time.)_
 | `xstockstrat-notify` (service owner) | Stream delivery guarantees, alert deduplication, backpressure handling |
 | `xstockstrat-marketdata` (service owner) | Live bar/quote consumption, feed idempotency |
 | `xstockstrat-ingest` (service owner) | `QuerySignals` for live signal-weighting |
+| `xstockstrat-ui` (service owner) | Live Strategies panel correctness, admin toggle enforcement, BFF route safety, Playwright E2E coverage |
 | Platform Lead | Confirm asyncio background task in `xstockstrat-analysis` is acceptable (OQ-1 resolved); dependency-graph impact |
 | Security | Trading-mode safety (alerts must never auto-execute), admin scope on enable/disable |
 
 ## Next Action
 
-`/sdd-spec live-strategy-alert-engine` — generate implementation spec (after 047 merges to main-dev)
+`/sdd-spec live-strategy-alert-engine` — generate implementation spec from the approved product spec

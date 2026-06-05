@@ -17,12 +17,14 @@ evaluator the backtest uses so a strategy behaves identically live and in simula
 
 As a trader, I want the platform to continuously evaluate my active strategies against live market
 data and alert me the moment a strategy's entry or exit rule triggers, so that I can act on the
-same logic I validated in backtests without manually re-running anything.
+same logic I validated in backtests without manually re-running anything. I also want a dashboard
+panel in the trader UI where I can see which strategies are currently live, toggle them on/off,
+and view their recent alert history — all without leaving the platform.
 
 ## Functional Requirements
 
-FR-1. A continuous evaluation runtime must, on a configurable cadence (e.g. per bar close /
-polling interval) for each **active** strategy, fetch the latest required OHLCV window from
+FR-1. A continuous evaluation runtime must, on a configurable cadence for each strategy where
+`live_enabled = true`, fetch the latest required OHLCV window from
 `xstockstrat-marketdata` and active signals from `xstockstrat-ingest` (`QuerySignals`), and run the
 **047 shared strategy evaluator** to determine current entry/exit state.
 
@@ -33,6 +35,9 @@ to its backtest decision for that bar. No duplicated or divergent strategy logic
 FR-3. On an entry or exit **trigger** (a transition, not a steady state), the runtime must emit an
 alert via `xstockstrat-notify` `EmitAlert` containing at minimum: `strategy_id`, symbol, trigger
 type (entry/exit), the rule/components that fired, the bar timestamp, and combined conviction.
+Alerts must use `category = "strategy"` and include `strategy_id` in both `tags`
+(formatted as `"strategy_id:<id>"`) and `context`, so the UI BFF can filter via
+`ListAlerts(categories=["strategy"])` without a new proto addition.
 
 FR-4. **Edge-triggered, deduplicated:** an alert fires once per state transition per
 (strategy, symbol), not repeatedly while the condition remains true. Per-(strategy, symbol) last
@@ -58,14 +63,25 @@ overlap runs (single-flight per cycle).
 FR-9. Config keys in the `analysis.engine.*` namespace for cadence, max strategies per cycle,
 and alert throttle — all hot-reloadable via the config WatchConfig stream (see Config Key Changes).
 
+FR-10. A **Live Strategies panel** must be added to `xstockstrat-ui` in the `/trader` segment.
+The panel must display all strategies (from `ListStrategyDefinitions`) with their `live_enabled`
+status, most recent trigger type (entry/exit), and last trigger timestamp. Admin-authenticated
+users must be able to toggle `live_enabled` per strategy directly from the panel via a BFF route
+backed by `SetStrategyLive`; the toggle is hidden (read-only view) for non-admin sessions.
+
+FR-11. The Live Strategies panel must display a **strategy alert feed**: for each strategy, the
+10 most recent alerts where `category = "strategy"` and `strategy_id` matches (sourced from
+`NotifyService.ListAlerts`). Each alert entry must show timestamp, symbol, trigger type, and
+conviction. The alert feed does not require a new proto RPC — it uses the existing
+`ListAlerts(categories=["strategy"])` endpoint and filters client-side by `strategy_id` in
+`Alert.context`.
+
 ## Out of Scope
 
 - The strategy **model, persistence, evaluator, and backtest** — all owned by feature 047 (hard
   dependency).
 - **Order execution** of any kind (see FR-6). Position sizing (023), stop-loss/bracket (030).
 - Backfilling or historical replay of triggers.
-- A UI for live strategy status/alerts (possible follow-up in insights/trader; alerts surface via
-  the existing notify stream).
 - Live tick streaming (feature `025-realtime-tick-streaming`) — this engine consumes bars/quotes via
   existing marketdata RPCs; sub-bar streaming is a separate concern.
 
@@ -78,6 +94,7 @@ Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-notify` — `EmitAlert` on triggers
 - `xstockstrat-ledger` — evaluation/trigger events
 - `xstockstrat-config` — cadence/throttle config via WatchConfig
+- `xstockstrat-ui` — new Live Strategies panel in `/trader` segment; BFF API routes for `ListStrategyDefinitions`, `SetStrategyLive`, and `ListAlerts(categories=["strategy"])`
 
 ## Proto Contract Changes
 
@@ -86,9 +103,14 @@ New messages/RPCs in `analysis/v1/analysis.proto` (all additive/non-breaking):
 - `SetStrategyLiveResponse { StrategyDefinition definition = 1; }` — returns updated definition (with `live_enabled` reflected)
 - `rpc SetStrategyLive(SetStrategyLiveRequest) returns (SetStrategyLiveResponse)` on `AnalysisService`
 
-`StrategyDefinition` gains one additive field from feature 047: no change here — the `live_enabled` flag is stored on the `analysis.strategies` DB row and returned via existing `GetStrategy` / `ListStrategyDefinitions` once the field is added. Decide at `/sdd-spec` whether `StrategyDefinition` proto message gets a `bool live_enabled` field or whether live status is a separate response message.
+`StrategyDefinition` (defined by feature 047) must gain one additive field: `bool live_enabled = 8;`
+This resolves the previously deferred design question — the UI's `ListStrategyDefinitions` response
+must include `live_enabled` per strategy to render the panel without N+1 `GetStrategy` calls.
+Field 8 is additive/non-breaking; all existing callers that do not read this field are unaffected.
 
-No changes to `indicators`, `ingest`, `notify`, or `marketdata` protos — this feature only consumes their existing RPCs.
+No changes to `indicators`, `ingest`, or `marketdata` protos — this feature only consumes their
+existing RPCs. `notify/v1/notify.proto` is unchanged — strategy alerts use the existing `category`
+and `tags` fields of `EmitAlertRequest`.
 
 ## Config Key Changes
 
@@ -109,9 +131,10 @@ New migration in `services/xstockstrat-analysis/migrations/` (`002_strategy_live
 Branch to create: `feature/live-strategy-alert-engine` (branch from `main-dev`)
 **Merge after `047-strategy-engine`** (hard dependency — record in `merge-order.md`).
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [ ] 1 service owner approval — additive proto/config + analysis service changes
+- [ ] 1 service owner approval — additive proto/config + analysis + ui service changes
 - [ ] Platform Lead — asyncio background task in `xstockstrat-analysis` (OQ-1 resolved; confirm no port/dependency-graph impact)
 - [ ] DBA review + service owner — `analysis.strategies` `live_enabled` column migration (002_strategy_live_enabled)
+- [ ] `xstockstrat-ui` owner — Live Strategies panel correctness, admin toggle enforcement, BFF route safety
 
 ## Acceptance Criteria
 
@@ -123,6 +146,13 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 4. The engine never emits an order/trade in any trading mode (safety test).
 5. One strategy's evaluation error does not stop evaluation of the others.
 6. Cadence/throttle config changes take effect without restart.
+7. The Live Strategies panel in `/trader` renders all strategies with correct `live_enabled`
+   status. An admin session shows a toggle per strategy; toggling it calls `SetStrategyLive`
+   and the updated status is reflected on the next page load. A non-admin session sees the panel
+   as read-only (no toggle rendered).
+8. The alert feed for at least one strategy shows its most recent strategy-triggered alert with
+   correct `strategy_id`, symbol, trigger type, and timestamp (verified using a simulated-live
+   trigger from AC-1).
 
 ## Open Questions
 

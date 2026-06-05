@@ -39,3 +39,23 @@
 - Review passed (PASS). Stale text fixed: FR-9 TBD namespace → `analysis.engine.*`; Affected Services `xstockstrat-analysis` qualifier updated; Feature Workflow Notes gates updated.
 - Advisory overlap WARNs: 047 (same service/proto/migrations dir — merge-order already recorded), 007 (same service, no key collision), 009 (prerequisite chain: 009→047→048).
 - Open proto design deferred to sdd-spec: whether `StrategyDefinition` gets a `bool live_enabled` field or live status is a separate response message.
+
+## Session 2026-06-05 — sdd-review product-spec (re-review after UI scope addition)
+
+- Product spec approved. Status: `draft` → `spec-ready`.
+- Warnings (advisory, 4 total):
+  - ⚠ `strategy-engine` (047) also modifies `xstockstrat-analysis` — merge-order already recorded.
+  - ⚠ `strategy-engine` (047) also changes `analysis/v1/analysis.proto` — `live_enabled = 8` is additive, no field collision (047 uses fields 1–7); merge-order already recorded.
+  - ⚠ `strategy-engine` (047) also touches `services/xstockstrat-analysis/migrations/` — 047 uses `001_strategies.up.sql`, 048 uses `002_strategy_live_enabled.up.sql`; sequential, no NNN collision; merge-order already recorded.
+  - ⚠ `unified-login-page` (019) also modifies `xstockstrat-ui` — merge order not conflicting (019 removes HTTP server from identity; 048 adds Live Strategies panel) but coordination advised.
+- No FAIL-level overlaps. No duplicate config keys. No field number collisions.
+- Review passed (PASS). All 9 spec criteria PASS. Trading domain checks skipped (non-trading feature).
+
+## Session 2026-06-05 — scope addition (UI)
+
+- User directed: move "A UI for live strategy status/alerts" from Out of Scope into scope.
+- Added FR-10 (Live Strategies panel in `/trader` segment) and FR-11 (strategy alert feed).
+- FR-3 updated: strategy alerts must use `category = "strategy"` + `strategy_id` in `tags` and `context`, enabling `ListAlerts(categories=["strategy"])` filter — no new proto RPC needed for the alert feed (existing `NotifyService.ListAlerts` confirmed at `packages/proto/notify/v1/notify.proto`).
+- Resolved deferred proto question: `StrategyDefinition` gets `bool live_enabled = 8;` (additive) — required for the UI to render per-strategy status from `ListStrategyDefinitions` without N+1 calls.
+- Affected Services: `xstockstrat-ui` added. BFF routes needed: strategy list, SetStrategyLive toggle, alert feed.
+- Status reverted to `draft` for re-review. `xstockstrat-ui` reviewer added to feature.md.
