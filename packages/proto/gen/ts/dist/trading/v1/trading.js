@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: trading/v1/trading.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TradingServiceClient = exports.TradingServiceService = exports.DeregisterBrokerAccountResponse = exports.DeregisterBrokerAccountRequest = exports.ListBrokerAccountsResponse = exports.ListBrokerAccountsRequest = exports.RegisterBrokerAccountResponse = exports.RegisterBrokerAccountRequest = exports.BrokerAccount = exports.StreamOrderUpdatesRequest = exports.ListOrdersResponse = exports.ListOrdersRequest = exports.GetOrderRequest = exports.CancelOrderResponse = exports.CancelOrderRequest = exports.PlaceOrderRequest = exports.Order = exports.OrderStatus = exports.OrderType = exports.OrderSide = exports.protobufPackage = void 0;
+exports.TradingServiceClient = exports.TradingServiceService = exports.DeregisterBrokerAccountResponse = exports.DeregisterBrokerAccountRequest = exports.ListBrokerAccountsResponse = exports.ListBrokerAccountsRequest = exports.GetTradingEnvironmentResponse = exports.GetTradingEnvironmentRequest = exports.UpdateBrokerAccountCredentialsResponse = exports.UpdateBrokerAccountCredentialsRequest = exports.RegisterBrokerAccountResponse = exports.RegisterBrokerAccountRequest = exports.BrokerAccount = exports.StreamOrderUpdatesRequest = exports.ListOrdersResponse = exports.ListOrdersRequest = exports.GetOrderRequest = exports.CancelOrderResponse = exports.CancelOrderRequest = exports.PlaceOrderRequest = exports.Order = exports.CredentialStatus = exports.OrderStatus = exports.OrderType = exports.OrderSide = exports.protobufPackage = void 0;
 exports.orderSideFromJSON = orderSideFromJSON;
 exports.orderSideToJSON = orderSideToJSON;
 exports.orderSideToNumber = orderSideToNumber;
@@ -15,6 +15,9 @@ exports.orderTypeToNumber = orderTypeToNumber;
 exports.orderStatusFromJSON = orderStatusFromJSON;
 exports.orderStatusToJSON = orderStatusToJSON;
 exports.orderStatusToNumber = orderStatusToNumber;
+exports.credentialStatusFromJSON = credentialStatusFromJSON;
+exports.credentialStatusToJSON = credentialStatusToJSON;
+exports.credentialStatusToNumber = credentialStatusToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -231,6 +234,72 @@ function orderStatusToNumber(object) {
         case OrderStatus.ORDER_STATUS_PENDING_APPROVAL:
             return 7;
         case OrderStatus.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/**
+ * CredentialStatus reflects the last known health of a broker account's stored
+ * API credentials, so the UI can surface accounts whose secrets stopped working.
+ */
+var CredentialStatus;
+(function (CredentialStatus) {
+    /** CREDENTIAL_STATUS_UNSPECIFIED - never validated yet */
+    CredentialStatus["CREDENTIAL_STATUS_UNSPECIFIED"] = "CREDENTIAL_STATUS_UNSPECIFIED";
+    /** CREDENTIAL_STATUS_OK - last validation succeeded */
+    CredentialStatus["CREDENTIAL_STATUS_OK"] = "CREDENTIAL_STATUS_OK";
+    /** CREDENTIAL_STATUS_INVALID - broker rejected the credentials (auth failure) */
+    CredentialStatus["CREDENTIAL_STATUS_INVALID"] = "CREDENTIAL_STATUS_INVALID";
+    /** CREDENTIAL_STATUS_UNKNOWN - validation could not complete (transient/network error) */
+    CredentialStatus["CREDENTIAL_STATUS_UNKNOWN"] = "CREDENTIAL_STATUS_UNKNOWN";
+    CredentialStatus["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(CredentialStatus || (exports.CredentialStatus = CredentialStatus = {}));
+function credentialStatusFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "CREDENTIAL_STATUS_UNSPECIFIED":
+            return CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED;
+        case 1:
+        case "CREDENTIAL_STATUS_OK":
+            return CredentialStatus.CREDENTIAL_STATUS_OK;
+        case 2:
+        case "CREDENTIAL_STATUS_INVALID":
+            return CredentialStatus.CREDENTIAL_STATUS_INVALID;
+        case 3:
+        case "CREDENTIAL_STATUS_UNKNOWN":
+            return CredentialStatus.CREDENTIAL_STATUS_UNKNOWN;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return CredentialStatus.UNRECOGNIZED;
+    }
+}
+function credentialStatusToJSON(object) {
+    switch (object) {
+        case CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED:
+            return "CREDENTIAL_STATUS_UNSPECIFIED";
+        case CredentialStatus.CREDENTIAL_STATUS_OK:
+            return "CREDENTIAL_STATUS_OK";
+        case CredentialStatus.CREDENTIAL_STATUS_INVALID:
+            return "CREDENTIAL_STATUS_INVALID";
+        case CredentialStatus.CREDENTIAL_STATUS_UNKNOWN:
+            return "CREDENTIAL_STATUS_UNKNOWN";
+        case CredentialStatus.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function credentialStatusToNumber(object) {
+    switch (object) {
+        case CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED:
+            return 0;
+        case CredentialStatus.CREDENTIAL_STATUS_OK:
+            return 1;
+        case CredentialStatus.CREDENTIAL_STATUS_INVALID:
+            return 2;
+        case CredentialStatus.CREDENTIAL_STATUS_UNKNOWN:
+            return 3;
+        case CredentialStatus.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -1460,6 +1529,8 @@ function createBaseBrokerAccount() {
         isPaper: false,
         userId: "",
         isActive: false,
+        credentialStatus: CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED,
+        credentialCheckedAt: undefined,
     };
 }
 exports.BrokerAccount = {
@@ -1481,6 +1552,12 @@ exports.BrokerAccount = {
         }
         if (message.isActive !== false) {
             writer.uint32(48).bool(message.isActive);
+        }
+        if (message.credentialStatus !== CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED) {
+            writer.uint32(56).int32(credentialStatusToNumber(message.credentialStatus));
+        }
+        if (message.credentialCheckedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.credentialCheckedAt), writer.uint32(66).fork()).join();
         }
         return writer;
     },
@@ -1533,6 +1610,20 @@ exports.BrokerAccount = {
                     message.isActive = reader.bool();
                     continue;
                 }
+                case 7: {
+                    if (tag !== 56) {
+                        break;
+                    }
+                    message.credentialStatus = credentialStatusFromJSON(reader.int32());
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.credentialCheckedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1569,6 +1660,16 @@ exports.BrokerAccount = {
                 : isSet(object.is_active)
                     ? globalThis.Boolean(object.is_active)
                     : false,
+            credentialStatus: isSet(object.credentialStatus)
+                ? credentialStatusFromJSON(object.credentialStatus)
+                : isSet(object.credential_status)
+                    ? credentialStatusFromJSON(object.credential_status)
+                    : CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED,
+            credentialCheckedAt: isSet(object.credentialCheckedAt)
+                ? fromJsonTimestamp(object.credentialCheckedAt)
+                : isSet(object.credential_checked_at)
+                    ? fromJsonTimestamp(object.credential_checked_at)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -1591,6 +1692,12 @@ exports.BrokerAccount = {
         if (message.isActive !== false) {
             obj.isActive = message.isActive;
         }
+        if (message.credentialStatus !== CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED) {
+            obj.credentialStatus = credentialStatusToJSON(message.credentialStatus);
+        }
+        if (message.credentialCheckedAt !== undefined) {
+            obj.credentialCheckedAt = message.credentialCheckedAt.toISOString();
+        }
         return obj;
     },
     create(base) {
@@ -1604,6 +1711,8 @@ exports.BrokerAccount = {
         message.isPaper = object.isPaper ?? false;
         message.userId = object.userId ?? "";
         message.isActive = object.isActive ?? false;
+        message.credentialStatus = object.credentialStatus ?? CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED;
+        message.credentialCheckedAt = object.credentialCheckedAt ?? undefined;
         return message;
     },
 };
@@ -1771,6 +1880,248 @@ exports.RegisterBrokerAccountResponse = {
         message.account = (object.account !== undefined && object.account !== null)
             ? exports.BrokerAccount.fromPartial(object.account)
             : undefined;
+        return message;
+    },
+};
+function createBaseUpdateBrokerAccountCredentialsRequest() {
+    return { accountId: "", credentialsJson: "" };
+}
+exports.UpdateBrokerAccountCredentialsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.accountId !== "") {
+            writer.uint32(10).string(message.accountId);
+        }
+        if (message.credentialsJson !== "") {
+            writer.uint32(18).string(message.credentialsJson);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUpdateBrokerAccountCredentialsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.accountId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.credentialsJson = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            accountId: isSet(object.accountId)
+                ? globalThis.String(object.accountId)
+                : isSet(object.account_id)
+                    ? globalThis.String(object.account_id)
+                    : "",
+            credentialsJson: isSet(object.credentialsJson)
+                ? globalThis.String(object.credentialsJson)
+                : isSet(object.credentials_json)
+                    ? globalThis.String(object.credentials_json)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.accountId !== "") {
+            obj.accountId = message.accountId;
+        }
+        if (message.credentialsJson !== "") {
+            obj.credentialsJson = message.credentialsJson;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.UpdateBrokerAccountCredentialsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUpdateBrokerAccountCredentialsRequest();
+        message.accountId = object.accountId ?? "";
+        message.credentialsJson = object.credentialsJson ?? "";
+        return message;
+    },
+};
+function createBaseUpdateBrokerAccountCredentialsResponse() {
+    return { account: undefined };
+}
+exports.UpdateBrokerAccountCredentialsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.account !== undefined) {
+            exports.BrokerAccount.encode(message.account, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUpdateBrokerAccountCredentialsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.account = exports.BrokerAccount.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { account: isSet(object.account) ? exports.BrokerAccount.fromJSON(object.account) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.account !== undefined) {
+            obj.account = exports.BrokerAccount.toJSON(message.account);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.UpdateBrokerAccountCredentialsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUpdateBrokerAccountCredentialsResponse();
+        message.account = (object.account !== undefined && object.account !== null)
+            ? exports.BrokerAccount.fromPartial(object.account)
+            : undefined;
+        return message;
+    },
+};
+function createBaseGetTradingEnvironmentRequest() {
+    return {};
+}
+exports.GetTradingEnvironmentRequest = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetTradingEnvironmentRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.GetTradingEnvironmentRequest.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseGetTradingEnvironmentRequest();
+        return message;
+    },
+};
+function createBaseGetTradingEnvironmentResponse() {
+    return { tradingMode: common_1.TradingMode.TRADING_MODE_UNSPECIFIED, applicationEnv: "" };
+}
+exports.GetTradingEnvironmentResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.tradingMode !== common_1.TradingMode.TRADING_MODE_UNSPECIFIED) {
+            writer.uint32(8).int32((0, common_1.tradingModeToNumber)(message.tradingMode));
+        }
+        if (message.applicationEnv !== "") {
+            writer.uint32(18).string(message.applicationEnv);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetTradingEnvironmentResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.tradingMode = (0, common_1.tradingModeFromJSON)(reader.int32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.applicationEnv = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            tradingMode: isSet(object.tradingMode)
+                ? (0, common_1.tradingModeFromJSON)(object.tradingMode)
+                : isSet(object.trading_mode)
+                    ? (0, common_1.tradingModeFromJSON)(object.trading_mode)
+                    : common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
+            applicationEnv: isSet(object.applicationEnv)
+                ? globalThis.String(object.applicationEnv)
+                : isSet(object.application_env)
+                    ? globalThis.String(object.application_env)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.tradingMode !== common_1.TradingMode.TRADING_MODE_UNSPECIFIED) {
+            obj.tradingMode = (0, common_1.tradingModeToJSON)(message.tradingMode);
+        }
+        if (message.applicationEnv !== "") {
+            obj.applicationEnv = message.applicationEnv;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetTradingEnvironmentResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetTradingEnvironmentResponse();
+        message.tradingMode = object.tradingMode ?? common_1.TradingMode.TRADING_MODE_UNSPECIFIED;
+        message.applicationEnv = object.applicationEnv ?? "";
         return message;
     },
 };
@@ -2032,6 +2383,32 @@ exports.TradingServiceService = {
         requestDeserialize: (value) => exports.DeregisterBrokerAccountRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.DeregisterBrokerAccountResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.DeregisterBrokerAccountResponse.decode(value),
+    },
+    /**
+     * UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+     * account, re-validates them against the broker, and refreshes credential_status.
+     */
+    updateBrokerAccountCredentials: {
+        path: "/xstockstrat.trading.v1.TradingService/UpdateBrokerAccountCredentials",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.UpdateBrokerAccountCredentialsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.UpdateBrokerAccountCredentialsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.UpdateBrokerAccountCredentialsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.UpdateBrokerAccountCredentialsResponse.decode(value),
+    },
+    /**
+     * GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+     * switch between paper and live — the environment owns this decision.
+     */
+    getTradingEnvironment: {
+        path: "/xstockstrat.trading.v1.TradingService/GetTradingEnvironment",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetTradingEnvironmentRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetTradingEnvironmentRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetTradingEnvironmentResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetTradingEnvironmentResponse.decode(value),
     },
 };
 exports.TradingServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.TradingServiceService, "xstockstrat.trading.v1.TradingService");
