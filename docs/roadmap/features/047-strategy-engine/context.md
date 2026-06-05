@@ -230,3 +230,12 @@ grpcio-tools==1.80.0 in a venv) per sequential-mode CI-equivalent fallback. `pnp
   My added test code is ruff-clean (fixed one self-introduced F401). Residual I001/F841 are pre-existing
   009 lines (agent not CI-linted).
 - Deviations: pre-existing agent ruff drift (see Step 8 Deviation Log).
+
+### Step 12 — docs: Update mcp-tools.md with new management tools [done]
+- `mcp-tools.md`: "six" → "nine"; added `### manage_strategy`, `### manage_formula`,
+  `### manage_signal_source` sections (Parameters/Return/Errors), with the credentials_ref-never-echoed
+  note (FR-12); added a "Strategy management" usage pattern.
+- `docs/runbooks/CLAUDE.md`: "all six agent tools" → "all nine agent tools".
+- Files modified: `docs/runbooks/mcp-tools.md`, `docs/runbooks/CLAUDE.md`.
+- Verification: greps confirm "nine tools" + the three new sections + usage pattern.
+- Deviations: none.

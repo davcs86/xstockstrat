@@ -937,7 +937,7 @@ uv run pytest --cov=app --cov-fail-under=40
 
 ### Step 12 — docs: Update mcp-tools.md with new management tools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
