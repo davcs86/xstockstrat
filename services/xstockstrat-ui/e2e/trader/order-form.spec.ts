@@ -109,8 +109,11 @@ test.describe('OrderForm', () => {
     await expect(page.getByRole('button', { name: 'SELL', exact: true })).toBeVisible();
   });
 
-  test('PAPER or LIVE badge is shown in the form header', async ({ page }) => {
-    const modeBadge = page.getByText(/^PAPER$|^LIVE$/);
+  test('PAPER or LIVE badge is shown in the global header', async ({ page }) => {
+    // The header TradingModeBadge (#575) renders the mode as lowercase text
+    // ("paper"/"live") and uppercases it via CSS only; getByText matches the DOM
+    // text node, so the locator must be case-insensitive.
+    const modeBadge = page.getByText(/^(paper|live)$/i);
     await expect(modeBadge.first()).toBeVisible();
   });
 });
