@@ -971,7 +971,7 @@ grep -n "tools\|manage_strategy\|manage_formula\|manage_signal_source" \
 
 ### Step 13 — docs: Update indicator-builder.md with strategy-definition model
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/indicator-builder.md` — modify

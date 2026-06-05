@@ -239,3 +239,12 @@ grpcio-tools==1.80.0 in a venv) per sequential-mode CI-equivalent fallback. `pnp
 - Files modified: `docs/runbooks/mcp-tools.md`, `docs/runbooks/CLAUDE.md`.
 - Verification: greps confirm "nine tools" + the three new sections + usage pattern.
 - Deviations: none.
+
+### Step 13 — docs: Update indicator-builder.md with strategy-definition model [done]
+- Updated the formula-persistence note (formulas persisted in `indicators.formulas`; reference by
+  `formula_id` in a `StrategyDefinition`). Appended "## Using Indicators in a Strategy Definition"
+  (builtin vs custom-formula components, condition-tree rules, JSON example, register via
+  `manage_strategy`/`ManageStrategy`, evaluator path + 048 reuse).
+- Files modified: `docs/runbooks/indicator-builder.md`.
+- Verification: greps confirm `StrategyDefinition`, `manage_strategy`, `evaluator`.
+- Deviations: none.
