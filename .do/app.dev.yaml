@@ -246,6 +246,8 @@ services:
         value: ${xstockstrat-analysis.PRIVATE_DOMAIN}:50056
       - key: IDENTITY_ENDPOINT
         value: ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
+      - key: INDICATORS_ENDPOINT
+        value: ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
       - key: CONFIG_ENDPOINT
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060
       - key: WAIT_FOR

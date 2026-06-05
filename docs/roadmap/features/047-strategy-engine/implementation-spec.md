@@ -707,7 +707,7 @@ uv run pytest --cov=app --cov-fail-under=40
 
 ### Step 8 — service: Add manage_strategy, manage_formula, manage_signal_source client helpers to agent
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -1043,6 +1043,12 @@ grep -n "StrategyDefinition\|manage_strategy\|evaluator" \
 **Actual**: `buf` and `protoc` were absent in the execution environment. Installed CI-pinned versions per the sequential-mode verification fallback: buf 1.69.0, protoc-gen-go@v1.36.11, protoc-gen-go-grpc@v1.6.2, protoc-gen-connect-go@v1.19.2, grpcio-tools==1.80.0 (venv); `pnpm install --frozen-lockfile` for TS plugins. Versions match `.github/workflows/ci.yml` proto-freshness job exactly.
 **Reason**: Run codegen/verification with the same tool versions CI uses so generated stubs match.
 **Disposition**: CI-equivalent fallback.
+
+### Deviation: Step 8 — pre-existing ruff drift in xstockstrat-agent (UP017 autofix)
+**Spec said**: Step 8 verification is `ruff check . && ruff format --check .` (whole agent service).
+**Actual**: Under ruff 0.15.8, the pristine `xstockstrat-agent` on main-dev already fails 15 lint findings (UP017/UP045/I001/E501/F841) — pre-existing feature-009 code modernized by a newer ruff. **The CI `python-lint` matrix does not include `xstockstrat-agent`** (only indicators/ingest/analysis), so these are not a CI gate. Verification was scoped to the file this step changed: `ruff check app/client.py` + `ruff format --check app/client.py` (clean). The one autofix that touched pre-existing code — `timezone.utc` → `datetime.UTC` (UP017) in `client.py`'s `_iso_to_timestamp`, plus the resulting `from datetime import UTC` reorder — was applied per explicit user instruction; it is behavior-equivalent. Unrelated 009 files (`main.py`, etc.) were left untouched.
+**Reason**: The agent isn't CI-linted; absorbing 009's full lint debt is out of scope. My step's own code is lint-clean.
+**Disposition**: CI-equivalent fallback (scoped verification) + user-approved pre-existing autofix.
 
 ### Deviation: Steps that require a running multi-service stack — verified via CI-equivalent fallback
 **Spec said**: Step 3 verification runs `./scripts/db-migrate.sh up` + `psql`; Step 4 confirms a live `docker compose up xstockstrat-analysis` "analysis DB pool created" log; Step 14 runs `./scripts/integration-test.sh`.

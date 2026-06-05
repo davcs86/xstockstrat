@@ -179,3 +179,19 @@ grpcio-tools==1.80.0 in a venv) per sequential-mode CI-equivalent fallback. `pnp
 - Verification: `ruff check`/`format --check` clean; `uv run pytest --cov=app --cov-fail-under=40` →
   83 passed, total coverage 53.69%.
 - Deviations: none.
+
+### Step 8 — service: agent client helpers (manage_strategy/formula/signal_source) [done]
+- `client.py`: added `INDICATORS_ENDPOINT`, `_admin_metadata(api_key)`, and async helpers
+  `manage_strategy`/`get_strategy`/`list_strategy_definitions` (analysis), `manage_formula`/
+  `list_formulas` (indicators), `manage_signal_source` (ingest). Admin-scoped calls forward
+  `authorization: Bearer <key>` alongside `x-mcp-secret`. `manage_signal_source` never echoes
+  `credentials_ref` (FR-12). Operation strings validated; component `kind` builtin/formula → enum.
+- Added `INDICATORS_ENDPOINT` to the agent block in docker-compose + both `.do` specs.
+- Files modified: `services/xstockstrat-agent/app/client.py`, `docker-compose.yml`, `.do/app.dev.yaml`,
+  `.do/app.yaml`.
+- Verification: `ruff check app/client.py` + format clean; agent `uv run pytest` → 23 passed; env greps
+  present. Whole-service `ruff check .` has pre-existing 009 ruff drift (agent NOT in CI lint matrix) —
+  see Deviation Log.
+- IMPORTANT for Steps 9 & 11: agent service has pre-existing ruff-0.15.8 drift (UP045/I001/E501/F841) in
+  tools.py and the test files. Since those steps modify those files, scope ruff verification to the
+  changed files (or fix the touched lines); do not rewrite unrelated 009 code. Agent is not CI-linted.
