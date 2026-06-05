@@ -76,9 +76,9 @@ This step modifies `packages/proto/analysis/v1/analysis.proto`. All changes are 
 ```bash
 cd /home/user/xstockstrat/packages/proto
 buf lint
-buf breaking --against ".git#branch=feature/live-strategy-alert-engine"
+buf breaking --against ".git#branch=main-dev"
 ```
-Both commands must exit with code 0. `buf breaking` must report no breaking changes (all changes are additive).
+Both commands must exit with code 0. `buf breaking` must report no breaking changes (all changes are additive). Baseline is `main-dev` (same as feature 047 Step 1) — the 048 additions are additive relative to both the current production state and 047's pending additions.
 
 ---
 
@@ -91,7 +91,9 @@ Both commands must exit with code 0. `buf breaking` must report no breaking chan
 - `packages/proto/gen/python/analysis/v1/analysis_pb2_grpc.py` — modify (regenerated)
 - `packages/proto/gen/go/analysis/v1/analysis.pb.go` — modify (regenerated)
 - `packages/proto/gen/go/analysis/v1/analysis_grpc.pb.go` — modify (regenerated)
-- `packages/proto/gen/ts/analysis/v1/` — modify (regenerated TS stubs, exact filenames per buf-gen.sh output)
+- `packages/proto/gen/ts/analysis/v1/analysis.ts` — modify (regenerated)
+- `packages/proto/gen/ts/analysis/v1/analysis_connect.ts` — modify (regenerated)
+- `packages/proto/gen/ts/analysis/v1/analysis_pb.ts` — modify (regenerated)
 
 **Reviewers**: Proto Reviewer — field number uniqueness, additive/non-breaking changes; `xstockstrat-analysis` (service owner) — backtest reproducibility, strategy scoring determinism
 
@@ -695,9 +697,19 @@ grep -n "PermissionDenied\|ADMIN_BIT\|rolesToAccessScope" \
    ```
 
 4. In `services/xstockstrat-ui/src/app/trader/page.tsx`:
-   - Add `import { LiveStrategiesPanel } from '@/components/trader/LiveStrategiesPanel';`
-   - Add `<LiveStrategiesPanel isAdmin={false} />` below `<ChartPanel />` (isAdmin defaulted to false for the client component; see below for server-side isAdmin derivation)
-   - To derive `isAdmin` server-side without adding a new API route: convert `TradingDashboard` to accept server-rendered props from a parent server component, or use a `Suspense` boundary with a server component. The simplest approach matching the existing architecture is to pass `isAdmin` as a prop from a wrapping server component in `layout.tsx` (which already runs server-side). Document the decision in the deviation log.
+   - `trader/page.tsx` is a Next.js App Router server component by default. It can read the session server-side using the existing `getSession()` utility from `src/lib/auth.ts` (same pattern used by `/api/auth` route handlers).
+   - Derive `isAdmin` server-side and pass it as a prop:
+     ```typescript
+     import { getSession } from '@/lib/auth';
+     import { LiveStrategiesPanel } from '@/components/trader/LiveStrategiesPanel';
+
+     // Inside the async server component:
+     const session = await getSession();
+     const isAdmin = session?.roles?.includes('admin') ?? false;
+     // ... render:
+     <LiveStrategiesPanel isAdmin={isAdmin} />
+     ```
+   - This avoids client-side exposure of the admin check and ensures the toggle is never rendered for non-admin sessions, even if the BFF would reject the call anyway.
 
 **Verification**:
 ```bash
