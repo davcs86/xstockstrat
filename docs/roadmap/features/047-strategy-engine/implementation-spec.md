@@ -138,8 +138,9 @@ Both commands must exit with code 0. Confirm `buf breaking` reports no breaking 
 **Files**:
 - `packages/proto/gen/python/analysis/v1/analysis_pb2.py` — modify (regenerated)
 - `packages/proto/gen/python/analysis/v1/analysis_pb2_grpc.py` — modify (regenerated)
-- `packages/proto/gen/go/analysis/v1/` — modify (regenerated, all files)
-- `packages/proto/gen/ts/` (and `gen/ts/dist/`) — modify (regenerated)
+- `packages/proto/gen/go/analysis/v1/analysis.pb.go` — modify (regenerated)
+- `packages/proto/gen/go/analysis/v1/analysis_grpc.pb.go` — modify (regenerated)
+- `packages/proto/gen/ts/analysis/v1/` — modify (regenerated; exact filenames determined by buf-gen.sh output)
 
 **Reviewers**: Proto Reviewer — field number uniqueness, additive/non-breaking changes; `xstockstrat-analysis` (service owner) — backtest reproducibility, strategy scoring determinism
 
@@ -927,6 +928,7 @@ uv run pytest --cov=app --cov-fail-under=40
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
+- `docs/runbooks/CLAUDE.md` — modify (update tool count from "six" to "nine")
 
 **Reviewers**: none
 
