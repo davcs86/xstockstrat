@@ -71,3 +71,26 @@
   - No `services/xstockstrat-agent/CLAUDE.md` file found — Step 13 notes to create if absent.
   - 047's `StrategyDefinition` uses fields 1–7 (`active = 7`); `bool live_enabled = 8` is the next available field — additive, no collision.
   - `app/engine/` directory does not yet exist in analysis service — 047 creates it for the evaluator; this feature adds `live_loop.py` to the same package.
+
+## Session 2026-06-05 — sdd-execute (sequential, 048 re-spec gate)
+047 completed first (PRs #566–#581). 048 branch `feature/live-strategy-alert-engine` based on
+`feature/strategy-engine` (hard dependency; 047 not yet merged to main-dev).
+
+Conditional re-spec directive ("re-spec if significant deviation in 047") — **applied**, targeted at
+Steps 4/5/6/7. Significant 047-implementation deviations found vs 048's pre-047 spec:
+1. Evaluator delivered at `app/services/evaluator.py` (NOT `app/engine/evaluator.py`); `app/engine/`
+   does not exist (048 creates it). Servicer has no `self._evaluator` — loop constructs
+   `StrategyEvaluator(servicer._indicators, ())`. → Step 5 re-spec.
+2. Servicer `__init__` actually has `db_pool=None, identity_channel=None` (047 Steps 4+6); strategy
+   store is `self._strategies_repo` (not bare `self._db`). SetStrategyLive uses a new
+   `StrategiesRepository.set_live_enabled`. → Steps 4 & 6 re-spec.
+3. Admin gate: per product-owner guidance (authz at entry points, internal services role-check only),
+   analysis SetStrategyLive does an `x-access-scope` ADMIN-bit role check (kept from 048 spec; NOT
+   047's `_validate_admin_token`). **Security finding**: agent SSE `validate_api_key` accepts ANY
+   valid key (no admin check), so blanket `x-access-scope=7` in `_metadata()` would over-privilege.
+   Re-spec Step 7: agent `set_strategy_live` validates admin role at the entry (`client.validate_admin`)
+   before forwarding admin scope; `_metadata()` left unchanged (047 tests stay valid). → Step 7 re-spec.
+
+Steps 1–3, 8–13 unchanged by the re-spec (8 will mock `validate_admin` in tests; 9–13 are UI/docs,
+validated per-step). Up-front confirm: user chose "Re-spec + execute 048 now"; admin-gate guidance
+captured above.
