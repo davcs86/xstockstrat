@@ -109,7 +109,7 @@ test.describe('OrderForm', () => {
     await expect(page.getByRole('button', { name: 'SELL', exact: true })).toBeVisible();
   });
 
-  test('PAPER or LIVE badge is shown in the form header', async ({ page }) => {
+  test('PAPER or LIVE badge is shown in the global header', async ({ page }) => {
     const modeBadge = page.getByText(/^PAPER$|^LIVE$/);
     await expect(modeBadge.first()).toBeVisible();
   });
