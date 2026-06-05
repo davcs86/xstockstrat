@@ -71,6 +71,11 @@ type TradingService struct {
 	// Fan-out channels for StreamOrderUpdates
 	mu   sync.Mutex
 	subs map[string]chan *tradingv1.Order
+	// credStatus tracks the last-persisted CredentialStatus per account so the
+	// health poller can skip DB writes when the status has not changed. Seeded
+	// from the DB in LoadBrokerPool.
+	credStatus   map[string]int32
+	credStatusMu sync.Mutex
 }
 
 // clientKeepAlive prevents silent connection drops on idle inter-service links.
@@ -111,6 +116,7 @@ func NewTradingService(
 		repo:        repo,
 		orders:      make(map[string]*tradingv1.Order),
 		subs:        make(map[string]chan *tradingv1.Order),
+		credStatus:  make(map[string]int32),
 	}, nil
 }
 
@@ -137,6 +143,9 @@ func (s *TradingService) LoadBrokerPool(ctx context.Context) error {
 			continue
 		}
 		s.brokers[rec.ID] = brokerPoolEntry{client: b, brokerType: rec.BrokerType}
+		s.credStatusMu.Lock()
+		s.credStatus[rec.ID] = rec.CredentialStatus
+		s.credStatusMu.Unlock()
 		slog.Info("LoadBrokerPool: loaded account", "account_id", rec.ID, "broker_type", rec.BrokerType, "is_paper", rec.IsPaper)
 	}
 	return nil
@@ -653,6 +662,12 @@ func (s *TradingService) UpdateBrokerAccountCredentials(ctx context.Context, acc
 	rec.CredentialsEnc = encCreds
 	rec.CredentialStatus = 0
 	rec.CredentialCheckedAt = nil
+	// UpdateCredentials reset the persisted status to UNSPECIFIED; mirror that in
+	// the cache so the re-validation below always writes the fresh status, even
+	// if it matches the pre-update value.
+	s.credStatusMu.Lock()
+	s.credStatus[accountID] = 0
+	s.credStatusMu.Unlock()
 
 	b, err := s.instantiateBrokerLocked(rec, []byte(credentialsJSON))
 	if err != nil {
@@ -688,46 +703,78 @@ func (s *TradingService) environmentIsPaper() bool {
 
 // validateAndRecordCredential validates a broker client's credentials, persists
 // the resulting status, and returns it along with the check time. Best-effort:
-// persistence failures are logged but do not surface to the caller.
+// persistence failures are logged but do not surface to the caller. The DB write
+// is skipped when the status has not changed since the last check (tracked in
+// s.credStatus), so steady-state polling does no DB work.
 func (s *TradingService) validateAndRecordCredential(ctx context.Context, accountID string, b broker.Broker) (int32, *time.Time) {
 	valCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	status := credentialStatusFromError(b.ValidateCredentials(valCtx))
 	checkedAt := time.Now().UTC()
-	if err := s.accountRepo.UpdateCredentialStatus(context.Background(), accountID, status, checkedAt); err != nil {
-		slog.Warn("validateAndRecordCredential: persist status failed", "account_id", accountID, "error", err)
+
+	s.credStatusMu.Lock()
+	prev, seen := s.credStatus[accountID]
+	changed := !seen || prev != status
+	s.credStatus[accountID] = status
+	s.credStatusMu.Unlock()
+
+	if changed {
+		if err := s.accountRepo.UpdateCredentialStatus(context.Background(), accountID, status, checkedAt); err != nil {
+			slog.Warn("validateAndRecordCredential: persist status failed", "account_id", accountID, "error", err)
+			// Roll back the cached value so the next check retries the write.
+			s.credStatusMu.Lock()
+			if seen {
+				s.credStatus[accountID] = prev
+			} else {
+				delete(s.credStatus, accountID)
+			}
+			s.credStatusMu.Unlock()
+		}
 	}
 	return status, &checkedAt
 }
 
+// credentialHealthDefaultIntervalMs is the fallback poll interval when the config
+// key trading.credential_health.interval_ms is unset.
+const credentialHealthDefaultIntervalMs = 300000.0
+
+// credentialHealthDisabledRecheck is how often the poller re-reads config while
+// disabled (interval_ms <= 0), so it can resume without a restart.
+const credentialHealthDisabledRecheck = 60 * time.Second
+
+// maxConcurrentCredentialChecks bounds how many broker validations run in
+// parallel per poll cycle, so a large pool cannot exhaust connections.
+const maxConcurrentCredentialChecks = 8
+
 // StartCredentialHealthPoller periodically re-validates every registered broker
 // account's credentials and records the result, so the UI can surface accounts
-// whose secrets stopped working. Interval is live-reloaded from config key
-// trading.credential_health.interval_ms (default 300000 ms).
+// whose secrets stopped working. The interval is read from config key
+// trading.credential_health.interval_ms (default 300000 ms) on every cycle;
+// setting it to 0 or a negative value disables (pauses) the poller, which keeps
+// re-checking config so it can be re-enabled live.
 func (s *TradingService) StartCredentialHealthPoller(ctx context.Context) {
-	const defaultIntervalMs = 300000.0
-	currentInterval := time.Duration(defaultIntervalMs) * time.Millisecond
-	ticker := time.NewTicker(currentInterval)
-	defer ticker.Stop()
 	for {
+		intervalMs := s.cfgW.GetFloat("trading.credential_health.interval_ms", credentialHealthDefaultIntervalMs)
+
+		wait := credentialHealthDisabledRecheck
+		if intervalMs > 0 {
+			wait = time.Duration(intervalMs) * time.Millisecond
+		}
+
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			s.checkCredentialHealth(ctx)
-			intervalMs := s.cfgW.GetFloat("trading.credential_health.interval_ms", defaultIntervalMs)
+		case <-time.After(wait):
 			if intervalMs > 0 {
-				newInterval := time.Duration(intervalMs) * time.Millisecond
-				if newInterval != currentInterval {
-					currentInterval = newInterval
-					ticker.Reset(currentInterval)
-				}
+				s.checkCredentialHealth(ctx)
 			}
 		}
 	}
 }
 
+// checkCredentialHealth validates every pooled account's credentials concurrently
+// (bounded by maxConcurrentCredentialChecks) and records any status changes.
 func (s *TradingService) checkCredentialHealth(ctx context.Context) {
 	s.brokersMu.RLock()
 	brokerMap := make(map[string]broker.Broker, len(s.brokers))
@@ -736,9 +783,18 @@ func (s *TradingService) checkCredentialHealth(ctx context.Context) {
 	}
 	s.brokersMu.RUnlock()
 
+	sem := make(chan struct{}, maxConcurrentCredentialChecks)
+	var wg sync.WaitGroup
 	for accountID, b := range brokerMap {
-		s.validateAndRecordCredential(ctx, accountID, b)
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(accountID string, b broker.Broker) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			s.validateAndRecordCredential(ctx, accountID, b)
+		}(accountID, b)
 	}
+	wg.Wait()
 }
 
 // ListBrokerAccountsSvc returns all broker accounts for the given user.
@@ -800,6 +856,9 @@ func (s *TradingService) DeregisterBrokerAccountSvc(ctx context.Context, account
 	s.brokersMu.Lock()
 	delete(s.brokers, accountID)
 	s.brokersMu.Unlock()
+	s.credStatusMu.Lock()
+	delete(s.credStatus, accountID)
+	s.credStatusMu.Unlock()
 	return nil
 }
 
