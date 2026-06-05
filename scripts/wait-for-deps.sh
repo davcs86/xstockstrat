@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 # wait-for-deps.sh — probe TCP endpoints before starting a service.
 #
 # Usage:
