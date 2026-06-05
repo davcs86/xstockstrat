@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { Settings, AlertTriangle } from 'lucide-react';
 import { useAccountContext } from '@/context/AccountContext';
-import { AccountManagementPanel } from './AccountManagementPanel';
 import { CredentialStatusBadge } from './CredentialStatusBadge';
 import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { CredentialStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
@@ -16,13 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '../ui/sheet';
 
 function brokerLabel(brokerType: BrokerType): string {
   return brokerType === BrokerType.IBKR ? 'IBKR' : 'Alpaca';
@@ -72,27 +65,14 @@ export function AccountSelector() {
 
       {selected && <CredentialStatusBadge status={selected.credentialStatus} />}
 
-      <Sheet>
-        <SheetTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 relative"
-            aria-label="Manage accounts"
-          >
-            <Settings className="h-4 w-4" />
-            {hasCredentialIssue && (
-              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-destructive" />
-            )}
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="right" className="w-[400px] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Broker Accounts</SheetTitle>
-          </SheetHeader>
-          <AccountManagementPanel />
-        </SheetContent>
-      </Sheet>
+      <Button variant="ghost" size="icon" className="h-8 w-8 relative" asChild aria-label="Manage accounts">
+        <Link href="/trader/accounts">
+          <Settings className="h-4 w-4" />
+          {hasCredentialIssue && (
+            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-destructive" />
+          )}
+        </Link>
+      </Button>
     </div>
   );
 }
