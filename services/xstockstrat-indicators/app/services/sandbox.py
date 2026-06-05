@@ -85,6 +85,13 @@ class SandboxResult:
 
 
 # Template injected around user formula code
+#
+# Builtin restriction is done by running the formula in an exec namespace whose
+# `__builtins__` exposes only a safe subset — NOT by deleting names from the
+# shared `builtins` module. Mutating `builtins` in place breaks the interpreter
+# and import machinery (which depend on builtins such as `KeyError`, `locals`,
+# and `delattr` itself), so a trivial formula like `result = 1` would fail with
+# `NameError: name 'delattr' is not defined` before it ever ran.
 _SANDBOX_WRAPPER = textwrap.dedent("""
 import json
 import sys
@@ -94,21 +101,9 @@ import resource
 if {memory_bytes} > 0:
     resource.setrlimit(resource.RLIMIT_AS, ({memory_bytes}, {memory_bytes}))
 
-# Block dangerous builtins
-import builtins
-_SAFE = set({safe_builtins!r})
-for name in list(vars(builtins).keys()):
-    if name not in _SAFE and not name.startswith('__'):
-        try:
-            delattr(builtins, name)
-        except AttributeError:
-            pass
-
-# Whitelist imports
-import sys as _sys
+# Guard imports: only modules in the allowed list may be imported by the formula.
 _allowed = set({allowed_imports!r})
-import importlib
-_real_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
+_real_import = __import__
 
 def _safe_import(name, *args, **kwargs):
     base = name.split('.')[0]
@@ -116,18 +111,34 @@ def _safe_import(name, *args, **kwargs):
         raise ImportError(f"Import '{{name}}' is not allowed in sandbox")
     return _real_import(name, *args, **kwargs)
 
-import builtins
-builtins.__import__ = _safe_import
+# Build a restricted __builtins__ for the formula. Keep the safe-callable subset,
+# all exception/warning types (so formulas can raise/except), and dunder builtins
+# such as __build_class__ (needed for class definitions). Everything else —
+# open/eval/exec/compile/input/globals/locals/... — is left out, and __import__
+# is replaced with the guarded version above.
+import builtins as _builtins
+_SAFE = set({safe_builtins!r})
+_restricted_builtins = {{}}
+for _name in dir(_builtins):
+    _obj = getattr(_builtins, _name)
+    if (
+        _name in _SAFE
+        or _name.startswith('__')
+        or (isinstance(_obj, type) and issubclass(_obj, BaseException))
+    ):
+        _restricted_builtins[_name] = _obj
+_restricted_builtins['__import__'] = _safe_import
 
 # Load input data
 data = json.loads({input_json!r})
 
 # ── User formula begins ──────────────────────────────────────────────────────
-{source}
+_formula_globals = {{'__builtins__': _restricted_builtins, 'data': data}}
+exec({source!r}, _formula_globals)
 # ── User formula ends ────────────────────────────────────────────────────────
 
 # Output must be assigned to `result` variable
-_output = result if 'result' in dir() else {{}}
+_output = _formula_globals.get('result', {{}})
 print("__OUTPUT__:" + json.dumps(_output if isinstance(_output, dict) else {{"value": _output}}))
 """)
 
@@ -150,7 +161,7 @@ def execute_formula(
         safe_builtins=sorted(_SAFE_BUILTINS),
         allowed_imports=allowed_imports,
         input_json=json.dumps(input_data),
-        source=textwrap.indent(source, "    " * 0),
+        source=source,
     )
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
