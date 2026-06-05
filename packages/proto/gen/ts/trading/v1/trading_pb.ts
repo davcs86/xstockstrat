@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file trading/v1/trading.proto.
  */
 export const file_trading_v1_trading: GenFile = /*@__PURE__*/
-  fileDesc("Chh0cmFkaW5nL3YxL3RyYWRpbmcucHJvdG8SFnhzdG9ja3N0cmF0LnRyYWRpbmcudjEi/wQKBU9yZGVyEhAKCG9yZGVyX2lkGAEgASgJEhcKD2NsaWVudF9vcmRlcl9pZBgCIAEoCRIOCgZzeW1ib2wYAyABKAkSLwoEc2lkZRgEIAEoDjIhLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXJTaWRlEjUKCm9yZGVyX3R5cGUYBSABKA4yIS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyVHlwZRIzCgZzdGF0dXMYBiABKA4yIy54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyU3RhdHVzEgsKA3F0eRgHIAEoARISCgpmaWxsZWRfcXR5GAggASgBEhMKC2xpbWl0X3ByaWNlGAkgASgBEhIKCnN0b3BfcHJpY2UYCiABKAESGAoQZmlsbGVkX2F2Z19wcmljZRgLIAEoARIVCg10aW1lX2luX2ZvcmNlGAwgASgJEi4KCmNyZWF0ZWRfYXQYDSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYDiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC3N0cmF0ZWd5X2lkGA8gASgJEg8KB3VzZXJfaWQYECABKAkSOAoMdHJhZGluZ19tb2RlGBEgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhcKD2Jyb2tlcl9vcmRlcl9pZBgSIAEoCRISCgphY2NvdW50X2lkGBMgASgJEjYKC2Jyb2tlcl90eXBlGBQgASgOMiEueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkJyb2tlclR5cGUigAMKEVBsYWNlT3JkZXJSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRIvCgRzaWRlGAIgASgOMiEueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlclNpZGUSNQoKb3JkZXJfdHlwZRgDIAEoDjIhLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXJUeXBlEgsKA3F0eRgEIAEoARITCgtsaW1pdF9wcmljZRgFIAEoARISCgpzdG9wX3ByaWNlGAYgASgBEhUKDXRpbWVfaW5fZm9yY2UYByABKAkSEwoLc3RyYXRlZ3lfaWQYCCABKAkSDwoHdXNlcl9pZBgJIAEoCRIXCg9jbGllbnRfb3JkZXJfaWQYCiABKAkSGQoRcmVxdWlyZXNfYXBwcm92YWwYCyABKAgSOAoMdHJhZGluZ19tb2RlGAwgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhIKCmFjY291bnRfaWQYDSABKAkiNwoSQ2FuY2VsT3JkZXJSZXF1ZXN0EhAKCG9yZGVyX2lkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkiVAoTQ2FuY2VsT3JkZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEiwKBW9yZGVyGAIgASgLMh0ueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlciIjCg9HZXRPcmRlclJlcXVlc3QSEAoIb3JkZXJfaWQYASABKAkiiwIKEUxpc3RPcmRlcnNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSEwoLc3RyYXRlZ3lfaWQYAiABKAkSMwoGc3RhdHVzGAMgASgOMiMueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlclN0YXR1cxIvCgVyYW5nZRgEIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USMAoEcGFnZRgFIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdBI4Cgx0cmFkaW5nX21vZGUYBiABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUidgoSTGlzdE9yZGVyc1Jlc3BvbnNlEi0KBm9yZGVycxgBIAMoCzIdLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXISMQoEcGFnZRgCIAEoCzIjLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiaAoZU3RyZWFtT3JkZXJVcGRhdGVzUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEjoKDXN0YXR1c19maWx0ZXIYAiADKA4yIy54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyU3RhdHVzIp8BCg1Ccm9rZXJBY2NvdW50EgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRI2Cgticm9rZXJfdHlwZRgDIAEoDjIhLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5Ccm9rZXJUeXBlEhAKCGlzX3BhcGVyGAQgASgIEg8KB3VzZXJfaWQYBSABKAkSEQoJaXNfYWN0aXZlGAYgASgIIpgBChxSZWdpc3RlckJyb2tlckFjY291bnRSZXF1ZXN0EhQKDGRpc3BsYXlfbmFtZRgBIAEoCRI2Cgticm9rZXJfdHlwZRgCIAEoDjIhLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5Ccm9rZXJUeXBlEhAKCGlzX3BhcGVyGAMgASgIEhgKEGNyZWRlbnRpYWxzX2pzb24YBCABKAkiVwodUmVnaXN0ZXJCcm9rZXJBY2NvdW50UmVzcG9uc2USNgoHYWNjb3VudBgBIAEoCzIlLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuQnJva2VyQWNjb3VudCIbChlMaXN0QnJva2VyQWNjb3VudHNSZXF1ZXN0IlUKGkxpc3RCcm9rZXJBY2NvdW50c1Jlc3BvbnNlEjcKCGFjY291bnRzGAEgAygLMiUueHN0b2Nrc3RyYXQudHJhZGluZy52MS5Ccm9rZXJBY2NvdW50IjQKHkRlcmVnaXN0ZXJCcm9rZXJBY2NvdW50UmVxdWVzdBISCgphY2NvdW50X2lkGAEgASgJIiEKH0RlcmVnaXN0ZXJCcm9rZXJBY2NvdW50UmVzcG9uc2UqUAoJT3JkZXJTaWRlEhoKFk9SREVSX1NJREVfVU5TUEVDSUZJRUQQABISCg5PUkRFUl9TSURFX0JVWRABEhMKD09SREVSX1NJREVfU0VMTBACKqIBCglPcmRlclR5cGUSGgoWT1JERVJfVFlQRV9VTlNQRUNJRklFRBAAEhUKEU9SREVSX1RZUEVfTUFSS0VUEAESFAoQT1JERVJfVFlQRV9MSU1JVBACEhMKD09SREVSX1RZUEVfU1RPUBADEhkKFU9SREVSX1RZUEVfU1RPUF9MSU1JVBAEEhwKGE9SREVSX1RZUEVfVFJBSUxJTkdfU1RPUBAFKvABCgtPcmRlclN0YXR1cxIcChhPUkRFUl9TVEFUVVNfVU5TUEVDSUZJRUQQABIUChBPUkRFUl9TVEFUVVNfTkVXEAESIQodT1JERVJfU1RBVFVTX1BBUlRJQUxMWV9GSUxMRUQQAhIXChNPUkRFUl9TVEFUVVNfRklMTEVEEAMSGQoVT1JERVJfU1RBVFVTX0NBTkNFTEVEEAQSGAoUT1JERVJfU1RBVFVTX0VYUElSRUQQBRIZChVPUkRFUl9TVEFUVVNfUkVKRUNURUQQBhIhCh1PUkRFUl9TVEFUVVNfUEVORElOR19BUFBST1ZBTBAHMoQHCg5UcmFkaW5nU2VydmljZRJWCgpQbGFjZU9yZGVyEikueHN0b2Nrc3RyYXQudHJhZGluZy52MS5QbGFjZU9yZGVyUmVxdWVzdBodLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXISZgoLQ2FuY2VsT3JkZXISKi54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkNhbmNlbE9yZGVyUmVxdWVzdBorLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuQ2FuY2VsT3JkZXJSZXNwb25zZRJSCghHZXRPcmRlchInLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuR2V0T3JkZXJSZXF1ZXN0Gh0ueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlchJjCgpMaXN0T3JkZXJzEikueHN0b2Nrc3RyYXQudHJhZGluZy52MS5MaXN0T3JkZXJzUmVxdWVzdBoqLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuTGlzdE9yZGVyc1Jlc3BvbnNlEmgKElN0cmVhbU9yZGVyVXBkYXRlcxIxLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuU3RyZWFtT3JkZXJVcGRhdGVzUmVxdWVzdBodLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXIwARKEAQoVUmVnaXN0ZXJCcm9rZXJBY2NvdW50EjQueHN0b2Nrc3RyYXQudHJhZGluZy52MS5SZWdpc3RlckJyb2tlckFjY291bnRSZXF1ZXN0GjUueHN0b2Nrc3RyYXQudHJhZGluZy52MS5SZWdpc3RlckJyb2tlckFjY291bnRSZXNwb25zZRJ7ChJMaXN0QnJva2VyQWNjb3VudHMSMS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkxpc3RCcm9rZXJBY2NvdW50c1JlcXVlc3QaMi54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkxpc3RCcm9rZXJBY2NvdW50c1Jlc3BvbnNlEooBChdEZXJlZ2lzdGVyQnJva2VyQWNjb3VudBI2LnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuRGVyZWdpc3RlckJyb2tlckFjY291bnRSZXF1ZXN0GjcueHN0b2Nrc3RyYXQudHJhZGluZy52MS5EZXJlZ2lzdGVyQnJva2VyQWNjb3VudFJlc3BvbnNlQj5aPGdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby90cmFkaW5nL3YxO3RyYWRpbmd2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_common_v1_common]);
+  fileDesc("Chh0cmFkaW5nL3YxL3RyYWRpbmcucHJvdG8SFnhzdG9ja3N0cmF0LnRyYWRpbmcudjEi/wQKBU9yZGVyEhAKCG9yZGVyX2lkGAEgASgJEhcKD2NsaWVudF9vcmRlcl9pZBgCIAEoCRIOCgZzeW1ib2wYAyABKAkSLwoEc2lkZRgEIAEoDjIhLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXJTaWRlEjUKCm9yZGVyX3R5cGUYBSABKA4yIS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyVHlwZRIzCgZzdGF0dXMYBiABKA4yIy54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyU3RhdHVzEgsKA3F0eRgHIAEoARISCgpmaWxsZWRfcXR5GAggASgBEhMKC2xpbWl0X3ByaWNlGAkgASgBEhIKCnN0b3BfcHJpY2UYCiABKAESGAoQZmlsbGVkX2F2Z19wcmljZRgLIAEoARIVCg10aW1lX2luX2ZvcmNlGAwgASgJEi4KCmNyZWF0ZWRfYXQYDSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYDiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC3N0cmF0ZWd5X2lkGA8gASgJEg8KB3VzZXJfaWQYECABKAkSOAoMdHJhZGluZ19tb2RlGBEgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhcKD2Jyb2tlcl9vcmRlcl9pZBgSIAEoCRISCgphY2NvdW50X2lkGBMgASgJEjYKC2Jyb2tlcl90eXBlGBQgASgOMiEueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkJyb2tlclR5cGUigAMKEVBsYWNlT3JkZXJSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRIvCgRzaWRlGAIgASgOMiEueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlclNpZGUSNQoKb3JkZXJfdHlwZRgDIAEoDjIhLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXJUeXBlEgsKA3F0eRgEIAEoARITCgtsaW1pdF9wcmljZRgFIAEoARISCgpzdG9wX3ByaWNlGAYgASgBEhUKDXRpbWVfaW5fZm9yY2UYByABKAkSEwoLc3RyYXRlZ3lfaWQYCCABKAkSDwoHdXNlcl9pZBgJIAEoCRIXCg9jbGllbnRfb3JkZXJfaWQYCiABKAkSGQoRcmVxdWlyZXNfYXBwcm92YWwYCyABKAgSOAoMdHJhZGluZ19tb2RlGAwgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhIKCmFjY291bnRfaWQYDSABKAkiNwoSQ2FuY2VsT3JkZXJSZXF1ZXN0EhAKCG9yZGVyX2lkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkiVAoTQ2FuY2VsT3JkZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEiwKBW9yZGVyGAIgASgLMh0ueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlciIjCg9HZXRPcmRlclJlcXVlc3QSEAoIb3JkZXJfaWQYASABKAkiiwIKEUxpc3RPcmRlcnNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSEwoLc3RyYXRlZ3lfaWQYAiABKAkSMwoGc3RhdHVzGAMgASgOMiMueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlclN0YXR1cxIvCgVyYW5nZRgEIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USMAoEcGFnZRgFIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdBI4Cgx0cmFkaW5nX21vZGUYBiABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUidgoSTGlzdE9yZGVyc1Jlc3BvbnNlEi0KBm9yZGVycxgBIAMoCzIdLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXISMQoEcGFnZRgCIAEoCzIjLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiaAoZU3RyZWFtT3JkZXJVcGRhdGVzUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEjoKDXN0YXR1c19maWx0ZXIYAiADKA4yIy54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyU3RhdHVzIp8CCg1Ccm9rZXJBY2NvdW50EgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRI2Cgticm9rZXJfdHlwZRgDIAEoDjIhLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5Ccm9rZXJUeXBlEhAKCGlzX3BhcGVyGAQgASgIEg8KB3VzZXJfaWQYBSABKAkSEQoJaXNfYWN0aXZlGAYgASgIEkMKEWNyZWRlbnRpYWxfc3RhdHVzGAcgASgOMigueHN0b2Nrc3RyYXQudHJhZGluZy52MS5DcmVkZW50aWFsU3RhdHVzEjkKFWNyZWRlbnRpYWxfY2hlY2tlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAinAEKHFJlZ2lzdGVyQnJva2VyQWNjb3VudFJlcXVlc3QSFAoMZGlzcGxheV9uYW1lGAEgASgJEjYKC2Jyb2tlcl90eXBlGAIgASgOMiEueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkJyb2tlclR5cGUSFAoIaXNfcGFwZXIYAyABKAhCAhgBEhgKEGNyZWRlbnRpYWxzX2pzb24YBCABKAkiVwodUmVnaXN0ZXJCcm9rZXJBY2NvdW50UmVzcG9uc2USNgoHYWNjb3VudBgBIAEoCzIlLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuQnJva2VyQWNjb3VudCJVCiVVcGRhdGVCcm9rZXJBY2NvdW50Q3JlZGVudGlhbHNSZXF1ZXN0EhIKCmFjY291bnRfaWQYASABKAkSGAoQY3JlZGVudGlhbHNfanNvbhgCIAEoCSJgCiZVcGRhdGVCcm9rZXJBY2NvdW50Q3JlZGVudGlhbHNSZXNwb25zZRI2CgdhY2NvdW50GAEgASgLMiUueHN0b2Nrc3RyYXQudHJhZGluZy52MS5Ccm9rZXJBY2NvdW50Ih4KHEdldFRyYWRpbmdFbnZpcm9ubWVudFJlcXVlc3QicgodR2V0VHJhZGluZ0Vudmlyb25tZW50UmVzcG9uc2USOAoMdHJhZGluZ19tb2RlGAEgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhcKD2FwcGxpY2F0aW9uX2VudhgCIAEoCSIbChlMaXN0QnJva2VyQWNjb3VudHNSZXF1ZXN0IlUKGkxpc3RCcm9rZXJBY2NvdW50c1Jlc3BvbnNlEjcKCGFjY291bnRzGAEgAygLMiUueHN0b2Nrc3RyYXQudHJhZGluZy52MS5Ccm9rZXJBY2NvdW50IjQKHkRlcmVnaXN0ZXJCcm9rZXJBY2NvdW50UmVxdWVzdBISCgphY2NvdW50X2lkGAEgASgJIiEKH0RlcmVnaXN0ZXJCcm9rZXJBY2NvdW50UmVzcG9uc2UqUAoJT3JkZXJTaWRlEhoKFk9SREVSX1NJREVfVU5TUEVDSUZJRUQQABISCg5PUkRFUl9TSURFX0JVWRABEhMKD09SREVSX1NJREVfU0VMTBACKqIBCglPcmRlclR5cGUSGgoWT1JERVJfVFlQRV9VTlNQRUNJRklFRBAAEhUKEU9SREVSX1RZUEVfTUFSS0VUEAESFAoQT1JERVJfVFlQRV9MSU1JVBACEhMKD09SREVSX1RZUEVfU1RPUBADEhkKFU9SREVSX1RZUEVfU1RPUF9MSU1JVBAEEhwKGE9SREVSX1RZUEVfVFJBSUxJTkdfU1RPUBAFKvABCgtPcmRlclN0YXR1cxIcChhPUkRFUl9TVEFUVVNfVU5TUEVDSUZJRUQQABIUChBPUkRFUl9TVEFUVVNfTkVXEAESIQodT1JERVJfU1RBVFVTX1BBUlRJQUxMWV9GSUxMRUQQAhIXChNPUkRFUl9TVEFUVVNfRklMTEVEEAMSGQoVT1JERVJfU1RBVFVTX0NBTkNFTEVEEAQSGAoUT1JERVJfU1RBVFVTX0VYUElSRUQQBRIZChVPUkRFUl9TVEFUVVNfUkVKRUNURUQQBhIhCh1PUkRFUl9TVEFUVVNfUEVORElOR19BUFBST1ZBTBAHKo0BChBDcmVkZW50aWFsU3RhdHVzEiEKHUNSRURFTlRJQUxfU1RBVFVTX1VOU1BFQ0lGSUVEEAASGAoUQ1JFREVOVElBTF9TVEFUVVNfT0sQARIdChlDUkVERU5USUFMX1NUQVRVU19JTlZBTElEEAISHQoZQ1JFREVOVElBTF9TVEFUVVNfVU5LTk9XThADMq0JCg5UcmFkaW5nU2VydmljZRJWCgpQbGFjZU9yZGVyEikueHN0b2Nrc3RyYXQudHJhZGluZy52MS5QbGFjZU9yZGVyUmVxdWVzdBodLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXISZgoLQ2FuY2VsT3JkZXISKi54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkNhbmNlbE9yZGVyUmVxdWVzdBorLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuQ2FuY2VsT3JkZXJSZXNwb25zZRJSCghHZXRPcmRlchInLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuR2V0T3JkZXJSZXF1ZXN0Gh0ueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlchJjCgpMaXN0T3JkZXJzEikueHN0b2Nrc3RyYXQudHJhZGluZy52MS5MaXN0T3JkZXJzUmVxdWVzdBoqLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuTGlzdE9yZGVyc1Jlc3BvbnNlEmgKElN0cmVhbU9yZGVyVXBkYXRlcxIxLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuU3RyZWFtT3JkZXJVcGRhdGVzUmVxdWVzdBodLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXIwARKEAQoVUmVnaXN0ZXJCcm9rZXJBY2NvdW50EjQueHN0b2Nrc3RyYXQudHJhZGluZy52MS5SZWdpc3RlckJyb2tlckFjY291bnRSZXF1ZXN0GjUueHN0b2Nrc3RyYXQudHJhZGluZy52MS5SZWdpc3RlckJyb2tlckFjY291bnRSZXNwb25zZRJ7ChJMaXN0QnJva2VyQWNjb3VudHMSMS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkxpc3RCcm9rZXJBY2NvdW50c1JlcXVlc3QaMi54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkxpc3RCcm9rZXJBY2NvdW50c1Jlc3BvbnNlEooBChdEZXJlZ2lzdGVyQnJva2VyQWNjb3VudBI2LnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuRGVyZWdpc3RlckJyb2tlckFjY291bnRSZXF1ZXN0GjcueHN0b2Nrc3RyYXQudHJhZGluZy52MS5EZXJlZ2lzdGVyQnJva2VyQWNjb3VudFJlc3BvbnNlEp8BCh5VcGRhdGVCcm9rZXJBY2NvdW50Q3JlZGVudGlhbHMSPS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLlVwZGF0ZUJyb2tlckFjY291bnRDcmVkZW50aWFsc1JlcXVlc3QaPi54c3RvY2tzdHJhdC50cmFkaW5nLnYxLlVwZGF0ZUJyb2tlckFjY291bnRDcmVkZW50aWFsc1Jlc3BvbnNlEoQBChVHZXRUcmFkaW5nRW52aXJvbm1lbnQSNC54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkdldFRyYWRpbmdFbnZpcm9ubWVudFJlcXVlc3QaNS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkdldFRyYWRpbmdFbnZpcm9ubWVudFJlc3BvbnNlQj5aPGdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby90cmFkaW5nL3YxO3RyYWRpbmd2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.trading.v1.Order
@@ -383,6 +383,8 @@ export type BrokerAccount = Message<"xstockstrat.trading.v1.BrokerAccount"> & {
   brokerType: BrokerType;
 
   /**
+   * is_paper is derived from the deployment environment, not chosen per account.
+   *
    * @generated from field: bool is_paper = 4;
    */
   isPaper: boolean;
@@ -396,6 +398,20 @@ export type BrokerAccount = Message<"xstockstrat.trading.v1.BrokerAccount"> & {
    * @generated from field: bool is_active = 6;
    */
   isActive: boolean;
+
+  /**
+   * credential_status is the result of the most recent credential validation.
+   *
+   * @generated from field: xstockstrat.trading.v1.CredentialStatus credential_status = 7;
+   */
+  credentialStatus: CredentialStatus;
+
+  /**
+   * credential_checked_at is when credential_status was last refreshed.
+   *
+   * @generated from field: google.protobuf.Timestamp credential_checked_at = 8;
+   */
+  credentialCheckedAt?: Timestamp | undefined;
 };
 
 /**
@@ -420,7 +436,12 @@ export type RegisterBrokerAccountRequest = Message<"xstockstrat.trading.v1.Regis
   brokerType: BrokerType;
 
   /**
-   * @generated from field: bool is_paper = 3;
+   * Deprecated: paper/live is owned by the deployment environment
+   * (trading.broker.paper config key / TRADING_MODE env). The server derives
+   * is_paper from the environment and ignores this field.
+   *
+   * @generated from field: bool is_paper = 3 [deprecated = true];
+   * @deprecated
    */
   isPaper: boolean;
 
@@ -459,6 +480,87 @@ export const RegisterBrokerAccountResponseSchema: GenMessage<RegisterBrokerAccou
   messageDesc(file_trading_v1_trading, 10);
 
 /**
+ * @generated from message xstockstrat.trading.v1.UpdateBrokerAccountCredentialsRequest
+ */
+export type UpdateBrokerAccountCredentialsRequest = Message<"xstockstrat.trading.v1.UpdateBrokerAccountCredentialsRequest"> & {
+  /**
+   * @generated from field: string account_id = 1;
+   */
+  accountId: string;
+
+  /**
+   * credentials_json uses the same broker-type-specific shape as
+   * RegisterBrokerAccountRequest.credentials_json.
+   *
+   * @generated from field: string credentials_json = 2;
+   */
+  credentialsJson: string;
+};
+
+/**
+ * Describes the message xstockstrat.trading.v1.UpdateBrokerAccountCredentialsRequest.
+ * Use `create(UpdateBrokerAccountCredentialsRequestSchema)` to create a new message.
+ */
+export const UpdateBrokerAccountCredentialsRequestSchema: GenMessage<UpdateBrokerAccountCredentialsRequest> = /*@__PURE__*/
+  messageDesc(file_trading_v1_trading, 11);
+
+/**
+ * @generated from message xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse
+ */
+export type UpdateBrokerAccountCredentialsResponse = Message<"xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse"> & {
+  /**
+   * @generated from field: xstockstrat.trading.v1.BrokerAccount account = 1;
+   */
+  account?: BrokerAccount | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse.
+ * Use `create(UpdateBrokerAccountCredentialsResponseSchema)` to create a new message.
+ */
+export const UpdateBrokerAccountCredentialsResponseSchema: GenMessage<UpdateBrokerAccountCredentialsResponse> = /*@__PURE__*/
+  messageDesc(file_trading_v1_trading, 12);
+
+/**
+ * @generated from message xstockstrat.trading.v1.GetTradingEnvironmentRequest
+ */
+export type GetTradingEnvironmentRequest = Message<"xstockstrat.trading.v1.GetTradingEnvironmentRequest"> & {
+};
+
+/**
+ * Describes the message xstockstrat.trading.v1.GetTradingEnvironmentRequest.
+ * Use `create(GetTradingEnvironmentRequestSchema)` to create a new message.
+ */
+export const GetTradingEnvironmentRequestSchema: GenMessage<GetTradingEnvironmentRequest> = /*@__PURE__*/
+  messageDesc(file_trading_v1_trading, 13);
+
+/**
+ * @generated from message xstockstrat.trading.v1.GetTradingEnvironmentResponse
+ */
+export type GetTradingEnvironmentResponse = Message<"xstockstrat.trading.v1.GetTradingEnvironmentResponse"> & {
+  /**
+   * trading_mode is the mode every order in this deployment routes to.
+   *
+   * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 1;
+   */
+  tradingMode: TradingMode;
+
+  /**
+   * application_env: "development" | "production".
+   *
+   * @generated from field: string application_env = 2;
+   */
+  applicationEnv: string;
+};
+
+/**
+ * Describes the message xstockstrat.trading.v1.GetTradingEnvironmentResponse.
+ * Use `create(GetTradingEnvironmentResponseSchema)` to create a new message.
+ */
+export const GetTradingEnvironmentResponseSchema: GenMessage<GetTradingEnvironmentResponse> = /*@__PURE__*/
+  messageDesc(file_trading_v1_trading, 14);
+
+/**
  * @generated from message xstockstrat.trading.v1.ListBrokerAccountsRequest
  */
 export type ListBrokerAccountsRequest = Message<"xstockstrat.trading.v1.ListBrokerAccountsRequest"> & {
@@ -469,7 +571,7 @@ export type ListBrokerAccountsRequest = Message<"xstockstrat.trading.v1.ListBrok
  * Use `create(ListBrokerAccountsRequestSchema)` to create a new message.
  */
 export const ListBrokerAccountsRequestSchema: GenMessage<ListBrokerAccountsRequest> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 11);
+  messageDesc(file_trading_v1_trading, 15);
 
 /**
  * @generated from message xstockstrat.trading.v1.ListBrokerAccountsResponse
@@ -486,7 +588,7 @@ export type ListBrokerAccountsResponse = Message<"xstockstrat.trading.v1.ListBro
  * Use `create(ListBrokerAccountsResponseSchema)` to create a new message.
  */
 export const ListBrokerAccountsResponseSchema: GenMessage<ListBrokerAccountsResponse> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 12);
+  messageDesc(file_trading_v1_trading, 16);
 
 /**
  * @generated from message xstockstrat.trading.v1.DeregisterBrokerAccountRequest
@@ -503,7 +605,7 @@ export type DeregisterBrokerAccountRequest = Message<"xstockstrat.trading.v1.Der
  * Use `create(DeregisterBrokerAccountRequestSchema)` to create a new message.
  */
 export const DeregisterBrokerAccountRequestSchema: GenMessage<DeregisterBrokerAccountRequest> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 13);
+  messageDesc(file_trading_v1_trading, 17);
 
 /**
  * @generated from message xstockstrat.trading.v1.DeregisterBrokerAccountResponse
@@ -516,7 +618,7 @@ export type DeregisterBrokerAccountResponse = Message<"xstockstrat.trading.v1.De
  * Use `create(DeregisterBrokerAccountResponseSchema)` to create a new message.
  */
 export const DeregisterBrokerAccountResponseSchema: GenMessage<DeregisterBrokerAccountResponse> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 14);
+  messageDesc(file_trading_v1_trading, 18);
 
 /**
  * @generated from enum xstockstrat.trading.v1.OrderSide
@@ -637,6 +739,48 @@ export const OrderStatusSchema: GenEnum<OrderStatus> = /*@__PURE__*/
   enumDesc(file_trading_v1_trading, 2);
 
 /**
+ * CredentialStatus reflects the last known health of a broker account's stored
+ * API credentials, so the UI can surface accounts whose secrets stopped working.
+ *
+ * @generated from enum xstockstrat.trading.v1.CredentialStatus
+ */
+export enum CredentialStatus {
+  /**
+   * never validated yet
+   *
+   * @generated from enum value: CREDENTIAL_STATUS_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * last validation succeeded
+   *
+   * @generated from enum value: CREDENTIAL_STATUS_OK = 1;
+   */
+  OK = 1,
+
+  /**
+   * broker rejected the credentials (auth failure)
+   *
+   * @generated from enum value: CREDENTIAL_STATUS_INVALID = 2;
+   */
+  INVALID = 2,
+
+  /**
+   * validation could not complete (transient/network error)
+   *
+   * @generated from enum value: CREDENTIAL_STATUS_UNKNOWN = 3;
+   */
+  UNKNOWN = 3,
+}
+
+/**
+ * Describes the enum xstockstrat.trading.v1.CredentialStatus.
+ */
+export const CredentialStatusSchema: GenEnum<CredentialStatus> = /*@__PURE__*/
+  enumDesc(file_trading_v1_trading, 3);
+
+/**
  * @generated from service xstockstrat.trading.v1.TradingService
  */
 export const TradingService: GenService<{
@@ -703,6 +847,28 @@ export const TradingService: GenService<{
     methodKind: "unary";
     input: typeof DeregisterBrokerAccountRequestSchema;
     output: typeof DeregisterBrokerAccountResponseSchema;
+  },
+  /**
+   * UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+   * account, re-validates them against the broker, and refreshes credential_status.
+   *
+   * @generated from rpc xstockstrat.trading.v1.TradingService.UpdateBrokerAccountCredentials
+   */
+  updateBrokerAccountCredentials: {
+    methodKind: "unary";
+    input: typeof UpdateBrokerAccountCredentialsRequestSchema;
+    output: typeof UpdateBrokerAccountCredentialsResponseSchema;
+  },
+  /**
+   * GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+   * switch between paper and live — the environment owns this decision.
+   *
+   * @generated from rpc xstockstrat.trading.v1.TradingService.GetTradingEnvironment
+   */
+  getTradingEnvironment: {
+    methodKind: "unary";
+    input: typeof GetTradingEnvironmentRequestSchema;
+    output: typeof GetTradingEnvironmentResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_trading_v1_trading, 0);

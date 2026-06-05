@@ -93,16 +93,22 @@ export async function startMockBackend(): Promise<void> {
         async listBrokerAccounts() {
           return {
             accounts: [
-              { id: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true },
-              { id: 'ibkr-001', displayName: 'IBKR Paper', brokerType: 2, isPaper: true, isActive: true },
+              { id: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true, credentialStatus: 1 },
+              { id: 'ibkr-001', displayName: 'IBKR Paper', brokerType: 2, isPaper: true, isActive: true, credentialStatus: 1 },
             ],
           };
         },
         async registerBrokerAccount() {
-          return { account: { id: 'new-account-001', displayName: 'New Account', brokerType: 1, isPaper: true, isActive: true } };
+          return { account: { id: 'new-account-001', displayName: 'New Account', brokerType: 1, isPaper: true, isActive: true, credentialStatus: 1 } };
         },
         async deregisterBrokerAccount() {
           return {};
+        },
+        async updateBrokerAccountCredentials() {
+          return { account: { id: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true, credentialStatus: 1 } };
+        },
+        async getTradingEnvironment() {
+          return { tradingMode: 1, applicationEnv: 'development' };
         },
       });
 

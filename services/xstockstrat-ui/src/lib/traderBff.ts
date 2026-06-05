@@ -65,6 +65,14 @@ router.service(TradingService, {
     const claims = await requireSession(ctx);
     return tradingClient.deregisterBrokerAccount(req, { headers: backendHeaders(claims, ctx) });
   },
+  async updateBrokerAccountCredentials(req, ctx) {
+    const claims = await requireSession(ctx);
+    return tradingClient.updateBrokerAccountCredentials(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async getTradingEnvironment(req, ctx) {
+    const claims = await requireSession(ctx);
+    return tradingClient.getTradingEnvironment(req, { headers: backendHeaders(claims, ctx) });
+  },
 });
 
 router.service(PortfolioService, {

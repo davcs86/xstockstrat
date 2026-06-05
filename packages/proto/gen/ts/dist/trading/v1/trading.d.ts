@@ -37,6 +37,24 @@ export declare enum OrderStatus {
 export declare function orderStatusFromJSON(object: any): OrderStatus;
 export declare function orderStatusToJSON(object: OrderStatus): string;
 export declare function orderStatusToNumber(object: OrderStatus): number;
+/**
+ * CredentialStatus reflects the last known health of a broker account's stored
+ * API credentials, so the UI can surface accounts whose secrets stopped working.
+ */
+export declare enum CredentialStatus {
+    /** CREDENTIAL_STATUS_UNSPECIFIED - never validated yet */
+    CREDENTIAL_STATUS_UNSPECIFIED = "CREDENTIAL_STATUS_UNSPECIFIED",
+    /** CREDENTIAL_STATUS_OK - last validation succeeded */
+    CREDENTIAL_STATUS_OK = "CREDENTIAL_STATUS_OK",
+    /** CREDENTIAL_STATUS_INVALID - broker rejected the credentials (auth failure) */
+    CREDENTIAL_STATUS_INVALID = "CREDENTIAL_STATUS_INVALID",
+    /** CREDENTIAL_STATUS_UNKNOWN - validation could not complete (transient/network error) */
+    CREDENTIAL_STATUS_UNKNOWN = "CREDENTIAL_STATUS_UNKNOWN",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function credentialStatusFromJSON(object: any): CredentialStatus;
+export declare function credentialStatusToJSON(object: CredentialStatus): string;
+export declare function credentialStatusToNumber(object: CredentialStatus): number;
 export interface Order {
     orderId: string;
     clientOrderId: string;
@@ -113,13 +131,25 @@ export interface BrokerAccount {
     id: string;
     displayName: string;
     brokerType: BrokerType;
+    /** is_paper is derived from the deployment environment, not chosen per account. */
     isPaper: boolean;
     userId: string;
     isActive: boolean;
+    /** credential_status is the result of the most recent credential validation. */
+    credentialStatus: CredentialStatus;
+    /** credential_checked_at is when credential_status was last refreshed. */
+    credentialCheckedAt?: Date | undefined;
 }
 export interface RegisterBrokerAccountRequest {
     displayName: string;
     brokerType: BrokerType;
+    /**
+     * Deprecated: paper/live is owned by the deployment environment
+     * (trading.broker.paper config key / TRADING_MODE env). The server derives
+     * is_paper from the environment and ignores this field.
+     *
+     * @deprecated
+     */
     isPaper: boolean;
     /**
      * credentials_json: broker-type-specific JSON blob.
@@ -130,6 +160,25 @@ export interface RegisterBrokerAccountRequest {
 }
 export interface RegisterBrokerAccountResponse {
     account?: BrokerAccount | undefined;
+}
+export interface UpdateBrokerAccountCredentialsRequest {
+    accountId: string;
+    /**
+     * credentials_json uses the same broker-type-specific shape as
+     * RegisterBrokerAccountRequest.credentials_json.
+     */
+    credentialsJson: string;
+}
+export interface UpdateBrokerAccountCredentialsResponse {
+    account?: BrokerAccount | undefined;
+}
+export interface GetTradingEnvironmentRequest {
+}
+export interface GetTradingEnvironmentResponse {
+    /** trading_mode is the mode every order in this deployment routes to. */
+    tradingMode: TradingMode;
+    /** application_env: "development" | "production". */
+    applicationEnv: string;
 }
 export interface ListBrokerAccountsRequest {
 }
@@ -152,6 +201,10 @@ export declare const StreamOrderUpdatesRequest: MessageFns<StreamOrderUpdatesReq
 export declare const BrokerAccount: MessageFns<BrokerAccount>;
 export declare const RegisterBrokerAccountRequest: MessageFns<RegisterBrokerAccountRequest>;
 export declare const RegisterBrokerAccountResponse: MessageFns<RegisterBrokerAccountResponse>;
+export declare const UpdateBrokerAccountCredentialsRequest: MessageFns<UpdateBrokerAccountCredentialsRequest>;
+export declare const UpdateBrokerAccountCredentialsResponse: MessageFns<UpdateBrokerAccountCredentialsResponse>;
+export declare const GetTradingEnvironmentRequest: MessageFns<GetTradingEnvironmentRequest>;
+export declare const GetTradingEnvironmentResponse: MessageFns<GetTradingEnvironmentResponse>;
 export declare const ListBrokerAccountsRequest: MessageFns<ListBrokerAccountsRequest>;
 export declare const ListBrokerAccountsResponse: MessageFns<ListBrokerAccountsResponse>;
 export declare const DeregisterBrokerAccountRequest: MessageFns<DeregisterBrokerAccountRequest>;
@@ -230,6 +283,32 @@ export declare const TradingServiceService: {
         readonly responseSerialize: (value: DeregisterBrokerAccountResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => DeregisterBrokerAccountResponse;
     };
+    /**
+     * UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+     * account, re-validates them against the broker, and refreshes credential_status.
+     */
+    readonly updateBrokerAccountCredentials: {
+        readonly path: "/xstockstrat.trading.v1.TradingService/UpdateBrokerAccountCredentials";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: UpdateBrokerAccountCredentialsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => UpdateBrokerAccountCredentialsRequest;
+        readonly responseSerialize: (value: UpdateBrokerAccountCredentialsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => UpdateBrokerAccountCredentialsResponse;
+    };
+    /**
+     * GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+     * switch between paper and live — the environment owns this decision.
+     */
+    readonly getTradingEnvironment: {
+        readonly path: "/xstockstrat.trading.v1.TradingService/GetTradingEnvironment";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetTradingEnvironmentRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetTradingEnvironmentRequest;
+        readonly responseSerialize: (value: GetTradingEnvironmentResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetTradingEnvironmentResponse;
+    };
 };
 export interface TradingServiceServer extends UntypedServiceImplementation {
     placeOrder: handleUnaryCall<PlaceOrderRequest, Order>;
@@ -240,6 +319,16 @@ export interface TradingServiceServer extends UntypedServiceImplementation {
     registerBrokerAccount: handleUnaryCall<RegisterBrokerAccountRequest, RegisterBrokerAccountResponse>;
     listBrokerAccounts: handleUnaryCall<ListBrokerAccountsRequest, ListBrokerAccountsResponse>;
     deregisterBrokerAccount: handleUnaryCall<DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse>;
+    /**
+     * UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+     * account, re-validates them against the broker, and refreshes credential_status.
+     */
+    updateBrokerAccountCredentials: handleUnaryCall<UpdateBrokerAccountCredentialsRequest, UpdateBrokerAccountCredentialsResponse>;
+    /**
+     * GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+     * switch between paper and live — the environment owns this decision.
+     */
+    getTradingEnvironment: handleUnaryCall<GetTradingEnvironmentRequest, GetTradingEnvironmentResponse>;
 }
 export interface TradingServiceClient extends Client {
     placeOrder(request: PlaceOrderRequest, callback: (error: ServiceError | null, response: Order) => void): ClientUnaryCall;
@@ -265,6 +354,20 @@ export interface TradingServiceClient extends Client {
     deregisterBrokerAccount(request: DeregisterBrokerAccountRequest, callback: (error: ServiceError | null, response: DeregisterBrokerAccountResponse) => void): ClientUnaryCall;
     deregisterBrokerAccount(request: DeregisterBrokerAccountRequest, metadata: Metadata, callback: (error: ServiceError | null, response: DeregisterBrokerAccountResponse) => void): ClientUnaryCall;
     deregisterBrokerAccount(request: DeregisterBrokerAccountRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: DeregisterBrokerAccountResponse) => void): ClientUnaryCall;
+    /**
+     * UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+     * account, re-validates them against the broker, and refreshes credential_status.
+     */
+    updateBrokerAccountCredentials(request: UpdateBrokerAccountCredentialsRequest, callback: (error: ServiceError | null, response: UpdateBrokerAccountCredentialsResponse) => void): ClientUnaryCall;
+    updateBrokerAccountCredentials(request: UpdateBrokerAccountCredentialsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: UpdateBrokerAccountCredentialsResponse) => void): ClientUnaryCall;
+    updateBrokerAccountCredentials(request: UpdateBrokerAccountCredentialsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: UpdateBrokerAccountCredentialsResponse) => void): ClientUnaryCall;
+    /**
+     * GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+     * switch between paper and live — the environment owns this decision.
+     */
+    getTradingEnvironment(request: GetTradingEnvironmentRequest, callback: (error: ServiceError | null, response: GetTradingEnvironmentResponse) => void): ClientUnaryCall;
+    getTradingEnvironment(request: GetTradingEnvironmentRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetTradingEnvironmentResponse) => void): ClientUnaryCall;
+    getTradingEnvironment(request: GetTradingEnvironmentRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetTradingEnvironmentResponse) => void): ClientUnaryCall;
 }
 export declare const TradingServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): TradingServiceClient;

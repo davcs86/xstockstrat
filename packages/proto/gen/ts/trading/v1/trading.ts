@@ -260,6 +260,75 @@ export function orderStatusToNumber(object: OrderStatus): number {
   }
 }
 
+/**
+ * CredentialStatus reflects the last known health of a broker account's stored
+ * API credentials, so the UI can surface accounts whose secrets stopped working.
+ */
+export enum CredentialStatus {
+  /** CREDENTIAL_STATUS_UNSPECIFIED - never validated yet */
+  CREDENTIAL_STATUS_UNSPECIFIED = "CREDENTIAL_STATUS_UNSPECIFIED",
+  /** CREDENTIAL_STATUS_OK - last validation succeeded */
+  CREDENTIAL_STATUS_OK = "CREDENTIAL_STATUS_OK",
+  /** CREDENTIAL_STATUS_INVALID - broker rejected the credentials (auth failure) */
+  CREDENTIAL_STATUS_INVALID = "CREDENTIAL_STATUS_INVALID",
+  /** CREDENTIAL_STATUS_UNKNOWN - validation could not complete (transient/network error) */
+  CREDENTIAL_STATUS_UNKNOWN = "CREDENTIAL_STATUS_UNKNOWN",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function credentialStatusFromJSON(object: any): CredentialStatus {
+  switch (object) {
+    case 0:
+    case "CREDENTIAL_STATUS_UNSPECIFIED":
+      return CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED;
+    case 1:
+    case "CREDENTIAL_STATUS_OK":
+      return CredentialStatus.CREDENTIAL_STATUS_OK;
+    case 2:
+    case "CREDENTIAL_STATUS_INVALID":
+      return CredentialStatus.CREDENTIAL_STATUS_INVALID;
+    case 3:
+    case "CREDENTIAL_STATUS_UNKNOWN":
+      return CredentialStatus.CREDENTIAL_STATUS_UNKNOWN;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return CredentialStatus.UNRECOGNIZED;
+  }
+}
+
+export function credentialStatusToJSON(object: CredentialStatus): string {
+  switch (object) {
+    case CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED:
+      return "CREDENTIAL_STATUS_UNSPECIFIED";
+    case CredentialStatus.CREDENTIAL_STATUS_OK:
+      return "CREDENTIAL_STATUS_OK";
+    case CredentialStatus.CREDENTIAL_STATUS_INVALID:
+      return "CREDENTIAL_STATUS_INVALID";
+    case CredentialStatus.CREDENTIAL_STATUS_UNKNOWN:
+      return "CREDENTIAL_STATUS_UNKNOWN";
+    case CredentialStatus.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function credentialStatusToNumber(object: CredentialStatus): number {
+  switch (object) {
+    case CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED:
+      return 0;
+    case CredentialStatus.CREDENTIAL_STATUS_OK:
+      return 1;
+    case CredentialStatus.CREDENTIAL_STATUS_INVALID:
+      return 2;
+    case CredentialStatus.CREDENTIAL_STATUS_UNKNOWN:
+      return 3;
+    case CredentialStatus.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export interface Order {
   orderId: string;
   clientOrderId: string;
@@ -346,14 +415,26 @@ export interface BrokerAccount {
   id: string;
   displayName: string;
   brokerType: BrokerType;
+  /** is_paper is derived from the deployment environment, not chosen per account. */
   isPaper: boolean;
   userId: string;
   isActive: boolean;
+  /** credential_status is the result of the most recent credential validation. */
+  credentialStatus: CredentialStatus;
+  /** credential_checked_at is when credential_status was last refreshed. */
+  credentialCheckedAt?: Date | undefined;
 }
 
 export interface RegisterBrokerAccountRequest {
   displayName: string;
   brokerType: BrokerType;
+  /**
+   * Deprecated: paper/live is owned by the deployment environment
+   * (trading.broker.paper config key / TRADING_MODE env). The server derives
+   * is_paper from the environment and ignores this field.
+   *
+   * @deprecated
+   */
   isPaper: boolean;
   /**
    * credentials_json: broker-type-specific JSON blob.
@@ -365,6 +446,29 @@ export interface RegisterBrokerAccountRequest {
 
 export interface RegisterBrokerAccountResponse {
   account?: BrokerAccount | undefined;
+}
+
+export interface UpdateBrokerAccountCredentialsRequest {
+  accountId: string;
+  /**
+   * credentials_json uses the same broker-type-specific shape as
+   * RegisterBrokerAccountRequest.credentials_json.
+   */
+  credentialsJson: string;
+}
+
+export interface UpdateBrokerAccountCredentialsResponse {
+  account?: BrokerAccount | undefined;
+}
+
+export interface GetTradingEnvironmentRequest {
+}
+
+export interface GetTradingEnvironmentResponse {
+  /** trading_mode is the mode every order in this deployment routes to. */
+  tradingMode: TradingMode;
+  /** application_env: "development" | "production". */
+  applicationEnv: string;
 }
 
 export interface ListBrokerAccountsRequest {
@@ -1705,6 +1809,8 @@ function createBaseBrokerAccount(): BrokerAccount {
     isPaper: false,
     userId: "",
     isActive: false,
+    credentialStatus: CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED,
+    credentialCheckedAt: undefined,
   };
 }
 
@@ -1727,6 +1833,12 @@ export const BrokerAccount: MessageFns<BrokerAccount> = {
     }
     if (message.isActive !== false) {
       writer.uint32(48).bool(message.isActive);
+    }
+    if (message.credentialStatus !== CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED) {
+      writer.uint32(56).int32(credentialStatusToNumber(message.credentialStatus));
+    }
+    if (message.credentialCheckedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.credentialCheckedAt), writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -1786,6 +1898,22 @@ export const BrokerAccount: MessageFns<BrokerAccount> = {
           message.isActive = reader.bool();
           continue;
         }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.credentialStatus = credentialStatusFromJSON(reader.int32());
+          continue;
+        }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.credentialCheckedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1823,6 +1951,16 @@ export const BrokerAccount: MessageFns<BrokerAccount> = {
         : isSet(object.is_active)
         ? globalThis.Boolean(object.is_active)
         : false,
+      credentialStatus: isSet(object.credentialStatus)
+        ? credentialStatusFromJSON(object.credentialStatus)
+        : isSet(object.credential_status)
+        ? credentialStatusFromJSON(object.credential_status)
+        : CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED,
+      credentialCheckedAt: isSet(object.credentialCheckedAt)
+        ? fromJsonTimestamp(object.credentialCheckedAt)
+        : isSet(object.credential_checked_at)
+        ? fromJsonTimestamp(object.credential_checked_at)
+        : undefined,
     };
   },
 
@@ -1846,6 +1984,12 @@ export const BrokerAccount: MessageFns<BrokerAccount> = {
     if (message.isActive !== false) {
       obj.isActive = message.isActive;
     }
+    if (message.credentialStatus !== CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED) {
+      obj.credentialStatus = credentialStatusToJSON(message.credentialStatus);
+    }
+    if (message.credentialCheckedAt !== undefined) {
+      obj.credentialCheckedAt = message.credentialCheckedAt.toISOString();
+    }
     return obj;
   },
 
@@ -1860,6 +2004,8 @@ export const BrokerAccount: MessageFns<BrokerAccount> = {
     message.isPaper = object.isPaper ?? false;
     message.userId = object.userId ?? "";
     message.isActive = object.isActive ?? false;
+    message.credentialStatus = object.credentialStatus ?? CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED;
+    message.credentialCheckedAt = object.credentialCheckedAt ?? undefined;
     return message;
   },
 };
@@ -2046,6 +2192,287 @@ export const RegisterBrokerAccountResponse: MessageFns<RegisterBrokerAccountResp
     message.account = (object.account !== undefined && object.account !== null)
       ? BrokerAccount.fromPartial(object.account)
       : undefined;
+    return message;
+  },
+};
+
+function createBaseUpdateBrokerAccountCredentialsRequest(): UpdateBrokerAccountCredentialsRequest {
+  return { accountId: "", credentialsJson: "" };
+}
+
+export const UpdateBrokerAccountCredentialsRequest: MessageFns<UpdateBrokerAccountCredentialsRequest> = {
+  encode(message: UpdateBrokerAccountCredentialsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.accountId !== "") {
+      writer.uint32(10).string(message.accountId);
+    }
+    if (message.credentialsJson !== "") {
+      writer.uint32(18).string(message.credentialsJson);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateBrokerAccountCredentialsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateBrokerAccountCredentialsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.accountId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.credentialsJson = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdateBrokerAccountCredentialsRequest {
+    return {
+      accountId: isSet(object.accountId)
+        ? globalThis.String(object.accountId)
+        : isSet(object.account_id)
+        ? globalThis.String(object.account_id)
+        : "",
+      credentialsJson: isSet(object.credentialsJson)
+        ? globalThis.String(object.credentialsJson)
+        : isSet(object.credentials_json)
+        ? globalThis.String(object.credentials_json)
+        : "",
+    };
+  },
+
+  toJSON(message: UpdateBrokerAccountCredentialsRequest): unknown {
+    const obj: any = {};
+    if (message.accountId !== "") {
+      obj.accountId = message.accountId;
+    }
+    if (message.credentialsJson !== "") {
+      obj.credentialsJson = message.credentialsJson;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdateBrokerAccountCredentialsRequest>, I>>(
+    base?: I,
+  ): UpdateBrokerAccountCredentialsRequest {
+    return UpdateBrokerAccountCredentialsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateBrokerAccountCredentialsRequest>, I>>(
+    object: I,
+  ): UpdateBrokerAccountCredentialsRequest {
+    const message = createBaseUpdateBrokerAccountCredentialsRequest();
+    message.accountId = object.accountId ?? "";
+    message.credentialsJson = object.credentialsJson ?? "";
+    return message;
+  },
+};
+
+function createBaseUpdateBrokerAccountCredentialsResponse(): UpdateBrokerAccountCredentialsResponse {
+  return { account: undefined };
+}
+
+export const UpdateBrokerAccountCredentialsResponse: MessageFns<UpdateBrokerAccountCredentialsResponse> = {
+  encode(message: UpdateBrokerAccountCredentialsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.account !== undefined) {
+      BrokerAccount.encode(message.account, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateBrokerAccountCredentialsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateBrokerAccountCredentialsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.account = BrokerAccount.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdateBrokerAccountCredentialsResponse {
+    return { account: isSet(object.account) ? BrokerAccount.fromJSON(object.account) : undefined };
+  },
+
+  toJSON(message: UpdateBrokerAccountCredentialsResponse): unknown {
+    const obj: any = {};
+    if (message.account !== undefined) {
+      obj.account = BrokerAccount.toJSON(message.account);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdateBrokerAccountCredentialsResponse>, I>>(
+    base?: I,
+  ): UpdateBrokerAccountCredentialsResponse {
+    return UpdateBrokerAccountCredentialsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateBrokerAccountCredentialsResponse>, I>>(
+    object: I,
+  ): UpdateBrokerAccountCredentialsResponse {
+    const message = createBaseUpdateBrokerAccountCredentialsResponse();
+    message.account = (object.account !== undefined && object.account !== null)
+      ? BrokerAccount.fromPartial(object.account)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetTradingEnvironmentRequest(): GetTradingEnvironmentRequest {
+  return {};
+}
+
+export const GetTradingEnvironmentRequest: MessageFns<GetTradingEnvironmentRequest> = {
+  encode(_: GetTradingEnvironmentRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetTradingEnvironmentRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetTradingEnvironmentRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): GetTradingEnvironmentRequest {
+    return {};
+  },
+
+  toJSON(_: GetTradingEnvironmentRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetTradingEnvironmentRequest>, I>>(base?: I): GetTradingEnvironmentRequest {
+    return GetTradingEnvironmentRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetTradingEnvironmentRequest>, I>>(_: I): GetTradingEnvironmentRequest {
+    const message = createBaseGetTradingEnvironmentRequest();
+    return message;
+  },
+};
+
+function createBaseGetTradingEnvironmentResponse(): GetTradingEnvironmentResponse {
+  return { tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED, applicationEnv: "" };
+}
+
+export const GetTradingEnvironmentResponse: MessageFns<GetTradingEnvironmentResponse> = {
+  encode(message: GetTradingEnvironmentResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.tradingMode !== TradingMode.TRADING_MODE_UNSPECIFIED) {
+      writer.uint32(8).int32(tradingModeToNumber(message.tradingMode));
+    }
+    if (message.applicationEnv !== "") {
+      writer.uint32(18).string(message.applicationEnv);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetTradingEnvironmentResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetTradingEnvironmentResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.tradingMode = tradingModeFromJSON(reader.int32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.applicationEnv = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetTradingEnvironmentResponse {
+    return {
+      tradingMode: isSet(object.tradingMode)
+        ? tradingModeFromJSON(object.tradingMode)
+        : isSet(object.trading_mode)
+        ? tradingModeFromJSON(object.trading_mode)
+        : TradingMode.TRADING_MODE_UNSPECIFIED,
+      applicationEnv: isSet(object.applicationEnv)
+        ? globalThis.String(object.applicationEnv)
+        : isSet(object.application_env)
+        ? globalThis.String(object.application_env)
+        : "",
+    };
+  },
+
+  toJSON(message: GetTradingEnvironmentResponse): unknown {
+    const obj: any = {};
+    if (message.tradingMode !== TradingMode.TRADING_MODE_UNSPECIFIED) {
+      obj.tradingMode = tradingModeToJSON(message.tradingMode);
+    }
+    if (message.applicationEnv !== "") {
+      obj.applicationEnv = message.applicationEnv;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetTradingEnvironmentResponse>, I>>(base?: I): GetTradingEnvironmentResponse {
+    return GetTradingEnvironmentResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetTradingEnvironmentResponse>, I>>(
+    object: I,
+  ): GetTradingEnvironmentResponse {
+    const message = createBaseGetTradingEnvironmentResponse();
+    message.tradingMode = object.tradingMode ?? TradingMode.TRADING_MODE_UNSPECIFIED;
+    message.applicationEnv = object.applicationEnv ?? "";
     return message;
   },
 };
@@ -2346,6 +2773,38 @@ export const TradingServiceService = {
     responseDeserialize: (value: Buffer): DeregisterBrokerAccountResponse =>
       DeregisterBrokerAccountResponse.decode(value),
   },
+  /**
+   * UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+   * account, re-validates them against the broker, and refreshes credential_status.
+   */
+  updateBrokerAccountCredentials: {
+    path: "/xstockstrat.trading.v1.TradingService/UpdateBrokerAccountCredentials" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: UpdateBrokerAccountCredentialsRequest): Buffer =>
+      Buffer.from(UpdateBrokerAccountCredentialsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateBrokerAccountCredentialsRequest =>
+      UpdateBrokerAccountCredentialsRequest.decode(value),
+    responseSerialize: (value: UpdateBrokerAccountCredentialsResponse): Buffer =>
+      Buffer.from(UpdateBrokerAccountCredentialsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): UpdateBrokerAccountCredentialsResponse =>
+      UpdateBrokerAccountCredentialsResponse.decode(value),
+  },
+  /**
+   * GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+   * switch between paper and live — the environment owns this decision.
+   */
+  getTradingEnvironment: {
+    path: "/xstockstrat.trading.v1.TradingService/GetTradingEnvironment" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetTradingEnvironmentRequest): Buffer =>
+      Buffer.from(GetTradingEnvironmentRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetTradingEnvironmentRequest => GetTradingEnvironmentRequest.decode(value),
+    responseSerialize: (value: GetTradingEnvironmentResponse): Buffer =>
+      Buffer.from(GetTradingEnvironmentResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetTradingEnvironmentResponse => GetTradingEnvironmentResponse.decode(value),
+  },
 } as const;
 
 export interface TradingServiceServer extends UntypedServiceImplementation {
@@ -2357,6 +2816,19 @@ export interface TradingServiceServer extends UntypedServiceImplementation {
   registerBrokerAccount: handleUnaryCall<RegisterBrokerAccountRequest, RegisterBrokerAccountResponse>;
   listBrokerAccounts: handleUnaryCall<ListBrokerAccountsRequest, ListBrokerAccountsResponse>;
   deregisterBrokerAccount: handleUnaryCall<DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse>;
+  /**
+   * UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+   * account, re-validates them against the broker, and refreshes credential_status.
+   */
+  updateBrokerAccountCredentials: handleUnaryCall<
+    UpdateBrokerAccountCredentialsRequest,
+    UpdateBrokerAccountCredentialsResponse
+  >;
+  /**
+   * GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+   * switch between paper and live — the environment owns this decision.
+   */
+  getTradingEnvironment: handleUnaryCall<GetTradingEnvironmentRequest, GetTradingEnvironmentResponse>;
 }
 
 export interface TradingServiceClient extends Client {
@@ -2467,6 +2939,44 @@ export interface TradingServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: DeregisterBrokerAccountResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+   * account, re-validates them against the broker, and refreshes credential_status.
+   */
+  updateBrokerAccountCredentials(
+    request: UpdateBrokerAccountCredentialsRequest,
+    callback: (error: ServiceError | null, response: UpdateBrokerAccountCredentialsResponse) => void,
+  ): ClientUnaryCall;
+  updateBrokerAccountCredentials(
+    request: UpdateBrokerAccountCredentialsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: UpdateBrokerAccountCredentialsResponse) => void,
+  ): ClientUnaryCall;
+  updateBrokerAccountCredentials(
+    request: UpdateBrokerAccountCredentialsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: UpdateBrokerAccountCredentialsResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+   * switch between paper and live — the environment owns this decision.
+   */
+  getTradingEnvironment(
+    request: GetTradingEnvironmentRequest,
+    callback: (error: ServiceError | null, response: GetTradingEnvironmentResponse) => void,
+  ): ClientUnaryCall;
+  getTradingEnvironment(
+    request: GetTradingEnvironmentRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetTradingEnvironmentResponse) => void,
+  ): ClientUnaryCall;
+  getTradingEnvironment(
+    request: GetTradingEnvironmentRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetTradingEnvironmentResponse) => void,
   ): ClientUnaryCall;
 }
 

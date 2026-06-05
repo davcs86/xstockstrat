@@ -19,14 +19,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	TradingService_PlaceOrder_FullMethodName              = "/xstockstrat.trading.v1.TradingService/PlaceOrder"
-	TradingService_CancelOrder_FullMethodName             = "/xstockstrat.trading.v1.TradingService/CancelOrder"
-	TradingService_GetOrder_FullMethodName                = "/xstockstrat.trading.v1.TradingService/GetOrder"
-	TradingService_ListOrders_FullMethodName              = "/xstockstrat.trading.v1.TradingService/ListOrders"
-	TradingService_StreamOrderUpdates_FullMethodName      = "/xstockstrat.trading.v1.TradingService/StreamOrderUpdates"
-	TradingService_RegisterBrokerAccount_FullMethodName   = "/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount"
-	TradingService_ListBrokerAccounts_FullMethodName      = "/xstockstrat.trading.v1.TradingService/ListBrokerAccounts"
-	TradingService_DeregisterBrokerAccount_FullMethodName = "/xstockstrat.trading.v1.TradingService/DeregisterBrokerAccount"
+	TradingService_PlaceOrder_FullMethodName                     = "/xstockstrat.trading.v1.TradingService/PlaceOrder"
+	TradingService_CancelOrder_FullMethodName                    = "/xstockstrat.trading.v1.TradingService/CancelOrder"
+	TradingService_GetOrder_FullMethodName                       = "/xstockstrat.trading.v1.TradingService/GetOrder"
+	TradingService_ListOrders_FullMethodName                     = "/xstockstrat.trading.v1.TradingService/ListOrders"
+	TradingService_StreamOrderUpdates_FullMethodName             = "/xstockstrat.trading.v1.TradingService/StreamOrderUpdates"
+	TradingService_RegisterBrokerAccount_FullMethodName          = "/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount"
+	TradingService_ListBrokerAccounts_FullMethodName             = "/xstockstrat.trading.v1.TradingService/ListBrokerAccounts"
+	TradingService_DeregisterBrokerAccount_FullMethodName        = "/xstockstrat.trading.v1.TradingService/DeregisterBrokerAccount"
+	TradingService_UpdateBrokerAccountCredentials_FullMethodName = "/xstockstrat.trading.v1.TradingService/UpdateBrokerAccountCredentials"
+	TradingService_GetTradingEnvironment_FullMethodName          = "/xstockstrat.trading.v1.TradingService/GetTradingEnvironment"
 )
 
 // TradingServiceClient is the client API for TradingService service.
@@ -41,6 +43,12 @@ type TradingServiceClient interface {
 	RegisterBrokerAccount(ctx context.Context, in *RegisterBrokerAccountRequest, opts ...grpc.CallOption) (*RegisterBrokerAccountResponse, error)
 	ListBrokerAccounts(ctx context.Context, in *ListBrokerAccountsRequest, opts ...grpc.CallOption) (*ListBrokerAccountsResponse, error)
 	DeregisterBrokerAccount(ctx context.Context, in *DeregisterBrokerAccountRequest, opts ...grpc.CallOption) (*DeregisterBrokerAccountResponse, error)
+	// UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+	// account, re-validates them against the broker, and refreshes credential_status.
+	UpdateBrokerAccountCredentials(ctx context.Context, in *UpdateBrokerAccountCredentialsRequest, opts ...grpc.CallOption) (*UpdateBrokerAccountCredentialsResponse, error)
+	// GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+	// switch between paper and live — the environment owns this decision.
+	GetTradingEnvironment(ctx context.Context, in *GetTradingEnvironmentRequest, opts ...grpc.CallOption) (*GetTradingEnvironmentResponse, error)
 }
 
 type tradingServiceClient struct {
@@ -140,6 +148,26 @@ func (c *tradingServiceClient) DeregisterBrokerAccount(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *tradingServiceClient) UpdateBrokerAccountCredentials(ctx context.Context, in *UpdateBrokerAccountCredentialsRequest, opts ...grpc.CallOption) (*UpdateBrokerAccountCredentialsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateBrokerAccountCredentialsResponse)
+	err := c.cc.Invoke(ctx, TradingService_UpdateBrokerAccountCredentials_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *tradingServiceClient) GetTradingEnvironment(ctx context.Context, in *GetTradingEnvironmentRequest, opts ...grpc.CallOption) (*GetTradingEnvironmentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTradingEnvironmentResponse)
+	err := c.cc.Invoke(ctx, TradingService_GetTradingEnvironment_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TradingServiceServer is the server API for TradingService service.
 // All implementations should embed UnimplementedTradingServiceServer
 // for forward compatibility.
@@ -152,6 +180,12 @@ type TradingServiceServer interface {
 	RegisterBrokerAccount(context.Context, *RegisterBrokerAccountRequest) (*RegisterBrokerAccountResponse, error)
 	ListBrokerAccounts(context.Context, *ListBrokerAccountsRequest) (*ListBrokerAccountsResponse, error)
 	DeregisterBrokerAccount(context.Context, *DeregisterBrokerAccountRequest) (*DeregisterBrokerAccountResponse, error)
+	// UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+	// account, re-validates them against the broker, and refreshes credential_status.
+	UpdateBrokerAccountCredentials(context.Context, *UpdateBrokerAccountCredentialsRequest) (*UpdateBrokerAccountCredentialsResponse, error)
+	// GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+	// switch between paper and live — the environment owns this decision.
+	GetTradingEnvironment(context.Context, *GetTradingEnvironmentRequest) (*GetTradingEnvironmentResponse, error)
 }
 
 // UnimplementedTradingServiceServer should be embedded to have
@@ -184,6 +218,12 @@ func (UnimplementedTradingServiceServer) ListBrokerAccounts(context.Context, *Li
 }
 func (UnimplementedTradingServiceServer) DeregisterBrokerAccount(context.Context, *DeregisterBrokerAccountRequest) (*DeregisterBrokerAccountResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeregisterBrokerAccount not implemented")
+}
+func (UnimplementedTradingServiceServer) UpdateBrokerAccountCredentials(context.Context, *UpdateBrokerAccountCredentialsRequest) (*UpdateBrokerAccountCredentialsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateBrokerAccountCredentials not implemented")
+}
+func (UnimplementedTradingServiceServer) GetTradingEnvironment(context.Context, *GetTradingEnvironmentRequest) (*GetTradingEnvironmentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTradingEnvironment not implemented")
 }
 func (UnimplementedTradingServiceServer) testEmbeddedByValue() {}
 
@@ -342,6 +382,42 @@ func _TradingService_DeregisterBrokerAccount_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TradingService_UpdateBrokerAccountCredentials_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateBrokerAccountCredentialsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TradingServiceServer).UpdateBrokerAccountCredentials(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TradingService_UpdateBrokerAccountCredentials_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TradingServiceServer).UpdateBrokerAccountCredentials(ctx, req.(*UpdateBrokerAccountCredentialsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TradingService_GetTradingEnvironment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTradingEnvironmentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TradingServiceServer).GetTradingEnvironment(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TradingService_GetTradingEnvironment_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TradingServiceServer).GetTradingEnvironment(ctx, req.(*GetTradingEnvironmentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // TradingService_ServiceDesc is the grpc.ServiceDesc for TradingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -376,6 +452,14 @@ var TradingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeregisterBrokerAccount",
 			Handler:    _TradingService_DeregisterBrokerAccount_Handler,
+		},
+		{
+			MethodName: "UpdateBrokerAccountCredentials",
+			Handler:    _TradingService_UpdateBrokerAccountCredentials_Handler,
+		},
+		{
+			MethodName: "GetTradingEnvironment",
+			Handler:    _TradingService_GetTradingEnvironment_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
