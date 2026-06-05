@@ -298,7 +298,7 @@ Service starts without error when `DATABASE_URL` is set: `docker compose up xsto
 
 ### Step 5 — service: Implement shared strategy evaluator module
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/__init__.py` — create

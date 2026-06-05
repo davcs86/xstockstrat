@@ -136,3 +136,14 @@ grpcio-tools==1.80.0 in a venv) per sequential-mode CI-equivalent fallback. `pnp
   parse. `docker compose up` pool-log check via CI-equivalent fallback (no full stack here).
 - Deviations: `import asyncpg` placed at top of file (with other third-party imports) rather than
   literally "after L30", matching the indicators reference and satisfying ruff E402. No behavior change.
+
+### Step 5 — service: Implement shared strategy evaluator module [done]
+- Created `app/services/__init__.py` + `app/services/evaluator.py` (`StrategyEvaluator` + `BarDecision`
+  + module helpers `_validate_definition`/`_validate_rule_refs`/`_eval_condition`/`_resolve_term`).
+  No backtest-only imports/side-effects; no look-ahead (bar i uses only series[0..i]); reused as-is by
+  feature 048.
+- Files created: `app/services/__init__.py`, `app/services/evaluator.py`.
+- Verification: `ruff check` + `ruff format --check` clean; imports `StrategyEvaluator`/
+  `_validate_definition` OK via the conftest-style `gen` namespace shim.
+- Deviations: ruff format wrapped two long `raise ValueError(...)` lines onto their own lines to satisfy
+  E501 (line-length 100) — formatting only, no behavior change.
