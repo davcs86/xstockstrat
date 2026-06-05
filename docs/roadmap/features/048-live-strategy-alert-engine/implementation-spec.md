@@ -29,7 +29,7 @@ Steps 1–2 (proto) must complete before all service steps because service code 
 
 ### Step 1 — proto: Add SetStrategyLive RPC and live_enabled field to analysis.proto
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify

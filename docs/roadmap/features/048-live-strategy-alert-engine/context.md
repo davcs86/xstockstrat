@@ -94,3 +94,9 @@ Steps 4/5/6/7. Significant 047-implementation deviations found vs 048's pre-047 
 Steps 1–3, 8–13 unchanged by the re-spec (8 will mock `validate_admin` in tests; 9–13 are UI/docs,
 validated per-step). Up-front confirm: user chose "Re-spec + execute 048 now"; admin-gate guidance
 captured above.
+
+### Step 1 — proto: Add SetStrategyLive RPC and live_enabled field [done]
+- analysis.proto: added `bool live_enabled = 8;` to StrategyDefinition, `SetStrategyLiveRequest`/
+  `SetStrategyLiveResponse` messages, and `SetStrategyLive` RPC (all additive on top of 047).
+- Files: `packages/proto/analysis/v1/analysis.proto`.
+- Verification: `buf lint` + `buf breaking --against main-dev` clean (additive).
