@@ -38,9 +38,10 @@ FR-4. **Edge-triggered, deduplicated:** an alert fires once per state transition
 (strategy, symbol), not repeatedly while the condition remains true. Per-(strategy, symbol) last
 state must be tracked; restart behavior is defined (re-arm without replaying historical triggers).
 
-FR-5. The runtime must support per-strategy enable/disable for live evaluation independent of the
-strategy's `active` flag for backtests (an operator may backtest a strategy without it alerting
-live). Enable/disable is admin-scoped.
+FR-5. The runtime must support per-strategy enable/disable for live evaluation via a `live_enabled`
+flag stored on the `analysis.strategies` row, independent of the strategy's `active` flag (which
+gates backtest availability). An operator may backtest a strategy without it alerting live.
+The `SetStrategyLive` RPC and `set_strategy_live` MCP tool control this flag; both are admin-scoped.
 
 FR-6. **Safety invariant:** the engine emits **alerts only** — it must never place or trigger
 orders, in any trading mode. This is explicit and must be enforced/tested. (Auto-execution, if ever
@@ -54,8 +55,8 @@ FR-8. Resilience: a failure evaluating one strategy or symbol must not halt the 
 ingest errors are logged and that strategy is skipped for the cycle. The loop must not drift or
 overlap runs (single-flight per cycle).
 
-FR-9. Config keys (namespace `analysis` or a new `engine` namespace — TBD) for cadence, max
-strategies per cycle, and alert throttle, all hot-reloadable via the config WatchConfig stream.
+FR-9. Config keys in the `analysis.engine.*` namespace for cadence, max strategies per cycle,
+and alert throttle — all hot-reloadable via the config WatchConfig stream (see Config Key Changes).
 
 ## Out of Scope
 
@@ -71,8 +72,7 @@ strategies per cycle, and alert throttle, all hot-reloadable via the config Watc
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-analysis` — most likely home of the runtime (reuses the 047 evaluator) **or** a new
-  dedicated service / the agent scheduler — see Open Questions
+- `xstockstrat-analysis` — home of the runtime (asyncio background task loop, reuses the 047 evaluator directly; same Python process, no gRPC hop — see OQ-1 resolution)
 - `xstockstrat-marketdata` — live OHLCV/quote reads each cycle
 - `xstockstrat-ingest` — `QuerySignals` for signal-weighted strategies
 - `xstockstrat-notify` — `EmitAlert` on triggers
@@ -81,33 +81,37 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Proto Contract Changes
 
-- [ ] Possibly none if the runtime is an internal loop driven by stored strategies + existing RPCs
-  (`GetBars`, `QuerySignals`, `EmitAlert`).
-- OR: a small `analysis` RPC to enable/disable live evaluation per strategy and report live status
-  (`SetStrategyLive`, `GetLiveStrategyStatus`) — additive/non-breaking. Decide at /sdd-spec.
+New messages/RPCs in `analysis/v1/analysis.proto` (all additive/non-breaking):
+- `SetStrategyLiveRequest { string strategy_id = 1; bool live_enabled = 2; }` — admin-scoped toggle
+- `SetStrategyLiveResponse { StrategyDefinition definition = 1; }` — returns updated definition (with `live_enabled` reflected)
+- `rpc SetStrategyLive(SetStrategyLiveRequest) returns (SetStrategyLiveResponse)` on `AnalysisService`
+
+`StrategyDefinition` gains one additive field from feature 047: no change here — the `live_enabled` flag is stored on the `analysis.strategies` DB row and returned via existing `GetStrategy` / `ListStrategyDefinitions` once the field is added. Decide at `/sdd-spec` whether `StrategyDefinition` proto message gets a `bool live_enabled` field or whether live status is a separate response message.
+
+No changes to `indicators`, `ingest`, `notify`, or `marketdata` protos — this feature only consumes their existing RPCs.
 
 ## Config Key Changes
 
-Likely new keys (final namespace TBD):
-- `analysis.engine.eval_interval_seconds` (int) — evaluation cadence
-- `analysis.engine.max_strategies_per_cycle` (int) — throughput cap
-- `analysis.engine.alert_throttle_seconds` (int) — minimum gap between alerts per (strategy, symbol)
+New keys in the `analysis` namespace (consistent with the analysis service's existing `analysis.backtest.*` / `analysis.scoring.*` keys):
+- `analysis.engine.eval_interval_seconds` (int, default `60`) — evaluation polling cadence in seconds
+- `analysis.engine.max_strategies_per_cycle` (int, default `50`) — cap on (strategy × symbol) pairs evaluated per cycle; pairs beyond the cap are skipped and logged
+- `analysis.engine.alert_throttle_seconds` (int, default `300`) — minimum seconds between alerts for the same (strategy, symbol) pair; prevents alert floods on noisy conditions
 
 ## Database Changes
 
-- [ ] Likely no new schema if live enable/disable + last-state are stored on the `analysis.strategies`
-  row (047) or in memory with a documented restart policy.
-- OR: a small `analysis.strategy_live_state` table (strategy_id, symbol, last_state, last_triggered_at)
-  if durable cross-restart dedup is required — DBA review if added.
+New migration in `services/xstockstrat-analysis/migrations/` (`002_strategy_live_enabled.up.sql` + `.down.sql`):
+- `ALTER TABLE analysis.strategies ADD COLUMN IF NOT EXISTS live_enabled BOOLEAN NOT NULL DEFAULT FALSE;` — opt-in flag for live evaluation, independent of the `active` flag for backtests (FR-5). DBA review required (NNN numbering, up+down pair).
+
+**No `analysis.strategy_live_state` table.** Per-cycle dedup state is held in-memory (see OQ-3 resolution — FR-4 explicitly defines restart policy as "re-arm without replaying"). The in-memory map `last_state: dict[tuple[strategy_id, symbol], bool]` is reset to neutral on service restart; no historical triggers are replayed.
 
 ## Feature Workflow Notes
 
 Branch to create: `feature/live-strategy-alert-engine` (branch from `main-dev`)
 **Merge after `047-strategy-engine`** (hard dependency — record in `merge-order.md`).
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [ ] 1 service owner approval — additive proto/config + service changes
-- [ ] Platform Lead — runtime placement / dependency-graph impact (new loop or new service)
-- [ ] DBA review — only if `analysis.strategy_live_state` table is added
+- [ ] 1 service owner approval — additive proto/config + analysis service changes
+- [ ] Platform Lead — asyncio background task in `xstockstrat-analysis` (OQ-1 resolved; confirm no port/dependency-graph impact)
+- [ ] DBA review + service owner — `analysis.strategies` `live_enabled` column migration (002_strategy_live_enabled)
 
 ## Acceptance Criteria
 
@@ -122,14 +126,34 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] **Runtime placement:** extend `xstockstrat-analysis` with an evaluation loop, build a new
-  dedicated service, or run it inside `xstockstrat-agent` alongside `010-agent-scheduler`? Drives
-  the dependency graph and Platform Lead review.
-- [ ] **Trigger cadence:** bar-close driven (needs a bar-close signal/stream) vs fixed polling
-  interval. Interaction with market hours / `017-premarket-aftermarket-session-toggle`.
-- [ ] **Dedup durability:** in-memory last-state (simple, lost on restart) vs persisted
-  `strategy_live_state` (survives restart, needs migration).
-- [ ] **Live enable/disable surface:** new analysis RPC + MCP tool, or a flag on the 047
-  strategy definition?
-- [ ] **Scale:** how many (strategy × symbol) pairs must be evaluated per cycle, and within what
-  latency budget? Determines polling vs streaming and batching strategy.
+- [x] **Runtime placement:** RESOLVED — asyncio background task loop inside `xstockstrat-analysis`,
+  started alongside the gRPC server in `app/main.py`. Feature 047 product spec AC-5 explicitly
+  requires "feature 048 being able to call [the evaluator] directly with no changes to its
+  signature or module path" — same Python process is the only interpretation that satisfies this
+  without a gRPC hop. No new service; no Platform Lead approval threshold triggered. The agent
+  scheduler (`010`) handles signal extraction; this loop handles strategy evaluation — different
+  concerns, same pattern.
+- [x] **Trigger cadence:** RESOLVED — fixed polling interval (default 60s, configurable via
+  `analysis.engine.eval_interval_seconds`). Feature `025-realtime-tick-streaming` is explicitly out
+  of scope. The loop calls `GetBars` for the most recent N bars per symbol; if no new bars have
+  arrived since the last cycle (e.g. market closed), evaluation produces no new decisions — a
+  silent no-op. Interaction with market hours (`017`) is deferred; the cadence config allows
+  operators to lengthen the interval during off-hours as a workaround.
+- [x] **Dedup durability:** RESOLVED — in-memory per-(strategy, symbol) state dict
+  (`last_state: dict[tuple[str, str], bool]`). FR-4 already defines the restart policy as
+  "re-arm without replaying historical triggers." Alert-only semantics (no financial transactions)
+  make in-memory dedup acceptable for v1. Durable cross-restart dedup (e.g.
+  `analysis.strategy_live_state` table) is a follow-up if operators require it.
+- [x] **Live enable/disable surface:** RESOLVED — new `live_enabled BOOLEAN NOT NULL DEFAULT FALSE`
+  column on `analysis.strategies` (migration `002_`) via `ALTER TABLE`. Controlled by a new
+  `SetStrategyLive(SetStrategyLiveRequest)` RPC on `AnalysisService` (additive) and a
+  `set_strategy_live` MCP tool on the agent (admin-scoped). The existing `ManageStrategy` RPC is
+  not reused to avoid conflating model management with live-state toggling. The `active` flag
+  (backtest availability) and `live_enabled` (live evaluation) remain independent, as required by
+  FR-5.
+- [x] **Scale:** RESOLVED — sequential evaluation for v1, capped by
+  `analysis.engine.max_strategies_per_cycle` (default 50 strategy × symbol pairs per cycle).
+  Single-flight enforcement: if a cycle exceeds the polling interval, the next cycle is skipped
+  (asyncio.Lock or asyncio.Event). Parallelism (asyncio.gather across strategies) is a follow-up
+  once the sequential baseline is profiled. Latency budget: evaluation must complete within the
+  polling interval; the cap prevents runaway cycles.

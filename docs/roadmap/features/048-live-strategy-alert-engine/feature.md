@@ -1,9 +1,9 @@
 # Feature: live-strategy-alert-engine
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/live-strategy-alert-engine`
 **Created**: 2026-06-01
-**Last Updated**: 2026-06-01
+**Last Updated**: 2026-06-05
 
 ---
 
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-06-01 | `idea` → `draft` | /sdd-story | Split out from `047-strategy-engine` revamp — the continuous live evaluation runtime |
+| 2026-06-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings — advisory). All 5 OQs resolved: asyncio background task in analysis, polling cadence, in-memory dedup, live_enabled column + SetStrategyLive RPC, sequential evaluation cap. |
 
 ---
 
@@ -49,9 +50,9 @@ change types. Finalized at /sdd-spec time.)_
 | `xstockstrat-notify` (service owner) | Stream delivery guarantees, alert deduplication, backpressure handling |
 | `xstockstrat-marketdata` (service owner) | Live bar/quote consumption, feed idempotency |
 | `xstockstrat-ingest` (service owner) | `QuerySignals` for live signal-weighting |
-| Platform Lead | Where the runtime lives (extend analysis vs new service vs agent scheduler), port/dependency-graph impact |
+| Platform Lead | Confirm asyncio background task in `xstockstrat-analysis` is acceptable (OQ-1 resolved); dependency-graph impact |
 | Security | Trading-mode safety (alerts must never auto-execute), admin scope on enable/disable |
 
 ## Next Action
 
-`/sdd-review live-strategy-alert-engine product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec live-strategy-alert-engine` — generate implementation spec (after 047 merges to main-dev)
