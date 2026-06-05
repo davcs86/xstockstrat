@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 # wait-for-deps.sh — probe TCP endpoints before starting a service.
 #
 # Usage:
@@ -51,34 +51,32 @@ if [ -z "$WAIT_ARGS" ]; then
 fi
 
 probe() {
-  local host="$1" port="$2"
   if command -v nc >/dev/null 2>&1; then
     # nc -z: zero-I/O mode — just check TCP connectivity, no data exchange
     # Works on: Alpine busybox nc, GNU netcat, macOS BSD nc
-    nc -z "$host" "$port" >/dev/null 2>&1
+    nc -z "$1" "$2" >/dev/null 2>&1
   else
     # bash built-in /dev/tcp — no external tools needed (bash 3.2+)
     # Used on: python:3.12-slim (Debian) where nc is not installed by default
-    bash -c "echo >/dev/tcp/$host/$port" >/dev/null 2>&1
+    bash -c "echo >/dev/tcp/$1/$2" >/dev/null 2>&1
   fi
 }
 
 wait_for() {
-  local addr="$1"
-  local host="${addr%:*}"
-  local port="${addr##*:}"
-  local elapsed=0
+  _wf_host="${1%:*}"
+  _wf_port="${1##*:}"
+  _wf_elapsed=0
 
-  printf '[wait-for-deps] Waiting for %s...\n' "$addr"
-  until probe "$host" "$port"; do
-    if [ "$elapsed" -ge "$TIMEOUT" ]; then
-      printf '[wait-for-deps] ERROR: timed out after %ss waiting for %s\n' "$TIMEOUT" "$addr" >&2
+  printf '[wait-for-deps] Waiting for %s...\n' "$1"
+  until probe "$_wf_host" "$_wf_port"; do
+    if [ "$_wf_elapsed" -ge "$TIMEOUT" ]; then
+      printf '[wait-for-deps] ERROR: timed out after %ss waiting for %s\n' "$TIMEOUT" "$1" >&2
       exit 1
     fi
     sleep "$INTERVAL"
-    elapsed=$((elapsed + INTERVAL))
+    _wf_elapsed=$((_wf_elapsed + INTERVAL))
   done
-  printf '[wait-for-deps] %s is ready (%ss elapsed)\n' "$addr" "$elapsed"
+  printf '[wait-for-deps] %s is ready (%ss elapsed)\n' "$1" "$_wf_elapsed"
 }
 
 # Word-split is intentional here — WAIT_ARGS is a space-separated list
