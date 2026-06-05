@@ -900,7 +900,7 @@ grep -n "Nine tools\|manage_strategy\|manage_formula\|manage_signal_source" \
 
 ### Step 11 — test: Tests for agent management tools and client helpers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify (add new test classes)

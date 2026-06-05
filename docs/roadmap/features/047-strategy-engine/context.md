@@ -217,3 +217,16 @@ grpcio-tools==1.80.0 in a venv) per sequential-mode CI-equivalent fallback. `pnp
 - Files modified: `services/xstockstrat-agent/app/tools.py` (docstring only).
 - Verification: grep shows "Nine tools" + all 3 new tool names; no E501 on the new docstring lines.
 - Deviations: none (manage_formula docstring trimmed for line length — my own added line).
+
+### Step 11 — test: agent management tools + client helpers [done]
+- `tests/test_tools.py`: `TestManageStrategyTool` (args forwarded; UNAUTHENTICATED gRPC error →
+  "admin API key required" via `_rpc_error` AioRpcError helper), `TestManageFormulaTool`
+  (register+delete), `TestManageSignalSourceTool` (FR-12: credentials_ref not echoed).
+- `tests/test_client.py`: `TestManageStrategyClient` (ANALYSIS_ENDPOINT + x-mcp-secret +
+  authorization Bearer; unknown-op ValueError), `TestManageFormulaClient` (INDICATORS_ENDPOINT),
+  `TestManageSignalSourceClient` (INGEST_ENDPOINT; credentials_ref omitted).
+- Files modified: `tests/test_tools.py`, `tests/test_client.py`.
+- Verification: `uv run pytest --cov=app --cov-fail-under=40` → 31 passed, total coverage 57.77%.
+  My added test code is ruff-clean (fixed one self-introduced F401). Residual I001/F841 are pre-existing
+  009 lines (agent not CI-linted).
+- Deviations: pre-existing agent ruff drift (see Step 8 Deviation Log).
