@@ -594,7 +594,7 @@ cd services/xstockstrat-agent && pytest --cov=app --cov-fail-under=40
 
 ### Step 9 — service: Add SetStrategyLive and ListAlerts BFF handlers to traderBff.ts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/traderBff.ts` — modify

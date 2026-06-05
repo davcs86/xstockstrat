@@ -154,3 +154,9 @@ captured above.
 - test_tools.py: TestSetStrategyLiveTool (validate_admin False → RuntimeError; admin path calls client).
 - Verification: my code ruff-clean (residual F841/I001 pre-existing 009 lines); agent pytest 36 passed,
   coverage 59.75%.
+
+### Step 9 — service: trader BFF handlers [done]
+- traderBff.ts: imported AnalysisService + analysisClient; added NotifyService.listAlerts handler and a
+  new AnalysisService block (listStrategyDefinitions; setStrategyLive with server-side admin-scope gate
+  → ConnectError PermissionDenied). All forward backendHeaders (x-user-id/x-access-scope/x-trace-id).
+- Verification: greps pass; ListAlerts RPC exists in notify proto; `pnpm exec tsc --noEmit` exit 0.
