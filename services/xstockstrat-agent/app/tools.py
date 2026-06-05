@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Nine tools:
+Ten tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -11,6 +11,7 @@ Nine tools:
   manage_strategy     — registers/updates/deactivates stored strategies in analysis (admin-scoped)
   manage_formula      — registers/updates/deletes custom formulas in indicators (admin-scoped)
   manage_signal_source — registers/updates/deactivates signal sources in ingest (admin-scoped)
+  set_strategy_live   — enables/disables live alert evaluation for a strategy (admin-scoped)
 """
 
 import base64
@@ -346,6 +347,26 @@ def register_tools(server: FastMCP) -> None:
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="signal source not found")) from e
+
+    @server.tool()
+    async def set_strategy_live(
+        strategy_id: str,
+        live_enabled: bool,
+        admin_api_key: str = "",
+    ) -> dict:
+        """Enable or disable live alert evaluation for a strategy. Admin scope required.
+        strategy_id: ID of the strategy to toggle (from list_strategy_definitions/manage_strategy).
+        live_enabled: true to enable continuous live evaluation + alerting; false to disable.
+        admin_api_key: required; must carry the admin role (validated here at the agent entry).
+        Returns the updated strategy definition with live_enabled reflected."""
+        if not await client.validate_admin(admin_api_key):
+            raise RuntimeError("admin API key required")
+        try:
+            return await client.set_strategy_live(
+                strategy_id=strategy_id, live_enabled=live_enabled, api_key=admin_api_key
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
 
 
 async def _get_source(source_slug: str) -> dict:

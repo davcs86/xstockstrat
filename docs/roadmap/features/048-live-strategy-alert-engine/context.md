@@ -138,3 +138,12 @@ captured above.
   into the proto (previously only strategy_id/display_name/active were carried) so SetStrategyLive
   returns the updated flag. (servicer.py — logically a Step-4 fix, applied here.)
 - Verification: ruff clean; uv run pytest --cov → 91 passed, 56.89% coverage.
+
+### Step 7 — service: set_strategy_live MCP tool [done]
+- client.py: added IDENTITY_ENDPOINT, validate_admin(api_key) (entry-point authz via identity
+  ValidateApiKey → "admin" in roles), set_strategy_live(strategy_id, live_enabled, api_key) forwarding
+  _admin_metadata + x-access-scope=7. `_metadata()` left unchanged (047 tests stay valid).
+- tools.py: set_strategy_live tool validates admin at the entry then calls the client; module docstring
+  9→10 tools.
+- Verification: my code ruff-clean (residual E501/UP045 are pre-existing 009 lines; agent not CI-linted);
+  10 tools registered incl. set_strategy_live; agent pytest 31 passed.

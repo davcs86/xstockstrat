@@ -459,7 +459,7 @@ cd services/xstockstrat-analysis && pytest --cov=app --cov-fail-under=40
 
 ### Step 7 — service: Add set_strategy_live MCP tool to xstockstrat-agent
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify (add `set_strategy_live` client function)

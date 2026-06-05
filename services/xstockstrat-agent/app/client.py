@@ -18,6 +18,7 @@ ANALYSIS_ENDPOINT = os.environ.get("ANALYSIS_ENDPOINT", "xstockstrat-analysis:50
 MCP_AGENT_SECRET = os.environ.get("MCP_AGENT_SECRET", "")
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
 INDICATORS_ENDPOINT = os.environ.get("INDICATORS_ENDPOINT", "xstockstrat-indicators:50054")
+IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50058")
 
 
 def _metadata() -> list[tuple[str, str]]:
@@ -364,6 +365,53 @@ async def manage_signal_source(
         "extractor_module": resp.source.extractor_module,
         "active": resp.source.active,
         "has_credentials": resp.source.has_credentials,
+    }
+
+
+async def validate_admin(api_key: str | None) -> bool:
+    """Return True iff the API key is valid AND carries the 'admin' role.
+
+    Entry-point authorization for admin-scoped tools (the SSE auth layer only checks
+    that a key is valid, not that it is admin).
+    """
+    if not api_key:
+        return False
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    try:
+        async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+            stub = identity_pb2_grpc.IdentityServiceStub(channel)
+            claims = await stub.ValidateApiKey(
+                identity_pb2.ValidateApiKeyRequest(api_key=api_key), metadata=_metadata()
+            )
+            return "admin" in claims.roles
+    except Exception:
+        return False
+
+
+async def set_strategy_live(
+    strategy_id: str, live_enabled: bool, api_key: str | None = None
+) -> dict[str, Any]:
+    """Enable/disable live evaluation via SetStrategyLive RPC (admin-scoped).
+
+    The tool layer authorizes the admin role before calling this; here we forward the
+    admin access scope so the internal analysis service's role check passes.
+    """
+    from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
+
+    meta = list(_admin_metadata(api_key)) + [("x-access-scope", "7")]
+    async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
+        stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
+        resp = await stub.SetStrategyLive(
+            analysis_pb2.SetStrategyLiveRequest(strategy_id=strategy_id, live_enabled=live_enabled),
+            metadata=meta,
+        )
+    defn = resp.definition
+    return {
+        "strategy_id": defn.strategy_id,
+        "display_name": defn.display_name,
+        "live_enabled": defn.live_enabled,
+        "active": defn.active,
     }
 
 
