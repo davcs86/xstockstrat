@@ -29,7 +29,6 @@ MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketd
 INDICATORS_ENDPOINT = os.environ.get("INDICATORS_ENDPOINT", "xstockstrat-indicators:50054")
 INGEST_ENDPOINT = os.environ.get("INGEST_ENDPOINT", "xstockstrat-ingest:50055")
 LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
-IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50058")
 NOTIFY_ENDPOINT = os.environ.get("NOTIFY_ENDPOINT", "xstockstrat-notify:50059")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
@@ -53,7 +52,6 @@ async def serve():
         ingest_channel=grpc.aio.insecure_channel(INGEST_ENDPOINT),
         ledger_channel=grpc.aio.insecure_channel(LEDGER_ENDPOINT),
         db_pool=db_pool,
-        identity_channel=grpc.aio.insecure_channel(IDENTITY_ENDPOINT),
         notify_channel=grpc.aio.insecure_channel(NOTIFY_ENDPOINT),
     )
 

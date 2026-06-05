@@ -274,9 +274,12 @@ class TestManageStrategyTool:
     @pytest.mark.asyncio
     async def test_calls_client_with_args(self):
         server = _make_server()
-        with patch.object(
-            client, "manage_strategy", AsyncMock(return_value={"strategy_id": "sma_x"})
-        ) as m:
+        with (
+            patch.object(client, "validate_admin", AsyncMock(return_value=True)),
+            patch.object(
+                client, "manage_strategy", AsyncMock(return_value={"strategy_id": "sma_x"})
+            ) as m,
+        ):
             result = await _tool_fn(server, "manage_strategy")(
                 operation="register",
                 strategy_id="sma_x",
@@ -292,15 +295,27 @@ class TestManageStrategyTool:
         assert kwargs["definition"]["strategy_id"] == "sma_x"
 
     @pytest.mark.asyncio
-    async def test_unauthenticated_reraised_as_clear_message(self):
-        import grpc  # noqa: PLC0415
-
+    async def test_non_admin_rejected_at_entry(self):
         server = _make_server()
-        err = _rpc_error(grpc.StatusCode.UNAUTHENTICATED, "nope")
-        with patch.object(client, "manage_strategy", AsyncMock(side_effect=err)):
+        with patch.object(client, "validate_admin", AsyncMock(return_value=False)):
             with pytest.raises(RuntimeError, match="admin API key required"):
                 await _tool_fn(server, "manage_strategy")(
                     operation="register", strategy_id="x", admin_api_key="bad"
+                )
+
+    @pytest.mark.asyncio
+    async def test_grpc_error_reraised_as_clear_message(self):
+        import grpc  # noqa: PLC0415
+
+        server = _make_server()
+        err = _rpc_error(grpc.StatusCode.NOT_FOUND, "nope")
+        with (
+            patch.object(client, "validate_admin", AsyncMock(return_value=True)),
+            patch.object(client, "manage_strategy", AsyncMock(side_effect=err)),
+        ):
+            with pytest.raises(RuntimeError, match="strategy not found"):
+                await _tool_fn(server, "manage_strategy")(
+                    operation="update", strategy_id="x", admin_api_key="good"
                 )
 
 

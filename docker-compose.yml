@@ -342,7 +342,6 @@ services:
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       INGEST_ENDPOINT: xstockstrat-ingest:50055
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
-      IDENTITY_ENDPOINT: xstockstrat-identity:50058
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-indicators:50054"
       SERVICE_NAME: analysis

@@ -18,7 +18,6 @@ import uuid
 import grpc
 import numpy as np
 from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc
-from gen.identity.v1 import identity_pb2, identity_pb2_grpc
 from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc
 from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc
 from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
@@ -43,7 +42,6 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         ingest_channel,
         ledger_channel,
         db_pool=None,
-        identity_channel=None,
         notify_channel=None,
     ):
         self._cfg = config_watcher
@@ -51,36 +49,25 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._indicators = indicators_pb2_grpc.IndicatorsServiceStub(indicators_channel)
         self._ingest = ingest_pb2_grpc.IngestServiceStub(ingest_channel)
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
-        self._identity = (
-            identity_pb2_grpc.IdentityServiceStub(identity_channel) if identity_channel else None
-        )
         self._notify = notify_pb2_grpc.NotifyServiceStub(notify_channel) if notify_channel else None
         self._backtests: dict[str, analysis_pb2.BacktestResult] = {}
         self._strategies: dict[str, analysis_pb2.StrategyScore] = {}
         self._strategies_repo = StrategiesRepository(db_pool) if db_pool else None
 
-    async def _validate_admin_token(self, context) -> bool:
-        """Returns True if the Authorization header carries a valid admin API key."""
-        if self._identity is None:
-            return False
+    @staticmethod
+    def _has_admin_scope(context) -> bool:
+        """Role check on the propagated x-access-scope ADMIN bit (0x04).
+
+        Internal services trust the access scope set by the entry points (UI BFF via JWT,
+        MCP agent via its SSE auth layer) and do a role check at most — they do not
+        re-authenticate. Shared by ManageStrategy and (feature 048) SetStrategyLive.
+        """
         metadata = dict(context.invocation_metadata())
-        auth = metadata.get("authorization", "")
-        if not auth.startswith("Bearer "):
-            return False
-        api_key = auth[len("Bearer ") :]
-        propagation_meta = [
-            (k, v)
-            for k, v in context.invocation_metadata()
-            if k in ("x-user-id", "x-access-scope", "x-trace-id")
-        ]
         try:
-            claims = await self._identity.ValidateApiKey(
-                identity_pb2.ValidateApiKeyRequest(api_key=api_key),
-                metadata=propagation_meta,
-            )
-            return "admin" in claims.roles
-        except Exception:
-            return False
+            access_scope = int(metadata.get("x-access-scope", "0"))
+        except (TypeError, ValueError):
+            access_scope = 0
+        return bool(access_scope & 0x04)
 
     async def _validate_definition_proto(self, definition, context) -> None:
         """Validate a StrategyDefinition; abort INVALID_ARGUMENT on failure."""
@@ -664,9 +651,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
 
     async def ManageStrategy(self, request, context):
-        is_admin = await self._validate_admin_token(context)
-        if not is_admin:
-            await context.abort(grpc.StatusCode.UNAUTHENTICATED, "admin API key required")
+        # Role check only — authn/authz is owned by the entry points (UI BFF / MCP agent).
+        if not self._has_admin_scope(context):
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
             return
         if self._strategies_repo is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
@@ -736,15 +723,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
 
     async def SetStrategyLive(self, request, context):
-        # Role check only — authentication/authorization is owned by the entry points
-        # (UI BFF via JWT; MCP agent via its SSE auth layer). Internal service trusts the
-        # propagated x-access-scope and checks the ADMIN bit (0x04). FR-5/feature 048.
-        metadata = dict(context.invocation_metadata())
-        try:
-            access_scope = int(metadata.get("x-access-scope", "0"))
-        except (TypeError, ValueError):
-            access_scope = 0
-        if not (access_scope & 0x04):
+        # Role check only — same gate as ManageStrategy (shared _has_admin_scope helper).
+        if not self._has_admin_scope(context):
             await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
             return
 

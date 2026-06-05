@@ -268,3 +268,18 @@ step branch; auto-retarget to feature/strategy-engine as bases merge). Next: int
 feature/strategy-engine → main-dev (merge-order gate: waits for agent-mcp-server #009, which is already
 present in main-dev at code level). Then proceed to feature 048 (live-strategy-alert-engine), with a
 conditional re-spec based on 047's actual deviations.
+
+## Session 2026-06-05 — admin-gate consistency (post-048)
+User request: "use the same admin gate logic for 047 for consistency". Aligned 047's analysis admin
+gate with 048's model (role check on propagated x-access-scope; authn/authz owned by entry points).
+- analysis servicer: removed identity wiring + `_validate_admin_token`; added static `_has_admin_scope`
+  (x-access-scope ADMIN bit 0x04); `ManageStrategy` now aborts PERMISSION_DENIED "admin scope required".
+  Removed `identity_channel` from `__init__` + `main.py`; removed `IDENTITY_ENDPOINT` from the analysis
+  block in docker-compose + both .do specs (analysis no longer calls identity).
+- agent: `manage_strategy` tool validates admin at the entry (`client.validate_admin`, added here);
+  `client.manage_strategy` forwards `x-access-scope: 7` (kept Bearer for back-compat). `IDENTITY_ENDPOINT`
+  added to client.
+- Tests updated: analysis TestManageStrategy uses x-access-scope contexts; agent TestManageStrategyTool
+  mocks validate_admin (entry gate) + gRPC error re-raise. analysis 83 pass/54.4%; agent 32 pass.
+- Out of scope (separate services, separate auth): `manage_signal_source`→ingest (_validate_admin_token,
+  Bearer) and `manage_formula`→indicators (author-based user_id==author) keep their existing gates.

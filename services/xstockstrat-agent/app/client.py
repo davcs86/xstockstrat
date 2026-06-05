@@ -222,11 +222,14 @@ async def manage_strategy(
         sp.update(signal_params)
         pb_def.signal_params.CopyFrom(sp)
 
+    # Analysis does a role check on x-access-scope (admin bit); the tool layer has already
+    # authorized the admin role at the entry point. Bearer kept for backward compatibility.
+    meta = list(_admin_metadata(api_key)) + [("x-access-scope", "7")]
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.ManageStrategy(
             analysis_pb2.ManageStrategyRequest(operation=op_map[operation], definition=pb_def),
-            metadata=_admin_metadata(api_key),
+            metadata=meta,
         )
     return MessageToDict(resp)
 
