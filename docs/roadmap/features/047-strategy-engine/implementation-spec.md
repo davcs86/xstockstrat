@@ -1,6 +1,6 @@
 # Implementation Spec: strategy-engine
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-04
 **Feature**: `docs/roadmap/features/047-strategy-engine/feature.md`
 **Total Steps**: 14
@@ -1004,7 +1004,7 @@ grep -n "StrategyDefinition\|manage_strategy\|evaluator" \
 
 ### Step 14 — test: Integration test for backward compatibility and end-to-end strategy flow
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` (integration)
 **Files**:
 - `scripts/integration-test.sh` — modify

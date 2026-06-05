@@ -248,3 +248,23 @@ grpcio-tools==1.80.0 in a venv) per sequential-mode CI-equivalent fallback. `pnp
 - Files modified: `docs/runbooks/indicator-builder.md`.
 - Verification: greps confirm `StrategyDefinition`, `manage_strategy`, `evaluator`.
 - Deviations: none.
+
+### Step 14 — test: Integration test for backward compat + end-to-end strategy flow [done]
+- `scripts/integration-test.sh`: the existing `section_7_backtest` already exercises a legacy
+  RunBacktest. Added `section_7b_strategy_engine` (registers a two-SMA-component strategy via
+  ManageStrategy, GetStrategy round-trip assert, RunBacktest via strategy_id_ref asserting
+  backtest_id, and a legacy strategy_params RunBacktest asserting backtest_id — FR-8/AC-3). Wired into
+  the main runner after section_7.
+- Files modified: `scripts/integration-test.sh`.
+- Verification: `bash -n` syntax OK; section wired + present. Full `./scripts/integration-test.sh` run
+  needs a live multi-service stack (and the script is in documented pending-gRPC-conversion state) →
+  CI-equivalent fallback (no full stack here). New section follows the existing curl/post Connect-RPC
+  style for consistency.
+- Deviations: integration-test run deferred to a live stack (CI-equivalent fallback; Deviation Log).
+
+## Session 2026-06-05 — sdd-execute (047 complete)
+All 14 steps done → feature `code-completed`. Stacked per-step PRs #566–#579 (each based on the prior
+step branch; auto-retarget to feature/strategy-engine as bases merge). Next: integration PR
+feature/strategy-engine → main-dev (merge-order gate: waits for agent-mcp-server #009, which is already
+present in main-dev at code level). Then proceed to feature 048 (live-strategy-alert-engine), with a
+conditional re-spec based on 047's actual deviations.
