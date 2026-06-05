@@ -25,6 +25,7 @@ Steps 1–2 (proto) must complete before Steps 3–11 (service/agent) because al
 - Step 11 (agent test) covers Steps 8–10: run after all agent steps complete.
 - Steps 12–13 (docs) are independent; can be done at any point after Steps 4–6 and 8–10 are understood.
 - Step 14 (integration test) requires all service/agent steps and migration steps to be merged.
+- Steps 8–11 (agent tools) require feature `009-agent-mcp-server` to be merged into `feature/strategy-engine` first — those steps modify `client.py`, `tools.py`, `test_client.py`, and `test_tools.py`, which are created by that feature.
 
 ---
 
@@ -82,10 +83,17 @@ Add the following to `packages/proto/analysis/v1/analysis.proto`, after the exis
    }
    ```
 
-4. Add `ManageStrategy` request/response messages:
+4. Add the `StrategyOperation` enum and `ManageStrategy` request/response messages. Per root CLAUDE.md proto governance, operation verbs for a closed set must be an enum with `_UNSPECIFIED = 0`:
    ```protobuf
+   enum StrategyOperation {
+     STRATEGY_OPERATION_UNSPECIFIED = 0;
+     STRATEGY_OPERATION_REGISTER = 1;
+     STRATEGY_OPERATION_UPDATE = 2;
+     STRATEGY_OPERATION_DEACTIVATE = 3;
+   }
+
    message ManageStrategyRequest {
-     string operation = 1;  // "register" | "update" | "deactivate"
+     StrategyOperation operation = 1;
      StrategyDefinition definition = 2;
    }
 
@@ -328,6 +336,10 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from gen.analysis.v1 import analysis_pb2
+from gen.indicators.v1 import indicators_pb2
+from google.protobuf.struct_pb2 import Struct
+
 log = logging.getLogger(__name__)
 
 _SUPPORTED_INDICATORS = {"SMA", "EMA", "RSI", "MACD", "BB", "ATR", "VWAP", "STOCH"}
@@ -409,8 +421,7 @@ class StrategyEvaluator:
 
     async def _compute_component(self, comp, closes: list[float]) -> list[float | None]:
         """Compute a single component's series over all bars."""
-        from gen.indicators.v1 import indicators_pb2  # noqa: PLC0415
-        if comp.kind == 1:  # COMPONENT_KIND_BUILTIN_INDICATOR
+        if comp.kind == analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR:
             resp = await self._indicators.ComputeIndicator(
                 indicators_pb2.ComputeIndicatorRequest(
                     indicator=comp.indicator,
@@ -422,8 +433,7 @@ class StrategyEvaluator:
             # Build aligned list — None for warm-up bars where result is absent
             result_map = {i: p.value for i, p in enumerate(resp.result)}
             return [result_map.get(i) for i in range(len(closes))]
-        elif comp.kind == 2:  # COMPONENT_KIND_CUSTOM_FORMULA
-            from google.protobuf.struct_pb2 import Struct  # noqa: PLC0415
+        elif comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
             input_struct = Struct()
             input_struct.update({"close": closes})
             resp = await self._indicators.ExecuteFormula(
@@ -455,13 +465,13 @@ def _validate_definition(definition) -> None:
         if comp.ref_name in ref_names:
             raise ValueError(f"Duplicate ref_name: {comp.ref_name}")
         ref_names.add(comp.ref_name)
-        if comp.kind == 1:  # BUILTIN_INDICATOR
+        if comp.kind == analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR:
             if comp.indicator.upper() not in _SUPPORTED_INDICATORS:
                 raise ValueError(
                     f"Unknown built-in indicator '{comp.indicator}'. "
                     f"Supported: {sorted(_SUPPORTED_INDICATORS)}"
                 )
-        elif comp.kind == 2:  # CUSTOM_FORMULA
+        elif comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
             if not comp.formula_id:
                 raise ValueError("COMPONENT_KIND_CUSTOM_FORMULA component must have formula_id set")
         else:
@@ -605,9 +615,9 @@ python3 -c "from app.services.evaluator import StrategyEvaluator, _validate_defi
    - Extract `propagation_meta` from `context.invocation_metadata()` (same pattern as `RunBacktest` L71-75)
    - Validate admin token via `_validate_admin_token(context)`; if not admin, `await context.abort(grpc.StatusCode.UNAUTHENTICATED, "admin API key required")`
    - If `self._strategies_repo` is None, abort with `UNAVAILABLE`
-   - `operation == "register"`: call `_validate_definition_proto(request.definition)`, then `self._strategies_repo.create(...)`. Return `StrategyDefinition` proto built from the DB row via `_row_to_strategy_definition(row)`.
-   - `operation == "update"`: validate definition, call `self._strategies_repo.update(...)`
-   - `operation == "deactivate"`: call `self._strategies_repo.deactivate(request.definition.strategy_id)`
+   - `request.operation == analysis_pb2.STRATEGY_OPERATION_REGISTER`: call `_validate_definition_proto(request.definition)`, then `self._strategies_repo.create(...)`. Return `StrategyDefinition` proto built from the DB row via `_row_to_strategy_definition(row)`.
+   - `request.operation == analysis_pb2.STRATEGY_OPERATION_UPDATE`: validate definition, call `self._strategies_repo.update(...)`
+   - `request.operation == analysis_pb2.STRATEGY_OPERATION_DEACTIVATE`: call `self._strategies_repo.deactivate(request.definition.strategy_id)`
    - Helper `_validate_definition_proto(definition)` wraps `_validate_definition(definition)` from `app.services.evaluator` — catches `ValueError` → `abort(INVALID_ARGUMENT, str(e))`
 
 5. Add `GetStrategy` RPC method:
@@ -736,9 +746,10 @@ uv run pytest --cov=app --cov-fail-under=40
    ```
 
 3. Add `async def manage_strategy(operation: str, definition: dict, api_key: str | None = None) -> dict`:
-   - `operation`: `"register"` | `"update"` | `"deactivate"`
+   - `operation`: `"register"` | `"update"` | `"deactivate"` — map to enum: `"register"` → `analysis_pb2.STRATEGY_OPERATION_REGISTER`, `"update"` → `analysis_pb2.STRATEGY_OPERATION_UPDATE`, `"deactivate"` → `analysis_pb2.STRATEGY_OPERATION_DEACTIVATE`; raise `ValueError` for unknown values
    - `definition`: dict with keys `strategy_id`, `display_name`, `components` (list of dicts), `entry_rule` (str), `exit_rule` (str), `signal_params` (dict, optional), `active` (bool, optional)
-   - Build `analysis_pb2.ManageStrategyRequest` with `StrategyDefinition` from the dict, call `AnalysisServiceStub.ManageStrategy`
+   - Each `components[i]["kind"]` string must be mapped: `"builtin"` → `analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR`, `"formula"` → `analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA`; raise `ValueError` for unknown values
+   - Build `analysis_pb2.ManageStrategyRequest(operation=<mapped_op>, definition=StrategyDefinition(...))`, call `AnalysisServiceStub.ManageStrategy`
    - Return `MessageToDict(resp)`
    - Use `_admin_metadata(api_key)` as metadata
 
@@ -751,10 +762,11 @@ uv run pytest --cov=app --cov-fail-under=40
    - Return list of dicts from `resp.definitions`
 
 6. Add `async def manage_formula(operation: str, formula: dict, api_key: str | None = None) -> dict`:
-   - `operation`: `"register"` | `"update"` | `"delete"`
-   - Wraps `IndicatorsServiceStub.RegisterFormula` / `UpdateFormula` / `DeleteFormula`
-   - Use `INDICATORS_ENDPOINT`; use `_admin_metadata(api_key)`
-   - Return dict with relevant fields
+   - `operation`: `"register"` | `"update"` | `"delete"`; raise `ValueError` for unknown values
+   - Open channel to `INDICATORS_ENDPOINT`; use `_admin_metadata(api_key)` as metadata
+   - `"register"` → `IndicatorsServiceStub.RegisterFormula(RegisterFormulaRequest(name=formula["name"], description=formula.get("description", ""), source=formula["source"], is_public=formula.get("is_public", False), author=formula.get("author", "")))` — return `{"formula_id": resp.formula_id}`
+   - `"update"` → `IndicatorsServiceStub.UpdateFormula(UpdateFormulaRequest(formula_id=formula["formula_id"], user_id=formula["user_id"], name=formula.get("name", ""), description=formula.get("description", ""), source=formula.get("source", ""), is_public=formula.get("is_public", False)))` — return `MessageToDict(resp.formula)`. Note: `user_id` must match `formula.author` (returns `PERMISSION_DENIED` otherwise); the tool layer must expose a `formula_author_user_id` parameter and pass it here
+   - `"delete"` → `IndicatorsServiceStub.DeleteFormula(DeleteFormulaRequest(formula_id=formula["formula_id"], user_id=formula["user_id"]))` — return `{"success": resp.success}`. Same `user_id` constraint applies
 
 7. Add `async def list_formulas(author_filter: str = "", include_public: bool = True) -> list[dict]`:
    - Wraps `IndicatorsServiceStub.ListFormulas`
@@ -817,13 +829,14 @@ Add three new `@server.tool()` functions inside `register_tools()`, after the ex
    - On gRPC error, raises with a clear message (`NOT_FOUND` → `"strategy not found"`, `INVALID_ARGUMENT` → propagate message, `UNAUTHENTICATED` → `"admin API key required"`)
    - Returns result dict
 
-2. `manage_formula(operation, name, description, source, is_public, formula_id, author, admin_api_key)`:
+2. `manage_formula(operation, name, description, source, is_public, formula_id, author, formula_author_user_id, admin_api_key)`:
    - `operation`: `"register"` | `"update"` | `"delete"`
    - `name`, `description`, `source`, `is_public` — for register/update
-   - `formula_id` — for update/delete
-   - `author` — for register
+   - `formula_id` — required for update/delete
+   - `author` — for register (stored immutably)
+   - `formula_author_user_id` — required for update/delete; must match the formula's original `author` field (enforced by `xstockstrat-indicators`; returns `PERMISSION_DENIED` otherwise)
    - `admin_api_key`: str
-   - Calls appropriate `client.manage_formula(...)` or `client.list_formulas(...)`
+   - Calls `client.manage_formula(operation=operation, formula={"formula_id": formula_id, "user_id": formula_author_user_id, "name": name, ...}, api_key=admin_api_key)`
    - Returns result dict
 
 3. `manage_signal_source(operation, slug, display_name, source_type, config_json, extractor_module, credentials_ref, admin_api_key)`:
