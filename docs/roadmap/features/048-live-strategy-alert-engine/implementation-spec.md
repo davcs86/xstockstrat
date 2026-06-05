@@ -857,7 +857,7 @@ grep -n "listStrategyDefinitions\|setStrategyLive\|listAlerts\|strat-live" \
 
 ### Step 12 — test: E2E Playwright tests for Live Strategies panel
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/live-strategies.spec.ts` — create

@@ -155,23 +155,6 @@ export async function startMockBackend(): Promise<void> {
         },
       });
 
-      router.service(AnalysisService, {
-        async listStrategyDefinitions() {
-          return {
-            definitions: [
-              { strategyId: 'strat-live-001', displayName: 'Live Test Strategy', active: true, liveEnabled: true },
-              { strategyId: 'strat-live-002', displayName: 'Inactive Strategy', active: true, liveEnabled: false },
-            ],
-            totalCount: 2,
-          };
-        },
-        async setStrategyLive(req) {
-          return {
-            definition: { strategyId: req.strategyId, displayName: 'Live Test Strategy', active: true, liveEnabled: req.liveEnabled },
-          };
-        },
-      });
-
       router.service(MarketDataService, {
         async getBars() {
           return {
@@ -217,6 +200,22 @@ export async function startMockBackend(): Promise<void> {
         },
         async scoreStrategy() {
           return { overallScore: 0.5, rating: 'C' };
+        },
+        // Feature 048: trader BFF analysisClient dials ANALYSIS_ENDPOINT (9092 in e2e),
+        // so the live-strategy methods are mocked here.
+        async listStrategyDefinitions() {
+          return {
+            definitions: [
+              { strategyId: 'strat-live-001', displayName: 'Live Test Strategy', active: true, liveEnabled: true },
+              { strategyId: 'strat-live-002', displayName: 'Inactive Strategy', active: true, liveEnabled: false },
+            ],
+            totalCount: 2,
+          };
+        },
+        async setStrategyLive(req) {
+          return {
+            definition: { strategyId: req.strategyId, displayName: 'Live Test Strategy', active: true, liveEnabled: req.liveEnabled },
+          };
         },
       });
 

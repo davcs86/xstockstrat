@@ -180,3 +180,15 @@ captured above.
   (tags=['strategy_id:strat-live-001']) to the existing NotifyService.listAlerts so useStrategyAlerts
   (tag filter) finds it. Omitted the fragile Struct `context` (hook uses tags) for protobuf-es v2 safety.
 - Verification: `pnpm exec tsc --noEmit` clean; greps pass.
+
+### Step 12 — test: E2E Playwright tests [done]
+- Created e2e/trader/live-strategies.spec.ts (4 tests: listStrategyDefinitions liveEnabled; setStrategyLive
+  admin 200; setStrategyLive non-admin PermissionDenied; listAlerts strategy-category + strategy_id tag).
+- FIX (surfaced by e2e): Step 11 mis-placed the AnalysisService mock on port 9091, but the trader BFF's
+  analysisClient dials ANALYSIS_ENDPOINT=9092 (playwright.config.ts) → 501. Moved listStrategyDefinitions/
+  setStrategyLive to the 9092 insights mock; removed the unused 9091 AnalysisService block (kept the 9091
+  listAlerts strategy alert, used via NOTIFY_ENDPOINT=9091). Test asserts liveEnabled:true (proto3
+  Connect-JSON omits false/default bools).
+- Verification: 4/4 e2e tests pass (no failure artifacts in test-results/); process exit 124 was the
+  `pnpm dev` web-server teardown timeout (documented Playwright harness-teardown case, not a test failure).
+  `tsc --noEmit` + `next lint` clean.
