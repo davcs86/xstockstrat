@@ -367,17 +367,24 @@ def _row_for(definition):
     }
 
 
+def _admin_ctx():
+    """A gRPC context carrying the admin x-access-scope bit (7 = READ|WRITE|ADMIN)."""
+    ctx = MagicMock()
+    ctx.invocation_metadata = MagicMock(return_value=[("x-access-scope", "7")])
+    ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+    return ctx
+
+
 class TestManageStrategy:
     @pytest.mark.asyncio
     async def test_admin_gate_aborts_when_not_admin(self):
         svc = make_servicer()
-        svc._identity = None  # no identity stub → _validate_admin_token returns False
         req = analysis_pb2.ManageStrategyRequest(
             operation=analysis_pb2.STRATEGY_OPERATION_REGISTER,
             definition=_valid_definition(),
         )
         context = MagicMock()
-        context.invocation_metadata = MagicMock(return_value=[])
+        context.invocation_metadata = MagicMock(return_value=[("x-access-scope", "1")])  # READ only
         context.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.ManageStrategy(req, context)
@@ -386,14 +393,13 @@ class TestManageStrategy:
     @pytest.mark.asyncio
     async def test_register_returns_definition(self):
         svc = make_servicer()
-        svc._validate_admin_token = AsyncMock(return_value=True)
         definition = _valid_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.create = AsyncMock(return_value=_row_for(definition))
         req = analysis_pb2.ManageStrategyRequest(
             operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
         )
-        result = await svc.ManageStrategy(req, context=MagicMock())
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
         assert result.strategy_id == "sma_x"
         assert result.components[0].indicator == "SMA"
         svc._strategies_repo.create.assert_awaited_once()
@@ -401,27 +407,25 @@ class TestManageStrategy:
     @pytest.mark.asyncio
     async def test_update_path(self):
         svc = make_servicer()
-        svc._validate_admin_token = AsyncMock(return_value=True)
         definition = _valid_definition(display_name="Renamed")
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.update = AsyncMock(return_value=_row_for(definition))
         req = analysis_pb2.ManageStrategyRequest(
             operation=analysis_pb2.STRATEGY_OPERATION_UPDATE, definition=definition
         )
-        result = await svc.ManageStrategy(req, context=MagicMock())
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
         assert result.display_name == "Renamed"
 
     @pytest.mark.asyncio
     async def test_deactivate_not_found(self):
         svc = make_servicer()
-        svc._validate_admin_token = AsyncMock(return_value=True)
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.deactivate = AsyncMock(return_value=None)
         req = analysis_pb2.ManageStrategyRequest(
             operation=analysis_pb2.STRATEGY_OPERATION_DEACTIVATE,
             definition=_valid_definition(),
         )
-        context = MagicMock()
+        context = _admin_ctx()
         context.abort = AsyncMock(side_effect=Exception("not found"))
         with pytest.raises(Exception, match="not found"):
             await svc.ManageStrategy(req, context)

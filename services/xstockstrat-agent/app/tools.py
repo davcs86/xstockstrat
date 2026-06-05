@@ -260,7 +260,9 @@ def register_tools(server: FastMCP) -> None:
         components: list of {ref_name, kind ('builtin'|'formula'), indicator, formula_id, params}.
         entry_rule / exit_rule: JSON-encoded condition trees.
         signal_params: optional signal-weighting params.
-        admin_api_key: required; validated by the analysis backend."""
+        admin_api_key: required; must carry the admin role (validated here at the agent entry)."""
+        if not await client.validate_admin(admin_api_key):
+            raise RuntimeError("admin API key required")
         definition: dict = {
             "strategy_id": strategy_id,
             "display_name": display_name,
