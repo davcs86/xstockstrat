@@ -210,3 +210,10 @@ grpcio-tools==1.80.0 in a venv) per sequential-mode CI-equivalent fallback. `pnp
   lines (behavior-equivalent).
 - Deviations: pre-existing agent ruff drift (see Step 8 Deviation Log); 2 pre-existing lines wrapped by
   ruff format.
+
+### Step 10 — service: Update tool count in tools.py module docstring [done]
+- Changed module docstring "Six tools:" → "Nine tools:" and appended the three new tool entries.
+  Shortened the manage_formula line to satisfy E501 (≤100) on my own docstring lines.
+- Files modified: `services/xstockstrat-agent/app/tools.py` (docstring only).
+- Verification: grep shows "Nine tools" + all 3 new tool names; no E501 on the new docstring lines.
+- Deviations: none (manage_formula docstring trimmed for line length — my own added line).

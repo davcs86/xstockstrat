@@ -869,7 +869,7 @@ print('tools registered:', tool_names)
 
 ### Step 10 — service: Update tool count in tools.py module docstring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (docstring only)

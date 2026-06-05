@@ -1,13 +1,16 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Six tools:
+Nine tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
   ingest_signal        — ingests a trading signal via gRPC IngestSignal
   emit_alert           — emits an alert via gRPC EmitAlert
   run_backtest         — triggers a backtest via gRPC RunBacktest
+  manage_strategy     — registers/updates/deactivates stored strategies in analysis (admin-scoped)
+  manage_formula      — registers/updates/deletes custom formulas in indicators (admin-scoped)
+  manage_signal_source — registers/updates/deactivates signal sources in ingest (admin-scoped)
 """
 
 import base64
