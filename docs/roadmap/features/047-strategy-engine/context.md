@@ -195,3 +195,18 @@ grpcio-tools==1.80.0 in a venv) per sequential-mode CI-equivalent fallback. `pnp
 - IMPORTANT for Steps 9 & 11: agent service has pre-existing ruff-0.15.8 drift (UP045/I001/E501/F841) in
   tools.py and the test files. Since those steps modify those files, scope ruff verification to the
   changed files (or fix the touched lines); do not rewrite unrelated 009 code. Agent is not CI-linted.
+
+### Step 9 — service: agent MCP management tools [done]
+- `tools.py`: added `import grpc` + `_grpc_error_message` helper, and three `@server.tool()` functions
+  inside `register_tools` after `run_backtest`: `manage_strategy`, `manage_formula`,
+  `manage_signal_source`. Each wraps the Step-8 client helper, forwards `admin_api_key`, and maps gRPC
+  errors (NOT_FOUND/UNAUTHENTICATED/PERMISSION_DENIED/INVALID_ARGUMENT) to clear messages.
+  `manage_signal_source` docstring documents that `credentials_ref` is never echoed (FR-12). New code
+  uses modern `X | None` typing (ruff-clean).
+- Files modified: `services/xstockstrat-agent/app/tools.py`.
+- Verification: tool-registration check confirms all 9 tools registered incl. the 3 new ones; agent
+  `uv run pytest` → 23 passed; my additions ruff-clean. Residual UP045/E501 in tools.py are pre-existing
+  009 drift (not my lines; agent not CI-linted). `ruff format` also wrapped 2 pre-existing over-long
+  lines (behavior-equivalent).
+- Deviations: pre-existing agent ruff drift (see Step 8 Deviation Log); 2 pre-existing lines wrapped by
+  ruff format.

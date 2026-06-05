@@ -796,7 +796,7 @@ ruff check . && ruff format --check .
 
 ### Step 9 — service: Add manage_strategy, manage_formula, manage_signal_source MCP tools to agent
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
