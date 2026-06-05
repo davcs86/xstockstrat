@@ -1,6 +1,6 @@
 # Implementation Spec: live-strategy-alert-engine
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-05
 **Feature**: `docs/roadmap/features/048-live-strategy-alert-engine/feature.md`
 **Total Steps**: 13
@@ -896,7 +896,7 @@ cd services/xstockstrat-ui && pnpm run test:e2e -- --grep "live-strategies"
 
 ### Step 13 — docs: Update CLAUDE.md files for analysis, agent, and UI services
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify

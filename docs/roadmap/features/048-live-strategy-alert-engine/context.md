@@ -192,3 +192,16 @@ captured above.
 - Verification: 4/4 e2e tests pass (no failure artifacts in test-results/); process exit 124 was the
   `pnpm dev` web-server teardown timeout (documented Playwright harness-teardown case, not a test failure).
   `tsc --noEmit` + `next lint` clean.
+
+### Step 13 — docs: CLAUDE.md updates [done]
+- analysis CLAUDE.md: Role mentions the asyncio live loop; added 3 analysis.engine.* config keys and
+  the analysis.strategy.triggered / live_toggled ledger events (analysis.strategy.evaluated is NOT
+  emitted by the implementation, so it was omitted for accuracy). NOTIFY_ENDPOINT already present.
+- Created services/xstockstrat-agent/CLAUDE.md (was absent) documenting the ten MCP tools incl.
+  set_strategy_live and the entry-point admin-authorization pattern.
+- Verification: greps confirm new config keys, ledger events, and set_strategy_live docs.
+
+## Session 2026-06-05 — sdd-execute (048 complete)
+All 13 steps done → feature `code-completed`. Stacked per-step PRs #582–#594 on
+feature/live-strategy-alert-engine (based on feature/strategy-engine due to the hard 047 dependency).
+Next: integration PR → main-dev (gated on 047 per merge-order). 047 integration PR #581 still open.
