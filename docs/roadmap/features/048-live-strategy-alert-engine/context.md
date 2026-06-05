@@ -205,3 +205,10 @@ captured above.
 All 13 steps done → feature `code-completed`. Stacked per-step PRs #582–#594 on
 feature/live-strategy-alert-engine (based on feature/strategy-engine due to the hard 047 dependency).
 Next: integration PR → main-dev (gated on 047 per merge-order). 047 integration PR #581 still open.
+
+## Session 2026-06-05 — re-sync with 047 admin-gate consistency
+Merged the updated feature/strategy-engine (047 admin-gate refactor) into
+feature/live-strategy-alert-engine. Resolved conflicts in servicer.py (kept notify, dropped identity),
+main.py (kept NOTIFY, dropped IDENTITY), client.py (kept set_strategy_live; validate_admin auto-deduped).
+Refactored SetStrategyLive to use the shared `_has_admin_scope` helper (same gate as ManageStrategy).
+Verified: analysis 91 pass/57.6%, agent 37 pass, UI tsc clean.
