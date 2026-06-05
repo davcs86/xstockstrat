@@ -284,10 +284,10 @@ func (c *IBKRClient) ValidateCredentials(ctx context.Context) error {
 		return fmt.Errorf("ibkr ValidateCredentials: http: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
-	switch {
-	case resp.StatusCode == http.StatusOK:
+	switch resp.StatusCode {
+	case http.StatusOK:
 		return nil
-	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+	case http.StatusUnauthorized, http.StatusForbidden:
 		return ErrInvalidCredentials
 	default:
 		body, _ := io.ReadAll(resp.Body)
