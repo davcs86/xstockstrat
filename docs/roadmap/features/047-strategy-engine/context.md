@@ -166,3 +166,16 @@ grpcio-tools==1.80.0 in a venv) per sequential-mode CI-equivalent fallback. `pnp
 - Deviations: definition persisted as a single JSONB via `json_format.MessageToDict(...,
   preserving_proto_field_name=True)` and rebuilt with `ParseDict` (clean enum/Struct round-trip) — the
   spec left the JSON shape open; this is the chosen encoding.
+
+### Step 7 — test: Tests for analysis service [done]
+- Created `tests/test_strategy_evaluator.py` (validate_definition accept/reject cases; _eval_condition
+  >/</crosses_above/crosses_below + no-look-ahead at bar 0; async evaluate per-bar decisions + empty).
+- Extended `tests/test_analysis_servicer.py` with `TestManageStrategy` (admin gate, register, update,
+  deactivate NOT_FOUND), `TestGetStrategy` (NOT_FOUND/success), `TestListStrategyDefinitions`
+  (empty-when-no-repo / returns definitions), `TestRunBacktestBackwardCompat` (legacy strategy_params
+  → SMA path, FR-8). Injected `AsyncMock` repo/identity directly rather than changing `make_servicer`
+  (keeps existing tests green).
+- Files modified: `tests/test_strategy_evaluator.py` (new), `tests/test_analysis_servicer.py`.
+- Verification: `ruff check`/`format --check` clean; `uv run pytest --cov=app --cov-fail-under=40` →
+  83 passed, total coverage 53.69%.
+- Deviations: none.

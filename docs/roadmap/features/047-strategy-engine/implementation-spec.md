@@ -668,7 +668,7 @@ grep -n "IDENTITY_ENDPOINT" /home/user/xstockstrat/.do/app.dev.yaml /home/user/x
 
 ### Step 7 — test: Tests for analysis service (strategy management + evaluator + RunBacktest rework)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_strategy_evaluator.py` — create
