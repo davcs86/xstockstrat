@@ -129,3 +129,12 @@ captured above.
 - Design note (Open Item): StrategyDefinition has no symbols field; loop reads per-strategy symbols from
   signal_params.symbols. Documented as a deviation.
 - Verification: ruff clean; import OK; FR-6 grep finds no trading imports.
+
+### Step 6 — test: SetStrategyLive + LiveEvaluationLoop [done]
+- test_analysis_servicer.py: TestSetStrategyLive (admin-scope gate, permit+update, NOT_FOUND).
+- test_live_loop.py: edge-triggered entry/exit, no-bars no-alert, throttle suppression, FR-6 no-trading
+  source guard, per-pair isolation in _run_cycle.
+- Correctness fix (surfaced by tests): `_row_to_strategy_definition` now maps the `live_enabled` column
+  into the proto (previously only strategy_id/display_name/active were carried) so SetStrategyLive
+  returns the updated flag. (servicer.py — logically a Step-4 fix, applied here.)
+- Verification: ruff clean; uv run pytest --cov → 91 passed, 56.89% coverage.

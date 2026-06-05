@@ -493,3 +493,62 @@ class TestRunBacktestBackwardCompat:
         assert result.strategy_id == "legacy"
         assert result.backtest_id
         assert "legacy" in svc._backtests
+
+
+# ---------------------------------------------------------------------------
+# SetStrategyLive (feature 048)
+# ---------------------------------------------------------------------------
+
+
+class TestSetStrategyLive:
+    @pytest.mark.asyncio
+    async def test_requires_admin_scope(self):
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        req = MagicMock()
+        req.strategy_id = "s1"
+        req.live_enabled = True
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "1")]  # READ only
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception, match="aborted"):
+            await svc.SetStrategyLive(req, ctx)
+        ctx.abort.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_permits_admin_scope(self):
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.set_live_enabled = AsyncMock(
+            return_value={
+                "strategy_id": "s1",
+                "display_name": "S1",
+                "active": True,
+                "live_enabled": True,
+                "definition_json": {},
+            }
+        )
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        req = MagicMock()
+        req.strategy_id = "s1"
+        req.live_enabled = True
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]  # ADMIN|WRITE|READ
+        resp = await svc.SetStrategyLive(req, ctx)
+        assert resp.definition.strategy_id == "s1"
+        assert resp.definition.live_enabled is True
+
+    @pytest.mark.asyncio
+    async def test_returns_not_found_for_missing_strategy(self):
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.set_live_enabled = AsyncMock(return_value=None)
+        req = MagicMock()
+        req.strategy_id = "missing"
+        req.live_enabled = True
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception, match="aborted"):
+            await svc.SetStrategyLive(req, ctx)

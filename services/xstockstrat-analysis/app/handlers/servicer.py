@@ -803,6 +803,8 @@ def _row_to_strategy_definition(row: dict) -> "analysis_pb2.StrategyDefinition":
     definition.strategy_id = row["strategy_id"]
     definition.display_name = row["display_name"]
     definition.active = row["active"]
+    # live_enabled column added by feature 048 (absent on rows predating that migration).
+    definition.live_enabled = bool(row.get("live_enabled", False))
     return definition
 
 

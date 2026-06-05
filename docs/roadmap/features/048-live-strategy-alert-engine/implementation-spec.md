@@ -381,7 +381,7 @@ grep -n "trading_pb2\|TradingService\|PlaceOrder\|portfolio_pb2" \
 
 ### Step 6 — test: Tests for SetStrategyLive and LiveEvaluationLoop
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (add SetStrategyLive tests)
