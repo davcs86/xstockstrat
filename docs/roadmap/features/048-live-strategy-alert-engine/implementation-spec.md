@@ -119,7 +119,7 @@ git diff packages/proto/gen/
 
 ### Step 3 — migration: Add live_enabled column to analysis.strategies
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/002_strategy_live_enabled.up.sql` — create

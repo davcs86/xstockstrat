@@ -104,3 +104,9 @@ captured above.
 ### Step 2 — proto-gen: Regenerate stubs [done]
 - Ran buf-gen.sh; analysis Go/Python/TS stubs regenerated with SetStrategyLive + live_enabled. Diff
   scoped to analysis only; no lockfile drift.
+
+### Step 3 — migration: Add live_enabled column [done]
+- Created migrations/002_strategy_live_enabled.{up,down}.sql (ADD COLUMN IF NOT EXISTS live_enabled
+  BOOLEAN NOT NULL DEFAULT FALSE / DROP COLUMN IF EXISTS).
+- Verification: applied 001+002 up then 002 down on ephemeral postgres 16 — column present then removed
+  (CI-equivalent fallback; docker unavailable).
