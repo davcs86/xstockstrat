@@ -151,3 +151,46 @@ class TestManageSignalSourceClient:
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.INGEST_ENDPOINT
         assert "credentials_ref" not in result  # FR-12
         assert result["slug"] == "uw"
+
+
+class TestSetStrategyLiveClient:
+    @pytest.mark.asyncio
+    async def test_uses_analysis_endpoint_and_admin_scope(self):
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        resp = analysis_pb2.SetStrategyLiveResponse(
+            definition=analysis_pb2.StrategyDefinition(
+                strategy_id="s1", display_name="S1", live_enabled=True
+            )
+        )
+        mock_stub = MagicMock()
+        mock_stub.SetStrategyLive = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.set_strategy_live(
+                    strategy_id="s1", live_enabled=True, api_key="key-1"
+                )
+        assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
+        meta = mock_stub.SetStrategyLive.call_args.kwargs["metadata"]
+        assert ("x-access-scope", "7") in meta
+        assert ("authorization", "Bearer key-1") in meta
+        assert result["live_enabled"] is True
+
+
+class TestValidateAdminClient:
+    @pytest.mark.asyncio
+    async def test_returns_false_for_empty_key(self):
+        assert await client.validate_admin("") is False
+
+    @pytest.mark.asyncio
+    async def test_true_when_admin_role(self):
+        from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # type: ignore
+
+        claims = identity_pb2.TokenClaims(roles=["admin", "user"])
+        mock_stub = MagicMock()
+        mock_stub.ValidateApiKey = AsyncMock(return_value=claims)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(identity_pb2_grpc, "IdentityServiceStub", return_value=mock_stub):
+                assert await client.validate_admin("k") is True

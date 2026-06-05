@@ -563,7 +563,7 @@ grep -n "x-access-scope\|_metadata" services/xstockstrat-agent/app/client.py | h
 
 ### Step 8 — test: Tests for set_strategy_live MCP tool
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify (add set_strategy_live client test)

@@ -348,3 +348,32 @@ class TestManageSignalSourceTool:
             )
         assert "credentials_ref" not in result  # FR-12
         assert m.call_args.kwargs["credentials_ref"] == "secret-ref"
+
+
+class TestSetStrategyLiveTool:
+    @pytest.mark.asyncio
+    async def test_requires_admin(self):
+        server = _make_server()
+        with patch.object(client, "validate_admin", AsyncMock(return_value=False)):
+            with pytest.raises(RuntimeError, match="admin API key required"):
+                await _tool_fn(server, "set_strategy_live")(
+                    strategy_id="s1", live_enabled=True, admin_api_key="bad"
+                )
+
+    @pytest.mark.asyncio
+    async def test_calls_client_when_admin(self):
+        server = _make_server()
+        returned = {
+            "strategy_id": "s1",
+            "display_name": "S1",
+            "live_enabled": True,
+            "active": True,
+        }
+        with patch.object(client, "validate_admin", AsyncMock(return_value=True)):
+            with patch.object(client, "set_strategy_live", AsyncMock(return_value=returned)) as m:
+                result = await _tool_fn(server, "set_strategy_live")(
+                    strategy_id="s1", live_enabled=True, admin_api_key="good"
+                )
+        assert result == returned
+        assert m.call_args.kwargs["strategy_id"] == "s1"
+        assert m.call_args.kwargs["api_key"] == "good"

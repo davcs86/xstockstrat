@@ -147,3 +147,10 @@ captured above.
   9→10 tools.
 - Verification: my code ruff-clean (residual E501/UP045 are pre-existing 009 lines; agent not CI-linted);
   10 tools registered incl. set_strategy_live; agent pytest 31 passed.
+
+### Step 8 — test: set_strategy_live tests [done]
+- test_client.py: TestSetStrategyLiveClient (ANALYSIS_ENDPOINT + authorization Bearer + x-access-scope=7
+  metadata; live_enabled in result), TestValidateAdminClient (empty key False; admin role True).
+- test_tools.py: TestSetStrategyLiveTool (validate_admin False → RuntimeError; admin path calls client).
+- Verification: my code ruff-clean (residual F841/I001 pre-existing 009 lines); agent pytest 36 passed,
+  coverage 59.75%.
