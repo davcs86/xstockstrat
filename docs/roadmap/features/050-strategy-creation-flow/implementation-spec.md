@@ -72,7 +72,7 @@ client plumbing (Steps 1–3) land before any page consumes them, and the wizard
 
 ### Step 2 — service: Add strategy-definition browser hooks (manage / get / list / setLive)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useStrategyDefinitions.ts` — create

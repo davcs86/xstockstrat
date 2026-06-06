@@ -23,6 +23,14 @@ all 11 steps' Files/evidence validated against the live codebase — no mismatch
   if `ingestClient` is not already exported"); it is already exported at `connectClients.ts:36`, so no
   change was needed.
 
+### Step 2 — Strategy-definition browser hooks [done]
+- Created `src/hooks/useStrategyDefinitions.ts` exporting `useStrategyDefinitions`, `useGetStrategy`,
+  `useManageStrategy`, `useSetStrategyLiveInsights`. Mutations invalidate the strategy-definition /
+  strategies / strategy-def query keys. Used `MessageInitShape<typeof StrategyDefinitionSchema>` for
+  the typed `definition` param.
+- Files modified: `services/xstockstrat-ui/src/hooks/useStrategyDefinitions.ts`
+- Deviations: none.
+
 ## Session 2026-06-06T00:05:00Z — sdd-spec
 
 - Generated implementation-spec.md with 11 steps. Status → implementation-ready.
