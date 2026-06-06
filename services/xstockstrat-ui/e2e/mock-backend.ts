@@ -22,12 +22,11 @@ import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_p
 import { NotifyService, type Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { TEST_JWT_SECRET } from './helpers/auth';
 
 export const TRADER_MOCK_PORT = 9091;
 export const INSIGHTS_MOCK_PORT = 9092;
 export const CONFIG_UI_MOCK_PORT = 9093;
-
-const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
 
 let traderServer: http2.Http2Server | null = null;
 let insightsServer: http2.Http2Server | null = null;
@@ -149,6 +148,7 @@ export async function startMockBackend(): Promise<void> {
             alerts: [
               { alertId: 'alert-001', severity: 2, category: 'RISK', title: 'Position limit approaching', body: 'AAPL position is at 80% of max allowed.', sourceService: 'trading' },
               { alertId: 'alert-002', severity: 4, category: 'SYSTEM', title: 'Order rejected', body: 'Insufficient buying power for TSLA order.', sourceService: 'trading' },
+              { alertId: 'alert-strat-001', severity: 1, category: 'strategy', title: 'Entry trigger: Live Test Strategy', body: 'AAPL entry triggered (conviction 0.82)', sourceService: 'xstockstrat-analysis', tags: ['strategy_id:strat-live-001'] },
             ],
           };
         },
@@ -199,6 +199,22 @@ export async function startMockBackend(): Promise<void> {
         },
         async scoreStrategy() {
           return { overallScore: 0.5, rating: 'C' };
+        },
+        // Feature 048: trader BFF analysisClient dials ANALYSIS_ENDPOINT (9092 in e2e),
+        // so the live-strategy methods are mocked here.
+        async listStrategyDefinitions() {
+          return {
+            definitions: [
+              { strategyId: 'strat-live-001', displayName: 'Live Test Strategy', active: true, liveEnabled: true },
+              { strategyId: 'strat-live-002', displayName: 'Inactive Strategy', active: true, liveEnabled: false },
+            ],
+            totalCount: 2,
+          };
+        },
+        async setStrategyLive(req) {
+          return {
+            definition: { strategyId: req.strategyId, displayName: 'Live Test Strategy', active: true, liveEnabled: req.liveEnabled },
+          };
         },
       });
 

@@ -13,6 +13,21 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-06-06
+
+### Features
+- upgrade-nextjs15: Upgrade `xstockstrat-insights` and `xstockstrat-config-ui` from Next.js 14.2.x to Next.js 15.x (the version already used by `xstockstrat-trader`). The current workaround for the pnpm workspace standalone path issue (subdirectory CMD and static COPY paths) works correctly but leaves two services on an older, unsupported Next.js major version. Upgrading aligns all three frontends on the same major version and eliminates the version split.
+- strategy-engine: Make **Strategy** a first-class, persisted entity in `xstockstrat-analysis`: a named definition
+- live-strategy-alert-engine: Continuously evaluate **active strategies** (defined by feature `047-strategy-engine`) against the
+
+### Proto Changes
+- analysis/v1/analysis.proto
+
+### Summary
+4 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-06-05
 
 ### Features

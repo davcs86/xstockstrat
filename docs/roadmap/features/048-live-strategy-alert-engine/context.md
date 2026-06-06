@@ -71,3 +71,151 @@
   - No `services/xstockstrat-agent/CLAUDE.md` file found — Step 13 notes to create if absent.
   - 047's `StrategyDefinition` uses fields 1–7 (`active = 7`); `bool live_enabled = 8` is the next available field — additive, no collision.
   - `app/engine/` directory does not yet exist in analysis service — 047 creates it for the evaluator; this feature adds `live_loop.py` to the same package.
+
+## Session 2026-06-05 — sdd-execute (sequential, 048 re-spec gate)
+047 completed first (PRs #566–#581). 048 branch `feature/live-strategy-alert-engine` based on
+`feature/strategy-engine` (hard dependency; 047 not yet merged to main-dev).
+
+Conditional re-spec directive ("re-spec if significant deviation in 047") — **applied**, targeted at
+Steps 4/5/6/7. Significant 047-implementation deviations found vs 048's pre-047 spec:
+1. Evaluator delivered at `app/services/evaluator.py` (NOT `app/engine/evaluator.py`); `app/engine/`
+   does not exist (048 creates it). Servicer has no `self._evaluator` — loop constructs
+   `StrategyEvaluator(servicer._indicators, ())`. → Step 5 re-spec.
+2. Servicer `__init__` actually has `db_pool=None, identity_channel=None` (047 Steps 4+6); strategy
+   store is `self._strategies_repo` (not bare `self._db`). SetStrategyLive uses a new
+   `StrategiesRepository.set_live_enabled`. → Steps 4 & 6 re-spec.
+3. Admin gate: per product-owner guidance (authz at entry points, internal services role-check only),
+   analysis SetStrategyLive does an `x-access-scope` ADMIN-bit role check (kept from 048 spec; NOT
+   047's `_validate_admin_token`). **Security finding**: agent SSE `validate_api_key` accepts ANY
+   valid key (no admin check), so blanket `x-access-scope=7` in `_metadata()` would over-privilege.
+   Re-spec Step 7: agent `set_strategy_live` validates admin role at the entry (`client.validate_admin`)
+   before forwarding admin scope; `_metadata()` left unchanged (047 tests stay valid). → Step 7 re-spec.
+
+Steps 1–3, 8–13 unchanged by the re-spec (8 will mock `validate_admin` in tests; 9–13 are UI/docs,
+validated per-step). Up-front confirm: user chose "Re-spec + execute 048 now"; admin-gate guidance
+captured above.
+
+### Step 1 — proto: Add SetStrategyLive RPC and live_enabled field [done]
+- analysis.proto: added `bool live_enabled = 8;` to StrategyDefinition, `SetStrategyLiveRequest`/
+  `SetStrategyLiveResponse` messages, and `SetStrategyLive` RPC (all additive on top of 047).
+- Files: `packages/proto/analysis/v1/analysis.proto`.
+- Verification: `buf lint` + `buf breaking --against main-dev` clean (additive).
+
+### Step 2 — proto-gen: Regenerate stubs [done]
+- Ran buf-gen.sh; analysis Go/Python/TS stubs regenerated with SetStrategyLive + live_enabled. Diff
+  scoped to analysis only; no lockfile drift.
+
+### Step 3 — migration: Add live_enabled column [done]
+- Created migrations/002_strategy_live_enabled.{up,down}.sql (ADD COLUMN IF NOT EXISTS live_enabled
+  BOOLEAN NOT NULL DEFAULT FALSE / DROP COLUMN IF EXISTS).
+- Verification: applied 001+002 up then 002 down on ephemeral postgres 16 — column present then removed
+  (CI-equivalent fallback; docker unavailable).
+
+### Step 4 — service: Add SetStrategyLive RPC [done]
+- servicer.py: imported notify_pb2_grpc; __init__ gains notify_channel=None → self._notify; added
+  SetStrategyLive (x-access-scope ADMIN-bit role check → PERMISSION_DENIED; repo.set_live_enabled;
+  NOT_FOUND; best-effort live_toggled ledger event; returns SetStrategyLiveResponse).
+- repositories/strategies.py: added set_live_enabled (UPDATE ... RETURNING *).
+- main.py: NOTIFY_ENDPOINT + notify_channel wired.
+- Verification: ruff clean; SetStrategyLive + set_live_enabled import OK; greps pass.
+
+### Step 5 — service: live evaluation loop [done]
+- Created app/engine/__init__.py + app/engine/live_loop.py (LiveEvaluationLoop: run_forever single-flight
+  via asyncio.Lock; _run_cycle reads live_enabled+active strategies; edge-triggered entry/exit alerts via
+  notify EmitAlert with category="strategy", tags, context Struct; alert throttle; per-pair isolation;
+  ledger analysis.strategy.triggered). Imports 047 evaluator from app.services.evaluator + reuses
+  _row_to_strategy_definition. No trading imports (FR-6).
+- main.py: starts the loop (only if db_pool) with StrategyEvaluator(servicer._indicators, ()).
+- Design note (Open Item): StrategyDefinition has no symbols field; loop reads per-strategy symbols from
+  signal_params.symbols. Documented as a deviation.
+- Verification: ruff clean; import OK; FR-6 grep finds no trading imports.
+
+### Step 6 — test: SetStrategyLive + LiveEvaluationLoop [done]
+- test_analysis_servicer.py: TestSetStrategyLive (admin-scope gate, permit+update, NOT_FOUND).
+- test_live_loop.py: edge-triggered entry/exit, no-bars no-alert, throttle suppression, FR-6 no-trading
+  source guard, per-pair isolation in _run_cycle.
+- Correctness fix (surfaced by tests): `_row_to_strategy_definition` now maps the `live_enabled` column
+  into the proto (previously only strategy_id/display_name/active were carried) so SetStrategyLive
+  returns the updated flag. (servicer.py — logically a Step-4 fix, applied here.)
+- Verification: ruff clean; uv run pytest --cov → 91 passed, 56.89% coverage.
+
+### Step 7 — service: set_strategy_live MCP tool [done]
+- client.py: added IDENTITY_ENDPOINT, validate_admin(api_key) (entry-point authz via identity
+  ValidateApiKey → "admin" in roles), set_strategy_live(strategy_id, live_enabled, api_key) forwarding
+  _admin_metadata + x-access-scope=7. `_metadata()` left unchanged (047 tests stay valid).
+- tools.py: set_strategy_live tool validates admin at the entry then calls the client; module docstring
+  9→10 tools.
+- Verification: my code ruff-clean (residual E501/UP045 are pre-existing 009 lines; agent not CI-linted);
+  10 tools registered incl. set_strategy_live; agent pytest 31 passed.
+
+### Step 8 — test: set_strategy_live tests [done]
+- test_client.py: TestSetStrategyLiveClient (ANALYSIS_ENDPOINT + authorization Bearer + x-access-scope=7
+  metadata; live_enabled in result), TestValidateAdminClient (empty key False; admin role True).
+- test_tools.py: TestSetStrategyLiveTool (validate_admin False → RuntimeError; admin path calls client).
+- Verification: my code ruff-clean (residual F841/I001 pre-existing 009 lines); agent pytest 36 passed,
+  coverage 59.75%.
+
+### Step 9 — service: trader BFF handlers [done]
+- traderBff.ts: imported AnalysisService + analysisClient; added NotifyService.listAlerts handler and a
+  new AnalysisService block (listStrategyDefinitions; setStrategyLive with server-side admin-scope gate
+  → ConnectError PermissionDenied). All forward backendHeaders (x-user-id/x-access-scope/x-trace-id).
+- Verification: greps pass; ListAlerts RPC exists in notify proto; `pnpm exec tsc --noEmit` exit 0.
+
+### Step 10 — service: LiveStrategiesPanel + hooks [done]
+- Created traderAnalysisClient.ts (/trader/api), useLiveStrategies.ts (useLiveStrategyDefinitions,
+  useSetStrategyLive, useStrategyAlerts [filters by `strategy_id:<id>` tag — robust vs Struct introspection],
+  useIsAdmin), LiveStrategiesPanel.tsx (table + live badge + admin-only toggle + per-strategy alert feed),
+  and wired <LiveStrategiesPanel isAdmin> into trader/page.tsx.
+- DEVIATION: spec assumed trader/page.tsx is a server component using getSession() — it is actually a
+  'use client' component and getSession() does not exist (only getSessionFromRequest). Added a small
+  GET /api/auth/me route (derives isAdmin from the session cookie) + a useIsAdmin() hook so the client
+  page can gate the admin toggle. Defense-in-depth: the BFF (Step 9) also enforces admin server-side.
+  Alert feed shows title + timestamp (title already encodes trigger+symbol) rather than Struct
+  introspection, for protobuf-es v2 robustness.
+- Verification: `pnpm exec tsc --noEmit` clean; `pnpm run lint` (next lint) clean; greps pass.
+
+### Step 11 — service: trader-segment mocks [done]
+- mock-backend.ts (port 9091): added AnalysisService block (listStrategyDefinitions → strat-live-001 live
+  + strat-live-002 not-live; setStrategyLive echoes liveEnabled); added a strategy-category alert
+  (tags=['strategy_id:strat-live-001']) to the existing NotifyService.listAlerts so useStrategyAlerts
+  (tag filter) finds it. Omitted the fragile Struct `context` (hook uses tags) for protobuf-es v2 safety.
+- Verification: `pnpm exec tsc --noEmit` clean; greps pass.
+
+### Step 12 — test: E2E Playwright tests [done]
+- Created e2e/trader/live-strategies.spec.ts (4 tests: listStrategyDefinitions liveEnabled; setStrategyLive
+  admin 200; setStrategyLive non-admin PermissionDenied; listAlerts strategy-category + strategy_id tag).
+- FIX (surfaced by e2e): Step 11 mis-placed the AnalysisService mock on port 9091, but the trader BFF's
+  analysisClient dials ANALYSIS_ENDPOINT=9092 (playwright.config.ts) → 501. Moved listStrategyDefinitions/
+  setStrategyLive to the 9092 insights mock; removed the unused 9091 AnalysisService block (kept the 9091
+  listAlerts strategy alert, used via NOTIFY_ENDPOINT=9091). Test asserts liveEnabled:true (proto3
+  Connect-JSON omits false/default bools).
+- Verification: 4/4 e2e tests pass (no failure artifacts in test-results/); process exit 124 was the
+  `pnpm dev` web-server teardown timeout (documented Playwright harness-teardown case, not a test failure).
+  `tsc --noEmit` + `next lint` clean.
+
+### Step 13 — docs: CLAUDE.md updates [done]
+- analysis CLAUDE.md: Role mentions the asyncio live loop; added 3 analysis.engine.* config keys and
+  the analysis.strategy.triggered / live_toggled ledger events (analysis.strategy.evaluated is NOT
+  emitted by the implementation, so it was omitted for accuracy). NOTIFY_ENDPOINT already present.
+- Created services/xstockstrat-agent/CLAUDE.md (was absent) documenting the ten MCP tools incl.
+  set_strategy_live and the entry-point admin-authorization pattern.
+- Verification: greps confirm new config keys, ledger events, and set_strategy_live docs.
+
+## Session 2026-06-05 — sdd-execute (048 complete)
+All 13 steps done → feature `code-completed`. Stacked per-step PRs #582–#594 on
+feature/live-strategy-alert-engine (based on feature/strategy-engine due to the hard 047 dependency).
+Next: integration PR → main-dev (gated on 047 per merge-order). 047 integration PR #581 still open.
+
+## Session 2026-06-05 — re-sync with 047 admin-gate consistency
+Merged the updated feature/strategy-engine (047 admin-gate refactor) into
+feature/live-strategy-alert-engine. Resolved conflicts in servicer.py (kept notify, dropped identity),
+main.py (kept NOTIFY, dropped IDENTITY), client.py (kept set_strategy_live; validate_admin auto-deduped).
+Refactored SetStrategyLive to use the shared `_has_admin_scope` helper (same gate as ManageStrategy).
+Verified: analysis 91 pass/57.6%, agent 37 pass, UI tsc clean.
+
+## Session 2026-06-06 (CI: feature status automation)
+
+- Promotion PR #599 merged to main
+- Feature promoted and committed: a7201b02bb2b035e48f96aba634594c605d2de56
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-06

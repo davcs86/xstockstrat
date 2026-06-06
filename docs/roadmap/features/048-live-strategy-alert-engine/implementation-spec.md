@@ -1,6 +1,6 @@
 # Implementation Spec: live-strategy-alert-engine
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-05
 **Feature**: `docs/roadmap/features/048-live-strategy-alert-engine/feature.md`
 **Total Steps**: 13
@@ -29,7 +29,7 @@ Steps 1–2 (proto) must complete before all service steps because service code 
 
 ### Step 1 — proto: Add SetStrategyLive RPC and live_enabled field to analysis.proto
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -84,7 +84,7 @@ Both commands must exit with code 0. `buf breaking` must report no breaking chan
 
 ### Step 2 — proto-gen: Regenerate stubs after analysis.proto changes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/python/analysis/v1/analysis_pb2.py` — modify (regenerated)
@@ -119,7 +119,7 @@ git diff packages/proto/gen/
 
 ### Step 3 — migration: Add live_enabled column to analysis.strategies
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/002_strategy_live_enabled.up.sql` — create
@@ -156,21 +156,23 @@ psql "$DATABASE_URL" -c "\d analysis.strategies"
 
 ### Step 4 — service: Add SetStrategyLive RPC to AnalysisServicer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
+- `services/xstockstrat-analysis/app/repositories/strategies.py` — modify (add `set_live_enabled`)
+- `services/xstockstrat-analysis/app/main.py` — modify (add `NOTIFY_ENDPOINT` + `notify_channel`)
 
 **Reviewers**: `xstockstrat-analysis` (service owner) — backtest reproducibility, strategy scoring determinism, no look-ahead bias, per-strategy live state correctness
 
-**Codebase Evidence**:
-- Confirmed via Read of `services/xstockstrat-analysis/app/handlers/servicer.py` L32–47: `AnalysisServicer.__init__` accepts `config_watcher`, `marketdata_channel`, `indicators_channel`, `ingest_channel`, `ledger_channel`. A `notify_channel` parameter must be added alongside a `db_pool` parameter (asyncpg pool added by 047 Step 4).
-- Confirmed existing `propagation_meta` pattern at L71–75: `context.invocation_metadata()` filtered for `x-user-id`, `x-access-scope`, `x-trace-id` — the `SetStrategyLive` handler must follow this exact pattern.
-- `notify_pb2_grpc.NotifyServiceStub` import pattern confirmed from agent's `client.py` L115: `from gen.notify.v1 import notify_pb2, notify_pb2_grpc`.
-- `NOTIFY_ENDPOINT` already present in `docker-compose.yml` analysis block (L344) and in `app/main.py` is **absent** (main.py L26–30 shows `MARKETDATA_ENDPOINT`, `INDICATORS_ENDPOINT`, `INGEST_ENDPOINT`, `LEDGER_ENDPOINT` — no `NOTIFY_ENDPOINT` or `notify_channel`). This step adds `NOTIFY_ENDPOINT` to `main.py` and passes `notify_channel` to `AnalysisServicer`. (Note: `NOTIFY_ENDPOINT` is already in `docker-compose.yml` L344 and `.do/app.dev.yaml` L209/`.do/app.yaml` L209 for the analysis block — confirmed present, no deployment change needed for this env var.)
-- 047 adds `db_pool` to the servicer constructor. This step extends that constructor to also accept `notify_channel`.
-- Admin scope gating: `rolesToAccessScope` in `auth.ts` maps `admin` role to bit `0x04` (ADMIN). The `SetStrategyLive` RPC is admin-scoped — the servicer must check `x-access-scope` has the ADMIN bit (`0x04`) set and return `PERMISSION_DENIED` if not. When called from the UI BFF, `x-access-scope` is forwarded from the JWT claims. When called from the MCP agent, `_metadata()` will include `("x-access-scope", "7")` per Step 7 — so the admin bit check will pass for agent callers.
-- Confirmed `grpc.StatusCode.PERMISSION_DENIED` is available in Python grpc via `grpc.StatusCode.PERMISSION_DENIED`.
+**Codebase Evidence** (re-spec 2026-06-05 — aligned with 047's *delivered* code):
+- Confirmed via Read of `services/xstockstrat-analysis/app/handlers/servicer.py`: 047 delivered `AnalysisServicer.__init__(self, config_watcher, marketdata_channel, indicators_channel, ingest_channel, ledger_channel, db_pool=None, identity_channel=None)` — both `db_pool` **and** `identity_channel` are present (047 Steps 4 & 6). This step adds `notify_channel=None` as a further keyword param (after `identity_channel=None`).
+- 047 stores the strategy store as `self._strategies_repo` (a `StrategiesRepository`), **not** a bare `self._db`. SetStrategyLive must go through the repository — add a `set_live_enabled(strategy_id, live_enabled)` method to `app/repositories/strategies.py` and call it (consistent with the repo's existing `deactivate`/`update` methods which already `RETURNING *`).
+- Confirmed existing `propagation_meta` pattern at `RunBacktest` (`context.invocation_metadata()` filtered for `x-user-id`, `x-access-scope`, `x-trace-id`) — SetStrategyLive follows it.
+- Admin gate (per platform header-propagation trust model + product owner guidance): the internal analysis service does a **role check only** on the propagated `x-access-scope` ADMIN bit (`0x04`); it does NOT re-authenticate. Authentication is owned by the entry points (UI BFF via JWT; MCP agent via its SSE auth layer). Abort `PERMISSION_DENIED` if the ADMIN bit is absent.
+- `NOTIFY_ENDPOINT` is already in `docker-compose.yml` and both `.do` specs for the analysis block, but **absent** from `app/main.py` — this step adds `NOTIFY_ENDPOINT` + `notify_channel` to main.py.
+- `notify_pb2_grpc.NotifyServiceStub` import: `from gen.notify.v1 import notify_pb2, notify_pb2_grpc`.
+- Confirmed `grpc.StatusCode.PERMISSION_DENIED` available in Python grpc.
 
 **Instructions**:
 
@@ -179,7 +181,7 @@ psql "$DATABASE_URL" -c "\d analysis.strategies"
    from gen.notify.v1 import notify_pb2, notify_pb2_grpc
    ```
 
-2. Extend `AnalysisServicer.__init__` to accept `notify_channel` (after `ledger_channel`):
+2. Extend `AnalysisServicer.__init__` to accept `notify_channel=None` (after the existing `identity_channel=None`), and set `self._notify`:
    ```python
    def __init__(
        self,
@@ -188,42 +190,63 @@ psql "$DATABASE_URL" -c "\d analysis.strategies"
        indicators_channel,
        ingest_channel,
        ledger_channel,
-       notify_channel,          # new
-       db_pool=None,            # added by 047
+       db_pool=None,            # 047 Step 4
+       identity_channel=None,   # 047 Step 6
+       notify_channel=None,     # 048 — new
    ):
        ...
-       self._notify = notify_pb2_grpc.NotifyServiceStub(notify_channel)
+       self._notify = (
+           notify_pb2_grpc.NotifyServiceStub(notify_channel) if notify_channel else None
+       )
    ```
 
-3. Add the `SetStrategyLive` async method to `AnalysisServicer`. The method must:
-   - Extract `propagation_meta` using the existing pattern (same as `RunBacktest` L71–75).
-   - Check admin scope: parse `x-access-scope` from `propagation_meta`; if the ADMIN bit (`0x04`) is not set, call `context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")` and return.
-   - Query the `analysis.strategies` table via `db_pool` to verify the strategy exists; abort with `NOT_FOUND` if absent.
-   - `UPDATE analysis.strategies SET live_enabled = $1 WHERE strategy_id = $2 RETURNING *` — update and retrieve the updated row.
-   - Re-fetch the full `StrategyDefinition` from the DB (using the updated row) and return `SetStrategyLiveResponse(definition=...)`.
-   - Emit a ledger event `analysis.strategy.live_toggled` with `strategy_id` and `live_enabled` in the payload (best-effort, swallow exceptions — same pattern as `ScoreStrategy` L456–468).
-   - Return `SetStrategyLiveResponse`.
+3. Add a `set_live_enabled` method to `services/xstockstrat-analysis/app/repositories/strategies.py` (mirrors the existing `deactivate` method):
+   ```python
+   async def set_live_enabled(self, strategy_id: str, live_enabled: bool) -> dict | None:
+       row = await self._db.fetchrow(
+           """
+           UPDATE analysis.strategies
+              SET live_enabled = $2, updated_at = NOW()
+            WHERE strategy_id = $1
+           RETURNING *
+           """,
+           strategy_id,
+           live_enabled,
+       )
+       return _to_dict(row)
+   ```
 
-4. In `services/xstockstrat-analysis/app/main.py`:
-   - Add `NOTIFY_ENDPOINT = os.environ.get("NOTIFY_ENDPOINT", "xstockstrat-notify:50059")` (after existing endpoint env vars at L29).
-   - Pass `notify_channel=grpc.aio.insecure_channel(NOTIFY_ENDPOINT)` to `AnalysisServicer(...)` call.
+4. Add the `SetStrategyLive` async method to `AnalysisServicer`. It must:
+   - Extract `propagation_meta` (same pattern as `RunBacktest`).
+   - Role check: parse `x-access-scope` from the inbound metadata; if the ADMIN bit (`0x04`) is not set, `await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")` and return. (Role check only — no identity call.)
+   - If `self._strategies_repo` is None, abort `UNAVAILABLE`.
+   - `row = await self._strategies_repo.set_live_enabled(request.strategy_id, request.live_enabled)`; if `row is None`, abort `NOT_FOUND`.
+   - Build the response via `_row_to_strategy_definition(row)` (047 helper) → `SetStrategyLiveResponse(definition=...)`.
+   - Best-effort ledger event `analysis.strategy.live_toggled` (`strategy_id`, `live_enabled`), swallowing exceptions (same pattern as `ScoreStrategy`).
 
-**Header propagation note**: `SetStrategyLive` does not make outbound gRPC calls to other services (only DB and a best-effort ledger write). The ledger write is via the existing `self._ledger` stub which reuses the same `propagation_meta` pattern already established in `RunBacktest`. No new propagation wiring is needed.
+5. In `services/xstockstrat-analysis/app/main.py`:
+   - Add `NOTIFY_ENDPOINT = os.environ.get("NOTIFY_ENDPOINT", "xstockstrat-notify:50059")` (after the existing endpoint env vars).
+   - Pass `notify_channel=grpc.aio.insecure_channel(NOTIFY_ENDPOINT)` to `AnalysisServicer(...)`.
+
+**Header propagation note**: `SetStrategyLive` makes no outbound user-context gRPC calls (only the repo DB write and a best-effort ledger write via the existing `self._ledger` stub with `propagation_meta`). No new propagation wiring needed.
 
 **Verification**:
 ```bash
-grep -n "SetStrategyLive\|PERMISSION_DENIED\|live_enabled" \
+grep -n "SetStrategyLive\|PERMISSION_DENIED" \
   services/xstockstrat-analysis/app/handlers/servicer.py
-# Must show: SetStrategyLive method, PERMISSION_DENIED abort, live_enabled column reference.
+# Must show: SetStrategyLive method + PERMISSION_DENIED abort.
+grep -n "set_live_enabled\|live_enabled" services/xstockstrat-analysis/app/repositories/strategies.py
+# Must show the set_live_enabled method updating live_enabled.
 grep -n "NOTIFY_ENDPOINT\|notify_channel" services/xstockstrat-analysis/app/main.py
 # Must show both lines added.
+cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 ```
 
 ---
 
 ### Step 5 — service: Add live evaluation loop to xstockstrat-analysis
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/__init__.py` — create (empty)
@@ -232,8 +255,9 @@ grep -n "NOTIFY_ENDPOINT\|notify_channel" services/xstockstrat-analysis/app/main
 
 **Reviewers**: `xstockstrat-analysis` (service owner) — backtest reproducibility, strategy scoring determinism, no look-ahead bias, per-strategy live state correctness
 
-**Codebase Evidence**:
-- Confirmed `app/engine/` directory does **not exist** yet in the current codebase (via `find services/xstockstrat-analysis`); it will be created by 047 for the evaluator. This step creates `live_loop.py` in the same package.
+**Codebase Evidence** (re-spec 2026-06-05 — aligned with 047's *delivered* code):
+- 047 placed the shared evaluator at **`app/services/evaluator.py`** (class `StrategyEvaluator`), NOT `app/engine/evaluator.py`. The `app/engine/` package does **not** exist — **this step creates it** (`app/engine/__init__.py` + `app/engine/live_loop.py`). The live loop imports `from app.services.evaluator import StrategyEvaluator`.
+- 047's `AnalysisServicer` does **not** keep a `self._evaluator` instance (it constructs `StrategyEvaluator(self._indicators, propagation_meta)` per backtest call). The loop therefore constructs its own evaluator from the servicer's indicators stub: `StrategyEvaluator(servicer._indicators, ())` (empty propagation_meta — background task, no inbound user context).
 - Confirmed `asyncio.Lock` is available in Python standard library — used for single-flight enforcement (FR-8, OQ-5).
 - Confirmed `ConfigWatcher.get_int` at `app/config/watcher.py` L67–73 — used to read `analysis.engine.eval_interval_seconds`, `analysis.engine.max_strategies_per_cycle`, `analysis.engine.alert_throttle_seconds` hot-reloadable per cycle.
 - `notify_pb2_grpc.NotifyServiceStub.EmitAlert` — pattern confirmed from `app/handlers/servicer.py` (notify import) and agent `client.py` L119–132.
@@ -244,12 +268,12 @@ grep -n "NOTIFY_ENDPOINT\|notify_channel" services/xstockstrat-analysis/app/main
 - FR-3 alert shape: `category = "strategy"`, `tags = [f"strategy_id:{strategy_id}"]`, `context` Struct with `strategy_id`, `symbol`, `trigger_type`, `rule_components`, `bar_timestamp`, `conviction`.
 - FR-6 safety: the loop must **never** call any trading RPC — this is tested in Step 6.
 - FR-8 single-flight: `asyncio.Lock` acquired before each cycle; if lock is already held (previous cycle still running), skip cycle.
-- The 047 evaluator will live at `services/xstockstrat-analysis/app/engine/evaluator.py` — the live loop calls it directly (same Python process, no gRPC hop, per OQ-1).
+- The 047 evaluator lives at `services/xstockstrat-analysis/app/services/evaluator.py` — the live loop imports and calls it directly (same Python process, no gRPC hop, per OQ-1).
 - `serve()` in `main.py` (L33–68) uses `asyncio.run(serve())` — the loop is started as `asyncio.get_event_loop().create_task(live_loop.run_forever(...))` before `await grpc_server.wait_for_termination()`, following the same pattern as `ConfigWatcher._watch` (`app/config/watcher.py` L28).
 
 **Instructions**:
 
-1. Create `services/xstockstrat-analysis/app/engine/__init__.py` as an empty file (only if 047 has not already created it).
+1. Create `services/xstockstrat-analysis/app/engine/__init__.py` as an empty file (047 created `app/services/`, not `app/engine/` — this package is new).
 
 2. Create `services/xstockstrat-analysis/app/engine/live_loop.py`. The module must implement:
 
@@ -324,6 +348,8 @@ grep -n "NOTIFY_ENDPOINT\|notify_channel" services/xstockstrat-analysis/app/main
 3. In `services/xstockstrat-analysis/app/main.py`, after starting the gRPC server and before `await grpc_server.wait_for_termination()`:
    ```python
    from app.engine.live_loop import LiveEvaluationLoop
+   from app.services.evaluator import StrategyEvaluator  # 047 shared evaluator
+
    live_loop = LiveEvaluationLoop(
        config_watcher=cfg_watcher,
        db_pool=db_pool,          # asyncpg pool created by 047's main.py wiring
@@ -331,11 +357,12 @@ grep -n "NOTIFY_ENDPOINT\|notify_channel" services/xstockstrat-analysis/app/main
        ingest_stub=servicer._ingest,
        notify_stub=servicer._notify,
        ledger_stub=servicer._ledger,
-       evaluator=servicer._evaluator,   # 047 shared evaluator instance on AnalysisServicer
+       evaluator=StrategyEvaluator(servicer._indicators, ()),  # 047 evaluator; empty meta (bg task)
    )
    asyncio.get_event_loop().create_task(live_loop.run_forever())
    log.info("live evaluation loop started")
    ```
+   Note: the loop only starts if `db_pool` is not None (no DB → nothing to evaluate). Guard accordingly.
 
 **Header propagation note**: The loop runs as an internal asyncio task — there is no inbound gRPC context. All outbound calls (`GetBars`, `QuerySignals`, `EmitAlert`, `AppendEvent`) use an empty metadata list or a platform-internal service identity. This is consistent with the `ConfigWatcher._watch` pattern (no propagation headers — internal service-to-service without a user context). No `x-user-id` propagation is needed for background tasks.
 
@@ -354,7 +381,7 @@ grep -n "trading_pb2\|TradingService\|PlaceOrder\|portfolio_pb2" \
 
 ### Step 6 — test: Tests for SetStrategyLive and LiveEvaluationLoop
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (add SetStrategyLive tests)
@@ -370,12 +397,13 @@ grep -n "trading_pb2\|TradingService\|PlaceOrder\|portfolio_pb2" \
 
 **Instructions**:
 
-1. In `services/xstockstrat-analysis/tests/test_analysis_servicer.py`, add a `TestSetStrategyLive` class:
+1. In `services/xstockstrat-analysis/tests/test_analysis_servicer.py`, add a `TestSetStrategyLive` class. Mock `svc._strategies_repo` (an `AsyncMock`) — 047 stores the repo, not a bare `self._db`:
    ```python
    class TestSetStrategyLive:
        @pytest.mark.asyncio
        async def test_requires_admin_scope(self):
            svc = make_servicer()
+           svc._strategies_repo = AsyncMock()
            req = MagicMock(); req.strategy_id = "s1"; req.live_enabled = True
            ctx = MagicMock()
            ctx.invocation_metadata.return_value = [("x-access-scope", "1")]  # READ only, not admin
@@ -383,24 +411,30 @@ grep -n "trading_pb2\|TradingService\|PlaceOrder\|portfolio_pb2" \
            with pytest.raises(Exception, match="aborted"):
                await svc.SetStrategyLive(req, ctx)
            ctx.abort.assert_called_once()
-   
+
        @pytest.mark.asyncio
        async def test_permits_admin_scope(self):
            svc = make_servicer()
-           svc._db = AsyncMock()  # mock db_pool (added by 047)
-           # mock fetch_row returning a strategy row with strategy_id
-           # mock UPDATE returning live_enabled=True
-           # assert response.definition.live_enabled == True
-           ...  # implement using AsyncMock for db_pool.fetchrow and db_pool.execute
-   
+           svc._strategies_repo = AsyncMock()
+           svc._strategies_repo.set_live_enabled = AsyncMock(return_value={
+               "strategy_id": "s1", "display_name": "S1", "active": True,
+               "live_enabled": True, "definition_json": {},
+           })
+           svc._ledger = MagicMock(); svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+           req = MagicMock(); req.strategy_id = "s1"; req.live_enabled = True
+           ctx = MagicMock()
+           ctx.invocation_metadata.return_value = [("x-access-scope", "7")]  # ADMIN|WRITE|READ
+           resp = await svc.SetStrategyLive(req, ctx)
+           assert resp.definition.strategy_id == "s1"
+
        @pytest.mark.asyncio
        async def test_returns_not_found_for_missing_strategy(self):
            svc = make_servicer()
-           svc._db = AsyncMock()
-           # mock db_pool.fetchrow returning None
+           svc._strategies_repo = AsyncMock()
+           svc._strategies_repo.set_live_enabled = AsyncMock(return_value=None)
            req = MagicMock(); req.strategy_id = "missing"; req.live_enabled = True
            ctx = MagicMock()
-           ctx.invocation_metadata.return_value = [("x-access-scope", "7")]  # ADMIN=4|WRITE=2|READ=1
+           ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
            ctx.abort = AsyncMock(side_effect=Exception("aborted"))
            with pytest.raises(Exception, match="aborted"):
                await svc.SetStrategyLive(req, ctx)
@@ -425,7 +459,7 @@ cd services/xstockstrat-analysis && pytest --cov=app --cov-fail-under=40
 
 ### Step 7 — service: Add set_strategy_live MCP tool to xstockstrat-agent
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify (add `set_strategy_live` client function)
@@ -433,43 +467,53 @@ cd services/xstockstrat-analysis && pytest --cov=app --cov-fail-under=40
 
 **Reviewers**: `xstockstrat-analysis` (service owner) — backtest reproducibility, strategy scoring determinism; Security — admin API key scoping on mutating MCP tools, `x-mcp-secret` propagation
 
-**Codebase Evidence**:
-- Confirmed `client.py` existing pattern at L135–161: `run_backtest` opens a one-shot channel via `async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel`, calls the stub, and returns a dict. `set_strategy_live` follows this identical pattern.
-- `ANALYSIS_ENDPOINT` already declared at `client.py` L16: `ANALYSIS_ENDPOINT = os.environ.get("ANALYSIS_ENDPOINT", "xstockstrat-analysis:50056")` — no new env var needed.
-- Confirmed `_metadata()` at `client.py` L21–23 — currently appends only `x-mcp-secret` when set. This step also updates `_metadata()` to include `("x-access-scope", "7")` (READ=1 | WRITE=2 | ADMIN=4 = 7). The MCP agent SSE transport requires an admin API key, so advertising admin scope on all outbound gRPC calls correctly reflects the caller's access level. This unblocks the `x-access-scope` ADMIN bit check in `SetStrategyLive` (Step 4) and any future admin-gated RPCs the agent calls.
-- Confirmed `tools.py` tool registration pattern at L38–39: `@server.tool()` decorator on async functions registered via `register_tools(server: FastMCP)`.
-- Admin scope enforcement: the `SetStrategyLive` RPC on the analysis service enforces admin scope via `x-access-scope` bit check (Step 4). The MCP tool passes `metadata=_metadata()` — after the `_metadata()` update in instruction 1 below, the ADMIN bit will be present and the RPC will succeed.
+**Codebase Evidence** (re-spec 2026-06-05 — entry-point authorization per product-owner guidance + SSE finding):
+- 047 delivered `client.py` with `_metadata()` (x-mcp-secret), `_admin_metadata(api_key)` (adds `authorization: Bearer <key>`), `INDICATORS_ENDPOINT`, and `ANALYSIS_ENDPOINT` (`xstockstrat-analysis:50056`). `set_strategy_live` follows the one-shot-channel pattern of `run_backtest`/`manage_strategy`.
+- **Security finding**: the agent's SSE auth (`app/auth.py::validate_api_key`) accepts ANY valid API key — it does **not** check the admin role. So we must NOT blanket-assert `x-access-scope: 7` on all agent calls (that would over-privilege every authenticated caller). Per the product-owner guidance, the agent (entry point) performs the admin **authorization** for this mutating tool; the internal analysis service only **role-checks** the forwarded `x-access-scope` (Step 4).
+- `IDENTITY_ENDPOINT` is already in the agent env (used by `app/auth.py`) — add the constant to `client.py` for the admin-role check.
+- `identity_pb2.ValidateApiKey` returns `TokenClaims` with a `roles` repeated field (`"admin" in claims.roles`).
+- Confirmed `tools.py` tool registration pattern: `@server.tool()` async functions inside `register_tools(server: FastMCP)`; gRPC errors mapped via the `_grpc_error_message` helper added in 047 Step 9.
 
 **Instructions**:
 
-1. In `services/xstockstrat-agent/app/client.py`, update `_metadata()` to include `x-access-scope`:
+1. In `services/xstockstrat-agent/app/client.py`, add `IDENTITY_ENDPOINT` near the other endpoint constants:
    ```python
-   def _metadata():
-       meta = []
-       if MCP_AGENT_SECRET:
-           meta.append(("x-mcp-secret", MCP_AGENT_SECRET))
-       # MCP agent SSE transport requires an admin API key — carry admin scope on all gRPC calls.
-       meta.append(("x-access-scope", "7"))  # READ=1 | WRITE=2 | ADMIN=4
-       return meta
+   IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50058")
+   ```
+   Do **not** change `_metadata()`. Add an admin-role validator (entry-point authorization):
+   ```python
+   async def validate_admin(api_key: str | None) -> bool:
+       """Return True iff the API key is valid AND carries the 'admin' role."""
+       if not api_key:
+           return False
+       from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+       try:
+           async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+               stub = identity_pb2_grpc.IdentityServiceStub(channel)
+               claims = await stub.ValidateApiKey(
+                   identity_pb2.ValidateApiKeyRequest(api_key=api_key), metadata=_metadata()
+               )
+               return "admin" in claims.roles
+       except Exception:
+           return False
    ```
 
-2. In the same file, add the `set_strategy_live` function after `run_backtest` (after L161):
+2. Add the `set_strategy_live` client function (forwards admin scope; the tool layer has already authorized):
    ```python
    async def set_strategy_live(
-       strategy_id: str,
-       live_enabled: bool,
+       strategy_id: str, live_enabled: bool, api_key: str | None = None
    ) -> dict[str, Any]:
-       """Enable or disable live evaluation for a strategy via SetStrategyLive RPC."""
+       """Enable/disable live evaluation via SetStrategyLive RPC (admin-scoped)."""
        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
-   
+
+       meta = list(_admin_metadata(api_key)) + [("x-access-scope", "7")]
        async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
            stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
            resp = await stub.SetStrategyLive(
                analysis_pb2.SetStrategyLiveRequest(
-                   strategy_id=strategy_id,
-                   live_enabled=live_enabled,
+                   strategy_id=strategy_id, live_enabled=live_enabled
                ),
-               metadata=_metadata(),
+               metadata=meta,
            )
        defn = resp.definition
        return {
@@ -480,23 +524,30 @@ cd services/xstockstrat-analysis && pytest --cov=app --cov-fail-under=40
        }
    ```
 
-3. In `services/xstockstrat-agent/app/tools.py`, inside `register_tools(server: FastMCP)`, add the `set_strategy_live` tool after `run_backtest` (after L217):
+3. In `services/xstockstrat-agent/app/tools.py`, add the `set_strategy_live` tool after `run_backtest`. The tool authorizes at the entry, then calls the backend:
    ```python
    @server.tool()
    async def set_strategy_live(
        strategy_id: str,
        live_enabled: bool,
+       admin_api_key: str = "",
    ) -> dict:
        """Enable or disable live alert evaluation for a strategy. Admin scope required.
-       strategy_id: ID of the strategy to toggle (from list_strategies or manage_strategy).
-       live_enabled: true to enable continuous live evaluation and alerting; false to disable.
-       Returns the updated strategy definition with live_enabled reflected.
-       Raises PERMISSION_DENIED if the caller does not have admin scope."""
-       return await client.set_strategy_live(
-           strategy_id=strategy_id,
-           live_enabled=live_enabled,
-       )
+       strategy_id: ID of the strategy to toggle.
+       live_enabled: true to enable continuous live evaluation + alerting; false to disable.
+       admin_api_key: required; must carry the admin role (validated here at the agent).
+       Returns the updated strategy definition with live_enabled reflected."""
+       if not await client.validate_admin(admin_api_key):
+           raise RuntimeError("admin API key required")
+       try:
+           return await client.set_strategy_live(
+               strategy_id=strategy_id, live_enabled=live_enabled, api_key=admin_api_key
+           )
+       except grpc.aio.AioRpcError as e:
+           raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
    ```
+
+Note: because `_metadata()` is **not** changed, 047's existing client tests remain valid (no update to `test_metadata_empty_when_no_secret` needed).
 
 **Verification**:
 ```bash
@@ -512,7 +563,7 @@ grep -n "x-access-scope\|_metadata" services/xstockstrat-agent/app/client.py | h
 
 ### Step 8 — test: Tests for set_strategy_live MCP tool
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify (add set_strategy_live client test)
@@ -543,7 +594,7 @@ cd services/xstockstrat-agent && pytest --cov=app --cov-fail-under=40
 
 ### Step 9 — service: Add SetStrategyLive and ListAlerts BFF handlers to traderBff.ts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/traderBff.ts` — modify
@@ -609,7 +660,7 @@ grep -n "PermissionDenied\|ADMIN_BIT\|rolesToAccessScope" \
 
 ### Step 10 — service: Create LiveStrategiesPanel component and hooks
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/LiveStrategiesPanel.tsx` — create
@@ -739,7 +790,7 @@ grep -n "isAdmin\|PermissionDenied\|liveEnabled" \
 
 ### Step 11 — service: Add AnalysisService and NotifyService mocks for trader segment in mock-backend.ts
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify
@@ -806,7 +857,7 @@ grep -n "listStrategyDefinitions\|setStrategyLive\|listAlerts\|strat-live" \
 
 ### Step 12 — test: E2E Playwright tests for Live Strategies panel
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/live-strategies.spec.ts` — create
@@ -845,7 +896,7 @@ cd services/xstockstrat-ui && pnpm run test:e2e -- --grep "live-strategies"
 
 ### Step 13 — docs: Update CLAUDE.md files for analysis, agent, and UI services
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify

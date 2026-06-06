@@ -6,12 +6,14 @@ populating _backtests/_strategies directly, same pattern as ingest.
 """
 
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from gen.analysis.v1 import analysis_pb2
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2
+from google.protobuf import json_format
 
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer
@@ -332,3 +334,225 @@ class TestConfigWatcherGetters:
         w = _StubWatcher()
         with pytest.raises(RuntimeError, match="Timed out"):
             await w.wait_for_snapshot(timeout_seconds=0.01)
+
+
+# ---------------------------------------------------------------------------
+# Strategy management RPCs (feature 047-strategy-engine)
+# ---------------------------------------------------------------------------
+
+
+def _valid_definition(strategy_id="sma_x", display_name="SMA X"):
+    return analysis_pb2.StrategyDefinition(
+        strategy_id=strategy_id,
+        display_name=display_name,
+        active=True,
+        components=[
+            analysis_pb2.StrategyComponent(
+                ref_name="fast",
+                kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                indicator="SMA",
+                params={"period": 10.0},
+            )
+        ],
+        entry_rule=json.dumps({"fn": ">", "lhs": "fast", "rhs": 100}),
+    )
+
+
+def _row_for(definition):
+    return {
+        "strategy_id": definition.strategy_id,
+        "display_name": definition.display_name,
+        "active": definition.active,
+        "definition_json": json_format.MessageToDict(definition, preserving_proto_field_name=True),
+    }
+
+
+def _admin_ctx():
+    """A gRPC context carrying the admin x-access-scope bit (7 = READ|WRITE|ADMIN)."""
+    ctx = MagicMock()
+    ctx.invocation_metadata = MagicMock(return_value=[("x-access-scope", "7")])
+    ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+    return ctx
+
+
+class TestManageStrategy:
+    @pytest.mark.asyncio
+    async def test_admin_gate_aborts_when_not_admin(self):
+        svc = make_servicer()
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_REGISTER,
+            definition=_valid_definition(),
+        )
+        context = MagicMock()
+        context.invocation_metadata = MagicMock(return_value=[("x-access-scope", "1")])  # READ only
+        context.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, context)
+        context.abort.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_register_returns_definition(self):
+        svc = make_servicer()
+        definition = _valid_definition()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.create = AsyncMock(return_value=_row_for(definition))
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
+        )
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+        assert result.strategy_id == "sma_x"
+        assert result.components[0].indicator == "SMA"
+        svc._strategies_repo.create.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_update_path(self):
+        svc = make_servicer()
+        definition = _valid_definition(display_name="Renamed")
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.update = AsyncMock(return_value=_row_for(definition))
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_UPDATE, definition=definition
+        )
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+        assert result.display_name == "Renamed"
+
+    @pytest.mark.asyncio
+    async def test_deactivate_not_found(self):
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.deactivate = AsyncMock(return_value=None)
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_DEACTIVATE,
+            definition=_valid_definition(),
+        )
+        context = _admin_ctx()
+        context.abort = AsyncMock(side_effect=Exception("not found"))
+        with pytest.raises(Exception, match="not found"):
+            await svc.ManageStrategy(req, context)
+
+
+class TestGetStrategy:
+    @pytest.mark.asyncio
+    async def test_not_found(self):
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        req = analysis_pb2.GetStrategyRequest(strategy_id="missing")
+        context = MagicMock()
+        context.abort = AsyncMock(side_effect=Exception("not found"))
+        with pytest.raises(Exception, match="not found"):
+            await svc.GetStrategy(req, context)
+
+    @pytest.mark.asyncio
+    async def test_success(self):
+        svc = make_servicer()
+        definition = _valid_definition()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        req = analysis_pb2.GetStrategyRequest(strategy_id="sma_x")
+        result = await svc.GetStrategy(req, context=MagicMock())
+        assert result.strategy_id == "sma_x"
+
+
+class TestListStrategyDefinitions:
+    @pytest.mark.asyncio
+    async def test_empty_when_no_repo(self):
+        svc = make_servicer()
+        svc._strategies_repo = None
+        req = analysis_pb2.ListStrategyDefinitionsRequest()
+        resp = await svc.ListStrategyDefinitions(req, context=MagicMock())
+        assert list(resp.definitions) == []
+        assert resp.total_count == 0
+
+    @pytest.mark.asyncio
+    async def test_returns_definitions(self):
+        svc = make_servicer()
+        definition = _valid_definition()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.list = AsyncMock(return_value=([_row_for(definition)], 1))
+        req = analysis_pb2.ListStrategyDefinitionsRequest(include_inactive=False)
+        resp = await svc.ListStrategyDefinitions(req, context=MagicMock())
+        assert resp.total_count == 1
+        assert resp.definitions[0].strategy_id == "sma_x"
+
+
+class TestRunBacktestBackwardCompat:
+    @pytest.mark.asyncio
+    async def test_legacy_strategy_params_uses_sma_path(self):
+        """A call with only strategy_params (no strategy_id_ref/inline) stays on the
+        legacy SMA path (FR-8). Empty symbols → valid result without DB access."""
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+
+        req = MagicMock()
+        req.strategy_id = "legacy"
+        req.strategy_id_ref = ""  # no stored-strategy lookup
+        req.symbols = []
+        req.initial_capital = 100_000.0
+        req.HasField = MagicMock(return_value=False)  # no inline_definition, no strategy_params
+        req.range = common_pb2.TimeRange()
+
+        result = await svc.RunBacktest(req, context=MagicMock())
+        assert result.strategy_id == "legacy"
+        assert result.backtest_id
+        assert "legacy" in svc._backtests
+
+
+# ---------------------------------------------------------------------------
+# SetStrategyLive (feature 048)
+# ---------------------------------------------------------------------------
+
+
+class TestSetStrategyLive:
+    @pytest.mark.asyncio
+    async def test_requires_admin_scope(self):
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        req = MagicMock()
+        req.strategy_id = "s1"
+        req.live_enabled = True
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "1")]  # READ only
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception, match="aborted"):
+            await svc.SetStrategyLive(req, ctx)
+        ctx.abort.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_permits_admin_scope(self):
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.set_live_enabled = AsyncMock(
+            return_value={
+                "strategy_id": "s1",
+                "display_name": "S1",
+                "active": True,
+                "live_enabled": True,
+                "definition_json": {},
+            }
+        )
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        req = MagicMock()
+        req.strategy_id = "s1"
+        req.live_enabled = True
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]  # ADMIN|WRITE|READ
+        resp = await svc.SetStrategyLive(req, ctx)
+        assert resp.definition.strategy_id == "s1"
+        assert resp.definition.live_enabled is True
+
+    @pytest.mark.asyncio
+    async def test_returns_not_found_for_missing_strategy(self):
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.set_live_enabled = AsyncMock(return_value=None)
+        req = MagicMock()
+        req.strategy_id = "missing"
+        req.live_enabled = True
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception, match="aborted"):
+            await svc.SetStrategyLive(req, ctx)

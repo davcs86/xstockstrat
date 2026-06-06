@@ -54,6 +54,26 @@ class AnalysisServiceStub(object):
                 request_serializer=analysis_dot_v1_dot_analysis__pb2.GetStrategyReportRequest.SerializeToString,
                 response_deserializer=analysis_dot_v1_dot_analysis__pb2.StrategyReport.FromString,
                 _registered_method=True)
+        self.ManageStrategy = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/ManageStrategy',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.ManageStrategyRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.StrategyDefinition.FromString,
+                _registered_method=True)
+        self.GetStrategy = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/GetStrategy',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.GetStrategyRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.StrategyDefinition.FromString,
+                _registered_method=True)
+        self.ListStrategyDefinitions = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/ListStrategyDefinitions',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.ListStrategyDefinitionsRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.ListStrategyDefinitionsResponse.FromString,
+                _registered_method=True)
+        self.SetStrategyLive = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveResponse.FromString,
+                _registered_method=True)
 
 
 class AnalysisServiceServicer(object):
@@ -83,6 +103,30 @@ class AnalysisServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ManageStrategy(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetStrategy(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListStrategyDefinitions(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetStrategyLive(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AnalysisServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -105,6 +149,26 @@ def add_AnalysisServiceServicer_to_server(servicer, server):
                     servicer.GetStrategyReport,
                     request_deserializer=analysis_dot_v1_dot_analysis__pb2.GetStrategyReportRequest.FromString,
                     response_serializer=analysis_dot_v1_dot_analysis__pb2.StrategyReport.SerializeToString,
+            ),
+            'ManageStrategy': grpc.unary_unary_rpc_method_handler(
+                    servicer.ManageStrategy,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.ManageStrategyRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.StrategyDefinition.SerializeToString,
+            ),
+            'GetStrategy': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetStrategy,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.GetStrategyRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.StrategyDefinition.SerializeToString,
+            ),
+            'ListStrategyDefinitions': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListStrategyDefinitions,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.ListStrategyDefinitionsRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.ListStrategyDefinitionsResponse.SerializeToString,
+            ),
+            'SetStrategyLive': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetStrategyLive,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -215,6 +279,114 @@ class AnalysisService(object):
             '/xstockstrat.analysis.v1.AnalysisService/GetStrategyReport',
             analysis_dot_v1_dot_analysis__pb2.GetStrategyReportRequest.SerializeToString,
             analysis_dot_v1_dot_analysis__pb2.StrategyReport.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ManageStrategy(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/ManageStrategy',
+            analysis_dot_v1_dot_analysis__pb2.ManageStrategyRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.StrategyDefinition.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetStrategy(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/GetStrategy',
+            analysis_dot_v1_dot_analysis__pb2.GetStrategyRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.StrategyDefinition.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListStrategyDefinitions(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/ListStrategyDefinitions',
+            analysis_dot_v1_dot_analysis__pb2.ListStrategyDefinitionsRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.ListStrategyDefinitionsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetStrategyLive(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive',
+            analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveResponse.FromString,
             options,
             channel_credentials,
             insecure,

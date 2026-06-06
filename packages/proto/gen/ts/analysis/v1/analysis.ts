@@ -24,12 +24,132 @@ import { Timestamp } from "../../google/protobuf/timestamp";
 
 export const protobufPackage = "xstockstrat.analysis.v1";
 
+export enum ComponentKind {
+  COMPONENT_KIND_UNSPECIFIED = "COMPONENT_KIND_UNSPECIFIED",
+  COMPONENT_KIND_BUILTIN_INDICATOR = "COMPONENT_KIND_BUILTIN_INDICATOR",
+  COMPONENT_KIND_CUSTOM_FORMULA = "COMPONENT_KIND_CUSTOM_FORMULA",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function componentKindFromJSON(object: any): ComponentKind {
+  switch (object) {
+    case 0:
+    case "COMPONENT_KIND_UNSPECIFIED":
+      return ComponentKind.COMPONENT_KIND_UNSPECIFIED;
+    case 1:
+    case "COMPONENT_KIND_BUILTIN_INDICATOR":
+      return ComponentKind.COMPONENT_KIND_BUILTIN_INDICATOR;
+    case 2:
+    case "COMPONENT_KIND_CUSTOM_FORMULA":
+      return ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return ComponentKind.UNRECOGNIZED;
+  }
+}
+
+export function componentKindToJSON(object: ComponentKind): string {
+  switch (object) {
+    case ComponentKind.COMPONENT_KIND_UNSPECIFIED:
+      return "COMPONENT_KIND_UNSPECIFIED";
+    case ComponentKind.COMPONENT_KIND_BUILTIN_INDICATOR:
+      return "COMPONENT_KIND_BUILTIN_INDICATOR";
+    case ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA:
+      return "COMPONENT_KIND_CUSTOM_FORMULA";
+    case ComponentKind.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function componentKindToNumber(object: ComponentKind): number {
+  switch (object) {
+    case ComponentKind.COMPONENT_KIND_UNSPECIFIED:
+      return 0;
+    case ComponentKind.COMPONENT_KIND_BUILTIN_INDICATOR:
+      return 1;
+    case ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA:
+      return 2;
+    case ComponentKind.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
+export enum StrategyOperation {
+  STRATEGY_OPERATION_UNSPECIFIED = "STRATEGY_OPERATION_UNSPECIFIED",
+  STRATEGY_OPERATION_REGISTER = "STRATEGY_OPERATION_REGISTER",
+  STRATEGY_OPERATION_UPDATE = "STRATEGY_OPERATION_UPDATE",
+  STRATEGY_OPERATION_DEACTIVATE = "STRATEGY_OPERATION_DEACTIVATE",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function strategyOperationFromJSON(object: any): StrategyOperation {
+  switch (object) {
+    case 0:
+    case "STRATEGY_OPERATION_UNSPECIFIED":
+      return StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED;
+    case 1:
+    case "STRATEGY_OPERATION_REGISTER":
+      return StrategyOperation.STRATEGY_OPERATION_REGISTER;
+    case 2:
+    case "STRATEGY_OPERATION_UPDATE":
+      return StrategyOperation.STRATEGY_OPERATION_UPDATE;
+    case 3:
+    case "STRATEGY_OPERATION_DEACTIVATE":
+      return StrategyOperation.STRATEGY_OPERATION_DEACTIVATE;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return StrategyOperation.UNRECOGNIZED;
+  }
+}
+
+export function strategyOperationToJSON(object: StrategyOperation): string {
+  switch (object) {
+    case StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED:
+      return "STRATEGY_OPERATION_UNSPECIFIED";
+    case StrategyOperation.STRATEGY_OPERATION_REGISTER:
+      return "STRATEGY_OPERATION_REGISTER";
+    case StrategyOperation.STRATEGY_OPERATION_UPDATE:
+      return "STRATEGY_OPERATION_UPDATE";
+    case StrategyOperation.STRATEGY_OPERATION_DEACTIVATE:
+      return "STRATEGY_OPERATION_DEACTIVATE";
+    case StrategyOperation.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function strategyOperationToNumber(object: StrategyOperation): number {
+  switch (object) {
+    case StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED:
+      return 0;
+    case StrategyOperation.STRATEGY_OPERATION_REGISTER:
+      return 1;
+    case StrategyOperation.STRATEGY_OPERATION_UPDATE:
+      return 2;
+    case StrategyOperation.STRATEGY_OPERATION_DEACTIVATE:
+      return 3;
+    case StrategyOperation.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export interface RunBacktestRequest {
   strategyId: string;
   range?: TimeRange | undefined;
   symbols: string[];
   initialCapital: number;
-  strategyParams?: { [key: string]: any } | undefined;
+  strategyParams?:
+    | { [key: string]: any }
+    | undefined;
+  /** field 6 — resolve definition from DB; legacy strategy_params (field 5) remains supported */
+  strategyIdRef: string;
+  /** field 7 — inline definition; takes precedence over strategy_id_ref if both supplied */
+  inlineDefinition?: StrategyDefinition | undefined;
 }
 
 export interface BacktestResult {
@@ -97,8 +217,73 @@ export interface GetStrategyReportRequest {
   strategyId: string;
 }
 
+export interface StrategyComponent {
+  refName: string;
+  kind: ComponentKind;
+  /** used when kind == COMPONENT_KIND_BUILTIN_INDICATOR */
+  indicator: string;
+  /** used when kind == COMPONENT_KIND_CUSTOM_FORMULA */
+  formulaId: string;
+  params: { [key: string]: number };
+}
+
+export interface StrategyComponent_ParamsEntry {
+  key: string;
+  value: number;
+}
+
+export interface StrategyDefinition {
+  strategyId: string;
+  displayName: string;
+  components: StrategyComponent[];
+  /** JSON-encoded condition tree */
+  entryRule: string;
+  /** JSON-encoded condition tree */
+  exitRule: string;
+  signalParams?: { [key: string]: any } | undefined;
+  active: boolean;
+  liveEnabled: boolean;
+}
+
+export interface ManageStrategyRequest {
+  operation: StrategyOperation;
+  definition?: StrategyDefinition | undefined;
+}
+
+export interface GetStrategyRequest {
+  strategyId: string;
+}
+
+export interface ListStrategyDefinitionsRequest {
+  includeInactive: boolean;
+  pageSize: number;
+  pageOffset: number;
+}
+
+export interface ListStrategyDefinitionsResponse {
+  definitions: StrategyDefinition[];
+  totalCount: number;
+}
+
+export interface SetStrategyLiveRequest {
+  strategyId: string;
+  liveEnabled: boolean;
+}
+
+export interface SetStrategyLiveResponse {
+  definition?: StrategyDefinition | undefined;
+}
+
 function createBaseRunBacktestRequest(): RunBacktestRequest {
-  return { strategyId: "", range: undefined, symbols: [], initialCapital: 0, strategyParams: undefined };
+  return {
+    strategyId: "",
+    range: undefined,
+    symbols: [],
+    initialCapital: 0,
+    strategyParams: undefined,
+    strategyIdRef: "",
+    inlineDefinition: undefined,
+  };
 }
 
 export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
@@ -117,6 +302,12 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
     }
     if (message.strategyParams !== undefined) {
       Struct.encode(Struct.wrap(message.strategyParams), writer.uint32(42).fork()).join();
+    }
+    if (message.strategyIdRef !== "") {
+      writer.uint32(50).string(message.strategyIdRef);
+    }
+    if (message.inlineDefinition !== undefined) {
+      StrategyDefinition.encode(message.inlineDefinition, writer.uint32(58).fork()).join();
     }
     return writer;
   },
@@ -168,6 +359,22 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
           message.strategyParams = Struct.unwrap(Struct.decode(reader, reader.uint32()));
           continue;
         }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.strategyIdRef = reader.string();
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.inlineDefinition = StrategyDefinition.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -196,6 +403,16 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
         : isObject(object.strategy_params)
         ? object.strategy_params
         : undefined,
+      strategyIdRef: isSet(object.strategyIdRef)
+        ? globalThis.String(object.strategyIdRef)
+        : isSet(object.strategy_id_ref)
+        ? globalThis.String(object.strategy_id_ref)
+        : "",
+      inlineDefinition: isSet(object.inlineDefinition)
+        ? StrategyDefinition.fromJSON(object.inlineDefinition)
+        : isSet(object.inline_definition)
+        ? StrategyDefinition.fromJSON(object.inline_definition)
+        : undefined,
     };
   },
 
@@ -216,6 +433,12 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
     if (message.strategyParams !== undefined) {
       obj.strategyParams = message.strategyParams;
     }
+    if (message.strategyIdRef !== "") {
+      obj.strategyIdRef = message.strategyIdRef;
+    }
+    if (message.inlineDefinition !== undefined) {
+      obj.inlineDefinition = StrategyDefinition.toJSON(message.inlineDefinition);
+    }
     return obj;
   },
 
@@ -231,6 +454,10 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
     message.symbols = object.symbols?.map((e) => e) || [];
     message.initialCapital = object.initialCapital ?? 0;
     message.strategyParams = object.strategyParams ?? undefined;
+    message.strategyIdRef = object.strategyIdRef ?? "";
+    message.inlineDefinition = (object.inlineDefinition !== undefined && object.inlineDefinition !== null)
+      ? StrategyDefinition.fromPartial(object.inlineDefinition)
+      : undefined;
     return message;
   },
 };
@@ -1363,6 +1590,926 @@ export const GetStrategyReportRequest: MessageFns<GetStrategyReportRequest> = {
   },
 };
 
+function createBaseStrategyComponent(): StrategyComponent {
+  return { refName: "", kind: ComponentKind.COMPONENT_KIND_UNSPECIFIED, indicator: "", formulaId: "", params: {} };
+}
+
+export const StrategyComponent: MessageFns<StrategyComponent> = {
+  encode(message: StrategyComponent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.refName !== "") {
+      writer.uint32(10).string(message.refName);
+    }
+    if (message.kind !== ComponentKind.COMPONENT_KIND_UNSPECIFIED) {
+      writer.uint32(16).int32(componentKindToNumber(message.kind));
+    }
+    if (message.indicator !== "") {
+      writer.uint32(26).string(message.indicator);
+    }
+    if (message.formulaId !== "") {
+      writer.uint32(34).string(message.formulaId);
+    }
+    globalThis.Object.entries(message.params).forEach(([key, value]: [string, number]) => {
+      StrategyComponent_ParamsEntry.encode({ key: key as any, value }, writer.uint32(42).fork()).join();
+    });
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StrategyComponent {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStrategyComponent();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.refName = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.kind = componentKindFromJSON(reader.int32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.indicator = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.formulaId = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          const entry5 = StrategyComponent_ParamsEntry.decode(reader, reader.uint32());
+          if (entry5.value !== undefined) {
+            message.params[entry5.key] = entry5.value;
+          }
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StrategyComponent {
+    return {
+      refName: isSet(object.refName)
+        ? globalThis.String(object.refName)
+        : isSet(object.ref_name)
+        ? globalThis.String(object.ref_name)
+        : "",
+      kind: isSet(object.kind) ? componentKindFromJSON(object.kind) : ComponentKind.COMPONENT_KIND_UNSPECIFIED,
+      indicator: isSet(object.indicator) ? globalThis.String(object.indicator) : "",
+      formulaId: isSet(object.formulaId)
+        ? globalThis.String(object.formulaId)
+        : isSet(object.formula_id)
+        ? globalThis.String(object.formula_id)
+        : "",
+      params: isObject(object.params)
+        ? (globalThis.Object.entries(object.params) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : {},
+    };
+  },
+
+  toJSON(message: StrategyComponent): unknown {
+    const obj: any = {};
+    if (message.refName !== "") {
+      obj.refName = message.refName;
+    }
+    if (message.kind !== ComponentKind.COMPONENT_KIND_UNSPECIFIED) {
+      obj.kind = componentKindToJSON(message.kind);
+    }
+    if (message.indicator !== "") {
+      obj.indicator = message.indicator;
+    }
+    if (message.formulaId !== "") {
+      obj.formulaId = message.formulaId;
+    }
+    if (message.params) {
+      const entries = globalThis.Object.entries(message.params) as [string, number][];
+      if (entries.length > 0) {
+        obj.params = {};
+        entries.forEach(([k, v]) => {
+          obj.params[k] = v;
+        });
+      }
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StrategyComponent>, I>>(base?: I): StrategyComponent {
+    return StrategyComponent.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StrategyComponent>, I>>(object: I): StrategyComponent {
+    const message = createBaseStrategyComponent();
+    message.refName = object.refName ?? "";
+    message.kind = object.kind ?? ComponentKind.COMPONENT_KIND_UNSPECIFIED;
+    message.indicator = object.indicator ?? "";
+    message.formulaId = object.formulaId ?? "";
+    message.params = (globalThis.Object.entries(object.params ?? {}) as [string, number][]).reduce(
+      (acc: { [key: string]: number }, [key, value]: [string, number]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.Number(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    return message;
+  },
+};
+
+function createBaseStrategyComponent_ParamsEntry(): StrategyComponent_ParamsEntry {
+  return { key: "", value: 0 };
+}
+
+export const StrategyComponent_ParamsEntry: MessageFns<StrategyComponent_ParamsEntry> = {
+  encode(message: StrategyComponent_ParamsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== 0) {
+      writer.uint32(17).double(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StrategyComponent_ParamsEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStrategyComponent_ParamsEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.value = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StrategyComponent_ParamsEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+    };
+  },
+
+  toJSON(message: StrategyComponent_ParamsEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== 0) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StrategyComponent_ParamsEntry>, I>>(base?: I): StrategyComponent_ParamsEntry {
+    return StrategyComponent_ParamsEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StrategyComponent_ParamsEntry>, I>>(
+    object: I,
+  ): StrategyComponent_ParamsEntry {
+    const message = createBaseStrategyComponent_ParamsEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? 0;
+    return message;
+  },
+};
+
+function createBaseStrategyDefinition(): StrategyDefinition {
+  return {
+    strategyId: "",
+    displayName: "",
+    components: [],
+    entryRule: "",
+    exitRule: "",
+    signalParams: undefined,
+    active: false,
+    liveEnabled: false,
+  };
+}
+
+export const StrategyDefinition: MessageFns<StrategyDefinition> = {
+  encode(message: StrategyDefinition, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.strategyId !== "") {
+      writer.uint32(10).string(message.strategyId);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(18).string(message.displayName);
+    }
+    for (const v of message.components) {
+      StrategyComponent.encode(v!, writer.uint32(26).fork()).join();
+    }
+    if (message.entryRule !== "") {
+      writer.uint32(34).string(message.entryRule);
+    }
+    if (message.exitRule !== "") {
+      writer.uint32(42).string(message.exitRule);
+    }
+    if (message.signalParams !== undefined) {
+      Struct.encode(Struct.wrap(message.signalParams), writer.uint32(50).fork()).join();
+    }
+    if (message.active !== false) {
+      writer.uint32(56).bool(message.active);
+    }
+    if (message.liveEnabled !== false) {
+      writer.uint32(64).bool(message.liveEnabled);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StrategyDefinition {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStrategyDefinition();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.displayName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.components.push(StrategyComponent.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.entryRule = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.exitRule = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.signalParams = Struct.unwrap(Struct.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.active = reader.bool();
+          continue;
+        }
+        case 8: {
+          if (tag !== 64) {
+            break;
+          }
+
+          message.liveEnabled = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StrategyDefinition {
+    return {
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : "",
+      components: globalThis.Array.isArray(object?.components)
+        ? object.components.map((e: any) => StrategyComponent.fromJSON(e))
+        : [],
+      entryRule: isSet(object.entryRule)
+        ? globalThis.String(object.entryRule)
+        : isSet(object.entry_rule)
+        ? globalThis.String(object.entry_rule)
+        : "",
+      exitRule: isSet(object.exitRule)
+        ? globalThis.String(object.exitRule)
+        : isSet(object.exit_rule)
+        ? globalThis.String(object.exit_rule)
+        : "",
+      signalParams: isObject(object.signalParams)
+        ? object.signalParams
+        : isObject(object.signal_params)
+        ? object.signal_params
+        : undefined,
+      active: isSet(object.active) ? globalThis.Boolean(object.active) : false,
+      liveEnabled: isSet(object.liveEnabled)
+        ? globalThis.Boolean(object.liveEnabled)
+        : isSet(object.live_enabled)
+        ? globalThis.Boolean(object.live_enabled)
+        : false,
+    };
+  },
+
+  toJSON(message: StrategyDefinition): unknown {
+    const obj: any = {};
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    if (message.displayName !== "") {
+      obj.displayName = message.displayName;
+    }
+    if (message.components?.length) {
+      obj.components = message.components.map((e) => StrategyComponent.toJSON(e));
+    }
+    if (message.entryRule !== "") {
+      obj.entryRule = message.entryRule;
+    }
+    if (message.exitRule !== "") {
+      obj.exitRule = message.exitRule;
+    }
+    if (message.signalParams !== undefined) {
+      obj.signalParams = message.signalParams;
+    }
+    if (message.active !== false) {
+      obj.active = message.active;
+    }
+    if (message.liveEnabled !== false) {
+      obj.liveEnabled = message.liveEnabled;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StrategyDefinition>, I>>(base?: I): StrategyDefinition {
+    return StrategyDefinition.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StrategyDefinition>, I>>(object: I): StrategyDefinition {
+    const message = createBaseStrategyDefinition();
+    message.strategyId = object.strategyId ?? "";
+    message.displayName = object.displayName ?? "";
+    message.components = object.components?.map((e) => StrategyComponent.fromPartial(e)) || [];
+    message.entryRule = object.entryRule ?? "";
+    message.exitRule = object.exitRule ?? "";
+    message.signalParams = object.signalParams ?? undefined;
+    message.active = object.active ?? false;
+    message.liveEnabled = object.liveEnabled ?? false;
+    return message;
+  },
+};
+
+function createBaseManageStrategyRequest(): ManageStrategyRequest {
+  return { operation: StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED, definition: undefined };
+}
+
+export const ManageStrategyRequest: MessageFns<ManageStrategyRequest> = {
+  encode(message: ManageStrategyRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operation !== StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED) {
+      writer.uint32(8).int32(strategyOperationToNumber(message.operation));
+    }
+    if (message.definition !== undefined) {
+      StrategyDefinition.encode(message.definition, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ManageStrategyRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseManageStrategyRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.operation = strategyOperationFromJSON(reader.int32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.definition = StrategyDefinition.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ManageStrategyRequest {
+    return {
+      operation: isSet(object.operation)
+        ? strategyOperationFromJSON(object.operation)
+        : StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED,
+      definition: isSet(object.definition) ? StrategyDefinition.fromJSON(object.definition) : undefined,
+    };
+  },
+
+  toJSON(message: ManageStrategyRequest): unknown {
+    const obj: any = {};
+    if (message.operation !== StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED) {
+      obj.operation = strategyOperationToJSON(message.operation);
+    }
+    if (message.definition !== undefined) {
+      obj.definition = StrategyDefinition.toJSON(message.definition);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ManageStrategyRequest>, I>>(base?: I): ManageStrategyRequest {
+    return ManageStrategyRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ManageStrategyRequest>, I>>(object: I): ManageStrategyRequest {
+    const message = createBaseManageStrategyRequest();
+    message.operation = object.operation ?? StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED;
+    message.definition = (object.definition !== undefined && object.definition !== null)
+      ? StrategyDefinition.fromPartial(object.definition)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetStrategyRequest(): GetStrategyRequest {
+  return { strategyId: "" };
+}
+
+export const GetStrategyRequest: MessageFns<GetStrategyRequest> = {
+  encode(message: GetStrategyRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.strategyId !== "") {
+      writer.uint32(10).string(message.strategyId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetStrategyRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetStrategyRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetStrategyRequest {
+    return {
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetStrategyRequest): unknown {
+    const obj: any = {};
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetStrategyRequest>, I>>(base?: I): GetStrategyRequest {
+    return GetStrategyRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetStrategyRequest>, I>>(object: I): GetStrategyRequest {
+    const message = createBaseGetStrategyRequest();
+    message.strategyId = object.strategyId ?? "";
+    return message;
+  },
+};
+
+function createBaseListStrategyDefinitionsRequest(): ListStrategyDefinitionsRequest {
+  return { includeInactive: false, pageSize: 0, pageOffset: 0 };
+}
+
+export const ListStrategyDefinitionsRequest: MessageFns<ListStrategyDefinitionsRequest> = {
+  encode(message: ListStrategyDefinitionsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.includeInactive !== false) {
+      writer.uint32(8).bool(message.includeInactive);
+    }
+    if (message.pageSize !== 0) {
+      writer.uint32(16).int32(message.pageSize);
+    }
+    if (message.pageOffset !== 0) {
+      writer.uint32(24).int32(message.pageOffset);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListStrategyDefinitionsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListStrategyDefinitionsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.includeInactive = reader.bool();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.pageSize = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.pageOffset = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListStrategyDefinitionsRequest {
+    return {
+      includeInactive: isSet(object.includeInactive)
+        ? globalThis.Boolean(object.includeInactive)
+        : isSet(object.include_inactive)
+        ? globalThis.Boolean(object.include_inactive)
+        : false,
+      pageSize: isSet(object.pageSize)
+        ? globalThis.Number(object.pageSize)
+        : isSet(object.page_size)
+        ? globalThis.Number(object.page_size)
+        : 0,
+      pageOffset: isSet(object.pageOffset)
+        ? globalThis.Number(object.pageOffset)
+        : isSet(object.page_offset)
+        ? globalThis.Number(object.page_offset)
+        : 0,
+    };
+  },
+
+  toJSON(message: ListStrategyDefinitionsRequest): unknown {
+    const obj: any = {};
+    if (message.includeInactive !== false) {
+      obj.includeInactive = message.includeInactive;
+    }
+    if (message.pageSize !== 0) {
+      obj.pageSize = Math.round(message.pageSize);
+    }
+    if (message.pageOffset !== 0) {
+      obj.pageOffset = Math.round(message.pageOffset);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListStrategyDefinitionsRequest>, I>>(base?: I): ListStrategyDefinitionsRequest {
+    return ListStrategyDefinitionsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListStrategyDefinitionsRequest>, I>>(
+    object: I,
+  ): ListStrategyDefinitionsRequest {
+    const message = createBaseListStrategyDefinitionsRequest();
+    message.includeInactive = object.includeInactive ?? false;
+    message.pageSize = object.pageSize ?? 0;
+    message.pageOffset = object.pageOffset ?? 0;
+    return message;
+  },
+};
+
+function createBaseListStrategyDefinitionsResponse(): ListStrategyDefinitionsResponse {
+  return { definitions: [], totalCount: 0 };
+}
+
+export const ListStrategyDefinitionsResponse: MessageFns<ListStrategyDefinitionsResponse> = {
+  encode(message: ListStrategyDefinitionsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.definitions) {
+      StrategyDefinition.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.totalCount !== 0) {
+      writer.uint32(16).int32(message.totalCount);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListStrategyDefinitionsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListStrategyDefinitionsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.definitions.push(StrategyDefinition.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.totalCount = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListStrategyDefinitionsResponse {
+    return {
+      definitions: globalThis.Array.isArray(object?.definitions)
+        ? object.definitions.map((e: any) => StrategyDefinition.fromJSON(e))
+        : [],
+      totalCount: isSet(object.totalCount)
+        ? globalThis.Number(object.totalCount)
+        : isSet(object.total_count)
+        ? globalThis.Number(object.total_count)
+        : 0,
+    };
+  },
+
+  toJSON(message: ListStrategyDefinitionsResponse): unknown {
+    const obj: any = {};
+    if (message.definitions?.length) {
+      obj.definitions = message.definitions.map((e) => StrategyDefinition.toJSON(e));
+    }
+    if (message.totalCount !== 0) {
+      obj.totalCount = Math.round(message.totalCount);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListStrategyDefinitionsResponse>, I>>(base?: I): ListStrategyDefinitionsResponse {
+    return ListStrategyDefinitionsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListStrategyDefinitionsResponse>, I>>(
+    object: I,
+  ): ListStrategyDefinitionsResponse {
+    const message = createBaseListStrategyDefinitionsResponse();
+    message.definitions = object.definitions?.map((e) => StrategyDefinition.fromPartial(e)) || [];
+    message.totalCount = object.totalCount ?? 0;
+    return message;
+  },
+};
+
+function createBaseSetStrategyLiveRequest(): SetStrategyLiveRequest {
+  return { strategyId: "", liveEnabled: false };
+}
+
+export const SetStrategyLiveRequest: MessageFns<SetStrategyLiveRequest> = {
+  encode(message: SetStrategyLiveRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.strategyId !== "") {
+      writer.uint32(10).string(message.strategyId);
+    }
+    if (message.liveEnabled !== false) {
+      writer.uint32(16).bool(message.liveEnabled);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetStrategyLiveRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSetStrategyLiveRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.liveEnabled = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SetStrategyLiveRequest {
+    return {
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+      liveEnabled: isSet(object.liveEnabled)
+        ? globalThis.Boolean(object.liveEnabled)
+        : isSet(object.live_enabled)
+        ? globalThis.Boolean(object.live_enabled)
+        : false,
+    };
+  },
+
+  toJSON(message: SetStrategyLiveRequest): unknown {
+    const obj: any = {};
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    if (message.liveEnabled !== false) {
+      obj.liveEnabled = message.liveEnabled;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SetStrategyLiveRequest>, I>>(base?: I): SetStrategyLiveRequest {
+    return SetStrategyLiveRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetStrategyLiveRequest>, I>>(object: I): SetStrategyLiveRequest {
+    const message = createBaseSetStrategyLiveRequest();
+    message.strategyId = object.strategyId ?? "";
+    message.liveEnabled = object.liveEnabled ?? false;
+    return message;
+  },
+};
+
+function createBaseSetStrategyLiveResponse(): SetStrategyLiveResponse {
+  return { definition: undefined };
+}
+
+export const SetStrategyLiveResponse: MessageFns<SetStrategyLiveResponse> = {
+  encode(message: SetStrategyLiveResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.definition !== undefined) {
+      StrategyDefinition.encode(message.definition, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetStrategyLiveResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSetStrategyLiveResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.definition = StrategyDefinition.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SetStrategyLiveResponse {
+    return { definition: isSet(object.definition) ? StrategyDefinition.fromJSON(object.definition) : undefined };
+  },
+
+  toJSON(message: SetStrategyLiveResponse): unknown {
+    const obj: any = {};
+    if (message.definition !== undefined) {
+      obj.definition = StrategyDefinition.toJSON(message.definition);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SetStrategyLiveResponse>, I>>(base?: I): SetStrategyLiveResponse {
+    return SetStrategyLiveResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetStrategyLiveResponse>, I>>(object: I): SetStrategyLiveResponse {
+    const message = createBaseSetStrategyLiveResponse();
+    message.definition = (object.definition !== undefined && object.definition !== null)
+      ? StrategyDefinition.fromPartial(object.definition)
+      : undefined;
+    return message;
+  },
+};
+
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export const AnalysisServiceService = {
   runBacktest: {
@@ -1404,6 +2551,48 @@ export const AnalysisServiceService = {
     responseSerialize: (value: StrategyReport): Buffer => Buffer.from(StrategyReport.encode(value).finish()),
     responseDeserialize: (value: Buffer): StrategyReport => StrategyReport.decode(value),
   },
+  manageStrategy: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ManageStrategyRequest): Buffer =>
+      Buffer.from(ManageStrategyRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ManageStrategyRequest => ManageStrategyRequest.decode(value),
+    responseSerialize: (value: StrategyDefinition): Buffer => Buffer.from(StrategyDefinition.encode(value).finish()),
+    responseDeserialize: (value: Buffer): StrategyDefinition => StrategyDefinition.decode(value),
+  },
+  getStrategy: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/GetStrategy" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetStrategyRequest): Buffer => Buffer.from(GetStrategyRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetStrategyRequest => GetStrategyRequest.decode(value),
+    responseSerialize: (value: StrategyDefinition): Buffer => Buffer.from(StrategyDefinition.encode(value).finish()),
+    responseDeserialize: (value: Buffer): StrategyDefinition => StrategyDefinition.decode(value),
+  },
+  listStrategyDefinitions: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/ListStrategyDefinitions" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListStrategyDefinitionsRequest): Buffer =>
+      Buffer.from(ListStrategyDefinitionsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListStrategyDefinitionsRequest => ListStrategyDefinitionsRequest.decode(value),
+    responseSerialize: (value: ListStrategyDefinitionsResponse): Buffer =>
+      Buffer.from(ListStrategyDefinitionsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListStrategyDefinitionsResponse =>
+      ListStrategyDefinitionsResponse.decode(value),
+  },
+  setStrategyLive: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SetStrategyLiveRequest): Buffer =>
+      Buffer.from(SetStrategyLiveRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetStrategyLiveRequest => SetStrategyLiveRequest.decode(value),
+    responseSerialize: (value: SetStrategyLiveResponse): Buffer =>
+      Buffer.from(SetStrategyLiveResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SetStrategyLiveResponse => SetStrategyLiveResponse.decode(value),
+  },
 } as const;
 
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
@@ -1411,6 +2600,10 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
   scoreStrategy: handleUnaryCall<ScoreStrategyRequest, StrategyScore>;
   listStrategies: handleUnaryCall<ListStrategiesRequest, ListStrategiesResponse>;
   getStrategyReport: handleUnaryCall<GetStrategyReportRequest, StrategyReport>;
+  manageStrategy: handleUnaryCall<ManageStrategyRequest, StrategyDefinition>;
+  getStrategy: handleUnaryCall<GetStrategyRequest, StrategyDefinition>;
+  listStrategyDefinitions: handleUnaryCall<ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse>;
+  setStrategyLive: handleUnaryCall<SetStrategyLiveRequest, SetStrategyLiveResponse>;
 }
 
 export interface AnalysisServiceClient extends Client {
@@ -1473,6 +2666,66 @@ export interface AnalysisServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: StrategyReport) => void,
+  ): ClientUnaryCall;
+  manageStrategy(
+    request: ManageStrategyRequest,
+    callback: (error: ServiceError | null, response: StrategyDefinition) => void,
+  ): ClientUnaryCall;
+  manageStrategy(
+    request: ManageStrategyRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: StrategyDefinition) => void,
+  ): ClientUnaryCall;
+  manageStrategy(
+    request: ManageStrategyRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: StrategyDefinition) => void,
+  ): ClientUnaryCall;
+  getStrategy(
+    request: GetStrategyRequest,
+    callback: (error: ServiceError | null, response: StrategyDefinition) => void,
+  ): ClientUnaryCall;
+  getStrategy(
+    request: GetStrategyRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: StrategyDefinition) => void,
+  ): ClientUnaryCall;
+  getStrategy(
+    request: GetStrategyRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: StrategyDefinition) => void,
+  ): ClientUnaryCall;
+  listStrategyDefinitions(
+    request: ListStrategyDefinitionsRequest,
+    callback: (error: ServiceError | null, response: ListStrategyDefinitionsResponse) => void,
+  ): ClientUnaryCall;
+  listStrategyDefinitions(
+    request: ListStrategyDefinitionsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListStrategyDefinitionsResponse) => void,
+  ): ClientUnaryCall;
+  listStrategyDefinitions(
+    request: ListStrategyDefinitionsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListStrategyDefinitionsResponse) => void,
+  ): ClientUnaryCall;
+  setStrategyLive(
+    request: SetStrategyLiveRequest,
+    callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void,
+  ): ClientUnaryCall;
+  setStrategyLive(
+    request: SetStrategyLiveRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void,
+  ): ClientUnaryCall;
+  setStrategyLive(
+    request: SetStrategyLiveRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void,
   ): ClientUnaryCall;
 }
 

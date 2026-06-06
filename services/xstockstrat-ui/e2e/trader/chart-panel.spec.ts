@@ -1,5 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
-import { SignJWT } from 'jose';
+import { test, expect } from '@playwright/test';
+import { addAuthCookie } from '../helpers/auth';
 
 /**
  * E2E tests for the MarketDataService BFF paths and ChartPanel component.
@@ -8,31 +8,10 @@ import { SignJWT } from 'jose';
  * quirk. Component tests load the trading dashboard and assert DOM rendering.
  */
 
-const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
-const BASE_URL = 'http://localhost:3000';
-
-async function addAuthCookie(page: Page): Promise<void> {
-  const now = Math.floor(Date.now() / 1000);
-  const token = await new SignJWT({
-    user_id: 'test-user-001',
-    email: 'test@example.com',
-    roles: [],
-    issued_at: now,
-    expires_at: now + 3600,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('1h')
-    .sign(new TextEncoder().encode(TEST_JWT_SECRET));
-
-  await page.context().addCookies([
-    { name: 'access_token', value: token, url: BASE_URL, httpOnly: true, sameSite: 'Lax' },
-  ]);
-}
-
 test.describe('Connect BFF — MarketDataService/GetBars data contract', () => {
   test('returns bars array with required OHLCV fields', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/trader/login');
+    await page.goto('/auth/login');
 
     const result = await page.evaluate(async () => {
       const res = await fetch(
@@ -65,7 +44,7 @@ test.describe('Connect BFF — MarketDataService/GetBars data contract', () => {
   test('returns auth error when not authenticated', async ({ page }) => {
     // No auth cookie — middleware redirects to login page (HTML) or BFF returns Connect error.
     // Either way the response body must not contain bar data.
-    await page.goto('/trader/login');
+    await page.goto('/auth/login');
     const result = await page.evaluate(async () => {
       const res = await fetch(
         '/trader/api/xstockstrat.marketdata.v1.MarketDataService/GetBars',
@@ -85,7 +64,7 @@ test.describe('Connect BFF — MarketDataService/GetBars data contract', () => {
 test.describe('Connect BFF — MarketDataService/ListAssets data contract', () => {
   test('returns assets array for the symbol selector', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/trader/login');
+    await page.goto('/auth/login');
 
     const result = await page.evaluate(async () => {
       const res = await fetch(
@@ -111,7 +90,7 @@ test.describe('Connect BFF — MarketDataService/ListAssets data contract', () =
   });
 
   test('returns auth error when not authenticated', async ({ page }) => {
-    await page.goto('/trader/login');
+    await page.goto('/auth/login');
     const result = await page.evaluate(async () => {
       const res = await fetch(
         '/trader/api/xstockstrat.marketdata.v1.MarketDataService/ListAssets',
