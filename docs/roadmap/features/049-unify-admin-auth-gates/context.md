@@ -464,3 +464,26 @@
   → switched to Mount("/sse") like /messages. See Deviation Log.
 - Files modified: tests/test_tools.py, tests/test_auth.py, tests/test_oauth.py (new), app/main.py
 - Deviations: /sse Route→Mount bug fix (Deviation Log).
+
+### Step 22 — docs: MCP OAuth 2.1 connect flow + claude_mcp_config.json + header-propagation (FR-A6) [done]
+- mcp-tools.md: documented the OAuth 2.1 connect flow (discovery → DCR → authorize → UI login →
+  callback → token → aud-bound /sse) as the recommended method; removed nginx; marked ?api_key=
+  deprecated; noted AGENT_PUBLIC_URL + DO /agent route. claude_mcp_config.json: removed the nginx
+  block, added an OAuth remote entry ({AGENT_PUBLIC_URL}/sse) + a deprecated ?api_key= fallback.
+  header-propagation.md: documented the entry-authenticates / internal-role-check model and the
+  indicators author-ownership exception (+ admin override, RegisterFormula gap close).
+- Files modified: docs/runbooks/mcp-tools.md, services/xstockstrat-agent/claude_mcp_config.json,
+  docs/patterns/header-propagation.md
+- Deviations: none
+
+## Session 2026-06-06 — sdd-execute (sequential) — COMPLETE
+**Steps this session**: 1–22 (all)
+**Progress**: 22 done / 22 total
+**Stopped at**: all complete → feature `code-completed`
+**Verification**: ingest pytest 67% / indicators 82% / identity test:coverage EXIT=0 / agent 63%;
+ruff + eslint + tsc clean; buf lint+breaking (additive, non-breaking); 003_oauth reversible on
+postgres:16; proto stubs fresh+idempotent (identity/v1 only).
+**Deviations** (Deviation Log): CI-equivalent proto-codegen toolchain on host; CI-equivalent DB
+reversibility via postgres:16; user-approved agent ruff debt cleanup; /sse Route→Mount latent bug fix;
+UI tsc+lint in lieu of full Playwright.
+**Next**: single integration PR → main-dev (per user branch decision).

@@ -1,6 +1,6 @@
 # Implementation Spec: unify-admin-auth-gates
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-06-06
 **Feature**: `docs/roadmap/features/049-unify-admin-auth-gates/feature.md`
 **Total Steps**: 22
@@ -647,7 +647,7 @@ runs the language linter.
 
 ### Step 22 — docs: MCP OAuth 2.1 connect flow + `claude_mcp_config.json` + header-propagation note
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` / `xstockstrat-agent`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify

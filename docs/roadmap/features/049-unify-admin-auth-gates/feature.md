@@ -1,6 +1,6 @@
 # Feature: unify-admin-auth-gates
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/unify-admin-auth-gates`
 **Created**: 2026-06-05
 **Last Updated**: 2026-06-06
@@ -20,6 +20,7 @@
 | 2026-06-06 | `draft` → `spec-ready` | /sdd-review | "100% connect" revision re-approved. No criteria failures. 1 warning (041-upgrade-nextjs15 also touches xstockstrat-ui — coordinate merge order; no proto/migration/config collision). Remaining open: OQ-A (formula gate), OQ-E (discovery reachability), OQ-G (api_key deprecation), OQ-H (TTLs) — settle at /sdd-spec. |
 | 2026-06-06 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 22 steps. Settled OQ-A (keep ownership + admin override + close RegisterFormula gap), OQ-E (`AGENT_PUBLIC_URL`=`${APP_URL}/agent` in DO under the `/agent` route), OQ-G (keep `?api_key=`, mark deprecated), OQ-H (reuse identity `access_ttl_seconds`/`refresh_ttl_seconds`). Confirmed: ingest migrations up to 002, indicators 001, identity 002 (→003); `AGENT_PUBLIC_URL` + `agent.oauth.*` absent from all deploy files; identity JWT/refresh-rotation infra reusable for the OAuth token mint. |
 | 2026-06-06 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Started full 22-step sequential execution. Per user decision: all work on harness branch `claude/sdd-execute-049-sequential-076Qx` with a single integration PR → `main-dev` at the end (not the stacked per-step-PR model). Spec artifacts brought in from `claude/product-spec-049-ZiIXN` (never synced to main-dev; `feature/unify-admin-auth-gates` absent on origin). |
+| 2026-06-06 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 22 steps done. Part A (ingest/indicators/agent admin-scope gates) + Part B (full MCP OAuth 2.1: identity proto RPCs + 003_oauth migration + OAuth RPC impls, agent discovery/DCR/authorize/callback/token + aud-bound /sse, UI login delegation, config keys, docs). Verified per-service: ingest 67%, indicators 82%, identity test:coverage EXIT=0, agent 63%; buf lint+breaking (additive); migration reversible on postgres:16; all linters clean. Deviations: CI-equivalent codegen/DB fallbacks, user-approved agent ruff cleanup, /sse Route→Mount bug fix (see Deviation Log). |
 
 ---
 

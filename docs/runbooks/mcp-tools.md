@@ -12,14 +12,19 @@ Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 | `stdio` | Claude Desktop (local) — process started directly by the client | `MCP_TRANSPORT=stdio` (default) |
 | `sse` | Remote access via HTTP — Claude.ai, production deployments | `MCP_TRANSPORT=sse`, `MCP_SSE_PORT=9000` |
 
-**SSE endpoints (via nginx on port 80):**
+**SSE endpoints.** nginx was removed by feature 045; in the DO App Platform the agent is served under
+the `/agent` route prefix (`AGENT_PUBLIC_URL = ${APP_URL}/agent`, OQ-E), and locally it is exposed
+directly on port 9000.
 
-| Path | Purpose |
+| Path (relative to `AGENT_PUBLIC_URL`) | Purpose |
 |---|---|
-| `GET /agent/sse` | SSE connection entry point |
-| `POST /agent/messages` | MCP message channel |
+| `GET /sse` | SSE connection entry point |
+| `POST /messages` | MCP message channel |
+| `GET /.well-known/oauth-protected-resource` | RFC 9728 discovery |
+| `GET /.well-known/oauth-authorization-server` | RFC 8414 discovery |
+| `POST /oauth/register`, `GET /oauth/authorize`, `GET /oauth/callback`, `POST /oauth/token` | OAuth 2.1 endpoints |
 
-**Direct SSE (bypasses nginx):** `http://localhost:9000/sse`
+**Direct SSE (local):** `http://localhost:9000/sse`
 
 ---
 
@@ -28,10 +33,33 @@ Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 ### stdio
 No authentication required — the process is launched by the MCP client with the correct environment.
 
-### SSE — API key
-Provide a valid xstockstrat API key in either of:
+### SSE — OAuth 2.1 (recommended, feature 049 Part B)
+The **recommended** production method for Claude.ai. The agent is the OAuth 2.1 Resource Server +
+Authorization-Server HTTP facade; `xstockstrat-identity` is the durable client/code store + token mint.
+The end-to-end connect flow:
+
+1. **Discovery** — the client `GET`s `/.well-known/oauth-protected-resource` (RFC 9728) and
+   `/.well-known/oauth-authorization-server` (RFC 8414); an unauthenticated `GET /sse` returns
+   `401` with `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`,
+   which triggers discovery.
+2. **DCR** — `POST /oauth/register` (RFC 7591) registers a public client (https-only redirect URIs);
+   returns a `client_id`, no secret.
+3. **Authorize** — `GET /oauth/authorize` with `response_type=code`, `code_challenge_method=S256`
+   (PKCE mandatory), `client_id`, an exact-matched `redirect_uri`, `state`, and `resource`. The agent
+   delegates login to the unified UI (`/auth/oauth-login`) via an HMAC-signed stateless `txn` blob.
+4. **UI login → callback** — after login the UI redirects to `/oauth/callback` with `txn`+`state`
+   only; the agent derives `user_id` from the same-origin `access_token` session cookie
+   (identity `ValidateToken`) and mints a single-use auth code.
+5. **Token** — `POST /oauth/token` (`authorization_code` then `refresh_token`) returns an
+   **audience-bound JWT** (`aud` = the agent resource URI) plus a rotating refresh token. The JWT is
+   presented as `Authorization: Bearer <jwt>` on `/sse`; the agent rejects tokens whose `aud` does
+   not match.
+
+### SSE — API key (legacy)
+A valid xstockstrat API key in either of:
 - `Authorization: Bearer <api_key>` header
-- `?api_key=<api_key>` query parameter (for clients that cannot set custom headers)
+- `?api_key=<api_key>` query parameter — **DEPRECATED**: OAuth 2.1 forbids credentials in query
+  strings. Kept only as a Desktop-only fallback for clients that cannot perform the OAuth flow.
 
 The key is validated against `xstockstrat-identity` `ValidateApiKey` RPC. Invalid keys return `HTTP 401`.
 
