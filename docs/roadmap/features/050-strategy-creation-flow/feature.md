@@ -1,6 +1,6 @@
 # Feature: strategy-creation-flow
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/strategy-creation-flow`
 **Created**: 2026-06-06
 **Last Updated**: 2026-06-06
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-06-06 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-06-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 
 ---
 
@@ -41,4 +42,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review strategy-creation-flow product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec strategy-creation-flow` — generate implementation spec from the approved product spec
