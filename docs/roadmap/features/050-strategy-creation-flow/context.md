@@ -47,6 +47,14 @@ all 11 steps' Files/evidence validated against the live codebase — no mismatch
 - Files modified: `services/xstockstrat-ui/src/components/insights/RuleEditor.tsx`
 - Deviations: none.
 
+### Step 5 — ComponentEditor [done]
+- Created `src/components/insights/ComponentEditor.tsx` — controlled `{ value, onChange, onRemove }`
+  editing one component (refName, kind Select, indicator free-text or searchable formula picker via
+  `useFormulas` filtered by name/id substring per AC-7, and a key-value params editor). Exports
+  `StrategyComponentDraft` + `emptyComponent()` for the wizard.
+- Files modified: `services/xstockstrat-ui/src/components/insights/ComponentEditor.tsx`
+- Deviations: none.
+
 ## Session 2026-06-06T00:05:00Z — sdd-spec
 
 - Generated implementation-spec.md with 11 steps. Status → implementation-ready.

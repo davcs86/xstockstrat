@@ -152,7 +152,7 @@ client plumbing (Steps 1–3) land before any page consumes them, and the wizard
 
 ### Step 5 — service: Build the component editor (ref_name / kind / indicator|formula picker / params)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/ComponentEditor.tsx` — create
