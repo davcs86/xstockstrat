@@ -297,3 +297,18 @@
   re-auth tests. `ruff` clean; `pytest --cov=app` 67% (≥40).
 - Files modified: `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
 - Deviations: none
+
+### Step 3 — indicators formula gate (OQ-A / FR-A4) [done]
+- Added `_has_admin_scope` (x-access-scope & 0x04) to IndicatorsServicer. RegisterFormula no longer
+  silently defaults author to "dev-user": explicit author wins, else falls back to propagated
+  x-user-id, else aborts INVALID_ARGUMENT. UpdateFormula/DeleteFormula now allow an admin-scope
+  override of the author-ownership check.
+- Files modified: `services/xstockstrat-indicators/app/handlers/servicer.py`
+- Deviations: none
+
+### Step 4 — indicators formula gate coverage (AC-A3) [done]
+- Added TestRegisterFormulaAuthorGate (x-user-id default, explicit author wins, abort without either)
+  and TestFormulaAdminOverride (owner ok; non-owner admin override ok; non-owner no-admin denied; same
+  for delete). `ruff` clean; `pytest --cov=app` 82% (≥50).
+- Files modified: `services/xstockstrat-indicators/tests/test_formulas.py`
+- Deviations: none

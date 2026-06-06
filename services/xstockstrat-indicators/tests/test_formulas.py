@@ -111,3 +111,123 @@ class TestIndicatorsServicerCRUD:
             await servicer.DeleteFormula(MagicMock(), ctx)
         ctx.abort.assert_awaited_once()
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.UNAVAILABLE
+
+
+# ---------------------------------------------------------------------------
+# RegisterFormula author gate (feature 049 Part A, OQ-A) — close the
+# silent "dev-user" default; require an authenticated author.
+# ---------------------------------------------------------------------------
+
+
+def _ctx(metadata: list[tuple[str, str]]):
+    ctx = MagicMock()
+    ctx.invocation_metadata = MagicMock(return_value=metadata)
+    return ctx
+
+
+class TestRegisterFormulaAuthorGate:
+    def _servicer(self):
+        return IndicatorsServicer(config_watcher=MagicMock())
+
+    async def test_defaults_author_to_x_user_id(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = self._servicer()  # repo is None → in-memory path
+        req = indicators_pb2.RegisterFormulaRequest(name="f", source="x = 1")
+        ctx = _ctx([("x-user-id", "user-42")])
+        resp = await servicer.RegisterFormula(req, ctx)
+        stored = servicer._formulas[resp.formula_id]
+        assert stored.author == "user-42"
+
+    async def test_explicit_author_wins(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = self._servicer()
+        req = indicators_pb2.RegisterFormulaRequest(name="f", source="x = 1", author="explicit")
+        ctx = _ctx([("x-user-id", "user-42")])
+        resp = await servicer.RegisterFormula(req, ctx)
+        assert servicer._formulas[resp.formula_id].author == "explicit"
+
+    async def test_aborts_without_author_or_user_id(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = self._servicer()
+        req = indicators_pb2.RegisterFormulaRequest(name="f", source="x = 1")
+        ctx = _ctx([])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.RegisterFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+
+
+# ---------------------------------------------------------------------------
+# Update/Delete admin-scope override (feature 049 Part A, OQ-A)
+# ---------------------------------------------------------------------------
+
+
+def _repo_servicer(author: str):
+    servicer = IndicatorsServicer(config_watcher=MagicMock())
+    repo = MagicMock()
+    repo.get_by_id = AsyncMock(return_value={"author": author})
+    repo.update = AsyncMock(
+        return_value={
+            "formula_id": "f",
+            "name": "n",
+            "description": "",
+            "source": "x = 1",
+            "author": author,
+            "is_public": False,
+            "input_schema": {},
+        }
+    )
+    repo.delete = AsyncMock(return_value=True)
+    servicer._repo = repo
+    return servicer
+
+
+class TestFormulaAdminOverride:
+    async def test_owner_updates_without_admin_scope(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = _repo_servicer(author="user-1")
+        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-1", name="n")
+        resp = await servicer.UpdateFormula(req, _ctx([]))
+        assert resp.formula.formula_id == "f"
+
+    async def test_non_owner_admin_override_updates(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = _repo_servicer(author="owner")
+        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="someone-else", name="n")
+        resp = await servicer.UpdateFormula(req, _ctx([("x-access-scope", "7")]))
+        assert resp.formula.formula_id == "f"
+
+    async def test_non_owner_no_admin_denied(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = _repo_servicer(author="owner")
+        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="someone-else", name="n")
+        ctx = _ctx([("x-access-scope", "1")])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.UpdateFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+
+    async def test_delete_non_owner_admin_override(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = _repo_servicer(author="owner")
+        req = indicators_pb2.DeleteFormulaRequest(formula_id="f", user_id="someone-else")
+        resp = await servicer.DeleteFormula(req, _ctx([("x-access-scope", "7")]))
+        assert resp.success is True
+
+    async def test_delete_non_owner_no_admin_denied(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = _repo_servicer(author="owner")
+        req = indicators_pb2.DeleteFormulaRequest(formula_id="f", user_id="someone-else")
+        ctx = _ctx([("x-access-scope", "0")])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.DeleteFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED

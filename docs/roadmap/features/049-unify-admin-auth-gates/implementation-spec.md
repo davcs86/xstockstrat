@@ -111,7 +111,7 @@ runs the language linter.
 
 ### Step 3 — service: indicators formula gate (OQ-A / FR-A4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/handlers/servicer.py` — modify
@@ -139,7 +139,7 @@ runs the language linter.
 
 ### Step 4 — test: indicators formula gate coverage (AC-A3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_formulas.py` — modify
