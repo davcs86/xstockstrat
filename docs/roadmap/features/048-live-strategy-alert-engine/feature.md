@@ -1,6 +1,8 @@
 # Feature: live-strategy-alert-engine
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: a7201b02bb2b035e48f96aba634594c605d2de56
+**Launched date**: 2026-06-06
 **Development Branch**: `feature/live-strategy-alert-engine`
 **Created**: 2026-06-01
 **Last Updated**: 2026-06-05
@@ -20,6 +22,7 @@
 | 2026-06-05 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 — live_enabled field + SetStrategyLive RPC/messages; buf lint+breaking clean). |
 | 2026-06-05 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done (stacked PRs #582–#594). analysis 91 tests/56.89% + live_loop; agent 36 tests/59.75%; UI tsc+lint clean, 4/4 live-strategies e2e pass. |
 
+| 2026-06-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #599; committed a7201b02bb2b035e48f96aba634594c605d2de56 |
 ---
 
 ## Artifacts

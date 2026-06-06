@@ -212,3 +212,10 @@ feature/live-strategy-alert-engine. Resolved conflicts in servicer.py (kept noti
 main.py (kept NOTIFY, dropped IDENTITY), client.py (kept set_strategy_live; validate_admin auto-deduped).
 Refactored SetStrategyLive to use the shared `_has_admin_scope` helper (same gate as ManageStrategy).
 Verified: analysis 91 pass/57.6%, agent 37 pass, UI tsc clean.
+
+## Session 2026-06-06 (CI: feature status automation)
+
+- Promotion PR #599 merged to main
+- Feature promoted and committed: a7201b02bb2b035e48f96aba634594c605d2de56
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-06

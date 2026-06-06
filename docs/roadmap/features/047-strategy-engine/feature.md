@@ -1,6 +1,8 @@
 # Feature: strategy-engine
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: a7201b02bb2b035e48f96aba634594c605d2de56
+**Launched date**: 2026-06-06
 **Development Branch**: `feature/strategy-engine`
 **Created**: 2026-06-01
 **Last Updated**: 2026-06-05
@@ -19,6 +21,7 @@
 | 2026-06-05 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 — proto messages/RPCs added to analysis.proto; buf lint + breaking clean). |
 | 2026-06-05 | `in-progress` → `code-completed` | /sdd-execute | All 14 steps done (stacked per-step PRs #566–#579). analysis 83 tests / 53.69% cov, agent 31 tests / 57.77% cov; buf+codegen clean; migration up/down verified. |
 
+| 2026-06-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #599; committed a7201b02bb2b035e48f96aba634594c605d2de56 |
 ---
 
 ## Artifacts

@@ -283,3 +283,10 @@ gate with 048's model (role check on propagated x-access-scope; authn/authz owne
   mocks validate_admin (entry gate) + gRPC error re-raise. analysis 83 pass/54.4%; agent 32 pass.
 - Out of scope (separate services, separate auth): `manage_signal_source`→ingest (_validate_admin_token,
   Bearer) and `manage_formula`→indicators (author-based user_id==author) keep their existing gates.
+
+## Session 2026-06-06 (CI: feature status automation)
+
+- Promotion PR #599 merged to main
+- Feature promoted and committed: a7201b02bb2b035e48f96aba634594c605d2de56
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-06
