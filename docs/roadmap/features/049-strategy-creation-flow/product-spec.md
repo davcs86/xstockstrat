@@ -17,9 +17,9 @@ As an operator using the Insights UI, I want to create, edit, deactivate, and en
 FR-1. **Strategy list actions** — The `/insights/strategies` page must expose a "New Strategy" button and per-row "Edit" and "Deactivate" actions.
 
 FR-2. **Strategy creation form** — A `/insights/strategies/new` page (or modal) must allow the operator to:
-  - Set `strategy_id` (lowercase/underscore, validated client-side) and `display_name`.
-  - Add one or more components, each specifying: `ref_name`, kind (`BUILTIN_INDICATOR` or `CUSTOM_FORMULA`), indicator name or `formula_id` (searchable dropdown), and arbitrary `params` (key-value editor).
-  - Define an `entry_rule` and `exit_rule` as a structured condition tree (visual builder with `op: AND/OR` and leaf conditions: `lhs ref_name`, `fn` or comparison operator, `rhs ref_name or constant`).
+  - Set `strategy_id` (lowercase/underscore, validated client-side) and `display_name`. `strategy_id` is **immutable after creation** — it cannot be changed on the edit form (field rendered as read-only on edit).
+  - Add any number of components (no client-side limit) each specifying: `ref_name`, kind (`BUILTIN_INDICATOR` or `CUSTOM_FORMULA`), indicator name or `formula_id` (searchable dropdown), and arbitrary `params` (key-value editor).
+  - Define an `entry_rule` and `exit_rule` using a **dual-mode rule editor**: a structured visual condition-tree builder (default; `op: AND/OR` nodes with leaf conditions: `lhs ref_name`, `fn` or comparison operator, `rhs ref_name or constant`) and a **raw JSON fallback editor** accessible via a toggle (for power users who prefer to write the condition tree directly).
   - Configure optional `signal_params`: `signal_sources` (multi-select from live source list), `signal_weight`, `technical_weight`, `min_conviction`.
   - Submit calls `ManageStrategy(operation=register)` via the existing `analysisClient`.
 
@@ -79,9 +79,14 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 5. A read-only operator sees no "New Strategy", "Edit", "Deactivate", or live toggle controls.
 6. Server-side validation errors (e.g., unknown indicator name, `ref_name` used in rule but not declared in components) are displayed as field-level error messages.
 7. The formula picker in the component editor shows all formulas returned by `ListFormulas` and filters by substring as the operator types.
+8. The `strategy_id` field is disabled (read-only) on the edit form; the operator cannot change it after creation.
+9. The rule editor's "JSON" toggle switches between the visual tree builder and a raw JSON textarea; both modes produce the same `entry_rule`/`exit_rule` string sent to the backend.
+10. Adding more than any given number of components (stress-test: 20+) works without UI error — only backend validation limits apply.
 
-## Open Questions
+## Decisions
 
-- [ ] Should the entry/exit rule builder expose a raw JSON fallback editor for power users, or is the structured visual builder sufficient?
-- [ ] Should `strategy_id` be editable after creation, or locked after first save (current proto behavior: `update` preserves the ID)?
-- [ ] Is there a maximum number of components per strategy that the UI should enforce client-side (currently only backend-validated)?
+| # | Question | Decision |
+|---|---|---|
+| 1 | Raw JSON fallback in rule builder? | **Yes** — dual-mode editor: visual builder (default) + raw JSON toggle |
+| 2 | `strategy_id` editable after creation? | **No** — locked after first save; rendered read-only on edit form |
+| 3 | Client-side component count limit? | **No limit** — backend validation only |

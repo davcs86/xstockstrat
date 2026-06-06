@@ -12,3 +12,10 @@
 - Scope: UI-only — no proto changes, no DB migrations, no new config keys.
 - All required backend RPCs already exist (ManageStrategy, GetStrategy, ListStrategyDefinitions, SetStrategyLive, ListFormulas).
 - Affected service: xstockstrat-ui (new pages + BFF routes); xstockstrat-analysis and xstockstrat-indicators read-only consumers, no code changes needed there.
+
+## Session 2026-06-06T00:01:00Z — open question resolution
+
+Decisions recorded in product-spec.md §Decisions and reflected in FR-2 and acceptance criteria:
+- Rule editor: dual-mode (visual tree builder + raw JSON fallback toggle).
+- strategy_id: immutable after creation; rendered read-only on edit form.
+- Component count: no client-side limit; backend validation only.
