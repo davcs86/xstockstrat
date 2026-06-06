@@ -6,6 +6,19 @@
 
 ---
 
+## Session 2026-06-06T00:05:00Z — sdd-spec
+
+- Generated implementation-spec.md with 11 steps. Status → implementation-ready.
+- Key codebase findings:
+  - **Insights BFF gap**: `services/xstockstrat-ui/src/lib/insightsBff.ts:34-54` proxies only 4 AnalysisService methods (listStrategies, scoreStrategy, runBacktest, getStrategyReport). The 4 RPCs this feature needs (manageStrategy, getStrategy, listStrategyDefinitions, setStrategyLive) are NOT proxied there yet — Step 1 adds them. The trader BFF (`traderBff.ts:115-129`) already proxies listStrategyDefinitions + setStrategyLive with an admin-scope gate (ADMIN_BIT = 0x04 / PermissionDenied) — reused verbatim.
+  - **Generated stubs already present**: all new analysis types (ManageStrategyRequest, GetStrategyRequest, ListStrategyDefinitionsRequest/Response, SetStrategyLiveRequest/Response, StrategyDefinition, StrategyOperation, ComponentKind) exist in `packages/proto/gen/ts/analysis/v1/analysis_pb.ts`. No proto/proto-gen step needed.
+  - **ListFormulas already proxied** by insights BFF (`insightsBff.ts:90-93`) and `useFormulas` hook exists — formula picker (FR-6) needs no BFF change.
+  - **Signal sources**: `ingestClient` browser client points at `/config-ui/api` (`browserClients/ingestClient.ts:5`); insights pages call `/insights/api`. Step 3 adds a new `/insights/api`-scoped ingest client + the insights BFF proxies `IngestService.listSignalSources` (pattern from `configUiBff.ts:45-49`).
+  - **Admin gating**: `useIsAdmin()` (`hooks/useLiveStrategies.ts:42-53`) hits the existing `/api/auth/me` route (`app/api/auth/me/route.ts`) returning `{ isAdmin }`. Reused for client-side render gating; BFF admin-scope gate is authoritative (defense-in-depth).
+  - **No `services/xstockstrat-ui/CLAUDE.md`** exists — only the feature context.md is the doc artifact (Step 11).
+  - **Next.js service** — no unit coverage threshold; verification is `pnpm run lint` + `pnpm run build` + `pnpm test:e2e` (new `e2e/insights/strategy-authoring.spec.ts`), reusing `e2e/mock-backend.ts` + `e2e/helpers/auth.ts` and the `e2e/trader/live-strategies.spec.ts` gating pattern.
+  - All step reviewers resolve to `xstockstrat-ui` owner (UI-only; analysis/indicators are read-only consumers).
+
 ## Session 2026-06-06T00:00:00Z — sdd-story
 
 - Created feature.md (status: draft), product-spec.md, context.md from user story.
