@@ -112,7 +112,9 @@ def build_sse_app():
             )
 
     routes = [
-        Route("/sse", endpoint=handle_sse),
+        # /sse is a raw-ASGI handler (scope, receive, send) — mount it as an ASGI app (like
+        # /messages) rather than a request-response Route, which would call it as f(request).
+        Mount("/sse", app=handle_sse),
         Mount("/messages", app=sse.handle_post_message),
         Route(
             "/.well-known/oauth-protected-resource",

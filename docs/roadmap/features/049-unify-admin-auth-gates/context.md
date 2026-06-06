@@ -453,3 +453,14 @@
   Documented both keys in root CLAUDE.md (Config Governance) and the agent CLAUDE.md defaults.
 - Files modified: app/oauth_server.py, CLAUDE.md (root), services/xstockstrat-agent/CLAUDE.md
 - Deviations: none
+
+### Step 21 — agent Part A + Part B coverage (AC-A2, AC-B0..B8) [done]
+- test_tools.py: updated TestManageSignalSourceTool to mock validate_admin + added non-admin-rejected
+  (AC-A2). test_auth.py: validate_bearer_jwt aud match/mismatch (AC-B4/B8). test_oauth.py (new): both
+  .well-known docs (AC-B1), /sse 401+WWW-Authenticate (AC-B0) + credential-accepted-reaches-transport,
+  DCR register/non-https/disabled, authorize S256+redirect-mismatch (AC-B3), token invalid_grant +
+  refresh pair + unsupported_grant (AC-B2/B5). 53 tests pass; ruff clean; coverage 63% (≥40).
+- Fixed a latent defect: /sse was registered via Route (calls f(request)) but handle_sse is raw ASGI
+  → switched to Mount("/sse") like /messages. See Deviation Log.
+- Files modified: tests/test_tools.py, tests/test_auth.py, tests/test_oauth.py (new), app/main.py
+- Deviations: /sse Route→Mount bug fix (Deviation Log).

@@ -620,7 +620,7 @@ runs the language linter.
 
 ### Step 21 — test: agent Part A + Part B coverage (AC-A2, AC-B0..B8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -685,3 +685,9 @@ runs the language linter.
 **Actual**: The current `ruff` (0.15.8) flags pre-existing violations on `origin/main-dev` in the agent (`UP045` Optional→`X | None` across `app/tools.py`, one `E501` long docstring line, `F841` unused `result` in `tests/test_client.py`) that an older CI `ruff` did not. Because CI installs the latest `ruff` and the agent lint job is triggered by this feature's agent changes, those findings would turn the job red regardless of feature 049. With explicit user approval (sequential blocker → "fix now / expand scope"), applied `ruff check --fix` (UP045) + `ruff format`, wrapped the long docstring line, and dropped the unused test assignment. Behavior-preserving (type-annotation syntax, whitespace, dead-assignment removal).
 **Reason**: Required for the agent lint gate (and CI) to pass on this PR; the debt is unrelated to feature 049 but unavoidable once the agent is touched.
 **Disposition**: accepted limitation cleanup (user-approved).
+
+### Deviation: Step 21 — `/sse` route registration (Route → Mount)
+**Spec said**: (Step 12) register the SSE handler with `Route("/sse", endpoint=handle_sse)` (carried over verbatim from the pre-049 code).
+**Actual**: `handle_sse` is a raw-ASGI handler `(scope, receive, send)`, but Starlette's `Route` wraps a plain async function as a request-response endpoint and calls it as `f(request)` — raising `TypeError: missing 2 required positional arguments`. Step 21's first TestClient hit on `/sse` exposed this latent defect. Changed the registration to `Mount("/sse", app=handle_sse)` (the same raw-ASGI mechanism already used for `/messages`), which invokes the handler with `(scope, receive, send)` correctly. Handler body unchanged.
+**Reason**: The endpoint must actually function (and be testable) for the 401/`WWW-Authenticate` and credential-accepted paths; the pre-existing `Route` form was non-functional under the current Starlette.
+**Disposition**: bug fix (latent pre-049 defect surfaced by the new tests).
