@@ -58,7 +58,7 @@ def build_sse_app():
     from starlette.responses import Response
     from starlette.routing import Mount, Route
 
-    from app.auth import validate_api_key
+    from app.auth import validate_api_key, validate_bearer_jwt
     from app.oauth_metadata import (
         authorization_server_metadata,
         protected_resource_metadata,
@@ -78,13 +78,32 @@ def build_sse_app():
         auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
         # Fall back to ?api_key= query param for clients that cannot set custom headers
         # (e.g. Claude Desktop SSE, which does not support Authorization headers).
+        # DEPRECATED: OAuth 2.1 forbids credentials in query strings — kept only as a
+        # Desktop-only fallback (feature 049 OQ-G).
         if not auth_header:
             qs = parse_qs(scope.get("query_string", b"").decode())
             raw_key = (qs.get("api_key") or [""])[0]
             if raw_key:
                 auth_header = f"Bearer {raw_key}"
-        if not await validate_api_key(auth_header):
-            response = Response("Unauthorized", status_code=401)
+
+        # Try the OAuth 2.1 aud-bound JWT first (so a token whose aud is wrong is rejected even if
+        # it would otherwise validate as some other credential — FR-B8), then the legacy API-key
+        # path (FR-B10). On total failure, 401 with a WWW-Authenticate discovery pointer (FR-B0).
+        token = auth_header[len("Bearer ") :] if auth_header.startswith("Bearer ") else ""
+        authorized = (token and await validate_bearer_jwt(token)) or await validate_api_key(
+            auth_header
+        )
+        if not authorized:
+            response = Response(
+                "Unauthorized",
+                status_code=401,
+                headers={
+                    "WWW-Authenticate": (
+                        "Bearer resource_metadata="
+                        f'"{AGENT_PUBLIC_URL}/.well-known/oauth-protected-resource"'
+                    )
+                },
+            )
             await response(scope, receive, send)
             return
         async with sse.connect_sse(scope, receive, send) as streams:

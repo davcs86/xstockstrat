@@ -494,7 +494,7 @@ runs the language linter.
 
 ### Step 16 — service: agent `/sse` 401+`WWW-Authenticate` + JWT `aud` validation (FR-B0, FR-B8, FR-B10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/auth.py` — modify

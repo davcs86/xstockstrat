@@ -415,3 +415,11 @@
   returned only in the JSON body. Registered the POST route.
 - Files modified: app/oauth_server.py, app/client.py, app/main.py
 - Deviations: none
+
+### Step 16 — agent /sse 401+WWW-Authenticate + JWT aud validation (FR-B0/B8/B10) [done]
+- auth.py: added validate_bearer_jwt(token) → ValidateToken + claims.aud == AGENT_PUBLIC_URL (rejects
+  wrong-aud tokens); added _metadata (x-mcp-secret). main.py handle_sse: try JWT first, then the
+  legacy api_key path (Bearer + ?api_key= deprecated fallback); on failure return 401 with
+  WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource".
+- Files modified: app/auth.py, app/main.py
+- Deviations: none
