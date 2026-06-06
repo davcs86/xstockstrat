@@ -19,6 +19,9 @@ cannot open its final integration PR to `main-dev` until the feature in the
 | `broker-accounts-ui` | `add-ikbr-account-support` | Consumes proto stubs and backend RPCs (`ListBrokerAccounts`, `ListPortfolios`, `RegisterBrokerAccount`, `DeregisterBrokerAccount`) defined by that feature | Yes |
 | `strategy-engine` | `agent-mcp-server` | Steps 8–11 modify `client.py`, `tools.py`, `test_client.py`, `test_tools.py` — all four are **created** by `agent-mcp-server` (feature 009); they must exist before strategy-engine modifies them | Yes |
 | `live-strategy-alert-engine` | `strategy-engine` | Hard dependency: requires `StrategyDefinition` model, `analysis.strategies` table, and `StrategyEvaluator` module delivered by `strategy-engine` (feature 047) | No |
+| `strategy-creation-flow` | `formula-management-ui` | Consumes `ListFormulas` RPC from `xstockstrat-indicators` (feature 003); formula picker in the component editor depends on this RPC existing in generated stubs | Yes |
+| `strategy-creation-flow` | `strategy-engine` | Consumes `ManageStrategy`, `GetStrategy`, `ListStrategyDefinitions`, and `SetStrategyLive` RPCs from `xstockstrat-analysis` (feature 047); all strategy authoring and live toggle RPCs must exist before the UI can call them | Yes |
+| `strategy-creation-flow` | `live-strategy-alert-engine` | FR-5 live evaluation toggle calls `SetStrategyLive` and reads `live_enabled` column on `analysis.strategies` — both introduced by feature 048 | Yes |
 
 ---
 
