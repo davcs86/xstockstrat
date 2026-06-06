@@ -592,14 +592,14 @@ func (s *TradingService) syncPositions(ctx context.Context) {
 		if b.IsPaper() {
 			tradingMode = "TRADING_MODE_PAPER"
 		}
-		type posEntry struct {
-			Symbol  string  `json:"symbol"`
-			Qty     float64 `json:"qty"`
-			AvgCost float64 `json:"avg_cost"`
-		}
-		posEntries := make([]posEntry, len(positions))
+		// structpb.NewStruct only accepts []interface{}, not typed slices.
+		posEntries := make([]interface{}, len(positions))
 		for i, p := range positions {
-			posEntries[i] = posEntry{Symbol: p.Symbol, Qty: p.Quantity, AvgCost: p.AvgCost}
+			posEntries[i] = map[string]interface{}{
+				"symbol":   p.Symbol,
+				"qty":      p.Quantity,
+				"avg_cost": p.AvgCost,
+			}
 		}
 		payload := map[string]interface{}{
 			"account_id":   accountID,
