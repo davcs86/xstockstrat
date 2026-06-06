@@ -332,7 +332,9 @@ def register_tools(server: FastMCP) -> None:
         slug/display_name/source_type/extractor_module/config_json: SignalSource fields.
         credentials_ref: optional reference forwarded to the ingest backend. It is NEVER
             echoed back in the response and never exposed to the caller (FR-12).
-        admin_api_key: required; validated by the ingest backend."""
+        admin_api_key: required; must carry the admin role (validated here at the agent entry)."""
+        if not await client.validate_admin(admin_api_key):
+            raise RuntimeError("admin API key required")
         source: dict = {
             "slug": slug,
             "display_name": display_name,

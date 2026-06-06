@@ -356,9 +356,11 @@ async def manage_signal_source(
     if credentials_ref:
         req.credentials_ref = credentials_ref
 
+    # Forward the admin access scope so ingest's role check (x-access-scope & 0x04) passes.
+    meta = list(_admin_metadata(api_key)) + [("x-access-scope", "7")]
     async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
-        resp = await stub.ManageSignalSource(req, metadata=_admin_metadata(api_key))
+        resp = await stub.ManageSignalSource(req, metadata=meta)
 
     # FR-12: never echo credentials_ref back to the caller.
     return {

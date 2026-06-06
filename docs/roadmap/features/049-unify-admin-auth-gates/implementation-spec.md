@@ -161,7 +161,7 @@ runs the language linter.
 
 ### Step 5 — service: agent `manage_signal_source` entry validation + scope forward (FR-A2, FR-A5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify

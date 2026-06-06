@@ -312,3 +312,11 @@
   for delete). `ruff` clean; `pytest --cov=app` 82% (≥50).
 - Files modified: `services/xstockstrat-indicators/tests/test_formulas.py`
 - Deviations: none
+
+### Step 5 — agent manage_signal_source entry validation + scope forward (FR-A2, FR-A5) [done]
+- tools.py manage_signal_source now calls client.validate_admin(admin_api_key) at entry (raises
+  RuntimeError on failure), matching manage_strategy/set_strategy_live. client.py manage_signal_source
+  now appends ("x-access-scope","7") to the metadata so ingest's new scope gate (Step 1) passes.
+  Response shape unchanged (credentials_ref still never echoed).
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/client.py`
+- Deviations: none (coverage verified later by Step 21).
