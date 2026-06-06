@@ -1,9 +1,11 @@
 # Feature: live-strategy-alert-engine
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `launched`
+**Committed to main**: a7201b02bb2b035e48f96aba634594c605d2de56
+**Launched date**: 2026-06-06
 **Development Branch**: `feature/live-strategy-alert-engine`
 **Created**: 2026-06-01
-**Last Updated**: 2026-06-01
+**Last Updated**: 2026-06-05
 
 ---
 
@@ -12,13 +14,21 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-06-01 | `idea` → `draft` | /sdd-story | Split out from `047-strategy-engine` revamp — the continuous live evaluation runtime |
+| 2026-06-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings — advisory). All 5 OQs resolved: asyncio background task in analysis, polling cadence, in-memory dedup, live_enabled column + SetStrategyLive RPC, sequential evaluation cap. |
+| 2026-06-05 | `spec-ready` → `draft` | scope change | Added UI scope: Live Strategies panel (FR-10, FR-11) in xstockstrat-ui /trader segment with admin toggle and strategy alert feed. Requires re-review. |
+| 2026-06-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved after UI scope addition (4 warnings — advisory). All overlap warnings advisory; 047/019 merge-order already recorded. |
+| 2026-06-05 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps. |
+| 2026-06-05 | `implementation-ready` (re-spec) | /sdd-execute | Targeted re-spec of Steps 4/5/6/7 to align with 047's *delivered* code (evaluator at app/services/evaluator.py; servicer __init__ has db_pool+identity_channel, store is self._strategies_repo; SetStrategyLive uses repo.set_live_enabled; admin gate = role check on x-access-scope per entry-point-auth guidance; agent validates admin at entry since SSE auth does not enforce admin role). |
+| 2026-06-05 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 — live_enabled field + SetStrategyLive RPC/messages; buf lint+breaking clean). |
+| 2026-06-05 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done (stacked PRs #582–#594). analysis 91 tests/56.89% + live_loop; agent 36 tests/59.75%; UI tsc+lint clean, 4/4 live-strategies e2e pass. |
 
+| 2026-06-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #599; committed a7201b02bb2b035e48f96aba634594c605d2de56 |
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec live-strategy-alert-engine`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -40,18 +50,19 @@ backtest decisions. Alerts only — no order placement.
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Finalized at /sdd-spec time.)_
+_(Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| `xstockstrat-analysis` (service owner) | Evaluator parity with backtest, determinism, no look-ahead, per-strategy live state correctness |
-| `xstockstrat-notify` (service owner) | Stream delivery guarantees, alert deduplication, backpressure handling |
-| `xstockstrat-marketdata` (service owner) | Live bar/quote consumption, feed idempotency |
-| `xstockstrat-ingest` (service owner) | `QuerySignals` for live signal-weighting |
-| Platform Lead | Where the runtime lives (extend analysis vs new service vs agent scheduler), port/dependency-graph impact |
-| Security | Trading-mode safety (alerts must never auto-execute), admin scope on enable/disable |
+| `xstockstrat-analysis` (service owner) | Backtest reproducibility, strategy scoring determinism, no look-ahead bias, per-strategy live state correctness |
+| `xstockstrat-notify` (service owner) | Stream delivery guarantees, backpressure handling, alert deduplication |
+| `xstockstrat-marketdata` (service owner) | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency |
+| `xstockstrat-ingest` (service owner) | Signal normalization correctness, idempotent ingestion, newsletter source schema stability |
+| `xstockstrat-ui` (service owner) | Trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access |
+| Proto Reviewer | Field number uniqueness, backward compatibility, naming conventions |
+| DBA | Migration NNN numbering, up+down pair present, index correctness |
+| Security | Admin API key scoping on mutating MCP tools, `secret.*` handling for any credential refs |
 
 ## Next Action
 
-`/sdd-review live-strategy-alert-engine product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-review live-strategy-alert-engine impl-spec` — validate implementation spec, then `/sdd-execute live-strategy-alert-engine`

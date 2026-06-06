@@ -105,6 +105,8 @@ func main() {
 	go svc.StartFillPoller(ctx)
 	// Start position sync poller — reconciles broker positions every N ms.
 	go svc.StartPositionSyncPoller(ctx)
+	// Start credential health poller — flags accounts whose API secrets stopped working.
+	go svc.StartCredentialHealthPoller(ctx)
 
 	// gRPC server.
 	grpcHdl := handler.NewTradingHandler(svc)

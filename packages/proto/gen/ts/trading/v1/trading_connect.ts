@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CancelOrderRequest, CancelOrderResponse, DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse, GetOrderRequest, ListBrokerAccountsRequest, ListBrokerAccountsResponse, ListOrdersRequest, ListOrdersResponse, Order, PlaceOrderRequest, RegisterBrokerAccountRequest, RegisterBrokerAccountResponse, StreamOrderUpdatesRequest } from "./trading_pb.js";
+import { CancelOrderRequest, CancelOrderResponse, DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse, GetOrderRequest, GetTradingEnvironmentRequest, GetTradingEnvironmentResponse, ListBrokerAccountsRequest, ListBrokerAccountsResponse, ListOrdersRequest, ListOrdersResponse, Order, PlaceOrderRequest, RegisterBrokerAccountRequest, RegisterBrokerAccountResponse, StreamOrderUpdatesRequest, UpdateBrokerAccountCredentialsRequest, UpdateBrokerAccountCredentialsResponse } from "./trading_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -82,6 +82,30 @@ export const TradingService = {
       name: "DeregisterBrokerAccount",
       I: DeregisterBrokerAccountRequest,
       O: DeregisterBrokerAccountResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+     * account, re-validates them against the broker, and refreshes credential_status.
+     *
+     * @generated from rpc xstockstrat.trading.v1.TradingService.UpdateBrokerAccountCredentials
+     */
+    updateBrokerAccountCredentials: {
+      name: "UpdateBrokerAccountCredentials",
+      I: UpdateBrokerAccountCredentialsRequest,
+      O: UpdateBrokerAccountCredentialsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+     * switch between paper and live — the environment owns this decision.
+     *
+     * @generated from rpc xstockstrat.trading.v1.TradingService.GetTradingEnvironment
+     */
+    getTradingEnvironment: {
+      name: "GetTradingEnvironment",
+      I: GetTradingEnvironmentRequest,
+      O: GetTradingEnvironmentResponse,
       kind: MethodKind.Unary,
     },
   }

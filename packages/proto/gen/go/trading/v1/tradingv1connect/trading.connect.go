@@ -56,6 +56,12 @@ const (
 	// TradingServiceDeregisterBrokerAccountProcedure is the fully-qualified name of the
 	// TradingService's DeregisterBrokerAccount RPC.
 	TradingServiceDeregisterBrokerAccountProcedure = "/xstockstrat.trading.v1.TradingService/DeregisterBrokerAccount"
+	// TradingServiceUpdateBrokerAccountCredentialsProcedure is the fully-qualified name of the
+	// TradingService's UpdateBrokerAccountCredentials RPC.
+	TradingServiceUpdateBrokerAccountCredentialsProcedure = "/xstockstrat.trading.v1.TradingService/UpdateBrokerAccountCredentials"
+	// TradingServiceGetTradingEnvironmentProcedure is the fully-qualified name of the TradingService's
+	// GetTradingEnvironment RPC.
+	TradingServiceGetTradingEnvironmentProcedure = "/xstockstrat.trading.v1.TradingService/GetTradingEnvironment"
 )
 
 // TradingServiceClient is a client for the xstockstrat.trading.v1.TradingService service.
@@ -68,6 +74,12 @@ type TradingServiceClient interface {
 	RegisterBrokerAccount(context.Context, *connect.Request[v1.RegisterBrokerAccountRequest]) (*connect.Response[v1.RegisterBrokerAccountResponse], error)
 	ListBrokerAccounts(context.Context, *connect.Request[v1.ListBrokerAccountsRequest]) (*connect.Response[v1.ListBrokerAccountsResponse], error)
 	DeregisterBrokerAccount(context.Context, *connect.Request[v1.DeregisterBrokerAccountRequest]) (*connect.Response[v1.DeregisterBrokerAccountResponse], error)
+	// UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+	// account, re-validates them against the broker, and refreshes credential_status.
+	UpdateBrokerAccountCredentials(context.Context, *connect.Request[v1.UpdateBrokerAccountCredentialsRequest]) (*connect.Response[v1.UpdateBrokerAccountCredentialsResponse], error)
+	// GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+	// switch between paper and live — the environment owns this decision.
+	GetTradingEnvironment(context.Context, *connect.Request[v1.GetTradingEnvironmentRequest]) (*connect.Response[v1.GetTradingEnvironmentResponse], error)
 }
 
 // NewTradingServiceClient constructs a client for the xstockstrat.trading.v1.TradingService
@@ -129,19 +141,33 @@ func NewTradingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(tradingServiceMethods.ByName("DeregisterBrokerAccount")),
 			connect.WithClientOptions(opts...),
 		),
+		updateBrokerAccountCredentials: connect.NewClient[v1.UpdateBrokerAccountCredentialsRequest, v1.UpdateBrokerAccountCredentialsResponse](
+			httpClient,
+			baseURL+TradingServiceUpdateBrokerAccountCredentialsProcedure,
+			connect.WithSchema(tradingServiceMethods.ByName("UpdateBrokerAccountCredentials")),
+			connect.WithClientOptions(opts...),
+		),
+		getTradingEnvironment: connect.NewClient[v1.GetTradingEnvironmentRequest, v1.GetTradingEnvironmentResponse](
+			httpClient,
+			baseURL+TradingServiceGetTradingEnvironmentProcedure,
+			connect.WithSchema(tradingServiceMethods.ByName("GetTradingEnvironment")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // tradingServiceClient implements TradingServiceClient.
 type tradingServiceClient struct {
-	placeOrder              *connect.Client[v1.PlaceOrderRequest, v1.Order]
-	cancelOrder             *connect.Client[v1.CancelOrderRequest, v1.CancelOrderResponse]
-	getOrder                *connect.Client[v1.GetOrderRequest, v1.Order]
-	listOrders              *connect.Client[v1.ListOrdersRequest, v1.ListOrdersResponse]
-	streamOrderUpdates      *connect.Client[v1.StreamOrderUpdatesRequest, v1.Order]
-	registerBrokerAccount   *connect.Client[v1.RegisterBrokerAccountRequest, v1.RegisterBrokerAccountResponse]
-	listBrokerAccounts      *connect.Client[v1.ListBrokerAccountsRequest, v1.ListBrokerAccountsResponse]
-	deregisterBrokerAccount *connect.Client[v1.DeregisterBrokerAccountRequest, v1.DeregisterBrokerAccountResponse]
+	placeOrder                     *connect.Client[v1.PlaceOrderRequest, v1.Order]
+	cancelOrder                    *connect.Client[v1.CancelOrderRequest, v1.CancelOrderResponse]
+	getOrder                       *connect.Client[v1.GetOrderRequest, v1.Order]
+	listOrders                     *connect.Client[v1.ListOrdersRequest, v1.ListOrdersResponse]
+	streamOrderUpdates             *connect.Client[v1.StreamOrderUpdatesRequest, v1.Order]
+	registerBrokerAccount          *connect.Client[v1.RegisterBrokerAccountRequest, v1.RegisterBrokerAccountResponse]
+	listBrokerAccounts             *connect.Client[v1.ListBrokerAccountsRequest, v1.ListBrokerAccountsResponse]
+	deregisterBrokerAccount        *connect.Client[v1.DeregisterBrokerAccountRequest, v1.DeregisterBrokerAccountResponse]
+	updateBrokerAccountCredentials *connect.Client[v1.UpdateBrokerAccountCredentialsRequest, v1.UpdateBrokerAccountCredentialsResponse]
+	getTradingEnvironment          *connect.Client[v1.GetTradingEnvironmentRequest, v1.GetTradingEnvironmentResponse]
 }
 
 // PlaceOrder calls xstockstrat.trading.v1.TradingService.PlaceOrder.
@@ -184,6 +210,17 @@ func (c *tradingServiceClient) DeregisterBrokerAccount(ctx context.Context, req 
 	return c.deregisterBrokerAccount.CallUnary(ctx, req)
 }
 
+// UpdateBrokerAccountCredentials calls
+// xstockstrat.trading.v1.TradingService.UpdateBrokerAccountCredentials.
+func (c *tradingServiceClient) UpdateBrokerAccountCredentials(ctx context.Context, req *connect.Request[v1.UpdateBrokerAccountCredentialsRequest]) (*connect.Response[v1.UpdateBrokerAccountCredentialsResponse], error) {
+	return c.updateBrokerAccountCredentials.CallUnary(ctx, req)
+}
+
+// GetTradingEnvironment calls xstockstrat.trading.v1.TradingService.GetTradingEnvironment.
+func (c *tradingServiceClient) GetTradingEnvironment(ctx context.Context, req *connect.Request[v1.GetTradingEnvironmentRequest]) (*connect.Response[v1.GetTradingEnvironmentResponse], error) {
+	return c.getTradingEnvironment.CallUnary(ctx, req)
+}
+
 // TradingServiceHandler is an implementation of the xstockstrat.trading.v1.TradingService service.
 type TradingServiceHandler interface {
 	PlaceOrder(context.Context, *connect.Request[v1.PlaceOrderRequest]) (*connect.Response[v1.Order], error)
@@ -194,6 +231,12 @@ type TradingServiceHandler interface {
 	RegisterBrokerAccount(context.Context, *connect.Request[v1.RegisterBrokerAccountRequest]) (*connect.Response[v1.RegisterBrokerAccountResponse], error)
 	ListBrokerAccounts(context.Context, *connect.Request[v1.ListBrokerAccountsRequest]) (*connect.Response[v1.ListBrokerAccountsResponse], error)
 	DeregisterBrokerAccount(context.Context, *connect.Request[v1.DeregisterBrokerAccountRequest]) (*connect.Response[v1.DeregisterBrokerAccountResponse], error)
+	// UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+	// account, re-validates them against the broker, and refreshes credential_status.
+	UpdateBrokerAccountCredentials(context.Context, *connect.Request[v1.UpdateBrokerAccountCredentialsRequest]) (*connect.Response[v1.UpdateBrokerAccountCredentialsResponse], error)
+	// GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+	// switch between paper and live — the environment owns this decision.
+	GetTradingEnvironment(context.Context, *connect.Request[v1.GetTradingEnvironmentRequest]) (*connect.Response[v1.GetTradingEnvironmentResponse], error)
 }
 
 // NewTradingServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -251,6 +294,18 @@ func NewTradingServiceHandler(svc TradingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(tradingServiceMethods.ByName("DeregisterBrokerAccount")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tradingServiceUpdateBrokerAccountCredentialsHandler := connect.NewUnaryHandler(
+		TradingServiceUpdateBrokerAccountCredentialsProcedure,
+		svc.UpdateBrokerAccountCredentials,
+		connect.WithSchema(tradingServiceMethods.ByName("UpdateBrokerAccountCredentials")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tradingServiceGetTradingEnvironmentHandler := connect.NewUnaryHandler(
+		TradingServiceGetTradingEnvironmentProcedure,
+		svc.GetTradingEnvironment,
+		connect.WithSchema(tradingServiceMethods.ByName("GetTradingEnvironment")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.trading.v1.TradingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TradingServicePlaceOrderProcedure:
@@ -269,6 +324,10 @@ func NewTradingServiceHandler(svc TradingServiceHandler, opts ...connect.Handler
 			tradingServiceListBrokerAccountsHandler.ServeHTTP(w, r)
 		case TradingServiceDeregisterBrokerAccountProcedure:
 			tradingServiceDeregisterBrokerAccountHandler.ServeHTTP(w, r)
+		case TradingServiceUpdateBrokerAccountCredentialsProcedure:
+			tradingServiceUpdateBrokerAccountCredentialsHandler.ServeHTTP(w, r)
+		case TradingServiceGetTradingEnvironmentProcedure:
+			tradingServiceGetTradingEnvironmentHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -308,4 +367,12 @@ func (UnimplementedTradingServiceHandler) ListBrokerAccounts(context.Context, *c
 
 func (UnimplementedTradingServiceHandler) DeregisterBrokerAccount(context.Context, *connect.Request[v1.DeregisterBrokerAccountRequest]) (*connect.Response[v1.DeregisterBrokerAccountResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.trading.v1.TradingService.DeregisterBrokerAccount is not implemented"))
+}
+
+func (UnimplementedTradingServiceHandler) UpdateBrokerAccountCredentials(context.Context, *connect.Request[v1.UpdateBrokerAccountCredentialsRequest]) (*connect.Response[v1.UpdateBrokerAccountCredentialsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.trading.v1.TradingService.UpdateBrokerAccountCredentials is not implemented"))
+}
+
+func (UnimplementedTradingServiceHandler) GetTradingEnvironment(context.Context, *connect.Request[v1.GetTradingEnvironmentRequest]) (*connect.Response[v1.GetTradingEnvironmentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.trading.v1.TradingService.GetTradingEnvironment is not implemented"))
 }

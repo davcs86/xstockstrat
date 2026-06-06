@@ -13,5 +13,5 @@ Step-by-step procedures for recurring platform operations. Each file is self-con
 | `historical-backfill.md` | Trigger, monitor, and verify historical OHLCV bar backfills via TriggerBackfill RPC or n8n webhook | Need historical data for backtesting or analysis |
 | `hotfix-log.md` | Append-only register of all production hotfixes (Track A); updated by `/sdd-triage` | After each hotfix is deployed |
 | `indicator-builder.md` | Build, test, register, and deploy custom Python formula indicators; sandbox constraints and limits | New custom indicator needed |
-| `mcp-tools.md` | MCP tool reference — all six agent tools with parameter tables, return shapes, error cases, transport modes, and x-mcp-secret enforcement | Using or troubleshooting the agent MCP server |
+| `mcp-tools.md` | MCP tool reference — all nine agent tools with parameter tables, return shapes, error cases, transport modes, and x-mcp-secret enforcement | Using or troubleshooting the agent MCP server |
 | `proto-versioning.md` | v1→v2 proto migration workflow; when to create v2; parallel-feature safety | Breaking proto change required |

@@ -2,8 +2,8 @@
 // @generated from file analysis/v1/analysis.proto (package xstockstrat.analysis.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse, TimeRange } from "../../common/v1/common_pb";
@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file analysis/v1/analysis.proto.
  */
 export const file_analysis_v1_analysis: GenFile = /*@__PURE__*/
-  fileDesc("ChphbmFseXNpcy92MS9hbmFseXNpcy5wcm90bxIXeHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEitgEKElJ1bkJhY2t0ZXN0UmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCRIvCgVyYW5nZRgCIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USDwoHc3ltYm9scxgDIAMoCRIXCg9pbml0aWFsX2NhcGl0YWwYBCABKAESMAoPc3RyYXRlZ3lfcGFyYW1zGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCK+AgoOQmFja3Rlc3RSZXN1bHQSEwoLYmFja3Rlc3RfaWQYASABKAkSEwoLc3RyYXRlZ3lfaWQYAiABKAkSFAoMdG90YWxfcmV0dXJuGAMgASgBEhkKEWFubnVhbGl6ZWRfcmV0dXJuGAQgASgBEhQKDHNoYXJwZV9yYXRpbxgFIAEoARIUCgxtYXhfZHJhd2Rvd24YBiABKAESEAoId2luX3JhdGUYByABKAESFAoMdG90YWxfdHJhZGVzGAggASgFEhUKDXByb2ZpdF9mYWN0b3IYCSABKAESMAoMY29tcGxldGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI0CgZ0cmFkZXMYCyADKAsyJC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5UcmFkZVJlY29yZCLNAQoLVHJhZGVSZWNvcmQSDgoGc3ltYm9sGAEgASgJEgwKBHNpZGUYAiABKAkSCwoDcXR5GAMgASgBEhMKC2VudHJ5X3ByaWNlGAQgASgBEhIKCmV4aXRfcHJpY2UYBSABKAESCwoDcG5sGAYgASgBEi4KCmVudHJ5X3RpbWUYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi0KCWV4aXRfdGltZRgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiXAoUU2NvcmVTdHJhdGVneVJlcXVlc3QSEwoLc3RyYXRlZ3lfaWQYASABKAkSLwoFcmFuZ2UYAiABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlItoBCg1TdHJhdGVneVNjb3JlEhMKC3N0cmF0ZWd5X2lkGAEgASgJEhUKDW92ZXJhbGxfc2NvcmUYAiABKAESVQoQY29tcG9uZW50X3Njb3JlcxgDIAMoCzI7LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5U2NvcmUuQ29tcG9uZW50U2NvcmVzRW50cnkSDgoGcmF0aW5nGAQgASgJGjYKFENvbXBvbmVudFNjb3Jlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEiyQEKDlN0cmF0ZWd5UmVwb3J0EhMKC3N0cmF0ZWd5X2lkGAEgASgJEkAKD2xhdGVzdF9iYWNrdGVzdBgCIAEoCzInLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhY2t0ZXN0UmVzdWx0EjUKBXNjb3JlGAMgASgLMiYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lTY29yZRIpCghtZXRhZGF0YRgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiWgoVTGlzdFN0cmF0ZWdpZXNSZXF1ZXN0EjAKBHBhZ2UYASABKAsyIi54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlcXVlc3QSDwoHdXNlcl9pZBgCIAEoCSKHAQoWTGlzdFN0cmF0ZWdpZXNSZXNwb25zZRI6CgpzdHJhdGVnaWVzGAEgAygLMiYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lTY29yZRIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIvChhHZXRTdHJhdGVneVJlcG9ydFJlcXVlc3QSEwoLc3RyYXRlZ3lfaWQYASABKAkywgMKD0FuYWx5c2lzU2VydmljZRJjCgtSdW5CYWNrdGVzdBIrLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlJ1bkJhY2t0ZXN0UmVxdWVzdBonLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhY2t0ZXN0UmVzdWx0EmYKDVNjb3JlU3RyYXRlZ3kSLS54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TY29yZVN0cmF0ZWd5UmVxdWVzdBomLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5U2NvcmUScQoOTGlzdFN0cmF0ZWdpZXMSLi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5MaXN0U3RyYXRlZ2llc1JlcXVlc3QaLy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5MaXN0U3RyYXRlZ2llc1Jlc3BvbnNlEm8KEUdldFN0cmF0ZWd5UmVwb3J0EjEueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuR2V0U3RyYXRlZ3lSZXBvcnRSZXF1ZXN0GicueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lSZXBvcnRCQFo+Z2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL2FuYWx5c2lzL3YxO2FuYWx5c2lzdjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
+  fileDesc("ChphbmFseXNpcy92MS9hbmFseXNpcy5wcm90bxIXeHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEilwIKElJ1bkJhY2t0ZXN0UmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCRIvCgVyYW5nZRgCIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USDwoHc3ltYm9scxgDIAMoCRIXCg9pbml0aWFsX2NhcGl0YWwYBCABKAESMAoPc3RyYXRlZ3lfcGFyYW1zGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIXCg9zdHJhdGVneV9pZF9yZWYYBiABKAkSRgoRaW5saW5lX2RlZmluaXRpb24YByABKAsyKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneURlZmluaXRpb24ivgIKDkJhY2t0ZXN0UmVzdWx0EhMKC2JhY2t0ZXN0X2lkGAEgASgJEhMKC3N0cmF0ZWd5X2lkGAIgASgJEhQKDHRvdGFsX3JldHVybhgDIAEoARIZChFhbm51YWxpemVkX3JldHVybhgEIAEoARIUCgxzaGFycGVfcmF0aW8YBSABKAESFAoMbWF4X2RyYXdkb3duGAYgASgBEhAKCHdpbl9yYXRlGAcgASgBEhQKDHRvdGFsX3RyYWRlcxgIIAEoBRIVCg1wcm9maXRfZmFjdG9yGAkgASgBEjAKDGNvbXBsZXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNAoGdHJhZGVzGAsgAygLMiQueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuVHJhZGVSZWNvcmQizQEKC1RyYWRlUmVjb3JkEg4KBnN5bWJvbBgBIAEoCRIMCgRzaWRlGAIgASgJEgsKA3F0eRgDIAEoARITCgtlbnRyeV9wcmljZRgEIAEoARISCgpleGl0X3ByaWNlGAUgASgBEgsKA3BubBgGIAEoARIuCgplbnRyeV90aW1lGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCglleGl0X3RpbWUYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlwKFFNjb3JlU3RyYXRlZ3lSZXF1ZXN0EhMKC3N0cmF0ZWd5X2lkGAEgASgJEi8KBXJhbmdlGAIgASgLMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVSYW5nZSLaAQoNU3RyYXRlZ3lTY29yZRITCgtzdHJhdGVneV9pZBgBIAEoCRIVCg1vdmVyYWxsX3Njb3JlGAIgASgBElUKEGNvbXBvbmVudF9zY29yZXMYAyADKAsyOy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneVNjb3JlLkNvbXBvbmVudFNjb3Jlc0VudHJ5Eg4KBnJhdGluZxgEIAEoCRo2ChRDb21wb25lbnRTY29yZXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAE6AjgBIskBCg5TdHJhdGVneVJlcG9ydBITCgtzdHJhdGVneV9pZBgBIAEoCRJACg9sYXRlc3RfYmFja3Rlc3QYAiABKAsyJy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5CYWNrdGVzdFJlc3VsdBI1CgVzY29yZRgDIAEoCzImLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5U2NvcmUSKQoIbWV0YWRhdGEYBCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IloKFUxpc3RTdHJhdGVnaWVzUmVxdWVzdBIwCgRwYWdlGAEgASgLMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg8KB3VzZXJfaWQYAiABKAkihwEKFkxpc3RTdHJhdGVnaWVzUmVzcG9uc2USOgoKc3RyYXRlZ2llcxgBIAMoCzImLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5U2NvcmUSMQoEcGFnZRgCIAEoCzIjLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiLwoYR2V0U3RyYXRlZ3lSZXBvcnRSZXF1ZXN0EhMKC3N0cmF0ZWd5X2lkGAEgASgJIvkBChFTdHJhdGVneUNvbXBvbmVudBIQCghyZWZfbmFtZRgBIAEoCRI0CgRraW5kGAIgASgOMiYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuQ29tcG9uZW50S2luZBIRCglpbmRpY2F0b3IYAyABKAkSEgoKZm9ybXVsYV9pZBgEIAEoCRJGCgZwYXJhbXMYBSADKAsyNi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneUNvbXBvbmVudC5QYXJhbXNFbnRyeRotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAE6AjgBIvwBChJTdHJhdGVneURlZmluaXRpb24SEwoLc3RyYXRlZ3lfaWQYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEj4KCmNvbXBvbmVudHMYAyADKAsyKi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneUNvbXBvbmVudBISCgplbnRyeV9ydWxlGAQgASgJEhEKCWV4aXRfcnVsZRgFIAEoCRIuCg1zaWduYWxfcGFyYW1zGAYgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIOCgZhY3RpdmUYByABKAgSFAoMbGl2ZV9lbmFibGVkGAggASgIIpcBChVNYW5hZ2VTdHJhdGVneVJlcXVlc3QSPQoJb3BlcmF0aW9uGAEgASgOMioueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lPcGVyYXRpb24SPwoKZGVmaW5pdGlvbhgCIAEoCzIrLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5RGVmaW5pdGlvbiIpChJHZXRTdHJhdGVneVJlcXVlc3QSEwoLc3RyYXRlZ3lfaWQYASABKAkiYgoeTGlzdFN0cmF0ZWd5RGVmaW5pdGlvbnNSZXF1ZXN0EhgKEGluY2x1ZGVfaW5hY3RpdmUYASABKAgSEQoJcGFnZV9zaXplGAIgASgFEhMKC3BhZ2Vfb2Zmc2V0GAMgASgFIngKH0xpc3RTdHJhdGVneURlZmluaXRpb25zUmVzcG9uc2USQAoLZGVmaW5pdGlvbnMYASADKAsyKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneURlZmluaXRpb24SEwoLdG90YWxfY291bnQYAiABKAUiQwoWU2V0U3RyYXRlZ3lMaXZlUmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCRIUCgxsaXZlX2VuYWJsZWQYAiABKAgiWgoXU2V0U3RyYXRlZ3lMaXZlUmVzcG9uc2USPwoKZGVmaW5pdGlvbhgBIAEoCzIrLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5RGVmaW5pdGlvbip4Cg1Db21wb25lbnRLaW5kEh4KGkNPTVBPTkVOVF9LSU5EX1VOU1BFQ0lGSUVEEAASJAogQ09NUE9ORU5UX0tJTkRfQlVJTFRJTl9JTkRJQ0FUT1IQARIhCh1DT01QT05FTlRfS0lORF9DVVNUT01fRk9STVVMQRACKpoBChFTdHJhdGVneU9wZXJhdGlvbhIiCh5TVFJBVEVHWV9PUEVSQVRJT05fVU5TUEVDSUZJRUQQABIfChtTVFJBVEVHWV9PUEVSQVRJT05fUkVHSVNURVIQARIdChlTVFJBVEVHWV9PUEVSQVRJT05fVVBEQVRFEAISIQodU1RSQVRFR1lfT1BFUkFUSU9OX0RFQUNUSVZBVEUQAzKfBwoPQW5hbHlzaXNTZXJ2aWNlEmMKC1J1bkJhY2t0ZXN0EisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuUnVuQmFja3Rlc3RSZXF1ZXN0GicueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuQmFja3Rlc3RSZXN1bHQSZgoNU2NvcmVTdHJhdGVneRItLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNjb3JlU3RyYXRlZ3lSZXF1ZXN0GiYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lTY29yZRJxCg5MaXN0U3RyYXRlZ2llcxIuLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RTdHJhdGVnaWVzUmVxdWVzdBovLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RTdHJhdGVnaWVzUmVzcG9uc2USbwoRR2V0U3RyYXRlZ3lSZXBvcnQSMS54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5HZXRTdHJhdGVneVJlcG9ydFJlcXVlc3QaJy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneVJlcG9ydBJtCg5NYW5hZ2VTdHJhdGVneRIuLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLk1hbmFnZVN0cmF0ZWd5UmVxdWVzdBorLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5RGVmaW5pdGlvbhJnCgtHZXRTdHJhdGVneRIrLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkdldFN0cmF0ZWd5UmVxdWVzdBorLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5RGVmaW5pdGlvbhKMAQoXTGlzdFN0cmF0ZWd5RGVmaW5pdGlvbnMSNy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5MaXN0U3RyYXRlZ3lEZWZpbml0aW9uc1JlcXVlc3QaOC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5MaXN0U3RyYXRlZ3lEZWZpbml0aW9uc1Jlc3BvbnNlEnQKD1NldFN0cmF0ZWd5TGl2ZRIvLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNldFN0cmF0ZWd5TGl2ZVJlcXVlc3QaMC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TZXRTdHJhdGVneUxpdmVSZXNwb25zZUJAWj5naXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vYW5hbHlzaXMvdjE7YW5hbHlzaXN2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.analysis.v1.RunBacktestRequest
@@ -44,6 +44,20 @@ export type RunBacktestRequest = Message<"xstockstrat.analysis.v1.RunBacktestReq
    * @generated from field: google.protobuf.Struct strategy_params = 5;
    */
   strategyParams?: JsonObject | undefined;
+
+  /**
+   * field 6 — resolve definition from DB; legacy strategy_params (field 5) remains supported
+   *
+   * @generated from field: string strategy_id_ref = 6;
+   */
+  strategyIdRef: string;
+
+  /**
+   * field 7 — inline definition; takes precedence over strategy_id_ref if both supplied
+   *
+   * @generated from field: xstockstrat.analysis.v1.StrategyDefinition inline_definition = 7;
+   */
+  inlineDefinition?: StrategyDefinition | undefined;
 };
 
 /**
@@ -324,6 +338,287 @@ export const GetStrategyReportRequestSchema: GenMessage<GetStrategyReportRequest
   messageDesc(file_analysis_v1_analysis, 8);
 
 /**
+ * @generated from message xstockstrat.analysis.v1.StrategyComponent
+ */
+export type StrategyComponent = Message<"xstockstrat.analysis.v1.StrategyComponent"> & {
+  /**
+   * @generated from field: string ref_name = 1;
+   */
+  refName: string;
+
+  /**
+   * @generated from field: xstockstrat.analysis.v1.ComponentKind kind = 2;
+   */
+  kind: ComponentKind;
+
+  /**
+   * used when kind == COMPONENT_KIND_BUILTIN_INDICATOR
+   *
+   * @generated from field: string indicator = 3;
+   */
+  indicator: string;
+
+  /**
+   * used when kind == COMPONENT_KIND_CUSTOM_FORMULA
+   *
+   * @generated from field: string formula_id = 4;
+   */
+  formulaId: string;
+
+  /**
+   * @generated from field: map<string, double> params = 5;
+   */
+  params: { [key: string]: number };
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.StrategyComponent.
+ * Use `create(StrategyComponentSchema)` to create a new message.
+ */
+export const StrategyComponentSchema: GenMessage<StrategyComponent> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 9);
+
+/**
+ * @generated from message xstockstrat.analysis.v1.StrategyDefinition
+ */
+export type StrategyDefinition = Message<"xstockstrat.analysis.v1.StrategyDefinition"> & {
+  /**
+   * @generated from field: string strategy_id = 1;
+   */
+  strategyId: string;
+
+  /**
+   * @generated from field: string display_name = 2;
+   */
+  displayName: string;
+
+  /**
+   * @generated from field: repeated xstockstrat.analysis.v1.StrategyComponent components = 3;
+   */
+  components: StrategyComponent[];
+
+  /**
+   * JSON-encoded condition tree
+   *
+   * @generated from field: string entry_rule = 4;
+   */
+  entryRule: string;
+
+  /**
+   * JSON-encoded condition tree
+   *
+   * @generated from field: string exit_rule = 5;
+   */
+  exitRule: string;
+
+  /**
+   * @generated from field: google.protobuf.Struct signal_params = 6;
+   */
+  signalParams?: JsonObject | undefined;
+
+  /**
+   * @generated from field: bool active = 7;
+   */
+  active: boolean;
+
+  /**
+   * @generated from field: bool live_enabled = 8;
+   */
+  liveEnabled: boolean;
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.StrategyDefinition.
+ * Use `create(StrategyDefinitionSchema)` to create a new message.
+ */
+export const StrategyDefinitionSchema: GenMessage<StrategyDefinition> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 10);
+
+/**
+ * @generated from message xstockstrat.analysis.v1.ManageStrategyRequest
+ */
+export type ManageStrategyRequest = Message<"xstockstrat.analysis.v1.ManageStrategyRequest"> & {
+  /**
+   * @generated from field: xstockstrat.analysis.v1.StrategyOperation operation = 1;
+   */
+  operation: StrategyOperation;
+
+  /**
+   * @generated from field: xstockstrat.analysis.v1.StrategyDefinition definition = 2;
+   */
+  definition?: StrategyDefinition | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.ManageStrategyRequest.
+ * Use `create(ManageStrategyRequestSchema)` to create a new message.
+ */
+export const ManageStrategyRequestSchema: GenMessage<ManageStrategyRequest> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 11);
+
+/**
+ * @generated from message xstockstrat.analysis.v1.GetStrategyRequest
+ */
+export type GetStrategyRequest = Message<"xstockstrat.analysis.v1.GetStrategyRequest"> & {
+  /**
+   * @generated from field: string strategy_id = 1;
+   */
+  strategyId: string;
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.GetStrategyRequest.
+ * Use `create(GetStrategyRequestSchema)` to create a new message.
+ */
+export const GetStrategyRequestSchema: GenMessage<GetStrategyRequest> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 12);
+
+/**
+ * @generated from message xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
+ */
+export type ListStrategyDefinitionsRequest = Message<"xstockstrat.analysis.v1.ListStrategyDefinitionsRequest"> & {
+  /**
+   * @generated from field: bool include_inactive = 1;
+   */
+  includeInactive: boolean;
+
+  /**
+   * @generated from field: int32 page_size = 2;
+   */
+  pageSize: number;
+
+  /**
+   * @generated from field: int32 page_offset = 3;
+   */
+  pageOffset: number;
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.ListStrategyDefinitionsRequest.
+ * Use `create(ListStrategyDefinitionsRequestSchema)` to create a new message.
+ */
+export const ListStrategyDefinitionsRequestSchema: GenMessage<ListStrategyDefinitionsRequest> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 13);
+
+/**
+ * @generated from message xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
+ */
+export type ListStrategyDefinitionsResponse = Message<"xstockstrat.analysis.v1.ListStrategyDefinitionsResponse"> & {
+  /**
+   * @generated from field: repeated xstockstrat.analysis.v1.StrategyDefinition definitions = 1;
+   */
+  definitions: StrategyDefinition[];
+
+  /**
+   * @generated from field: int32 total_count = 2;
+   */
+  totalCount: number;
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.ListStrategyDefinitionsResponse.
+ * Use `create(ListStrategyDefinitionsResponseSchema)` to create a new message.
+ */
+export const ListStrategyDefinitionsResponseSchema: GenMessage<ListStrategyDefinitionsResponse> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 14);
+
+/**
+ * @generated from message xstockstrat.analysis.v1.SetStrategyLiveRequest
+ */
+export type SetStrategyLiveRequest = Message<"xstockstrat.analysis.v1.SetStrategyLiveRequest"> & {
+  /**
+   * @generated from field: string strategy_id = 1;
+   */
+  strategyId: string;
+
+  /**
+   * @generated from field: bool live_enabled = 2;
+   */
+  liveEnabled: boolean;
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.SetStrategyLiveRequest.
+ * Use `create(SetStrategyLiveRequestSchema)` to create a new message.
+ */
+export const SetStrategyLiveRequestSchema: GenMessage<SetStrategyLiveRequest> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 15);
+
+/**
+ * @generated from message xstockstrat.analysis.v1.SetStrategyLiveResponse
+ */
+export type SetStrategyLiveResponse = Message<"xstockstrat.analysis.v1.SetStrategyLiveResponse"> & {
+  /**
+   * @generated from field: xstockstrat.analysis.v1.StrategyDefinition definition = 1;
+   */
+  definition?: StrategyDefinition | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.SetStrategyLiveResponse.
+ * Use `create(SetStrategyLiveResponseSchema)` to create a new message.
+ */
+export const SetStrategyLiveResponseSchema: GenMessage<SetStrategyLiveResponse> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 16);
+
+/**
+ * @generated from enum xstockstrat.analysis.v1.ComponentKind
+ */
+export enum ComponentKind {
+  /**
+   * @generated from enum value: COMPONENT_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: COMPONENT_KIND_BUILTIN_INDICATOR = 1;
+   */
+  BUILTIN_INDICATOR = 1,
+
+  /**
+   * @generated from enum value: COMPONENT_KIND_CUSTOM_FORMULA = 2;
+   */
+  CUSTOM_FORMULA = 2,
+}
+
+/**
+ * Describes the enum xstockstrat.analysis.v1.ComponentKind.
+ */
+export const ComponentKindSchema: GenEnum<ComponentKind> = /*@__PURE__*/
+  enumDesc(file_analysis_v1_analysis, 0);
+
+/**
+ * @generated from enum xstockstrat.analysis.v1.StrategyOperation
+ */
+export enum StrategyOperation {
+  /**
+   * @generated from enum value: STRATEGY_OPERATION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: STRATEGY_OPERATION_REGISTER = 1;
+   */
+  REGISTER = 1,
+
+  /**
+   * @generated from enum value: STRATEGY_OPERATION_UPDATE = 2;
+   */
+  UPDATE = 2,
+
+  /**
+   * @generated from enum value: STRATEGY_OPERATION_DEACTIVATE = 3;
+   */
+  DEACTIVATE = 3,
+}
+
+/**
+ * Describes the enum xstockstrat.analysis.v1.StrategyOperation.
+ */
+export const StrategyOperationSchema: GenEnum<StrategyOperation> = /*@__PURE__*/
+  enumDesc(file_analysis_v1_analysis, 1);
+
+/**
  * @generated from service xstockstrat.analysis.v1.AnalysisService
  */
 export const AnalysisService: GenService<{
@@ -358,6 +653,38 @@ export const AnalysisService: GenService<{
     methodKind: "unary";
     input: typeof GetStrategyReportRequestSchema;
     output: typeof StrategyReportSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ManageStrategy
+   */
+  manageStrategy: {
+    methodKind: "unary";
+    input: typeof ManageStrategyRequestSchema;
+    output: typeof StrategyDefinitionSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetStrategy
+   */
+  getStrategy: {
+    methodKind: "unary";
+    input: typeof GetStrategyRequestSchema;
+    output: typeof StrategyDefinitionSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions
+   */
+  listStrategyDefinitions: {
+    methodKind: "unary";
+    input: typeof ListStrategyDefinitionsRequestSchema;
+    output: typeof ListStrategyDefinitionsResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.analysis.v1.AnalysisService.SetStrategyLive
+   */
+  setStrategyLive: {
+    methodKind: "unary";
+    input: typeof SetStrategyLiveRequestSchema;
+    output: typeof SetStrategyLiveResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_analysis_v1_analysis, 0);

@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the six tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the nine tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -239,6 +239,107 @@ Triggers a backtest via `xstockstrat-analysis`. The default strategy is SMA cros
 
 ---
 
+### `manage_strategy`
+
+Registers, updates, or deactivates a stored strategy definition in `xstockstrat-analysis` (admin-scoped).
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `operation` | `string` | Yes | `"register"`, `"update"`, or `"deactivate"` |
+| `strategy_id` | `string` | Yes | Lowercase/underscore identifier, e.g. `"sma_crossover"` |
+| `display_name` | `string` | No | Human-readable name |
+| `components` | `object[]` | No | `{ref_name, kind ("builtin"\|"formula"), indicator, formula_id, params}` |
+| `entry_rule` | `string` | No | JSON-encoded condition tree |
+| `exit_rule` | `string` | No | JSON-encoded condition tree |
+| `signal_params` | `object` | No | Optional signal-weighting params |
+| `admin_api_key` | `string` | Yes | Admin API key; validated by the analysis backend |
+
+**Return**
+
+```json
+{ "strategyId": "sma_crossover", "displayName": "SMA Crossover", "active": true }
+```
+
+**Errors**
+
+| Condition | Error |
+|---|---|
+| Missing/invalid admin key | `admin API key required` (UNAUTHENTICATED) |
+| Invalid definition (unknown indicator, bad rule JSON, undefined ref_name) | `invalid argument` (INVALID_ARGUMENT) |
+| `update`/`deactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
+
+---
+
+### `manage_formula`
+
+Registers, updates, or deletes a custom formula definition in `xstockstrat-indicators` (admin-scoped).
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `operation` | `string` | Yes | `"register"`, `"update"`, or `"delete"` |
+| `name` | `string` | register/update | Formula name |
+| `description` | `string` | No | Formula description |
+| `source` | `string` | register/update | Python formula source |
+| `is_public` | `bool` | No | Whether the formula is public (default `false`) |
+| `formula_id` | `string` | update/delete | Formula identifier |
+| `author` | `string` | register | Author, stored immutably on register |
+| `formula_author_user_id` | `string` | update/delete | Must match the formula's original `author` (else PERMISSION_DENIED) |
+| `admin_api_key` | `string` | Yes | Admin API key; validated by the indicators backend |
+
+**Return**
+
+```json
+{ "formula_id": "f-abc123" }
+```
+
+**Errors**
+
+| Condition | Error |
+|---|---|
+| Missing/invalid admin key | `admin API key required` (UNAUTHENTICATED) |
+| `formula_author_user_id` ≠ author | `permission denied` (PERMISSION_DENIED) |
+| `update`/`delete` on unknown formula | `formula not found` (NOT_FOUND) |
+
+---
+
+### `manage_signal_source`
+
+Registers, updates, or deactivates a signal source in `xstockstrat-ingest` (admin-scoped).
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `operation` | `string` | Yes | `"register"`, `"update"`, or `"deactivate"` |
+| `slug` | `string` | Yes | Source slug |
+| `display_name` | `string` | No | Human-readable name |
+| `source_type` | `string` | No | Source type (e.g. `"newsletter"`) |
+| `config_json` | `object` | No | Source configuration |
+| `extractor_module` | `string` | No | Extractor module name |
+| `credentials_ref` | `string` | No | Reference to stored credentials — forwarded to the backend, **never echoed** |
+| `admin_api_key` | `string` | Yes | Admin API key; validated by the ingest backend |
+
+**Return**
+
+```json
+{ "slug": "unusual_whales", "display_name": "Unusual Whales", "source_type": "newsletter", "active": true, "has_credentials": true }
+```
+
+**Errors**
+
+| Condition | Error |
+|---|---|
+| Missing/invalid admin key | `admin API key required` (UNAUTHENTICATED) |
+| Invalid source fields | `invalid argument` (INVALID_ARGUMENT) |
+| `deactivate` on unknown source | `signal source not found` (NOT_FOUND) |
+| `credentials_ref` exposure | **Never** — `credentials_ref` is intentionally omitted from the return and never exposed to Claude (FR-12) |
+
+---
+
 ## Usage Patterns
 
 ### Email newsletter ingestion
@@ -278,6 +379,26 @@ Triggers a backtest via `xstockstrat-analysis`. The default strategy is SMA cros
 ```
 emit_alert(severity="info", category="system",
            title="Backtest complete", body="sma_crossover on NVDA: Sharpe 1.4")
+```
+
+### Strategy management
+
+```
+1. manage_formula(operation="register", name="rsi_div", source="<python source>",
+                  author="<user_id>", admin_api_key="<key>")
+   → formula_id
+
+2. manage_strategy(operation="register", strategy_id="rsi_sma_combo",
+                  display_name="RSI + SMA", admin_api_key="<key>",
+                  components=[
+                    {"ref_name": "sma_fast", "kind": "builtin", "indicator": "SMA", "params": {"period": 20}},
+                    {"ref_name": "rsi", "kind": "formula", "formula_id": "<formula_id>"}
+                  ],
+                  entry_rule='{"op":"AND","conditions":[{"lhs":"sma_fast","fn":"crosses_above","rhs":"rsi"}]}')
+   → strategyId
+
+3. run_backtest(strategy_id="rsi_sma_combo", symbols=["NVDA"])
+   → backtest_id
 ```
 
 ---

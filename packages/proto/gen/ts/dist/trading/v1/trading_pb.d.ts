@@ -306,6 +306,8 @@ export type BrokerAccount = Message<"xstockstrat.trading.v1.BrokerAccount"> & {
      */
     brokerType: BrokerType;
     /**
+     * is_paper is derived from the deployment environment, not chosen per account.
+     *
      * @generated from field: bool is_paper = 4;
      */
     isPaper: boolean;
@@ -317,6 +319,18 @@ export type BrokerAccount = Message<"xstockstrat.trading.v1.BrokerAccount"> & {
      * @generated from field: bool is_active = 6;
      */
     isActive: boolean;
+    /**
+     * credential_status is the result of the most recent credential validation.
+     *
+     * @generated from field: xstockstrat.trading.v1.CredentialStatus credential_status = 7;
+     */
+    credentialStatus: CredentialStatus;
+    /**
+     * credential_checked_at is when credential_status was last refreshed.
+     *
+     * @generated from field: google.protobuf.Timestamp credential_checked_at = 8;
+     */
+    credentialCheckedAt?: Timestamp | undefined;
 };
 /**
  * Describes the message xstockstrat.trading.v1.BrokerAccount.
@@ -336,7 +350,12 @@ export type RegisterBrokerAccountRequest = Message<"xstockstrat.trading.v1.Regis
      */
     brokerType: BrokerType;
     /**
-     * @generated from field: bool is_paper = 3;
+     * Deprecated: paper/live is owned by the deployment environment
+     * (trading.broker.paper config key / TRADING_MODE env). The server derives
+     * is_paper from the environment and ignores this field.
+     *
+     * @generated from field: bool is_paper = 3 [deprecated = true];
+     * @deprecated
      */
     isPaper: boolean;
     /**
@@ -367,6 +386,72 @@ export type RegisterBrokerAccountResponse = Message<"xstockstrat.trading.v1.Regi
  * Use `create(RegisterBrokerAccountResponseSchema)` to create a new message.
  */
 export declare const RegisterBrokerAccountResponseSchema: GenMessage<RegisterBrokerAccountResponse>;
+/**
+ * @generated from message xstockstrat.trading.v1.UpdateBrokerAccountCredentialsRequest
+ */
+export type UpdateBrokerAccountCredentialsRequest = Message<"xstockstrat.trading.v1.UpdateBrokerAccountCredentialsRequest"> & {
+    /**
+     * @generated from field: string account_id = 1;
+     */
+    accountId: string;
+    /**
+     * credentials_json uses the same broker-type-specific shape as
+     * RegisterBrokerAccountRequest.credentials_json.
+     *
+     * @generated from field: string credentials_json = 2;
+     */
+    credentialsJson: string;
+};
+/**
+ * Describes the message xstockstrat.trading.v1.UpdateBrokerAccountCredentialsRequest.
+ * Use `create(UpdateBrokerAccountCredentialsRequestSchema)` to create a new message.
+ */
+export declare const UpdateBrokerAccountCredentialsRequestSchema: GenMessage<UpdateBrokerAccountCredentialsRequest>;
+/**
+ * @generated from message xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse
+ */
+export type UpdateBrokerAccountCredentialsResponse = Message<"xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse"> & {
+    /**
+     * @generated from field: xstockstrat.trading.v1.BrokerAccount account = 1;
+     */
+    account?: BrokerAccount | undefined;
+};
+/**
+ * Describes the message xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse.
+ * Use `create(UpdateBrokerAccountCredentialsResponseSchema)` to create a new message.
+ */
+export declare const UpdateBrokerAccountCredentialsResponseSchema: GenMessage<UpdateBrokerAccountCredentialsResponse>;
+/**
+ * @generated from message xstockstrat.trading.v1.GetTradingEnvironmentRequest
+ */
+export type GetTradingEnvironmentRequest = Message<"xstockstrat.trading.v1.GetTradingEnvironmentRequest"> & {};
+/**
+ * Describes the message xstockstrat.trading.v1.GetTradingEnvironmentRequest.
+ * Use `create(GetTradingEnvironmentRequestSchema)` to create a new message.
+ */
+export declare const GetTradingEnvironmentRequestSchema: GenMessage<GetTradingEnvironmentRequest>;
+/**
+ * @generated from message xstockstrat.trading.v1.GetTradingEnvironmentResponse
+ */
+export type GetTradingEnvironmentResponse = Message<"xstockstrat.trading.v1.GetTradingEnvironmentResponse"> & {
+    /**
+     * trading_mode is the mode every order in this deployment routes to.
+     *
+     * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 1;
+     */
+    tradingMode: TradingMode;
+    /**
+     * application_env: "development" | "production".
+     *
+     * @generated from field: string application_env = 2;
+     */
+    applicationEnv: string;
+};
+/**
+ * Describes the message xstockstrat.trading.v1.GetTradingEnvironmentResponse.
+ * Use `create(GetTradingEnvironmentResponseSchema)` to create a new message.
+ */
+export declare const GetTradingEnvironmentResponseSchema: GenMessage<GetTradingEnvironmentResponse>;
 /**
  * @generated from message xstockstrat.trading.v1.ListBrokerAccountsRequest
  */
@@ -509,6 +594,42 @@ export declare enum OrderStatus {
  */
 export declare const OrderStatusSchema: GenEnum<OrderStatus>;
 /**
+ * CredentialStatus reflects the last known health of a broker account's stored
+ * API credentials, so the UI can surface accounts whose secrets stopped working.
+ *
+ * @generated from enum xstockstrat.trading.v1.CredentialStatus
+ */
+export declare enum CredentialStatus {
+    /**
+     * never validated yet
+     *
+     * @generated from enum value: CREDENTIAL_STATUS_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * last validation succeeded
+     *
+     * @generated from enum value: CREDENTIAL_STATUS_OK = 1;
+     */
+    OK = 1,
+    /**
+     * broker rejected the credentials (auth failure)
+     *
+     * @generated from enum value: CREDENTIAL_STATUS_INVALID = 2;
+     */
+    INVALID = 2,
+    /**
+     * validation could not complete (transient/network error)
+     *
+     * @generated from enum value: CREDENTIAL_STATUS_UNKNOWN = 3;
+     */
+    UNKNOWN = 3
+}
+/**
+ * Describes the enum xstockstrat.trading.v1.CredentialStatus.
+ */
+export declare const CredentialStatusSchema: GenEnum<CredentialStatus>;
+/**
  * @generated from service xstockstrat.trading.v1.TradingService
  */
 export declare const TradingService: GenService<{
@@ -575,5 +696,27 @@ export declare const TradingService: GenService<{
         methodKind: "unary";
         input: typeof DeregisterBrokerAccountRequestSchema;
         output: typeof DeregisterBrokerAccountResponseSchema;
+    };
+    /**
+     * UpdateBrokerAccountCredentials replaces the stored API secrets for an existing
+     * account, re-validates them against the broker, and refreshes credential_status.
+     *
+     * @generated from rpc xstockstrat.trading.v1.TradingService.UpdateBrokerAccountCredentials
+     */
+    updateBrokerAccountCredentials: {
+        methodKind: "unary";
+        input: typeof UpdateBrokerAccountCredentialsRequestSchema;
+        output: typeof UpdateBrokerAccountCredentialsResponseSchema;
+    };
+    /**
+     * GetTradingEnvironment reports the deployment-fixed trading mode. Users cannot
+     * switch between paper and live — the environment owns this decision.
+     *
+     * @generated from rpc xstockstrat.trading.v1.TradingService.GetTradingEnvironment
+     */
+    getTradingEnvironment: {
+        methodKind: "unary";
+        input: typeof GetTradingEnvironmentRequestSchema;
+        output: typeof GetTradingEnvironmentResponseSchema;
     };
 }>;

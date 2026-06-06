@@ -1,18 +1,24 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Six tools:
+Ten tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
   ingest_signal        — ingests a trading signal via gRPC IngestSignal
   emit_alert           — emits an alert via gRPC EmitAlert
   run_backtest         — triggers a backtest via gRPC RunBacktest
+  manage_strategy     — registers/updates/deactivates stored strategies in analysis (admin-scoped)
+  manage_formula      — registers/updates/deletes custom formulas in indicators (admin-scoped)
+  manage_signal_source — registers/updates/deactivates signal sources in ingest (admin-scoped)
+  set_strategy_live   — enables/disables live alert evaluation for a strategy (admin-scoped)
 """
+
 import base64
 import logging
 from typing import Optional
 
+import grpc
 from mcp.server import FastMCP
 
 from app import client
@@ -21,6 +27,21 @@ _ALERT_THRESHOLD_DEFAULT = 0.6
 _ALERT_THRESHOLD_CONFIG_KEY = "signal.alert_threshold"
 
 log = logging.getLogger(__name__)
+
+
+def _grpc_error_message(exc: grpc.aio.AioRpcError, not_found: str = "not found") -> str:
+    """Map a gRPC error to a concise, caller-facing message for an MCP tool."""
+    code = exc.code()
+    if code == grpc.StatusCode.NOT_FOUND:
+        return not_found
+    if code == grpc.StatusCode.UNAUTHENTICATED:
+        return "admin API key required"
+    if code == grpc.StatusCode.PERMISSION_DENIED:
+        return exc.details() or "permission denied"
+    if code == grpc.StatusCode.INVALID_ARGUMENT:
+        return exc.details() or "invalid argument"
+    return exc.details() or str(code)
+
 
 # Type-level mapping: source_type → extractor_tool
 # Derives extractor_tool from source_type at the agent layer only.
@@ -51,13 +72,15 @@ def register_tools(server: FastMCP) -> None:
         enriched = []
         for src in sources:
             st = src["source_type"]
-            enriched.append({
-                "slug": src["slug"],
-                "display_name": src["display_name"],
-                "source_type": st,
-                "config_json": src["config_json"],
-                "extractor_tool": _EXTRACTOR_TOOL_MAP.get(st, None),
-            })
+            enriched.append(
+                {
+                    "slug": src["slug"],
+                    "display_name": src["display_name"],
+                    "source_type": st,
+                    "config_json": src["config_json"],
+                    "extractor_tool": _EXTRACTOR_TOOL_MAP.get(st, None),
+                }
+            )
         if source_type:
             enriched = [s for s in enriched if s["source_type"] in source_type]
         return {"sources": enriched}
@@ -157,7 +180,9 @@ def register_tools(server: FastMCP) -> None:
         # Auto-emit alert for high-conviction signals — deterministic rule, not model-driven.
         threshold_str = await client.get_config_value(_ALERT_THRESHOLD_CONFIG_KEY)
         try:
-            alert_threshold = float(threshold_str) if threshold_str is not None else _ALERT_THRESHOLD_DEFAULT
+            alert_threshold = (
+                float(threshold_str) if threshold_str is not None else _ALERT_THRESHOLD_DEFAULT
+            )
         except (ValueError, TypeError):
             alert_threshold = _ALERT_THRESHOLD_DEFAULT
         if conviction is not None and conviction >= alert_threshold:
@@ -175,7 +200,9 @@ def register_tools(server: FastMCP) -> None:
                     target_user_id="",
                 )
             except Exception as e:
-                log.warning("Auto-alert failed after ingest_signal (signal already ingested): %s", e)
+                log.warning(
+                    "Auto-alert failed after ingest_signal (signal already ingested): %s", e
+                )
         return result
 
     @server.tool()
@@ -215,6 +242,133 @@ def register_tools(server: FastMCP) -> None:
             symbols=symbols,
             initial_capital=initial_capital,
         )
+
+    @server.tool()
+    async def manage_strategy(
+        operation: str,
+        strategy_id: str,
+        display_name: str = "",
+        components: list[dict] | None = None,
+        entry_rule: str = "",
+        exit_rule: str = "",
+        signal_params: dict | None = None,
+        admin_api_key: str = "",
+    ) -> dict:
+        """Register/update/deactivate a stored strategy in xstockstrat-analysis (admin-scoped).
+        operation: 'register' | 'update' | 'deactivate'.
+        strategy_id: lowercase/underscore identifier (e.g. 'sma_crossover').
+        display_name: human-readable name.
+        components: list of {ref_name, kind ('builtin'|'formula'), indicator, formula_id, params}.
+        entry_rule / exit_rule: JSON-encoded condition trees.
+        signal_params: optional signal-weighting params.
+        admin_api_key: required; must carry the admin role (validated here at the agent entry)."""
+        if not await client.validate_admin(admin_api_key):
+            raise RuntimeError("admin API key required")
+        definition: dict = {
+            "strategy_id": strategy_id,
+            "display_name": display_name,
+            "components": components or [],
+            "entry_rule": entry_rule,
+            "exit_rule": exit_rule,
+        }
+        if signal_params:
+            definition["signal_params"] = signal_params
+        try:
+            return await client.manage_strategy(
+                operation=operation, definition=definition, api_key=admin_api_key
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
+
+    @server.tool()
+    async def manage_formula(
+        operation: str,
+        name: str = "",
+        description: str = "",
+        source: str = "",
+        is_public: bool = False,
+        formula_id: str = "",
+        author: str = "",
+        formula_author_user_id: str = "",
+        admin_api_key: str = "",
+    ) -> dict:
+        """Register/update/delete a custom formula in xstockstrat-indicators (admin-scoped).
+        operation: 'register' | 'update' | 'delete'.
+        name/description/source/is_public: for register and update.
+        author: stored immutably on register.
+        formula_id: required for update/delete.
+        formula_author_user_id: required for update/delete; must match the formula's original
+            author (the indicators backend returns PERMISSION_DENIED otherwise).
+        admin_api_key: required; validated by the indicators backend."""
+        formula: dict = {
+            "formula_id": formula_id,
+            "user_id": formula_author_user_id,
+            "name": name,
+            "description": description,
+            "source": source,
+            "is_public": is_public,
+            "author": author,
+        }
+        try:
+            return await client.manage_formula(
+                operation=operation, formula=formula, api_key=admin_api_key
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="formula not found")) from e
+
+    @server.tool()
+    async def manage_signal_source(
+        operation: str,
+        slug: str,
+        display_name: str = "",
+        source_type: str = "",
+        config_json: dict | None = None,
+        extractor_module: str = "",
+        credentials_ref: str | None = None,
+        admin_api_key: str = "",
+    ) -> dict:
+        """Register/update/deactivate a signal source in xstockstrat-ingest (admin-scoped).
+        operation: 'register' | 'update' | 'deactivate'.
+        slug/display_name/source_type/extractor_module/config_json: SignalSource fields.
+        credentials_ref: optional reference forwarded to the ingest backend. It is NEVER
+            echoed back in the response and never exposed to the caller (FR-12).
+        admin_api_key: required; validated by the ingest backend."""
+        source: dict = {
+            "slug": slug,
+            "display_name": display_name,
+            "source_type": source_type,
+            "extractor_module": extractor_module,
+            "config_json": config_json or {},
+        }
+        try:
+            return await client.manage_signal_source(
+                operation=operation,
+                source=source,
+                credentials_ref=credentials_ref,
+                api_key=admin_api_key,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="signal source not found")) from e
+
+    @server.tool()
+    async def set_strategy_live(
+        strategy_id: str,
+        live_enabled: bool,
+        admin_api_key: str = "",
+    ) -> dict:
+        """Enable or disable live alert evaluation for a strategy. Admin scope required.
+        strategy_id: ID of the strategy to toggle (from list_strategy_definitions/manage_strategy).
+        live_enabled: true to enable continuous live evaluation + alerting; false to disable.
+        admin_api_key: required; must carry the admin role (validated here at the agent entry).
+        Returns the updated strategy definition with live_enabled reflected."""
+        if not await client.validate_admin(admin_api_key):
+            raise RuntimeError("admin API key required")
+        try:
+            return await client.set_strategy_live(
+                strategy_id=strategy_id, live_enabled=live_enabled, api_key=admin_api_key
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
 
 
 async def _get_source(source_slug: str) -> dict:

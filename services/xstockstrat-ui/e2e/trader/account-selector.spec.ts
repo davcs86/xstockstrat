@@ -1,5 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
-import { SignJWT } from 'jose';
+import { test, expect } from '@playwright/test';
+import { addAuthCookie } from '../helpers/auth';
 
 /**
  * E2E tests for AccountSelector and AccountManagementPanel.
@@ -9,27 +9,6 @@ import { SignJWT } from 'jose';
  * the non-existent /trader/api/accounts REST route. The Connect JSON response uses
  * camelCase proto field names (id, displayName, brokerType, isPaper, isActive).
  */
-
-const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
-const BASE_URL = 'http://localhost:3000';
-
-async function addAuthCookie(page: Page): Promise<void> {
-  const now = Math.floor(Date.now() / 1000);
-  const token = await new SignJWT({
-    user_id: 'test-user-001',
-    email: 'test@example.com',
-    roles: [],
-    issued_at: now,
-    expires_at: now + 3600,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('1h')
-    .sign(new TextEncoder().encode(TEST_JWT_SECRET));
-
-  await page.context().addCookies([
-    { name: 'access_token', value: token, url: BASE_URL, httpOnly: true, sameSite: 'Lax' },
-  ]);
-}
 
 test.describe('AccountSelector', () => {
   test('Account Selector is visible in the header', async ({ page }) => {
@@ -71,8 +50,9 @@ test.describe('AccountSelector', () => {
   test('Account Management Panel opens via gear icon', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/trader');
-    await page.getByRole('button', { name: /manage accounts/i }).click();
-    await expect(page.getByRole('heading', { name: 'Add Account' })).toBeVisible({ timeout: 3000 });
+    // Gear icon is a link that navigates to the accounts submodule page.
+    await page.getByRole('link', { name: /manage accounts/i }).click();
+    await expect(page.getByRole('heading', { name: 'Add Account' })).toBeVisible({ timeout: 5000 });
   });
 
   test('Add Account form clears credential fields on success', async ({ page }) => {
@@ -95,8 +75,8 @@ test.describe('AccountSelector', () => {
       });
     });
     await addAuthCookie(page);
-    await page.goto('/trader');
-    await page.getByRole('button', { name: /manage accounts/i }).click();
+    // Navigate directly to the accounts submodule page.
+    await page.goto('/trader/accounts');
     await page.getByPlaceholder('Display name').fill('Test Account');
     await page.getByPlaceholder('API Key').fill('test-key-123');
     await page.getByPlaceholder('API Secret').fill('test-secret-456');

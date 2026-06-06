@@ -1,4 +1,5 @@
 """Tests for app/tools.py — all six MCP tool definitions."""
+
 import base64
 from unittest.mock import AsyncMock, patch
 
@@ -23,16 +24,32 @@ def _tool_fn(server: FastMCP, name: str):
 
 # Shared source list used by many tests
 _SOURCES = [
-    {"slug": "s1", "display_name": "S1", "source_type": "mediated_email_attachment",
-     "config_json": {}, "has_credentials": False},
-    {"slug": "s2", "display_name": "S2", "source_type": "mediated_simple_email",
-     "config_json": {}, "has_credentials": False},
-    {"slug": "s3", "display_name": "S3", "source_type": "mediated_simple_website",
-     "config_json": {"url": "https://example.com"}, "has_credentials": False},
+    {
+        "slug": "s1",
+        "display_name": "S1",
+        "source_type": "mediated_email_attachment",
+        "config_json": {},
+        "has_credentials": False,
+    },
+    {
+        "slug": "s2",
+        "display_name": "S2",
+        "source_type": "mediated_simple_email",
+        "config_json": {},
+        "has_credentials": False,
+    },
+    {
+        "slug": "s3",
+        "display_name": "S3",
+        "source_type": "mediated_simple_website",
+        "config_json": {"url": "https://example.com"},
+        "has_credentials": False,
+    },
 ]
 
 
 # ── list_signal_sources ──────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_list_signal_sources_adds_extractor_tool():
@@ -63,6 +80,7 @@ async def test_list_signal_sources_source_type_filter():
 
 
 # ── extract_email_content ──────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_extract_email_content_no_inputs_raises():
@@ -104,14 +122,13 @@ async def test_extract_email_content_text_attachment():
 
 # ── extract_website_content ──────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_extract_website_content_fetches_url():
     """extract_website_content fetches the URL from config_json.url."""
     with patch.object(client, "list_signal_sources", AsyncMock(return_value=_SOURCES)):
         with respx.mock(base_url="https://example.com") as site_mock:
-            site_mock.get("/").mock(
-                return_value=httpx.Response(200, text="NVDA: strong buy")
-            )
+            site_mock.get("/").mock(return_value=httpx.Response(200, text="NVDA: strong buy"))
             server = _make_server()
             result = await _tool_fn(server, "extract_website_content")(source_slug="s3")
             assert "NVDA" in result["raw_text"]
@@ -122,8 +139,13 @@ async def test_extract_website_content_fetches_url():
 async def test_extract_website_content_no_url_raises():
     """extract_website_content raises if config_json has no url."""
     sources_no_url = [
-        {"slug": "site1", "display_name": "Site", "source_type": "mediated_simple_website",
-         "config_json": {}, "has_credentials": False},
+        {
+            "slug": "site1",
+            "display_name": "Site",
+            "source_type": "mediated_simple_website",
+            "config_json": {},
+            "has_credentials": False,
+        },
     ]
     with patch.object(client, "list_signal_sources", AsyncMock(return_value=sources_no_url)):
         server = _make_server()
@@ -132,6 +154,7 @@ async def test_extract_website_content_no_url_raises():
 
 
 # ── ingest_signal ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_ingest_signal_calls_grpc():
@@ -181,6 +204,7 @@ async def test_ingest_signal_auto_alert_above_threshold():
 
 # ── emit_alert ────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_emit_alert_calls_grpc():
     """emit_alert calls client.emit_alert with correct args."""
@@ -203,6 +227,7 @@ async def test_emit_alert_calls_grpc():
 
 # ── run_backtest ──────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_run_backtest_calls_grpc():
     """run_backtest calls client.run_backtest with correct args."""
@@ -224,6 +249,7 @@ async def test_run_backtest_calls_grpc():
 
 # ── extractor_tool mapping ────────────────────────────────────────────────
 
+
 def test_extractor_tool_map_values():
     """Verify the type-level extractor_tool mapping covers all mediated types."""
     assert _EXTRACTOR_TOOL_MAP["mediated_email_attachment"] == "extract_email_content"
@@ -233,3 +259,136 @@ def test_extractor_tool_map_values():
     # mediated_simple_email and non-mediated types → null (absent from map, default None)
     assert _EXTRACTOR_TOOL_MAP.get("mediated_simple_email", None) is None
     assert _EXTRACTOR_TOOL_MAP.get("simple_email", None) is None
+
+
+# ── strategy/formula/signal-source management tools (feature 047) ──────────
+
+
+def _rpc_error(code, details=""):
+    from grpc.aio import AioRpcError, Metadata  # noqa: PLC0415
+
+    return AioRpcError(code, Metadata(), Metadata(), details=details)
+
+
+class TestManageStrategyTool:
+    @pytest.mark.asyncio
+    async def test_calls_client_with_args(self):
+        server = _make_server()
+        with (
+            patch.object(client, "validate_admin", AsyncMock(return_value=True)),
+            patch.object(
+                client, "manage_strategy", AsyncMock(return_value={"strategy_id": "sma_x"})
+            ) as m,
+        ):
+            result = await _tool_fn(server, "manage_strategy")(
+                operation="register",
+                strategy_id="sma_x",
+                display_name="SMA X",
+                components=[{"ref_name": "fast", "kind": "builtin", "indicator": "SMA"}],
+                entry_rule="{}",
+                admin_api_key="key-123",
+            )
+        assert result == {"strategy_id": "sma_x"}
+        kwargs = m.call_args.kwargs
+        assert kwargs["operation"] == "register"
+        assert kwargs["api_key"] == "key-123"
+        assert kwargs["definition"]["strategy_id"] == "sma_x"
+
+    @pytest.mark.asyncio
+    async def test_non_admin_rejected_at_entry(self):
+        server = _make_server()
+        with patch.object(client, "validate_admin", AsyncMock(return_value=False)):
+            with pytest.raises(RuntimeError, match="admin API key required"):
+                await _tool_fn(server, "manage_strategy")(
+                    operation="register", strategy_id="x", admin_api_key="bad"
+                )
+
+    @pytest.mark.asyncio
+    async def test_grpc_error_reraised_as_clear_message(self):
+        import grpc  # noqa: PLC0415
+
+        server = _make_server()
+        err = _rpc_error(grpc.StatusCode.NOT_FOUND, "nope")
+        with (
+            patch.object(client, "validate_admin", AsyncMock(return_value=True)),
+            patch.object(client, "manage_strategy", AsyncMock(side_effect=err)),
+        ):
+            with pytest.raises(RuntimeError, match="strategy not found"):
+                await _tool_fn(server, "manage_strategy")(
+                    operation="update", strategy_id="x", admin_api_key="good"
+                )
+
+
+class TestManageFormulaTool:
+    @pytest.mark.asyncio
+    async def test_register_and_delete_paths(self):
+        server = _make_server()
+        with patch.object(
+            client, "manage_formula", AsyncMock(return_value={"formula_id": "f-1"})
+        ) as m:
+            await _tool_fn(server, "manage_formula")(
+                operation="register", name="rsi2", source="x = 1", admin_api_key="k"
+            )
+            await _tool_fn(server, "manage_formula")(
+                operation="delete",
+                formula_id="f-1",
+                formula_author_user_id="u1",
+                admin_api_key="k",
+            )
+        assert m.call_count == 2
+        assert m.call_args_list[0].kwargs["operation"] == "register"
+        assert m.call_args_list[1].kwargs["operation"] == "delete"
+
+
+class TestManageSignalSourceTool:
+    @pytest.mark.asyncio
+    async def test_register_omits_credentials_ref(self):
+        server = _make_server()
+        returned = {
+            "slug": "uw",
+            "display_name": "UW",
+            "source_type": "newsletter",
+            "extractor_module": "",
+            "active": True,
+            "has_credentials": True,
+        }
+        with patch.object(client, "manage_signal_source", AsyncMock(return_value=returned)) as m:
+            result = await _tool_fn(server, "manage_signal_source")(
+                operation="register",
+                slug="uw",
+                display_name="UW",
+                source_type="newsletter",
+                credentials_ref="secret-ref",
+                admin_api_key="k",
+            )
+        assert "credentials_ref" not in result  # FR-12
+        assert m.call_args.kwargs["credentials_ref"] == "secret-ref"
+
+
+class TestSetStrategyLiveTool:
+    @pytest.mark.asyncio
+    async def test_requires_admin(self):
+        server = _make_server()
+        with patch.object(client, "validate_admin", AsyncMock(return_value=False)):
+            with pytest.raises(RuntimeError, match="admin API key required"):
+                await _tool_fn(server, "set_strategy_live")(
+                    strategy_id="s1", live_enabled=True, admin_api_key="bad"
+                )
+
+    @pytest.mark.asyncio
+    async def test_calls_client_when_admin(self):
+        server = _make_server()
+        returned = {
+            "strategy_id": "s1",
+            "display_name": "S1",
+            "live_enabled": True,
+            "active": True,
+        }
+        with patch.object(client, "validate_admin", AsyncMock(return_value=True)):
+            with patch.object(client, "set_strategy_live", AsyncMock(return_value=returned)) as m:
+                result = await _tool_fn(server, "set_strategy_live")(
+                    strategy_id="s1", live_enabled=True, admin_api_key="good"
+                )
+        assert result == returned
+        assert m.call_args.kwargs["strategy_id"] == "s1"
+        assert m.call_args.kwargs["api_key"] == "good"

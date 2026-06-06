@@ -4,7 +4,8 @@ import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 import { NotifyService } from '@xstockstrat/proto/notify/v1/notify_pb';
-import { tradingClient, portfolioClient, marketDataClient, notifyClient } from '@/lib/connectClients';
+import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { tradingClient, portfolioClient, marketDataClient, notifyClient, analysisClient } from '@/lib/connectClients';
 import { verifyAccessToken, rolesToAccessScope, generateTraceId, type JwtClaims } from '@/lib/auth';
 
 function parseCookieValue(cookieHeader: string, name: string): string | undefined {
@@ -65,6 +66,14 @@ router.service(TradingService, {
     const claims = await requireSession(ctx);
     return tradingClient.deregisterBrokerAccount(req, { headers: backendHeaders(claims, ctx) });
   },
+  async updateBrokerAccountCredentials(req, ctx) {
+    const claims = await requireSession(ctx);
+    return tradingClient.updateBrokerAccountCredentials(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async getTradingEnvironment(req, ctx) {
+    const claims = await requireSession(ctx);
+    return tradingClient.getTradingEnvironment(req, { headers: backendHeaders(claims, ctx) });
+  },
 });
 
 router.service(PortfolioService, {
@@ -96,6 +105,26 @@ router.service(NotifyService, {
       { ...req, userId: claims.user_id },
       { headers: backendHeaders(claims, ctx), signal: ctx.signal },
     );
+  },
+  async listAlerts(req, ctx) {
+    const claims = await requireSession(ctx);
+    return notifyClient.listAlerts(req, { headers: backendHeaders(claims, ctx) });
+  },
+});
+
+router.service(AnalysisService, {
+  async listStrategyDefinitions(req, ctx) {
+    const claims = await requireSession(ctx);
+    return analysisClient.listStrategyDefinitions(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async setStrategyLive(req, ctx) {
+    const claims = await requireSession(ctx);
+    // Admin scope gate — enforced server-side before forwarding to the gRPC service.
+    const ADMIN_BIT = 0x04;
+    if ((rolesToAccessScope(claims.roles) & ADMIN_BIT) === 0) {
+      throw new ConnectError('Admin scope required', Code.PermissionDenied);
+    }
+    return analysisClient.setStrategyLive(req, { headers: backendHeaders(claims, ctx) });
   },
 });
 
