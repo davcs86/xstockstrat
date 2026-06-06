@@ -6,6 +6,23 @@
 
 ---
 
+## Session 2026-06-06 — sdd-execute (sequential mode)
+
+Running `/sdd-execute strategy-creation-flow sequential`. Branch model: user authorized the SDD
+stacked-PR model (feature/strategy-creation-flow + feature-steps/*-step-N branches). Re-spec gate:
+all 11 steps' Files/evidence validated against the live codebase — no mismatch, no re-spec needed.
+
+### Step 1 — Proxy strategy-authoring RPCs and ListSignalSources through the insights BFF [done]
+- Added `manageStrategy` (admin gate on register/update/deactivate), `getStrategy`,
+  `listStrategyDefinitions`, `setStrategyLive` (admin gate) to the AnalysisService block, plus a new
+  `IngestService` block with `listSignalSources`, in `src/lib/insightsBff.ts`. All forward
+  `backendHeaders` (x-user-id/x-access-scope/x-trace-id). Admin gate reuses the `ADMIN_BIT = 0x04` /
+  `PermissionDenied` pattern from `traderBff.ts`.
+- Files modified: `services/xstockstrat-ui/src/lib/insightsBff.ts`
+- Deviations: `connectClients.ts` was NOT modified — the spec listed it as a conditional edit ("only
+  if `ingestClient` is not already exported"); it is already exported at `connectClients.ts:36`, so no
+  change was needed.
+
 ## Session 2026-06-06T00:05:00Z — sdd-spec
 
 - Generated implementation-spec.md with 11 steps. Status → implementation-ready.

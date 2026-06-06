@@ -1,11 +1,12 @@
 import { createConnectRouter, ConnectError, Code, type HandlerContext } from '@connectrpc/connect';
 import { compressionGzip, compressionBrotli } from '@connectrpc/connect-node';
-import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { AnalysisService, StrategyOperation } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { IndicatorsService } from '@xstockstrat/proto/indicators/v1/indicators_pb';
+import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
-import { analysisClient, indicatorsClient, marketDataClient, portfolioClient, tradingClient } from '@/lib/connectClients';
+import { analysisClient, indicatorsClient, ingestClient, marketDataClient, portfolioClient, tradingClient } from '@/lib/connectClients';
 import { verifyAccessToken, rolesToAccessScope, generateTraceId, type JwtClaims } from '@/lib/auth';
 
 function parseCookieValue(cookieHeader: string, name: string): string | undefined {
@@ -50,6 +51,46 @@ router.service(AnalysisService, {
   async getStrategyReport(req, ctx) {
     const claims = await requireSession(ctx);
     return analysisClient.getStrategyReport(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async manageStrategy(req, ctx) {
+    const claims = await requireSession(ctx);
+    // Mutations (register/update/deactivate) are admin-only per FR-8 — enforced
+    // server-side before forwarding to the gRPC service.
+    const mutating =
+      req.operation === StrategyOperation.REGISTER ||
+      req.operation === StrategyOperation.UPDATE ||
+      req.operation === StrategyOperation.DEACTIVATE;
+    if (mutating) {
+      const ADMIN_BIT = 0x04;
+      if ((rolesToAccessScope(claims.roles) & ADMIN_BIT) === 0) {
+        throw new ConnectError('Admin scope required', Code.PermissionDenied);
+      }
+    }
+    return analysisClient.manageStrategy(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async getStrategy(req, ctx) {
+    const claims = await requireSession(ctx);
+    return analysisClient.getStrategy(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async listStrategyDefinitions(req, ctx) {
+    const claims = await requireSession(ctx);
+    return analysisClient.listStrategyDefinitions(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async setStrategyLive(req, ctx) {
+    const claims = await requireSession(ctx);
+    // Admin scope gate — enforced server-side before forwarding to the gRPC service.
+    const ADMIN_BIT = 0x04;
+    if ((rolesToAccessScope(claims.roles) & ADMIN_BIT) === 0) {
+      throw new ConnectError('Admin scope required', Code.PermissionDenied);
+    }
+    return analysisClient.setStrategyLive(req, { headers: backendHeaders(claims, ctx) });
+  },
+});
+
+router.service(IngestService, {
+  async listSignalSources(req, ctx) {
+    const claims = await requireSession(ctx);
+    return ingestClient.listSignalSources(req, { headers: backendHeaders(claims, ctx) });
   },
 });
 

@@ -1,6 +1,6 @@
 # Implementation Spec: strategy-creation-flow
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-06-06
 **Feature**: `docs/roadmap/features/050-strategy-creation-flow/feature.md`
 **Total Steps**: 11
@@ -37,7 +37,7 @@ client plumbing (Steps 1–3) land before any page consumes them, and the wizard
 
 ### Step 1 — service: Proxy strategy-authoring RPCs and ListSignalSources through the insights BFF
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify
@@ -342,4 +342,7 @@ client plumbing (Steps 1–3) land before any page consumes them, and the wizard
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 1 — connectClients.ts not modified
+**Spec said**: `services/xstockstrat-ui/src/lib/connectClients.ts` — modify (only if `ingestClient` is not already exported there — verify; see Codebase Evidence)
+**Actual**: Left unchanged. `ingestClient` is already exported at `connectClients.ts:36`.
+**Reason**: The step itself made the edit conditional. Discovery confirmed the export already exists, so the conditional did not apply. `**Disposition**: planned-conditional, condition not met.`
