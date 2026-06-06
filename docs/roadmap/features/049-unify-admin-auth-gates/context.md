@@ -246,3 +246,27 @@
   JWT+refresh+audience / identity-backed-AS design.
 - Status remains `implementation-ready`. Next: /sdd-execute unify-admin-auth-gates (or resolve the
   callback-handoff advisory first).
+
+## Session 2026-06-06 — resolve callback-handoff advisory (same-origin cookie validation)
+
+- User challenged the "different origin" premise of the prior advisory. Verified: it was wrong for prod.
+  - DO is a **single path-routed ingress** — `/agent`→agent, `/`→UI under one domain (`.do/app.yaml:10-21`)
+    → agent and UI are **same origin** in production.
+  - UI session cookie `access_token` is `httpOnly`/`secure`/`sameSite:'lax'`/`path:'/'`
+    (`services/xstockstrat-ui/src/lib/auth.ts:42-45`) → a top-level 302 to `{AGENT_PUBLIC_URL}/oauth/callback`
+    (`${APP_URL}/agent/...`) **carries the cookie**. The cookie value is the identity-issued access JWT.
+- **Resolution:** the forgeable-callback advisory is solved by deriving the user from the session cookie:
+  the agent `/oauth/callback` reads the `access_token` cookie and validates it via identity `ValidateToken`
+  → trustworthy `user_id`. Dropped the forgeable `?login=ok` proof. Non-forgeable (attacker can't mint a
+  signed JWT).
+- **Spec tightened (no scope change):**
+  - impl-spec Step 14: added same-origin/cookie evidence; new `client.validate_token(token)->claims`
+    helper; `/oauth/callback` now verifies `txn` HMAC + `state`, reads `access_token` cookie, validates
+    via `ValidateToken` → `user_id` (re-redirect/401 if missing/invalid); header-prop note updated.
+  - impl-spec Step 18: UI redirects to agent callback with `txn`+`state` ONLY (no token/user id/login=ok);
+    cookie rides along same-origin; added the `pnpm run lint` gate the review flagged.
+  - product-spec: flow steps (5)(6)(7), FR-B5/FR-B6, AC-B8 updated to the cookie→ValidateToken handoff.
+- **Residual caveats kept on record:** (1) local docker-compose is cross-origin (UI :3000/agent :9000) →
+  full round-trip only prod-testable; unit tests mock stubs. (2) cookie proves *authentication*; `state` +
+  signed `txn` still bind the *authorization request* (consent/CSRF) — Security to confirm at execute.
+- Status unchanged: `implementation-ready`.

@@ -441,18 +441,23 @@ runs the language linter.
 - `UI_BASE_URL` redirect target intended at `app/main.py:26-30` (`TODO(019)` → `{UI_BASE_URL}/auth/oauth-login`). The UI page exists (`services/xstockstrat-ui/src/app/auth/oauth-login/page.tsx`) and reads `redirect_uri` + `state` query params (`:9-11`).
 - `getOAuthClient` gRPC RPC added in Steps 6/9 for exact-redirect validation; `issueAuthCode` for code minting. Agent gRPC pattern as in Step 13.
 - `RedirectResponse` is available from `starlette.responses` (already importing `Response` at `app/main.py:51`).
+- **Same-origin user handoff (verified):** in DO production the app is a single path-routed ingress — `/agent` → agent, `/` → UI (`.do/app.yaml:10-21`), so the UI and the agent callback share one origin. The UI session cookie `access_token` is set `httpOnly`, `secure`, `sameSite: 'lax'`, `path: '/'` (`services/xstockstrat-ui/src/lib/auth.ts:42-45`), so a top-level 302 to `{AGENT_PUBLIC_URL}/oauth/callback` (= `${APP_URL}/agent/oauth/callback`) **carries that cookie**. The cookie value is the identity-issued access JWT (stored verbatim by the BFF login route from `AuthenticateUser`), so the agent can derive a trustworthy `user_id` by validating it via identity `ValidateToken` — **not** by trusting a query param. (Local docker-compose is cross-origin — UI `:3000` vs agent `:9000` — so the full browser round-trip is only end-to-end testable in a prod-like single-origin setup; unit tests mock the identity stubs.)
 
 **Instructions**:
 1. `GET /oauth/authorize` handler: require `response_type=code`, `code_challenge_method=S256` (reject otherwise), a registered `client_id` (call `client.get_oauth_client`), and an **exact-match** `redirect_uri` against the client's registered list (no wildcard). Capture `state`, `code_challenge`, `resource`. On success, 302-redirect (`RedirectResponse`) to `{UI_BASE_URL}/auth/oauth-login` carrying the agent callback URL (`{AGENT_PUBLIC_URL}/oauth/callback`), `state`, and an opaque server-side-free transaction blob (encode `client_id`, `redirect_uri`, `code_challenge`, `resource`, `state` into a signed/encoded `txn` query param so the agent stays stateless — FR-B13). Use the existing `MCP_AGENT_SECRET` to HMAC-sign the `txn` blob.
-2. Add `client.get_oauth_client(client_id) -> dict` and `client.issue_auth_code(user_id, client_id, redirect_uri, code_challenge, resource) -> str` to `app/client.py` (gRPC to identity, `metadata=_metadata()`).
-3. `GET /oauth/callback` handler: receive the login proof + `txn` + `state` from the UI (Step 18); verify the `txn` HMAC; extract `user_id` from the login proof; call `client.issue_auth_code(...)`; 302-redirect to the client's registered `redirect_uri` with `code` + `state` (FR-B6).
+2. Add `client.get_oauth_client(client_id) -> dict`, `client.issue_auth_code(user_id, client_id, redirect_uri, code_challenge, resource) -> str`, and `client.validate_token(token) -> dict` (gRPC `ValidateToken` → returns the `TokenClaims` incl. `user_id`) to `app/client.py` (gRPC to identity, `metadata=_metadata()`).
+3. `GET /oauth/callback` handler — **derive the user from the same-origin session cookie, never from a query param** (closes the forgeable-callback gap):
+   - Read the `txn` + `state` query params; **verify the `txn` HMAC** (signed in instruction 1) and that `state` matches the value inside `txn`.
+   - Read the **`access_token` cookie** from the request (delivered same-origin per the evidence above). If absent, redirect the browser back to `{UI_BASE_URL}/auth/oauth-login?...` to authenticate (not yet logged in).
+   - Call `client.validate_token(access_token)`; if it fails, return 401 / re-redirect to login. On success take `user_id` from the validated claims. **Do not** trust any `login=ok`-style flag.
+   - Call `client.issue_auth_code(user_id, client_id, redirect_uri, code_challenge, resource)` using the `txn`-carried request context; 302-redirect to the client's registered `redirect_uri` with `code` + `state` (FR-B6).
 4. Register both routes in `app/main.py`.
 
 **Verification**:
 - `grep -n "oauth/authorize\|oauth/callback\|issue_auth_code\|get_oauth_client" services/xstockstrat-agent/app/oauth_server.py services/xstockstrat-agent/app/client.py services/xstockstrat-agent/app/main.py` — confirm handlers + client helpers + route registration.
 - Covered by Step 21 (exact-redirect-mismatch → 400; S256 required).
 
-> Header propagation note (§5c): `get_oauth_client` and `issue_auth_code` are new outbound gRPC calls to identity made during the pre-token OAuth handshake (no authenticated platform user context on the wire yet — the `user_id` is an argument, not an inbound header). They reuse `_metadata()` (`x-mcp-secret`); no `x-user-id`/`x-access-scope`/`x-trace-id` exist to forward at this stage.
+> Header propagation note (§5c): `get_oauth_client`, `issue_auth_code`, and `validate_token` are new outbound gRPC calls to identity made during the OAuth handshake. `validate_token` establishes the `user_id` from the session cookie (the agent reads it from the validated claims, not from an inbound header); the other two take `user_id`/`client_id` as arguments. All reuse `_metadata()` (`x-mcp-secret`); no `x-user-id`/`x-access-scope`/`x-trace-id` exist to forward at this pre-token stage.
 
 ---
 
@@ -550,16 +555,18 @@ runs the language linter.
 
 **Codebase Evidence**:
 - Current stub: on `/api/auth/login` success it redirects to `${redirectUri}?state=${state}` (`page.tsx:42-44`) with **no auth code** and **directly to the external client** — the bug FR-B5 fixes.
-- It reads `redirect_uri` + `state` from query params (`page.tsx:10-11`). The BFF login route sets session cookies on success (`src/app/api/auth/login/route.ts:18-22` → `setSessionCookies`).
-- The agent `/oauth/callback` (Step 14) expects the login proof + `txn` + `state`.
+- It reads `redirect_uri` + `state` from query params (`page.tsx:10-11`). The BFF login route sets session cookies on success (`src/app/api/auth/login/route.ts:17` → `setSessionCookies`), which writes `access_token` `httpOnly`/`secure`/`sameSite:'lax'`/`path:'/'` (`src/lib/auth.ts:42-45`).
+- **Same-origin in prod:** UI and agent share one DO ingress origin (`.do/app.yaml:10-21`), so a top-level 302 to the agent callback carries the `access_token` cookie automatically — **the UI does not put any user id or token in the URL**. The agent derives `user_id` by validating that cookie (Step 14). (Local compose is cross-origin — full round-trip is prod-only; see Step 14 evidence.)
+- The agent `/oauth/callback` (Step 14) expects `txn` + `state` query params and reads the session cookie itself.
 
 **Instructions**:
-1. Change the authorize-flow params the page reads to also accept the **agent callback URL** and the signed `txn` blob (Step 14 passes `agent_cb`, `txn`, `state` when it redirects here). Keep backward-compatible reads of `redirect_uri`/`state` for the invalid-request guard, but the real OAuth flow now carries `agent_cb` + `txn`.
-2. On `/api/auth/login` success, instead of redirecting to the external `redirect_uri`, 302 the browser to the **agent callback**: `window.location.href = \`${agentCb}?txn=${encodeURIComponent(txn)}&state=${encodeURIComponent(state)}&login=ok\`` — the agent then issues the code and redirects to the real client (FR-B5/FR-B6). The "login proof" is the session cookie set by the BFF (the agent callback can treat a successful UI redirect as the proof, or the UI can forward the user id; keep it to the cookie-backed redirect to avoid exposing tokens in the URL).
+1. Change the authorize-flow params the page reads to accept the **agent callback URL** and the signed `txn` blob (Step 14 passes `agent_cb`, `txn`, `state` when it redirects here). Keep backward-compatible reads of `redirect_uri`/`state` only for the invalid-request guard; the real OAuth flow now carries `agent_cb` + `txn`.
+2. On `/api/auth/login` success, 302 the browser to the **agent callback** carrying **only** `txn` + `state` — **no user id, no token, no `login=ok` flag** in the URL: `window.location.href = \`${agentCb}?txn=${encodeURIComponent(txn)}&state=${encodeURIComponent(state)}\``. Authentication rides along as the same-origin `access_token` cookie (httpOnly; the browser sends it, the page never reads it); the agent callback validates that cookie via identity `ValidateToken` to derive `user_id` (Step 14). This avoids exposing any credential in the URL and is non-forgeable.
 3. Update the invalid-request guard to require `agent_cb` + `txn` (the OAuth path), keeping a clear error card.
 
 **Verification**:
-- `grep -n "agent_cb\|/oauth/callback\|txn" services/xstockstrat-ui/src/app/auth/oauth-login/page.tsx` — confirm the redirect now targets the agent callback, not the external client.
+- `grep -n "agent_cb\|txn" services/xstockstrat-ui/src/app/auth/oauth-login/page.tsx` — confirm the redirect targets the agent callback with `txn`+`state` only (and **not** `login=ok` / any user id / token).
+- `cd services/xstockstrat-ui && pnpm run lint` — confirm the Next/Node linter passes (frontend has no coverage gate).
 - Covered by Step 21's integration assertion (AC-B8) and the UI's existing Playwright E2E (no coverage threshold for the UI — see test-pairing table).
 
 ---

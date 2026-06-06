@@ -115,9 +115,9 @@ Claude.ai ──(2) GET /.well-known/oauth-authorization-server (RFC 8414)► ag
 Claude.ai ──(3) POST /oauth/register (RFC 7591 DCR)──► agent →(gRPC RegisterOAuthClient)→ identity DB → returns client_id
 Claude.ai ──(4) GET /oauth/authorize?client_id&redirect_uri&state&code_challenge(S256)&response_type=code&resource=<agent URI>
    agent validates client_id + EXACT redirect_uri + PKCE + resource → 302 to {UI_BASE_URL}/auth/oauth-login?…&agent_cb&state
-User ─────(5) submits email/password on UI page → UI BFF /api/auth/login → identity AuthenticateUser (gRPC)
-   UI ──(6) on success, 302 back to agent /oauth/callback with a one-time login proof + state
-   agent ──(7) (gRPC IssueAuthCode: user, client_id, redirect_uri, code_challenge, resource) → identity stores single-use ≤60s code
+User ─────(5) submits email/password on UI page → UI BFF /api/auth/login → identity AuthenticateUser (gRPC); BFF sets the `access_token` session cookie (httpOnly, SameSite=Lax, path=/)
+   UI ──(6) on success, 302 back to agent /oauth/callback with `txn`+`state` only (no token in URL); the same-origin `access_token` cookie rides along
+   agent ──(7) verifies `txn` HMAC, reads the `access_token` cookie, validates it via identity ValidateToken → user_id; then (gRPC IssueAuthCode: user_id, client_id, redirect_uri, code_challenge, resource) → identity stores single-use ≤60s code
    agent ──(8) 302 to client redirect_uri?code=<code>&state=<state>
 Claude.ai ──(9) POST /oauth/token (grant_type=authorization_code, code, code_verifier, redirect_uri, client_id, resource)
    agent →(gRPC ExchangeAuthCode)→ identity verifies PKCE S256 + exact redirect_uri + client_id + single-use + TTL,
@@ -153,11 +153,18 @@ Claude.ai ──(11) POST /oauth/token (grant_type=refresh_token, refresh_token,
   the PKCE challenge context, and `resource`.
 - **FR-B5 (UI login delegation)** Complete the existing `xstockstrat-ui`
   `/auth/oauth-login/page.tsx`: on successful `/api/auth/login`, redirect back to the **agent callback**
-  (not directly to the external client) so the agent can issue the OAuth code.
-- **FR-B6** Agent `GET /oauth/callback` receives the authenticated login result + state and calls
-  identity `IssueAuthCode` (**gRPC**: `user_id`, `client_id`, `redirect_uri`, `code_challenge`,
-  `resource`) → identity persists a single-use, PKCE-bound, ≤60 s code in `oauth_auth_codes`; the agent
-  302-redirects to the client's registered `redirect_uri` with `code` + `state`.
+  with **`txn` + `state` only** (no token or user id in the URL) — not to the external client. The BFF's
+  `access_token` session cookie (httpOnly, `SameSite=Lax`, `path=/`) is the authentication carrier;
+  because the agent and UI are **same-origin** in the DO ingress (`/agent` and `/` under one domain), the
+  cookie is delivered to the agent callback automatically.
+- **FR-B6** Agent `GET /oauth/callback` verifies the `txn` HMAC + `state`, then **derives `user_id` from
+  the same-origin `access_token` session cookie by validating it via identity `ValidateToken`** (never
+  from a forgeable query param). It then calls identity `IssueAuthCode` (**gRPC**: `user_id`,
+  `client_id`, `redirect_uri`, `code_challenge`, `resource`) → identity persists a single-use,
+  PKCE-bound, ≤60 s code in `oauth_auth_codes`; the agent 302-redirects to the client's registered
+  `redirect_uri` with `code` + `state`. *(Local docker-compose is cross-origin (UI `:3000` / agent
+  `:9000`), so the full browser round-trip is only end-to-end testable in a prod-like single-origin
+  setup; unit tests mock the identity stubs.)*
 - **FR-B7 (token — auth code)** `POST /oauth/token` (`grant_type=authorization_code`) calls identity
   `ExchangeAuthCode`, which verifies PKCE `code_verifier` (S256), **exact** `redirect_uri` + `client_id`,
   single-use, and TTL, then **mints a JWT access token with `aud` = the agent's resource URI** (short
@@ -317,8 +324,11 @@ proto + migration gates:
   `instance_count: 1` dependency).
 - **AC-B7** Legacy `Authorization: Bearer <api_key>` still authenticates `/sse`; `?api_key=` still works
   but is documented as deprecated/Desktop-only.
-- **AC-B8** UI `/auth/oauth-login` redirects back to the agent callback (not the external client) and the
-  agent issues the code — verified by an E2E/integration test.
+- **AC-B8** UI `/auth/oauth-login` redirects back to the agent callback with `txn`+`state` only (no
+  token/user id in the URL); the agent callback derives `user_id` by validating the `access_token`
+  session cookie via `ValidateToken` and issues the code. A callback request with **no/invalid session
+  cookie** does not issue a code (re-auth/401); a request carrying only a forged `login=ok`-style flag is
+  **rejected** — verified by an E2E/integration test.
 - **AC-X** Existing agent/ingest/indicators/identity tests pass; new tests cover the gate changes and the
   OAuth endpoints (PKCE, single-use, expiry, exact-redirect, DCR, audience reject, refresh rotation).
   Coverage ≥40% (identity Node ≥40%).
