@@ -57,6 +57,21 @@ const (
 	// IdentityServiceRevokeApiKeyProcedure is the fully-qualified name of the IdentityService's
 	// RevokeApiKey RPC.
 	IdentityServiceRevokeApiKeyProcedure = "/xstockstrat.identity.v1.IdentityService/RevokeApiKey"
+	// IdentityServiceRegisterOAuthClientProcedure is the fully-qualified name of the IdentityService's
+	// RegisterOAuthClient RPC.
+	IdentityServiceRegisterOAuthClientProcedure = "/xstockstrat.identity.v1.IdentityService/RegisterOAuthClient"
+	// IdentityServiceGetOAuthClientProcedure is the fully-qualified name of the IdentityService's
+	// GetOAuthClient RPC.
+	IdentityServiceGetOAuthClientProcedure = "/xstockstrat.identity.v1.IdentityService/GetOAuthClient"
+	// IdentityServiceIssueAuthCodeProcedure is the fully-qualified name of the IdentityService's
+	// IssueAuthCode RPC.
+	IdentityServiceIssueAuthCodeProcedure = "/xstockstrat.identity.v1.IdentityService/IssueAuthCode"
+	// IdentityServiceExchangeAuthCodeProcedure is the fully-qualified name of the IdentityService's
+	// ExchangeAuthCode RPC.
+	IdentityServiceExchangeAuthCodeProcedure = "/xstockstrat.identity.v1.IdentityService/ExchangeAuthCode"
+	// IdentityServiceRefreshOAuthTokenProcedure is the fully-qualified name of the IdentityService's
+	// RefreshOAuthToken RPC.
+	IdentityServiceRefreshOAuthTokenProcedure = "/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken"
 )
 
 // IdentityServiceClient is a client for the xstockstrat.identity.v1.IdentityService service.
@@ -69,6 +84,13 @@ type IdentityServiceClient interface {
 	ValidateApiKey(context.Context, *connect.Request[v1.ValidateApiKeyRequest]) (*connect.Response[v1.TokenClaims], error)
 	ListApiKeys(context.Context, *connect.Request[v1.ListApiKeysRequest]) (*connect.Response[v1.ListApiKeysResponse], error)
 	RevokeApiKey(context.Context, *connect.Request[v1.RevokeApiKeyRequest]) (*connect.Response[v1.RevokeApiKeyResponse], error)
+	// OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+	// OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+	RegisterOAuthClient(context.Context, *connect.Request[v1.RegisterOAuthClientRequest]) (*connect.Response[v1.OAuthClient], error)
+	GetOAuthClient(context.Context, *connect.Request[v1.GetOAuthClientRequest]) (*connect.Response[v1.OAuthClient], error)
+	IssueAuthCode(context.Context, *connect.Request[v1.IssueAuthCodeRequest]) (*connect.Response[v1.IssueAuthCodeResponse], error)
+	ExchangeAuthCode(context.Context, *connect.Request[v1.ExchangeAuthCodeRequest]) (*connect.Response[v1.OAuthTokenResponse], error)
+	RefreshOAuthToken(context.Context, *connect.Request[v1.RefreshOAuthTokenRequest]) (*connect.Response[v1.OAuthTokenResponse], error)
 }
 
 // NewIdentityServiceClient constructs a client for the xstockstrat.identity.v1.IdentityService
@@ -130,19 +152,54 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(identityServiceMethods.ByName("RevokeApiKey")),
 			connect.WithClientOptions(opts...),
 		),
+		registerOAuthClient: connect.NewClient[v1.RegisterOAuthClientRequest, v1.OAuthClient](
+			httpClient,
+			baseURL+IdentityServiceRegisterOAuthClientProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("RegisterOAuthClient")),
+			connect.WithClientOptions(opts...),
+		),
+		getOAuthClient: connect.NewClient[v1.GetOAuthClientRequest, v1.OAuthClient](
+			httpClient,
+			baseURL+IdentityServiceGetOAuthClientProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("GetOAuthClient")),
+			connect.WithClientOptions(opts...),
+		),
+		issueAuthCode: connect.NewClient[v1.IssueAuthCodeRequest, v1.IssueAuthCodeResponse](
+			httpClient,
+			baseURL+IdentityServiceIssueAuthCodeProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("IssueAuthCode")),
+			connect.WithClientOptions(opts...),
+		),
+		exchangeAuthCode: connect.NewClient[v1.ExchangeAuthCodeRequest, v1.OAuthTokenResponse](
+			httpClient,
+			baseURL+IdentityServiceExchangeAuthCodeProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("ExchangeAuthCode")),
+			connect.WithClientOptions(opts...),
+		),
+		refreshOAuthToken: connect.NewClient[v1.RefreshOAuthTokenRequest, v1.OAuthTokenResponse](
+			httpClient,
+			baseURL+IdentityServiceRefreshOAuthTokenProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("RefreshOAuthToken")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // identityServiceClient implements IdentityServiceClient.
 type identityServiceClient struct {
-	authenticateUser *connect.Client[v1.AuthenticateUserRequest, v1.AuthTokenResponse]
-	validateToken    *connect.Client[v1.ValidateTokenRequest, v1.TokenClaims]
-	refreshToken     *connect.Client[v1.RefreshTokenRequest, v1.AuthTokenResponse]
-	revokeToken      *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
-	createApiKey     *connect.Client[v1.CreateApiKeyRequest, v1.ApiKey]
-	validateApiKey   *connect.Client[v1.ValidateApiKeyRequest, v1.TokenClaims]
-	listApiKeys      *connect.Client[v1.ListApiKeysRequest, v1.ListApiKeysResponse]
-	revokeApiKey     *connect.Client[v1.RevokeApiKeyRequest, v1.RevokeApiKeyResponse]
+	authenticateUser    *connect.Client[v1.AuthenticateUserRequest, v1.AuthTokenResponse]
+	validateToken       *connect.Client[v1.ValidateTokenRequest, v1.TokenClaims]
+	refreshToken        *connect.Client[v1.RefreshTokenRequest, v1.AuthTokenResponse]
+	revokeToken         *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
+	createApiKey        *connect.Client[v1.CreateApiKeyRequest, v1.ApiKey]
+	validateApiKey      *connect.Client[v1.ValidateApiKeyRequest, v1.TokenClaims]
+	listApiKeys         *connect.Client[v1.ListApiKeysRequest, v1.ListApiKeysResponse]
+	revokeApiKey        *connect.Client[v1.RevokeApiKeyRequest, v1.RevokeApiKeyResponse]
+	registerOAuthClient *connect.Client[v1.RegisterOAuthClientRequest, v1.OAuthClient]
+	getOAuthClient      *connect.Client[v1.GetOAuthClientRequest, v1.OAuthClient]
+	issueAuthCode       *connect.Client[v1.IssueAuthCodeRequest, v1.IssueAuthCodeResponse]
+	exchangeAuthCode    *connect.Client[v1.ExchangeAuthCodeRequest, v1.OAuthTokenResponse]
+	refreshOAuthToken   *connect.Client[v1.RefreshOAuthTokenRequest, v1.OAuthTokenResponse]
 }
 
 // AuthenticateUser calls xstockstrat.identity.v1.IdentityService.AuthenticateUser.
@@ -185,6 +242,31 @@ func (c *identityServiceClient) RevokeApiKey(ctx context.Context, req *connect.R
 	return c.revokeApiKey.CallUnary(ctx, req)
 }
 
+// RegisterOAuthClient calls xstockstrat.identity.v1.IdentityService.RegisterOAuthClient.
+func (c *identityServiceClient) RegisterOAuthClient(ctx context.Context, req *connect.Request[v1.RegisterOAuthClientRequest]) (*connect.Response[v1.OAuthClient], error) {
+	return c.registerOAuthClient.CallUnary(ctx, req)
+}
+
+// GetOAuthClient calls xstockstrat.identity.v1.IdentityService.GetOAuthClient.
+func (c *identityServiceClient) GetOAuthClient(ctx context.Context, req *connect.Request[v1.GetOAuthClientRequest]) (*connect.Response[v1.OAuthClient], error) {
+	return c.getOAuthClient.CallUnary(ctx, req)
+}
+
+// IssueAuthCode calls xstockstrat.identity.v1.IdentityService.IssueAuthCode.
+func (c *identityServiceClient) IssueAuthCode(ctx context.Context, req *connect.Request[v1.IssueAuthCodeRequest]) (*connect.Response[v1.IssueAuthCodeResponse], error) {
+	return c.issueAuthCode.CallUnary(ctx, req)
+}
+
+// ExchangeAuthCode calls xstockstrat.identity.v1.IdentityService.ExchangeAuthCode.
+func (c *identityServiceClient) ExchangeAuthCode(ctx context.Context, req *connect.Request[v1.ExchangeAuthCodeRequest]) (*connect.Response[v1.OAuthTokenResponse], error) {
+	return c.exchangeAuthCode.CallUnary(ctx, req)
+}
+
+// RefreshOAuthToken calls xstockstrat.identity.v1.IdentityService.RefreshOAuthToken.
+func (c *identityServiceClient) RefreshOAuthToken(ctx context.Context, req *connect.Request[v1.RefreshOAuthTokenRequest]) (*connect.Response[v1.OAuthTokenResponse], error) {
+	return c.refreshOAuthToken.CallUnary(ctx, req)
+}
+
 // IdentityServiceHandler is an implementation of the xstockstrat.identity.v1.IdentityService
 // service.
 type IdentityServiceHandler interface {
@@ -196,6 +278,13 @@ type IdentityServiceHandler interface {
 	ValidateApiKey(context.Context, *connect.Request[v1.ValidateApiKeyRequest]) (*connect.Response[v1.TokenClaims], error)
 	ListApiKeys(context.Context, *connect.Request[v1.ListApiKeysRequest]) (*connect.Response[v1.ListApiKeysResponse], error)
 	RevokeApiKey(context.Context, *connect.Request[v1.RevokeApiKeyRequest]) (*connect.Response[v1.RevokeApiKeyResponse], error)
+	// OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+	// OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+	RegisterOAuthClient(context.Context, *connect.Request[v1.RegisterOAuthClientRequest]) (*connect.Response[v1.OAuthClient], error)
+	GetOAuthClient(context.Context, *connect.Request[v1.GetOAuthClientRequest]) (*connect.Response[v1.OAuthClient], error)
+	IssueAuthCode(context.Context, *connect.Request[v1.IssueAuthCodeRequest]) (*connect.Response[v1.IssueAuthCodeResponse], error)
+	ExchangeAuthCode(context.Context, *connect.Request[v1.ExchangeAuthCodeRequest]) (*connect.Response[v1.OAuthTokenResponse], error)
+	RefreshOAuthToken(context.Context, *connect.Request[v1.RefreshOAuthTokenRequest]) (*connect.Response[v1.OAuthTokenResponse], error)
 }
 
 // NewIdentityServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -253,6 +342,36 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		connect.WithSchema(identityServiceMethods.ByName("RevokeApiKey")),
 		connect.WithHandlerOptions(opts...),
 	)
+	identityServiceRegisterOAuthClientHandler := connect.NewUnaryHandler(
+		IdentityServiceRegisterOAuthClientProcedure,
+		svc.RegisterOAuthClient,
+		connect.WithSchema(identityServiceMethods.ByName("RegisterOAuthClient")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceGetOAuthClientHandler := connect.NewUnaryHandler(
+		IdentityServiceGetOAuthClientProcedure,
+		svc.GetOAuthClient,
+		connect.WithSchema(identityServiceMethods.ByName("GetOAuthClient")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceIssueAuthCodeHandler := connect.NewUnaryHandler(
+		IdentityServiceIssueAuthCodeProcedure,
+		svc.IssueAuthCode,
+		connect.WithSchema(identityServiceMethods.ByName("IssueAuthCode")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceExchangeAuthCodeHandler := connect.NewUnaryHandler(
+		IdentityServiceExchangeAuthCodeProcedure,
+		svc.ExchangeAuthCode,
+		connect.WithSchema(identityServiceMethods.ByName("ExchangeAuthCode")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceRefreshOAuthTokenHandler := connect.NewUnaryHandler(
+		IdentityServiceRefreshOAuthTokenProcedure,
+		svc.RefreshOAuthToken,
+		connect.WithSchema(identityServiceMethods.ByName("RefreshOAuthToken")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.identity.v1.IdentityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IdentityServiceAuthenticateUserProcedure:
@@ -271,6 +390,16 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 			identityServiceListApiKeysHandler.ServeHTTP(w, r)
 		case IdentityServiceRevokeApiKeyProcedure:
 			identityServiceRevokeApiKeyHandler.ServeHTTP(w, r)
+		case IdentityServiceRegisterOAuthClientProcedure:
+			identityServiceRegisterOAuthClientHandler.ServeHTTP(w, r)
+		case IdentityServiceGetOAuthClientProcedure:
+			identityServiceGetOAuthClientHandler.ServeHTTP(w, r)
+		case IdentityServiceIssueAuthCodeProcedure:
+			identityServiceIssueAuthCodeHandler.ServeHTTP(w, r)
+		case IdentityServiceExchangeAuthCodeProcedure:
+			identityServiceExchangeAuthCodeHandler.ServeHTTP(w, r)
+		case IdentityServiceRefreshOAuthTokenProcedure:
+			identityServiceRefreshOAuthTokenHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -310,4 +439,24 @@ func (UnimplementedIdentityServiceHandler) ListApiKeys(context.Context, *connect
 
 func (UnimplementedIdentityServiceHandler) RevokeApiKey(context.Context, *connect.Request[v1.RevokeApiKeyRequest]) (*connect.Response[v1.RevokeApiKeyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.RevokeApiKey is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) RegisterOAuthClient(context.Context, *connect.Request[v1.RegisterOAuthClientRequest]) (*connect.Response[v1.OAuthClient], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.RegisterOAuthClient is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) GetOAuthClient(context.Context, *connect.Request[v1.GetOAuthClientRequest]) (*connect.Response[v1.OAuthClient], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.GetOAuthClient is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) IssueAuthCode(context.Context, *connect.Request[v1.IssueAuthCodeRequest]) (*connect.Response[v1.IssueAuthCodeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.IssueAuthCode is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) ExchangeAuthCode(context.Context, *connect.Request[v1.ExchangeAuthCodeRequest]) (*connect.Response[v1.OAuthTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.ExchangeAuthCode is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) RefreshOAuthToken(context.Context, *connect.Request[v1.RefreshOAuthTokenRequest]) (*connect.Response[v1.OAuthTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.RefreshOAuthToken is not implemented"))
 }

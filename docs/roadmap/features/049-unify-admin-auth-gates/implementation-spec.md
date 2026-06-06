@@ -190,7 +190,7 @@ runs the language linter.
 
 ### Step 6 — proto: additive identity OAuth RPCs + `TokenClaims.aud`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/identity/v1/identity.proto` — modify
@@ -228,7 +228,7 @@ runs the language linter.
 
 ### Step 7 — proto-gen: regenerate stubs (Go, Python, TS)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/identity/v1/` — modify (generated)

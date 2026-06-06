@@ -320,3 +320,22 @@
   Response shape unchanged (credentials_ref still never echoed).
 - Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/client.py`
 - Deviations: none (coverage verified later by Step 21).
+
+### Step 6 — proto: additive identity OAuth RPCs + TokenClaims.aud [done]
+- Added `aud = 6` to TokenClaims and 5 RPCs (RegisterOAuthClient, GetOAuthClient, IssueAuthCode,
+  ExchangeAuthCode, RefreshOAuthToken) + 8 messages (OAuthClient, RegisterOAuthClientRequest,
+  GetOAuthClientRequest, IssueAuthCodeRequest, IssueAuthCodeResponse, ExchangeAuthCodeRequest,
+  OAuthTokenResponse, RefreshOAuthTokenRequest). All additive.
+- Verification: `buf lint` OK; `buf breaking --against origin/main-dev` confirms non-breaking.
+- Files modified: `packages/proto/identity/v1/identity.proto`
+- Deviations: **CI-equivalent fallback** — host has no `buf`/Docker codegen container; installed the
+  CI-pinned toolchain on the host (buf 1.69.0, protoc-gen-go v1.36.11, protoc-gen-go-grpc v1.6.2,
+  protoc-gen-connect-go v1.19.2, grpcio-tools 1.80.0, pnpm 9.15.0) and ran the standard
+  `scripts/buf-gen.sh`. Disposition: CI-equivalent fallback (see Deviation Log).
+
+### Step 7 — proto-gen: regenerate stubs (Go, Python, TS) [done]
+- Ran `./scripts/buf-gen.sh`; diff confined to `packages/proto/gen/{go,python,ts}/identity/v1/`.
+  New RPCs confirmed in Python + TS stubs. Re-run is idempotent (no further diff) — mirrors the CI
+  proto-freshness stale-stub gate.
+- Files modified: generated stubs under `packages/proto/gen/`
+- Deviations: none beyond the Step 6 toolchain fallback.
