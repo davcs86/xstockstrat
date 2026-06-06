@@ -125,7 +125,7 @@ client plumbing (Steps 1–3) land before any page consumes them, and the wizard
 
 ### Step 4 — service: Build the dual-mode rule editor component
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/RuleEditor.tsx` — create

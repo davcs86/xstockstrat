@@ -39,6 +39,14 @@ all 11 steps' Files/evidence validated against the live codebase — no mismatch
   `services/xstockstrat-ui/src/hooks/useInsightsSignalSources.ts`
 - Deviations: none.
 
+### Step 4 — Dual-mode RuleEditor [done]
+- Created `src/components/insights/RuleEditor.tsx` — controlled `{ value, onChange, label }`. Visual
+  builder edits a `{ op: and|or, conditions: [{lhs, cmp, rhs}] }` tree; JSON mode is a raw textarea.
+  Both modes serialize to the identical string (AC-9). Switching JSON→visual parses best-effort; an
+  unparseable/foreign-shape JSON keeps JSON mode and shows an inline parse error.
+- Files modified: `services/xstockstrat-ui/src/components/insights/RuleEditor.tsx`
+- Deviations: none.
+
 ## Session 2026-06-06T00:05:00Z — sdd-spec
 
 - Generated implementation-spec.md with 11 steps. Status → implementation-ready.
