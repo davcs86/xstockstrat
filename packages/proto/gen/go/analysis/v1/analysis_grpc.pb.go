@@ -19,10 +19,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AnalysisService_RunBacktest_FullMethodName       = "/xstockstrat.analysis.v1.AnalysisService/RunBacktest"
-	AnalysisService_ScoreStrategy_FullMethodName     = "/xstockstrat.analysis.v1.AnalysisService/ScoreStrategy"
-	AnalysisService_ListStrategies_FullMethodName    = "/xstockstrat.analysis.v1.AnalysisService/ListStrategies"
-	AnalysisService_GetStrategyReport_FullMethodName = "/xstockstrat.analysis.v1.AnalysisService/GetStrategyReport"
+	AnalysisService_RunBacktest_FullMethodName             = "/xstockstrat.analysis.v1.AnalysisService/RunBacktest"
+	AnalysisService_ScoreStrategy_FullMethodName           = "/xstockstrat.analysis.v1.AnalysisService/ScoreStrategy"
+	AnalysisService_ListStrategies_FullMethodName          = "/xstockstrat.analysis.v1.AnalysisService/ListStrategies"
+	AnalysisService_GetStrategyReport_FullMethodName       = "/xstockstrat.analysis.v1.AnalysisService/GetStrategyReport"
+	AnalysisService_ManageStrategy_FullMethodName          = "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy"
+	AnalysisService_GetStrategy_FullMethodName             = "/xstockstrat.analysis.v1.AnalysisService/GetStrategy"
+	AnalysisService_ListStrategyDefinitions_FullMethodName = "/xstockstrat.analysis.v1.AnalysisService/ListStrategyDefinitions"
 )
 
 // AnalysisServiceClient is the client API for AnalysisService service.
@@ -33,6 +36,9 @@ type AnalysisServiceClient interface {
 	ScoreStrategy(ctx context.Context, in *ScoreStrategyRequest, opts ...grpc.CallOption) (*StrategyScore, error)
 	ListStrategies(ctx context.Context, in *ListStrategiesRequest, opts ...grpc.CallOption) (*ListStrategiesResponse, error)
 	GetStrategyReport(ctx context.Context, in *GetStrategyReportRequest, opts ...grpc.CallOption) (*StrategyReport, error)
+	ManageStrategy(ctx context.Context, in *ManageStrategyRequest, opts ...grpc.CallOption) (*StrategyDefinition, error)
+	GetStrategy(ctx context.Context, in *GetStrategyRequest, opts ...grpc.CallOption) (*StrategyDefinition, error)
+	ListStrategyDefinitions(ctx context.Context, in *ListStrategyDefinitionsRequest, opts ...grpc.CallOption) (*ListStrategyDefinitionsResponse, error)
 }
 
 type analysisServiceClient struct {
@@ -83,6 +89,36 @@ func (c *analysisServiceClient) GetStrategyReport(ctx context.Context, in *GetSt
 	return out, nil
 }
 
+func (c *analysisServiceClient) ManageStrategy(ctx context.Context, in *ManageStrategyRequest, opts ...grpc.CallOption) (*StrategyDefinition, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StrategyDefinition)
+	err := c.cc.Invoke(ctx, AnalysisService_ManageStrategy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *analysisServiceClient) GetStrategy(ctx context.Context, in *GetStrategyRequest, opts ...grpc.CallOption) (*StrategyDefinition, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StrategyDefinition)
+	err := c.cc.Invoke(ctx, AnalysisService_GetStrategy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *analysisServiceClient) ListStrategyDefinitions(ctx context.Context, in *ListStrategyDefinitionsRequest, opts ...grpc.CallOption) (*ListStrategyDefinitionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListStrategyDefinitionsResponse)
+	err := c.cc.Invoke(ctx, AnalysisService_ListStrategyDefinitions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AnalysisServiceServer is the server API for AnalysisService service.
 // All implementations should embed UnimplementedAnalysisServiceServer
 // for forward compatibility.
@@ -91,6 +127,9 @@ type AnalysisServiceServer interface {
 	ScoreStrategy(context.Context, *ScoreStrategyRequest) (*StrategyScore, error)
 	ListStrategies(context.Context, *ListStrategiesRequest) (*ListStrategiesResponse, error)
 	GetStrategyReport(context.Context, *GetStrategyReportRequest) (*StrategyReport, error)
+	ManageStrategy(context.Context, *ManageStrategyRequest) (*StrategyDefinition, error)
+	GetStrategy(context.Context, *GetStrategyRequest) (*StrategyDefinition, error)
+	ListStrategyDefinitions(context.Context, *ListStrategyDefinitionsRequest) (*ListStrategyDefinitionsResponse, error)
 }
 
 // UnimplementedAnalysisServiceServer should be embedded to have
@@ -111,6 +150,15 @@ func (UnimplementedAnalysisServiceServer) ListStrategies(context.Context, *ListS
 }
 func (UnimplementedAnalysisServiceServer) GetStrategyReport(context.Context, *GetStrategyReportRequest) (*StrategyReport, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetStrategyReport not implemented")
+}
+func (UnimplementedAnalysisServiceServer) ManageStrategy(context.Context, *ManageStrategyRequest) (*StrategyDefinition, error) {
+	return nil, status.Error(codes.Unimplemented, "method ManageStrategy not implemented")
+}
+func (UnimplementedAnalysisServiceServer) GetStrategy(context.Context, *GetStrategyRequest) (*StrategyDefinition, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetStrategy not implemented")
+}
+func (UnimplementedAnalysisServiceServer) ListStrategyDefinitions(context.Context, *ListStrategyDefinitionsRequest) (*ListStrategyDefinitionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListStrategyDefinitions not implemented")
 }
 func (UnimplementedAnalysisServiceServer) testEmbeddedByValue() {}
 
@@ -204,6 +252,60 @@ func _AnalysisService_GetStrategyReport_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AnalysisService_ManageStrategy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ManageStrategyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).ManageStrategy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_ManageStrategy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).ManageStrategy(ctx, req.(*ManageStrategyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AnalysisService_GetStrategy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetStrategyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).GetStrategy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_GetStrategy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).GetStrategy(ctx, req.(*GetStrategyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AnalysisService_ListStrategyDefinitions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListStrategyDefinitionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).ListStrategyDefinitions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_ListStrategyDefinitions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).ListStrategyDefinitions(ctx, req.(*ListStrategyDefinitionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AnalysisService_ServiceDesc is the grpc.ServiceDesc for AnalysisService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -226,6 +328,18 @@ var AnalysisService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetStrategyReport",
 			Handler:    _AnalysisService_GetStrategyReport_Handler,
+		},
+		{
+			MethodName: "ManageStrategy",
+			Handler:    _AnalysisService_ManageStrategy_Handler,
+		},
+		{
+			MethodName: "GetStrategy",
+			Handler:    _AnalysisService_GetStrategy_Handler,
+		},
+		{
+			MethodName: "ListStrategyDefinitions",
+			Handler:    _AnalysisService_ListStrategyDefinitions_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

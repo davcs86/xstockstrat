@@ -5,7 +5,13 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.TradeRecord = exports.BacktestResult = exports.RunBacktestRequest = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.TradeRecord = exports.BacktestResult = exports.RunBacktestRequest = exports.StrategyOperation = exports.ComponentKind = exports.protobufPackage = void 0;
+exports.componentKindFromJSON = componentKindFromJSON;
+exports.componentKindToJSON = componentKindToJSON;
+exports.componentKindToNumber = componentKindToNumber;
+exports.strategyOperationFromJSON = strategyOperationFromJSON;
+exports.strategyOperationToJSON = strategyOperationToJSON;
+exports.strategyOperationToNumber = strategyOperationToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -13,8 +19,124 @@ const common_1 = require("../../common/v1/common");
 const struct_1 = require("../../google/protobuf/struct");
 const timestamp_1 = require("../../google/protobuf/timestamp");
 exports.protobufPackage = "xstockstrat.analysis.v1";
+var ComponentKind;
+(function (ComponentKind) {
+    ComponentKind["COMPONENT_KIND_UNSPECIFIED"] = "COMPONENT_KIND_UNSPECIFIED";
+    ComponentKind["COMPONENT_KIND_BUILTIN_INDICATOR"] = "COMPONENT_KIND_BUILTIN_INDICATOR";
+    ComponentKind["COMPONENT_KIND_CUSTOM_FORMULA"] = "COMPONENT_KIND_CUSTOM_FORMULA";
+    ComponentKind["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(ComponentKind || (exports.ComponentKind = ComponentKind = {}));
+function componentKindFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "COMPONENT_KIND_UNSPECIFIED":
+            return ComponentKind.COMPONENT_KIND_UNSPECIFIED;
+        case 1:
+        case "COMPONENT_KIND_BUILTIN_INDICATOR":
+            return ComponentKind.COMPONENT_KIND_BUILTIN_INDICATOR;
+        case 2:
+        case "COMPONENT_KIND_CUSTOM_FORMULA":
+            return ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return ComponentKind.UNRECOGNIZED;
+    }
+}
+function componentKindToJSON(object) {
+    switch (object) {
+        case ComponentKind.COMPONENT_KIND_UNSPECIFIED:
+            return "COMPONENT_KIND_UNSPECIFIED";
+        case ComponentKind.COMPONENT_KIND_BUILTIN_INDICATOR:
+            return "COMPONENT_KIND_BUILTIN_INDICATOR";
+        case ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA:
+            return "COMPONENT_KIND_CUSTOM_FORMULA";
+        case ComponentKind.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function componentKindToNumber(object) {
+    switch (object) {
+        case ComponentKind.COMPONENT_KIND_UNSPECIFIED:
+            return 0;
+        case ComponentKind.COMPONENT_KIND_BUILTIN_INDICATOR:
+            return 1;
+        case ComponentKind.COMPONENT_KIND_CUSTOM_FORMULA:
+            return 2;
+        case ComponentKind.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+var StrategyOperation;
+(function (StrategyOperation) {
+    StrategyOperation["STRATEGY_OPERATION_UNSPECIFIED"] = "STRATEGY_OPERATION_UNSPECIFIED";
+    StrategyOperation["STRATEGY_OPERATION_REGISTER"] = "STRATEGY_OPERATION_REGISTER";
+    StrategyOperation["STRATEGY_OPERATION_UPDATE"] = "STRATEGY_OPERATION_UPDATE";
+    StrategyOperation["STRATEGY_OPERATION_DEACTIVATE"] = "STRATEGY_OPERATION_DEACTIVATE";
+    StrategyOperation["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(StrategyOperation || (exports.StrategyOperation = StrategyOperation = {}));
+function strategyOperationFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "STRATEGY_OPERATION_UNSPECIFIED":
+            return StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED;
+        case 1:
+        case "STRATEGY_OPERATION_REGISTER":
+            return StrategyOperation.STRATEGY_OPERATION_REGISTER;
+        case 2:
+        case "STRATEGY_OPERATION_UPDATE":
+            return StrategyOperation.STRATEGY_OPERATION_UPDATE;
+        case 3:
+        case "STRATEGY_OPERATION_DEACTIVATE":
+            return StrategyOperation.STRATEGY_OPERATION_DEACTIVATE;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return StrategyOperation.UNRECOGNIZED;
+    }
+}
+function strategyOperationToJSON(object) {
+    switch (object) {
+        case StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED:
+            return "STRATEGY_OPERATION_UNSPECIFIED";
+        case StrategyOperation.STRATEGY_OPERATION_REGISTER:
+            return "STRATEGY_OPERATION_REGISTER";
+        case StrategyOperation.STRATEGY_OPERATION_UPDATE:
+            return "STRATEGY_OPERATION_UPDATE";
+        case StrategyOperation.STRATEGY_OPERATION_DEACTIVATE:
+            return "STRATEGY_OPERATION_DEACTIVATE";
+        case StrategyOperation.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function strategyOperationToNumber(object) {
+    switch (object) {
+        case StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED:
+            return 0;
+        case StrategyOperation.STRATEGY_OPERATION_REGISTER:
+            return 1;
+        case StrategyOperation.STRATEGY_OPERATION_UPDATE:
+            return 2;
+        case StrategyOperation.STRATEGY_OPERATION_DEACTIVATE:
+            return 3;
+        case StrategyOperation.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
 function createBaseRunBacktestRequest() {
-    return { strategyId: "", range: undefined, symbols: [], initialCapital: 0, strategyParams: undefined };
+    return {
+        strategyId: "",
+        range: undefined,
+        symbols: [],
+        initialCapital: 0,
+        strategyParams: undefined,
+        strategyIdRef: "",
+        inlineDefinition: undefined,
+    };
 }
 exports.RunBacktestRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -32,6 +154,12 @@ exports.RunBacktestRequest = {
         }
         if (message.strategyParams !== undefined) {
             struct_1.Struct.encode(struct_1.Struct.wrap(message.strategyParams), writer.uint32(42).fork()).join();
+        }
+        if (message.strategyIdRef !== "") {
+            writer.uint32(50).string(message.strategyIdRef);
+        }
+        if (message.inlineDefinition !== undefined) {
+            exports.StrategyDefinition.encode(message.inlineDefinition, writer.uint32(58).fork()).join();
         }
         return writer;
     },
@@ -77,6 +205,20 @@ exports.RunBacktestRequest = {
                     message.strategyParams = struct_1.Struct.unwrap(struct_1.Struct.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.strategyIdRef = reader.string();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.inlineDefinition = exports.StrategyDefinition.decode(reader, reader.uint32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -104,6 +246,16 @@ exports.RunBacktestRequest = {
                 : isObject(object.strategy_params)
                     ? object.strategy_params
                     : undefined,
+            strategyIdRef: isSet(object.strategyIdRef)
+                ? globalThis.String(object.strategyIdRef)
+                : isSet(object.strategy_id_ref)
+                    ? globalThis.String(object.strategy_id_ref)
+                    : "",
+            inlineDefinition: isSet(object.inlineDefinition)
+                ? exports.StrategyDefinition.fromJSON(object.inlineDefinition)
+                : isSet(object.inline_definition)
+                    ? exports.StrategyDefinition.fromJSON(object.inline_definition)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -123,6 +275,12 @@ exports.RunBacktestRequest = {
         if (message.strategyParams !== undefined) {
             obj.strategyParams = message.strategyParams;
         }
+        if (message.strategyIdRef !== "") {
+            obj.strategyIdRef = message.strategyIdRef;
+        }
+        if (message.inlineDefinition !== undefined) {
+            obj.inlineDefinition = exports.StrategyDefinition.toJSON(message.inlineDefinition);
+        }
         return obj;
     },
     create(base) {
@@ -137,6 +295,10 @@ exports.RunBacktestRequest = {
         message.symbols = object.symbols?.map((e) => e) || [];
         message.initialCapital = object.initialCapital ?? 0;
         message.strategyParams = object.strategyParams ?? undefined;
+        message.strategyIdRef = object.strategyIdRef ?? "";
+        message.inlineDefinition = (object.inlineDefinition !== undefined && object.inlineDefinition !== null)
+            ? exports.StrategyDefinition.fromPartial(object.inlineDefinition)
+            : undefined;
         return message;
     },
 };
@@ -1165,6 +1327,685 @@ exports.GetStrategyReportRequest = {
         return message;
     },
 };
+function createBaseStrategyComponent() {
+    return { refName: "", kind: ComponentKind.COMPONENT_KIND_UNSPECIFIED, indicator: "", formulaId: "", params: {} };
+}
+exports.StrategyComponent = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.refName !== "") {
+            writer.uint32(10).string(message.refName);
+        }
+        if (message.kind !== ComponentKind.COMPONENT_KIND_UNSPECIFIED) {
+            writer.uint32(16).int32(componentKindToNumber(message.kind));
+        }
+        if (message.indicator !== "") {
+            writer.uint32(26).string(message.indicator);
+        }
+        if (message.formulaId !== "") {
+            writer.uint32(34).string(message.formulaId);
+        }
+        globalThis.Object.entries(message.params).forEach(([key, value]) => {
+            exports.StrategyComponent_ParamsEntry.encode({ key: key, value }, writer.uint32(42).fork()).join();
+        });
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseStrategyComponent();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.refName = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.kind = componentKindFromJSON(reader.int32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.indicator = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.formulaId = reader.string();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    const entry5 = exports.StrategyComponent_ParamsEntry.decode(reader, reader.uint32());
+                    if (entry5.value !== undefined) {
+                        message.params[entry5.key] = entry5.value;
+                    }
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            refName: isSet(object.refName)
+                ? globalThis.String(object.refName)
+                : isSet(object.ref_name)
+                    ? globalThis.String(object.ref_name)
+                    : "",
+            kind: isSet(object.kind) ? componentKindFromJSON(object.kind) : ComponentKind.COMPONENT_KIND_UNSPECIFIED,
+            indicator: isSet(object.indicator) ? globalThis.String(object.indicator) : "",
+            formulaId: isSet(object.formulaId)
+                ? globalThis.String(object.formulaId)
+                : isSet(object.formula_id)
+                    ? globalThis.String(object.formula_id)
+                    : "",
+            params: isObject(object.params)
+                ? globalThis.Object.entries(object.params).reduce((acc, [key, value]) => {
+                    acc[key] = globalThis.Number(value);
+                    return acc;
+                }, {})
+                : {},
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.refName !== "") {
+            obj.refName = message.refName;
+        }
+        if (message.kind !== ComponentKind.COMPONENT_KIND_UNSPECIFIED) {
+            obj.kind = componentKindToJSON(message.kind);
+        }
+        if (message.indicator !== "") {
+            obj.indicator = message.indicator;
+        }
+        if (message.formulaId !== "") {
+            obj.formulaId = message.formulaId;
+        }
+        if (message.params) {
+            const entries = globalThis.Object.entries(message.params);
+            if (entries.length > 0) {
+                obj.params = {};
+                entries.forEach(([k, v]) => {
+                    obj.params[k] = v;
+                });
+            }
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.StrategyComponent.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseStrategyComponent();
+        message.refName = object.refName ?? "";
+        message.kind = object.kind ?? ComponentKind.COMPONENT_KIND_UNSPECIFIED;
+        message.indicator = object.indicator ?? "";
+        message.formulaId = object.formulaId ?? "";
+        message.params = globalThis.Object.entries(object.params ?? {}).reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = globalThis.Number(value);
+            }
+            return acc;
+        }, {});
+        return message;
+    },
+};
+function createBaseStrategyComponent_ParamsEntry() {
+    return { key: "", value: 0 };
+}
+exports.StrategyComponent_ParamsEntry = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.key !== "") {
+            writer.uint32(10).string(message.key);
+        }
+        if (message.value !== 0) {
+            writer.uint32(17).double(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseStrategyComponent_ParamsEntry();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.key = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.value = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            key: isSet(object.key) ? globalThis.String(object.key) : "",
+            value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.key !== "") {
+            obj.key = message.key;
+        }
+        if (message.value !== 0) {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.StrategyComponent_ParamsEntry.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseStrategyComponent_ParamsEntry();
+        message.key = object.key ?? "";
+        message.value = object.value ?? 0;
+        return message;
+    },
+};
+function createBaseStrategyDefinition() {
+    return {
+        strategyId: "",
+        displayName: "",
+        components: [],
+        entryRule: "",
+        exitRule: "",
+        signalParams: undefined,
+        active: false,
+    };
+}
+exports.StrategyDefinition = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.strategyId !== "") {
+            writer.uint32(10).string(message.strategyId);
+        }
+        if (message.displayName !== "") {
+            writer.uint32(18).string(message.displayName);
+        }
+        for (const v of message.components) {
+            exports.StrategyComponent.encode(v, writer.uint32(26).fork()).join();
+        }
+        if (message.entryRule !== "") {
+            writer.uint32(34).string(message.entryRule);
+        }
+        if (message.exitRule !== "") {
+            writer.uint32(42).string(message.exitRule);
+        }
+        if (message.signalParams !== undefined) {
+            struct_1.Struct.encode(struct_1.Struct.wrap(message.signalParams), writer.uint32(50).fork()).join();
+        }
+        if (message.active !== false) {
+            writer.uint32(56).bool(message.active);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseStrategyDefinition();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.displayName = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.components.push(exports.StrategyComponent.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.entryRule = reader.string();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.exitRule = reader.string();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.signalParams = struct_1.Struct.unwrap(struct_1.Struct.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 56) {
+                        break;
+                    }
+                    message.active = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+            displayName: isSet(object.displayName)
+                ? globalThis.String(object.displayName)
+                : isSet(object.display_name)
+                    ? globalThis.String(object.display_name)
+                    : "",
+            components: globalThis.Array.isArray(object?.components)
+                ? object.components.map((e) => exports.StrategyComponent.fromJSON(e))
+                : [],
+            entryRule: isSet(object.entryRule)
+                ? globalThis.String(object.entryRule)
+                : isSet(object.entry_rule)
+                    ? globalThis.String(object.entry_rule)
+                    : "",
+            exitRule: isSet(object.exitRule)
+                ? globalThis.String(object.exitRule)
+                : isSet(object.exit_rule)
+                    ? globalThis.String(object.exit_rule)
+                    : "",
+            signalParams: isObject(object.signalParams)
+                ? object.signalParams
+                : isObject(object.signal_params)
+                    ? object.signal_params
+                    : undefined,
+            active: isSet(object.active) ? globalThis.Boolean(object.active) : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        if (message.displayName !== "") {
+            obj.displayName = message.displayName;
+        }
+        if (message.components?.length) {
+            obj.components = message.components.map((e) => exports.StrategyComponent.toJSON(e));
+        }
+        if (message.entryRule !== "") {
+            obj.entryRule = message.entryRule;
+        }
+        if (message.exitRule !== "") {
+            obj.exitRule = message.exitRule;
+        }
+        if (message.signalParams !== undefined) {
+            obj.signalParams = message.signalParams;
+        }
+        if (message.active !== false) {
+            obj.active = message.active;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.StrategyDefinition.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseStrategyDefinition();
+        message.strategyId = object.strategyId ?? "";
+        message.displayName = object.displayName ?? "";
+        message.components = object.components?.map((e) => exports.StrategyComponent.fromPartial(e)) || [];
+        message.entryRule = object.entryRule ?? "";
+        message.exitRule = object.exitRule ?? "";
+        message.signalParams = object.signalParams ?? undefined;
+        message.active = object.active ?? false;
+        return message;
+    },
+};
+function createBaseManageStrategyRequest() {
+    return { operation: StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED, definition: undefined };
+}
+exports.ManageStrategyRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.operation !== StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED) {
+            writer.uint32(8).int32(strategyOperationToNumber(message.operation));
+        }
+        if (message.definition !== undefined) {
+            exports.StrategyDefinition.encode(message.definition, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseManageStrategyRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.operation = strategyOperationFromJSON(reader.int32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.definition = exports.StrategyDefinition.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            operation: isSet(object.operation)
+                ? strategyOperationFromJSON(object.operation)
+                : StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED,
+            definition: isSet(object.definition) ? exports.StrategyDefinition.fromJSON(object.definition) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.operation !== StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED) {
+            obj.operation = strategyOperationToJSON(message.operation);
+        }
+        if (message.definition !== undefined) {
+            obj.definition = exports.StrategyDefinition.toJSON(message.definition);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ManageStrategyRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseManageStrategyRequest();
+        message.operation = object.operation ?? StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED;
+        message.definition = (object.definition !== undefined && object.definition !== null)
+            ? exports.StrategyDefinition.fromPartial(object.definition)
+            : undefined;
+        return message;
+    },
+};
+function createBaseGetStrategyRequest() {
+    return { strategyId: "" };
+}
+exports.GetStrategyRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.strategyId !== "") {
+            writer.uint32(10).string(message.strategyId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetStrategyRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetStrategyRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetStrategyRequest();
+        message.strategyId = object.strategyId ?? "";
+        return message;
+    },
+};
+function createBaseListStrategyDefinitionsRequest() {
+    return { includeInactive: false, pageSize: 0, pageOffset: 0 };
+}
+exports.ListStrategyDefinitionsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.includeInactive !== false) {
+            writer.uint32(8).bool(message.includeInactive);
+        }
+        if (message.pageSize !== 0) {
+            writer.uint32(16).int32(message.pageSize);
+        }
+        if (message.pageOffset !== 0) {
+            writer.uint32(24).int32(message.pageOffset);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListStrategyDefinitionsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.includeInactive = reader.bool();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.pageSize = reader.int32();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.pageOffset = reader.int32();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            includeInactive: isSet(object.includeInactive)
+                ? globalThis.Boolean(object.includeInactive)
+                : isSet(object.include_inactive)
+                    ? globalThis.Boolean(object.include_inactive)
+                    : false,
+            pageSize: isSet(object.pageSize)
+                ? globalThis.Number(object.pageSize)
+                : isSet(object.page_size)
+                    ? globalThis.Number(object.page_size)
+                    : 0,
+            pageOffset: isSet(object.pageOffset)
+                ? globalThis.Number(object.pageOffset)
+                : isSet(object.page_offset)
+                    ? globalThis.Number(object.page_offset)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.includeInactive !== false) {
+            obj.includeInactive = message.includeInactive;
+        }
+        if (message.pageSize !== 0) {
+            obj.pageSize = Math.round(message.pageSize);
+        }
+        if (message.pageOffset !== 0) {
+            obj.pageOffset = Math.round(message.pageOffset);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListStrategyDefinitionsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListStrategyDefinitionsRequest();
+        message.includeInactive = object.includeInactive ?? false;
+        message.pageSize = object.pageSize ?? 0;
+        message.pageOffset = object.pageOffset ?? 0;
+        return message;
+    },
+};
+function createBaseListStrategyDefinitionsResponse() {
+    return { definitions: [], totalCount: 0 };
+}
+exports.ListStrategyDefinitionsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.definitions) {
+            exports.StrategyDefinition.encode(v, writer.uint32(10).fork()).join();
+        }
+        if (message.totalCount !== 0) {
+            writer.uint32(16).int32(message.totalCount);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListStrategyDefinitionsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.definitions.push(exports.StrategyDefinition.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.totalCount = reader.int32();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            definitions: globalThis.Array.isArray(object?.definitions)
+                ? object.definitions.map((e) => exports.StrategyDefinition.fromJSON(e))
+                : [],
+            totalCount: isSet(object.totalCount)
+                ? globalThis.Number(object.totalCount)
+                : isSet(object.total_count)
+                    ? globalThis.Number(object.total_count)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.definitions?.length) {
+            obj.definitions = message.definitions.map((e) => exports.StrategyDefinition.toJSON(e));
+        }
+        if (message.totalCount !== 0) {
+            obj.totalCount = Math.round(message.totalCount);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListStrategyDefinitionsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListStrategyDefinitionsResponse();
+        message.definitions = object.definitions?.map((e) => exports.StrategyDefinition.fromPartial(e)) || [];
+        message.totalCount = object.totalCount ?? 0;
+        return message;
+    },
+};
 exports.AnalysisServiceService = {
     runBacktest: {
         path: "/xstockstrat.analysis.v1.AnalysisService/RunBacktest",
@@ -1201,6 +2042,33 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.GetStrategyReportRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.StrategyReport.encode(value).finish()),
         responseDeserialize: (value) => exports.StrategyReport.decode(value),
+    },
+    manageStrategy: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ManageStrategyRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ManageStrategyRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.StrategyDefinition.encode(value).finish()),
+        responseDeserialize: (value) => exports.StrategyDefinition.decode(value),
+    },
+    getStrategy: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/GetStrategy",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetStrategyRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetStrategyRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.StrategyDefinition.encode(value).finish()),
+        responseDeserialize: (value) => exports.StrategyDefinition.decode(value),
+    },
+    listStrategyDefinitions: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/ListStrategyDefinitions",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListStrategyDefinitionsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListStrategyDefinitionsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListStrategyDefinitionsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListStrategyDefinitionsResponse.decode(value),
     },
 };
 exports.AnalysisServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.AnalysisServiceService, "xstockstrat.analysis.v1.AnalysisService");

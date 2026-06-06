@@ -333,6 +333,59 @@ section_7_backtest() {
     }"
 }
 
+# Feature 047-strategy-engine: stored composable strategy → backtest via strategy_id_ref,
+# plus a legacy strategy_params backtest (FR-8 backward compatibility, AC-3).
+section_7b_strategy_engine() {
+  sep
+  log "SECTION 7b — Analysis: strategy-engine (stored strategy + backtest parity)"
+
+  local sid="it_sma_combo"
+  local range="\"range\": { \"start\": \"2024-07-01T00:00:00Z\", \"end\": \"2024-12-31T00:00:00Z\" }"
+
+  # a. Register a strategy (two SMA components + a crossover entry rule). Admin-scoped.
+  check "ManageStrategy register" "\"${sid}\"" \
+    post "${ANALYSIS_URL}/xstockstrat.analysis.v1.AnalysisService/ManageStrategy" \
+    "{
+      \"operation\": \"STRATEGY_OPERATION_REGISTER\",
+      \"definition\": {
+        \"strategy_id\": \"${sid}\",
+        \"display_name\": \"IT SMA Combo\",
+        \"components\": [
+          { \"ref_name\": \"sma_fast\", \"kind\": \"COMPONENT_KIND_BUILTIN_INDICATOR\", \"indicator\": \"SMA\", \"params\": { \"period\": 10 } },
+          { \"ref_name\": \"sma_slow\", \"kind\": \"COMPONENT_KIND_BUILTIN_INDICATOR\", \"indicator\": \"SMA\", \"params\": { \"period\": 30 } }
+        ],
+        \"entry_rule\": \"{\\\"op\\\":\\\"AND\\\",\\\"conditions\\\":[{\\\"lhs\\\":\\\"sma_fast\\\",\\\"fn\\\":\\\"crosses_above\\\",\\\"rhs\\\":\\\"sma_slow\\\"}]}\",
+        \"exit_rule\": \"{\\\"fn\\\":\\\"crosses_below\\\",\\\"lhs\\\":\\\"sma_fast\\\",\\\"rhs\\\":\\\"sma_slow\\\"}\",
+        \"active\": true
+      }
+    }"
+
+  # b. Fetch it back and assert the strategy_id round-trips.
+  check "GetStrategy returns ${sid}" "\"${sid}\"" \
+    post "${ANALYSIS_URL}/xstockstrat.analysis.v1.AnalysisService/GetStrategy" \
+    "{ \"strategy_id\": \"${sid}\" }"
+
+  # c+d. Backtest the stored strategy by reference; assert backtest_id + total_return.
+  check "RunBacktest via strategy_id_ref" '"backtest_id"' \
+    post "${ANALYSIS_URL}/xstockstrat.analysis.v1.AnalysisService/RunBacktest" \
+    "{
+      \"strategy_id\": \"it_run\",
+      \"strategy_id_ref\": \"${sid}\",
+      \"symbols\": [\"${TEST_SYMBOL}\"],
+      ${range}
+    }"
+
+  # e. Legacy backtest: only strategy_params (no strategy_id_ref / inline_definition) → SMA path (FR-8).
+  check "RunBacktest legacy strategy_params (backward compat)" '"backtest_id"' \
+    post "${ANALYSIS_URL}/xstockstrat.analysis.v1.AnalysisService/RunBacktest" \
+    "{
+      \"strategy_id\": \"it_legacy\",
+      \"symbols\": [\"${TEST_SYMBOL}\"],
+      \"strategy_params\": { \"fast_period\": 20, \"slow_period\": 50 },
+      ${range}
+    }"
+}
+
 section_8_place_order() {
   sep
   log "SECTION 8 — Trading: place order"
@@ -478,6 +531,7 @@ main() {
   section_5_ingest_signal
   section_6_backfill
   section_7_backtest
+  section_7b_strategy_engine
   section_8_place_order
   section_9_event_chain
   section_10_portfolio

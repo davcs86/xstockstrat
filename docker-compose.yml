@@ -340,6 +340,7 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
+      INGEST_ENDPOINT: xstockstrat-ingest:50055
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-indicators:50054"
@@ -489,6 +490,7 @@ services:
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       ANALYSIS_ENDPOINT: xstockstrat-analysis:50056
       IDENTITY_ENDPOINT: xstockstrat-identity:50058
+      INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       CONFIG_ENDPOINT: xstockstrat-config:50060
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-identity:50058"
       MCP_TRANSPORT: sse

@@ -13,6 +13,9 @@ service AnalysisService {
   rpc ScoreStrategy(ScoreStrategyRequest) returns (StrategyScore);
   rpc ListStrategies(ListStrategiesRequest) returns (ListStrategiesResponse);
   rpc GetStrategyReport(GetStrategyReportRequest) returns (StrategyReport);
+  rpc ManageStrategy(ManageStrategyRequest) returns (StrategyDefinition);
+  rpc GetStrategy(GetStrategyRequest) returns (StrategyDefinition);
+  rpc ListStrategyDefinitions(ListStrategyDefinitionsRequest) returns (ListStrategyDefinitionsResponse);
 }
 
 message RunBacktestRequest {
@@ -21,6 +24,10 @@ message RunBacktestRequest {
   repeated string symbols = 3;
   double initial_capital = 4;
   google.protobuf.Struct strategy_params = 5;
+  // field 6 — resolve definition from DB; legacy strategy_params (field 5) remains supported
+  string strategy_id_ref = 6;
+  // field 7 — inline definition; takes precedence over strategy_id_ref if both supplied
+  StrategyDefinition inline_definition = 7;
 }
 
 message BacktestResult {
@@ -78,3 +85,56 @@ message ListStrategiesResponse {
 }
 
 message GetStrategyReportRequest { string strategy_id = 1; }
+
+// ── Composable strategy model (feature 047-strategy-engine) ──────────────────
+
+enum ComponentKind {
+  COMPONENT_KIND_UNSPECIFIED = 0;
+  COMPONENT_KIND_BUILTIN_INDICATOR = 1;
+  COMPONENT_KIND_CUSTOM_FORMULA = 2;
+}
+
+message StrategyComponent {
+  string ref_name = 1;
+  ComponentKind kind = 2;
+  string indicator = 3;      // used when kind == COMPONENT_KIND_BUILTIN_INDICATOR
+  string formula_id = 4;     // used when kind == COMPONENT_KIND_CUSTOM_FORMULA
+  map<string, double> params = 5;
+}
+
+message StrategyDefinition {
+  string strategy_id = 1;
+  string display_name = 2;
+  repeated StrategyComponent components = 3;
+  string entry_rule = 4;   // JSON-encoded condition tree
+  string exit_rule = 5;    // JSON-encoded condition tree
+  google.protobuf.Struct signal_params = 6;
+  bool active = 7;
+}
+
+enum StrategyOperation {
+  STRATEGY_OPERATION_UNSPECIFIED = 0;
+  STRATEGY_OPERATION_REGISTER = 1;
+  STRATEGY_OPERATION_UPDATE = 2;
+  STRATEGY_OPERATION_DEACTIVATE = 3;
+}
+
+message ManageStrategyRequest {
+  StrategyOperation operation = 1;
+  StrategyDefinition definition = 2;
+}
+
+message GetStrategyRequest {
+  string strategy_id = 1;
+}
+
+message ListStrategyDefinitionsRequest {
+  bool include_inactive = 1;
+  int32 page_size = 2;
+  int32 page_offset = 3;
+}
+
+message ListStrategyDefinitionsResponse {
+  repeated StrategyDefinition definitions = 1;
+  int32 total_count = 2;
+}

@@ -177,4 +177,38 @@ Changes take effect immediately — no service restart needed.
 Develop → Test (local) → ExecuteFormula (inline source) → RegisterFormula → Use by formula_id
 ```
 
-Registered formulas are stored in-memory in the current xstockstrat-indicators instance. For persistence across restarts, store formula source in your strategy definition in `xstockstrat-analysis`.
+Registered formulas are persisted in the `indicators.formulas` table. For persistence across restarts, register the formula via `RegisterFormula` and reference it by `formula_id` in a `StrategyDefinition` stored in `xstockstrat-analysis` (see the `manage_strategy` MCP tool).
+
+## Using Indicators in a Strategy Definition
+
+A **StrategyDefinition** (feature 047-strategy-engine, stored in `xstockstrat-analysis`) composes one or
+more **components** with explicit **entry/exit rules**. Each component is either a built-in indicator or
+a custom formula:
+
+- `kind: COMPONENT_KIND_BUILTIN_INDICATOR` — uses an `indicator` name from the built-in registry:
+  `SMA`, `EMA`, `RSI`, `MACD`, `BB`, `ATR`, `VWAP`, `STOCH`.
+- `kind: COMPONENT_KIND_CUSTOM_FORMULA` — uses a `formula_id` returned by `RegisterFormula`.
+
+Components are referenced by `ref_name` in the `entry_rule` / `exit_rule` JSON condition trees. Leaf
+nodes use a function (`crosses_above`, `crosses_below`, `>`, `<`, `>=`, `<=`) over a `lhs` ref_name and
+a numeric or ref_name `rhs`; `AND`/`OR` nodes compose them.
+
+Example `StrategyDefinition` (two components + an entry rule):
+
+```json
+{
+  "strategy_id": "rsi_sma_combo",
+  "display_name": "RSI + SMA",
+  "components": [
+    { "ref_name": "sma_fast", "kind": "COMPONENT_KIND_BUILTIN_INDICATOR", "indicator": "SMA", "params": { "period": 20 } },
+    { "ref_name": "rsi", "kind": "COMPONENT_KIND_CUSTOM_FORMULA", "formula_id": "f-abc123" }
+  ],
+  "entry_rule": "{\"op\":\"AND\",\"conditions\":[{\"lhs\":\"sma_fast\",\"fn\":\"crosses_above\",\"rhs\":\"rsi\"}]}",
+  "exit_rule": "{\"fn\":\"crosses_below\",\"lhs\":\"sma_fast\",\"rhs\":\"rsi\"}"
+}
+```
+
+Register a strategy via the `manage_strategy` MCP tool (admin-scoped) or the `ManageStrategy` gRPC RPC
+on `xstockstrat-analysis`. The shared evaluator lives at
+`services/xstockstrat-analysis/app/services/evaluator.py` and is reused by both `RunBacktest`
+(feature 047) and the live strategy→alert runtime (feature 048), guaranteeing backtest/live parity.

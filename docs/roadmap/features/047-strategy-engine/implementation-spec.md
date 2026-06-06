@@ -1,6 +1,6 @@
 # Implementation Spec: strategy-engine
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-04
 **Feature**: `docs/roadmap/features/047-strategy-engine/feature.md`
 **Total Steps**: 14
@@ -31,7 +31,7 @@ Steps 1–2 (proto) must complete before Steps 3–11 (service/agent) because al
 
 ### Step 1 — proto: Add strategy messages and RPCs to analysis.proto
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -141,7 +141,7 @@ Both commands must exit with code 0. Confirm `buf breaking` reports no breaking 
 
 ### Step 2 — proto-gen: Regenerate stubs after analysis.proto changes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/python/analysis/v1/analysis_pb2.py` — modify (regenerated)
@@ -180,7 +180,7 @@ git diff packages/proto/gen/
 
 ### Step 3 — migration: Create analysis.strategies table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/001_strategies.up.sql` — create
@@ -231,7 +231,7 @@ psql "$DATABASE_URL" -c "\di analysis.idx_strategies_active"
 
 ### Step 4 — service: Wire asyncpg pool and strategy repository into AnalysisServicer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/main.py` — modify
@@ -298,7 +298,7 @@ Service starts without error when `DATABASE_URL` is set: `docker compose up xsto
 
 ### Step 5 — service: Implement shared strategy evaluator module
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/__init__.py` — create
@@ -574,7 +574,7 @@ python3 -c "from app.services.evaluator import StrategyEvaluator, _validate_defi
 
 ### Step 6 — service: Add ManageStrategy/GetStrategy/ListStrategyDefinitions RPCs and rework RunBacktest
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -668,7 +668,7 @@ grep -n "IDENTITY_ENDPOINT" /home/user/xstockstrat/.do/app.dev.yaml /home/user/x
 
 ### Step 7 — test: Tests for analysis service (strategy management + evaluator + RunBacktest rework)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_strategy_evaluator.py` — create
@@ -707,7 +707,7 @@ uv run pytest --cov=app --cov-fail-under=40
 
 ### Step 8 — service: Add manage_strategy, manage_formula, manage_signal_source client helpers to agent
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -796,7 +796,7 @@ ruff check . && ruff format --check .
 
 ### Step 9 — service: Add manage_strategy, manage_formula, manage_signal_source MCP tools to agent
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -869,7 +869,7 @@ print('tools registered:', tool_names)
 
 ### Step 10 — service: Update tool count in tools.py module docstring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (docstring only)
@@ -900,7 +900,7 @@ grep -n "Nine tools\|manage_strategy\|manage_formula\|manage_signal_source" \
 
 ### Step 11 — test: Tests for agent management tools and client helpers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify (add new test classes)
@@ -937,7 +937,7 @@ uv run pytest --cov=app --cov-fail-under=40
 
 ### Step 12 — docs: Update mcp-tools.md with new management tools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
@@ -971,7 +971,7 @@ grep -n "tools\|manage_strategy\|manage_formula\|manage_signal_source" \
 
 ### Step 13 — docs: Update indicator-builder.md with strategy-definition model
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/indicator-builder.md` — modify
@@ -1004,7 +1004,7 @@ grep -n "StrategyDefinition\|manage_strategy\|evaluator" \
 
 ### Step 14 — test: Integration test for backward compatibility and end-to-end strategy flow
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` (integration)
 **Files**:
 - `scripts/integration-test.sh` — modify
@@ -1038,4 +1038,20 @@ grep -n "StrategyDefinition\|manage_strategy\|evaluator" \
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Toolchain — proto codegen tools installed on host (CI-equivalent fallback)
+**Spec said**: Steps 1–2 run `buf lint` / `buf breaking` / `./scripts/buf-gen.sh` assuming the proto toolchain is present.
+**Actual**: `buf` and `protoc` were absent in the execution environment. Installed CI-pinned versions per the sequential-mode verification fallback: buf 1.69.0, protoc-gen-go@v1.36.11, protoc-gen-go-grpc@v1.6.2, protoc-gen-connect-go@v1.19.2, grpcio-tools==1.80.0 (venv); `pnpm install --frozen-lockfile` for TS plugins. Versions match `.github/workflows/ci.yml` proto-freshness job exactly.
+**Reason**: Run codegen/verification with the same tool versions CI uses so generated stubs match.
+**Disposition**: CI-equivalent fallback.
+
+### Deviation: Step 8 — pre-existing ruff drift in xstockstrat-agent (UP017 autofix)
+**Spec said**: Step 8 verification is `ruff check . && ruff format --check .` (whole agent service).
+**Actual**: Under ruff 0.15.8, the pristine `xstockstrat-agent` on main-dev already fails 15 lint findings (UP017/UP045/I001/E501/F841) — pre-existing feature-009 code modernized by a newer ruff. **The CI `python-lint` matrix does not include `xstockstrat-agent`** (only indicators/ingest/analysis), so these are not a CI gate. Verification was scoped to the file this step changed: `ruff check app/client.py` + `ruff format --check app/client.py` (clean). The one autofix that touched pre-existing code — `timezone.utc` → `datetime.UTC` (UP017) in `client.py`'s `_iso_to_timestamp`, plus the resulting `from datetime import UTC` reorder — was applied per explicit user instruction; it is behavior-equivalent. Unrelated 009 files (`main.py`, etc.) were left untouched.
+**Reason**: The agent isn't CI-linted; absorbing 009's full lint debt is out of scope. My step's own code is lint-clean.
+**Disposition**: CI-equivalent fallback (scoped verification) + user-approved pre-existing autofix.
+
+### Deviation: Steps that require a running multi-service stack — verified via CI-equivalent fallback
+**Spec said**: Step 3 verification runs `./scripts/db-migrate.sh up` + `psql`; Step 4 confirms a live `docker compose up xstockstrat-analysis` "analysis DB pool created" log; Step 14 runs `./scripts/integration-test.sh`.
+**Actual**: The full multi-service stack (config/identity/etc. dependencies, healthchecks) cannot be brought up in this environment. Migrations are verified up+down against a throwaway `postgres:16` container; service-start and integration-test sections are validated structurally (lint + import + script syntax) and rely on CI for live execution.
+**Reason**: No full compose stack available; matches the documented sequential-mode fallbacks.
+**Disposition**: CI-equivalent fallback.

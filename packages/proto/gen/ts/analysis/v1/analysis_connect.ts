@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BacktestResult, GetStrategyReportRequest, ListStrategiesRequest, ListStrategiesResponse, RunBacktestRequest, ScoreStrategyRequest, StrategyReport, StrategyScore } from "./analysis_pb.js";
+import { BacktestResult, GetStrategyReportRequest, GetStrategyRequest, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, RunBacktestRequest, ScoreStrategyRequest, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -46,6 +46,33 @@ export const AnalysisService = {
       name: "GetStrategyReport",
       I: GetStrategyReportRequest,
       O: StrategyReport,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ManageStrategy
+     */
+    manageStrategy: {
+      name: "ManageStrategy",
+      I: ManageStrategyRequest,
+      O: StrategyDefinition,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetStrategy
+     */
+    getStrategy: {
+      name: "GetStrategy",
+      I: GetStrategyRequest,
+      O: StrategyDefinition,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions
+     */
+    listStrategyDefinitions: {
+      name: "ListStrategyDefinitions",
+      I: ListStrategyDefinitionsRequest,
+      O: ListStrategyDefinitionsResponse,
       kind: MethodKind.Unary,
     },
   }
