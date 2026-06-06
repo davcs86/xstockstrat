@@ -139,3 +139,35 @@
   the approval). Remaining open: OQ-A (formula gate), OQ-D (token type), OQ-E (discovery reachability) —
   to settle at /sdd-spec.
 - Next (when ready): /sdd-spec unify-admin-auth-gates.
+
+## Session 2026-06-06 — "100% connect" analysis + revision (user)
+
+- **User goal:** Claude.ai must connect at 100%. Analyzed each Out-of-Scope item vs the MCP authorization
+  spec (modelcontextprotocol.io 2025-06-18), RFC 8707 (resource indicators), RFC 9728 (PRM).
+- **Repo finding:** identity ALREADY has JWT + rotating-refresh infra (`AuthenticateUser` issues
+  access+refresh JWT; `RefreshToken` rotates; `identity.refresh_tokens` table). The prior spec bypassed
+  it and returned the never-expiring API key (`createApiKey` sets no `expires_at`).
+- **Spec MUST/SHOULD that mattered:** PRM (MUST) + AS metadata (MUST) + 401 `WWW-Authenticate` (MUST,
+  the discovery trigger) + PKCE (MUST) + exact redirect (MUST) + **RS audience validation, "tokens MUST
+  be issued specifically for them"** (RFC 8707) + public-client **refresh-token rotation MUST** (if
+  refresh issued) + SHOULD issue short-lived access tokens. DCR is SHOULD (already in scope).
+- **Connect-impact verdict:** API-key-as-token connects but (a) advertising expires_in forces periodic
+  re-consent (no refresh), (b) isn't audience-bound (violates a MUST), (c) in-memory code store pins
+  instance_count:1. Revocation/OIDC/implicit-password-clientcred grants do NOT affect connect → stay OOS.
+- **User decisions (AskUserQuestion):** token model = **JWT + refresh + audience**; ALSO bring in **401
+  WWW-Authenticate**, **audience validation**, **shared auth-code store**.
+- **Spec revised accordingly:**
+  - Architecture: agent = RS + AS-HTTP-facade (stateless); **identity = durable OAuth state + token
+    backend over gRPC** (owns clients + codes; mints aud-bound JWT + rotating refresh).
+  - New FRs: FR-B0 (401+WWW-Authenticate), FR-B7 (ExchangeAuthCode → aud JWT+refresh), FR-B7b (refresh
+    rotation), FR-B8 (RS aud validation), FR-B13 (stateless/multi-instance). Updated FR-B1/B2/B3/B6/B9.
+  - Proto (additive): `RegisterOAuthClient`/`GetOAuthClient`, `IssueAuthCode`, `ExchangeAuthCode`,
+    `RefreshOAuthToken`, + `aud` on `TokenClaims`. buf breaking must pass.
+  - DB: migration `003_oauth` → `oauth_clients` + `oauth_auth_codes` (reuse existing `refresh_tokens`).
+  - OQ resolutions: OQ-C durable shared code store; OQ-D JWT+refresh+audience; OQ-F no instance_count:1
+    constraint. Still open: OQ-A (formula), OQ-E (discovery reachability), OQ-G (api_key deprecation),
+    OQ-H (TTLs).
+  - Out of Scope trimmed to truly-non-connect items (revocation, OIDC, implicit/password/clientcred,
+    BFF re-arch, other internal gates).
+- **Status reset spec-ready → draft** (material scope change) → re-review needed.
+- Next: /sdd-review unify-admin-auth-gates product-spec.
