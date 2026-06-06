@@ -423,3 +423,16 @@
   WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource".
 - Files modified: app/auth.py, app/main.py
 - Deviations: none
+
+### Step 17 — agent stateless multi-instance confirmation (FR-B13) [done]
+- Confirmed oauth_server.py holds no module/instance-level dict store (all OAuth state via gRPC to
+  identity; only the HMAC-signed txn blob links requests). Added an "OAuth 2.1 edge auth" section to
+  the agent CLAUDE.md documenting statelessness, the route table, AGENT_PUBLIC_URL, and the env vars.
+- Files modified: services/xstockstrat-agent/CLAUDE.md
+- Deviations: none
+
+### Step 19 — config: deployment env var AGENT_PUBLIC_URL [done]
+- Pointer step; the actual edits landed atomically in Step 12. Verified AGENT_PUBLIC_URL present in
+  docker-compose (http://localhost:9000) and both .do specs (${APP_URL}/agent).
+- Files modified: (none new — see Step 12)
+- Deviations: none

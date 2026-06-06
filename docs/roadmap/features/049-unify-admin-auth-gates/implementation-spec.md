@@ -522,7 +522,7 @@ runs the language linter.
 
 ### Step 17 — service: agent stateless multi-instance confirmation (FR-B13)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/oauth_server.py` — modify (review/confirm — no in-memory state)
@@ -573,7 +573,7 @@ runs the language linter.
 
 ### Step 19 — config: deployment env var `AGENT_PUBLIC_URL`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - (Covered by Step 12 deployment-file edits — see Step 12 `**Files**`.)
