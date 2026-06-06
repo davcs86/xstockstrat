@@ -67,6 +67,12 @@ all 11 steps' Files/evidence validated against the live codebase — no mismatch
 - Deviations: none. (SignalSource keyed by `slug`/`displayName`, not a `sourceId` — confirmed in
   generated stubs.)
 
+### Step 7 — New-strategy wizard page [done]
+- Created `src/app/insights/strategies/new/page.tsx` — AppShell + `<StrategyWizard mode="create">`,
+  admin-gated via `useIsAdmin()` (non-admins see an access notice; BFF gate is authoritative).
+- Files modified: `services/xstockstrat-ui/src/app/insights/strategies/new/page.tsx`
+- Deviations: none.
+
 ## Session 2026-06-06T00:05:00Z — sdd-spec
 
 - Generated implementation-spec.md with 11 steps. Status → implementation-ready.

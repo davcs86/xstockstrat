@@ -213,7 +213,7 @@ client plumbing (Steps 1–3) land before any page consumes them, and the wizard
 
 ### Step 7 — service: New-strategy wizard page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/strategies/new/page.tsx` — create
