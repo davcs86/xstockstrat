@@ -593,7 +593,7 @@ runs the language linter.
 
 ### Step 20 — config: new `agent.oauth.*` config keys (FR-B11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` / `xstockstrat-config`
 **Files**:
 - `CLAUDE.md` (root) — modify (document keys per config-rollout pre-rollout checklist)

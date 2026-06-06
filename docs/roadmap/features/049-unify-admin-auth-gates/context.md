@@ -446,3 +446,10 @@
 - Files modified: services/xstockstrat-ui/src/app/auth/oauth-login/page.tsx
 - Deviations: CI-equivalent fallback — used tsc+lint in place of the full Playwright browser run
   (sequential-mode documented e2e fallback).
+
+### Step 20 — config: new agent.oauth.* config keys (FR-B11) [done]
+- oauth_server.py register handler now gates on agent.oauth.registration_enabled (disabled ⇒ 403)
+  and uses agent.oauth.allowed_redirect_uris (comma-separated exact allowlist; empty ⇒ https-only).
+  Documented both keys in root CLAUDE.md (Config Governance) and the agent CLAUDE.md defaults.
+- Files modified: app/oauth_server.py, CLAUDE.md (root), services/xstockstrat-agent/CLAUDE.md
+- Deviations: none

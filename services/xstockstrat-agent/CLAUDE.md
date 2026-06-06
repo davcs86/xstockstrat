@@ -63,6 +63,15 @@ fallback; unauthenticated requests get `401` with a `WWW-Authenticate: Bearer re
 discovery pointer. `AGENT_PUBLIC_URL` builds all absolute discovery/endpoint URLs (in DO it is
 `${APP_URL}/agent`).
 
+## Config Keys Consumed
+
+Namespace: `agent` (resolved via one-shot `GetConfig` → `client.get_config_value("<bare-key>")`).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `agent.oauth.registration_enabled` | bool | `true` | Allow RFC 7591 DCR at `/oauth/register` (disabled ⇒ 403) |
+| `agent.oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only |
+
 ## Environment Variables
 
 ```text

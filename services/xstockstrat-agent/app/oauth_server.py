@@ -66,15 +66,40 @@ async def register(request):
             {"error": "invalid_request", "error_description": "invalid JSON body"}, 400
         )
 
+    # agent.oauth.registration_enabled (bool, default true). Disabled => 403.
+    reg_enabled = await client.get_config_value("oauth.registration_enabled")
+    if reg_enabled is not None and reg_enabled.strip().lower() in ("false", "0", "no"):
+        return JSONResponse(
+            {"error": "access_denied", "error_description": "registration disabled"}, 403
+        )
+
     redirect_uris = body.get("redirect_uris") or []
     client_name = body.get("client_name", "")
     if not isinstance(redirect_uris, list) or not redirect_uris:
         return JSONResponse(
             {"error": "invalid_redirect_uri", "error_description": "redirect_uris required"}, 400
         )
-    # Enforce https:// at the edge too (identity enforces the same minimum / allowlist).
+
+    # agent.oauth.allowed_redirect_uris (comma-separated exact URIs). When set, require an exact
+    # match; otherwise fall back to the https:// minimum (identity enforces the same).
+    allowed_raw = await client.get_config_value("oauth.allowed_redirect_uris")
+    allowlist = [u.strip() for u in allowed_raw.split(",")] if allowed_raw else []
+    allowlist = [u for u in allowlist if u]
     for uri in redirect_uris:
-        if not isinstance(uri, str) or not uri.startswith("https://"):
+        if not isinstance(uri, str):
+            return JSONResponse(
+                {"error": "invalid_redirect_uri", "error_description": "invalid redirect_uri"}, 400
+            )
+        if allowlist:
+            if uri not in allowlist:
+                return JSONResponse(
+                    {
+                        "error": "invalid_redirect_uri",
+                        "error_description": "redirect_uri not in allowlist",
+                    },
+                    400,
+                )
+        elif not uri.startswith("https://"):
             return JSONResponse(
                 {
                     "error": "invalid_redirect_uri",
