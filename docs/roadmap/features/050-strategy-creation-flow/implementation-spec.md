@@ -101,7 +101,7 @@ client plumbing (Steps 1–3) land before any page consumes them, and the wizard
 
 ### Step 3 — service: Add insights signal-sources browser client + hook
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/browserClients/insightsIngestClient.ts` — create
