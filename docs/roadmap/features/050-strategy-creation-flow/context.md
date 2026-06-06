@@ -73,6 +73,13 @@ all 11 steps' Files/evidence validated against the live codebase — no mismatch
 - Files modified: `services/xstockstrat-ui/src/app/insights/strategies/new/page.tsx`
 - Deviations: none.
 
+### Step 8 — Edit-strategy page [done]
+- Created `src/app/insights/strategies/[id]/edit/page.tsx` — `use(params)`, fetches via
+  `useGetStrategy(id)` (GetStrategy returns a StrategyDefinition directly), renders
+  `<StrategyWizard mode="edit" initial={data}>` (strategy_id read-only). Admin-gated + loading state.
+- Files modified: `services/xstockstrat-ui/src/app/insights/strategies/[id]/edit/page.tsx`
+- Deviations: none.
+
 ## Session 2026-06-06T00:05:00Z — sdd-spec
 
 - Generated implementation-spec.md with 11 steps. Status → implementation-ready.

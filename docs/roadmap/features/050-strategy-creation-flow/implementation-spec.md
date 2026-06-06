@@ -236,7 +236,7 @@ client plumbing (Steps 1–3) land before any page consumes them, and the wizard
 
 ### Step 8 — service: Edit-strategy page (pre-populated from GetStrategy)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/strategies/[id]/edit/page.tsx` — create
