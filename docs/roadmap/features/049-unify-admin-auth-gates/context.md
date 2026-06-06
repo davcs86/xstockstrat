@@ -122,3 +122,20 @@
 - Advisory (does not block): settle OQ-A (formula gate), OQ-B (DCR storage — decides if any proto/DB
   change exists), OQ-D (token type), OQ-E (discovery reachability) before/at /sdd-spec.
 - Next: /sdd-spec unify-admin-auth-gates.
+
+## Session 2026-06-06 — OQ-B resolved (user); hold at spec-ready
+
+- **User decisions:** OQ-B → **durable DCR store in identity** (proto + migration); **do NOT run
+  /sdd-spec yet** (hold at spec-ready).
+- Locked OQ-B into product-spec.md:
+  - **Proto:** additive identity RPCs `RegisterOAuthClient`/`GetOAuthClient` + `OAuthClient` message in
+    `packages/proto/identity/v1/identity.proto` (new field numbers; `buf breaking` must pass → non-breaking).
+  - **DB:** new `services/xstockstrat-identity/migrations/003_oauth_clients.up.sql` (+ `.down.sql`),
+    NNN after `002`; table `identity.oauth_clients`. Auth codes stay in-memory (OQ-C).
+  - **Governance gates activated:** additive-proto (identity owner + config/proto team) and DB-migration
+    (DBA + identity owner) checkboxes now checked.
+  - Affected Services + OQ-F updated (only the in-memory auth-code store now needs instance_count:1).
+- Status unchanged: `spec-ready` (resolving the already-declared conditional branch does not invalidate
+  the approval). Remaining open: OQ-A (formula gate), OQ-D (token type), OQ-E (discovery reachability) —
+  to settle at /sdd-spec.
+- Next (when ready): /sdd-spec unify-admin-auth-gates.

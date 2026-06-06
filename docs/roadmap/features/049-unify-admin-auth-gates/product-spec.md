@@ -165,16 +165,23 @@ Claude.ai ──(10) GET /sse  Authorization: Bearer <access_token> → existing
   OAuth 2.1 AS/RS endpoints (`main.py` Starlette routes + new `oauth_*` modules), gRPC `CreateApiKey`.
 - `xstockstrat-ingest` (Python) — Part A `ManageSignalSource` gate swap; remove `identity_channel`.
 - `xstockstrat-indicators` (Python) — Part A formula gate decision + `RegisterFormula` gap.
-- `xstockstrat-identity` (Node.js) — Part B consumes `CreateApiKey`/`AuthenticateUser`/`ValidateApiKey`
-  (no RPC changes). **New migration only if OQ-B chooses a DB-backed DCR client store.**
+- `xstockstrat-identity` (Node.js) — Part B consumes `CreateApiKey`/`AuthenticateUser`/`ValidateApiKey`,
+  **plus (OQ-B resolved) new additive DCR RPCs** `RegisterOAuthClient`/`GetOAuthClient` + the
+  `oauth_clients` table (migration `003`).
 - `xstockstrat-ui` (Next.js) — Part B: complete `/auth/oauth-login` to carry the auth code back to the
   agent callback. Part A: no change (BFF already forwards `x-access-scope`).
 
 ## Proto Contract Changes
 
-- [x] No proto changes **if** DCR clients are stored agent-side (OQ-B option 1, recommended).
-- ⚠ **Conditional:** if OQ-B chooses identity-DB-backed DCR, add identity RPC(s)
-  (`RegisterOAuthClient` / `GetOAuthClient`) → additive, non-breaking, owner + config-team approval.
+**OQ-B resolved (2026-06-06): durable DCR store in identity → proto change IS required.**
+
+- Add **additive, non-breaking** identity RPCs for Dynamic Client Registration:
+  `RegisterOAuthClient(RegisterOAuthClientRequest) → OAuthClient` and
+  `GetOAuthClient(GetOAuthClientRequest) → OAuthClient`, plus the `OAuthClient` message
+  (`client_id`, `redirect_uris[]`, `client_name`, `created_at`), in
+  `packages/proto/identity/v1/identity.proto`. New field numbers only; no existing field/RPC changes.
+- Run `./scripts/buf-gen.sh`; `buf lint` + `buf breaking` must pass (additive → non-breaking).
+- Approval: identity owner + config/proto team (additive). Exact field numbers fixed at `/sdd-spec`.
 
 ## Config Key Changes
 
@@ -185,10 +192,13 @@ New keys (namespace `agent`, category `oauth`):
 
 ## Database Changes
 
-- [x] No schema changes **if** DCR clients + auth codes are in-memory (OQ-B/OQ-C option 1, recommended;
-  safe at `instance_count: 1`).
-- ⚠ **Conditional:** if OQ-B chooses durable DCR, add `services/xstockstrat-identity/migrations/003_oauth_clients.up.sql`
-  (+ `.down.sql`), NNN-sequenced after `002`.
+**OQ-B resolved (2026-06-06): durable DCR store in identity → migration IS required.**
+
+- Add `services/xstockstrat-identity/migrations/003_oauth_clients.up.sql` (+ matching
+  `003_oauth_clients.down.sql`), NNN-sequenced after the existing `002`. Table `identity.oauth_clients`
+  (`client_id` PK, `redirect_uris text[]`, `client_name`, `created_at`); run via `scripts/db-migrate.sh`
+  (golang-migrate). Never edit an applied migration — this is a new numbered one.
+- Auth codes (OQ-C) remain **in-memory** in the agent (single-use, PKCE-bound, ≤60 s) — no table.
 
 ## Governance Gates
 
@@ -207,10 +217,12 @@ Branch: `feature/unify-admin-auth-gates` (from `main-dev`).
 Dependencies satisfied: 047 (#581) + 048 (#596) merged; UI unified-login (019) + `oauth-login` page +
 `UI_BASE_URL` plumbing present. **Supersedes feature 018** (its OAuth 2.0 spec is folded here and its
 impl spec is retired as stale).
-Approval gates (per `docs/runbooks/feature-workflow.md`):
+Approval gates (per `docs/runbooks/feature-workflow.md`) — OQ-B resolved (durable DCR) activates the
+proto + migration gates:
 - [x] 1 service owner per affected service (gate-logic + additive edge auth).
-- [ ] 2 owners + platform lead — only if OQ-B adds identity proto (conditional).
-- [ ] DBA + service owner — only if OQ-B adds the identity migration (conditional).
+- [x] **Additive proto change** (identity DCR RPCs) → identity owner + config/proto team
+      (`buf breaking` must pass — non-breaking; not the 2-owner+lead breaking-change path).
+- [x] **DB migration** (`identity/migrations/003_oauth_clients`) → DBA + identity owner.
 - [x] Security review (edge OAuth 2.1 + ingest trust-boundary).
 
 ## Acceptance Criteria
@@ -240,10 +252,11 @@ Approval gates (per `docs/runbooks/feature-workflow.md`):
 - **OQ-A (formula gate; Platform Lead + Security):** keep author-ownership, **add an admin-scope
   override**, and close the `RegisterFormula` gap (require authenticated `x-user-id`; default `author`
   to it). *Recommended.*
-- **OQ-B (DCR client storage; Platform Lead + identity owner):** **Option 1 (recommended)** — in-memory
-  client store in the agent (no proto/DB churn; clients re-register after restart, which Claude.ai does
-  automatically); safe at `instance_count: 1`. Option 2 — durable store in identity (new RPC + migration
-  `003`), choose only if cross-restart durability is required.
+- **OQ-B — RESOLVED (2026-06-06, user): durable store in identity.** DCR clients persist in the
+  `identity.oauth_clients` table (migration `003`) behind additive gRPC RPCs
+  `RegisterOAuthClient`/`GetOAuthClient`. Survives agent restarts and is not bound to `instance_count: 1`
+  for client storage (auth codes remain in-memory — see OQ-C/OQ-F). Adds the proto + migration
+  governance gates above.
 - **OQ-C (auth-code store):** in-memory dict, single-use, PKCE-bound, ≤60 s TTL (018's choice — keep).
 - **OQ-D (access-token type; Security):** reuse the xstockstrat **API key** as the bearer token
   (works with the unchanged `validate_api_key`; no new infra). *Recommended.* A resource-indicator/
@@ -251,7 +264,9 @@ Approval gates (per `docs/runbooks/feature-workflow.md`):
 - **OQ-E (discovery reachability under DO `/agent` route; Platform Lead):** confirm where Claude.ai
   fetches `/.well-known/oauth-protected-resource` relative to the MCP server URL, and set
   `AGENT_PUBLIC_URL` + route rules so discovery resolves to the agent. Resolve at `/sdd-spec`.
-- **OQ-F (single-instance constraint):** in-memory DCR + code stores require `instance_count: 1`;
-  document explicitly; a Redis/DB store is the scale-out path (deferred).
+- **OQ-F (single-instance constraint):** with OQ-B resolved to a DB-backed DCR store, only the
+  **in-memory auth-code store** (OQ-C) requires `instance_count: 1`. Codes are short-lived (≤60 s) and
+  consumed within a single OAuth round-trip; document the constraint. A Redis/DB code store is the
+  scale-out path (deferred).
 - **OQ-G (`?api_key=` deprecation):** keep for Claude Desktop, mark legacy/deprecated; do not remove in
   this feature.
