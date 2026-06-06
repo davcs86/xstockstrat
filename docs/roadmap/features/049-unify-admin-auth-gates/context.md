@@ -339,3 +339,14 @@
   proto-freshness stale-stub gate.
 - Files modified: generated stubs under `packages/proto/gen/`
 - Deviations: none beyond the Step 6 toolchain fallback.
+
+### Step 8 — migration: identity 003_oauth (oauth_clients + oauth_auth_codes) [done]
+- Created 003_oauth.up.sql (oauth_clients PK client_id + redirect_uris TEXT[]; oauth_auth_codes PK
+  code=SHA-256 hash, FK client_id/user_id ON DELETE CASCADE, code_challenge, resource, expires_at,
+  consumed_at; idx_oauth_codes_client) and 003_oauth.down.sql (drop child then parent). Refresh tokens
+  reuse identity.refresh_tokens (no new table).
+- Verification: applied 000→003 up against a throwaway postgres:16, confirmed both tables in schema
+  `identity`, applied 003 down, confirmed both dropped (reversible).
+- Files created: `services/xstockstrat-identity/migrations/003_oauth.{up,down}.sql`
+- Deviations: CI-equivalent fallback — no live TimescaleDB; reversibility proven via postgres:16
+  throwaway container (sequential-mode DB fallback). Disposition: CI-equivalent fallback.

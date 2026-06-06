@@ -254,7 +254,7 @@ runs the language linter.
 
 ### Step 8 — migration: identity `003_oauth` (oauth_clients + oauth_auth_codes)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/migrations/003_oauth.up.sql` — create
@@ -674,4 +674,8 @@ runs the language linter.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Steps 6–7 — proto codegen toolchain
+**Spec said**: Run `./scripts/buf-gen.sh` (which expects `buf` + the proto-gen Docker container / host plugins) and `buf lint && buf breaking`.
+**Actual**: The execution host had no `buf`, no proto-gen container pulled, and no `grpcio-tools`. Installed the exact CI `proto-freshness`/`proto-lint`-pinned toolchain on the host — `buf` 1.69.0, `protoc-gen-go` v1.36.11, `protoc-gen-go-grpc` v1.6.2, `protoc-gen-connect-go` v1.19.2, `grpcio-tools` 1.80.0, `pnpm` 9.15.0 (Node 22) — then ran the unmodified `scripts/buf-gen.sh`. `buf breaking` was run against `origin/main-dev` (the feature branch `feature/unify-admin-auth-gates` does not exist on origin; matches the spec's documented fallback). Confirmed `git diff` for `packages/proto/gen/` is confined to `identity/v1` and the re-run is idempotent (mirrors CI's stale-stub check).
+**Reason**: Sequential-mode CI-equivalent verification fallback (REPO CONVENTIONS → "Proto codegen container blocked").
+**Disposition**: CI-equivalent fallback.
