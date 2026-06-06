@@ -182,7 +182,7 @@ client plumbing (Steps 1–3) land before any page consumes them, and the wizard
 
 ### Step 6 — service: Build the wizard scaffold + per-step components (Identity / Components / Rules / Signal Params / Review)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx` — create

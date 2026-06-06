@@ -55,6 +55,18 @@ all 11 steps' Files/evidence validated against the live codebase — no mismatch
 - Files modified: `services/xstockstrat-ui/src/components/insights/ComponentEditor.tsx`
 - Deviations: none.
 
+### Step 6 — StrategyWizard scaffold [done]
+- Created `src/components/insights/StrategyWizard.tsx` — 5-step wizard with step indicator, free
+  Back/Next, no submit until Step 5. Gates: Step 1 requires valid `strategy_id` (`^[a-z0-9_]+$`) +
+  display name; Step 2 requires ≥1 component; Step 3 requires both rules non-empty; Step 4 skippable.
+  `strategy_id` is read-only in edit mode. Submit calls `useManageStrategy` (REGISTER/UPDATE); server
+  errors render inline with a heuristic "Go to Step N" link (rule→3, indicator/ref→2, id/display→1).
+  Signal params assembled into the Struct as `signal_sources`/`signal_weight`/`technical_weight`/
+  `min_conviction`; sources selected by `slug`.
+- Files modified: `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx`
+- Deviations: none. (SignalSource keyed by `slug`/`displayName`, not a `sourceId` — confirmed in
+  generated stubs.)
+
 ## Session 2026-06-06T00:05:00Z — sdd-spec
 
 - Generated implementation-spec.md with 11 steps. Status → implementation-ready.
