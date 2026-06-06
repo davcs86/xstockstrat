@@ -3,7 +3,7 @@
 **Lifecycle Status**: `draft`
 **Development Branch**: `feature/unify-admin-auth-gates`
 **Created**: 2026-06-05
-**Last Updated**: 2026-06-05
+**Last Updated**: 2026-06-06
 
 ---
 
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-06-05 | `idea` → `draft` | backlog capture | Split out of the 047/048 admin-gate consistency work — analysis was aligned to the x-access-scope role-check model; ingest + indicators still use their own gates. Captured as a backlog feature for later alignment. |
+| 2026-06-06 | `draft` (unchanged) | /sdd-story | Dependency cleared (047/048 merged). Verified spec premises against merged code; fleshed out product-spec.md to full SDD template (User Story, Affected Services w/ evidence, Proto/Config/DB declarations, Feature Workflow Notes, FR-7, AC-4/5/6), surfaced the ungated `RegisterFormula` finding, and added an open-questions review with recommendations. |
 
 ---
 

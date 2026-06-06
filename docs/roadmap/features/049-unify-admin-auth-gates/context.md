@@ -32,3 +32,31 @@
   - agent tools: `manage_signal_source`, `manage_formula` in `services/xstockstrat-agent/app/tools.py`.
 - **Do NOT start before 047/048 are merged to main-dev** — the `_has_admin_scope` / `validate_admin`
   pattern this feature extends only lands there once 047/048 merge.
+
+## Session 2026-06-06 — sdd-story (flesh out product spec)
+
+- **Dependency cleared:** 047 (`strategy-engine`, PR #581) and 048 (`live-strategy-alert-engine`,
+  PR #596) are both merged to `main-dev`. The `_has_admin_scope` / `validate_admin` pattern is present.
+- Fast-forwarded `claude/product-spec-049-ZiIXN` to `origin/main-dev` (`8b0245c`) so the 049 files
+  are on the working branch.
+- **Verified the backlog spec's premises against the merged code** — all accurate:
+  - analysis target: `_has_admin_scope` at `services/xstockstrat-analysis/app/handlers/servicer.py:58`
+    (checks `x-access-scope & 0x04`); gates `ManageStrategy` (`:655`) and `SetStrategyLive` (`:726`).
+  - agent: `validate_admin` (`app/client.py:374`), `_admin_metadata` (`app/client.py:30`); strategy
+    tools forward `x-access-scope: 7`.
+  - ingest: `_validate_admin_token` (`app/handlers/servicer.py:47`) re-auths via identity
+    `ValidateApiKey`; **only** call site is `ManageSignalSource` (`:427`) → `identity_channel` removal
+    (FR-3) is clean. Wiring at `app/main.py:60,67`.
+  - agent `manage_signal_source` tool (`app/tools.py:320-351`) has **no** entry `validate_admin` and
+    forwards no `x-access-scope` (the `validate_admin` at `:364` belongs to `set_strategy_live`).
+  - indicators: `UpdateFormula`/`DeleteFormula` enforce `row["author"] != request.user_id`
+    (`:211,236`); **`RegisterFormula` (`:135-150`) is effectively ungated** — `author` defaults to
+    `"dev-user"`. New finding surfaced into the spec.
+  - UI BFF callers exist: `config-ui/hooks/useSignalSourceMutations.ts`, `hooks/useFormulas.ts`.
+- **Fleshed out `product-spec.md`** to the standard SDD template + grounding: added User Story,
+  Affected Services (with file:line evidence), Proto/Config/DB change declarations (all "none"),
+  Feature Workflow Notes (dependency satisfied; approval gates), FR-7 + AC-4/5/6, the
+  `RegisterFormula` gap, and an "Open Questions — Review & Recommendations" section (OQ-1 keep
+  ownership + admin override + close RegisterFormula gap; OQ-2 verify ingress header-strip; OQ-3 defer
+  shared helper, duplicate now).
+- Status stays `draft`. Next action unchanged: `/sdd-review unify-admin-auth-gates product-spec`.
