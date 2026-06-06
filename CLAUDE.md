@@ -143,6 +143,13 @@ Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key ru
 
 **Full rules, global key table, and registration steps** → `docs/patterns/config-governance.md`.
 
+Recently added keys (feature 049 Part B — MCP OAuth 2.1 edge auth, owned by `xstockstrat-agent`):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `agent.oauth.registration_enabled` | bool | `true` | Allow RFC 7591 Dynamic Client Registration at `/oauth/register` |
+| `agent.oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only (no allow-any) |
+
 ---
 
 ## Environment Variable Naming Convention

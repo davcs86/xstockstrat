@@ -8,8 +8,8 @@ import pytest
 import respx
 from mcp.server import FastMCP
 
-from app.tools import register_tools, _EXTRACTOR_TOOL_MAP
 from app import client
+from app.tools import _EXTRACTOR_TOOL_MAP, register_tools
 
 
 def _make_server() -> FastMCP:
@@ -352,7 +352,10 @@ class TestManageSignalSourceTool:
             "active": True,
             "has_credentials": True,
         }
-        with patch.object(client, "manage_signal_source", AsyncMock(return_value=returned)) as m:
+        with (
+            patch.object(client, "validate_admin", AsyncMock(return_value=True)),
+            patch.object(client, "manage_signal_source", AsyncMock(return_value=returned)) as m,
+        ):
             result = await _tool_fn(server, "manage_signal_source")(
                 operation="register",
                 slug="uw",
@@ -363,6 +366,16 @@ class TestManageSignalSourceTool:
             )
         assert "credentials_ref" not in result  # FR-12
         assert m.call_args.kwargs["credentials_ref"] == "secret-ref"
+
+    @pytest.mark.asyncio
+    async def test_non_admin_rejected_at_entry(self):
+        """AC-A2: manage_signal_source validates admin at the agent entry."""
+        server = _make_server()
+        with patch.object(client, "validate_admin", AsyncMock(return_value=False)):
+            with pytest.raises(RuntimeError, match="admin API key required"):
+                await _tool_fn(server, "manage_signal_source")(
+                    operation="register", slug="uw", admin_api_key="bad"
+                )
 
 
 class TestSetStrategyLiveTool:

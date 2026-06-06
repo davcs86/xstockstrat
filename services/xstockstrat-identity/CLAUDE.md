@@ -19,9 +19,22 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 | gRPC | `50058` | Internal service-to-service (protobuf) |
 
 This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing all
-eight methods: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`, `CreateApiKey`,
-`ValidateApiKey`, `ListApiKeys`, `RevokeApiKey`). The frontends validate tokens over gRPC `50058`.
+thirteen methods: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`, `CreateApiKey`,
+`ValidateApiKey`, `ListApiKeys`, `RevokeApiKey`, and the OAuth 2.1 backend RPCs (feature 049 Part B)
+`RegisterOAuthClient`, `GetOAuthClient`, `IssueAuthCode`, `ExchangeAuthCode`, `RefreshOAuthToken`).
+The frontends validate tokens over gRPC `50058`.
 The former HTTP/Connect-RPC server on `8058` (and the `src/connect/` Connect router) was removed.
+
+### OAuth 2.1 backend (feature 049 Part B)
+
+Identity is the durable OAuth state store + token mint behind the MCP agent's stateless OAuth 2.1
+HTTP facade. `RegisterOAuthClient` (RFC 7591 DCR, https-only public client) and `GetOAuthClient`
+manage `identity.oauth_clients`; `IssueAuthCode`/`ExchangeAuthCode` use `identity.oauth_auth_codes`
+(single-use, 60s TTL, PKCE S256, exact redirect match). The OAuth **access token is an `aud`-bound
+JWT** (`TokenClaims.aud` = the agent resource URI, RFC 8707) minted with the standard claim shape;
+`ValidateToken` surfaces `aud`. The OAuth **refresh token reuses `identity.refresh_tokens`** (rotation
+on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs reuse
+`identity.jwt.access_ttl_seconds` / `identity.jwt.refresh_ttl_seconds`.
 
 ## Dependencies
 
@@ -29,7 +42,16 @@ The former HTTP/Connect-RPC server on `8058` (and the `src/connect/` Connect rou
 |---|---|---|
 | xstockstrat-config | gRPC WatchConfig | Live config (JWT secrets, token TTLs) |
 | xstockstrat-ledger | gRPC write | Auth event audit trail |
-| PostgreSQL | DB (schema: `identity`) | Users, sessions, API keys |
+| PostgreSQL | DB (schema: `identity`) | Users, sessions, API keys, OAuth clients + auth codes |
+
+## Database / Migrations
+
+- `000_schema`, `001_identity_tables` (`users`, `api_keys`, `refresh_tokens`), `002_seed_admin`.
+- `003_oauth` (feature 049 Part B) — adds `identity.oauth_clients` (`client_id` PK, `redirect_uris
+  TEXT[]`, `client_name`, `created_at`) and `identity.oauth_auth_codes` (`code` PK = SHA-256 hash,
+  `client_id`/`user_id` FKs ON DELETE CASCADE, `redirect_uri`, `code_challenge`, `resource`,
+  `expires_at`, `consumed_at`, `created_at`; index on `client_id`). Refresh tokens are **not** a new
+  table — OAuth reuses `identity.refresh_tokens`.
 
 ## Config Keys Consumed
 

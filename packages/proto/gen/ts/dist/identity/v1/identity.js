@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: identity/v1/identity.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IdentityServiceClient = exports.IdentityServiceService = exports.RevokeApiKeyResponse = exports.RevokeApiKeyRequest = exports.ListApiKeysResponse = exports.ListApiKeysRequest = exports.ValidateApiKeyRequest = exports.CreateApiKeyRequest = exports.ApiKey = exports.RevokeTokenResponse = exports.RevokeTokenRequest = exports.RefreshTokenRequest = exports.ValidateTokenRequest = exports.TokenClaims = exports.AuthTokenResponse = exports.AuthenticateUserRequest = exports.protobufPackage = void 0;
+exports.IdentityServiceClient = exports.IdentityServiceService = exports.RefreshOAuthTokenRequest = exports.OAuthTokenResponse = exports.ExchangeAuthCodeRequest = exports.IssueAuthCodeResponse = exports.IssueAuthCodeRequest = exports.GetOAuthClientRequest = exports.RegisterOAuthClientRequest = exports.OAuthClient = exports.RevokeApiKeyResponse = exports.RevokeApiKeyRequest = exports.ListApiKeysResponse = exports.ListApiKeysRequest = exports.ValidateApiKeyRequest = exports.CreateApiKeyRequest = exports.ApiKey = exports.RevokeTokenResponse = exports.RevokeTokenRequest = exports.RefreshTokenRequest = exports.ValidateTokenRequest = exports.TokenClaims = exports.AuthTokenResponse = exports.AuthenticateUserRequest = exports.protobufPackage = void 0;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -192,7 +192,7 @@ exports.AuthTokenResponse = {
     },
 };
 function createBaseTokenClaims() {
-    return { userId: "", email: "", roles: [], issuedAt: undefined, expiresAt: undefined };
+    return { userId: "", email: "", roles: [], issuedAt: undefined, expiresAt: undefined, aud: "" };
 }
 exports.TokenClaims = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -210,6 +210,9 @@ exports.TokenClaims = {
         }
         if (message.expiresAt !== undefined) {
             timestamp_1.Timestamp.encode(toTimestamp(message.expiresAt), writer.uint32(42).fork()).join();
+        }
+        if (message.aud !== "") {
+            writer.uint32(50).string(message.aud);
         }
         return writer;
     },
@@ -255,6 +258,13 @@ exports.TokenClaims = {
                     message.expiresAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.aud = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -282,6 +292,7 @@ exports.TokenClaims = {
                 : isSet(object.expires_at)
                     ? fromJsonTimestamp(object.expires_at)
                     : undefined,
+            aud: isSet(object.aud) ? globalThis.String(object.aud) : "",
         };
     },
     toJSON(message) {
@@ -301,6 +312,9 @@ exports.TokenClaims = {
         if (message.expiresAt !== undefined) {
             obj.expiresAt = message.expiresAt.toISOString();
         }
+        if (message.aud !== "") {
+            obj.aud = message.aud;
+        }
         return obj;
     },
     create(base) {
@@ -313,6 +327,7 @@ exports.TokenClaims = {
         message.roles = object.roles?.map((e) => e) || [];
         message.issuedAt = object.issuedAt ?? undefined;
         message.expiresAt = object.expiresAt ?? undefined;
+        message.aud = object.aud ?? "";
         return message;
     },
 };
@@ -1087,6 +1102,744 @@ exports.RevokeApiKeyResponse = {
         return message;
     },
 };
+function createBaseOAuthClient() {
+    return { clientId: "", redirectUris: [], clientName: "", createdAt: undefined };
+}
+exports.OAuthClient = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.clientId !== "") {
+            writer.uint32(10).string(message.clientId);
+        }
+        for (const v of message.redirectUris) {
+            writer.uint32(18).string(v);
+        }
+        if (message.clientName !== "") {
+            writer.uint32(26).string(message.clientName);
+        }
+        if (message.createdAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(34).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseOAuthClient();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.clientId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.redirectUris.push(reader.string());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.clientName = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.createdAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            clientId: isSet(object.clientId)
+                ? globalThis.String(object.clientId)
+                : isSet(object.client_id)
+                    ? globalThis.String(object.client_id)
+                    : "",
+            redirectUris: globalThis.Array.isArray(object?.redirectUris)
+                ? object.redirectUris.map((e) => globalThis.String(e))
+                : globalThis.Array.isArray(object?.redirect_uris)
+                    ? object.redirect_uris.map((e) => globalThis.String(e))
+                    : [],
+            clientName: isSet(object.clientName)
+                ? globalThis.String(object.clientName)
+                : isSet(object.client_name)
+                    ? globalThis.String(object.client_name)
+                    : "",
+            createdAt: isSet(object.createdAt)
+                ? fromJsonTimestamp(object.createdAt)
+                : isSet(object.created_at)
+                    ? fromJsonTimestamp(object.created_at)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.clientId !== "") {
+            obj.clientId = message.clientId;
+        }
+        if (message.redirectUris?.length) {
+            obj.redirectUris = message.redirectUris;
+        }
+        if (message.clientName !== "") {
+            obj.clientName = message.clientName;
+        }
+        if (message.createdAt !== undefined) {
+            obj.createdAt = message.createdAt.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.OAuthClient.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseOAuthClient();
+        message.clientId = object.clientId ?? "";
+        message.redirectUris = object.redirectUris?.map((e) => e) || [];
+        message.clientName = object.clientName ?? "";
+        message.createdAt = object.createdAt ?? undefined;
+        return message;
+    },
+};
+function createBaseRegisterOAuthClientRequest() {
+    return { redirectUris: [], clientName: "" };
+}
+exports.RegisterOAuthClientRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.redirectUris) {
+            writer.uint32(10).string(v);
+        }
+        if (message.clientName !== "") {
+            writer.uint32(18).string(message.clientName);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseRegisterOAuthClientRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.redirectUris.push(reader.string());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.clientName = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            redirectUris: globalThis.Array.isArray(object?.redirectUris)
+                ? object.redirectUris.map((e) => globalThis.String(e))
+                : globalThis.Array.isArray(object?.redirect_uris)
+                    ? object.redirect_uris.map((e) => globalThis.String(e))
+                    : [],
+            clientName: isSet(object.clientName)
+                ? globalThis.String(object.clientName)
+                : isSet(object.client_name)
+                    ? globalThis.String(object.client_name)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.redirectUris?.length) {
+            obj.redirectUris = message.redirectUris;
+        }
+        if (message.clientName !== "") {
+            obj.clientName = message.clientName;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.RegisterOAuthClientRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseRegisterOAuthClientRequest();
+        message.redirectUris = object.redirectUris?.map((e) => e) || [];
+        message.clientName = object.clientName ?? "";
+        return message;
+    },
+};
+function createBaseGetOAuthClientRequest() {
+    return { clientId: "" };
+}
+exports.GetOAuthClientRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.clientId !== "") {
+            writer.uint32(10).string(message.clientId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetOAuthClientRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.clientId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            clientId: isSet(object.clientId)
+                ? globalThis.String(object.clientId)
+                : isSet(object.client_id)
+                    ? globalThis.String(object.client_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.clientId !== "") {
+            obj.clientId = message.clientId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetOAuthClientRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetOAuthClientRequest();
+        message.clientId = object.clientId ?? "";
+        return message;
+    },
+};
+function createBaseIssueAuthCodeRequest() {
+    return { userId: "", clientId: "", redirectUri: "", codeChallenge: "", resource: "" };
+}
+exports.IssueAuthCodeRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        if (message.clientId !== "") {
+            writer.uint32(18).string(message.clientId);
+        }
+        if (message.redirectUri !== "") {
+            writer.uint32(26).string(message.redirectUri);
+        }
+        if (message.codeChallenge !== "") {
+            writer.uint32(34).string(message.codeChallenge);
+        }
+        if (message.resource !== "") {
+            writer.uint32(42).string(message.resource);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseIssueAuthCodeRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.clientId = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.redirectUri = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.codeChallenge = reader.string();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.resource = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            clientId: isSet(object.clientId)
+                ? globalThis.String(object.clientId)
+                : isSet(object.client_id)
+                    ? globalThis.String(object.client_id)
+                    : "",
+            redirectUri: isSet(object.redirectUri)
+                ? globalThis.String(object.redirectUri)
+                : isSet(object.redirect_uri)
+                    ? globalThis.String(object.redirect_uri)
+                    : "",
+            codeChallenge: isSet(object.codeChallenge)
+                ? globalThis.String(object.codeChallenge)
+                : isSet(object.code_challenge)
+                    ? globalThis.String(object.code_challenge)
+                    : "",
+            resource: isSet(object.resource) ? globalThis.String(object.resource) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.clientId !== "") {
+            obj.clientId = message.clientId;
+        }
+        if (message.redirectUri !== "") {
+            obj.redirectUri = message.redirectUri;
+        }
+        if (message.codeChallenge !== "") {
+            obj.codeChallenge = message.codeChallenge;
+        }
+        if (message.resource !== "") {
+            obj.resource = message.resource;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.IssueAuthCodeRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseIssueAuthCodeRequest();
+        message.userId = object.userId ?? "";
+        message.clientId = object.clientId ?? "";
+        message.redirectUri = object.redirectUri ?? "";
+        message.codeChallenge = object.codeChallenge ?? "";
+        message.resource = object.resource ?? "";
+        return message;
+    },
+};
+function createBaseIssueAuthCodeResponse() {
+    return { code: "" };
+}
+exports.IssueAuthCodeResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.code !== "") {
+            writer.uint32(10).string(message.code);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseIssueAuthCodeResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.code = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { code: isSet(object.code) ? globalThis.String(object.code) : "" };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.code !== "") {
+            obj.code = message.code;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.IssueAuthCodeResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseIssueAuthCodeResponse();
+        message.code = object.code ?? "";
+        return message;
+    },
+};
+function createBaseExchangeAuthCodeRequest() {
+    return { code: "", codeVerifier: "", redirectUri: "", clientId: "", resource: "" };
+}
+exports.ExchangeAuthCodeRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.code !== "") {
+            writer.uint32(10).string(message.code);
+        }
+        if (message.codeVerifier !== "") {
+            writer.uint32(18).string(message.codeVerifier);
+        }
+        if (message.redirectUri !== "") {
+            writer.uint32(26).string(message.redirectUri);
+        }
+        if (message.clientId !== "") {
+            writer.uint32(34).string(message.clientId);
+        }
+        if (message.resource !== "") {
+            writer.uint32(42).string(message.resource);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseExchangeAuthCodeRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.code = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.codeVerifier = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.redirectUri = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.clientId = reader.string();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.resource = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            code: isSet(object.code) ? globalThis.String(object.code) : "",
+            codeVerifier: isSet(object.codeVerifier)
+                ? globalThis.String(object.codeVerifier)
+                : isSet(object.code_verifier)
+                    ? globalThis.String(object.code_verifier)
+                    : "",
+            redirectUri: isSet(object.redirectUri)
+                ? globalThis.String(object.redirectUri)
+                : isSet(object.redirect_uri)
+                    ? globalThis.String(object.redirect_uri)
+                    : "",
+            clientId: isSet(object.clientId)
+                ? globalThis.String(object.clientId)
+                : isSet(object.client_id)
+                    ? globalThis.String(object.client_id)
+                    : "",
+            resource: isSet(object.resource) ? globalThis.String(object.resource) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.code !== "") {
+            obj.code = message.code;
+        }
+        if (message.codeVerifier !== "") {
+            obj.codeVerifier = message.codeVerifier;
+        }
+        if (message.redirectUri !== "") {
+            obj.redirectUri = message.redirectUri;
+        }
+        if (message.clientId !== "") {
+            obj.clientId = message.clientId;
+        }
+        if (message.resource !== "") {
+            obj.resource = message.resource;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ExchangeAuthCodeRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseExchangeAuthCodeRequest();
+        message.code = object.code ?? "";
+        message.codeVerifier = object.codeVerifier ?? "";
+        message.redirectUri = object.redirectUri ?? "";
+        message.clientId = object.clientId ?? "";
+        message.resource = object.resource ?? "";
+        return message;
+    },
+};
+function createBaseOAuthTokenResponse() {
+    return { accessToken: "", tokenType: "", expiresIn: 0, refreshToken: "" };
+}
+exports.OAuthTokenResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.accessToken !== "") {
+            writer.uint32(10).string(message.accessToken);
+        }
+        if (message.tokenType !== "") {
+            writer.uint32(18).string(message.tokenType);
+        }
+        if (message.expiresIn !== 0) {
+            writer.uint32(24).int64(message.expiresIn);
+        }
+        if (message.refreshToken !== "") {
+            writer.uint32(34).string(message.refreshToken);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseOAuthTokenResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.accessToken = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.tokenType = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.expiresIn = longToNumber(reader.int64());
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.refreshToken = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            accessToken: isSet(object.accessToken)
+                ? globalThis.String(object.accessToken)
+                : isSet(object.access_token)
+                    ? globalThis.String(object.access_token)
+                    : "",
+            tokenType: isSet(object.tokenType)
+                ? globalThis.String(object.tokenType)
+                : isSet(object.token_type)
+                    ? globalThis.String(object.token_type)
+                    : "",
+            expiresIn: isSet(object.expiresIn)
+                ? globalThis.Number(object.expiresIn)
+                : isSet(object.expires_in)
+                    ? globalThis.Number(object.expires_in)
+                    : 0,
+            refreshToken: isSet(object.refreshToken)
+                ? globalThis.String(object.refreshToken)
+                : isSet(object.refresh_token)
+                    ? globalThis.String(object.refresh_token)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.accessToken !== "") {
+            obj.accessToken = message.accessToken;
+        }
+        if (message.tokenType !== "") {
+            obj.tokenType = message.tokenType;
+        }
+        if (message.expiresIn !== 0) {
+            obj.expiresIn = Math.round(message.expiresIn);
+        }
+        if (message.refreshToken !== "") {
+            obj.refreshToken = message.refreshToken;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.OAuthTokenResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseOAuthTokenResponse();
+        message.accessToken = object.accessToken ?? "";
+        message.tokenType = object.tokenType ?? "";
+        message.expiresIn = object.expiresIn ?? 0;
+        message.refreshToken = object.refreshToken ?? "";
+        return message;
+    },
+};
+function createBaseRefreshOAuthTokenRequest() {
+    return { refreshToken: "", resource: "" };
+}
+exports.RefreshOAuthTokenRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.refreshToken !== "") {
+            writer.uint32(10).string(message.refreshToken);
+        }
+        if (message.resource !== "") {
+            writer.uint32(18).string(message.resource);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseRefreshOAuthTokenRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.refreshToken = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.resource = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            refreshToken: isSet(object.refreshToken)
+                ? globalThis.String(object.refreshToken)
+                : isSet(object.refresh_token)
+                    ? globalThis.String(object.refresh_token)
+                    : "",
+            resource: isSet(object.resource) ? globalThis.String(object.resource) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.refreshToken !== "") {
+            obj.refreshToken = message.refreshToken;
+        }
+        if (message.resource !== "") {
+            obj.resource = message.resource;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.RefreshOAuthTokenRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseRefreshOAuthTokenRequest();
+        message.refreshToken = object.refreshToken ?? "";
+        message.resource = object.resource ?? "";
+        return message;
+    },
+};
 exports.IdentityServiceService = {
     authenticateUser: {
         path: "/xstockstrat.identity.v1.IdentityService/AuthenticateUser",
@@ -1160,6 +1913,55 @@ exports.IdentityServiceService = {
         responseSerialize: (value) => Buffer.from(exports.RevokeApiKeyResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.RevokeApiKeyResponse.decode(value),
     },
+    /**
+     * OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+     * OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+     */
+    registerOAuthClient: {
+        path: "/xstockstrat.identity.v1.IdentityService/RegisterOAuthClient",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.RegisterOAuthClientRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.RegisterOAuthClientRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.OAuthClient.encode(value).finish()),
+        responseDeserialize: (value) => exports.OAuthClient.decode(value),
+    },
+    getOAuthClient: {
+        path: "/xstockstrat.identity.v1.IdentityService/GetOAuthClient",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetOAuthClientRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetOAuthClientRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.OAuthClient.encode(value).finish()),
+        responseDeserialize: (value) => exports.OAuthClient.decode(value),
+    },
+    issueAuthCode: {
+        path: "/xstockstrat.identity.v1.IdentityService/IssueAuthCode",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.IssueAuthCodeRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.IssueAuthCodeRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.IssueAuthCodeResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.IssueAuthCodeResponse.decode(value),
+    },
+    exchangeAuthCode: {
+        path: "/xstockstrat.identity.v1.IdentityService/ExchangeAuthCode",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ExchangeAuthCodeRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ExchangeAuthCodeRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.OAuthTokenResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.OAuthTokenResponse.decode(value),
+    },
+    refreshOAuthToken: {
+        path: "/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.RefreshOAuthTokenRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.RefreshOAuthTokenRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.OAuthTokenResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.OAuthTokenResponse.decode(value),
+    },
 };
 exports.IdentityServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.IdentityServiceService, "xstockstrat.identity.v1.IdentityService");
 function toTimestamp(date) {
@@ -1182,6 +1984,16 @@ function fromJsonTimestamp(o) {
     else {
         return fromTimestamp(timestamp_1.Timestamp.fromJSON(o));
     }
+}
+function longToNumber(int64) {
+    const num = globalThis.Number(int64.toString());
+    if (num > globalThis.Number.MAX_SAFE_INTEGER) {
+        throw new globalThis.Error("Value is larger than Number.MAX_SAFE_INTEGER");
+    }
+    if (num < globalThis.Number.MIN_SAFE_INTEGER) {
+        throw new globalThis.Error("Value is smaller than Number.MIN_SAFE_INTEGER");
+    }
+    return num;
 }
 function isSet(value) {
     return value !== null && value !== undefined;

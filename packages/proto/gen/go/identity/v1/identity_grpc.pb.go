@@ -19,14 +19,19 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	IdentityService_AuthenticateUser_FullMethodName = "/xstockstrat.identity.v1.IdentityService/AuthenticateUser"
-	IdentityService_ValidateToken_FullMethodName    = "/xstockstrat.identity.v1.IdentityService/ValidateToken"
-	IdentityService_RefreshToken_FullMethodName     = "/xstockstrat.identity.v1.IdentityService/RefreshToken"
-	IdentityService_RevokeToken_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/RevokeToken"
-	IdentityService_CreateApiKey_FullMethodName     = "/xstockstrat.identity.v1.IdentityService/CreateApiKey"
-	IdentityService_ValidateApiKey_FullMethodName   = "/xstockstrat.identity.v1.IdentityService/ValidateApiKey"
-	IdentityService_ListApiKeys_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/ListApiKeys"
-	IdentityService_RevokeApiKey_FullMethodName     = "/xstockstrat.identity.v1.IdentityService/RevokeApiKey"
+	IdentityService_AuthenticateUser_FullMethodName    = "/xstockstrat.identity.v1.IdentityService/AuthenticateUser"
+	IdentityService_ValidateToken_FullMethodName       = "/xstockstrat.identity.v1.IdentityService/ValidateToken"
+	IdentityService_RefreshToken_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/RefreshToken"
+	IdentityService_RevokeToken_FullMethodName         = "/xstockstrat.identity.v1.IdentityService/RevokeToken"
+	IdentityService_CreateApiKey_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/CreateApiKey"
+	IdentityService_ValidateApiKey_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/ValidateApiKey"
+	IdentityService_ListApiKeys_FullMethodName         = "/xstockstrat.identity.v1.IdentityService/ListApiKeys"
+	IdentityService_RevokeApiKey_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/RevokeApiKey"
+	IdentityService_RegisterOAuthClient_FullMethodName = "/xstockstrat.identity.v1.IdentityService/RegisterOAuthClient"
+	IdentityService_GetOAuthClient_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/GetOAuthClient"
+	IdentityService_IssueAuthCode_FullMethodName       = "/xstockstrat.identity.v1.IdentityService/IssueAuthCode"
+	IdentityService_ExchangeAuthCode_FullMethodName    = "/xstockstrat.identity.v1.IdentityService/ExchangeAuthCode"
+	IdentityService_RefreshOAuthToken_FullMethodName   = "/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken"
 )
 
 // IdentityServiceClient is the client API for IdentityService service.
@@ -41,6 +46,13 @@ type IdentityServiceClient interface {
 	ValidateApiKey(ctx context.Context, in *ValidateApiKeyRequest, opts ...grpc.CallOption) (*TokenClaims, error)
 	ListApiKeys(ctx context.Context, in *ListApiKeysRequest, opts ...grpc.CallOption) (*ListApiKeysResponse, error)
 	RevokeApiKey(ctx context.Context, in *RevokeApiKeyRequest, opts ...grpc.CallOption) (*RevokeApiKeyResponse, error)
+	// OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+	// OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+	RegisterOAuthClient(ctx context.Context, in *RegisterOAuthClientRequest, opts ...grpc.CallOption) (*OAuthClient, error)
+	GetOAuthClient(ctx context.Context, in *GetOAuthClientRequest, opts ...grpc.CallOption) (*OAuthClient, error)
+	IssueAuthCode(ctx context.Context, in *IssueAuthCodeRequest, opts ...grpc.CallOption) (*IssueAuthCodeResponse, error)
+	ExchangeAuthCode(ctx context.Context, in *ExchangeAuthCodeRequest, opts ...grpc.CallOption) (*OAuthTokenResponse, error)
+	RefreshOAuthToken(ctx context.Context, in *RefreshOAuthTokenRequest, opts ...grpc.CallOption) (*OAuthTokenResponse, error)
 }
 
 type identityServiceClient struct {
@@ -131,6 +143,56 @@ func (c *identityServiceClient) RevokeApiKey(ctx context.Context, in *RevokeApiK
 	return out, nil
 }
 
+func (c *identityServiceClient) RegisterOAuthClient(ctx context.Context, in *RegisterOAuthClientRequest, opts ...grpc.CallOption) (*OAuthClient, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OAuthClient)
+	err := c.cc.Invoke(ctx, IdentityService_RegisterOAuthClient_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityServiceClient) GetOAuthClient(ctx context.Context, in *GetOAuthClientRequest, opts ...grpc.CallOption) (*OAuthClient, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OAuthClient)
+	err := c.cc.Invoke(ctx, IdentityService_GetOAuthClient_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityServiceClient) IssueAuthCode(ctx context.Context, in *IssueAuthCodeRequest, opts ...grpc.CallOption) (*IssueAuthCodeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IssueAuthCodeResponse)
+	err := c.cc.Invoke(ctx, IdentityService_IssueAuthCode_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityServiceClient) ExchangeAuthCode(ctx context.Context, in *ExchangeAuthCodeRequest, opts ...grpc.CallOption) (*OAuthTokenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OAuthTokenResponse)
+	err := c.cc.Invoke(ctx, IdentityService_ExchangeAuthCode_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityServiceClient) RefreshOAuthToken(ctx context.Context, in *RefreshOAuthTokenRequest, opts ...grpc.CallOption) (*OAuthTokenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OAuthTokenResponse)
+	err := c.cc.Invoke(ctx, IdentityService_RefreshOAuthToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IdentityServiceServer is the server API for IdentityService service.
 // All implementations should embed UnimplementedIdentityServiceServer
 // for forward compatibility.
@@ -143,6 +205,13 @@ type IdentityServiceServer interface {
 	ValidateApiKey(context.Context, *ValidateApiKeyRequest) (*TokenClaims, error)
 	ListApiKeys(context.Context, *ListApiKeysRequest) (*ListApiKeysResponse, error)
 	RevokeApiKey(context.Context, *RevokeApiKeyRequest) (*RevokeApiKeyResponse, error)
+	// OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+	// OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+	RegisterOAuthClient(context.Context, *RegisterOAuthClientRequest) (*OAuthClient, error)
+	GetOAuthClient(context.Context, *GetOAuthClientRequest) (*OAuthClient, error)
+	IssueAuthCode(context.Context, *IssueAuthCodeRequest) (*IssueAuthCodeResponse, error)
+	ExchangeAuthCode(context.Context, *ExchangeAuthCodeRequest) (*OAuthTokenResponse, error)
+	RefreshOAuthToken(context.Context, *RefreshOAuthTokenRequest) (*OAuthTokenResponse, error)
 }
 
 // UnimplementedIdentityServiceServer should be embedded to have
@@ -175,6 +244,21 @@ func (UnimplementedIdentityServiceServer) ListApiKeys(context.Context, *ListApiK
 }
 func (UnimplementedIdentityServiceServer) RevokeApiKey(context.Context, *RevokeApiKeyRequest) (*RevokeApiKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RevokeApiKey not implemented")
+}
+func (UnimplementedIdentityServiceServer) RegisterOAuthClient(context.Context, *RegisterOAuthClientRequest) (*OAuthClient, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegisterOAuthClient not implemented")
+}
+func (UnimplementedIdentityServiceServer) GetOAuthClient(context.Context, *GetOAuthClientRequest) (*OAuthClient, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOAuthClient not implemented")
+}
+func (UnimplementedIdentityServiceServer) IssueAuthCode(context.Context, *IssueAuthCodeRequest) (*IssueAuthCodeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method IssueAuthCode not implemented")
+}
+func (UnimplementedIdentityServiceServer) ExchangeAuthCode(context.Context, *ExchangeAuthCodeRequest) (*OAuthTokenResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExchangeAuthCode not implemented")
+}
+func (UnimplementedIdentityServiceServer) RefreshOAuthToken(context.Context, *RefreshOAuthTokenRequest) (*OAuthTokenResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RefreshOAuthToken not implemented")
 }
 func (UnimplementedIdentityServiceServer) testEmbeddedByValue() {}
 
@@ -340,6 +424,96 @@ func _IdentityService_RevokeApiKey_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IdentityService_RegisterOAuthClient_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterOAuthClientRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).RegisterOAuthClient(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_RegisterOAuthClient_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).RegisterOAuthClient(ctx, req.(*RegisterOAuthClientRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_GetOAuthClient_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOAuthClientRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).GetOAuthClient(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_GetOAuthClient_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).GetOAuthClient(ctx, req.(*GetOAuthClientRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_IssueAuthCode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IssueAuthCodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).IssueAuthCode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_IssueAuthCode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).IssueAuthCode(ctx, req.(*IssueAuthCodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_ExchangeAuthCode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExchangeAuthCodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).ExchangeAuthCode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_ExchangeAuthCode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).ExchangeAuthCode(ctx, req.(*ExchangeAuthCodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_RefreshOAuthToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RefreshOAuthTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).RefreshOAuthToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_RefreshOAuthToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).RefreshOAuthToken(ctx, req.(*RefreshOAuthTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IdentityService_ServiceDesc is the grpc.ServiceDesc for IdentityService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -378,6 +552,26 @@ var IdentityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RevokeApiKey",
 			Handler:    _IdentityService_RevokeApiKey_Handler,
+		},
+		{
+			MethodName: "RegisterOAuthClient",
+			Handler:    _IdentityService_RegisterOAuthClient_Handler,
+		},
+		{
+			MethodName: "GetOAuthClient",
+			Handler:    _IdentityService_GetOAuthClient_Handler,
+		},
+		{
+			MethodName: "IssueAuthCode",
+			Handler:    _IdentityService_IssueAuthCode_Handler,
+		},
+		{
+			MethodName: "ExchangeAuthCode",
+			Handler:    _IdentityService_ExchangeAuthCode_Handler,
+		},
+		{
+			MethodName: "RefreshOAuthToken",
+			Handler:    _IdentityService_RefreshOAuthToken_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

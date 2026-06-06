@@ -39,7 +39,11 @@ export interface TokenClaims {
   email: string;
   roles: string[];
   issuedAt?: Date | undefined;
-  expiresAt?: Date | undefined;
+  expiresAt?:
+    | Date
+    | undefined;
+  /** audience / resource URI (OAuth audience-bound JWT, RFC 8707) */
+  aud: string;
 }
 
 export interface ValidateTokenRequest {
@@ -95,6 +99,55 @@ export interface RevokeApiKeyRequest {
 
 export interface RevokeApiKeyResponse {
   success: boolean;
+}
+
+/** ── OAuth 2.1 messages (feature 049 Part B) ────────────────────────────────── */
+export interface OAuthClient {
+  clientId: string;
+  redirectUris: string[];
+  clientName: string;
+  createdAt?: Date | undefined;
+}
+
+export interface RegisterOAuthClientRequest {
+  redirectUris: string[];
+  clientName: string;
+}
+
+export interface GetOAuthClientRequest {
+  clientId: string;
+}
+
+export interface IssueAuthCodeRequest {
+  userId: string;
+  clientId: string;
+  redirectUri: string;
+  codeChallenge: string;
+  resource: string;
+}
+
+export interface IssueAuthCodeResponse {
+  code: string;
+}
+
+export interface ExchangeAuthCodeRequest {
+  code: string;
+  codeVerifier: string;
+  redirectUri: string;
+  clientId: string;
+  resource: string;
+}
+
+export interface OAuthTokenResponse {
+  accessToken: string;
+  tokenType: string;
+  expiresIn: number;
+  refreshToken: string;
+}
+
+export interface RefreshOAuthTokenRequest {
+  refreshToken: string;
+  resource: string;
 }
 
 function createBaseAuthenticateUserRequest(): AuthenticateUserRequest {
@@ -296,7 +349,7 @@ export const AuthTokenResponse: MessageFns<AuthTokenResponse> = {
 };
 
 function createBaseTokenClaims(): TokenClaims {
-  return { userId: "", email: "", roles: [], issuedAt: undefined, expiresAt: undefined };
+  return { userId: "", email: "", roles: [], issuedAt: undefined, expiresAt: undefined, aud: "" };
 }
 
 export const TokenClaims: MessageFns<TokenClaims> = {
@@ -315,6 +368,9 @@ export const TokenClaims: MessageFns<TokenClaims> = {
     }
     if (message.expiresAt !== undefined) {
       Timestamp.encode(toTimestamp(message.expiresAt), writer.uint32(42).fork()).join();
+    }
+    if (message.aud !== "") {
+      writer.uint32(50).string(message.aud);
     }
     return writer;
   },
@@ -366,6 +422,14 @@ export const TokenClaims: MessageFns<TokenClaims> = {
           message.expiresAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
           continue;
         }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.aud = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -394,6 +458,7 @@ export const TokenClaims: MessageFns<TokenClaims> = {
         : isSet(object.expires_at)
         ? fromJsonTimestamp(object.expires_at)
         : undefined,
+      aud: isSet(object.aud) ? globalThis.String(object.aud) : "",
     };
   },
 
@@ -414,6 +479,9 @@ export const TokenClaims: MessageFns<TokenClaims> = {
     if (message.expiresAt !== undefined) {
       obj.expiresAt = message.expiresAt.toISOString();
     }
+    if (message.aud !== "") {
+      obj.aud = message.aud;
+    }
     return obj;
   },
 
@@ -427,6 +495,7 @@ export const TokenClaims: MessageFns<TokenClaims> = {
     message.roles = object.roles?.map((e) => e) || [];
     message.issuedAt = object.issuedAt ?? undefined;
     message.expiresAt = object.expiresAt ?? undefined;
+    message.aud = object.aud ?? "";
     return message;
   },
 };
@@ -1289,6 +1358,816 @@ export const RevokeApiKeyResponse: MessageFns<RevokeApiKeyResponse> = {
   },
 };
 
+function createBaseOAuthClient(): OAuthClient {
+  return { clientId: "", redirectUris: [], clientName: "", createdAt: undefined };
+}
+
+export const OAuthClient: MessageFns<OAuthClient> = {
+  encode(message: OAuthClient, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.clientId !== "") {
+      writer.uint32(10).string(message.clientId);
+    }
+    for (const v of message.redirectUris) {
+      writer.uint32(18).string(v!);
+    }
+    if (message.clientName !== "") {
+      writer.uint32(26).string(message.clientName);
+    }
+    if (message.createdAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OAuthClient {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseOAuthClient();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.clientId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.redirectUris.push(reader.string());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.clientName = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): OAuthClient {
+    return {
+      clientId: isSet(object.clientId)
+        ? globalThis.String(object.clientId)
+        : isSet(object.client_id)
+        ? globalThis.String(object.client_id)
+        : "",
+      redirectUris: globalThis.Array.isArray(object?.redirectUris)
+        ? object.redirectUris.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.redirect_uris)
+        ? object.redirect_uris.map((e: any) => globalThis.String(e))
+        : [],
+      clientName: isSet(object.clientName)
+        ? globalThis.String(object.clientName)
+        : isSet(object.client_name)
+        ? globalThis.String(object.client_name)
+        : "",
+      createdAt: isSet(object.createdAt)
+        ? fromJsonTimestamp(object.createdAt)
+        : isSet(object.created_at)
+        ? fromJsonTimestamp(object.created_at)
+        : undefined,
+    };
+  },
+
+  toJSON(message: OAuthClient): unknown {
+    const obj: any = {};
+    if (message.clientId !== "") {
+      obj.clientId = message.clientId;
+    }
+    if (message.redirectUris?.length) {
+      obj.redirectUris = message.redirectUris;
+    }
+    if (message.clientName !== "") {
+      obj.clientName = message.clientName;
+    }
+    if (message.createdAt !== undefined) {
+      obj.createdAt = message.createdAt.toISOString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<OAuthClient>, I>>(base?: I): OAuthClient {
+    return OAuthClient.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OAuthClient>, I>>(object: I): OAuthClient {
+    const message = createBaseOAuthClient();
+    message.clientId = object.clientId ?? "";
+    message.redirectUris = object.redirectUris?.map((e) => e) || [];
+    message.clientName = object.clientName ?? "";
+    message.createdAt = object.createdAt ?? undefined;
+    return message;
+  },
+};
+
+function createBaseRegisterOAuthClientRequest(): RegisterOAuthClientRequest {
+  return { redirectUris: [], clientName: "" };
+}
+
+export const RegisterOAuthClientRequest: MessageFns<RegisterOAuthClientRequest> = {
+  encode(message: RegisterOAuthClientRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.redirectUris) {
+      writer.uint32(10).string(v!);
+    }
+    if (message.clientName !== "") {
+      writer.uint32(18).string(message.clientName);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RegisterOAuthClientRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRegisterOAuthClientRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.redirectUris.push(reader.string());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.clientName = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RegisterOAuthClientRequest {
+    return {
+      redirectUris: globalThis.Array.isArray(object?.redirectUris)
+        ? object.redirectUris.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.redirect_uris)
+        ? object.redirect_uris.map((e: any) => globalThis.String(e))
+        : [],
+      clientName: isSet(object.clientName)
+        ? globalThis.String(object.clientName)
+        : isSet(object.client_name)
+        ? globalThis.String(object.client_name)
+        : "",
+    };
+  },
+
+  toJSON(message: RegisterOAuthClientRequest): unknown {
+    const obj: any = {};
+    if (message.redirectUris?.length) {
+      obj.redirectUris = message.redirectUris;
+    }
+    if (message.clientName !== "") {
+      obj.clientName = message.clientName;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RegisterOAuthClientRequest>, I>>(base?: I): RegisterOAuthClientRequest {
+    return RegisterOAuthClientRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RegisterOAuthClientRequest>, I>>(object: I): RegisterOAuthClientRequest {
+    const message = createBaseRegisterOAuthClientRequest();
+    message.redirectUris = object.redirectUris?.map((e) => e) || [];
+    message.clientName = object.clientName ?? "";
+    return message;
+  },
+};
+
+function createBaseGetOAuthClientRequest(): GetOAuthClientRequest {
+  return { clientId: "" };
+}
+
+export const GetOAuthClientRequest: MessageFns<GetOAuthClientRequest> = {
+  encode(message: GetOAuthClientRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.clientId !== "") {
+      writer.uint32(10).string(message.clientId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetOAuthClientRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetOAuthClientRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.clientId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetOAuthClientRequest {
+    return {
+      clientId: isSet(object.clientId)
+        ? globalThis.String(object.clientId)
+        : isSet(object.client_id)
+        ? globalThis.String(object.client_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetOAuthClientRequest): unknown {
+    const obj: any = {};
+    if (message.clientId !== "") {
+      obj.clientId = message.clientId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetOAuthClientRequest>, I>>(base?: I): GetOAuthClientRequest {
+    return GetOAuthClientRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetOAuthClientRequest>, I>>(object: I): GetOAuthClientRequest {
+    const message = createBaseGetOAuthClientRequest();
+    message.clientId = object.clientId ?? "";
+    return message;
+  },
+};
+
+function createBaseIssueAuthCodeRequest(): IssueAuthCodeRequest {
+  return { userId: "", clientId: "", redirectUri: "", codeChallenge: "", resource: "" };
+}
+
+export const IssueAuthCodeRequest: MessageFns<IssueAuthCodeRequest> = {
+  encode(message: IssueAuthCodeRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    if (message.clientId !== "") {
+      writer.uint32(18).string(message.clientId);
+    }
+    if (message.redirectUri !== "") {
+      writer.uint32(26).string(message.redirectUri);
+    }
+    if (message.codeChallenge !== "") {
+      writer.uint32(34).string(message.codeChallenge);
+    }
+    if (message.resource !== "") {
+      writer.uint32(42).string(message.resource);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): IssueAuthCodeRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseIssueAuthCodeRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.clientId = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.redirectUri = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.codeChallenge = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.resource = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): IssueAuthCodeRequest {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      clientId: isSet(object.clientId)
+        ? globalThis.String(object.clientId)
+        : isSet(object.client_id)
+        ? globalThis.String(object.client_id)
+        : "",
+      redirectUri: isSet(object.redirectUri)
+        ? globalThis.String(object.redirectUri)
+        : isSet(object.redirect_uri)
+        ? globalThis.String(object.redirect_uri)
+        : "",
+      codeChallenge: isSet(object.codeChallenge)
+        ? globalThis.String(object.codeChallenge)
+        : isSet(object.code_challenge)
+        ? globalThis.String(object.code_challenge)
+        : "",
+      resource: isSet(object.resource) ? globalThis.String(object.resource) : "",
+    };
+  },
+
+  toJSON(message: IssueAuthCodeRequest): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.clientId !== "") {
+      obj.clientId = message.clientId;
+    }
+    if (message.redirectUri !== "") {
+      obj.redirectUri = message.redirectUri;
+    }
+    if (message.codeChallenge !== "") {
+      obj.codeChallenge = message.codeChallenge;
+    }
+    if (message.resource !== "") {
+      obj.resource = message.resource;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<IssueAuthCodeRequest>, I>>(base?: I): IssueAuthCodeRequest {
+    return IssueAuthCodeRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<IssueAuthCodeRequest>, I>>(object: I): IssueAuthCodeRequest {
+    const message = createBaseIssueAuthCodeRequest();
+    message.userId = object.userId ?? "";
+    message.clientId = object.clientId ?? "";
+    message.redirectUri = object.redirectUri ?? "";
+    message.codeChallenge = object.codeChallenge ?? "";
+    message.resource = object.resource ?? "";
+    return message;
+  },
+};
+
+function createBaseIssueAuthCodeResponse(): IssueAuthCodeResponse {
+  return { code: "" };
+}
+
+export const IssueAuthCodeResponse: MessageFns<IssueAuthCodeResponse> = {
+  encode(message: IssueAuthCodeResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.code !== "") {
+      writer.uint32(10).string(message.code);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): IssueAuthCodeResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseIssueAuthCodeResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.code = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): IssueAuthCodeResponse {
+    return { code: isSet(object.code) ? globalThis.String(object.code) : "" };
+  },
+
+  toJSON(message: IssueAuthCodeResponse): unknown {
+    const obj: any = {};
+    if (message.code !== "") {
+      obj.code = message.code;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<IssueAuthCodeResponse>, I>>(base?: I): IssueAuthCodeResponse {
+    return IssueAuthCodeResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<IssueAuthCodeResponse>, I>>(object: I): IssueAuthCodeResponse {
+    const message = createBaseIssueAuthCodeResponse();
+    message.code = object.code ?? "";
+    return message;
+  },
+};
+
+function createBaseExchangeAuthCodeRequest(): ExchangeAuthCodeRequest {
+  return { code: "", codeVerifier: "", redirectUri: "", clientId: "", resource: "" };
+}
+
+export const ExchangeAuthCodeRequest: MessageFns<ExchangeAuthCodeRequest> = {
+  encode(message: ExchangeAuthCodeRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.code !== "") {
+      writer.uint32(10).string(message.code);
+    }
+    if (message.codeVerifier !== "") {
+      writer.uint32(18).string(message.codeVerifier);
+    }
+    if (message.redirectUri !== "") {
+      writer.uint32(26).string(message.redirectUri);
+    }
+    if (message.clientId !== "") {
+      writer.uint32(34).string(message.clientId);
+    }
+    if (message.resource !== "") {
+      writer.uint32(42).string(message.resource);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExchangeAuthCodeRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseExchangeAuthCodeRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.code = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.codeVerifier = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.redirectUri = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.clientId = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.resource = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ExchangeAuthCodeRequest {
+    return {
+      code: isSet(object.code) ? globalThis.String(object.code) : "",
+      codeVerifier: isSet(object.codeVerifier)
+        ? globalThis.String(object.codeVerifier)
+        : isSet(object.code_verifier)
+        ? globalThis.String(object.code_verifier)
+        : "",
+      redirectUri: isSet(object.redirectUri)
+        ? globalThis.String(object.redirectUri)
+        : isSet(object.redirect_uri)
+        ? globalThis.String(object.redirect_uri)
+        : "",
+      clientId: isSet(object.clientId)
+        ? globalThis.String(object.clientId)
+        : isSet(object.client_id)
+        ? globalThis.String(object.client_id)
+        : "",
+      resource: isSet(object.resource) ? globalThis.String(object.resource) : "",
+    };
+  },
+
+  toJSON(message: ExchangeAuthCodeRequest): unknown {
+    const obj: any = {};
+    if (message.code !== "") {
+      obj.code = message.code;
+    }
+    if (message.codeVerifier !== "") {
+      obj.codeVerifier = message.codeVerifier;
+    }
+    if (message.redirectUri !== "") {
+      obj.redirectUri = message.redirectUri;
+    }
+    if (message.clientId !== "") {
+      obj.clientId = message.clientId;
+    }
+    if (message.resource !== "") {
+      obj.resource = message.resource;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ExchangeAuthCodeRequest>, I>>(base?: I): ExchangeAuthCodeRequest {
+    return ExchangeAuthCodeRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExchangeAuthCodeRequest>, I>>(object: I): ExchangeAuthCodeRequest {
+    const message = createBaseExchangeAuthCodeRequest();
+    message.code = object.code ?? "";
+    message.codeVerifier = object.codeVerifier ?? "";
+    message.redirectUri = object.redirectUri ?? "";
+    message.clientId = object.clientId ?? "";
+    message.resource = object.resource ?? "";
+    return message;
+  },
+};
+
+function createBaseOAuthTokenResponse(): OAuthTokenResponse {
+  return { accessToken: "", tokenType: "", expiresIn: 0, refreshToken: "" };
+}
+
+export const OAuthTokenResponse: MessageFns<OAuthTokenResponse> = {
+  encode(message: OAuthTokenResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.accessToken !== "") {
+      writer.uint32(10).string(message.accessToken);
+    }
+    if (message.tokenType !== "") {
+      writer.uint32(18).string(message.tokenType);
+    }
+    if (message.expiresIn !== 0) {
+      writer.uint32(24).int64(message.expiresIn);
+    }
+    if (message.refreshToken !== "") {
+      writer.uint32(34).string(message.refreshToken);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OAuthTokenResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseOAuthTokenResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.accessToken = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.tokenType = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.expiresIn = longToNumber(reader.int64());
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.refreshToken = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): OAuthTokenResponse {
+    return {
+      accessToken: isSet(object.accessToken)
+        ? globalThis.String(object.accessToken)
+        : isSet(object.access_token)
+        ? globalThis.String(object.access_token)
+        : "",
+      tokenType: isSet(object.tokenType)
+        ? globalThis.String(object.tokenType)
+        : isSet(object.token_type)
+        ? globalThis.String(object.token_type)
+        : "",
+      expiresIn: isSet(object.expiresIn)
+        ? globalThis.Number(object.expiresIn)
+        : isSet(object.expires_in)
+        ? globalThis.Number(object.expires_in)
+        : 0,
+      refreshToken: isSet(object.refreshToken)
+        ? globalThis.String(object.refreshToken)
+        : isSet(object.refresh_token)
+        ? globalThis.String(object.refresh_token)
+        : "",
+    };
+  },
+
+  toJSON(message: OAuthTokenResponse): unknown {
+    const obj: any = {};
+    if (message.accessToken !== "") {
+      obj.accessToken = message.accessToken;
+    }
+    if (message.tokenType !== "") {
+      obj.tokenType = message.tokenType;
+    }
+    if (message.expiresIn !== 0) {
+      obj.expiresIn = Math.round(message.expiresIn);
+    }
+    if (message.refreshToken !== "") {
+      obj.refreshToken = message.refreshToken;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<OAuthTokenResponse>, I>>(base?: I): OAuthTokenResponse {
+    return OAuthTokenResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<OAuthTokenResponse>, I>>(object: I): OAuthTokenResponse {
+    const message = createBaseOAuthTokenResponse();
+    message.accessToken = object.accessToken ?? "";
+    message.tokenType = object.tokenType ?? "";
+    message.expiresIn = object.expiresIn ?? 0;
+    message.refreshToken = object.refreshToken ?? "";
+    return message;
+  },
+};
+
+function createBaseRefreshOAuthTokenRequest(): RefreshOAuthTokenRequest {
+  return { refreshToken: "", resource: "" };
+}
+
+export const RefreshOAuthTokenRequest: MessageFns<RefreshOAuthTokenRequest> = {
+  encode(message: RefreshOAuthTokenRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.refreshToken !== "") {
+      writer.uint32(10).string(message.refreshToken);
+    }
+    if (message.resource !== "") {
+      writer.uint32(18).string(message.resource);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RefreshOAuthTokenRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRefreshOAuthTokenRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.refreshToken = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.resource = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RefreshOAuthTokenRequest {
+    return {
+      refreshToken: isSet(object.refreshToken)
+        ? globalThis.String(object.refreshToken)
+        : isSet(object.refresh_token)
+        ? globalThis.String(object.refresh_token)
+        : "",
+      resource: isSet(object.resource) ? globalThis.String(object.resource) : "",
+    };
+  },
+
+  toJSON(message: RefreshOAuthTokenRequest): unknown {
+    const obj: any = {};
+    if (message.refreshToken !== "") {
+      obj.refreshToken = message.refreshToken;
+    }
+    if (message.resource !== "") {
+      obj.resource = message.resource;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RefreshOAuthTokenRequest>, I>>(base?: I): RefreshOAuthTokenRequest {
+    return RefreshOAuthTokenRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RefreshOAuthTokenRequest>, I>>(object: I): RefreshOAuthTokenRequest {
+    const message = createBaseRefreshOAuthTokenRequest();
+    message.refreshToken = object.refreshToken ?? "";
+    message.resource = object.resource ?? "";
+    return message;
+  },
+};
+
 export type IdentityServiceService = typeof IdentityServiceService;
 export const IdentityServiceService = {
   authenticateUser: {
@@ -1366,6 +2245,60 @@ export const IdentityServiceService = {
       Buffer.from(RevokeApiKeyResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): RevokeApiKeyResponse => RevokeApiKeyResponse.decode(value),
   },
+  /**
+   * OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+   * OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+   */
+  registerOAuthClient: {
+    path: "/xstockstrat.identity.v1.IdentityService/RegisterOAuthClient" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RegisterOAuthClientRequest): Buffer =>
+      Buffer.from(RegisterOAuthClientRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RegisterOAuthClientRequest => RegisterOAuthClientRequest.decode(value),
+    responseSerialize: (value: OAuthClient): Buffer => Buffer.from(OAuthClient.encode(value).finish()),
+    responseDeserialize: (value: Buffer): OAuthClient => OAuthClient.decode(value),
+  },
+  getOAuthClient: {
+    path: "/xstockstrat.identity.v1.IdentityService/GetOAuthClient" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetOAuthClientRequest): Buffer =>
+      Buffer.from(GetOAuthClientRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetOAuthClientRequest => GetOAuthClientRequest.decode(value),
+    responseSerialize: (value: OAuthClient): Buffer => Buffer.from(OAuthClient.encode(value).finish()),
+    responseDeserialize: (value: Buffer): OAuthClient => OAuthClient.decode(value),
+  },
+  issueAuthCode: {
+    path: "/xstockstrat.identity.v1.IdentityService/IssueAuthCode" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: IssueAuthCodeRequest): Buffer => Buffer.from(IssueAuthCodeRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): IssueAuthCodeRequest => IssueAuthCodeRequest.decode(value),
+    responseSerialize: (value: IssueAuthCodeResponse): Buffer =>
+      Buffer.from(IssueAuthCodeResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): IssueAuthCodeResponse => IssueAuthCodeResponse.decode(value),
+  },
+  exchangeAuthCode: {
+    path: "/xstockstrat.identity.v1.IdentityService/ExchangeAuthCode" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ExchangeAuthCodeRequest): Buffer =>
+      Buffer.from(ExchangeAuthCodeRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ExchangeAuthCodeRequest => ExchangeAuthCodeRequest.decode(value),
+    responseSerialize: (value: OAuthTokenResponse): Buffer => Buffer.from(OAuthTokenResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): OAuthTokenResponse => OAuthTokenResponse.decode(value),
+  },
+  refreshOAuthToken: {
+    path: "/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RefreshOAuthTokenRequest): Buffer =>
+      Buffer.from(RefreshOAuthTokenRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RefreshOAuthTokenRequest => RefreshOAuthTokenRequest.decode(value),
+    responseSerialize: (value: OAuthTokenResponse): Buffer => Buffer.from(OAuthTokenResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): OAuthTokenResponse => OAuthTokenResponse.decode(value),
+  },
 } as const;
 
 export interface IdentityServiceServer extends UntypedServiceImplementation {
@@ -1377,6 +2310,15 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
   validateApiKey: handleUnaryCall<ValidateApiKeyRequest, TokenClaims>;
   listApiKeys: handleUnaryCall<ListApiKeysRequest, ListApiKeysResponse>;
   revokeApiKey: handleUnaryCall<RevokeApiKeyRequest, RevokeApiKeyResponse>;
+  /**
+   * OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+   * OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+   */
+  registerOAuthClient: handleUnaryCall<RegisterOAuthClientRequest, OAuthClient>;
+  getOAuthClient: handleUnaryCall<GetOAuthClientRequest, OAuthClient>;
+  issueAuthCode: handleUnaryCall<IssueAuthCodeRequest, IssueAuthCodeResponse>;
+  exchangeAuthCode: handleUnaryCall<ExchangeAuthCodeRequest, OAuthTokenResponse>;
+  refreshOAuthToken: handleUnaryCall<RefreshOAuthTokenRequest, OAuthTokenResponse>;
 }
 
 export interface IdentityServiceClient extends Client {
@@ -1500,6 +2442,85 @@ export interface IdentityServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: RevokeApiKeyResponse) => void,
   ): ClientUnaryCall;
+  /**
+   * OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+   * OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+   */
+  registerOAuthClient(
+    request: RegisterOAuthClientRequest,
+    callback: (error: ServiceError | null, response: OAuthClient) => void,
+  ): ClientUnaryCall;
+  registerOAuthClient(
+    request: RegisterOAuthClientRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: OAuthClient) => void,
+  ): ClientUnaryCall;
+  registerOAuthClient(
+    request: RegisterOAuthClientRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: OAuthClient) => void,
+  ): ClientUnaryCall;
+  getOAuthClient(
+    request: GetOAuthClientRequest,
+    callback: (error: ServiceError | null, response: OAuthClient) => void,
+  ): ClientUnaryCall;
+  getOAuthClient(
+    request: GetOAuthClientRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: OAuthClient) => void,
+  ): ClientUnaryCall;
+  getOAuthClient(
+    request: GetOAuthClientRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: OAuthClient) => void,
+  ): ClientUnaryCall;
+  issueAuthCode(
+    request: IssueAuthCodeRequest,
+    callback: (error: ServiceError | null, response: IssueAuthCodeResponse) => void,
+  ): ClientUnaryCall;
+  issueAuthCode(
+    request: IssueAuthCodeRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: IssueAuthCodeResponse) => void,
+  ): ClientUnaryCall;
+  issueAuthCode(
+    request: IssueAuthCodeRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: IssueAuthCodeResponse) => void,
+  ): ClientUnaryCall;
+  exchangeAuthCode(
+    request: ExchangeAuthCodeRequest,
+    callback: (error: ServiceError | null, response: OAuthTokenResponse) => void,
+  ): ClientUnaryCall;
+  exchangeAuthCode(
+    request: ExchangeAuthCodeRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: OAuthTokenResponse) => void,
+  ): ClientUnaryCall;
+  exchangeAuthCode(
+    request: ExchangeAuthCodeRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: OAuthTokenResponse) => void,
+  ): ClientUnaryCall;
+  refreshOAuthToken(
+    request: RefreshOAuthTokenRequest,
+    callback: (error: ServiceError | null, response: OAuthTokenResponse) => void,
+  ): ClientUnaryCall;
+  refreshOAuthToken(
+    request: RefreshOAuthTokenRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: OAuthTokenResponse) => void,
+  ): ClientUnaryCall;
+  refreshOAuthToken(
+    request: RefreshOAuthTokenRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: OAuthTokenResponse) => void,
+  ): ClientUnaryCall;
 }
 
 export const IdentityServiceClient = makeGenericClientConstructor(
@@ -1543,6 +2564,17 @@ function fromJsonTimestamp(o: any): Date {
   } else {
     return fromTimestamp(Timestamp.fromJSON(o));
   }
+}
+
+function longToNumber(int64: { toString(): string }): number {
+  const num = globalThis.Number(int64.toString());
+  if (num > globalThis.Number.MAX_SAFE_INTEGER) {
+    throw new globalThis.Error("Value is larger than Number.MAX_SAFE_INTEGER");
+  }
+  if (num < globalThis.Number.MIN_SAFE_INTEGER) {
+    throw new globalThis.Error("Value is smaller than Number.MIN_SAFE_INTEGER");
+  }
+  return num;
 }
 
 function isSet(value: any): boolean {
