@@ -415,6 +415,60 @@ async def register_oauth_client(redirect_uris: list[str], client_name: str) -> d
     return {"client_id": resp.client_id, "redirect_uris": list(resp.redirect_uris)}
 
 
+async def get_oauth_client(client_id: str) -> dict[str, Any]:
+    """Fetch a registered OAuth client (for exact-redirect validation at /oauth/authorize)."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.GetOAuthClient(
+            identity_pb2.GetOAuthClientRequest(client_id=client_id), metadata=_metadata()
+        )
+    return {"client_id": resp.client_id, "redirect_uris": list(resp.redirect_uris)}
+
+
+async def issue_auth_code(
+    user_id: str, client_id: str, redirect_uri: str, code_challenge: str, resource: str
+) -> str:
+    """Mint a single-use authorization code via identity IssueAuthCode."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.IssueAuthCode(
+            identity_pb2.IssueAuthCodeRequest(
+                user_id=user_id,
+                client_id=client_id,
+                redirect_uri=redirect_uri,
+                code_challenge=code_challenge,
+                resource=resource,
+            ),
+            metadata=_metadata(),
+        )
+    return resp.code
+
+
+async def validate_token(token: str) -> dict[str, Any]:
+    """Validate a session/access JWT via identity ValidateToken; returns the claims dict.
+
+    Used by /oauth/callback to derive a trustworthy user_id from the same-origin session
+    cookie (never from a query param).
+    """
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        claims = await stub.ValidateToken(
+            identity_pb2.ValidateTokenRequest(token=token), metadata=_metadata()
+        )
+    return {
+        "user_id": claims.user_id,
+        "email": claims.email,
+        "roles": list(claims.roles),
+        "aud": claims.aud,
+    }
+
+
 async def set_strategy_live(
     strategy_id: str, live_enabled: bool, api_key: str | None = None
 ) -> dict[str, Any]:

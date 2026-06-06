@@ -63,6 +63,8 @@ def build_sse_app():
         authorization_server_metadata,
         protected_resource_metadata,
     )
+    from app.oauth_server import authorize as oauth_authorize
+    from app.oauth_server import callback as oauth_callback
     from app.oauth_server import register as oauth_register
 
     server = create_server()
@@ -101,6 +103,8 @@ def build_sse_app():
             endpoint=authorization_server_metadata,
         ),
         Route("/oauth/register", endpoint=oauth_register, methods=["POST"]),
+        Route("/oauth/authorize", endpoint=oauth_authorize, methods=["GET"]),
+        Route("/oauth/callback", endpoint=oauth_callback, methods=["GET"]),
     ]
     return Starlette(routes=routes)
 

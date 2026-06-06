@@ -428,7 +428,7 @@ runs the language linter.
 
 ### Step 14 — service: agent `/oauth/authorize` + `/oauth/callback` (FR-B4, FR-B6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/oauth_server.py` — modify

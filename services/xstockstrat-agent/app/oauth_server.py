@@ -13,13 +13,48 @@ Endpoints:
   POST /oauth/token      — authorization_code + refresh_token grants
 """
 
+import base64
+import hashlib
+import hmac
+import json
 import logging
+import os
+from urllib.parse import quote
 
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, RedirectResponse
 
 from app import client
 
 log = logging.getLogger(__name__)
+
+UI_BASE_URL = os.environ.get("UI_BASE_URL", "http://localhost:3000")
+AGENT_PUBLIC_URL = os.environ.get("AGENT_PUBLIC_URL", "http://localhost:9000")
+MCP_AGENT_SECRET = os.environ.get("MCP_AGENT_SECRET", "")
+
+
+def _sign_txn(data: dict) -> str:
+    """Encode + HMAC-sign an authorization-request transaction blob (keeps the agent stateless).
+
+    Format: base64url(json).hex(hmac_sha256(payload)). Signed with MCP_AGENT_SECRET.
+    """
+    payload = base64.urlsafe_b64encode(json.dumps(data, separators=(",", ":")).encode()).decode()
+    sig = hmac.new(MCP_AGENT_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}.{sig}"
+
+
+def _verify_txn(txn: str) -> dict | None:
+    """Verify a `txn` blob's HMAC and return the decoded dict, or None if invalid."""
+    try:
+        payload, sig = txn.rsplit(".", 1)
+    except ValueError:
+        return None
+    expected = hmac.new(MCP_AGENT_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        return None
+    try:
+        return json.loads(base64.urlsafe_b64decode(payload.encode()).decode())
+    except Exception:
+        return None
 
 
 async def register(request):
@@ -57,3 +92,99 @@ async def register(request):
     return JSONResponse(
         {"client_id": result["client_id"], "redirect_uris": result["redirect_uris"]}, 201
     )
+
+
+async def authorize(request):
+    """GET /oauth/authorize — validate the request, then delegate login to the UI.
+
+    Enforces response_type=code, PKCE S256, a registered client, and an exact redirect-URI
+    match (no wildcard). On success, 302-redirects to the unified UI login page carrying the
+    agent callback URL, state, and an HMAC-signed `txn` blob so the agent stays stateless.
+    Validation failures return 400 (never redirect to an unvalidated redirect_uri).
+    """
+    p = request.query_params
+    if p.get("response_type") != "code":
+        return JSONResponse({"error": "unsupported_response_type"}, 400)
+    if p.get("code_challenge_method") != "S256":
+        return JSONResponse({"error": "invalid_request", "error_description": "S256 required"}, 400)
+    client_id = p.get("client_id", "")
+    redirect_uri = p.get("redirect_uri", "")
+    code_challenge = p.get("code_challenge", "")
+    state = p.get("state", "")
+    resource = p.get("resource", "")
+    if not client_id or not redirect_uri or not code_challenge:
+        return JSONResponse(
+            {"error": "invalid_request", "error_description": "missing required parameter"}, 400
+        )
+    try:
+        oauth_client = await client.get_oauth_client(client_id)
+    except Exception:
+        return JSONResponse({"error": "invalid_client"}, 400)
+    if redirect_uri not in oauth_client["redirect_uris"]:
+        return JSONResponse(
+            {"error": "invalid_request", "error_description": "redirect_uri mismatch"}, 400
+        )
+
+    txn = _sign_txn(
+        {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": code_challenge,
+            "resource": resource,
+            "state": state,
+        }
+    )
+    agent_cb = f"{AGENT_PUBLIC_URL}/oauth/callback"
+    login_url = (
+        f"{UI_BASE_URL}/auth/oauth-login"
+        f"?agent_cb={quote(agent_cb, safe='')}"
+        f"&txn={quote(txn, safe='')}"
+        f"&state={quote(state, safe='')}"
+    )
+    return RedirectResponse(login_url, status_code=302)
+
+
+async def callback(request):
+    """GET /oauth/callback — derive the user from the same-origin session cookie (never a query
+    param), then mint an authorization code and redirect back to the client.
+    """
+    txn = request.query_params.get("txn", "")
+    state = request.query_params.get("state", "")
+    data = _verify_txn(txn)
+    if data is None or data.get("state") != state:
+        return JSONResponse({"error": "invalid_request", "error_description": "bad txn"}, 400)
+
+    # Authentication rides along as the same-origin httpOnly access_token cookie (the agent never
+    # trusts a query-param user id). If absent, send the browser back to the UI to log in.
+    access_token = request.cookies.get("access_token")
+    login_url = (
+        f"{UI_BASE_URL}/auth/oauth-login"
+        f"?agent_cb={quote(AGENT_PUBLIC_URL + '/oauth/callback', safe='')}"
+        f"&txn={quote(txn, safe='')}"
+        f"&state={quote(state, safe='')}"
+    )
+    if not access_token:
+        return RedirectResponse(login_url, status_code=302)
+    try:
+        claims = await client.validate_token(access_token)
+    except Exception:
+        return RedirectResponse(login_url, status_code=302)
+    user_id = claims.get("user_id")
+    if not user_id:
+        return RedirectResponse(login_url, status_code=302)
+
+    try:
+        code = await client.issue_auth_code(
+            user_id,
+            data["client_id"],
+            data["redirect_uri"],
+            data["code_challenge"],
+            data.get("resource", ""),
+        )
+    except Exception as e:
+        log.error("issue_auth_code failed: %s", e)
+        return JSONResponse({"error": "server_error"}, 500)
+
+    sep = "&" if "?" in data["redirect_uri"] else "?"
+    target = f"{data['redirect_uri']}{sep}code={quote(code, safe='')}&state={quote(state, safe='')}"
+    return RedirectResponse(target, status_code=302)

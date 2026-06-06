@@ -396,3 +396,14 @@
   config gate is added in Step 20 per spec.)
 - Files modified: app/oauth_server.py (new), app/client.py, app/main.py
 - Deviations: none
+
+### Step 14 — agent /oauth/authorize + /oauth/callback (FR-B4, FR-B6) [done]
+- client.py: added get_oauth_client, issue_auth_code, validate_token. oauth_server.py: HMAC-signed
+  txn helpers (_sign_txn/_verify_txn keyed on MCP_AGENT_SECRET); /oauth/authorize enforces
+  response_type=code + S256 + registered client + exact redirect match, then 302s to
+  {UI_BASE_URL}/auth/oauth-login with agent_cb+txn+state; /oauth/callback verifies txn HMAC + state,
+  reads the same-origin access_token cookie, validates via ValidateToken → user_id (re-redirects to
+  login if absent/invalid), mints the code and 302s to the client redirect with code+state. No
+  user id ever trusted from a query param. Registered both GET routes.
+- Files modified: app/oauth_server.py, app/client.py, app/main.py
+- Deviations: none
