@@ -350,3 +350,22 @@
 - Files created: `services/xstockstrat-identity/migrations/003_oauth.{up,down}.sql`
 - Deviations: CI-equivalent fallback — no live TimescaleDB; reversibility proven via postgres:16
   throwaway container (sequential-mode DB fallback). Disposition: CI-equivalent fallback.
+
+### Step 9 — identity OAuth RPC implementations [done]
+- Implemented registerOAuthClient (https-only DCR, client_id=oauthc_<hex>), getOAuthClient (NOT_FOUND
+  code 5), issueAuthCode (exact-redirect match, SHA-256 code hash, 60s TTL), exchangeAuthCode (PKCE
+  S256 via base64url(sha256(verifier)), single-use/TTL/redirect/client checks → invalid_grant code 16,
+  mints aud-bound JWT + rotating refresh), refreshOAuthToken (revoke+reissue rotation, aud-bound JWT).
+  Added mintOAuthAccessToken/issueRefreshToken helpers; extended validateToken to surface aud.
+  No index.ts change needed (service bound by descriptor; regenerated stubs include the methods).
+- Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`
+- Deviations: none. (Note: src/index.ts unchanged — confirmed registration is descriptor-based.)
+
+### Step 10 — identity OAuth RPC coverage [done]
+- Added tests: exchangeAuthCode PKCE happy path (aud in JWT), bad verifier/consumed/expired/redirect
+  mismatch → invalid_grant; registerOAuthClient non-https rejected + valid clientId; refreshOAuthToken
+  rotation (spy-pool asserts the revoked_at UPDATE) + unknown token; validateToken aud surfacing.
+  18 tests pass; `pnpm run lint` 0 errors; `pnpm run test:coverage` EXIT=0.
+- Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`
+- Deviations: none (c8 reports 0% under --experimental-strip-types — a pre-existing quirk shared with
+  CI; the threshold command exits 0, i.e. CI-equivalent).

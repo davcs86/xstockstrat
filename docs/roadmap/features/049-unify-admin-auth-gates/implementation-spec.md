@@ -283,7 +283,7 @@ runs the language linter.
 
 ### Step 9 — service: identity OAuth RPC implementations (FR-B3/B6/B7/B7b/B8 backend)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify
@@ -318,7 +318,7 @@ runs the language linter.
 
 ### Step 10 — test: identity OAuth RPC coverage (AC-B2/B3/B4/B5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
