@@ -27,12 +27,7 @@ export function OrderBook({ mode }: { mode: TradingMode }) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Orders</CardTitle>
-          <Badge variant={mode === 'paper' ? 'paper' : 'live'}>
-            {mode === 'paper' ? 'PAPER' : 'LIVE'}
-          </Badge>
-        </div>
+        <CardTitle>Orders</CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
@@ -116,12 +111,7 @@ export function PortfolioSummary({ mode }: { mode: TradingMode }) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Portfolio</CardTitle>
-          <Badge variant={mode === 'paper' ? 'paper' : 'live'}>
-            {mode === 'paper' ? 'PAPER' : 'LIVE'}
-          </Badge>
-        </div>
+        <CardTitle>Portfolio</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">

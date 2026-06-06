@@ -4,6 +4,8 @@
 
 Python gRPC service for strategy backtesting, scoring, and report generation. Reads historical market data from xstockstrat-marketdata and computed indicators from xstockstrat-indicators. Optionally fetches newsletter signals from xstockstrat-ingest for signal-weighted strategies. Writes backtest results to xstockstrat-ledger.
 
+Beyond the gRPC server, the service runs an **asyncio live evaluation loop** (`app/engine/live_loop.py`, feature 048) that continuously evaluates `live_enabled` strategies via the shared evaluator (`app/services/evaluator.py`) and emits alerts to xstockstrat-notify on entry/exit transitions — guaranteeing backtest/live parity. The loop never places orders.
+
 As of Phase 3, RunBacktest executes a real SMA crossover engine (no more synthetic stubs) that:
 
 1. Fetches OHLCV bars via `MarketDataService.GetBars`
@@ -68,6 +70,9 @@ Namespace: `analysis`
 | `analysis.scoring.drawdown_weight` | float | `0.3` | Weight of max drawdown |
 | `analysis.scoring.win_rate_weight` | float | `0.3` | Weight of win rate |
 | `analysis.signals.source_weights` | string (JSON) | `"{}"` | JSON object mapping source name to reliability weight in [0.0, 1.0]. Empty → all sources use 1.0 (neutral). Values outside [0.0, 1.0] are clamped at read time. |
+| `analysis.engine.eval_interval_seconds` | int | `60` | Live evaluation polling cadence in seconds |
+| `analysis.engine.max_strategies_per_cycle` | int | `50` | Max (strategy × symbol) pairs evaluated per cycle |
+| `analysis.engine.alert_throttle_seconds` | int | `300` | Min seconds between alerts per (strategy, symbol) pair |
 
 ## Ledger Events Emitted
 
@@ -76,6 +81,8 @@ Namespace: `analysis`
 | `analysis.backtest.started` | Backtest begins |
 | `analysis.backtest.completed` | Backtest done |
 | `analysis.strategy.scored` | Strategy scored |
+| `analysis.strategy.triggered` | Live loop detected an entry or exit transition |
+| `analysis.strategy.live_toggled` | `SetStrategyLive` enabled/disabled live evaluation |
 
 ## Running Tests
 

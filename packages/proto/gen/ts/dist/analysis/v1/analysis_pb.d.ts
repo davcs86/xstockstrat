@@ -1,4 +1,4 @@
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse, TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
@@ -30,6 +30,18 @@ export type RunBacktestRequest = Message<"xstockstrat.analysis.v1.RunBacktestReq
      * @generated from field: google.protobuf.Struct strategy_params = 5;
      */
     strategyParams?: JsonObject | undefined;
+    /**
+     * field 6 — resolve definition from DB; legacy strategy_params (field 5) remains supported
+     *
+     * @generated from field: string strategy_id_ref = 6;
+     */
+    strategyIdRef: string;
+    /**
+     * field 7 — inline definition; takes precedence over strategy_id_ref if both supplied
+     *
+     * @generated from field: xstockstrat.analysis.v1.StrategyDefinition inline_definition = 7;
+     */
+    inlineDefinition?: StrategyDefinition | undefined;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.RunBacktestRequest.
@@ -259,6 +271,238 @@ export type GetStrategyReportRequest = Message<"xstockstrat.analysis.v1.GetStrat
  */
 export declare const GetStrategyReportRequestSchema: GenMessage<GetStrategyReportRequest>;
 /**
+ * @generated from message xstockstrat.analysis.v1.StrategyComponent
+ */
+export type StrategyComponent = Message<"xstockstrat.analysis.v1.StrategyComponent"> & {
+    /**
+     * @generated from field: string ref_name = 1;
+     */
+    refName: string;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.ComponentKind kind = 2;
+     */
+    kind: ComponentKind;
+    /**
+     * used when kind == COMPONENT_KIND_BUILTIN_INDICATOR
+     *
+     * @generated from field: string indicator = 3;
+     */
+    indicator: string;
+    /**
+     * used when kind == COMPONENT_KIND_CUSTOM_FORMULA
+     *
+     * @generated from field: string formula_id = 4;
+     */
+    formulaId: string;
+    /**
+     * @generated from field: map<string, double> params = 5;
+     */
+    params: {
+        [key: string]: number;
+    };
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.StrategyComponent.
+ * Use `create(StrategyComponentSchema)` to create a new message.
+ */
+export declare const StrategyComponentSchema: GenMessage<StrategyComponent>;
+/**
+ * @generated from message xstockstrat.analysis.v1.StrategyDefinition
+ */
+export type StrategyDefinition = Message<"xstockstrat.analysis.v1.StrategyDefinition"> & {
+    /**
+     * @generated from field: string strategy_id = 1;
+     */
+    strategyId: string;
+    /**
+     * @generated from field: string display_name = 2;
+     */
+    displayName: string;
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.StrategyComponent components = 3;
+     */
+    components: StrategyComponent[];
+    /**
+     * JSON-encoded condition tree
+     *
+     * @generated from field: string entry_rule = 4;
+     */
+    entryRule: string;
+    /**
+     * JSON-encoded condition tree
+     *
+     * @generated from field: string exit_rule = 5;
+     */
+    exitRule: string;
+    /**
+     * @generated from field: google.protobuf.Struct signal_params = 6;
+     */
+    signalParams?: JsonObject | undefined;
+    /**
+     * @generated from field: bool active = 7;
+     */
+    active: boolean;
+    /**
+     * @generated from field: bool live_enabled = 8;
+     */
+    liveEnabled: boolean;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.StrategyDefinition.
+ * Use `create(StrategyDefinitionSchema)` to create a new message.
+ */
+export declare const StrategyDefinitionSchema: GenMessage<StrategyDefinition>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ManageStrategyRequest
+ */
+export type ManageStrategyRequest = Message<"xstockstrat.analysis.v1.ManageStrategyRequest"> & {
+    /**
+     * @generated from field: xstockstrat.analysis.v1.StrategyOperation operation = 1;
+     */
+    operation: StrategyOperation;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.StrategyDefinition definition = 2;
+     */
+    definition?: StrategyDefinition | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ManageStrategyRequest.
+ * Use `create(ManageStrategyRequestSchema)` to create a new message.
+ */
+export declare const ManageStrategyRequestSchema: GenMessage<ManageStrategyRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.GetStrategyRequest
+ */
+export type GetStrategyRequest = Message<"xstockstrat.analysis.v1.GetStrategyRequest"> & {
+    /**
+     * @generated from field: string strategy_id = 1;
+     */
+    strategyId: string;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.GetStrategyRequest.
+ * Use `create(GetStrategyRequestSchema)` to create a new message.
+ */
+export declare const GetStrategyRequestSchema: GenMessage<GetStrategyRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
+ */
+export type ListStrategyDefinitionsRequest = Message<"xstockstrat.analysis.v1.ListStrategyDefinitionsRequest"> & {
+    /**
+     * @generated from field: bool include_inactive = 1;
+     */
+    includeInactive: boolean;
+    /**
+     * @generated from field: int32 page_size = 2;
+     */
+    pageSize: number;
+    /**
+     * @generated from field: int32 page_offset = 3;
+     */
+    pageOffset: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ListStrategyDefinitionsRequest.
+ * Use `create(ListStrategyDefinitionsRequestSchema)` to create a new message.
+ */
+export declare const ListStrategyDefinitionsRequestSchema: GenMessage<ListStrategyDefinitionsRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
+ */
+export type ListStrategyDefinitionsResponse = Message<"xstockstrat.analysis.v1.ListStrategyDefinitionsResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.StrategyDefinition definitions = 1;
+     */
+    definitions: StrategyDefinition[];
+    /**
+     * @generated from field: int32 total_count = 2;
+     */
+    totalCount: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ListStrategyDefinitionsResponse.
+ * Use `create(ListStrategyDefinitionsResponseSchema)` to create a new message.
+ */
+export declare const ListStrategyDefinitionsResponseSchema: GenMessage<ListStrategyDefinitionsResponse>;
+/**
+ * @generated from message xstockstrat.analysis.v1.SetStrategyLiveRequest
+ */
+export type SetStrategyLiveRequest = Message<"xstockstrat.analysis.v1.SetStrategyLiveRequest"> & {
+    /**
+     * @generated from field: string strategy_id = 1;
+     */
+    strategyId: string;
+    /**
+     * @generated from field: bool live_enabled = 2;
+     */
+    liveEnabled: boolean;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SetStrategyLiveRequest.
+ * Use `create(SetStrategyLiveRequestSchema)` to create a new message.
+ */
+export declare const SetStrategyLiveRequestSchema: GenMessage<SetStrategyLiveRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.SetStrategyLiveResponse
+ */
+export type SetStrategyLiveResponse = Message<"xstockstrat.analysis.v1.SetStrategyLiveResponse"> & {
+    /**
+     * @generated from field: xstockstrat.analysis.v1.StrategyDefinition definition = 1;
+     */
+    definition?: StrategyDefinition | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SetStrategyLiveResponse.
+ * Use `create(SetStrategyLiveResponseSchema)` to create a new message.
+ */
+export declare const SetStrategyLiveResponseSchema: GenMessage<SetStrategyLiveResponse>;
+/**
+ * @generated from enum xstockstrat.analysis.v1.ComponentKind
+ */
+export declare enum ComponentKind {
+    /**
+     * @generated from enum value: COMPONENT_KIND_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: COMPONENT_KIND_BUILTIN_INDICATOR = 1;
+     */
+    BUILTIN_INDICATOR = 1,
+    /**
+     * @generated from enum value: COMPONENT_KIND_CUSTOM_FORMULA = 2;
+     */
+    CUSTOM_FORMULA = 2
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.ComponentKind.
+ */
+export declare const ComponentKindSchema: GenEnum<ComponentKind>;
+/**
+ * @generated from enum xstockstrat.analysis.v1.StrategyOperation
+ */
+export declare enum StrategyOperation {
+    /**
+     * @generated from enum value: STRATEGY_OPERATION_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: STRATEGY_OPERATION_REGISTER = 1;
+     */
+    REGISTER = 1,
+    /**
+     * @generated from enum value: STRATEGY_OPERATION_UPDATE = 2;
+     */
+    UPDATE = 2,
+    /**
+     * @generated from enum value: STRATEGY_OPERATION_DEACTIVATE = 3;
+     */
+    DEACTIVATE = 3
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.StrategyOperation.
+ */
+export declare const StrategyOperationSchema: GenEnum<StrategyOperation>;
+/**
  * @generated from service xstockstrat.analysis.v1.AnalysisService
  */
 export declare const AnalysisService: GenService<{
@@ -293,5 +537,37 @@ export declare const AnalysisService: GenService<{
         methodKind: "unary";
         input: typeof GetStrategyReportRequestSchema;
         output: typeof StrategyReportSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ManageStrategy
+     */
+    manageStrategy: {
+        methodKind: "unary";
+        input: typeof ManageStrategyRequestSchema;
+        output: typeof StrategyDefinitionSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetStrategy
+     */
+    getStrategy: {
+        methodKind: "unary";
+        input: typeof GetStrategyRequestSchema;
+        output: typeof StrategyDefinitionSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions
+     */
+    listStrategyDefinitions: {
+        methodKind: "unary";
+        input: typeof ListStrategyDefinitionsRequestSchema;
+        output: typeof ListStrategyDefinitionsResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.SetStrategyLive
+     */
+    setStrategyLive: {
+        methodKind: "unary";
+        input: typeof SetStrategyLiveRequestSchema;
+        output: typeof SetStrategyLiveResponseSchema;
     };
 }>;
