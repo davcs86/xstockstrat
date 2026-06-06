@@ -60,3 +60,18 @@
   ownership + admin override + close RegisterFormula gap; OQ-2 verify ingress header-strip; OQ-3 defer
   shared helper, duplicate now).
 - Status stays `draft`. Next action unchanged: `/sdd-review unify-admin-auth-gates product-spec`.
+
+## Session 2026-06-06 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Criteria: all PASS (Problem Statement, FR-1..7, Out of Scope/Non-Goals, Affected Services exact-match
+  registry, Proto/Config/DB all declared none, AC-1..6, Open Questions no unchecked checkboxes).
+- Trading-domain checks: skipped (non-trading feature).
+- Warnings: 1 — `018-agent-mcp-oauth` (implementation-ready) also modifies `xstockstrat-agent`;
+  coordinate merge order. Low collision risk (018 = SSE/OAuth auth layer `app/auth.py` + `agent.oauth.*`
+  config keys; 049 = tool layer `manage_signal_source` + `client.py`; different files, no shared key).
+- Advisory: OQ-1 (formula author-ownership vs admin-scope) is a genuine pending decision with an owner
+  (Platform Lead + Security) and a recommendation; settle it before/at /sdd-spec. FR-4 accommodates
+  either outcome, so it does not block product-spec approval.
+- Note: 041-upgrade-nextjs15 touches the UI but 049 expects no UI code change → no real overlap.
+- Next: /sdd-spec unify-admin-auth-gates.
