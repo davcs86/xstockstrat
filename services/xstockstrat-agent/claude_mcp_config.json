@@ -17,13 +17,13 @@
         "MCP_AGENT_SECRET": "<your-mcp-agent-secret-from-.env>"
       }
     },
-    "xstockstrat-sse-nginx": {
-      "_mode": "SSE via nginx (port 80) -- API key passed as ?api_key= query parameter",
-      "url": "http://localhost/agent/sse?api_key=<your-api-key>"
+    "xstockstrat-sse-oauth": {
+      "_mode": "SSE remote MCP with OAuth 2.1 (RECOMMENDED for Claude.ai). The client discovers the auth server via /.well-known, performs RFC 7591 DCR + PKCE login, and connects with an aud-bound JWT. No api_key needed.",
+      "url": "<AGENT_PUBLIC_URL>/sse"
     },
-    "xstockstrat-sse-direct": {
-      "_mode": "SSE direct to agent container -- bypasses nginx; API key as ?api_key= query parameter",
-      "url": "http://localhost:9000/sse?api_key=<your-api-key>"
+    "xstockstrat-sse-apikey-deprecated": {
+      "_mode": "DEPRECATED Desktop-only fallback -- API key in ?api_key= query parameter. OAuth 2.1 forbids credentials in query strings; prefer xstockstrat-sse-oauth. Kept only for clients that cannot perform the OAuth flow.",
+      "url": "<AGENT_PUBLIC_URL>/sse?api_key=<your-api-key>"
     }
   }
 }

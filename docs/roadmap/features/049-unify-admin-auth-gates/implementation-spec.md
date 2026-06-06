@@ -1,6 +1,6 @@
 # Implementation Spec: unify-admin-auth-gates
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-06
 **Feature**: `docs/roadmap/features/049-unify-admin-auth-gates/feature.md`
 **Total Steps**: 22
@@ -58,7 +58,7 @@ runs the language linter.
 
 ### Step 1 — service: ingest `ManageSignalSource` admin-scope gate swap (FR-A1, FR-A3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -89,7 +89,7 @@ runs the language linter.
 
 ### Step 2 — test: ingest gate-swap coverage (AC-A1, AC-A4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify
@@ -111,7 +111,7 @@ runs the language linter.
 
 ### Step 3 — service: indicators formula gate (OQ-A / FR-A4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/handlers/servicer.py` — modify
@@ -139,7 +139,7 @@ runs the language linter.
 
 ### Step 4 — test: indicators formula gate coverage (AC-A3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_formulas.py` — modify
@@ -161,7 +161,7 @@ runs the language linter.
 
 ### Step 5 — service: agent `manage_signal_source` entry validation + scope forward (FR-A2, FR-A5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -190,7 +190,7 @@ runs the language linter.
 
 ### Step 6 — proto: additive identity OAuth RPCs + `TokenClaims.aud`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/identity/v1/identity.proto` — modify
@@ -228,7 +228,7 @@ runs the language linter.
 
 ### Step 7 — proto-gen: regenerate stubs (Go, Python, TS)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/identity/v1/` — modify (generated)
@@ -254,7 +254,7 @@ runs the language linter.
 
 ### Step 8 — migration: identity `003_oauth` (oauth_clients + oauth_auth_codes)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/migrations/003_oauth.up.sql` — create
@@ -283,7 +283,7 @@ runs the language linter.
 
 ### Step 9 — service: identity OAuth RPC implementations (FR-B3/B6/B7/B7b/B8 backend)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify
@@ -318,7 +318,7 @@ runs the language linter.
 
 ### Step 10 — test: identity OAuth RPC coverage (AC-B2/B3/B4/B5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
@@ -343,7 +343,7 @@ runs the language linter.
 
 ### Step 11 — docs: identity OAuth backend + migration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` / `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/CLAUDE.md` — modify
@@ -365,7 +365,7 @@ runs the language linter.
 
 ### Step 12 — service: agent OAuth discovery endpoints + `AGENT_PUBLIC_URL` (FR-B1, FR-B2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/oauth_metadata.py` — create
@@ -399,7 +399,7 @@ runs the language linter.
 
 ### Step 13 — service: agent `/oauth/register` DCR endpoint (FR-B3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/oauth_server.py` — create
@@ -428,7 +428,7 @@ runs the language linter.
 
 ### Step 14 — service: agent `/oauth/authorize` + `/oauth/callback` (FR-B4, FR-B6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/oauth_server.py` — modify
@@ -463,7 +463,7 @@ runs the language linter.
 
 ### Step 15 — service: agent `/oauth/token` endpoint (FR-B7, FR-B7b)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/oauth_server.py` — modify
@@ -494,7 +494,7 @@ runs the language linter.
 
 ### Step 16 — service: agent `/sse` 401+`WWW-Authenticate` + JWT `aud` validation (FR-B0, FR-B8, FR-B10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/auth.py` — modify
@@ -522,7 +522,7 @@ runs the language linter.
 
 ### Step 17 — service: agent stateless multi-instance confirmation (FR-B13)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/oauth_server.py` — modify (review/confirm — no in-memory state)
@@ -546,7 +546,7 @@ runs the language linter.
 
 ### Step 18 — service: UI `/auth/oauth-login` redirect-to-agent-callback (FR-B5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/auth/oauth-login/page.tsx` — modify
@@ -573,7 +573,7 @@ runs the language linter.
 
 ### Step 19 — config: deployment env var `AGENT_PUBLIC_URL`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - (Covered by Step 12 deployment-file edits — see Step 12 `**Files**`.)
@@ -593,7 +593,7 @@ runs the language linter.
 
 ### Step 20 — config: new `agent.oauth.*` config keys (FR-B11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent` / `xstockstrat-config`
 **Files**:
 - `CLAUDE.md` (root) — modify (document keys per config-rollout pre-rollout checklist)
@@ -620,7 +620,7 @@ runs the language linter.
 
 ### Step 21 — test: agent Part A + Part B coverage (AC-A2, AC-B0..B8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -647,7 +647,7 @@ runs the language linter.
 
 ### Step 22 — docs: MCP OAuth 2.1 connect flow + `claude_mcp_config.json` + header-propagation note
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` / `xstockstrat-agent`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
@@ -674,4 +674,20 @@ runs the language linter.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Steps 6–7 — proto codegen toolchain
+**Spec said**: Run `./scripts/buf-gen.sh` (which expects `buf` + the proto-gen Docker container / host plugins) and `buf lint && buf breaking`.
+**Actual**: The execution host had no `buf`, no proto-gen container pulled, and no `grpcio-tools`. Installed the exact CI `proto-freshness`/`proto-lint`-pinned toolchain on the host — `buf` 1.69.0, `protoc-gen-go` v1.36.11, `protoc-gen-go-grpc` v1.6.2, `protoc-gen-connect-go` v1.19.2, `grpcio-tools` 1.80.0, `pnpm` 9.15.0 (Node 22) — then ran the unmodified `scripts/buf-gen.sh`. `buf breaking` was run against `origin/main-dev` (the feature branch `feature/unify-admin-auth-gates` does not exist on origin; matches the spec's documented fallback). Confirmed `git diff` for `packages/proto/gen/` is confined to `identity/v1` and the re-run is idempotent (mirrors CI's stale-stub check).
+**Reason**: Sequential-mode CI-equivalent verification fallback (REPO CONVENTIONS → "Proto codegen container blocked").
+**Disposition**: CI-equivalent fallback.
+
+### Deviation: Step 12 — pre-existing agent ruff debt (user-approved scope expansion)
+**Spec said**: Step 12 scope is the agent OAuth discovery endpoints + `AGENT_PUBLIC_URL`; the lint gate is Step 21's `ruff check . && ruff format --check .`.
+**Actual**: The current `ruff` (0.15.8) flags pre-existing violations on `origin/main-dev` in the agent (`UP045` Optional→`X | None` across `app/tools.py`, one `E501` long docstring line, `F841` unused `result` in `tests/test_client.py`) that an older CI `ruff` did not. Because CI installs the latest `ruff` and the agent lint job is triggered by this feature's agent changes, those findings would turn the job red regardless of feature 049. With explicit user approval (sequential blocker → "fix now / expand scope"), applied `ruff check --fix` (UP045) + `ruff format`, wrapped the long docstring line, and dropped the unused test assignment. Behavior-preserving (type-annotation syntax, whitespace, dead-assignment removal).
+**Reason**: Required for the agent lint gate (and CI) to pass on this PR; the debt is unrelated to feature 049 but unavoidable once the agent is touched.
+**Disposition**: accepted limitation cleanup (user-approved).
+
+### Deviation: Step 21 — `/sse` route registration (Route → Mount)
+**Spec said**: (Step 12) register the SSE handler with `Route("/sse", endpoint=handle_sse)` (carried over verbatim from the pre-049 code).
+**Actual**: `handle_sse` is a raw-ASGI handler `(scope, receive, send)`, but Starlette's `Route` wraps a plain async function as a request-response endpoint and calls it as `f(request)` — raising `TypeError: missing 2 required positional arguments`. Step 21's first TestClient hit on `/sse` exposed this latent defect. Changed the registration to `Mount("/sse", app=handle_sse)` (the same raw-ASGI mechanism already used for `/messages`), which invokes the handler with `(scope, receive, send)` correctly. Handler body unchanged.
+**Reason**: The endpoint must actually function (and be testable) for the 401/`WWW-Authenticate` and credential-accepted paths; the pre-existing `Route` form was non-functional under the current Starlette.
+**Disposition**: bug fix (latent pre-049 defect surfaced by the new tests).

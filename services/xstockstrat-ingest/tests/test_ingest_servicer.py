@@ -25,8 +25,7 @@ def make_servicer() -> IngestServicer:
     cfg = MagicMock()
     marketdata_ch = MagicMock()
     ledger_ch = MagicMock()
-    identity_ch = MagicMock()
-    return IngestServicer(cfg, marketdata_ch, ledger_ch, db_pool=None, identity_channel=identity_ch)
+    return IngestServicer(cfg, marketdata_ch, ledger_ch, db_pool=None)
 
 
 # ---------------------------------------------------------------------------
@@ -615,12 +614,30 @@ class TestIngestSignalRegistryValidation:
 
 class TestManageSignalSource:
     @pytest.mark.asyncio
-    async def test_unauthenticated_without_bearer(self):
+    async def test_permission_denied_without_admin_scope(self):
         svc = make_servicer()
         svc._db = MagicMock()
-        # _validate_admin_token will return False when identity stub is mocked
-        svc._identity = MagicMock()
-        svc._identity.ValidateApiKey = AsyncMock(side_effect=Exception("unauthorized"))
+
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(slug="s", source_type="simple_email"),
+            operation="register",
+        )
+        context = MagicMock()
+        # x-access-scope without the ADMIN bit (0x04)
+        context.invocation_metadata = MagicMock(return_value=[("x-access-scope", "1")])
+        context.abort = AsyncMock(side_effect=Exception("aborted"))
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageSignalSource(req, context)
+
+        import grpc
+
+        assert context.abort.call_args[0][0] == grpc.StatusCode.PERMISSION_DENIED
+
+    @pytest.mark.asyncio
+    async def test_permission_denied_without_scope_header(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
 
         req = ingest_pb2.ManageSignalSourceRequest(
             source=ingest_pb2.SignalSource(slug="s", source_type="simple_email"),
@@ -635,10 +652,10 @@ class TestManageSignalSource:
 
         import grpc
 
-        assert context.abort.call_args[0][0] == grpc.StatusCode.UNAUTHENTICATED
+        assert context.abort.call_args[0][0] == grpc.StatusCode.PERMISSION_DENIED
 
     @pytest.mark.asyncio
-    async def test_register_succeeds_with_admin_token(self):
+    async def test_register_succeeds_with_admin_scope(self):
         svc = make_servicer()
         svc._db = MagicMock()
         svc._db.fetchrow = AsyncMock(
@@ -651,12 +668,6 @@ class TestManageSignalSource:
                 "active": True,
                 "config_json": None,
             }
-        )
-        from gen.identity.v1 import identity_pb2
-
-        svc._identity = MagicMock()
-        svc._identity.ValidateApiKey = AsyncMock(
-            return_value=identity_pb2.TokenClaims(roles=["admin"])
         )
 
         from google.protobuf.struct_pb2 import Struct
@@ -675,7 +686,8 @@ class TestManageSignalSource:
             operation="register",
         )
         context = MagicMock()
-        context.invocation_metadata = MagicMock(return_value=[("authorization", "Bearer test-key")])
+        # x-access-scope with the ADMIN bit set (7 = 0b111)
+        context.invocation_metadata = MagicMock(return_value=[("x-access-scope", "7")])
 
         resp = await svc.ManageSignalSource(req, context)
         assert resp.source.slug == "uw"
@@ -685,19 +697,13 @@ class TestManageSignalSource:
         svc = make_servicer()
         svc._db = MagicMock()
         svc._db.fetchrow = AsyncMock(return_value=None)
-        from gen.identity.v1 import identity_pb2
-
-        svc._identity = MagicMock()
-        svc._identity.ValidateApiKey = AsyncMock(
-            return_value=identity_pb2.TokenClaims(roles=["admin"])
-        )
 
         req = ingest_pb2.ManageSignalSourceRequest(
             source=ingest_pb2.SignalSource(slug="missing"),
             operation="deactivate",
         )
         context = MagicMock()
-        context.invocation_metadata = MagicMock(return_value=[("authorization", "Bearer test-key")])
+        context.invocation_metadata = MagicMock(return_value=[("x-access-scope", "7")])
         context.abort = AsyncMock(side_effect=Exception("aborted"))
 
         with pytest.raises(Exception, match="aborted"):

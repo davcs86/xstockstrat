@@ -23,6 +23,21 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             FormulasRepository(db_pool) if db_pool is not None else None
         )
 
+    @staticmethod
+    def _has_admin_scope(context) -> bool:
+        """Role check on the propagated x-access-scope ADMIN bit (0x04).
+
+        Formula management keeps author-ownership as its primary authorization model;
+        this helper adds an admin-scope override (feature 049 Part A, OQ-A) for
+        Update/Delete and mirrors the analysis/ingest servicers' gate.
+        """
+        metadata = dict(context.invocation_metadata())
+        try:
+            access_scope = int(metadata.get("x-access-scope", "0"))
+        except (TypeError, ValueError):
+            access_scope = 0
+        return bool(access_scope & 0x04)
+
     async def ComputeIndicator(self, request, context):
         try:
             results = indicators_engine.compute(
@@ -141,7 +156,20 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         now = Timestamp()
         now.GetCurrentTime()
 
-        author = request.author if request.author else "dev-user"
+        # Require an authenticated author: explicit request.author wins, else fall back
+        # to the propagated x-user-id. No silent default (feature 049 Part A, OQ-A).
+        if request.author:
+            author = request.author
+        else:
+            metadata = dict(context.invocation_metadata())
+            x_user_id = metadata.get("x-user-id", "")
+            if not x_user_id:
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    "authenticated user required to register a formula",
+                )
+                return
+            author = x_user_id
         formula = indicators_pb2.FormulaDefinition(
             formula_id=formula_id,
             name=request.name,
@@ -208,7 +236,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
             )
             return
-        if row["author"] != request.user_id:
+        if row["author"] != request.user_id and not self._has_admin_scope(context):
             await context.abort(
                 grpc.StatusCode.PERMISSION_DENIED, "user_id does not match formula author"
             )
@@ -233,7 +261,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
             )
             return
-        if row["author"] != request.user_id:
+        if row["author"] != request.user_id and not self._has_admin_scope(context):
             await context.abort(
                 grpc.StatusCode.PERMISSION_DENIED, "user_id does not match formula author"
             )

@@ -270,3 +270,220 @@
   full round-trip only prod-testable; unit tests mock stubs. (2) cookie proves *authentication*; `state` +
   signed `txn` still bind the *authorization request* (consent/CSRF) — Security to confirm at execute.
 - Status unchanged: `implementation-ready`.
+
+## Session 2026-06-06 — sdd-execute (sequential, all 22 steps)
+
+**Setup decisions (user-confirmed):**
+- Branch model: all work on the harness branch `claude/sdd-execute-049-sequential-076Qx`; **single
+  integration PR → `main-dev`** at the end (not the SDD stacked per-step-PR model). Reason: the harness
+  pre-assigned this branch and forbids pushing elsewhere without permission.
+- Scope: execute all 22 steps unattended in one pass.
+- Spec artifacts were stranded on `claude/product-spec-049-ZiIXN` (never synced to main-dev; the dev
+  branch `feature/unify-admin-auth-gates` does not exist on origin). Brought the four feature files into
+  the working branch as the execution baseline.
+- buf-breaking baseline (Step 6): `feature/unify-admin-auth-gates` is absent → fall back to `main-dev`
+  per the spec's own note.
+
+### Step 1 — ingest ManageSignalSource admin-scope gate swap [done]
+- Replaced `_validate_admin_token` (identity ValidateApiKey re-auth) with a static `_has_admin_scope`
+  (x-access-scope & 0x04) mirroring analysis; gate now aborts PERMISSION_DENIED. Removed `_identity`,
+  the `identity_channel` ctor param, the `gen.identity.v1` import, and all identity wiring in main.py.
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/app/main.py`
+- Deviations: none
+
+### Step 2 — ingest gate-swap coverage [done]
+- Rewrote `make_servicer` (dropped `identity_channel`) and the `TestManageSignalSource` suite: admin
+  scope "7" succeeds; scope "1" and missing scope → PERMISSION_DENIED. Removed ValidateApiKey/identity
+  re-auth tests. `ruff` clean; `pytest --cov=app` 67% (≥40).
+- Files modified: `services/xstockstrat-ingest/tests/test_ingest_servicer.py`
+- Deviations: none
+
+### Step 3 — indicators formula gate (OQ-A / FR-A4) [done]
+- Added `_has_admin_scope` (x-access-scope & 0x04) to IndicatorsServicer. RegisterFormula no longer
+  silently defaults author to "dev-user": explicit author wins, else falls back to propagated
+  x-user-id, else aborts INVALID_ARGUMENT. UpdateFormula/DeleteFormula now allow an admin-scope
+  override of the author-ownership check.
+- Files modified: `services/xstockstrat-indicators/app/handlers/servicer.py`
+- Deviations: none
+
+### Step 4 — indicators formula gate coverage (AC-A3) [done]
+- Added TestRegisterFormulaAuthorGate (x-user-id default, explicit author wins, abort without either)
+  and TestFormulaAdminOverride (owner ok; non-owner admin override ok; non-owner no-admin denied; same
+  for delete). `ruff` clean; `pytest --cov=app` 82% (≥50).
+- Files modified: `services/xstockstrat-indicators/tests/test_formulas.py`
+- Deviations: none
+
+### Step 5 — agent manage_signal_source entry validation + scope forward (FR-A2, FR-A5) [done]
+- tools.py manage_signal_source now calls client.validate_admin(admin_api_key) at entry (raises
+  RuntimeError on failure), matching manage_strategy/set_strategy_live. client.py manage_signal_source
+  now appends ("x-access-scope","7") to the metadata so ingest's new scope gate (Step 1) passes.
+  Response shape unchanged (credentials_ref still never echoed).
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/client.py`
+- Deviations: none (coverage verified later by Step 21).
+
+### Step 6 — proto: additive identity OAuth RPCs + TokenClaims.aud [done]
+- Added `aud = 6` to TokenClaims and 5 RPCs (RegisterOAuthClient, GetOAuthClient, IssueAuthCode,
+  ExchangeAuthCode, RefreshOAuthToken) + 8 messages (OAuthClient, RegisterOAuthClientRequest,
+  GetOAuthClientRequest, IssueAuthCodeRequest, IssueAuthCodeResponse, ExchangeAuthCodeRequest,
+  OAuthTokenResponse, RefreshOAuthTokenRequest). All additive.
+- Verification: `buf lint` OK; `buf breaking --against origin/main-dev` confirms non-breaking.
+- Files modified: `packages/proto/identity/v1/identity.proto`
+- Deviations: **CI-equivalent fallback** — host has no `buf`/Docker codegen container; installed the
+  CI-pinned toolchain on the host (buf 1.69.0, protoc-gen-go v1.36.11, protoc-gen-go-grpc v1.6.2,
+  protoc-gen-connect-go v1.19.2, grpcio-tools 1.80.0, pnpm 9.15.0) and ran the standard
+  `scripts/buf-gen.sh`. Disposition: CI-equivalent fallback (see Deviation Log).
+
+### Step 7 — proto-gen: regenerate stubs (Go, Python, TS) [done]
+- Ran `./scripts/buf-gen.sh`; diff confined to `packages/proto/gen/{go,python,ts}/identity/v1/`.
+  New RPCs confirmed in Python + TS stubs. Re-run is idempotent (no further diff) — mirrors the CI
+  proto-freshness stale-stub gate.
+- Files modified: generated stubs under `packages/proto/gen/`
+- Deviations: none beyond the Step 6 toolchain fallback.
+
+### Step 8 — migration: identity 003_oauth (oauth_clients + oauth_auth_codes) [done]
+- Created 003_oauth.up.sql (oauth_clients PK client_id + redirect_uris TEXT[]; oauth_auth_codes PK
+  code=SHA-256 hash, FK client_id/user_id ON DELETE CASCADE, code_challenge, resource, expires_at,
+  consumed_at; idx_oauth_codes_client) and 003_oauth.down.sql (drop child then parent). Refresh tokens
+  reuse identity.refresh_tokens (no new table).
+- Verification: applied 000→003 up against a throwaway postgres:16, confirmed both tables in schema
+  `identity`, applied 003 down, confirmed both dropped (reversible).
+- Files created: `services/xstockstrat-identity/migrations/003_oauth.{up,down}.sql`
+- Deviations: CI-equivalent fallback — no live TimescaleDB; reversibility proven via postgres:16
+  throwaway container (sequential-mode DB fallback). Disposition: CI-equivalent fallback.
+
+### Step 9 — identity OAuth RPC implementations [done]
+- Implemented registerOAuthClient (https-only DCR, client_id=oauthc_<hex>), getOAuthClient (NOT_FOUND
+  code 5), issueAuthCode (exact-redirect match, SHA-256 code hash, 60s TTL), exchangeAuthCode (PKCE
+  S256 via base64url(sha256(verifier)), single-use/TTL/redirect/client checks → invalid_grant code 16,
+  mints aud-bound JWT + rotating refresh), refreshOAuthToken (revoke+reissue rotation, aud-bound JWT).
+  Added mintOAuthAccessToken/issueRefreshToken helpers; extended validateToken to surface aud.
+  No index.ts change needed (service bound by descriptor; regenerated stubs include the methods).
+- Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`
+- Deviations: none. (Note: src/index.ts unchanged — confirmed registration is descriptor-based.)
+
+### Step 10 — identity OAuth RPC coverage [done]
+- Added tests: exchangeAuthCode PKCE happy path (aud in JWT), bad verifier/consumed/expired/redirect
+  mismatch → invalid_grant; registerOAuthClient non-https rejected + valid clientId; refreshOAuthToken
+  rotation (spy-pool asserts the revoked_at UPDATE) + unknown token; validateToken aud surfacing.
+  18 tests pass; `pnpm run lint` 0 errors; `pnpm run test:coverage` EXIT=0.
+- Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`
+- Deviations: none (c8 reports 0% under --experimental-strip-types — a pre-existing quirk shared with
+  CI; the threshold command exits 0, i.e. CI-equivalent).
+
+### Step 11 — docs: identity OAuth backend + migration [done]
+- Updated identity CLAUDE.md: eight→thirteen gRPC methods (naming the five OAuth RPCs), added an
+  "OAuth 2.1 backend" subsection (aud-bound JWT, refresh reuse, PKCE/exact-redirect), and a
+  Database/Migrations section documenting 003_oauth + the two tables.
+- Files modified: `services/xstockstrat-identity/CLAUDE.md`
+- Deviations: none
+
+### Step 12 — agent OAuth discovery endpoints + AGENT_PUBLIC_URL (FR-B1/B2) [done]
+- Added AGENT_PUBLIC_URL to main.py; created app/oauth_metadata.py (RFC 9728 protected-resource +
+  RFC 8414 authorization-server metadata, S256/code/refresh_token capabilities). Refactored _run_sse
+  into a build_sse_app() factory (testability) and registered the two .well-known routes. Added
+  AGENT_PUBLIC_URL to docker-compose (http://localhost:9000) and both .do specs (${APP_URL}/agent).
+- Files modified: app/oauth_metadata.py (new), app/main.py, docker-compose.yml, .do/app.dev.yaml, .do/app.yaml
+- Deviations: user-approved agent ruff debt cleanup (see Deviation Log) — UP045/E501/F841 across
+  app/tools.py + tests, behavior-preserving, needed for CI agent-lint to pass.
+
+## Open Items
+- (none yet)
+
+### Step 13 — agent /oauth/register DCR endpoint (FR-B3) [done]
+- Added client.register_oauth_client (gRPC RegisterOAuthClient, _metadata only). Created
+  app/oauth_server.py with the register handler (https-only edge check, RFC 7591 public client →
+  {client_id, redirect_uris}, 201). Registered POST /oauth/register in build_sse_app. (registration_enabled
+  config gate is added in Step 20 per spec.)
+- Files modified: app/oauth_server.py (new), app/client.py, app/main.py
+- Deviations: none
+
+### Step 14 — agent /oauth/authorize + /oauth/callback (FR-B4, FR-B6) [done]
+- client.py: added get_oauth_client, issue_auth_code, validate_token. oauth_server.py: HMAC-signed
+  txn helpers (_sign_txn/_verify_txn keyed on MCP_AGENT_SECRET); /oauth/authorize enforces
+  response_type=code + S256 + registered client + exact redirect match, then 302s to
+  {UI_BASE_URL}/auth/oauth-login with agent_cb+txn+state; /oauth/callback verifies txn HMAC + state,
+  reads the same-origin access_token cookie, validates via ValidateToken → user_id (re-redirects to
+  login if absent/invalid), mints the code and 302s to the client redirect with code+state. No
+  user id ever trusted from a query param. Registered both GET routes.
+- Files modified: app/oauth_server.py, app/client.py, app/main.py
+- Deviations: none
+
+### Step 15 — agent /oauth/token endpoint (FR-B7, FR-B7b) [done]
+- client.py: added exchange_auth_code + refresh_oauth_token (gRPC to identity). oauth_server.py:
+  POST /oauth/token branches on grant_type (authorization_code → ExchangeAuthCode; refresh_token →
+  RefreshOAuthToken; else unsupported_grant_type 400); gRPC errors map to invalid_grant 400; tokens
+  returned only in the JSON body. Registered the POST route.
+- Files modified: app/oauth_server.py, app/client.py, app/main.py
+- Deviations: none
+
+### Step 16 — agent /sse 401+WWW-Authenticate + JWT aud validation (FR-B0/B8/B10) [done]
+- auth.py: added validate_bearer_jwt(token) → ValidateToken + claims.aud == AGENT_PUBLIC_URL (rejects
+  wrong-aud tokens); added _metadata (x-mcp-secret). main.py handle_sse: try JWT first, then the
+  legacy api_key path (Bearer + ?api_key= deprecated fallback); on failure return 401 with
+  WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource".
+- Files modified: app/auth.py, app/main.py
+- Deviations: none
+
+### Step 17 — agent stateless multi-instance confirmation (FR-B13) [done]
+- Confirmed oauth_server.py holds no module/instance-level dict store (all OAuth state via gRPC to
+  identity; only the HMAC-signed txn blob links requests). Added an "OAuth 2.1 edge auth" section to
+  the agent CLAUDE.md documenting statelessness, the route table, AGENT_PUBLIC_URL, and the env vars.
+- Files modified: services/xstockstrat-agent/CLAUDE.md
+- Deviations: none
+
+### Step 19 — config: deployment env var AGENT_PUBLIC_URL [done]
+- Pointer step; the actual edits landed atomically in Step 12. Verified AGENT_PUBLIC_URL present in
+  docker-compose (http://localhost:9000) and both .do specs (${APP_URL}/agent).
+- Files modified: (none new — see Step 12)
+- Deviations: none
+
+### Step 18 — UI /auth/oauth-login redirect-to-agent-callback (FR-B5) [done]
+- page.tsx now reads agent_cb + txn + state (invalid-request guard requires all three). On login
+  success it 302s to `${agentCb}?txn=…&state=…` only — no token/user id/login=ok. The httpOnly
+  access_token cookie rides along same-origin; the agent callback validates it (Step 14).
+- Verification: `pnpm run lint` clean; tsc --noEmit clean (Playwright e2e fallback — no UI coverage
+  gate). No existing e2e test referenced the old redirect_uri param.
+- Files modified: services/xstockstrat-ui/src/app/auth/oauth-login/page.tsx
+- Deviations: CI-equivalent fallback — used tsc+lint in place of the full Playwright browser run
+  (sequential-mode documented e2e fallback).
+
+### Step 20 — config: new agent.oauth.* config keys (FR-B11) [done]
+- oauth_server.py register handler now gates on agent.oauth.registration_enabled (disabled ⇒ 403)
+  and uses agent.oauth.allowed_redirect_uris (comma-separated exact allowlist; empty ⇒ https-only).
+  Documented both keys in root CLAUDE.md (Config Governance) and the agent CLAUDE.md defaults.
+- Files modified: app/oauth_server.py, CLAUDE.md (root), services/xstockstrat-agent/CLAUDE.md
+- Deviations: none
+
+### Step 21 — agent Part A + Part B coverage (AC-A2, AC-B0..B8) [done]
+- test_tools.py: updated TestManageSignalSourceTool to mock validate_admin + added non-admin-rejected
+  (AC-A2). test_auth.py: validate_bearer_jwt aud match/mismatch (AC-B4/B8). test_oauth.py (new): both
+  .well-known docs (AC-B1), /sse 401+WWW-Authenticate (AC-B0) + credential-accepted-reaches-transport,
+  DCR register/non-https/disabled, authorize S256+redirect-mismatch (AC-B3), token invalid_grant +
+  refresh pair + unsupported_grant (AC-B2/B5). 53 tests pass; ruff clean; coverage 63% (≥40).
+- Fixed a latent defect: /sse was registered via Route (calls f(request)) but handle_sse is raw ASGI
+  → switched to Mount("/sse") like /messages. See Deviation Log.
+- Files modified: tests/test_tools.py, tests/test_auth.py, tests/test_oauth.py (new), app/main.py
+- Deviations: /sse Route→Mount bug fix (Deviation Log).
+
+### Step 22 — docs: MCP OAuth 2.1 connect flow + claude_mcp_config.json + header-propagation (FR-A6) [done]
+- mcp-tools.md: documented the OAuth 2.1 connect flow (discovery → DCR → authorize → UI login →
+  callback → token → aud-bound /sse) as the recommended method; removed nginx; marked ?api_key=
+  deprecated; noted AGENT_PUBLIC_URL + DO /agent route. claude_mcp_config.json: removed the nginx
+  block, added an OAuth remote entry ({AGENT_PUBLIC_URL}/sse) + a deprecated ?api_key= fallback.
+  header-propagation.md: documented the entry-authenticates / internal-role-check model and the
+  indicators author-ownership exception (+ admin override, RegisterFormula gap close).
+- Files modified: docs/runbooks/mcp-tools.md, services/xstockstrat-agent/claude_mcp_config.json,
+  docs/patterns/header-propagation.md
+- Deviations: none
+
+## Session 2026-06-06 — sdd-execute (sequential) — COMPLETE
+**Steps this session**: 1–22 (all)
+**Progress**: 22 done / 22 total
+**Stopped at**: all complete → feature `code-completed`
+**Verification**: ingest pytest 67% / indicators 82% / identity test:coverage EXIT=0 / agent 63%;
+ruff + eslint + tsc clean; buf lint+breaking (additive, non-breaking); 003_oauth reversible on
+postgres:16; proto stubs fresh+idempotent (identity/v1 only).
+**Deviations** (Deviation Log): CI-equivalent proto-codegen toolchain on host; CI-equivalent DB
+reversibility via postgres:16; user-approved agent ruff debt cleanup; /sse Route→Mount latent bug fix;
+UI tsc+lint in lieu of full Playwright.
+**Next**: single integration PR → main-dev (per user branch decision).

@@ -10,6 +10,7 @@ SSE transport requires a valid API key, accepted via either:
   - ?api_key=<api_key> query parameter (for clients that cannot set headers, e.g. Claude Desktop)
 Key is validated against xstockstrat-identity ValidateApiKey gRPC RPC. Returns HTTP 401 on failure.
 """
+
 import logging
 import os
 
@@ -25,9 +26,10 @@ MCP_TRANSPORT = os.environ.get("MCP_TRANSPORT", "stdio")
 MCP_SSE_PORT = int(os.environ.get("MCP_SSE_PORT", "9000"))
 # Browser base URL for redirecting the OAuth login flow to the unified login page.
 UI_BASE_URL = os.environ.get("UI_BASE_URL", "http://localhost:3000")
-# TODO(019): when feature 018's /oauth/authorize handler lands, redirect the browser to
-# f"{UI_BASE_URL}/auth/oauth-login?redirect_uri={redirect_uri}&state={state}" instead of the
-# old identity HTTP login URL.
+# Public (browser-reachable) base URL of the agent itself, used to build absolute OAuth
+# discovery + endpoint URLs (RFC 8414/9728). In DO this is ${APP_URL}/agent (the agent is
+# mounted under the /agent route prefix); in docker-compose it is http://localhost:9000.
+AGENT_PUBLIC_URL = os.environ.get("AGENT_PUBLIC_URL", "http://localhost:9000")
 
 
 def create_server() -> FastMCP:
@@ -45,31 +47,63 @@ async def _run_stdio() -> None:
         )
 
 
-async def _run_sse() -> None:
+def build_sse_app():
+    """Construct the Starlette app for the SSE transport + OAuth 2.1 HTTP facade.
+
+    Extracted into a factory so tests can exercise the routes via Starlette's test client
+    without binding a real socket.
+    """
     from mcp.server.sse import SseServerTransport
     from starlette.applications import Starlette
     from starlette.responses import Response
     from starlette.routing import Mount, Route
-    import uvicorn
 
-    from app.auth import validate_api_key
+    from app.auth import validate_api_key, validate_bearer_jwt
+    from app.oauth_metadata import (
+        authorization_server_metadata,
+        protected_resource_metadata,
+    )
+    from app.oauth_server import authorize as oauth_authorize
+    from app.oauth_server import callback as oauth_callback
+    from app.oauth_server import register as oauth_register
+    from app.oauth_server import token as oauth_token
 
     server = create_server()
     sse = SseServerTransport("/messages")
 
     async def handle_sse(scope, receive, send):
         from urllib.parse import parse_qs  # noqa: PLC0415
+
         headers = dict(scope.get("headers", []))
         auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
         # Fall back to ?api_key= query param for clients that cannot set custom headers
         # (e.g. Claude Desktop SSE, which does not support Authorization headers).
+        # DEPRECATED: OAuth 2.1 forbids credentials in query strings — kept only as a
+        # Desktop-only fallback (feature 049 OQ-G).
         if not auth_header:
             qs = parse_qs(scope.get("query_string", b"").decode())
             raw_key = (qs.get("api_key") or [""])[0]
             if raw_key:
                 auth_header = f"Bearer {raw_key}"
-        if not await validate_api_key(auth_header):
-            response = Response("Unauthorized", status_code=401)
+
+        # Try the OAuth 2.1 aud-bound JWT first (so a token whose aud is wrong is rejected even if
+        # it would otherwise validate as some other credential — FR-B8), then the legacy API-key
+        # path (FR-B10). On total failure, 401 with a WWW-Authenticate discovery pointer (FR-B0).
+        token = auth_header[len("Bearer ") :] if auth_header.startswith("Bearer ") else ""
+        authorized = (token and await validate_bearer_jwt(token)) or await validate_api_key(
+            auth_header
+        )
+        if not authorized:
+            response = Response(
+                "Unauthorized",
+                status_code=401,
+                headers={
+                    "WWW-Authenticate": (
+                        "Bearer resource_metadata="
+                        f'"{AGENT_PUBLIC_URL}/.well-known/oauth-protected-resource"'
+                    )
+                },
+            )
             await response(scope, receive, send)
             return
         async with sse.connect_sse(scope, receive, send) as streams:
@@ -77,12 +111,31 @@ async def _run_sse() -> None:
                 streams[0], streams[1], server._mcp_server.create_initialization_options()
             )
 
-    starlette_app = Starlette(
-        routes=[
-            Route("/sse", endpoint=handle_sse),
-            Mount("/messages", app=sse.handle_post_message),
-        ]
-    )
+    routes = [
+        # /sse is a raw-ASGI handler (scope, receive, send) — mount it as an ASGI app (like
+        # /messages) rather than a request-response Route, which would call it as f(request).
+        Mount("/sse", app=handle_sse),
+        Mount("/messages", app=sse.handle_post_message),
+        Route(
+            "/.well-known/oauth-protected-resource",
+            endpoint=protected_resource_metadata,
+        ),
+        Route(
+            "/.well-known/oauth-authorization-server",
+            endpoint=authorization_server_metadata,
+        ),
+        Route("/oauth/register", endpoint=oauth_register, methods=["POST"]),
+        Route("/oauth/authorize", endpoint=oauth_authorize, methods=["GET"]),
+        Route("/oauth/callback", endpoint=oauth_callback, methods=["GET"]),
+        Route("/oauth/token", endpoint=oauth_token, methods=["POST"]),
+    ]
+    return Starlette(routes=routes)
+
+
+async def _run_sse() -> None:
+    import uvicorn
+
+    starlette_app = build_sse_app()
     log.info("xstockstrat-agent starting (transport=sse, port=%d)", MCP_SSE_PORT)
     config = uvicorn.Config(starlette_app, host="0.0.0.0", port=MCP_SSE_PORT, loop="asyncio")
     srv = uvicorn.Server(config)
@@ -91,6 +144,7 @@ async def _run_sse() -> None:
 
 if __name__ == "__main__":
     import asyncio
+
     if MCP_TRANSPORT == "sse":
         asyncio.run(_run_sse())
     else:

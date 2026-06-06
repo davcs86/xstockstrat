@@ -73,6 +73,12 @@ export type TokenClaims = Message<"xstockstrat.identity.v1.TokenClaims"> & {
      * @generated from field: google.protobuf.Timestamp expires_at = 5;
      */
     expiresAt?: Timestamp | undefined;
+    /**
+     * audience / resource URI (OAuth audience-bound JWT, RFC 8707)
+     *
+     * @generated from field: string aud = 6;
+     */
+    aud: string;
 };
 /**
  * Describes the message xstockstrat.identity.v1.TokenClaims.
@@ -276,6 +282,184 @@ export type RevokeApiKeyResponse = Message<"xstockstrat.identity.v1.RevokeApiKey
  */
 export declare const RevokeApiKeyResponseSchema: GenMessage<RevokeApiKeyResponse>;
 /**
+ * ── OAuth 2.1 messages (feature 049 Part B) ──────────────────────────────────
+ *
+ * @generated from message xstockstrat.identity.v1.OAuthClient
+ */
+export type OAuthClient = Message<"xstockstrat.identity.v1.OAuthClient"> & {
+    /**
+     * @generated from field: string client_id = 1;
+     */
+    clientId: string;
+    /**
+     * @generated from field: repeated string redirect_uris = 2;
+     */
+    redirectUris: string[];
+    /**
+     * @generated from field: string client_name = 3;
+     */
+    clientName: string;
+    /**
+     * @generated from field: google.protobuf.Timestamp created_at = 4;
+     */
+    createdAt?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.OAuthClient.
+ * Use `create(OAuthClientSchema)` to create a new message.
+ */
+export declare const OAuthClientSchema: GenMessage<OAuthClient>;
+/**
+ * @generated from message xstockstrat.identity.v1.RegisterOAuthClientRequest
+ */
+export type RegisterOAuthClientRequest = Message<"xstockstrat.identity.v1.RegisterOAuthClientRequest"> & {
+    /**
+     * @generated from field: repeated string redirect_uris = 1;
+     */
+    redirectUris: string[];
+    /**
+     * @generated from field: string client_name = 2;
+     */
+    clientName: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.RegisterOAuthClientRequest.
+ * Use `create(RegisterOAuthClientRequestSchema)` to create a new message.
+ */
+export declare const RegisterOAuthClientRequestSchema: GenMessage<RegisterOAuthClientRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.GetOAuthClientRequest
+ */
+export type GetOAuthClientRequest = Message<"xstockstrat.identity.v1.GetOAuthClientRequest"> & {
+    /**
+     * @generated from field: string client_id = 1;
+     */
+    clientId: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.GetOAuthClientRequest.
+ * Use `create(GetOAuthClientRequestSchema)` to create a new message.
+ */
+export declare const GetOAuthClientRequestSchema: GenMessage<GetOAuthClientRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.IssueAuthCodeRequest
+ */
+export type IssueAuthCodeRequest = Message<"xstockstrat.identity.v1.IssueAuthCodeRequest"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+    /**
+     * @generated from field: string client_id = 2;
+     */
+    clientId: string;
+    /**
+     * @generated from field: string redirect_uri = 3;
+     */
+    redirectUri: string;
+    /**
+     * @generated from field: string code_challenge = 4;
+     */
+    codeChallenge: string;
+    /**
+     * @generated from field: string resource = 5;
+     */
+    resource: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.IssueAuthCodeRequest.
+ * Use `create(IssueAuthCodeRequestSchema)` to create a new message.
+ */
+export declare const IssueAuthCodeRequestSchema: GenMessage<IssueAuthCodeRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.IssueAuthCodeResponse
+ */
+export type IssueAuthCodeResponse = Message<"xstockstrat.identity.v1.IssueAuthCodeResponse"> & {
+    /**
+     * @generated from field: string code = 1;
+     */
+    code: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.IssueAuthCodeResponse.
+ * Use `create(IssueAuthCodeResponseSchema)` to create a new message.
+ */
+export declare const IssueAuthCodeResponseSchema: GenMessage<IssueAuthCodeResponse>;
+/**
+ * @generated from message xstockstrat.identity.v1.ExchangeAuthCodeRequest
+ */
+export type ExchangeAuthCodeRequest = Message<"xstockstrat.identity.v1.ExchangeAuthCodeRequest"> & {
+    /**
+     * @generated from field: string code = 1;
+     */
+    code: string;
+    /**
+     * @generated from field: string code_verifier = 2;
+     */
+    codeVerifier: string;
+    /**
+     * @generated from field: string redirect_uri = 3;
+     */
+    redirectUri: string;
+    /**
+     * @generated from field: string client_id = 4;
+     */
+    clientId: string;
+    /**
+     * @generated from field: string resource = 5;
+     */
+    resource: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.ExchangeAuthCodeRequest.
+ * Use `create(ExchangeAuthCodeRequestSchema)` to create a new message.
+ */
+export declare const ExchangeAuthCodeRequestSchema: GenMessage<ExchangeAuthCodeRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.OAuthTokenResponse
+ */
+export type OAuthTokenResponse = Message<"xstockstrat.identity.v1.OAuthTokenResponse"> & {
+    /**
+     * @generated from field: string access_token = 1;
+     */
+    accessToken: string;
+    /**
+     * @generated from field: string token_type = 2;
+     */
+    tokenType: string;
+    /**
+     * @generated from field: int64 expires_in = 3;
+     */
+    expiresIn: bigint;
+    /**
+     * @generated from field: string refresh_token = 4;
+     */
+    refreshToken: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.OAuthTokenResponse.
+ * Use `create(OAuthTokenResponseSchema)` to create a new message.
+ */
+export declare const OAuthTokenResponseSchema: GenMessage<OAuthTokenResponse>;
+/**
+ * @generated from message xstockstrat.identity.v1.RefreshOAuthTokenRequest
+ */
+export type RefreshOAuthTokenRequest = Message<"xstockstrat.identity.v1.RefreshOAuthTokenRequest"> & {
+    /**
+     * @generated from field: string refresh_token = 1;
+     */
+    refreshToken: string;
+    /**
+     * @generated from field: string resource = 2;
+     */
+    resource: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.RefreshOAuthTokenRequest.
+ * Use `create(RefreshOAuthTokenRequestSchema)` to create a new message.
+ */
+export declare const RefreshOAuthTokenRequestSchema: GenMessage<RefreshOAuthTokenRequest>;
+/**
  * @generated from service xstockstrat.identity.v1.IdentityService
  */
 export declare const IdentityService: GenService<{
@@ -342,5 +526,48 @@ export declare const IdentityService: GenService<{
         methodKind: "unary";
         input: typeof RevokeApiKeyRequestSchema;
         output: typeof RevokeApiKeyResponseSchema;
+    };
+    /**
+     * OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+     * OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.RegisterOAuthClient
+     */
+    registerOAuthClient: {
+        methodKind: "unary";
+        input: typeof RegisterOAuthClientRequestSchema;
+        output: typeof OAuthClientSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.GetOAuthClient
+     */
+    getOAuthClient: {
+        methodKind: "unary";
+        input: typeof GetOAuthClientRequestSchema;
+        output: typeof OAuthClientSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.IssueAuthCode
+     */
+    issueAuthCode: {
+        methodKind: "unary";
+        input: typeof IssueAuthCodeRequestSchema;
+        output: typeof IssueAuthCodeResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.ExchangeAuthCode
+     */
+    exchangeAuthCode: {
+        methodKind: "unary";
+        input: typeof ExchangeAuthCodeRequestSchema;
+        output: typeof OAuthTokenResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.RefreshOAuthToken
+     */
+    refreshOAuthToken: {
+        methodKind: "unary";
+        input: typeof RefreshOAuthTokenRequestSchema;
+        output: typeof OAuthTokenResponseSchema;
     };
 }>;
