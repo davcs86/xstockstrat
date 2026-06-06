@@ -123,6 +123,44 @@
   change exists), OQ-D (token type), OQ-E (discovery reachability) before/at /sdd-spec.
 - Next: /sdd-spec unify-admin-auth-gates.
 
+## Session 2026-06-06 — sdd-spec (generate implementation spec)
+
+- Generated implementation-spec.md with **22 steps**. Status → `implementation-ready`.
+- **OQ resolutions locked** (per product-spec recommendations): OQ-A keep author-ownership +
+  add `x-access-scope & 0x04` admin override on Update/Delete + close RegisterFormula gap by
+  defaulting `author` to propagated `x-user-id` (require it); OQ-E `AGENT_PUBLIC_URL` new env var
+  (absent everywhere) = `${APP_URL}/agent` in DO (agent under `/agent` route), `http://localhost:9000`
+  in compose; OQ-G keep `?api_key=` deprecated; OQ-H reuse identity `identity.jwt.access_ttl_seconds`
+  (900) + `refresh_ttl_seconds` (2592000) — no new TTL config keys.
+- **Key codebase findings (verified by grep/Read):**
+  - Migrations: ingest last = `002_add_signal_sources_registry`, indicators = `001_formulas`,
+    identity = `002_seed_admin` → new `003_oauth` (up+down). Refresh tokens reuse existing
+    `identity.refresh_tokens` (migration 001, no new table).
+  - ingest gate: `_validate_admin_token` (servicer.py:47-62), single call site `ManageSignalSource`
+    (:427); `_identity`/`identity_channel` wiring at servicer.py:41-43 + main.py:34,60,67 → clean
+    removal. Target: analysis `_has_admin_scope` (analysis servicer.py:58-70).
+  - indicators: `RegisterFormula` author default `"dev-user"` at servicer.py:144 (the gap);
+    Update/Delete ownership checks at :211 / :236. No metadata reads today → add `_has_admin_scope`.
+  - agent: `manage_signal_source` tool (tools.py:319-351) has NO entry `validate_admin`; client
+    `manage_signal_source` (client.py:359-361) forwards `_admin_metadata` but NO `x-access-scope`
+    (cf. manage_strategy :227 / set_strategy_live :405 which append `("x-access-scope","7")`).
+    SSE `/sse` 401 (main.py:72-73) has NO `WWW-Authenticate` header; `validate_api_key` (auth.py)
+    has no JWT/aud path. Routes today = only `/sse` + `/messages` (main.py:80-85).
+  - identity: JWT mint `jwt.sign(claims, secret, {expiresIn: accessTtlSeconds})` (impl.ts:80-82);
+    refresh insert/rotate pattern (:87-91 / :157-176); sha256 hashing (:85,:249); service
+    registration via `IdentityServiceService` (index.ts:44-47) → adding matching methods needs no
+    index.ts change. `validateToken` (:115-130) extended to surface `aud`. Proto: TokenClaims fields
+    1–5 → add `aud=6`; 8 RPCs → add 5 OAuth RPCs (all additive/non-breaking).
+  - UI: `/auth/oauth-login/page.tsx` stub redirects to `${redirect_uri}?state=` with NO code,
+    directly to external client (the FR-B5 bug). BFF `/api/auth/login/route.ts` sets session cookies.
+  - Deployment: `AGENT_PUBLIC_URL` + `agent.oauth.*` confirmed absent from docker-compose.yml +
+    both .do app specs. Agent reads config via `client.get_config_value` → `GetConfig(namespace="agent")`.
+- **Every backend `service` step paired with a `test` step** enforcing CI coverage (ingest/agent 40%,
+  indicators 50%, identity `c8 --lines 40`) + the language linter (ruff / eslint).
+- Reviewers snapshot written to feature.md (deduped across 22 steps): adds Proto Reviewer (6,7),
+  DBA (8) now that OQ-B/D activated proto + migration gates.
+- Next: /sdd-review unify-admin-auth-gates impl-spec.
+
 ## Session 2026-06-06 — OQ-B resolved (user); hold at spec-ready
 
 - **User decisions:** OQ-B → **durable DCR store in identity** (proto + migration); **do NOT run
@@ -186,3 +224,25 @@
 - Remaining open (settle at /sdd-spec): OQ-A (formula gate), OQ-E (discovery reachability /
   AGENT_PUBLIC_URL under DO /agent route), OQ-G (?api_key= deprecation), OQ-H (access/refresh TTLs).
 - Next: /sdd-spec unify-admin-auth-gates.
+
+## Session 2026-06-06 — sdd-review impl-spec (advisory) + housekeeping
+
+- Reviewed the 22-step implementation spec. Result: 0 FAILs, 2 advisory WARNs, no lifecycle change.
+  - WARN: Step 7 (proto-gen) lists generated *directories* not files — acceptable for codegen.
+  - WARN: Step 18 (UI oauth-login) has no `pnpm run lint` in its/its paired test step's verification —
+    recommend adding (frontend has no coverage gate; Playwright note present).
+- Step ordering ✓ (migration 8 → identity 9; proto 6 → gen 7 → consumers; every non-frontend service
+  step paired with a test step). Overlap ✓ (no impl-ready/in-progress features; carry-forward: 041
+  also edits xstockstrat-ui at Step 18 — coordinate merge order). Migration 003 free; proto additive
+  (TokenClaims.aud=6; 5 new RPCs; 8 existing untouched).
+- **Substantive advisory for Security / impl review:** the agent `/oauth/callback` user-identity handoff
+  (Steps 14/18) is under-specified and, as written, forgeable — agent is a different origin (UI session
+  cookie won't reach it), the HMAC `txn` is created pre-login (no user_id), and trusting `?login=ok` is
+  forgeable. Recommend: UI obtains a short-lived identity-signed assertion (one-time token / access JWT)
+  post-login and forwards it to the agent callback; agent validates via identity `ValidateToken` to
+  derive the real user_id. Resolve before /sdd-execute Steps 14/18. (sdd-spec also flagged the HMAC-txn
+  approach for Security sign-off.)
+- Housekeeping: fixed the stale `feature.md` Summary (still described API-key-as-token) to the
+  JWT+refresh+audience / identity-backed-AS design.
+- Status remains `implementation-ready`. Next: /sdd-execute unify-admin-auth-gates (or resolve the
+  callback-handoff advisory first).
