@@ -80,6 +80,18 @@ all 11 steps' Files/evidence validated against the live codebase — no mismatch
 - Files modified: `services/xstockstrat-ui/src/app/insights/strategies/[id]/edit/page.tsx`
 - Deviations: none.
 
+### Step 9 — List actions + detail live toggle [done]
+- `strategies/page.tsx`: admin-only "New Strategy" button; per-card Edit (router.push to edit page) +
+  Deactivate (window.confirm → `useManageStrategy` DEACTIVATE). Merges `useStrategyDefinitions(true)`
+  by id to show an `inactive` badge and hide Deactivate on already-inactive strategies. Admin actions
+  rendered as siblings outside the `<Link>` to avoid nested anchors.
+- `strategies/[id]/page.tsx`: added a "Live Evaluation" card (state from `useGetStrategy(id)`) with an
+  admin-only toggle via `useSetStrategyLiveInsights`; inline "admin scope required" on error.
+- Files modified: `services/xstockstrat-ui/src/app/insights/strategies/page.tsx`,
+  `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx`
+- Deviations: none. Used `window.confirm` for the deactivate confirmation (spec sanctioned it — no
+  AlertDialog primitive exists).
+
 ## Session 2026-06-06T00:05:00Z — sdd-spec
 
 - Generated implementation-spec.md with 11 steps. Status → implementation-ready.

@@ -261,7 +261,7 @@ client plumbing (Steps 1–3) land before any page consumes them, and the wizard
 
 ### Step 9 — service: List actions (New/Edit/Deactivate) + detail-page live toggle
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/strategies/page.tsx` — modify
