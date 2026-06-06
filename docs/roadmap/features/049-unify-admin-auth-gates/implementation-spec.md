@@ -343,7 +343,7 @@ runs the language linter.
 
 ### Step 11 — docs: identity OAuth backend + migration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` / `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/CLAUDE.md` — modify

@@ -369,3 +369,10 @@
 - Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`
 - Deviations: none (c8 reports 0% under --experimental-strip-types — a pre-existing quirk shared with
   CI; the threshold command exits 0, i.e. CI-equivalent).
+
+### Step 11 — docs: identity OAuth backend + migration [done]
+- Updated identity CLAUDE.md: eight→thirteen gRPC methods (naming the five OAuth RPCs), added an
+  "OAuth 2.1 backend" subsection (aud-bound JWT, refresh reuse, PKCE/exact-redirect), and a
+  Database/Migrations section documenting 003_oauth + the two tables.
+- Files modified: `services/xstockstrat-identity/CLAUDE.md`
+- Deviations: none
