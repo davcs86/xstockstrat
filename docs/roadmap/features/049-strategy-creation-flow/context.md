@@ -13,6 +13,17 @@
 - All required backend RPCs already exist (ManageStrategy, GetStrategy, ListStrategyDefinitions, SetStrategyLive, ListFormulas).
 - Affected service: xstockstrat-ui (new pages + BFF routes); xstockstrat-analysis and xstockstrat-indicators read-only consumers, no code changes needed there.
 
+## Session 2026-06-06T00:02:00Z — wizard UX requirement added
+
+FR-2 changed from a single form to a 5-step wizard (/insights/strategies/new):
+- Step 1: Identity (strategy_id, display_name)
+- Step 2: Components (at least one required to advance)
+- Step 3: Rules (dual-mode editor; both rules required to advance)
+- Step 4: Signal Params (skippable)
+- Step 5: Review & Submit (server errors shown inline with step link)
+No-submit-until-final-step constraint. Back/Next navigation preserves state.
+ACs 11–13 added to cover wizard-specific gate logic.
+
 ## Session 2026-06-06T00:01:00Z — open question resolution
 
 Decisions recorded in product-spec.md §Decisions and reflected in FR-2 and acceptance criteria:
