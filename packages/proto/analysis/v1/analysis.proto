@@ -16,6 +16,7 @@ service AnalysisService {
   rpc ManageStrategy(ManageStrategyRequest) returns (StrategyDefinition);
   rpc GetStrategy(GetStrategyRequest) returns (StrategyDefinition);
   rpc ListStrategyDefinitions(ListStrategyDefinitionsRequest) returns (ListStrategyDefinitionsResponse);
+  rpc SetStrategyLive(SetStrategyLiveRequest) returns (SetStrategyLiveResponse);
 }
 
 message RunBacktestRequest {
@@ -110,6 +111,7 @@ message StrategyDefinition {
   string exit_rule = 5;    // JSON-encoded condition tree
   google.protobuf.Struct signal_params = 6;
   bool active = 7;
+  bool live_enabled = 8;
 }
 
 enum StrategyOperation {
@@ -137,4 +139,15 @@ message ListStrategyDefinitionsRequest {
 message ListStrategyDefinitionsResponse {
   repeated StrategyDefinition definitions = 1;
   int32 total_count = 2;
+}
+
+// ── Live strategy→alert engine (feature 048-live-strategy-alert-engine) ──────
+
+message SetStrategyLiveRequest {
+  string strategy_id = 1;
+  bool live_enabled = 2;
+}
+
+message SetStrategyLiveResponse {
+  StrategyDefinition definition = 1;
 }

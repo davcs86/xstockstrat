@@ -392,6 +392,32 @@ async def validate_admin(api_key: str | None) -> bool:
         return False
 
 
+async def set_strategy_live(
+    strategy_id: str, live_enabled: bool, api_key: str | None = None
+) -> dict[str, Any]:
+    """Enable/disable live evaluation via SetStrategyLive RPC (admin-scoped).
+
+    The tool layer authorizes the admin role before calling this; here we forward the
+    admin access scope so the internal analysis service's role check passes.
+    """
+    from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
+
+    meta = list(_admin_metadata(api_key)) + [("x-access-scope", "7")]
+    async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
+        stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
+        resp = await stub.SetStrategyLive(
+            analysis_pb2.SetStrategyLiveRequest(strategy_id=strategy_id, live_enabled=live_enabled),
+            metadata=meta,
+        )
+    defn = resp.definition
+    return {
+        "strategy_id": defn.strategy_id,
+        "display_name": defn.display_name,
+        "live_enabled": defn.live_enabled,
+        "active": defn.active,
+    }
+
+
 async def get_config_value(key: str) -> str | None:
     """
     Resolve a config key value via one-shot GetConfig gRPC call to xstockstrat-config.

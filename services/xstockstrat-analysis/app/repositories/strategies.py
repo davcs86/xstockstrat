@@ -67,6 +67,19 @@ class StrategiesRepository:
         )
         return _to_dict(row)
 
+    async def set_live_enabled(self, strategy_id: str, live_enabled: bool) -> dict | None:
+        row = await self._db.fetchrow(
+            """
+            UPDATE analysis.strategies
+               SET live_enabled = $2, updated_at = NOW()
+             WHERE strategy_id = $1
+            RETURNING *
+            """,
+            strategy_id,
+            live_enabled,
+        )
+        return _to_dict(row)
+
     async def deactivate(self, strategy_id: str) -> dict | None:
         row = await self._db.fetchrow(
             """

@@ -242,6 +242,7 @@ export interface StrategyDefinition {
   exitRule: string;
   signalParams?: { [key: string]: any } | undefined;
   active: boolean;
+  liveEnabled: boolean;
 }
 
 export interface ManageStrategyRequest {
@@ -262,6 +263,15 @@ export interface ListStrategyDefinitionsRequest {
 export interface ListStrategyDefinitionsResponse {
   definitions: StrategyDefinition[];
   totalCount: number;
+}
+
+export interface SetStrategyLiveRequest {
+  strategyId: string;
+  liveEnabled: boolean;
+}
+
+export interface SetStrategyLiveResponse {
+  definition?: StrategyDefinition | undefined;
 }
 
 function createBaseRunBacktestRequest(): RunBacktestRequest {
@@ -1824,6 +1834,7 @@ function createBaseStrategyDefinition(): StrategyDefinition {
     exitRule: "",
     signalParams: undefined,
     active: false,
+    liveEnabled: false,
   };
 }
 
@@ -1849,6 +1860,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     }
     if (message.active !== false) {
       writer.uint32(56).bool(message.active);
+    }
+    if (message.liveEnabled !== false) {
+      writer.uint32(64).bool(message.liveEnabled);
     }
     return writer;
   },
@@ -1916,6 +1930,14 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
           message.active = reader.bool();
           continue;
         }
+        case 8: {
+          if (tag !== 64) {
+            break;
+          }
+
+          message.liveEnabled = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1956,6 +1978,11 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
         ? object.signal_params
         : undefined,
       active: isSet(object.active) ? globalThis.Boolean(object.active) : false,
+      liveEnabled: isSet(object.liveEnabled)
+        ? globalThis.Boolean(object.liveEnabled)
+        : isSet(object.live_enabled)
+        ? globalThis.Boolean(object.live_enabled)
+        : false,
     };
   },
 
@@ -1982,6 +2009,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     if (message.active !== false) {
       obj.active = message.active;
     }
+    if (message.liveEnabled !== false) {
+      obj.liveEnabled = message.liveEnabled;
+    }
     return obj;
   },
 
@@ -1997,6 +2027,7 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     message.exitRule = object.exitRule ?? "";
     message.signalParams = object.signalParams ?? undefined;
     message.active = object.active ?? false;
+    message.liveEnabled = object.liveEnabled ?? false;
     return message;
   },
 };
@@ -2335,6 +2366,150 @@ export const ListStrategyDefinitionsResponse: MessageFns<ListStrategyDefinitions
   },
 };
 
+function createBaseSetStrategyLiveRequest(): SetStrategyLiveRequest {
+  return { strategyId: "", liveEnabled: false };
+}
+
+export const SetStrategyLiveRequest: MessageFns<SetStrategyLiveRequest> = {
+  encode(message: SetStrategyLiveRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.strategyId !== "") {
+      writer.uint32(10).string(message.strategyId);
+    }
+    if (message.liveEnabled !== false) {
+      writer.uint32(16).bool(message.liveEnabled);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetStrategyLiveRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSetStrategyLiveRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.liveEnabled = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SetStrategyLiveRequest {
+    return {
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+      liveEnabled: isSet(object.liveEnabled)
+        ? globalThis.Boolean(object.liveEnabled)
+        : isSet(object.live_enabled)
+        ? globalThis.Boolean(object.live_enabled)
+        : false,
+    };
+  },
+
+  toJSON(message: SetStrategyLiveRequest): unknown {
+    const obj: any = {};
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    if (message.liveEnabled !== false) {
+      obj.liveEnabled = message.liveEnabled;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SetStrategyLiveRequest>, I>>(base?: I): SetStrategyLiveRequest {
+    return SetStrategyLiveRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetStrategyLiveRequest>, I>>(object: I): SetStrategyLiveRequest {
+    const message = createBaseSetStrategyLiveRequest();
+    message.strategyId = object.strategyId ?? "";
+    message.liveEnabled = object.liveEnabled ?? false;
+    return message;
+  },
+};
+
+function createBaseSetStrategyLiveResponse(): SetStrategyLiveResponse {
+  return { definition: undefined };
+}
+
+export const SetStrategyLiveResponse: MessageFns<SetStrategyLiveResponse> = {
+  encode(message: SetStrategyLiveResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.definition !== undefined) {
+      StrategyDefinition.encode(message.definition, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetStrategyLiveResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSetStrategyLiveResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.definition = StrategyDefinition.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SetStrategyLiveResponse {
+    return { definition: isSet(object.definition) ? StrategyDefinition.fromJSON(object.definition) : undefined };
+  },
+
+  toJSON(message: SetStrategyLiveResponse): unknown {
+    const obj: any = {};
+    if (message.definition !== undefined) {
+      obj.definition = StrategyDefinition.toJSON(message.definition);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SetStrategyLiveResponse>, I>>(base?: I): SetStrategyLiveResponse {
+    return SetStrategyLiveResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetStrategyLiveResponse>, I>>(object: I): SetStrategyLiveResponse {
+    const message = createBaseSetStrategyLiveResponse();
+    message.definition = (object.definition !== undefined && object.definition !== null)
+      ? StrategyDefinition.fromPartial(object.definition)
+      : undefined;
+    return message;
+  },
+};
+
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export const AnalysisServiceService = {
   runBacktest: {
@@ -2407,6 +2582,17 @@ export const AnalysisServiceService = {
     responseDeserialize: (value: Buffer): ListStrategyDefinitionsResponse =>
       ListStrategyDefinitionsResponse.decode(value),
   },
+  setStrategyLive: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SetStrategyLiveRequest): Buffer =>
+      Buffer.from(SetStrategyLiveRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetStrategyLiveRequest => SetStrategyLiveRequest.decode(value),
+    responseSerialize: (value: SetStrategyLiveResponse): Buffer =>
+      Buffer.from(SetStrategyLiveResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SetStrategyLiveResponse => SetStrategyLiveResponse.decode(value),
+  },
 } as const;
 
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
@@ -2417,6 +2603,7 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
   manageStrategy: handleUnaryCall<ManageStrategyRequest, StrategyDefinition>;
   getStrategy: handleUnaryCall<GetStrategyRequest, StrategyDefinition>;
   listStrategyDefinitions: handleUnaryCall<ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse>;
+  setStrategyLive: handleUnaryCall<SetStrategyLiveRequest, SetStrategyLiveResponse>;
 }
 
 export interface AnalysisServiceClient extends Client {
@@ -2524,6 +2711,21 @@ export interface AnalysisServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListStrategyDefinitionsResponse) => void,
+  ): ClientUnaryCall;
+  setStrategyLive(
+    request: SetStrategyLiveRequest,
+    callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void,
+  ): ClientUnaryCall;
+  setStrategyLive(
+    request: SetStrategyLiveRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void,
+  ): ClientUnaryCall;
+  setStrategyLive(
+    request: SetStrategyLiveRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void,
   ): ClientUnaryCall;
 }
 

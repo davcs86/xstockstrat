@@ -1,6 +1,6 @@
 # Feature: live-strategy-alert-engine
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/live-strategy-alert-engine`
 **Created**: 2026-06-01
 **Last Updated**: 2026-06-05
@@ -16,6 +16,9 @@
 | 2026-06-05 | `spec-ready` → `draft` | scope change | Added UI scope: Live Strategies panel (FR-10, FR-11) in xstockstrat-ui /trader segment with admin toggle and strategy alert feed. Requires re-review. |
 | 2026-06-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved after UI scope addition (4 warnings — advisory). All overlap warnings advisory; 047/019 merge-order already recorded. |
 | 2026-06-05 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps. |
+| 2026-06-05 | `implementation-ready` (re-spec) | /sdd-execute | Targeted re-spec of Steps 4/5/6/7 to align with 047's *delivered* code (evaluator at app/services/evaluator.py; servicer __init__ has db_pool+identity_channel, store is self._strategies_repo; SetStrategyLive uses repo.set_live_enabled; admin gate = role check on x-access-scope per entry-point-auth guidance; agent validates admin at entry since SSE auth does not enforce admin role). |
+| 2026-06-05 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 — live_enabled field + SetStrategyLive RPC/messages; buf lint+breaking clean). |
+| 2026-06-05 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done (stacked PRs #582–#594). analysis 91 tests/56.89% + live_loop; agent 36 tests/59.75%; UI tsc+lint clean, 4/4 live-strategies e2e pass. |
 
 ---
 

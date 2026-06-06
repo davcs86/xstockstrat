@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.TradeRecord = exports.BacktestResult = exports.RunBacktestRequest = exports.StrategyOperation = exports.ComponentKind = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.TradeRecord = exports.BacktestResult = exports.RunBacktestRequest = exports.StrategyOperation = exports.ComponentKind = exports.protobufPackage = void 0;
 exports.componentKindFromJSON = componentKindFromJSON;
 exports.componentKindToJSON = componentKindToJSON;
 exports.componentKindToNumber = componentKindToNumber;
@@ -1544,6 +1544,7 @@ function createBaseStrategyDefinition() {
         exitRule: "",
         signalParams: undefined,
         active: false,
+        liveEnabled: false,
     };
 }
 exports.StrategyDefinition = {
@@ -1568,6 +1569,9 @@ exports.StrategyDefinition = {
         }
         if (message.active !== false) {
             writer.uint32(56).bool(message.active);
+        }
+        if (message.liveEnabled !== false) {
+            writer.uint32(64).bool(message.liveEnabled);
         }
         return writer;
     },
@@ -1627,6 +1631,13 @@ exports.StrategyDefinition = {
                     message.active = reader.bool();
                     continue;
                 }
+                case 8: {
+                    if (tag !== 64) {
+                        break;
+                    }
+                    message.liveEnabled = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1666,6 +1677,11 @@ exports.StrategyDefinition = {
                     ? object.signal_params
                     : undefined,
             active: isSet(object.active) ? globalThis.Boolean(object.active) : false,
+            liveEnabled: isSet(object.liveEnabled)
+                ? globalThis.Boolean(object.liveEnabled)
+                : isSet(object.live_enabled)
+                    ? globalThis.Boolean(object.live_enabled)
+                    : false,
         };
     },
     toJSON(message) {
@@ -1691,6 +1707,9 @@ exports.StrategyDefinition = {
         if (message.active !== false) {
             obj.active = message.active;
         }
+        if (message.liveEnabled !== false) {
+            obj.liveEnabled = message.liveEnabled;
+        }
         return obj;
     },
     create(base) {
@@ -1705,6 +1724,7 @@ exports.StrategyDefinition = {
         message.exitRule = object.exitRule ?? "";
         message.signalParams = object.signalParams ?? undefined;
         message.active = object.active ?? false;
+        message.liveEnabled = object.liveEnabled ?? false;
         return message;
     },
 };
@@ -2006,6 +2026,135 @@ exports.ListStrategyDefinitionsResponse = {
         return message;
     },
 };
+function createBaseSetStrategyLiveRequest() {
+    return { strategyId: "", liveEnabled: false };
+}
+exports.SetStrategyLiveRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.strategyId !== "") {
+            writer.uint32(10).string(message.strategyId);
+        }
+        if (message.liveEnabled !== false) {
+            writer.uint32(16).bool(message.liveEnabled);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSetStrategyLiveRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.liveEnabled = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+            liveEnabled: isSet(object.liveEnabled)
+                ? globalThis.Boolean(object.liveEnabled)
+                : isSet(object.live_enabled)
+                    ? globalThis.Boolean(object.live_enabled)
+                    : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        if (message.liveEnabled !== false) {
+            obj.liveEnabled = message.liveEnabled;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SetStrategyLiveRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSetStrategyLiveRequest();
+        message.strategyId = object.strategyId ?? "";
+        message.liveEnabled = object.liveEnabled ?? false;
+        return message;
+    },
+};
+function createBaseSetStrategyLiveResponse() {
+    return { definition: undefined };
+}
+exports.SetStrategyLiveResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.definition !== undefined) {
+            exports.StrategyDefinition.encode(message.definition, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSetStrategyLiveResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.definition = exports.StrategyDefinition.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { definition: isSet(object.definition) ? exports.StrategyDefinition.fromJSON(object.definition) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.definition !== undefined) {
+            obj.definition = exports.StrategyDefinition.toJSON(message.definition);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SetStrategyLiveResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSetStrategyLiveResponse();
+        message.definition = (object.definition !== undefined && object.definition !== null)
+            ? exports.StrategyDefinition.fromPartial(object.definition)
+            : undefined;
+        return message;
+    },
+};
 exports.AnalysisServiceService = {
     runBacktest: {
         path: "/xstockstrat.analysis.v1.AnalysisService/RunBacktest",
@@ -2069,6 +2218,15 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.ListStrategyDefinitionsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.ListStrategyDefinitionsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.ListStrategyDefinitionsResponse.decode(value),
+    },
+    setStrategyLive: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.SetStrategyLiveRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.SetStrategyLiveRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.SetStrategyLiveResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.SetStrategyLiveResponse.decode(value),
     },
 };
 exports.AnalysisServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.AnalysisServiceService, "xstockstrat.analysis.v1.AnalysisService");

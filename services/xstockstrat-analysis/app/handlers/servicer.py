@@ -22,6 +22,7 @@ from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc
 from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc
 from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
 from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc
+from gen.notify.v1 import notify_pb2_grpc
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -41,12 +42,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         ingest_channel,
         ledger_channel,
         db_pool=None,
+        notify_channel=None,
     ):
         self._cfg = config_watcher
         self._marketdata = marketdata_pb2_grpc.MarketDataServiceStub(marketdata_channel)
         self._indicators = indicators_pb2_grpc.IndicatorsServiceStub(indicators_channel)
         self._ingest = ingest_pb2_grpc.IngestServiceStub(ingest_channel)
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
+        self._notify = notify_pb2_grpc.NotifyServiceStub(notify_channel) if notify_channel else None
         self._backtests: dict[str, analysis_pb2.BacktestResult] = {}
         self._strategies: dict[str, analysis_pb2.StrategyScore] = {}
         self._strategies_repo = StrategiesRepository(db_pool) if db_pool else None
@@ -719,6 +722,53 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             total_count=total,
         )
 
+    async def SetStrategyLive(self, request, context):
+        # Role check only — same gate as ManageStrategy (shared _has_admin_scope helper).
+        if not self._has_admin_scope(context):
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
+            return
+
+        if self._strategies_repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
+            return
+
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+
+        row = await self._strategies_repo.set_live_enabled(
+            request.strategy_id, request.live_enabled
+        )
+        if row is None:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"strategy '{request.strategy_id}' not found"
+            )
+            return
+
+        # Best-effort ledger event (same swallow-exceptions pattern as ScoreStrategy).
+        try:
+            from google.protobuf.struct_pb2 import Struct
+
+            payload = Struct()
+            payload.update(
+                {"strategy_id": request.strategy_id, "live_enabled": request.live_enabled}
+            )
+            await self._ledger.AppendEvent(
+                ledger_pb2.AppendEventRequest(
+                    event_type="analysis.strategy.live_toggled",
+                    source_service="xstockstrat-analysis",
+                    stream_key=f"strategy:{request.strategy_id}",
+                    payload=payload,
+                ),
+                metadata=propagation_meta,
+            )
+        except Exception as e:
+            log.warning("failed to emit live_toggled ledger event: %s", e)
+
+        return analysis_pb2.SetStrategyLiveResponse(definition=_row_to_strategy_definition(row))
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -733,6 +783,8 @@ def _row_to_strategy_definition(row: dict) -> "analysis_pb2.StrategyDefinition":
     definition.strategy_id = row["strategy_id"]
     definition.display_name = row["display_name"]
     definition.active = row["active"]
+    # live_enabled column added by feature 048 (absent on rows predating that migration).
+    definition.live_enabled = bool(row.get("live_enabled", False))
     return definition
 
 

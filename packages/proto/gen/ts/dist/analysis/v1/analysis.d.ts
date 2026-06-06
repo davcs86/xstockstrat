@@ -121,6 +121,7 @@ export interface StrategyDefinition {
         [key: string]: any;
     } | undefined;
     active: boolean;
+    liveEnabled: boolean;
 }
 export interface ManageStrategyRequest {
     operation: StrategyOperation;
@@ -137,6 +138,13 @@ export interface ListStrategyDefinitionsRequest {
 export interface ListStrategyDefinitionsResponse {
     definitions: StrategyDefinition[];
     totalCount: number;
+}
+export interface SetStrategyLiveRequest {
+    strategyId: string;
+    liveEnabled: boolean;
+}
+export interface SetStrategyLiveResponse {
+    definition?: StrategyDefinition | undefined;
 }
 export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
 export declare const BacktestResult: MessageFns<BacktestResult>;
@@ -155,6 +163,8 @@ export declare const ManageStrategyRequest: MessageFns<ManageStrategyRequest>;
 export declare const GetStrategyRequest: MessageFns<GetStrategyRequest>;
 export declare const ListStrategyDefinitionsRequest: MessageFns<ListStrategyDefinitionsRequest>;
 export declare const ListStrategyDefinitionsResponse: MessageFns<ListStrategyDefinitionsResponse>;
+export declare const SetStrategyLiveRequest: MessageFns<SetStrategyLiveRequest>;
+export declare const SetStrategyLiveResponse: MessageFns<SetStrategyLiveResponse>;
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export declare const AnalysisServiceService: {
     readonly runBacktest: {
@@ -220,6 +230,15 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: ListStrategyDefinitionsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => ListStrategyDefinitionsResponse;
     };
+    readonly setStrategyLive: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: SetStrategyLiveRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => SetStrategyLiveRequest;
+        readonly responseSerialize: (value: SetStrategyLiveResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => SetStrategyLiveResponse;
+    };
 };
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
     runBacktest: handleUnaryCall<RunBacktestRequest, BacktestResult>;
@@ -229,6 +248,7 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
     manageStrategy: handleUnaryCall<ManageStrategyRequest, StrategyDefinition>;
     getStrategy: handleUnaryCall<GetStrategyRequest, StrategyDefinition>;
     listStrategyDefinitions: handleUnaryCall<ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse>;
+    setStrategyLive: handleUnaryCall<SetStrategyLiveRequest, SetStrategyLiveResponse>;
 }
 export interface AnalysisServiceClient extends Client {
     runBacktest(request: RunBacktestRequest, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
@@ -252,6 +272,9 @@ export interface AnalysisServiceClient extends Client {
     listStrategyDefinitions(request: ListStrategyDefinitionsRequest, callback: (error: ServiceError | null, response: ListStrategyDefinitionsResponse) => void): ClientUnaryCall;
     listStrategyDefinitions(request: ListStrategyDefinitionsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListStrategyDefinitionsResponse) => void): ClientUnaryCall;
     listStrategyDefinitions(request: ListStrategyDefinitionsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListStrategyDefinitionsResponse) => void): ClientUnaryCall;
+    setStrategyLive(request: SetStrategyLiveRequest, callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void): ClientUnaryCall;
+    setStrategyLive(request: SetStrategyLiveRequest, metadata: Metadata, callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void): ClientUnaryCall;
+    setStrategyLive(request: SetStrategyLiveRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void): ClientUnaryCall;
 }
 export declare const AnalysisServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AnalysisServiceClient;
