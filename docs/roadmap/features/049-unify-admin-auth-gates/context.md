@@ -388,3 +388,11 @@
 
 ## Open Items
 - (none yet)
+
+### Step 13 — agent /oauth/register DCR endpoint (FR-B3) [done]
+- Added client.register_oauth_client (gRPC RegisterOAuthClient, _metadata only). Created
+  app/oauth_server.py with the register handler (https-only edge check, RFC 7591 public client →
+  {client_id, redirect_uris}, 201). Registered POST /oauth/register in build_sse_app. (registration_enabled
+  config gate is added in Step 20 per spec.)
+- Files modified: app/oauth_server.py (new), app/client.py, app/main.py
+- Deviations: none

@@ -63,6 +63,7 @@ def build_sse_app():
         authorization_server_metadata,
         protected_resource_metadata,
     )
+    from app.oauth_server import register as oauth_register
 
     server = create_server()
     sse = SseServerTransport("/messages")
@@ -99,6 +100,7 @@ def build_sse_app():
             "/.well-known/oauth-authorization-server",
             endpoint=authorization_server_metadata,
         ),
+        Route("/oauth/register", endpoint=oauth_register, methods=["POST"]),
     ]
     return Starlette(routes=routes)
 

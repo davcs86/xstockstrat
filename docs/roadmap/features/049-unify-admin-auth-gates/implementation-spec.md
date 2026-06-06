@@ -399,7 +399,7 @@ runs the language linter.
 
 ### Step 13 — service: agent `/oauth/register` DCR endpoint (FR-B3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/oauth_server.py` — create

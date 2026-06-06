@@ -394,6 +394,27 @@ async def validate_admin(api_key: str | None) -> bool:
         return False
 
 
+# ── OAuth 2.1 backend gRPC helpers (feature 049 Part B) ──────────────────────
+# These call identity's OAuth RPCs over gRPC. DCR + the OAuth handshake happen before any
+# inbound user context exists, so they carry only _metadata() (x-mcp-secret) — there is no
+# x-user-id/x-access-scope to forward at the pre-token stage.
+
+
+async def register_oauth_client(redirect_uris: list[str], client_name: str) -> dict[str, Any]:
+    """RFC 7591 DCR — register a public OAuth client via identity RegisterOAuthClient."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.RegisterOAuthClient(
+            identity_pb2.RegisterOAuthClientRequest(
+                redirect_uris=redirect_uris, client_name=client_name
+            ),
+            metadata=_metadata(),
+        )
+    return {"client_id": resp.client_id, "redirect_uris": list(resp.redirect_uris)}
+
+
 async def set_strategy_live(
     strategy_id: str, live_enabled: bool, api_key: str | None = None
 ) -> dict[str, Any]:
