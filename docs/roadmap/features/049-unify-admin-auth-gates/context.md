@@ -376,3 +376,15 @@
   Database/Migrations section documenting 003_oauth + the two tables.
 - Files modified: `services/xstockstrat-identity/CLAUDE.md`
 - Deviations: none
+
+### Step 12 — agent OAuth discovery endpoints + AGENT_PUBLIC_URL (FR-B1/B2) [done]
+- Added AGENT_PUBLIC_URL to main.py; created app/oauth_metadata.py (RFC 9728 protected-resource +
+  RFC 8414 authorization-server metadata, S256/code/refresh_token capabilities). Refactored _run_sse
+  into a build_sse_app() factory (testability) and registered the two .well-known routes. Added
+  AGENT_PUBLIC_URL to docker-compose (http://localhost:9000) and both .do specs (${APP_URL}/agent).
+- Files modified: app/oauth_metadata.py (new), app/main.py, docker-compose.yml, .do/app.dev.yaml, .do/app.yaml
+- Deviations: user-approved agent ruff debt cleanup (see Deviation Log) — UP045/E501/F841 across
+  app/tools.py + tests, behavior-preserving, needed for CI agent-lint to pass.
+
+## Open Items
+- (none yet)

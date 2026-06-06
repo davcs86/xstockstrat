@@ -16,7 +16,6 @@ Ten tools:
 
 import base64
 import logging
-from typing import Optional
 
 import grpc
 from mcp.server import FastMCP
@@ -59,13 +58,14 @@ def register_tools(server: FastMCP) -> None:
 
     @server.tool()
     async def list_signal_sources(
-        source_type: Optional[list[str]] = None,
+        source_type: list[str] | None = None,
     ) -> dict:
         """List active signal sources from xstockstrat-ingest.
         Returns slug, display_name, source_type, config_json, and extractor_tool per source.
         extractor_tool: 'extract_email_content' | 'extract_website_content' | null.
         Claude must follow extractor_tool exactly — do not infer routing from source_type.
-        source_type: optional filter list (e.g. ['mediated_simple_email', 'mediated_email_attachment'])."""
+        source_type: optional filter list
+            (e.g. ['mediated_simple_email', 'mediated_email_attachment'])."""
         sources = await client.list_signal_sources(include_inactive=False)
         # Enrich each source with extractor_tool derived from source_type.
         # has_credentials and credentials are intentionally excluded — never exposed to Claude.
@@ -88,8 +88,8 @@ def register_tools(server: FastMCP) -> None:
     @server.tool()
     async def extract_email_content(
         source_slug: str,
-        attachments_b64: Optional[list[str]] = None,
-        urls: Optional[list[str]] = None,
+        attachments_b64: list[str] | None = None,
+        urls: list[str] | None = None,
     ) -> dict:
         """Extract raw text from email attachments or gated URLs for a registered source.
         Called only when a source's extractor_tool equals 'extract_email_content'.
@@ -153,11 +153,11 @@ def register_tools(server: FastMCP) -> None:
         symbol: str,
         direction: str,
         valid_from: str,
-        conviction: Optional[float] = None,
-        valid_until: Optional[str] = None,
-        headline: Optional[str] = None,
-        raw_url: Optional[str] = None,
-        tags: Optional[list[str]] = None,
+        conviction: float | None = None,
+        valid_until: str | None = None,
+        headline: str | None = None,
+        raw_url: str | None = None,
+        tags: list[str] | None = None,
     ) -> dict:
         """Ingest a trading signal into xstockstrat-ingest.
         source: slug from list_signal_sources (required, validated by ingest).

@@ -8,8 +8,8 @@ import pytest
 import respx
 from mcp.server import FastMCP
 
-from app.tools import register_tools, _EXTRACTOR_TOOL_MAP
 from app import client
+from app.tools import _EXTRACTOR_TOOL_MAP, register_tools
 
 
 def _make_server() -> FastMCP:

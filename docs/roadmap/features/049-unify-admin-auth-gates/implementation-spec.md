@@ -365,7 +365,7 @@ runs the language linter.
 
 ### Step 12 — service: agent OAuth discovery endpoints + `AGENT_PUBLIC_URL` (FR-B1, FR-B2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/oauth_metadata.py` — create
@@ -679,3 +679,9 @@ runs the language linter.
 **Actual**: The execution host had no `buf`, no proto-gen container pulled, and no `grpcio-tools`. Installed the exact CI `proto-freshness`/`proto-lint`-pinned toolchain on the host — `buf` 1.69.0, `protoc-gen-go` v1.36.11, `protoc-gen-go-grpc` v1.6.2, `protoc-gen-connect-go` v1.19.2, `grpcio-tools` 1.80.0, `pnpm` 9.15.0 (Node 22) — then ran the unmodified `scripts/buf-gen.sh`. `buf breaking` was run against `origin/main-dev` (the feature branch `feature/unify-admin-auth-gates` does not exist on origin; matches the spec's documented fallback). Confirmed `git diff` for `packages/proto/gen/` is confined to `identity/v1` and the re-run is idempotent (mirrors CI's stale-stub check).
 **Reason**: Sequential-mode CI-equivalent verification fallback (REPO CONVENTIONS → "Proto codegen container blocked").
 **Disposition**: CI-equivalent fallback.
+
+### Deviation: Step 12 — pre-existing agent ruff debt (user-approved scope expansion)
+**Spec said**: Step 12 scope is the agent OAuth discovery endpoints + `AGENT_PUBLIC_URL`; the lint gate is Step 21's `ruff check . && ruff format --check .`.
+**Actual**: The current `ruff` (0.15.8) flags pre-existing violations on `origin/main-dev` in the agent (`UP045` Optional→`X | None` across `app/tools.py`, one `E501` long docstring line, `F841` unused `result` in `tests/test_client.py`) that an older CI `ruff` did not. Because CI installs the latest `ruff` and the agent lint job is triggered by this feature's agent changes, those findings would turn the job red regardless of feature 049. With explicit user approval (sequential blocker → "fix now / expand scope"), applied `ruff check --fix` (UP045) + `ruff format`, wrapped the long docstring line, and dropped the unused test assignment. Behavior-preserving (type-annotation syntax, whitespace, dead-assignment removal).
+**Reason**: Required for the agent lint gate (and CI) to pass on this PR; the debt is unrelated to feature 049 but unavoidable once the agent is touched.
+**Disposition**: accepted limitation cleanup (user-approved).

@@ -5,6 +5,7 @@ Validates API keys against xstockstrat-identity's ValidateApiKey gRPC RPC.
 Returns True if the key is valid; False on invalid/missing key.
 Used as guard in the Starlette ASGI app wrapping the SSE transport.
 """
+
 import logging
 import os
 
@@ -27,7 +28,7 @@ async def validate_api_key(authorization_header: str | None) -> bool:
         return False
     if not authorization_header.startswith("Bearer "):
         return False
-    api_key = authorization_header[len("Bearer "):]
+    api_key = authorization_header[len("Bearer ") :]
     if not api_key:
         return False
     try:
