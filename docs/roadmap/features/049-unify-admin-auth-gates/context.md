@@ -75,3 +75,34 @@
   either outcome, so it does not block product-spec approval.
 - Note: 041-upgrade-nextjs15 touches the UI but 049 expects no UI code change → no real overlap.
 - Next: /sdd-spec unify-admin-auth-gates.
+
+## Session 2026-06-06 — re-spec: merge 018 (OAuth 2.1) into 049 (user decision)
+
+- **User decisions** (AskUserQuestion): (1) **merge** 049 + OAuth into one feature; (2) **full MCP
+  OAuth 2.1** scope; (3) **re-spec first** (018's impl spec is stale).
+- Feature broadened to **two parts**: Part A = original internal admin-scope gates; Part B = full MCP
+  OAuth 2.1 edge auth (absorbs 018). Directory slug `unify-admin-auth-gates` retained for branch/PR
+  continuity; working title *unify-agent-auth*. **Status reset `spec-ready` → `draft`** (scope changed;
+  prior product-spec approval no longer covers OAuth) → needs re-review.
+- **Why 018 could not be implemented as-written (stale):** its impl spec assumes nginx (deleted by 045),
+  HTTP/Connect-RPC `80xx` ports + `IDENTITY_HTTP_ENDPOINT` (removed; backends gRPC-only), and separate
+  trader/insights/config-ui (consolidated into `xstockstrat-ui`). Retired; 018 marked demoted/canceled.
+- **Architecture grounding for Part B (verified):**
+  - Agent = FastMCP+Starlette+uvicorn:9000, routes only `/sse` + `/messages`
+    (`services/xstockstrat-agent/app/main.py:80-85`); no `/.well-known` or `/oauth`.
+  - Agent→identity is gRPC-only (`auth.py:36` ValidateApiKey; `client.py:374-392` validate_admin). No
+    httpx-to-identity, no `IDENTITY_HTTP_ENDPOINT`.
+  - Identity gRPC-only (`src/index.ts:42-57`, :50058): `AuthenticateUser`, `CreateApiKey` (returns
+    `xss_` key), `ValidateApiKey` (`TokenClaims.roles`). golang-migrate migrations up to `002`.
+  - Intended login design already half-wired: `main.py:26-30` `UI_BASE_URL` + `TODO(019)` to redirect to
+    `{UI_BASE_URL}/auth/oauth-login`. UI page `src/app/auth/oauth-login/page.tsx` EXISTS but is a STUB —
+    on login it redirects to `${redirect_uri}?state=` with NO auth code (agent code-issuance never
+    built). Part B (FR-B5/FR-B6) completes this handshake.
+- **Design decisions captured as OQs with recommendations:** OQ-A keep ownership + admin override +
+  close RegisterFormula gap; OQ-B DCR clients in-memory in agent (recommended) vs identity DB+RPC
+  (conditional proto/migration); OQ-C in-memory PKCE-bound single-use ≤60s code store; OQ-D access
+  token = `xss_` API key (reuse validate_api_key); OQ-E discovery reachability under DO `/agent` route
+  (resolve at /sdd-spec); OQ-F in-memory ⇒ instance_count:1; OQ-G keep `?api_key=` as deprecated.
+- **Conditional governance:** proto + identity migration ONLY if OQ-B picks the DB-backed DCR store;
+  otherwise none. Heavy Security review required for Part B (outward-facing edge auth).
+- Next: `/sdd-review unify-admin-auth-gates product-spec` (re-review expanded spec).

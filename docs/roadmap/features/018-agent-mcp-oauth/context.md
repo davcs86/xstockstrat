@@ -40,3 +40,18 @@
     `/agent/oauth/` proxied to agent's `/oauth/`.
   - `AGENT_PUBLIC_URL` is a new env var needed in the metadata document to build absolute
     `authorization_endpoint` and `token_endpoint` URLs.
+
+## Session 2026-06-06 — superseded / folded into 049
+
+- Per user decision, this feature is **merged into `049-unify-admin-auth-gates` (Part B)** and re-specced
+  as **full MCP OAuth 2.1** (RFC 8414 + RFC 9728 metadata, RFC 7591 Dynamic Client Registration,
+  mandatory PKCE/S256, exact redirect-URI match, login delegated to `xstockstrat-ui` `/auth/oauth-login`,
+  identity over gRPC). Status: `implementation-ready` → `demoted/canceled`.
+- **The 7-step implementation-spec.md here is RETIRED — do not execute.** It is stale post-045: it assumes
+  nginx (`nginx.conf` deleted), HTTP/Connect-RPC `80xx` ports + `IDENTITY_HTTP_ENDPOINT` (removed; backends
+  are gRPC-only), and separate trader/insights/config-ui services (consolidated into `xstockstrat-ui`).
+- Reusable design decisions carried forward into 049 Part B: PKCE S256 auth-code flow; access token = the
+  `xss_` identity API key (no separate token store); in-memory single-use ≤60s code store
+  (instance_count:1). New in 049: RFC 9728 protected-resource metadata, RFC 7591 DCR, exact redirect
+  matching (OAuth 2.1), and gRPC-only identity calls replacing the stale HTTP approach.
+- Authoritative spec going forward: `docs/roadmap/features/049-unify-admin-auth-gates/product-spec.md`.

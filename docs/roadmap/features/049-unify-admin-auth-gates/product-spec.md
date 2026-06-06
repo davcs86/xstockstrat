@@ -1,203 +1,257 @@
-# Product Spec: unify-admin-auth-gates
+# Product Spec: unify-admin-auth-gates → **unify-agent-auth** (combined)
 
 **Feature**: `049-unify-admin-auth-gates`
-**Status**: `draft` (backlog)
+**Status**: `draft` (re-spec — scope expanded to absorb OAuth 2.1; supersedes feature 018)
 **Owner**: Platform / Security
+
+> **Scope note (2026-06-06):** This feature was broadened from the original internal admin-gate
+> unification to a single **"unify agent auth"** effort covering two layers:
+> **Part A — internal admin-scope gate unification** (the original 049 scope), and
+> **Part B — edge OAuth 2.1 for the MCP transport** (absorbing and re-speccing feature
+> `018-agent-mcp-oauth`, whose impl spec is stale post-045). The directory slug stays
+> `unify-admin-auth-gates` for branch/PR continuity; the working title is **unify-agent-auth**.
 
 ---
 
 ## Problem Statement
 
-The platform has **three different admin-authorization mechanisms** for mutating, admin-scoped
-operations. Features 047/048 standardized `xstockstrat-analysis` on a single model, but two services
-were intentionally left out of that scope (changing them means touching services 047 didn't own).
-This feature captures the remaining divergence so it can be aligned deliberately.
+The agent's authorization story is fragmented across two layers, neither of which is consistent:
+
+1. **Internal (service-to-service) admin gates** use *three* different mechanisms. 047/048 aligned
+   `xstockstrat-analysis` to an `x-access-scope` role check; `xstockstrat-ingest` still re-authenticates
+   internally, and `xstockstrat-indicators` uses author-ownership (with `RegisterFormula` ungated).
+2. **Edge (Claude.ai → agent) authentication** has no standards-based path. The MCP SSE transport accepts
+   only `Authorization: Bearer <api_key>` or `?api_key=` query param. Claude.ai's remote-MCP "Connect
+   apps" integration requires **OAuth 2.1** (PKCE, dynamic client registration, protected-resource
+   metadata), so operators cannot add the agent as a production remote MCP server through the standard UI.
+   Feature 018 specced an OAuth 2.0 flow, but its implementation spec predates feature 045 and is stale
+   (assumes nginx, HTTP/Connect-RPC `80xx` ports, and a non-existent `IDENTITY_HTTP_ENDPOINT`).
 
 ## User Story
 
-As a **platform/security engineer**, I want every mutating, admin-scoped operation to follow one
-authorization model — *entry points authenticate, internal services do an `x-access-scope` role
-check at most* — so that the trust boundary is consistent, auditable, and cheap to reason about,
-with the one deliberate exception (formula author-ownership) documented as intentional rather than
-accidental.
+As a **platform/security engineer and operator**, I want one coherent auth model for the agent —
+*standards-based OAuth 2.1 at the edge, and a single `x-access-scope` role-check model internally* — so
+that I can connect the agent to Claude.ai through the normal Connect-apps flow, and so the internal trust
+boundary is consistent and auditable, with the one deliberate exception (formula author-ownership)
+documented as intentional.
 
-### Current state (verified against `main-dev`, post-047/048, 2026-06-06)
+## Architecture grounding (current `main-dev`, post-045)
+
+- Agent serves MCP over **FastMCP + Starlette + uvicorn** on port 9000; routes today are only `/sse` and
+  `/messages` (`services/xstockstrat-agent/app/main.py:80-85`). No `/.well-known` or `/oauth` routes.
+- Agent → identity is **gRPC-only** (`IDENTITY_ENDPOINT=…:50058`); `auth.py:36` calls `ValidateApiKey`,
+  `client.py:374-392` `validate_admin` checks `"admin" in roles`. **No httpx-to-identity, no
+  `IDENTITY_HTTP_ENDPOINT`.**
+- Identity is **gRPC-only** (`src/index.ts:42-57`, port 50058); exposes `AuthenticateUser`,
+  `CreateApiKey` (returns `xss_…` key), `ValidateApiKey` (returns `TokenClaims.roles`). **No HTTP/login
+  routes.** Migrations are golang-migrate (`services/xstockstrat-identity/migrations/NNN_*.up/down.sql`,
+  currently up to `002`).
+- **No nginx** (`nginx.conf` deleted by 045). DO App Platform routes `/agent` → agent, `/` → UI.
+- The intended login design is already half-wired: `agent/app/main.py:26-30` reads `UI_BASE_URL` with a
+  `TODO(019)` to redirect OAuth login to `{UI_BASE_URL}/auth/oauth-login`. The UI page
+  `services/xstockstrat-ui/src/app/auth/oauth-login/page.tsx` **exists** (feature 019) but is a **stub**:
+  on successful `/api/auth/login` it redirects to `${redirect_uri}?state=…` with **no authorization
+  code** — the agent code-issuance handshake was never built.
+
+---
+
+# Part A — Internal admin-scope gate unification
+
+(Original 049 scope. Verified accurate against merged 047/048 code.)
+
+### Current state
 
 | Operation | Service | Gate today | Evidence | Model |
 |---|---|---|---|---|
-| `ManageStrategy` | analysis | `_has_admin_scope(context)` → role check on `x-access-scope` ADMIN bit `0x04` | `xstockstrat-analysis/app/handlers/servicer.py:58,655` | **Aligned** (target) |
-| `SetStrategyLive` | analysis | `_has_admin_scope(context)` (shared helper) | `…/servicer.py:726-727` | **Aligned** (target) |
-| `ManageSignalSource` | **ingest** | `_validate_admin_token` → reads `authorization: Bearer`, calls identity `ValidateApiKey`, checks `"admin" in roles` | `xstockstrat-ingest/app/handlers/servicer.py:47-58,427` | **Re-auth inside internal service** |
-| `UpdateFormula` / `DeleteFormula` | **indicators** | author-ownership: `row["author"] != request.user_id` → `PERMISSION_DENIED` | `xstockstrat-indicators/app/handlers/servicer.py:211-213,236-238` | **Ownership model (different concern)** |
-| `RegisterFormula` | **indicators** | **effectively ungated** — `author` defaults to `"dev-user"` when unset; no admin or ownership check | `xstockstrat-indicators/app/handlers/servicer.py:135-150` | **Gap (no gate)** |
+| `ManageStrategy` / `SetStrategyLive` | analysis | `_has_admin_scope(context)` → `x-access-scope & 0x04` | `xstockstrat-analysis/app/handlers/servicer.py:58,655,726` | **Aligned (target)** |
+| `ManageSignalSource` | **ingest** | `_validate_admin_token` → `authorization: Bearer` + identity `ValidateApiKey` + `"admin" in roles` | `xstockstrat-ingest/app/handlers/servicer.py:47-58,427` | **Re-auth inside internal service** |
+| `UpdateFormula` / `DeleteFormula` | **indicators** | author-ownership: `row["author"] != request.user_id` → `PERMISSION_DENIED` | `xstockstrat-indicators/app/handlers/servicer.py:211-213,236-238` | **Ownership (different concern)** |
+| `RegisterFormula` | **indicators** | **effectively ungated** — `author` defaults to `"dev-user"` | `xstockstrat-indicators/app/handlers/servicer.py:135-150` | **Gap (no gate)** |
 
-Agent side (`xstockstrat-agent`):
+### Functional Requirements — Part A
 
-- `manage_strategy` tool — validates admin **at the entry** (`client.validate_admin`) and forwards
-  `x-access-scope: 7`. **Aligned.** (`app/tools.py:265`, `app/client.py:225-227`)
-- `set_strategy_live` tool — validates admin at the entry, forwards `x-access-scope`. **Aligned.**
-  (`app/tools.py:364`, `app/client.py:405`)
-- `manage_signal_source` tool — forwards only `authorization: Bearer <admin_api_key>` via
-  `_admin_metadata`; **no entry validation, no `x-access-scope`**. (`app/tools.py:320-351`,
-  `app/client.py:361`)
-- `manage_formula` tool — forwards `authorization: Bearer <admin_api_key>` and a
-  `formula_author_user_id` (ownership), no entry validation. (`app/tools.py:284-317`)
+- **FR-A1** ingest `ManageSignalSource` authorizes via an `x-access-scope` ADMIN-bit (`0x04`) role check
+  mirroring analysis `_has_admin_scope`; returns `PERMISSION_DENIED` when the bit is absent. No identity
+  `ValidateApiKey` call inside ingest for this RPC.
+- **FR-A2** agent `manage_signal_source` tool calls `client.validate_admin(admin_api_key)` at the entry
+  and forwards `x-access-scope` to ingest (mirrors `manage_strategy`/`set_strategy_live`).
+- **FR-A3** ingest removes the `identity_channel`/`_identity` wiring if unused after FR-A1. Verified:
+  `_validate_admin_token` has a **single** call site (`servicer.py:427`) → removal is clean.
+- **FR-A4** indicators formula-management gate decision (OQ-A) is implemented and documented: keep
+  author-ownership **and** add an admin-scope override; close the `RegisterFormula` gap (require an
+  authenticated `x-user-id`; default `author` to it instead of `"dev-user"`).
+- **FR-A5** `credentials_ref` is never echoed by `manage_signal_source` (unchanged from FR-12 of 047).
+- **FR-A6** Docs updated: `docs/patterns/header-propagation.md` describes the single "entry
+  authenticates, internal role-checks" model and lists the indicators ownership exception.
 
-### Why it matters
+---
 
-- **Inconsistency / maintainability:** two different auth idioms in internal services for the same
-  conceptual gate ("admin can mutate") make the trust model harder to reason about and review.
-- **Trust-model clarity:** the platform convention (`docs/patterns/header-propagation.md`) is that
-  entry points authenticate and set `x-user-id` / `x-access-scope`, and internal services trust those.
-  ingest's `ManageSignalSource` re-authenticating is heavier than that convention requires.
-- **Security review surface:** a single, well-understood gate is easier to audit than three.
-- **Latent gap:** `RegisterFormula` carries no authorization check at all today — surfaced during this
-  audit. Whatever decision OQ-1 reaches for formulas must close (or consciously accept) this gap.
+# Part B — Edge OAuth 2.1 for the MCP transport
 
-## Goals
+The **agent acts as the OAuth 2.1 Authorization Server and Resource Server** for its own MCP endpoint.
+Login is **delegated to `xstockstrat-ui`**; identity stays gRPC-only and is reached via existing gRPC
+RPCs. The access token is the existing xstockstrat API key (validated by the unchanged `validate_api_key`
+path) — no separate token store. All of 018's stale HTTP/nginx assumptions are dropped.
 
-1. **`xstockstrat-ingest` `ManageSignalSource`**: replace `_validate_admin_token` re-auth with the
-   `x-access-scope` ADMIN-bit role check (mirror analysis `_has_admin_scope`). Update the agent
-   `manage_signal_source` tool to validate admin at the entry (`client.validate_admin`) and forward
-   `x-access-scope`. `credentials_ref` handling (never echoed) stays unchanged.
-2. **`xstockstrat-indicators` formula management**: **decide** (OQ-1) whether the author-ownership
-   model stays as-is (a legitimately different concern — "only the author may edit their formula"), or
-   is additionally combined with an admin-scope override. If kept as ownership, document it explicitly
-   as an intentional exception rather than an inconsistency, and address the `RegisterFormula` gap.
-3. **No behavior change for legitimate admin callers** — UI BFF (JWT-derived scope) and the MCP agent
-   (admin-validated at entry) continue to work; non-admin callers are rejected consistently with
-   `PERMISSION_DENIED`.
+### Flow (target)
 
-## Non-Goals
+```
+Claude.ai ──(1) GET /.well-known/oauth-protected-resource (RFC 9728)──► agent  → points to agent as AS
+Claude.ai ──(2) GET /.well-known/oauth-authorization-server (RFC 8414)► agent  → advertises endpoints, S256, DCR
+Claude.ai ──(3) POST /oauth/register (RFC 7591 DCR)──────────────────► agent  → returns client_id (+ exact redirect_uris)
+Claude.ai ──(4) GET /oauth/authorize?client_id&redirect_uri&state&code_challenge(S256)&response_type=code
+   agent validates client_id + EXACT redirect_uri + PKCE → 302 to {UI_BASE_URL}/auth/oauth-login?...&agent_cb=/oauth/callback&state
+User ─────(5) submits email/password on UI page → UI BFF /api/auth/login → identity AuthenticateUser (gRPC)
+   UI ──(6) on success, 302 back to agent /oauth/callback with a one-time login proof + state
+   agent ──(7) identity CreateApiKey (gRPC) → mints xss_ key; issues single-use PKCE-bound auth code
+   agent ──(8) 302 to client redirect_uri?code=<code>&state=<state>
+Claude.ai ──(9) POST /oauth/token (grant_type=authorization_code, code, code_verifier, redirect_uri, client_id)
+   agent verifies PKCE S256 + exact redirect_uri + client_id + single-use + TTL → {access_token=xss_ key, token_type:Bearer, expires_in}
+Claude.ai ──(10) GET /sse  Authorization: Bearer <access_token> → existing validate_api_key (unchanged)
+```
 
-- Re-architecting the JWT/identity system or the SSE auth layer.
-- Changing how the UI BFF derives `x-access-scope` from JWT claims.
-- Touching the trading/portfolio/config/ledger/notify services (their gates are out of scope unless a
-  later audit finds a similar divergence).
-- Adding new admin operations or roles — this is a gate-alignment feature, not a capability feature.
+### Functional Requirements — Part B
+
+- **FR-B1 (RFC 9728)** `GET /.well-known/oauth-protected-resource` returns Protected Resource Metadata
+  naming the agent's resource identifier and its `authorization_servers` (the agent itself).
+- **FR-B2 (RFC 8414)** `GET /.well-known/oauth-authorization-server` returns AS metadata with
+  `authorization_endpoint`, `token_endpoint`, `registration_endpoint`,
+  `code_challenge_methods_supported: ["S256"]`, `response_types_supported: ["code"]`,
+  `grant_types_supported: ["authorization_code"]`. Absolute URLs built from `AGENT_PUBLIC_URL`.
+- **FR-B3 (RFC 7591 DCR)** `POST /oauth/register` accepts a client registration (redirect_uris, etc.),
+  validates that every `redirect_uri` is `https://` (or the configured allowlist), persists the client,
+  and returns `client_id` (public client — no secret; PKCE is the proof). Storage per OQ-B.
+- **FR-B4** `GET /oauth/authorize` validates `response_type=code`, `code_challenge_method=S256`
+  (**PKCE required**), a registered `client_id`, and an **exact-match** `redirect_uri` (OAuth 2.1 — no
+  wildcards, no "allow any https" default). On success it 302-redirects the browser to
+  `{UI_BASE_URL}/auth/oauth-login` carrying the agent callback, `state`, and the PKCE challenge context.
+- **FR-B5 (UI login delegation)** Complete the existing `xstockstrat-ui`
+  `/auth/oauth-login/page.tsx`: on successful `/api/auth/login`, redirect back to the **agent callback**
+  (not directly to the external client) so the agent can mint the API key and issue the OAuth code.
+- **FR-B6** Agent `GET /oauth/callback` receives the authenticated login result + state, calls identity
+  `CreateApiKey` (**gRPC**, scopes per policy), issues a single-use, PKCE-bound, ≤60 s auth code, and
+  302-redirects to the client's registered `redirect_uri` with `code` + `state`.
+- **FR-B7** `POST /oauth/token` (`grant_type=authorization_code`) verifies PKCE `code_verifier` (S256),
+  **exact** `redirect_uri` and `client_id` match, single-use, and TTL; returns
+  `{access_token: <xss_ key>, token_type: "Bearer", expires_in}`. Any failure → `invalid_grant` (400).
+  No access tokens are ever returned in a query string (OAuth 2.1).
+- **FR-B8** The access token IS the xstockstrat API key; the unchanged `validate_api_key` gRPC path
+  authenticates the subsequent `/sse` connection. No separate token store for validation.
+- **FR-B9** All identity interactions (`AuthenticateUser` via the UI BFF, `CreateApiKey`,
+  `ValidateApiKey`) are **gRPC**. No `IDENTITY_HTTP_ENDPOINT`, no nginx, no `80xx` ports.
+- **FR-B10** Legacy `Authorization: Bearer <api_key>` remains fully supported. `?api_key=` query-param
+  auth is retained for Claude Desktop **but marked deprecated/legacy** (OAuth 2.1 discourages
+  credentials in query strings); documented as Desktop-only fallback.
+- **FR-B11** Config keys (namespace `agent`, category `oauth`): `agent.oauth.allowed_redirect_uris`
+  (exact-match allowlist; **no allow-any-https default** — empty = registration-time `https://` check
+  only), and a registration policy key per OQ-B. Documented in `docs/patterns/config-governance.md`.
+- **FR-B12** Discovery reachability: `AGENT_PUBLIC_URL` and the `.well-known` placement are chosen so
+  Claude.ai can discover the agent under the DO `/agent` route rule (OQ-E). `claude_mcp_config.json` and
+  `docs/runbooks/mcp-tools.md` updated to document the OAuth 2.1 flow as the recommended method.
+
+## Out of Scope
+
+- Re-architecting the JWT/identity system or the UI BFF JWT auth.
+- Refresh-token issuance / rotation, token revocation endpoint, OIDC/ID tokens, implicit or
+  client-credentials/password grants (excluded by OAuth 2.1 anyway).
+- Multi-instance horizontal scaling of the agent's OAuth state (in-memory stores assume
+  `instance_count: 1` — see OQ-F).
+- Touching trading/portfolio/config/ledger/notify internal gates (Part A is ingest + indicators only).
+- Resource-indicator/audience-bound JWT access tokens (API-key-as-token is used; see OQ-D).
 
 ## Affected Services
 
-Exact service names from CLAUDE.md Service Registry:
-
-- `xstockstrat-ingest` (Python) — `ManageSignalSource` gate swap; likely removal of the
-  `identity_channel`/`_identity` wiring (`app/main.py:60,67`, `app/handlers/servicer.py:36,41-58`),
-  since `_validate_admin_token` is its **only** caller (`servicer.py:427`).
-- `xstockstrat-indicators` (Python) — formula-management gate decision (OQ-1) and the `RegisterFormula`
-  gap (`app/handlers/servicer.py:135-238`).
-- `xstockstrat-agent` (Python) — entry-point `validate_admin` + `x-access-scope` forwarding for
-  `manage_signal_source` (`app/tools.py:320-351`, `app/client.py:344-361`); `manage_formula` adjusted
-  per OQ-1.
-- `xstockstrat-ui` (Next.js) — **no code change expected**; the BFF already derives `x-access-scope`
-  from JWT and forwards it. Callers exist (`src/app/config-ui/hooks/useSignalSourceMutations.ts`,
-  `src/hooks/useFormulas.ts`) and must keep working — covered by acceptance, not by new code.
+- `xstockstrat-agent` (Python) — Part A tool-layer entry validation (`tools.py`, `client.py`); Part B
+  OAuth 2.1 AS/RS endpoints (`main.py` Starlette routes + new `oauth_*` modules), gRPC `CreateApiKey`.
+- `xstockstrat-ingest` (Python) — Part A `ManageSignalSource` gate swap; remove `identity_channel`.
+- `xstockstrat-indicators` (Python) — Part A formula gate decision + `RegisterFormula` gap.
+- `xstockstrat-identity` (Node.js) — Part B consumes `CreateApiKey`/`AuthenticateUser`/`ValidateApiKey`
+  (no RPC changes). **New migration only if OQ-B chooses a DB-backed DCR client store.**
+- `xstockstrat-ui` (Next.js) — Part B: complete `/auth/oauth-login` to carry the auth code back to the
+  agent callback. Part A: no change (BFF already forwards `x-access-scope`).
 
 ## Proto Contract Changes
 
-- [x] No proto changes required — gate logic only; no RPC signatures, messages, or fields change.
-      (Re-confirm at `/sdd-spec`.)
+- [x] No proto changes **if** DCR clients are stored agent-side (OQ-B option 1, recommended).
+- ⚠ **Conditional:** if OQ-B chooses identity-DB-backed DCR, add identity RPC(s)
+  (`RegisterOAuthClient` / `GetOAuthClient`) → additive, non-breaking, owner + config-team approval.
 
 ## Config Key Changes
 
-- [x] No new config keys.
+New keys (namespace `agent`, category `oauth`):
+- `agent.oauth.allowed_redirect_uris` — string (comma-separated, **exact** URIs); empty = require
+  `https://` at registration. **No allow-any default** (OAuth 2.1 exact-match).
+- `agent.oauth.registration_enabled` — bool (default `true`); gates open Dynamic Client Registration.
 
 ## Database Changes
 
-- [x] No schema changes — authorization is request-scoped; no new tables/columns/migrations.
-
-## Functional Requirements
-
-- **FR-1** ingest `ManageSignalSource` authorizes via an `x-access-scope` ADMIN-bit (`0x04`) role check
-  mirroring analysis `_has_admin_scope`; returns `PERMISSION_DENIED` when the bit is absent. No identity
-  `ValidateApiKey` call inside ingest for this RPC.
-- **FR-2** agent `manage_signal_source` tool calls `client.validate_admin(admin_api_key)` at the entry
-  and forwards `x-access-scope` to ingest (mirrors `manage_strategy`/`set_strategy_live`).
-- **FR-3** ingest removes the `identity_channel`/`_identity` wiring if it is unused after FR-1.
-  Verified during this spec: `_validate_admin_token` (→ `_identity`) has a **single** call site
-  (`servicer.py:427`), so removal is expected to be clean. Re-verify at `/sdd-spec`/implementation.
-- **FR-4** indicators formula-management gate decision (OQ-1) is implemented and documented: either
-  (a) keep author-ownership and document it as an intentional model, or (b) add an admin-scope path
-  (e.g. admin scope overrides ownership). The decision must also resolve the **`RegisterFormula` gap**
-  (it has no gate today).
-- **FR-5** `credentials_ref` is still never echoed by `manage_signal_source` (unchanged from FR-12 of
-  047) — neither in the agent tool response nor the ingest response.
-- **FR-6** Docs updated: `docs/patterns/header-propagation.md` (or a short auth-model note) describes the
-  single "entry authenticates, internal role-checks" model and lists the indicators ownership exception.
-- **FR-7** No behavior change for legitimate admin callers: UI BFF (JWT-derived `x-access-scope`) and the
-  MCP agent (admin-validated at entry) continue to succeed for admins and are rejected for non-admins.
+- [x] No schema changes **if** DCR clients + auth codes are in-memory (OQ-B/OQ-C option 1, recommended;
+  safe at `instance_count: 1`).
+- ⚠ **Conditional:** if OQ-B chooses durable DCR, add `services/xstockstrat-identity/migrations/003_oauth_clients.up.sql`
+  (+ `.down.sql`), NNN-sequenced after `002`.
 
 ## Governance Gates
 
-- **Security review** — trust-boundary change in ingest; confirm entry points strip/validate
-  `x-access-scope` from external requests so internal callers can trust it (per
-  `docs/patterns/header-propagation.md`: nginx/ingress strips client-supplied trust headers).
-- **Service owners** — `xstockstrat-ingest` and `xstockstrat-indicators` (and `xstockstrat-agent` for
-  the tool-layer change).
-- **Platform Lead** — owns the OQ-1 decision (ownership vs. admin-scope for formulas).
-- No new proto, config key, or DB migration is anticipated (gate logic only). Confirm at `/sdd-spec`.
+- **Security review (heavy)** — Part B is outward-facing edge auth: PKCE enforcement, exact redirect-URI
+  matching, DCR abuse/SSRF surface, single-use + short-TTL codes, no tokens in query strings, login
+  delegation/CSRF (state binding), API-key scoping of minted tokens. Part A: trust-boundary change in
+  ingest (confirm ingress strips client-supplied `x-access-scope`).
+- **Service owners** — agent, ingest, indicators, identity, UI.
+- **Platform Lead** — OQ-A (formula model), OQ-B/D (DCR + token-type architecture), service-registry /
+  port / route consistency.
+- **Config team** — new `agent.oauth.*` keys.
 
 ## Feature Workflow Notes
 
-Branch to create: `feature/unify-admin-auth-gates` (branch from `main-dev`).
-Dependency: **047 + 048 merged to `main-dev`** (satisfied — PRs #581, #596) — the `_has_admin_scope`
-(analysis) and `validate_admin` (agent) patterns this feature extends are present on `main-dev`.
-
-Approval gates required (per `docs/runbooks/feature-workflow.md`):
-
-- [x] 1 service owner approval per affected service (non-breaking, gate-logic change) — ingest,
-      indicators, agent.
-- [ ] 2 service owners + platform lead (breaking proto change) — N/A (no proto change).
-- [ ] DBA review + service owner (schema migration) — N/A (no migration).
-- [x] Security review (trust-boundary change).
+Branch: `feature/unify-admin-auth-gates` (from `main-dev`).
+Dependencies satisfied: 047 (#581) + 048 (#596) merged; UI unified-login (019) + `oauth-login` page +
+`UI_BASE_URL` plumbing present. **Supersedes feature 018** (its OAuth 2.0 spec is folded here and its
+impl spec is retired as stale).
+Approval gates (per `docs/runbooks/feature-workflow.md`):
+- [x] 1 service owner per affected service (gate-logic + additive edge auth).
+- [ ] 2 owners + platform lead — only if OQ-B adds identity proto (conditional).
+- [ ] DBA + service owner — only if OQ-B adds the identity migration (conditional).
+- [x] Security review (edge OAuth 2.1 + ingest trust-boundary).
 
 ## Acceptance Criteria
 
-- **AC-1** A non-admin `x-access-scope` to ingest `ManageSignalSource` returns `PERMISSION_DENIED`; an
-  admin scope succeeds; no identity `ValidateApiKey` call is made by ingest for the gate.
-- **AC-2** The agent `manage_signal_source` tool rejects a non-admin key at the entry and forwards
-  admin scope (`x-access-scope`) for an admin key.
-- **AC-3** The indicators formula-management authorization decision (OQ-1) is implemented and
-  documented, including the disposition of the `RegisterFormula` gap.
-- **AC-4** UI BFF flows for signal sources and formulas continue to work unchanged for admin users.
-- **AC-5** Existing ingest/indicators/agent tests pass; new tests cover the gate change (admin allow /
-  non-admin deny for `ManageSignalSource`; entry-validation for the agent tool).
-- **AC-6** `identity_channel`/`_identity` removed from ingest if FR-3's unused-verification holds.
+- **AC-A1** Non-admin `x-access-scope` to ingest `ManageSignalSource` → `PERMISSION_DENIED`; admin
+  scope succeeds; no identity `ValidateApiKey` call by ingest for the gate.
+- **AC-A2** agent `manage_signal_source` rejects a non-admin key at the entry; forwards `x-access-scope`
+  for an admin key. `credentials_ref` never echoed.
+- **AC-A3** indicators formula decision (OQ-A) implemented + documented, including `RegisterFormula`.
+- **AC-A4** `identity_channel`/`_identity` removed from ingest (FR-A3 verification holds).
+- **AC-B1** `GET /.well-known/oauth-protected-resource` (RFC 9728) and
+  `/.well-known/oauth-authorization-server` (RFC 8414) return valid metadata advertising S256, the
+  three endpoints, and the registration endpoint.
+- **AC-B2** `POST /oauth/register` (DCR) returns a usable `client_id`; a subsequent authorize→login→
+  callback→token exchange completes end-to-end and the resulting `access_token` authenticates `/sse`.
+- **AC-B3** PKCE is enforced (bad `code_verifier` → `invalid_grant`); auth codes are single-use and
+  expire ≤60 s; a `redirect_uri` not exactly matching the registered value → 400.
+- **AC-B4** Legacy `Authorization: Bearer` still authenticates `/sse`; `?api_key=` still works but is
+  documented as deprecated/Desktop-only.
+- **AC-B5** UI `/auth/oauth-login` redirects back to the agent callback (not the external client) and
+  the agent issues the code — verified by an E2E/integration test.
+- **AC-X** Existing agent/ingest/indicators tests pass; new unit tests cover the gate changes and the
+  OAuth store + endpoints (PKCE, single-use, expiry, exact-redirect, DCR happy path). Coverage ≥40%.
 
-## Open Questions
+## Open Questions — with recommendations (advisory; owners decide)
 
-- **OQ-1 (key decision):** Should indicators formula management keep its **author-ownership** model
-  (only the author may edit/delete their own formula) as an intentional, distinct concern — or be
-  unified under admin-scope? Ownership and admin-scope are arguably *different* authorization questions;
-  the most likely answer is "keep ownership, document it as an exception, and optionally allow an admin
-  override." This decision must also resolve the **`RegisterFormula` gap**. Platform Lead + Security to
-  decide.
-- **OQ-2:** Does any external (non-entry-point) caller reach ingest `ManageSignalSource` directly? If
-  so, removing re-auth requires confirming those callers are inside the trusted boundary. (Known callers
-  today: UI BFF via JWT-derived scope, and the MCP agent. Confirm none bypass an entry point.)
-- **OQ-3:** Should `_has_admin_scope` be promoted to a shared helper module (instead of duplicated per
-  service) once a third service (ingest) adopts it? Three Python services would then carry the same
-  10-line helper.
-
-## Open Questions — Review & Recommendations (2026-06-06)
-
-Advisory analysis; final calls belong to the owners named per question.
-
-- **OQ-1 → Recommended: keep author-ownership, add an admin override, and close the `RegisterFormula`
-  gap.** Ownership and admin-scope answer different questions ("is this *your* formula?" vs. "are you an
-  admin?"); collapsing them would weaken the per-author model the indicators service was built around.
-  Recommended shape: `UpdateFormula`/`DeleteFormula` succeed if `user_id == author` **OR**
-  `x-access-scope` has the ADMIN bit; document the ownership rule as an intentional exception in
-  header-propagation.md. Separately, `RegisterFormula` should gain a minimal gate (at least an
-  authenticated `x-user-id`; default `author` to that id instead of the literal `"dev-user"`) so the
-  "anyone can register" gap is closed. **Owner: Platform Lead + Security.**
-- **OQ-2 → Low risk, must still verify at `/sdd-spec`.** Evidence so far shows only entry-point callers
-  (UI BFF, MCP agent) reach `ManageSignalSource`; no service-to-service caller invokes it. The trust
-  model holds **only if** ingress strips client-supplied `x-access-scope` from external requests —
-  re-confirm that header-stripping is in force for the ingest path before removing the in-service
-  re-auth. **Owner: Security + ingest owner.**
-- **OQ-3 → Defer (do it in this feature only if cheap).** Promoting `_has_admin_scope` to a shared
-  module is reasonable once ingest becomes the third adopter, but a shared Python util across three
-  services needs a home (e.g. a small internal package) and crosses service boundaries — scope risk for
-  a gate-alignment feature. Recommendation: **duplicate the 10-line helper in ingest now**, and capture
-  "extract shared admin-scope helper" as a follow-up backlog item. Revisit if a fourth adopter appears.
-  **Owner: Platform Lead.**
+- **OQ-A (formula gate; Platform Lead + Security):** keep author-ownership, **add an admin-scope
+  override**, and close the `RegisterFormula` gap (require authenticated `x-user-id`; default `author`
+  to it). *Recommended.*
+- **OQ-B (DCR client storage; Platform Lead + identity owner):** **Option 1 (recommended)** — in-memory
+  client store in the agent (no proto/DB churn; clients re-register after restart, which Claude.ai does
+  automatically); safe at `instance_count: 1`. Option 2 — durable store in identity (new RPC + migration
+  `003`), choose only if cross-restart durability is required.
+- **OQ-C (auth-code store):** in-memory dict, single-use, PKCE-bound, ≤60 s TTL (018's choice — keep).
+- **OQ-D (access-token type; Security):** reuse the xstockstrat **API key** as the bearer token
+  (works with the unchanged `validate_api_key`; no new infra). *Recommended.* A resource-indicator/
+  audience-bound JWT is deferred (Out of Scope).
+- **OQ-E (discovery reachability under DO `/agent` route; Platform Lead):** confirm where Claude.ai
+  fetches `/.well-known/oauth-protected-resource` relative to the MCP server URL, and set
+  `AGENT_PUBLIC_URL` + route rules so discovery resolves to the agent. Resolve at `/sdd-spec`.
+- **OQ-F (single-instance constraint):** in-memory DCR + code stores require `instance_count: 1`;
+  document explicitly; a Redis/DB store is the scale-out path (deferred).
+- **OQ-G (`?api_key=` deprecation):** keep for Claude Desktop, mark legacy/deprecated; do not remove in
+  this feature.
