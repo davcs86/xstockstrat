@@ -106,3 +106,19 @@
 - **Conditional governance:** proto + identity migration ONLY if OQ-B picks the DB-backed DCR store;
   otherwise none. Heavy Security review required for Part B (outward-facing edge auth).
 - Next: `/sdd-review unify-admin-auth-gates product-spec` (re-review expanded spec).
+
+## Session 2026-06-06 — sdd-review product-spec (re-review of expanded Part A + Part B)
+
+- Expanded product spec re-approved. Status: draft → spec-ready.
+- Criteria: all PASS — Problem Statement (2 personas, 2 layers), FR-A1..A6 + FR-B1..B12 (numbered/
+  testable), Out of Scope, Affected Services exact-match (agent/ingest/indicators/identity/ui), Proto
+  (conditional, flagged additive/non-breaking), Config keys (agent.oauth.* svc.cat.key), DB (conditional
+  migration with NNN-after-002 + up/down), AC-A*/AC-B*/AC-X, Open Questions (no unchecked checkboxes;
+  OQ-A..G are bullets w/ owners+recommendations).
+- Trading-domain checks: skipped (non-trading).
+- Warnings: 1 — `041-upgrade-nextjs15` (code-completed) also touches xstockstrat-ui; coordinate merge
+  order (low risk: 041 is a Next.js bump, 049 completes /auth/oauth-login logic; no shared config key).
+- Overlap cleared: 018 now demoted/canceled → no longer an active concurrent feature.
+- Advisory (does not block): settle OQ-A (formula gate), OQ-B (DCR storage — decides if any proto/DB
+  change exists), OQ-D (token type), OQ-E (discovery reachability) before/at /sdd-spec.
+- Next: /sdd-spec unify-admin-auth-gates.

@@ -1,6 +1,6 @@
 # Feature: unify-admin-auth-gates
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/unify-admin-auth-gates`
 **Created**: 2026-06-05
 **Last Updated**: 2026-06-06
@@ -15,6 +15,7 @@
 | 2026-06-06 | `draft` (unchanged) | /sdd-story | Dependency cleared (047/048 merged). Verified spec premises against merged code; fleshed out product-spec.md to full SDD template (User Story, Affected Services w/ evidence, Proto/Config/DB declarations, Feature Workflow Notes, FR-7, AC-4/5/6), surfaced the ungated `RegisterFormula` finding, and added an open-questions review with recommendations. |
 | 2026-06-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning: 018-agent-mcp-oauth also modifies xstockstrat-agent — coordinate merge order; advisory: settle OQ-1 before/at /sdd-spec). No criteria failures. |
 | 2026-06-06 | `spec-ready` → `draft` | re-spec (user) | **Scope expanded & merged with 018.** Per user decision, folded `018-agent-mcp-oauth` into this feature as **Part B — full MCP OAuth 2.1 edge auth** (RFC 8414/9728 metadata, RFC 7591 DCR, mandatory PKCE/S256, exact redirect match, UI-delegated login), alongside the original **Part A — internal admin-scope gates**. Re-spec grounded in current architecture (gRPC-only identity, no nginx, `xstockstrat-ui` `/auth/oauth-login`). 018's impl spec retired as stale. Reset to `draft` for re-review. |
+| 2026-06-06 | `draft` → `spec-ready` | /sdd-review | Expanded (Part A + Part B) product spec re-approved. No criteria failures. 1 warning (041-upgrade-nextjs15 also touches xstockstrat-ui — coordinate merge order); 018 overlap cleared (demoted). Advisory: settle OQ-A/B/D/E before/at /sdd-spec — OQ-B decides whether any proto/DB change exists. |
 
 ---
 
@@ -73,4 +74,4 @@ _(Auto-populated from docs/runbooks/reviewer-registry.md at /sdd-spec time.)_
 
 ## Next Action
 
-`/sdd-review unify-admin-auth-gates product-spec` — re-review the expanded (Part A + Part B) product spec before `/sdd-spec`.
+`/sdd-spec unify-admin-auth-gates` — generate the implementation spec from the approved product spec. Settle OQ-A/B/D/E first (OQ-B determines whether there is any proto/DB change).
