@@ -188,3 +188,36 @@ async def callback(request):
     sep = "&" if "?" in data["redirect_uri"] else "?"
     target = f"{data['redirect_uri']}{sep}code={quote(code, safe='')}&state={quote(state, safe='')}"
     return RedirectResponse(target, status_code=302)
+
+
+async def token(request):
+    """POST /oauth/token — authorization_code and refresh_token grants.
+
+    Tokens are returned only in the JSON body (never in a query string — FR-B7).
+    """
+    form = await request.form()
+    grant_type = form.get("grant_type", "")
+
+    if grant_type == "authorization_code":
+        try:
+            result = await client.exchange_auth_code(
+                form.get("code", ""),
+                form.get("code_verifier", ""),
+                form.get("redirect_uri", ""),
+                form.get("client_id", ""),
+                form.get("resource", ""),
+            )
+        except Exception:
+            return JSONResponse({"error": "invalid_grant"}, 400)
+        return JSONResponse(result)
+
+    if grant_type == "refresh_token":
+        try:
+            result = await client.refresh_oauth_token(
+                form.get("refresh_token", ""), form.get("resource", "")
+            )
+        except Exception:
+            return JSONResponse({"error": "invalid_grant"}, 400)
+        return JSONResponse(result)
+
+    return JSONResponse({"error": "unsupported_grant_type"}, 400)

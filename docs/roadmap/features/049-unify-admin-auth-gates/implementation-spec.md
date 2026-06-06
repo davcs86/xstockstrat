@@ -463,7 +463,7 @@ runs the language linter.
 
 ### Step 15 — service: agent `/oauth/token` endpoint (FR-B7, FR-B7b)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/oauth_server.py` — modify

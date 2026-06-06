@@ -469,6 +469,50 @@ async def validate_token(token: str) -> dict[str, Any]:
     }
 
 
+async def exchange_auth_code(
+    code: str, code_verifier: str, redirect_uri: str, client_id: str, resource: str
+) -> dict[str, Any]:
+    """Exchange an authorization code for tokens via identity ExchangeAuthCode (PKCE verified)."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.ExchangeAuthCode(
+            identity_pb2.ExchangeAuthCodeRequest(
+                code=code,
+                code_verifier=code_verifier,
+                redirect_uri=redirect_uri,
+                client_id=client_id,
+                resource=resource,
+            ),
+            metadata=_metadata(),
+        )
+    return {
+        "access_token": resp.access_token,
+        "token_type": resp.token_type,
+        "expires_in": resp.expires_in,
+        "refresh_token": resp.refresh_token,
+    }
+
+
+async def refresh_oauth_token(refresh_token: str, resource: str) -> dict[str, Any]:
+    """Rotate + refresh OAuth tokens via identity RefreshOAuthToken."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.RefreshOAuthToken(
+            identity_pb2.RefreshOAuthTokenRequest(refresh_token=refresh_token, resource=resource),
+            metadata=_metadata(),
+        )
+    return {
+        "access_token": resp.access_token,
+        "token_type": resp.token_type,
+        "expires_in": resp.expires_in,
+        "refresh_token": resp.refresh_token,
+    }
+
+
 async def set_strategy_live(
     strategy_id: str, live_enabled: bool, api_key: str | None = None
 ) -> dict[str, Any]:

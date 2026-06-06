@@ -66,6 +66,7 @@ def build_sse_app():
     from app.oauth_server import authorize as oauth_authorize
     from app.oauth_server import callback as oauth_callback
     from app.oauth_server import register as oauth_register
+    from app.oauth_server import token as oauth_token
 
     server = create_server()
     sse = SseServerTransport("/messages")
@@ -105,6 +106,7 @@ def build_sse_app():
         Route("/oauth/register", endpoint=oauth_register, methods=["POST"]),
         Route("/oauth/authorize", endpoint=oauth_authorize, methods=["GET"]),
         Route("/oauth/callback", endpoint=oauth_callback, methods=["GET"]),
+        Route("/oauth/token", endpoint=oauth_token, methods=["POST"]),
     ]
     return Starlette(routes=routes)
 

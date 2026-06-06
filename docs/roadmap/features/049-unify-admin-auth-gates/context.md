@@ -407,3 +407,11 @@
   user id ever trusted from a query param. Registered both GET routes.
 - Files modified: app/oauth_server.py, app/client.py, app/main.py
 - Deviations: none
+
+### Step 15 — agent /oauth/token endpoint (FR-B7, FR-B7b) [done]
+- client.py: added exchange_auth_code + refresh_oauth_token (gRPC to identity). oauth_server.py:
+  POST /oauth/token branches on grant_type (authorization_code → ExchangeAuthCode; refresh_token →
+  RefreshOAuthToken; else unsupported_grant_type 400); gRPC errors map to invalid_grant 400; tokens
+  returned only in the JSON body. Registered the POST route.
+- Files modified: app/oauth_server.py, app/client.py, app/main.py
+- Deviations: none
