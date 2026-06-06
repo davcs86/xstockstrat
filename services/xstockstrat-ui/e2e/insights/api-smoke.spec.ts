@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { SignJWT } from 'jose';
+import { addAuthCookie } from '../helpers/auth';
 
 /**
  * BFF smoke tests for the Connect-RPC gateway in xstockstrat-insights.
@@ -12,27 +12,7 @@ import { SignJWT } from 'jose';
  * Auth cookie is injected directly so the middleware allows the BFF call through.
  */
 
-const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
-const BASE_URL = 'http://localhost:3000';
 const ANALYSIS_BFF = '/insights/api/xstockstrat.analysis.v1.AnalysisService/ListStrategies';
-
-async function addAuthCookie(page: Page): Promise<void> {
-  const now = Math.floor(Date.now() / 1000);
-  const token = await new SignJWT({
-    user_id: 'test-user-001',
-    email: 'test@example.com',
-    roles: [],
-    issued_at: now,
-    expires_at: now + 3600,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('1h')
-    .sign(new TextEncoder().encode(TEST_JWT_SECRET));
-
-  await page.context().addCookies([
-    { name: 'access_token', value: token, url: BASE_URL, httpOnly: true, sameSite: 'Lax' },
-  ]);
-}
 
 async function callBff(page: Page): Promise<{ status: number; body: Record<string, unknown> }> {
   return page.evaluate(async (url) => {
@@ -57,7 +37,7 @@ test.describe('Connect BFF — AnalysisService/ListStrategies data contract', ()
    */
   test('response is a { strategies: [] } object', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/insights/login');
+    await page.goto('/auth/login');
     const { status, body } = await callBff(page);
     expect(status).toBe(200);
     expect(body).toHaveProperty('strategies');
@@ -66,7 +46,7 @@ test.describe('Connect BFF — AnalysisService/ListStrategies data contract', ()
 
   test('each strategy has strategyId used as the navigation key', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/insights/login');
+    await page.goto('/auth/login');
     const { body } = await callBff(page);
     const strategies = body.strategies as Array<Record<string, unknown>>;
 
@@ -80,7 +60,7 @@ test.describe('Connect BFF — AnalysisService/ListStrategies data contract', ()
 
   test('overallScore is a decimal in [0, 1] — component multiplies by 100 for display', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/insights/login');
+    await page.goto('/auth/login');
     const { body } = await callBff(page);
     const strategies = body.strategies as Array<Record<string, unknown>>;
 
@@ -97,7 +77,7 @@ test.describe('Connect BFF — AnalysisService/ListStrategies data contract', ()
 
   test('rating (when present) is a single uppercase letter A–D', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/insights/login');
+    await page.goto('/auth/login');
     const { body } = await callBff(page);
     const strategies = body.strategies as Array<Record<string, unknown>>;
 
@@ -110,7 +90,7 @@ test.describe('Connect BFF — AnalysisService/ListStrategies data contract', ()
 
   test('strategies with overallScore ≥ 0.8 are categorised as high-score', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/insights/login');
+    await page.goto('/auth/login');
     const { body } = await callBff(page);
     const strategies = body.strategies as Array<Record<string, unknown>>;
 
@@ -128,7 +108,7 @@ test.describe('Connect BFF — AnalysisService/ListStrategies data contract', ()
 
   test('chart data can be derived: strategyId.slice(0, 8) and overallScore * 100', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/insights/login');
+    await page.goto('/auth/login');
     const { body } = await callBff(page);
     const strategies = body.strategies as Array<Record<string, unknown>>;
 

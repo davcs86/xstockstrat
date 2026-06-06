@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { SignJWT } from 'jose';
+import { addAuthCookie, BASE_URL } from '../helpers/auth';
 
 /**
  * E2E tests for the signal sources BFF and Sources page.
@@ -14,29 +14,9 @@ import { SignJWT } from 'jose';
  * Auth cookie is injected so middleware allows requests through.
  */
 
-const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
-const BASE_URL = 'http://localhost:3000';
 const LIST_SOURCES_BFF = '/config-ui/api/xstockstrat.ingest.v1.IngestService/ListSignalSources';
 const MANAGE_SOURCE_BFF = '/config-ui/api/xstockstrat.ingest.v1.IngestService/ManageSignalSource';
 const SOURCES_PAGE = `${BASE_URL}/config-ui/sources`;
-
-async function addAuthCookie(page: Page): Promise<void> {
-  const now = Math.floor(Date.now() / 1000);
-  const token = await new SignJWT({
-    user_id: 'test-user-001',
-    email: 'test@example.com',
-    roles: [],
-    issued_at: now,
-    expires_at: now + 3600,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('1h')
-    .sign(new TextEncoder().encode(TEST_JWT_SECRET));
-
-  await page.context().addCookies([
-    { name: 'access_token', value: token, url: BASE_URL, httpOnly: true, sameSite: 'Lax' },
-  ]);
-}
 
 async function callBff(
   page: Page,
@@ -66,7 +46,7 @@ test.describe('GET /api/sources — ListSignalSources data contract', () => {
 
   test('returns 200 with a sources array wrapper', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/config-ui/login');
+    await page.goto('/auth/login');
     const { status, body } = await callBff(page, LIST_SOURCES_BFF, { includeInactive: true });
     expect(status).toBe(200);
     expect(body).toHaveProperty('sources');
@@ -75,7 +55,7 @@ test.describe('GET /api/sources — ListSignalSources data contract', () => {
 
   test('include_inactive=true param returns 200', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/config-ui/login');
+    await page.goto('/auth/login');
     const { status, body } = await callBff(page, LIST_SOURCES_BFF, { includeInactive: true });
     expect(status).toBe(200);
     expect(body).toHaveProperty('sources');
@@ -83,7 +63,7 @@ test.describe('GET /api/sources — ListSignalSources data contract', () => {
 
   test('each source has required SignalSource fields', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/config-ui/login');
+    await page.goto('/auth/login');
     const { body } = await callBff(page, LIST_SOURCES_BFF, { includeInactive: true });
     const sources = body.sources as Array<Record<string, unknown>>;
     expect(sources.length).toBeGreaterThan(0);
@@ -100,7 +80,7 @@ test.describe('GET /api/sources — ListSignalSources data contract', () => {
 
   test('response never includes credentialsRef field', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/config-ui/login');
+    await page.goto('/auth/login');
     const { body } = await callBff(page, LIST_SOURCES_BFF, { includeInactive: true });
     const sources = body.sources as Array<Record<string, unknown>>;
     for (const src of sources) {
@@ -112,7 +92,7 @@ test.describe('GET /api/sources — ListSignalSources data contract', () => {
 test.describe('POST /api/sources — ManageSignalSource data contract', () => {
   test('accepts a valid update payload and returns 200', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/config-ui/login');
+    await page.goto('/auth/login');
     const { status } = await callBff(page, MANAGE_SOURCE_BFF, {
       source: {
         slug: 'example_simple_email',
@@ -132,7 +112,7 @@ test.describe('POST /api/sources — ManageSignalSource data contract', () => {
 
   test('successful ManageSignalSource response does not have an error field', async ({ page }) => {
     await addAuthCookie(page);
-    await page.goto('/config-ui/login');
+    await page.goto('/auth/login');
     const { status, body } = await callBff(page, MANAGE_SOURCE_BFF, {
       source: { slug: 'example_simple_email', displayName: 'Test', sourceType: 'simple_email',
                 extractorModule: 'app.extractors.noop', active: false, configJson: {} },

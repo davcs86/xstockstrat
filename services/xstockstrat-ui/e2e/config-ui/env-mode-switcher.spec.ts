@@ -1,5 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
-import { SignJWT } from 'jose';
+import { test, expect } from '@playwright/test';
+import { addAuthCookie } from '../helpers/auth';
 
 /**
  * E2E tests for the EnvModeSwitcher component (embedded in app/page.tsx).
@@ -10,27 +10,6 @@ import { SignJWT } from 'jose';
  *
  * Auth cookie is injected directly so the middleware does not redirect to /login.
  */
-
-const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
-const BASE_URL = 'http://localhost:3000';
-
-async function addAuthCookie(page: Page): Promise<void> {
-  const now = Math.floor(Date.now() / 1000);
-  const token = await new SignJWT({
-    user_id: 'test-user-001',
-    email: 'test@example.com',
-    roles: [],
-    issued_at: now,
-    expires_at: now + 3600,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('1h')
-    .sign(new TextEncoder().encode(TEST_JWT_SECRET));
-
-  await page.context().addCookies([
-    { name: 'access_token', value: token, url: BASE_URL, httpOnly: true, sameSite: 'Lax' },
-  ]);
-}
 
 test.describe('EnvModeSwitcher', () => {
   test('ENV "dev" button is active by default', async ({ page }) => {
