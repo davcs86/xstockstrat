@@ -436,3 +436,13 @@
   docker-compose (http://localhost:9000) and both .do specs (${APP_URL}/agent).
 - Files modified: (none new — see Step 12)
 - Deviations: none
+
+### Step 18 — UI /auth/oauth-login redirect-to-agent-callback (FR-B5) [done]
+- page.tsx now reads agent_cb + txn + state (invalid-request guard requires all three). On login
+  success it 302s to `${agentCb}?txn=…&state=…` only — no token/user id/login=ok. The httpOnly
+  access_token cookie rides along same-origin; the agent callback validates it (Step 14).
+- Verification: `pnpm run lint` clean; tsc --noEmit clean (Playwright e2e fallback — no UI coverage
+  gate). No existing e2e test referenced the old redirect_uri param.
+- Files modified: services/xstockstrat-ui/src/app/auth/oauth-login/page.tsx
+- Deviations: CI-equivalent fallback — used tsc+lint in place of the full Playwright browser run
+  (sequential-mode documented e2e fallback).

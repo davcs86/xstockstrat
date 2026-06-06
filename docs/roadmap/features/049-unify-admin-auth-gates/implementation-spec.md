@@ -546,7 +546,7 @@ runs the language linter.
 
 ### Step 18 — service: UI `/auth/oauth-login` redirect-to-agent-callback (FR-B5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/auth/oauth-login/page.tsx` — modify

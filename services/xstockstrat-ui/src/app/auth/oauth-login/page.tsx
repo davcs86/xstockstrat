@@ -7,14 +7,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 function OAuthLoginForm() {
   const searchParams = useSearchParams();
-  const redirectUri = searchParams.get('redirect_uri');
+  // The OAuth flow now carries the agent callback URL + a signed transaction blob (FR-B5).
+  // The agent derives user_id from the same-origin session cookie via ValidateToken — the UI
+  // never puts a user id, token, or login flag in the URL.
+  const agentCb = searchParams.get('agent_cb');
+  const txn = searchParams.get('txn');
   const state = searchParams.get('state');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (!redirectUri || !state) {
+  if (!agentCb || !txn || !state) {
     return (
       <div className="min-h-screen bg-background font-sans flex items-center justify-center p-4">
         <Card className="w-full max-w-sm">
@@ -40,8 +44,12 @@ function OAuthLoginForm() {
         body: JSON.stringify({ email, password }),
       });
       if (res.ok) {
-        // redirect_uri is an external OAuth callback — not subject to the basePath allowlist.
-        window.location.href = `${redirectUri}?state=${encodeURIComponent(state!)}`;
+        // Redirect to the agent callback carrying ONLY the signed txn + state — no user id, no
+        // token, no login flag. The httpOnly access_token cookie set by /api/auth/login rides
+        // along same-origin (the page never reads it); the agent callback validates it via
+        // identity ValidateToken to derive user_id (FR-B5, non-forgeable).
+        window.location.href =
+          `${agentCb}?txn=${encodeURIComponent(txn!)}&state=${encodeURIComponent(state!)}`;
       } else {
         const data = await res.json().catch(() => ({}));
         setError(data.error ?? 'Login failed. Please check your credentials.');
