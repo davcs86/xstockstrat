@@ -171,3 +171,18 @@
     BFF re-arch, other internal gates).
 - **Status reset spec-ready → draft** (material scope change) → re-review needed.
 - Next: /sdd-review unify-admin-auth-gates product-spec.
+
+## Session 2026-06-06 — sdd-review product-spec (re-review #2, "100% connect" revision)
+
+- Revised product spec re-approved. Status: draft → spec-ready.
+- Criteria: all PASS — Problem Statement, FR-A1..A6 + FR-B0..B13 (numbered/testable), Out of Scope
+  (trimmed to non-connect items), Affected Services exact-match (agent/ingest/indicators/identity/ui),
+  Proto (additive identity RPCs + TokenClaims.aud, buf-breaking gate flagged), Config keys (agent.oauth.*),
+  DB (migration 003_oauth oauth_clients+oauth_auth_codes, NNN-after-002, up+down), AC-A*/AC-B0..B8/AC-X,
+  Open Questions (no unchecked checkboxes).
+- Trading-domain checks: skipped (non-trading).
+- Warnings: 1 — 041-upgrade-nextjs15 (code-completed) also touches xstockstrat-ui; coordinate merge
+  order. No proto/migration/config-key collision (049 proto+migration are identity-side).
+- Remaining open (settle at /sdd-spec): OQ-A (formula gate), OQ-E (discovery reachability /
+  AGENT_PUBLIC_URL under DO /agent route), OQ-G (?api_key= deprecation), OQ-H (access/refresh TTLs).
+- Next: /sdd-spec unify-admin-auth-gates.

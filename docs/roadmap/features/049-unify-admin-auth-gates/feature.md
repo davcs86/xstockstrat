@@ -1,6 +1,6 @@
 # Feature: unify-admin-auth-gates
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/unify-admin-auth-gates`
 **Created**: 2026-06-05
 **Last Updated**: 2026-06-06
@@ -17,6 +17,7 @@
 | 2026-06-06 | `spec-ready` → `draft` | re-spec (user) | **Scope expanded & merged with 018.** Per user decision, folded `018-agent-mcp-oauth` into this feature as **Part B — full MCP OAuth 2.1 edge auth** (RFC 8414/9728 metadata, RFC 7591 DCR, mandatory PKCE/S256, exact redirect match, UI-delegated login), alongside the original **Part A — internal admin-scope gates**. Re-spec grounded in current architecture (gRPC-only identity, no nginx, `xstockstrat-ui` `/auth/oauth-login`). 018's impl spec retired as stale. Reset to `draft` for re-review. |
 | 2026-06-06 | `draft` → `spec-ready` | /sdd-review | Expanded (Part A + Part B) product spec re-approved. No criteria failures. 1 warning (041-upgrade-nextjs15 also touches xstockstrat-ui — coordinate merge order); 018 overlap cleared (demoted). Advisory: settle OQ-A/B/D/E before/at /sdd-spec — OQ-B decides whether any proto/DB change exists. |
 | 2026-06-06 | `spec-ready` → `draft` | "100% connect" revision (user) | Analyzed out-of-scope items vs the MCP authorization spec (2025-06-18). To make Claude.ai connect seamlessly **and** spec-compliantly, brought 4 items INTO scope: **audience-bound JWT access tokens + RS `aud` validation (RFC 8707)**, **rotating refresh tokens**, the **`401 + WWW-Authenticate` discovery trigger**, and a **durable identity-backed OAuth state store** (stateless agent, multi-instance). Flipped OQ-D (was API-key-as-token → now JWT+refresh+audience). Identity becomes the AS/token backend (new RPCs `IssueAuthCode`/`ExchangeAuthCode`/`RefreshOAuthToken` + `TokenClaims.aud`; migration `003` adds `oauth_clients` + `oauth_auth_codes`). Reset to `draft` for re-review. |
+| 2026-06-06 | `draft` → `spec-ready` | /sdd-review | "100% connect" revision re-approved. No criteria failures. 1 warning (041-upgrade-nextjs15 also touches xstockstrat-ui — coordinate merge order; no proto/migration/config collision). Remaining open: OQ-A (formula gate), OQ-E (discovery reachability), OQ-G (api_key deprecation), OQ-H (TTLs) — settle at /sdd-spec. |
 
 ---
 
@@ -75,4 +76,4 @@ _(Auto-populated from docs/runbooks/reviewer-registry.md at /sdd-spec time.)_
 
 ## Next Action
 
-`/sdd-review unify-admin-auth-gates product-spec` — re-review after the "100% connect" revision (JWT+refresh+audience, durable identity-backed AS). Then `/sdd-spec`. Remaining open: OQ-A (formula gate), OQ-E (discovery reachability), OQ-G (api_key deprecation), OQ-H (TTLs).
+`/sdd-spec unify-admin-auth-gates` — generate the implementation spec from the approved product spec. Settle OQ-A (formula gate), OQ-E (discovery reachability / `AGENT_PUBLIC_URL`), OQ-G (api_key deprecation), OQ-H (access/refresh TTLs) during spec discovery.
