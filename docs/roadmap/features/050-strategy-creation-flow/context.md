@@ -92,6 +92,22 @@ all 11 steps' Files/evidence validated against the live codebase — no mismatch
 - Deviations: none. Used `window.confirm` for the deactivate confirmation (spec sanctioned it — no
   AlertDialog primitive exists).
 
+### Step 10 — Playwright E2E + lint/build gate [done]
+- Created `e2e/insights/strategy-authoring.spec.ts` (10 tests: BFF admin-gate/proxy + UI wizard
+  gating, AC-13 inline error, edit read-only id, formula-picker filter). Extended `e2e/mock-backend.ts`
+  (insights 9092 segment) with `manageStrategy` (errors on sentinel `invalid_ref`) + `getStrategy`.
+  Signal sources already mocked on 9093 (insights BFF `ingestClient` dials `INGEST_ENDPOINT`);
+  `ListFormulas` stubbed at browser level via `page.route` (IndicatorsService not on 9092), matching
+  `formulas.spec.ts`.
+- **Verification (full)**: `pnpm run lint` ✓; `pnpm run build` ✓; `pnpm exec playwright test
+  insights/strategy-authoring.spec.ts` → 10/10 passed on **chromium** AND **firefox**.
+- **Deviation (user-approved, Option A)**: also fixed `src/lib/insightsBff.ts` `dispatchConnect` so
+  downstream gRPC error messages survive to the browser (was surfacing as generic "HTTP 400" due to a
+  leaked `application/grpc+proto` content-type). See Deviation Log. This is why AC-13 now shows the
+  real validation message ("…ref_name…") and routes "Go to Step 2".
+- Files modified: `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts`,
+  `services/xstockstrat-ui/e2e/mock-backend.ts`, `services/xstockstrat-ui/src/lib/insightsBff.ts`
+
 ## Session 2026-06-06T00:05:00Z — sdd-spec
 
 - Generated implementation-spec.md with 11 steps. Status → implementation-ready.

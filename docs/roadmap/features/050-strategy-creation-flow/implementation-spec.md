@@ -294,7 +294,7 @@ client plumbing (Steps 1–3) land before any page consumes them, and the wizard
 
 ### Step 10 — test: Playwright E2E coverage for the strategy creation flow + lint/build gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts` — create
@@ -346,3 +346,8 @@ client plumbing (Steps 1–3) land before any page consumes them, and the wizard
 **Spec said**: `services/xstockstrat-ui/src/lib/connectClients.ts` — modify (only if `ingestClient` is not already exported there — verify; see Codebase Evidence)
 **Actual**: Left unchanged. `ingestClient` is already exported at `connectClients.ts:36`.
 **Reason**: The step itself made the edit conditional. Discovery confirmed the export already exists, so the conditional did not apply. `**Disposition**: planned-conditional, condition not met.`
+
+### Deviation: Step 10 — BFF error-passthrough fix (insightsBff.ts)
+**Spec said**: Step 10 Files = `e2e/insights/strategy-authoring.spec.ts` (create) + `e2e/mock-backend.ts` (modify).
+**Actual**: Also modified `services/xstockstrat-ui/src/lib/insightsBff.ts` (the Step 1 file) to normalise the error-response `content-type` in `dispatchConnect`.
+**Reason**: Writing the AC-13 E2E test surfaced that server validation errors reached the browser as a generic "HTTP 400" instead of the real message. Root cause (confirmed by a diagnostic E2E that dumped the raw BFF response): a `ConnectError` forwarded from the downstream gRPC service carries the gRPC response's `content-type` (`application/grpc+proto`) and `content-encoding` in its metadata; `createConnectRouter` copies those onto the error response, so the browser's Connect client cannot parse the (valid) JSON error body. Fix: on the error path (`status >= 400`), set `content-type: application/json` and drop `content-encoding`/`grpc-encoding`/`content-length`. The user explicitly chose this fix over accepting the limitation. Scope limited to the insights BFF. `**Disposition**: user-approved scope expansion (Option A).`
