@@ -350,7 +350,7 @@ this is the regression guard for Step 4's edits to those shared paths (they must
 
 ### Step 6 — service: UI BFF routes (list/revoke + agent-health + segment health)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/api/authorized-apps/route.ts` — create (BFF: list + revoke via identity)

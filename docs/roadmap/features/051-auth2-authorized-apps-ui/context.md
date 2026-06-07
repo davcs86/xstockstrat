@@ -208,3 +208,17 @@
   049's exchangeAuthCode/refreshOAuthToken regression tests (Step 4's shared-path edits stay green).
 - Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`
 - Deviations: none.
+
+### Step 6 — service: UI BFF routes (list/revoke + agent-health + segment health) [done]
+- Created `accounts/api/authorized-apps/route.ts` (GET list / POST revoke; session via
+  getSessionFromRequest → 401; propagation headers like configUiBff.backendHeaders;
+  userId always from the verified session, never body — FR-3; Connect errors via
+  connectCodeToHttp; returns only non-sensitive AuthorizedApp fields — FR-7),
+  `accounts/api/agent-health/route.ts` (server-side probe of AGENT_PUBLIC_URL discovery endpoint,
+  returns {reachable,status} only, graceful 200 on failure — FR-10),
+  `accounts/api/health/route.ts` (mirrors config-ui health). middleware.ts unchanged — its
+  negative-lookahead matcher already gates `/accounts/*` (FR-8).
+- Verification: `pnpm run lint` (next lint) clean; `tsc --noEmit` no errors (regenerated client
+  methods resolve).
+- Files modified: `services/xstockstrat-ui/src/app/accounts/api/{authorized-apps,agent-health,health}/route.ts`
+- Deviations: none.
