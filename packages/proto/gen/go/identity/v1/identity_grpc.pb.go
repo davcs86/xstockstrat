@@ -32,6 +32,8 @@ const (
 	IdentityService_IssueAuthCode_FullMethodName       = "/xstockstrat.identity.v1.IdentityService/IssueAuthCode"
 	IdentityService_ExchangeAuthCode_FullMethodName    = "/xstockstrat.identity.v1.IdentityService/ExchangeAuthCode"
 	IdentityService_RefreshOAuthToken_FullMethodName   = "/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken"
+	IdentityService_ListAuthorizedApps_FullMethodName  = "/xstockstrat.identity.v1.IdentityService/ListAuthorizedApps"
+	IdentityService_RevokeAuthorizedApp_FullMethodName = "/xstockstrat.identity.v1.IdentityService/RevokeAuthorizedApp"
 )
 
 // IdentityServiceClient is the client API for IdentityService service.
@@ -53,6 +55,10 @@ type IdentityServiceClient interface {
 	IssueAuthCode(ctx context.Context, in *IssueAuthCodeRequest, opts ...grpc.CallOption) (*IssueAuthCodeResponse, error)
 	ExchangeAuthCode(ctx context.Context, in *ExchangeAuthCodeRequest, opts ...grpc.CallOption) (*OAuthTokenResponse, error)
 	RefreshOAuthToken(ctx context.Context, in *RefreshOAuthTokenRequest, opts ...grpc.CallOption) (*OAuthTokenResponse, error)
+	// Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+	// calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+	ListAuthorizedApps(ctx context.Context, in *ListAuthorizedAppsRequest, opts ...grpc.CallOption) (*ListAuthorizedAppsResponse, error)
+	RevokeAuthorizedApp(ctx context.Context, in *RevokeAuthorizedAppRequest, opts ...grpc.CallOption) (*RevokeAuthorizedAppResponse, error)
 }
 
 type identityServiceClient struct {
@@ -193,6 +199,26 @@ func (c *identityServiceClient) RefreshOAuthToken(ctx context.Context, in *Refre
 	return out, nil
 }
 
+func (c *identityServiceClient) ListAuthorizedApps(ctx context.Context, in *ListAuthorizedAppsRequest, opts ...grpc.CallOption) (*ListAuthorizedAppsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAuthorizedAppsResponse)
+	err := c.cc.Invoke(ctx, IdentityService_ListAuthorizedApps_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityServiceClient) RevokeAuthorizedApp(ctx context.Context, in *RevokeAuthorizedAppRequest, opts ...grpc.CallOption) (*RevokeAuthorizedAppResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeAuthorizedAppResponse)
+	err := c.cc.Invoke(ctx, IdentityService_RevokeAuthorizedApp_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IdentityServiceServer is the server API for IdentityService service.
 // All implementations should embed UnimplementedIdentityServiceServer
 // for forward compatibility.
@@ -212,6 +238,10 @@ type IdentityServiceServer interface {
 	IssueAuthCode(context.Context, *IssueAuthCodeRequest) (*IssueAuthCodeResponse, error)
 	ExchangeAuthCode(context.Context, *ExchangeAuthCodeRequest) (*OAuthTokenResponse, error)
 	RefreshOAuthToken(context.Context, *RefreshOAuthTokenRequest) (*OAuthTokenResponse, error)
+	// Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+	// calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+	ListAuthorizedApps(context.Context, *ListAuthorizedAppsRequest) (*ListAuthorizedAppsResponse, error)
+	RevokeAuthorizedApp(context.Context, *RevokeAuthorizedAppRequest) (*RevokeAuthorizedAppResponse, error)
 }
 
 // UnimplementedIdentityServiceServer should be embedded to have
@@ -259,6 +289,12 @@ func (UnimplementedIdentityServiceServer) ExchangeAuthCode(context.Context, *Exc
 }
 func (UnimplementedIdentityServiceServer) RefreshOAuthToken(context.Context, *RefreshOAuthTokenRequest) (*OAuthTokenResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RefreshOAuthToken not implemented")
+}
+func (UnimplementedIdentityServiceServer) ListAuthorizedApps(context.Context, *ListAuthorizedAppsRequest) (*ListAuthorizedAppsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAuthorizedApps not implemented")
+}
+func (UnimplementedIdentityServiceServer) RevokeAuthorizedApp(context.Context, *RevokeAuthorizedAppRequest) (*RevokeAuthorizedAppResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeAuthorizedApp not implemented")
 }
 func (UnimplementedIdentityServiceServer) testEmbeddedByValue() {}
 
@@ -514,6 +550,42 @@ func _IdentityService_RefreshOAuthToken_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IdentityService_ListAuthorizedApps_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAuthorizedAppsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).ListAuthorizedApps(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_ListAuthorizedApps_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).ListAuthorizedApps(ctx, req.(*ListAuthorizedAppsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_RevokeAuthorizedApp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeAuthorizedAppRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).RevokeAuthorizedApp(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_RevokeAuthorizedApp_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).RevokeAuthorizedApp(ctx, req.(*RevokeAuthorizedAppRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IdentityService_ServiceDesc is the grpc.ServiceDesc for IdentityService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -572,6 +644,14 @@ var IdentityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RefreshOAuthToken",
 			Handler:    _IdentityService_RefreshOAuthToken_Handler,
+		},
+		{
+			MethodName: "ListAuthorizedApps",
+			Handler:    _IdentityService_ListAuthorizedApps_Handler,
+		},
+		{
+			MethodName: "RevokeAuthorizedApp",
+			Handler:    _IdentityService_RevokeAuthorizedApp_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

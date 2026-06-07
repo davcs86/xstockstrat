@@ -133,7 +133,7 @@ canonical breaking-check base per `docs/runbooks/feature-workflow.md`.
 
 ### Step 2 — proto-gen: Regenerate stubs (Go / Python / TS)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/ts/identity/v1/identity.ts` — regenerate (ts-proto, grpc-js — consumed by identity service)

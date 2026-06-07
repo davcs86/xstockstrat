@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: identity/v1/identity.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IdentityServiceClient = exports.IdentityServiceService = exports.RefreshOAuthTokenRequest = exports.OAuthTokenResponse = exports.ExchangeAuthCodeRequest = exports.IssueAuthCodeResponse = exports.IssueAuthCodeRequest = exports.GetOAuthClientRequest = exports.RegisterOAuthClientRequest = exports.OAuthClient = exports.RevokeApiKeyResponse = exports.RevokeApiKeyRequest = exports.ListApiKeysResponse = exports.ListApiKeysRequest = exports.ValidateApiKeyRequest = exports.CreateApiKeyRequest = exports.ApiKey = exports.RevokeTokenResponse = exports.RevokeTokenRequest = exports.RefreshTokenRequest = exports.ValidateTokenRequest = exports.TokenClaims = exports.AuthTokenResponse = exports.AuthenticateUserRequest = exports.protobufPackage = void 0;
+exports.IdentityServiceClient = exports.IdentityServiceService = exports.RevokeAuthorizedAppResponse = exports.RevokeAuthorizedAppRequest = exports.ListAuthorizedAppsResponse = exports.ListAuthorizedAppsRequest = exports.AuthorizedApp = exports.RefreshOAuthTokenRequest = exports.OAuthTokenResponse = exports.ExchangeAuthCodeRequest = exports.IssueAuthCodeResponse = exports.IssueAuthCodeRequest = exports.GetOAuthClientRequest = exports.RegisterOAuthClientRequest = exports.OAuthClient = exports.RevokeApiKeyResponse = exports.RevokeApiKeyRequest = exports.ListApiKeysResponse = exports.ListApiKeysRequest = exports.ValidateApiKeyRequest = exports.CreateApiKeyRequest = exports.ApiKey = exports.RevokeTokenResponse = exports.RevokeTokenRequest = exports.RefreshTokenRequest = exports.ValidateTokenRequest = exports.TokenClaims = exports.AuthTokenResponse = exports.AuthenticateUserRequest = exports.protobufPackage = void 0;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -1840,6 +1840,376 @@ exports.RefreshOAuthTokenRequest = {
         return message;
     },
 };
+function createBaseAuthorizedApp() {
+    return { clientId: "", clientName: "", authorizedAt: undefined, lastUsedAt: undefined, redirectUris: [] };
+}
+exports.AuthorizedApp = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.clientId !== "") {
+            writer.uint32(10).string(message.clientId);
+        }
+        if (message.clientName !== "") {
+            writer.uint32(18).string(message.clientName);
+        }
+        if (message.authorizedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.authorizedAt), writer.uint32(26).fork()).join();
+        }
+        if (message.lastUsedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.lastUsedAt), writer.uint32(34).fork()).join();
+        }
+        for (const v of message.redirectUris) {
+            writer.uint32(42).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseAuthorizedApp();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.clientId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.clientName = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.authorizedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.lastUsedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.redirectUris.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            clientId: isSet(object.clientId)
+                ? globalThis.String(object.clientId)
+                : isSet(object.client_id)
+                    ? globalThis.String(object.client_id)
+                    : "",
+            clientName: isSet(object.clientName)
+                ? globalThis.String(object.clientName)
+                : isSet(object.client_name)
+                    ? globalThis.String(object.client_name)
+                    : "",
+            authorizedAt: isSet(object.authorizedAt)
+                ? fromJsonTimestamp(object.authorizedAt)
+                : isSet(object.authorized_at)
+                    ? fromJsonTimestamp(object.authorized_at)
+                    : undefined,
+            lastUsedAt: isSet(object.lastUsedAt)
+                ? fromJsonTimestamp(object.lastUsedAt)
+                : isSet(object.last_used_at)
+                    ? fromJsonTimestamp(object.last_used_at)
+                    : undefined,
+            redirectUris: globalThis.Array.isArray(object?.redirectUris)
+                ? object.redirectUris.map((e) => globalThis.String(e))
+                : globalThis.Array.isArray(object?.redirect_uris)
+                    ? object.redirect_uris.map((e) => globalThis.String(e))
+                    : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.clientId !== "") {
+            obj.clientId = message.clientId;
+        }
+        if (message.clientName !== "") {
+            obj.clientName = message.clientName;
+        }
+        if (message.authorizedAt !== undefined) {
+            obj.authorizedAt = message.authorizedAt.toISOString();
+        }
+        if (message.lastUsedAt !== undefined) {
+            obj.lastUsedAt = message.lastUsedAt.toISOString();
+        }
+        if (message.redirectUris?.length) {
+            obj.redirectUris = message.redirectUris;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.AuthorizedApp.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseAuthorizedApp();
+        message.clientId = object.clientId ?? "";
+        message.clientName = object.clientName ?? "";
+        message.authorizedAt = object.authorizedAt ?? undefined;
+        message.lastUsedAt = object.lastUsedAt ?? undefined;
+        message.redirectUris = object.redirectUris?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseListAuthorizedAppsRequest() {
+    return { userId: "" };
+}
+exports.ListAuthorizedAppsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListAuthorizedAppsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListAuthorizedAppsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListAuthorizedAppsRequest();
+        message.userId = object.userId ?? "";
+        return message;
+    },
+};
+function createBaseListAuthorizedAppsResponse() {
+    return { apps: [] };
+}
+exports.ListAuthorizedAppsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.apps) {
+            exports.AuthorizedApp.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListAuthorizedAppsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.apps.push(exports.AuthorizedApp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            apps: globalThis.Array.isArray(object?.apps) ? object.apps.map((e) => exports.AuthorizedApp.fromJSON(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.apps?.length) {
+            obj.apps = message.apps.map((e) => exports.AuthorizedApp.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListAuthorizedAppsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListAuthorizedAppsResponse();
+        message.apps = object.apps?.map((e) => exports.AuthorizedApp.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseRevokeAuthorizedAppRequest() {
+    return { userId: "", clientId: "" };
+}
+exports.RevokeAuthorizedAppRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        if (message.clientId !== "") {
+            writer.uint32(18).string(message.clientId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseRevokeAuthorizedAppRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.clientId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            clientId: isSet(object.clientId)
+                ? globalThis.String(object.clientId)
+                : isSet(object.client_id)
+                    ? globalThis.String(object.client_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.clientId !== "") {
+            obj.clientId = message.clientId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.RevokeAuthorizedAppRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseRevokeAuthorizedAppRequest();
+        message.userId = object.userId ?? "";
+        message.clientId = object.clientId ?? "";
+        return message;
+    },
+};
+function createBaseRevokeAuthorizedAppResponse() {
+    return { success: false };
+}
+exports.RevokeAuthorizedAppResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.success !== false) {
+            writer.uint32(8).bool(message.success);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseRevokeAuthorizedAppResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.success = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { success: isSet(object.success) ? globalThis.Boolean(object.success) : false };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.success !== false) {
+            obj.success = message.success;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.RevokeAuthorizedAppResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseRevokeAuthorizedAppResponse();
+        message.success = object.success ?? false;
+        return message;
+    },
+};
 exports.IdentityServiceService = {
     authenticateUser: {
         path: "/xstockstrat.identity.v1.IdentityService/AuthenticateUser",
@@ -1961,6 +2331,28 @@ exports.IdentityServiceService = {
         requestDeserialize: (value) => exports.RefreshOAuthTokenRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.OAuthTokenResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.OAuthTokenResponse.decode(value),
+    },
+    /**
+     * Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+     * calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+     */
+    listAuthorizedApps: {
+        path: "/xstockstrat.identity.v1.IdentityService/ListAuthorizedApps",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListAuthorizedAppsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListAuthorizedAppsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListAuthorizedAppsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListAuthorizedAppsResponse.decode(value),
+    },
+    revokeAuthorizedApp: {
+        path: "/xstockstrat.identity.v1.IdentityService/RevokeAuthorizedApp",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.RevokeAuthorizedAppRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.RevokeAuthorizedAppRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.RevokeAuthorizedAppResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.RevokeAuthorizedAppResponse.decode(value),
     },
 };
 exports.IdentityServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.IdentityServiceService, "xstockstrat.identity.v1.IdentityService");

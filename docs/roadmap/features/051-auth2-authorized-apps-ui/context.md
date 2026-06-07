@@ -166,3 +166,13 @@
   reports no breaking changes.
 - Files modified: `packages/proto/identity/v1/identity.proto`
 - Deviations: proto toolchain installed on host (buf 1.69.0) — see Deviation Log.
+
+### Step 2 — proto-gen: Regenerate stubs (Go / Python / TS) [done]
+- Installed CI-pinned toolchain (Go plugins protoc-gen-go@v1.36.11 / go-grpc@v1.6.2 /
+  connect-go@v1.19.2, grpcio-tools==1.80.0, pnpm --frozen-lockfile), then ran `./scripts/buf-gen.sh`.
+  Regenerated Go/Python/TS stubs. `git diff --stat packages/proto/gen/` confined to `identity/v1`
+  (no other service changed); a second `buf generate` produced no further diff (idempotent, mirrors
+  CI stale-stub check). New RPCs present in both ts-proto `IdentityServiceService` and protobuf-es
+  `IdentityService`.
+- Files modified: `packages/proto/gen/{go,python,ts}/identity/v1/*` (12 files)
+- Deviations: toolchain installed on host — see Steps 1–2 Deviation Log entry.
