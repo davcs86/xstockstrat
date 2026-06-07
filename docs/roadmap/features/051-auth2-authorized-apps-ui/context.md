@@ -197,3 +197,14 @@
   methods match it). Behavioral/coverage + 049 regression guard in Step 5.
 - Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`
 - Deviations: none.
+
+### Step 5 — test: unit tests for client-tagging + list/revoke [done]
+- Added `describe('listAuthorizedApps')` (missing-userId → code 3; happy path asserts clientId/
+  clientName/lastUsedAt undefined, no `tokenHash` leak, SQL JOINs oauth_clients + WHERE rt.user_id)
+  and `describe('revokeAuthorizedApp')` (missing userId/clientId → code 3; happy path success:true +
+  UPDATE scoped `WHERE user_id = $1 AND client_id = $2`). Extended the exchangeAuthCode PKCE
+  happy-path test to assert the INSERT into refresh_tokens carries client_id.
+- Verification: `pnpm run lint` exit 0; `pnpm run test:coverage` exit 0 — 23/23 pass including
+  049's exchangeAuthCode/refreshOAuthToken regression tests (Step 4's shared-path edits stay green).
+- Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`
+- Deviations: none.

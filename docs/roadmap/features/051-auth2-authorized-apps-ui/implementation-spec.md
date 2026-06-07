@@ -303,7 +303,7 @@ regression guard). Lint (`eslint src --ext .ts`) must pass with no errors.
 
 ### Step 5 — test: Unit tests for client-tagging + listAuthorizedApps / revokeAuthorizedApp
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
