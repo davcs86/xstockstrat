@@ -8,12 +8,13 @@ interface FormulaEditorProps {
   value: string;
   onChange?: (value: string) => void;
   readOnly?: boolean;
+  height?: string;
 }
 
-export function FormulaEditor({ value, onChange, readOnly = false }: FormulaEditorProps) {
+export function FormulaEditor({ value, onChange, readOnly = false, height = '300px' }: FormulaEditorProps) {
   return (
     <MonacoEditor
-      height="300px"
+      height={height}
       language="python"
       theme="vs-dark"
       value={value}

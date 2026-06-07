@@ -73,9 +73,16 @@ export function useDeleteFormula() {
 
 export function useExecuteFormula() {
   return useMutation({
-    mutationFn: (req: { formulaId: string; inputData: Record<string, unknown> }) =>
+    // Either formulaId (run a saved formula) or formulaSource (run the current,
+    // possibly unsaved, editor buffer — the notebook-style "Run" behavior).
+    mutationFn: (req: {
+      formulaId?: string;
+      formulaSource?: string;
+      inputData: Record<string, unknown>;
+    }) =>
       indicatorsClient.executeFormula({
-        formulaId: req.formulaId,
+        formulaId: req.formulaId ?? '',
+        formulaSource: req.formulaSource ?? '',
         inputData: req.inputData as Record<string, never>,
       }),
   });

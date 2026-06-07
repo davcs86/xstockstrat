@@ -1,16 +1,34 @@
 'use client';
-import Link from 'next/link';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { useFormulas } from '@/hooks/useFormulas';
 import type { FormulaDefinition } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 
+type Visibility = 'all' | 'public' | 'private';
+
 function formatDate(seconds: bigint | undefined): string {
-  if (!seconds) return '';
+  if (!seconds) return '—';
   return new Date(Number(seconds) * 1000).toLocaleDateString();
 }
 
@@ -18,55 +36,117 @@ export default function FormulasPage() {
   const router = useRouter();
   const { data, isLoading, error } = useFormulas({ includePublic: true, pageSize: 50 });
 
+  const [query, setQuery] = useState('');
+  const [visibility, setVisibility] = useState<Visibility>('all');
+
+  const formulas = useMemo(() => data?.formulas ?? [], [data]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return formulas.filter((f: FormulaDefinition) => {
+      if (visibility === 'public' && !f.isPublic) return false;
+      if (visibility === 'private' && f.isPublic) return false;
+      if (!q) return true;
+      return (
+        f.name.toLowerCase().includes(q) ||
+        f.description.toLowerCase().includes(q) ||
+        f.author.toLowerCase().includes(q)
+      );
+    });
+  }, [formulas, query, visibility]);
+
   return (
     <AppShell>
       <div className="p-4 sm:p-6">
-        <div className="mb-6 flex items-start justify-between">
+        <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold tracking-tight">Formulas</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Custom indicator formulas, scoped to their author
+            <p className="mt-1 text-sm text-muted-foreground">
+              Custom indicator formulas. Open one to edit and test it, or create a new one — the
+              editor includes a reference panel with the data contract, available libraries, and
+              starter templates.
             </p>
           </div>
           <Button onClick={() => router.push('/insights/formulas/new')}>
-            <Plus className="h-4 w-4 mr-1.5" />
+            <Plus className="mr-1.5 h-4 w-4" />
             New Formula
           </Button>
+        </div>
+
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name, description, or author"
+              className="pl-8"
+            />
+          </div>
+          <Select value={visibility} onValueChange={(v) => setVisibility(v as Visibility)}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="public">Public only</SelectItem>
+              <SelectItem value="private">Private only</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {isLoading && <p className="text-sm text-muted-foreground">Loading formulas…</p>}
         {error && <p className="text-sm text-destructive">Failed to load formulas</p>}
 
         {data && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {(data.formulas ?? []).map((f: FormulaDefinition) => (
-              <Link key={f.formulaId} href={`/insights/formulas/${f.formulaId}`}>
-                <Card className="h-full hover:border-primary/50 transition-colors cursor-pointer">
-                  <CardContent className="pt-5">
-                    <div className="flex items-start justify-between mb-3">
-                      <p className="text-sm font-semibold text-foreground truncate mr-2">{f.name}</p>
-                      <Badge variant={f.isPublic ? 'info' : 'warning'} className="shrink-0">
-                        {f.isPublic ? 'Public' : 'Private'}
-                      </Badge>
-                    </div>
-                    {f.description && (
-                      <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{f.description}</p>
-                    )}
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span className="truncate mr-2">{f.author}</span>
-                      <span className="shrink-0 tabular-nums">{formatDate(f.createdAt?.seconds)}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-3">View details →</p>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-            {(data.formulas ?? []).length === 0 && (
-              <p className="text-sm text-muted-foreground col-span-3">
-                No formulas yet. Click New Formula to create one.
-              </p>
-            )}
-          </div>
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Visibility</TableHead>
+                    <TableHead>Author</TableHead>
+                    <TableHead className="text-right">Created</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((f: FormulaDefinition) => (
+                    <TableRow
+                      key={f.formulaId}
+                      className="cursor-pointer"
+                      onClick={() => router.push(`/insights/formulas/${f.formulaId}`)}
+                    >
+                      <TableCell>
+                        <p className="font-medium text-foreground">{f.name}</p>
+                        {f.description && (
+                          <p className="mt-0.5 line-clamp-1 text-muted-foreground">{f.description}</p>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={f.isPublic ? 'info' : 'warning'}>
+                          {f.isPublic ? 'Public' : 'Private'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{f.author}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        {formatDate(f.createdAt?.seconds)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filtered.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                        {formulas.length === 0
+                          ? 'No formulas yet. Click New Formula to create one.'
+                          : 'No formulas match your search.'}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         )}
       </div>
     </AppShell>
