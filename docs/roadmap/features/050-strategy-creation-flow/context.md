@@ -67,6 +67,66 @@ all 11 steps' Files/evidence validated against the live codebase — no mismatch
 - Deviations: none. (SignalSource keyed by `slug`/`displayName`, not a `sourceId` — confirmed in
   generated stubs.)
 
+### Step 7 — New-strategy wizard page [done]
+- Created `src/app/insights/strategies/new/page.tsx` — AppShell + `<StrategyWizard mode="create">`,
+  admin-gated via `useIsAdmin()` (non-admins see an access notice; BFF gate is authoritative).
+- Files modified: `services/xstockstrat-ui/src/app/insights/strategies/new/page.tsx`
+- Deviations: none.
+
+### Step 8 — Edit-strategy page [done]
+- Created `src/app/insights/strategies/[id]/edit/page.tsx` — `use(params)`, fetches via
+  `useGetStrategy(id)` (GetStrategy returns a StrategyDefinition directly), renders
+  `<StrategyWizard mode="edit" initial={data}>` (strategy_id read-only). Admin-gated + loading state.
+- Files modified: `services/xstockstrat-ui/src/app/insights/strategies/[id]/edit/page.tsx`
+- Deviations: none.
+
+### Step 9 — List actions + detail live toggle [done]
+- `strategies/page.tsx`: admin-only "New Strategy" button; per-card Edit (router.push to edit page) +
+  Deactivate (window.confirm → `useManageStrategy` DEACTIVATE). Merges `useStrategyDefinitions(true)`
+  by id to show an `inactive` badge and hide Deactivate on already-inactive strategies. Admin actions
+  rendered as siblings outside the `<Link>` to avoid nested anchors.
+- `strategies/[id]/page.tsx`: added a "Live Evaluation" card (state from `useGetStrategy(id)`) with an
+  admin-only toggle via `useSetStrategyLiveInsights`; inline "admin scope required" on error.
+- Files modified: `services/xstockstrat-ui/src/app/insights/strategies/page.tsx`,
+  `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx`
+- Deviations: none. Used `window.confirm` for the deactivate confirmation (spec sanctioned it — no
+  AlertDialog primitive exists).
+
+### Step 11 — Documentation [done]
+- No `services/xstockstrat-ui/CLAUDE.md` exists, and this is a UI-only feature (no Dockerfile/proto/
+  migration/config changes), so the only doc artifact is this `context.md` (kept current per step).
+- **Feature summary** (what shipped):
+  - **Insights BFF** (`src/lib/insightsBff.ts`): proxies `ManageStrategy` (admin-gated on
+    register/update/deactivate), `GetStrategy`, `ListStrategyDefinitions`, `SetStrategyLive`
+    (admin-gated), and `IngestService.ListSignalSources`; plus a `dispatchConnect` error-passthrough
+    fix so downstream gRPC validation messages reach the browser.
+  - **Hooks**: `useStrategyDefinitions` (`useStrategyDefinitions`/`useGetStrategy`/`useManageStrategy`/
+    `useSetStrategyLiveInsights`), `useInsightsSignalSources` + `insightsIngestClient`.
+  - **Components**: `RuleEditor` (dual-mode visual/JSON), `ComponentEditor` (kind + formula picker +
+    params), `StrategyWizard` (5-step create/edit wizard).
+  - **Pages**: `/insights/strategies/new`, `/insights/strategies/[id]/edit`; modified
+    `/insights/strategies` (New/Edit/Deactivate, admin-gated) and `/insights/strategies/[id]` (live
+    toggle).
+  - **Tests**: `e2e/insights/strategy-authoring.spec.ts` (10 tests, green on chromium + firefox).
+- Files modified: `docs/roadmap/features/050-strategy-creation-flow/context.md`
+- Deviations: none.
+
+### Step 10 — Playwright E2E + lint/build gate [done]
+- Created `e2e/insights/strategy-authoring.spec.ts` (10 tests: BFF admin-gate/proxy + UI wizard
+  gating, AC-13 inline error, edit read-only id, formula-picker filter). Extended `e2e/mock-backend.ts`
+  (insights 9092 segment) with `manageStrategy` (errors on sentinel `invalid_ref`) + `getStrategy`.
+  Signal sources already mocked on 9093 (insights BFF `ingestClient` dials `INGEST_ENDPOINT`);
+  `ListFormulas` stubbed at browser level via `page.route` (IndicatorsService not on 9092), matching
+  `formulas.spec.ts`.
+- **Verification (full)**: `pnpm run lint` ✓; `pnpm run build` ✓; `pnpm exec playwright test
+  insights/strategy-authoring.spec.ts` → 10/10 passed on **chromium** AND **firefox**.
+- **Deviation (user-approved, Option A)**: also fixed `src/lib/insightsBff.ts` `dispatchConnect` so
+  downstream gRPC error messages survive to the browser (was surfacing as generic "HTTP 400" due to a
+  leaked `application/grpc+proto` content-type). See Deviation Log. This is why AC-13 now shows the
+  real validation message ("…ref_name…") and routes "Go to Step 2".
+- Files modified: `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts`,
+  `services/xstockstrat-ui/e2e/mock-backend.ts`, `services/xstockstrat-ui/src/lib/insightsBff.ts`
+
 ## Session 2026-06-06T00:05:00Z — sdd-spec
 
 - Generated implementation-spec.md with 11 steps. Status → implementation-ready.
