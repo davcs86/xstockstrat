@@ -31,7 +31,6 @@ GRPC_PORT = os.environ.get("GRPC_PORT", "50055")
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
 MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053")
 LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
-IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50058")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError(
@@ -57,14 +56,12 @@ async def serve():
 
     marketdata_channel = grpc.aio.insecure_channel(MARKETDATA_ENDPOINT)
     ledger_channel = grpc.aio.insecure_channel(LEDGER_ENDPOINT)
-    identity_channel = grpc.aio.insecure_channel(IDENTITY_ENDPOINT)
 
     servicer = IngestServicer(
         config_watcher=cfg_watcher,
         marketdata_channel=marketdata_channel,
         ledger_channel=ledger_channel,
         db_pool=db_pool,
-        identity_channel=identity_channel,
     )
 
     # ── gRPC server (internal, port 50055) ────────────────────────────────

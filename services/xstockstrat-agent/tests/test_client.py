@@ -55,7 +55,7 @@ async def test_emit_alert_sends_grpc_call():
         from gen.notify.v1 import notify_pb2_grpc  # type: ignore
 
         with patch.object(notify_pb2_grpc, "NotifyServiceStub", return_value=mock_stub):
-            result = await client.emit_alert(
+            await client.emit_alert(
                 severity="info",
                 category="signal",
                 title="Test Alert",

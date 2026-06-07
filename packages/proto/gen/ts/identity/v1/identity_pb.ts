@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file identity/v1/identity.proto.
  */
 export const file_identity_v1_identity: GenFile = /*@__PURE__*/
-  fileDesc("ChppZGVudGl0eS92MS9pZGVudGl0eS5wcm90bxIXeHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEiOgoXQXV0aGVudGljYXRlVXNlclJlcXVlc3QSDQoFZW1haWwYASABKAkSEAoIcGFzc3dvcmQYAiABKAkipgEKEUF1dGhUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIVCg1yZWZyZXNoX3Rva2VuGAIgASgJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKBmNsYWltcxgEIAEoCzIkLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlRva2VuQ2xhaW1zIpsBCgtUb2tlbkNsYWltcxIPCgd1c2VyX2lkGAEgASgJEg0KBWVtYWlsGAIgASgJEg0KBXJvbGVzGAMgAygJEi0KCWlzc3VlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiJQoUVmFsaWRhdGVUb2tlblJlcXVlc3QSDQoFdG9rZW4YASABKAkiLAoTUmVmcmVzaFRva2VuUmVxdWVzdBIVCg1yZWZyZXNoX3Rva2VuGAEgASgJIiMKElJldm9rZVRva2VuUmVxdWVzdBINCgV0b2tlbhgBIAEoCSImChNSZXZva2VUb2tlblJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiuwEKBkFwaUtleRIOCgZrZXlfaWQYASABKAkSEgoKa2V5X3ByZWZpeBgCIAEoCRIPCgd1c2VyX2lkGAMgASgJEgwKBG5hbWUYBCABKAkSDgoGc2NvcGVzGAUgAygJEi4KCmNyZWF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmV4cGlyZXNfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wInQKE0NyZWF0ZUFwaUtleVJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEg4KBnNjb3BlcxgDIAMoCRIuCgpleHBpcmVzX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIoChVWYWxpZGF0ZUFwaUtleVJlcXVlc3QSDwoHYXBpX2tleRgBIAEoCSIlChJMaXN0QXBpS2V5c1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCSJEChNMaXN0QXBpS2V5c1Jlc3BvbnNlEi0KBGtleXMYASADKAsyHy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5BcGlLZXkiNgoTUmV2b2tlQXBpS2V5UmVxdWVzdBIOCgZrZXlfaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCSInChRSZXZva2VBcGlLZXlSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIMtsGCg9JZGVudGl0eVNlcnZpY2UScAoQQXV0aGVudGljYXRlVXNlchIwLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkF1dGhlbnRpY2F0ZVVzZXJSZXF1ZXN0GioueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXV0aFRva2VuUmVzcG9uc2USZAoNVmFsaWRhdGVUb2tlbhItLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlZhbGlkYXRlVG9rZW5SZXF1ZXN0GiQueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuVG9rZW5DbGFpbXMSaAoMUmVmcmVzaFRva2VuEiwueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuUmVmcmVzaFRva2VuUmVxdWVzdBoqLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkF1dGhUb2tlblJlc3BvbnNlEmgKC1Jldm9rZVRva2VuEisueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuUmV2b2tlVG9rZW5SZXF1ZXN0GiwueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuUmV2b2tlVG9rZW5SZXNwb25zZRJdCgxDcmVhdGVBcGlLZXkSLC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5DcmVhdGVBcGlLZXlSZXF1ZXN0Gh8ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXBpS2V5EmYKDlZhbGlkYXRlQXBpS2V5Ei4ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuVmFsaWRhdGVBcGlLZXlSZXF1ZXN0GiQueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuVG9rZW5DbGFpbXMSaAoLTGlzdEFwaUtleXMSKy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5MaXN0QXBpS2V5c1JlcXVlc3QaLC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5MaXN0QXBpS2V5c1Jlc3BvbnNlEmsKDFJldm9rZUFwaUtleRIsLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZUFwaUtleVJlcXVlc3QaLS54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZXZva2VBcGlLZXlSZXNwb25zZUJAWj5naXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vaWRlbnRpdHkvdjE7aWRlbnRpdHl2MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("ChppZGVudGl0eS92MS9pZGVudGl0eS5wcm90bxIXeHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEiOgoXQXV0aGVudGljYXRlVXNlclJlcXVlc3QSDQoFZW1haWwYASABKAkSEAoIcGFzc3dvcmQYAiABKAkipgEKEUF1dGhUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIVCg1yZWZyZXNoX3Rva2VuGAIgASgJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKBmNsYWltcxgEIAEoCzIkLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlRva2VuQ2xhaW1zIqgBCgtUb2tlbkNsYWltcxIPCgd1c2VyX2lkGAEgASgJEg0KBWVtYWlsGAIgASgJEg0KBXJvbGVzGAMgAygJEi0KCWlzc3VlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASCwoDYXVkGAYgASgJIiUKFFZhbGlkYXRlVG9rZW5SZXF1ZXN0Eg0KBXRva2VuGAEgASgJIiwKE1JlZnJlc2hUb2tlblJlcXVlc3QSFQoNcmVmcmVzaF90b2tlbhgBIAEoCSIjChJSZXZva2VUb2tlblJlcXVlc3QSDQoFdG9rZW4YASABKAkiJgoTUmV2b2tlVG9rZW5SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIrsBCgZBcGlLZXkSDgoGa2V5X2lkGAEgASgJEhIKCmtleV9wcmVmaXgYAiABKAkSDwoHdXNlcl9pZBgDIAEoCRIMCgRuYW1lGAQgASgJEg4KBnNjb3BlcxgFIAMoCRIuCgpjcmVhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpleHBpcmVzX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJ0ChNDcmVhdGVBcGlLZXlSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZzY29wZXMYAyADKAkSLgoKZXhwaXJlc19hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiKAoVVmFsaWRhdGVBcGlLZXlSZXF1ZXN0Eg8KB2FwaV9rZXkYASABKAkiJQoSTGlzdEFwaUtleXNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkiRAoTTGlzdEFwaUtleXNSZXNwb25zZRItCgRrZXlzGAEgAygLMh8ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXBpS2V5IjYKE1Jldm9rZUFwaUtleVJlcXVlc3QSDgoGa2V5X2lkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkiJwoUUmV2b2tlQXBpS2V5UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCJ8CgtPQXV0aENsaWVudBIRCgljbGllbnRfaWQYASABKAkSFQoNcmVkaXJlY3RfdXJpcxgCIAMoCRITCgtjbGllbnRfbmFtZRgDIAEoCRIuCgpjcmVhdGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJIChpSZWdpc3Rlck9BdXRoQ2xpZW50UmVxdWVzdBIVCg1yZWRpcmVjdF91cmlzGAEgAygJEhMKC2NsaWVudF9uYW1lGAIgASgJIioKFUdldE9BdXRoQ2xpZW50UmVxdWVzdBIRCgljbGllbnRfaWQYASABKAkiegoUSXNzdWVBdXRoQ29kZVJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIRCgljbGllbnRfaWQYAiABKAkSFAoMcmVkaXJlY3RfdXJpGAMgASgJEhYKDmNvZGVfY2hhbGxlbmdlGAQgASgJEhAKCHJlc291cmNlGAUgASgJIiUKFUlzc3VlQXV0aENvZGVSZXNwb25zZRIMCgRjb2RlGAEgASgJInkKF0V4Y2hhbmdlQXV0aENvZGVSZXF1ZXN0EgwKBGNvZGUYASABKAkSFQoNY29kZV92ZXJpZmllchgCIAEoCRIUCgxyZWRpcmVjdF91cmkYAyABKAkSEQoJY2xpZW50X2lkGAQgASgJEhAKCHJlc291cmNlGAUgASgJImkKEk9BdXRoVG9rZW5SZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSEgoKdG9rZW5fdHlwZRgCIAEoCRISCgpleHBpcmVzX2luGAMgASgDEhUKDXJlZnJlc2hfdG9rZW4YBCABKAkiQwoYUmVmcmVzaE9BdXRoVG9rZW5SZXF1ZXN0EhUKDXJlZnJlc2hfdG9rZW4YASABKAkSEAoIcmVzb3VyY2UYAiABKAkyjQsKD0lkZW50aXR5U2VydmljZRJwChBBdXRoZW50aWNhdGVVc2VyEjAueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXV0aGVudGljYXRlVXNlclJlcXVlc3QaKi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5BdXRoVG9rZW5SZXNwb25zZRJkCg1WYWxpZGF0ZVRva2VuEi0ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuVmFsaWRhdGVUb2tlblJlcXVlc3QaJC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5Ub2tlbkNsYWltcxJoCgxSZWZyZXNoVG9rZW4SLC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZWZyZXNoVG9rZW5SZXF1ZXN0GioueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXV0aFRva2VuUmVzcG9uc2USaAoLUmV2b2tlVG9rZW4SKy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZXZva2VUb2tlblJlcXVlc3QaLC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZXZva2VUb2tlblJlc3BvbnNlEl0KDENyZWF0ZUFwaUtleRIsLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkNyZWF0ZUFwaUtleVJlcXVlc3QaHy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5BcGlLZXkSZgoOVmFsaWRhdGVBcGlLZXkSLi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5WYWxpZGF0ZUFwaUtleVJlcXVlc3QaJC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5Ub2tlbkNsYWltcxJoCgtMaXN0QXBpS2V5cxIrLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkxpc3RBcGlLZXlzUmVxdWVzdBosLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkxpc3RBcGlLZXlzUmVzcG9uc2USawoMUmV2b2tlQXBpS2V5EiwueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuUmV2b2tlQXBpS2V5UmVxdWVzdBotLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZUFwaUtleVJlc3BvbnNlEnAKE1JlZ2lzdGVyT0F1dGhDbGllbnQSMy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZWdpc3Rlck9BdXRoQ2xpZW50UmVxdWVzdBokLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLk9BdXRoQ2xpZW50EmYKDkdldE9BdXRoQ2xpZW50Ei4ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuR2V0T0F1dGhDbGllbnRSZXF1ZXN0GiQueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuT0F1dGhDbGllbnQSbgoNSXNzdWVBdXRoQ29kZRItLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLklzc3VlQXV0aENvZGVSZXF1ZXN0Gi4ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuSXNzdWVBdXRoQ29kZVJlc3BvbnNlEnEKEEV4Y2hhbmdlQXV0aENvZGUSMC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5FeGNoYW5nZUF1dGhDb2RlUmVxdWVzdBorLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLk9BdXRoVG9rZW5SZXNwb25zZRJzChFSZWZyZXNoT0F1dGhUb2tlbhIxLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJlZnJlc2hPQXV0aFRva2VuUmVxdWVzdBorLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLk9BdXRoVG9rZW5SZXNwb25zZUJAWj5naXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vaWRlbnRpdHkvdjE7aWRlbnRpdHl2MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message xstockstrat.identity.v1.AuthenticateUserRequest
@@ -96,6 +96,13 @@ export type TokenClaims = Message<"xstockstrat.identity.v1.TokenClaims"> & {
    * @generated from field: google.protobuf.Timestamp expires_at = 5;
    */
   expiresAt?: Timestamp | undefined;
+
+  /**
+   * audience / resource URI (OAuth audience-bound JWT, RFC 8707)
+   *
+   * @generated from field: string aud = 6;
+   */
+  aud: string;
 };
 
 /**
@@ -345,6 +352,224 @@ export const RevokeApiKeyResponseSchema: GenMessage<RevokeApiKeyResponse> = /*@_
   messageDesc(file_identity_v1_identity, 13);
 
 /**
+ * ── OAuth 2.1 messages (feature 049 Part B) ──────────────────────────────────
+ *
+ * @generated from message xstockstrat.identity.v1.OAuthClient
+ */
+export type OAuthClient = Message<"xstockstrat.identity.v1.OAuthClient"> & {
+  /**
+   * @generated from field: string client_id = 1;
+   */
+  clientId: string;
+
+  /**
+   * @generated from field: repeated string redirect_uris = 2;
+   */
+  redirectUris: string[];
+
+  /**
+   * @generated from field: string client_name = 3;
+   */
+  clientName: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 4;
+   */
+  createdAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.OAuthClient.
+ * Use `create(OAuthClientSchema)` to create a new message.
+ */
+export const OAuthClientSchema: GenMessage<OAuthClient> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 14);
+
+/**
+ * @generated from message xstockstrat.identity.v1.RegisterOAuthClientRequest
+ */
+export type RegisterOAuthClientRequest = Message<"xstockstrat.identity.v1.RegisterOAuthClientRequest"> & {
+  /**
+   * @generated from field: repeated string redirect_uris = 1;
+   */
+  redirectUris: string[];
+
+  /**
+   * @generated from field: string client_name = 2;
+   */
+  clientName: string;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.RegisterOAuthClientRequest.
+ * Use `create(RegisterOAuthClientRequestSchema)` to create a new message.
+ */
+export const RegisterOAuthClientRequestSchema: GenMessage<RegisterOAuthClientRequest> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 15);
+
+/**
+ * @generated from message xstockstrat.identity.v1.GetOAuthClientRequest
+ */
+export type GetOAuthClientRequest = Message<"xstockstrat.identity.v1.GetOAuthClientRequest"> & {
+  /**
+   * @generated from field: string client_id = 1;
+   */
+  clientId: string;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.GetOAuthClientRequest.
+ * Use `create(GetOAuthClientRequestSchema)` to create a new message.
+ */
+export const GetOAuthClientRequestSchema: GenMessage<GetOAuthClientRequest> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 16);
+
+/**
+ * @generated from message xstockstrat.identity.v1.IssueAuthCodeRequest
+ */
+export type IssueAuthCodeRequest = Message<"xstockstrat.identity.v1.IssueAuthCodeRequest"> & {
+  /**
+   * @generated from field: string user_id = 1;
+   */
+  userId: string;
+
+  /**
+   * @generated from field: string client_id = 2;
+   */
+  clientId: string;
+
+  /**
+   * @generated from field: string redirect_uri = 3;
+   */
+  redirectUri: string;
+
+  /**
+   * @generated from field: string code_challenge = 4;
+   */
+  codeChallenge: string;
+
+  /**
+   * @generated from field: string resource = 5;
+   */
+  resource: string;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.IssueAuthCodeRequest.
+ * Use `create(IssueAuthCodeRequestSchema)` to create a new message.
+ */
+export const IssueAuthCodeRequestSchema: GenMessage<IssueAuthCodeRequest> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 17);
+
+/**
+ * @generated from message xstockstrat.identity.v1.IssueAuthCodeResponse
+ */
+export type IssueAuthCodeResponse = Message<"xstockstrat.identity.v1.IssueAuthCodeResponse"> & {
+  /**
+   * @generated from field: string code = 1;
+   */
+  code: string;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.IssueAuthCodeResponse.
+ * Use `create(IssueAuthCodeResponseSchema)` to create a new message.
+ */
+export const IssueAuthCodeResponseSchema: GenMessage<IssueAuthCodeResponse> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 18);
+
+/**
+ * @generated from message xstockstrat.identity.v1.ExchangeAuthCodeRequest
+ */
+export type ExchangeAuthCodeRequest = Message<"xstockstrat.identity.v1.ExchangeAuthCodeRequest"> & {
+  /**
+   * @generated from field: string code = 1;
+   */
+  code: string;
+
+  /**
+   * @generated from field: string code_verifier = 2;
+   */
+  codeVerifier: string;
+
+  /**
+   * @generated from field: string redirect_uri = 3;
+   */
+  redirectUri: string;
+
+  /**
+   * @generated from field: string client_id = 4;
+   */
+  clientId: string;
+
+  /**
+   * @generated from field: string resource = 5;
+   */
+  resource: string;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.ExchangeAuthCodeRequest.
+ * Use `create(ExchangeAuthCodeRequestSchema)` to create a new message.
+ */
+export const ExchangeAuthCodeRequestSchema: GenMessage<ExchangeAuthCodeRequest> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 19);
+
+/**
+ * @generated from message xstockstrat.identity.v1.OAuthTokenResponse
+ */
+export type OAuthTokenResponse = Message<"xstockstrat.identity.v1.OAuthTokenResponse"> & {
+  /**
+   * @generated from field: string access_token = 1;
+   */
+  accessToken: string;
+
+  /**
+   * @generated from field: string token_type = 2;
+   */
+  tokenType: string;
+
+  /**
+   * @generated from field: int64 expires_in = 3;
+   */
+  expiresIn: bigint;
+
+  /**
+   * @generated from field: string refresh_token = 4;
+   */
+  refreshToken: string;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.OAuthTokenResponse.
+ * Use `create(OAuthTokenResponseSchema)` to create a new message.
+ */
+export const OAuthTokenResponseSchema: GenMessage<OAuthTokenResponse> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 20);
+
+/**
+ * @generated from message xstockstrat.identity.v1.RefreshOAuthTokenRequest
+ */
+export type RefreshOAuthTokenRequest = Message<"xstockstrat.identity.v1.RefreshOAuthTokenRequest"> & {
+  /**
+   * @generated from field: string refresh_token = 1;
+   */
+  refreshToken: string;
+
+  /**
+   * @generated from field: string resource = 2;
+   */
+  resource: string;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.RefreshOAuthTokenRequest.
+ * Use `create(RefreshOAuthTokenRequestSchema)` to create a new message.
+ */
+export const RefreshOAuthTokenRequestSchema: GenMessage<RefreshOAuthTokenRequest> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 21);
+
+/**
  * @generated from service xstockstrat.identity.v1.IdentityService
  */
 export const IdentityService: GenService<{
@@ -411,6 +636,49 @@ export const IdentityService: GenService<{
     methodKind: "unary";
     input: typeof RevokeApiKeyRequestSchema;
     output: typeof RevokeApiKeyResponseSchema;
+  },
+  /**
+   * OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+   * OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+   *
+   * @generated from rpc xstockstrat.identity.v1.IdentityService.RegisterOAuthClient
+   */
+  registerOAuthClient: {
+    methodKind: "unary";
+    input: typeof RegisterOAuthClientRequestSchema;
+    output: typeof OAuthClientSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.identity.v1.IdentityService.GetOAuthClient
+   */
+  getOAuthClient: {
+    methodKind: "unary";
+    input: typeof GetOAuthClientRequestSchema;
+    output: typeof OAuthClientSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.identity.v1.IdentityService.IssueAuthCode
+   */
+  issueAuthCode: {
+    methodKind: "unary";
+    input: typeof IssueAuthCodeRequestSchema;
+    output: typeof IssueAuthCodeResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.identity.v1.IdentityService.ExchangeAuthCode
+   */
+  exchangeAuthCode: {
+    methodKind: "unary";
+    input: typeof ExchangeAuthCodeRequestSchema;
+    output: typeof OAuthTokenResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.identity.v1.IdentityService.RefreshOAuthToken
+   */
+  refreshOAuthToken: {
+    methodKind: "unary";
+    input: typeof RefreshOAuthTokenRequestSchema;
+    output: typeof OAuthTokenResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_identity_v1_identity, 0);

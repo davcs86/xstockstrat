@@ -497,6 +497,7 @@ services:
       MCP_SSE_PORT: "9000"
       MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       UI_BASE_URL: http://localhost:3000
+      AGENT_PUBLIC_URL: http://localhost:9000
     ports:
       - "9000:9000"
     healthcheck:

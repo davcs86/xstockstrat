@@ -143,10 +143,11 @@ export class LedgerServiceImpl {
     client.on('notification', (msg) => {
       if (!msg.payload) return;
       try {
-        // Notification payload is JSON from a DB trigger — uses DB column names (snake_case)
-        const event = JSON.parse(msg.payload);
-        if (!req.eventType || event.event_type === req.eventType) {
-          call.write(event);
+        // Notification payload is JSON from a DB trigger — uses DB column names (snake_case).
+        // rowToEvent converts to the camelCase shape that ts-proto encode() expects.
+        const row = JSON.parse(msg.payload);
+        if (!req.eventType || row.event_type === req.eventType) {
+          call.write(rowToEvent(row));
         }
       } catch { /* ignore parse errors for malformed NOTIFY payloads */ }
     });

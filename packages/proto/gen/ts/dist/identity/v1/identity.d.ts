@@ -17,6 +17,8 @@ export interface TokenClaims {
     roles: string[];
     issuedAt?: Date | undefined;
     expiresAt?: Date | undefined;
+    /** audience / resource URI (OAuth audience-bound JWT, RFC 8707) */
+    aud: string;
 }
 export interface ValidateTokenRequest {
     token: string;
@@ -62,6 +64,47 @@ export interface RevokeApiKeyRequest {
 export interface RevokeApiKeyResponse {
     success: boolean;
 }
+/** ── OAuth 2.1 messages (feature 049 Part B) ────────────────────────────────── */
+export interface OAuthClient {
+    clientId: string;
+    redirectUris: string[];
+    clientName: string;
+    createdAt?: Date | undefined;
+}
+export interface RegisterOAuthClientRequest {
+    redirectUris: string[];
+    clientName: string;
+}
+export interface GetOAuthClientRequest {
+    clientId: string;
+}
+export interface IssueAuthCodeRequest {
+    userId: string;
+    clientId: string;
+    redirectUri: string;
+    codeChallenge: string;
+    resource: string;
+}
+export interface IssueAuthCodeResponse {
+    code: string;
+}
+export interface ExchangeAuthCodeRequest {
+    code: string;
+    codeVerifier: string;
+    redirectUri: string;
+    clientId: string;
+    resource: string;
+}
+export interface OAuthTokenResponse {
+    accessToken: string;
+    tokenType: string;
+    expiresIn: number;
+    refreshToken: string;
+}
+export interface RefreshOAuthTokenRequest {
+    refreshToken: string;
+    resource: string;
+}
 export declare const AuthenticateUserRequest: MessageFns<AuthenticateUserRequest>;
 export declare const AuthTokenResponse: MessageFns<AuthTokenResponse>;
 export declare const TokenClaims: MessageFns<TokenClaims>;
@@ -76,6 +119,14 @@ export declare const ListApiKeysRequest: MessageFns<ListApiKeysRequest>;
 export declare const ListApiKeysResponse: MessageFns<ListApiKeysResponse>;
 export declare const RevokeApiKeyRequest: MessageFns<RevokeApiKeyRequest>;
 export declare const RevokeApiKeyResponse: MessageFns<RevokeApiKeyResponse>;
+export declare const OAuthClient: MessageFns<OAuthClient>;
+export declare const RegisterOAuthClientRequest: MessageFns<RegisterOAuthClientRequest>;
+export declare const GetOAuthClientRequest: MessageFns<GetOAuthClientRequest>;
+export declare const IssueAuthCodeRequest: MessageFns<IssueAuthCodeRequest>;
+export declare const IssueAuthCodeResponse: MessageFns<IssueAuthCodeResponse>;
+export declare const ExchangeAuthCodeRequest: MessageFns<ExchangeAuthCodeRequest>;
+export declare const OAuthTokenResponse: MessageFns<OAuthTokenResponse>;
+export declare const RefreshOAuthTokenRequest: MessageFns<RefreshOAuthTokenRequest>;
 export type IdentityServiceService = typeof IdentityServiceService;
 export declare const IdentityServiceService: {
     readonly authenticateUser: {
@@ -150,6 +201,55 @@ export declare const IdentityServiceService: {
         readonly responseSerialize: (value: RevokeApiKeyResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => RevokeApiKeyResponse;
     };
+    /**
+     * OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+     * OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+     */
+    readonly registerOAuthClient: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/RegisterOAuthClient";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: RegisterOAuthClientRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => RegisterOAuthClientRequest;
+        readonly responseSerialize: (value: OAuthClient) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => OAuthClient;
+    };
+    readonly getOAuthClient: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/GetOAuthClient";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetOAuthClientRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetOAuthClientRequest;
+        readonly responseSerialize: (value: OAuthClient) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => OAuthClient;
+    };
+    readonly issueAuthCode: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/IssueAuthCode";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: IssueAuthCodeRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => IssueAuthCodeRequest;
+        readonly responseSerialize: (value: IssueAuthCodeResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => IssueAuthCodeResponse;
+    };
+    readonly exchangeAuthCode: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/ExchangeAuthCode";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ExchangeAuthCodeRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ExchangeAuthCodeRequest;
+        readonly responseSerialize: (value: OAuthTokenResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => OAuthTokenResponse;
+    };
+    readonly refreshOAuthToken: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: RefreshOAuthTokenRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => RefreshOAuthTokenRequest;
+        readonly responseSerialize: (value: OAuthTokenResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => OAuthTokenResponse;
+    };
 };
 export interface IdentityServiceServer extends UntypedServiceImplementation {
     authenticateUser: handleUnaryCall<AuthenticateUserRequest, AuthTokenResponse>;
@@ -160,6 +260,15 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
     validateApiKey: handleUnaryCall<ValidateApiKeyRequest, TokenClaims>;
     listApiKeys: handleUnaryCall<ListApiKeysRequest, ListApiKeysResponse>;
     revokeApiKey: handleUnaryCall<RevokeApiKeyRequest, RevokeApiKeyResponse>;
+    /**
+     * OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+     * OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+     */
+    registerOAuthClient: handleUnaryCall<RegisterOAuthClientRequest, OAuthClient>;
+    getOAuthClient: handleUnaryCall<GetOAuthClientRequest, OAuthClient>;
+    issueAuthCode: handleUnaryCall<IssueAuthCodeRequest, IssueAuthCodeResponse>;
+    exchangeAuthCode: handleUnaryCall<ExchangeAuthCodeRequest, OAuthTokenResponse>;
+    refreshOAuthToken: handleUnaryCall<RefreshOAuthTokenRequest, OAuthTokenResponse>;
 }
 export interface IdentityServiceClient extends Client {
     authenticateUser(request: AuthenticateUserRequest, callback: (error: ServiceError | null, response: AuthTokenResponse) => void): ClientUnaryCall;
@@ -186,6 +295,25 @@ export interface IdentityServiceClient extends Client {
     revokeApiKey(request: RevokeApiKeyRequest, callback: (error: ServiceError | null, response: RevokeApiKeyResponse) => void): ClientUnaryCall;
     revokeApiKey(request: RevokeApiKeyRequest, metadata: Metadata, callback: (error: ServiceError | null, response: RevokeApiKeyResponse) => void): ClientUnaryCall;
     revokeApiKey(request: RevokeApiKeyRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: RevokeApiKeyResponse) => void): ClientUnaryCall;
+    /**
+     * OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+     * OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+     */
+    registerOAuthClient(request: RegisterOAuthClientRequest, callback: (error: ServiceError | null, response: OAuthClient) => void): ClientUnaryCall;
+    registerOAuthClient(request: RegisterOAuthClientRequest, metadata: Metadata, callback: (error: ServiceError | null, response: OAuthClient) => void): ClientUnaryCall;
+    registerOAuthClient(request: RegisterOAuthClientRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: OAuthClient) => void): ClientUnaryCall;
+    getOAuthClient(request: GetOAuthClientRequest, callback: (error: ServiceError | null, response: OAuthClient) => void): ClientUnaryCall;
+    getOAuthClient(request: GetOAuthClientRequest, metadata: Metadata, callback: (error: ServiceError | null, response: OAuthClient) => void): ClientUnaryCall;
+    getOAuthClient(request: GetOAuthClientRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: OAuthClient) => void): ClientUnaryCall;
+    issueAuthCode(request: IssueAuthCodeRequest, callback: (error: ServiceError | null, response: IssueAuthCodeResponse) => void): ClientUnaryCall;
+    issueAuthCode(request: IssueAuthCodeRequest, metadata: Metadata, callback: (error: ServiceError | null, response: IssueAuthCodeResponse) => void): ClientUnaryCall;
+    issueAuthCode(request: IssueAuthCodeRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: IssueAuthCodeResponse) => void): ClientUnaryCall;
+    exchangeAuthCode(request: ExchangeAuthCodeRequest, callback: (error: ServiceError | null, response: OAuthTokenResponse) => void): ClientUnaryCall;
+    exchangeAuthCode(request: ExchangeAuthCodeRequest, metadata: Metadata, callback: (error: ServiceError | null, response: OAuthTokenResponse) => void): ClientUnaryCall;
+    exchangeAuthCode(request: ExchangeAuthCodeRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: OAuthTokenResponse) => void): ClientUnaryCall;
+    refreshOAuthToken(request: RefreshOAuthTokenRequest, callback: (error: ServiceError | null, response: OAuthTokenResponse) => void): ClientUnaryCall;
+    refreshOAuthToken(request: RefreshOAuthTokenRequest, metadata: Metadata, callback: (error: ServiceError | null, response: OAuthTokenResponse) => void): ClientUnaryCall;
+    refreshOAuthToken(request: RefreshOAuthTokenRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: OAuthTokenResponse) => void): ClientUnaryCall;
 }
 export declare const IdentityServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): IdentityServiceClient;

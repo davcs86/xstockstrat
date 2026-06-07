@@ -15,6 +15,14 @@ service IdentityService {
   rpc ValidateApiKey(ValidateApiKeyRequest) returns (TokenClaims);
   rpc ListApiKeys(ListApiKeysRequest) returns (ListApiKeysResponse);
   rpc RevokeApiKey(RevokeApiKeyRequest) returns (RevokeApiKeyResponse);
+
+  // OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+  // OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+  rpc RegisterOAuthClient(RegisterOAuthClientRequest) returns (OAuthClient);
+  rpc GetOAuthClient(GetOAuthClientRequest) returns (OAuthClient);
+  rpc IssueAuthCode(IssueAuthCodeRequest) returns (IssueAuthCodeResponse);
+  rpc ExchangeAuthCode(ExchangeAuthCodeRequest) returns (OAuthTokenResponse);
+  rpc RefreshOAuthToken(RefreshOAuthTokenRequest) returns (OAuthTokenResponse);
 }
 
 message AuthenticateUserRequest {
@@ -35,6 +43,7 @@ message TokenClaims {
   repeated string roles = 3;
   google.protobuf.Timestamp issued_at = 4;
   google.protobuf.Timestamp expires_at = 5;
+  string aud = 6;  // audience / resource URI (OAuth audience-bound JWT, RFC 8707)
 }
 
 message ValidateTokenRequest { string token = 1; }
@@ -64,3 +73,48 @@ message ListApiKeysRequest { string user_id = 1; }
 message ListApiKeysResponse { repeated ApiKey keys = 1; }
 message RevokeApiKeyRequest { string key_id = 1; string user_id = 2; }
 message RevokeApiKeyResponse { bool success = 1; }
+
+// ── OAuth 2.1 messages (feature 049 Part B) ──────────────────────────────────
+message OAuthClient {
+  string client_id = 1;
+  repeated string redirect_uris = 2;
+  string client_name = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message RegisterOAuthClientRequest {
+  repeated string redirect_uris = 1;
+  string client_name = 2;
+}
+
+message GetOAuthClientRequest { string client_id = 1; }
+
+message IssueAuthCodeRequest {
+  string user_id = 1;
+  string client_id = 2;
+  string redirect_uri = 3;
+  string code_challenge = 4;
+  string resource = 5;
+}
+
+message IssueAuthCodeResponse { string code = 1; }
+
+message ExchangeAuthCodeRequest {
+  string code = 1;
+  string code_verifier = 2;
+  string redirect_uri = 3;
+  string client_id = 4;
+  string resource = 5;
+}
+
+message OAuthTokenResponse {
+  string access_token = 1;
+  string token_type = 2;
+  int64 expires_in = 3;
+  string refresh_token = 4;
+}
+
+message RefreshOAuthTokenRequest {
+  string refresh_token = 1;
+  string resource = 2;
+}

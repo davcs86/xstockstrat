@@ -38,6 +38,40 @@ calls `client.validate_admin(admin_api_key)` (identity `ValidateApiKey` → `"ad
 forwarding the call with the admin access scope. Internal services (e.g. `xstockstrat-analysis`
 `SetStrategyLive`) only perform a role check on the propagated `x-access-scope`.
 
+### OAuth 2.1 edge auth (feature 049 Part B)
+
+The agent is the OAuth 2.1 **Resource Server + Authorization-Server HTTP facade** for its MCP SSE
+endpoint, and is **stateless**: all durable OAuth state (clients, auth codes, refresh tokens) lives
+in `xstockstrat-identity` and is reached over gRPC (`app/client.py`). The only cross-request linkage
+is the HMAC-signed `txn` blob carried in URLs (`app/oauth_server.py`, signed with `MCP_AGENT_SECRET`),
+so there is **no in-memory store** and `instance_count > 1` is safe (FR-B13).
+
+Routes (registered in `app/main.py` `build_sse_app`):
+
+| Route | Purpose |
+|---|---|
+| `/.well-known/oauth-protected-resource` | RFC 9728 protected-resource metadata |
+| `/.well-known/oauth-authorization-server` | RFC 8414 authorization-server metadata |
+| `POST /oauth/register` | RFC 7591 Dynamic Client Registration (public client, https-only) |
+| `GET /oauth/authorize` | PKCE/S256 + exact-redirect validation; delegates login to the UI |
+| `GET /oauth/callback` | Derives user from the same-origin `access_token` cookie; mints the code |
+| `POST /oauth/token` | `authorization_code` + `refresh_token` grants (tokens in JSON body only) |
+
+The `/sse` endpoint accepts an **`aud`-bound JWT** (`aud` == `AGENT_PUBLIC_URL`, validated first) and
+falls back to the legacy `Authorization: Bearer <api_key>` and the **deprecated** `?api_key=` query
+fallback; unauthenticated requests get `401` with a `WWW-Authenticate: Bearer resource_metadata=…`
+discovery pointer. `AGENT_PUBLIC_URL` builds all absolute discovery/endpoint URLs (in DO it is
+`${APP_URL}/agent`).
+
+## Config Keys Consumed
+
+Namespace: `agent` (resolved via one-shot `GetConfig` → `client.get_config_value("<bare-key>")`).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `agent.oauth.registration_enabled` | bool | `true` | Allow RFC 7591 DCR at `/oauth/register` (disabled ⇒ 403) |
+| `agent.oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only |
+
 ## Environment Variables
 
 ```text
@@ -50,6 +84,8 @@ ANALYSIS_ENDPOINT=xstockstrat-analysis:50056
 INDICATORS_ENDPOINT=xstockstrat-indicators:50054
 IDENTITY_ENDPOINT=xstockstrat-identity:50058
 CONFIG_ENDPOINT=xstockstrat-config:50060
+UI_BASE_URL=http://localhost:3000
+AGENT_PUBLIC_URL=http://localhost:9000   # ${APP_URL}/agent in DO
 ```
 
 ## Running Tests

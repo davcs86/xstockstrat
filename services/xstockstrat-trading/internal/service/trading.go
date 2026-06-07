@@ -588,9 +588,23 @@ func (s *TradingService) syncPositions(ctx context.Context) {
 			slog.Warn("syncPositions: GetPositions failed", "account_id", accountID, "error", err)
 			continue
 		}
+		tradingMode := "TRADING_MODE_LIVE"
+		if b.IsPaper() {
+			tradingMode = "TRADING_MODE_PAPER"
+		}
+		// structpb.NewStruct only accepts []interface{}, not typed slices.
+		posEntries := make([]interface{}, len(positions))
+		for i, p := range positions {
+			posEntries[i] = map[string]interface{}{
+				"symbol":   p.Symbol,
+				"qty":      p.Quantity,
+				"avg_cost": p.AvgCost,
+			}
+		}
 		payload := map[string]interface{}{
-			"account_id": accountID,
-			"count":      len(positions),
+			"account_id":   accountID,
+			"trading_mode": tradingMode,
+			"positions":    posEntries,
 		}
 		s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), payload)
 	}

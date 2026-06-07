@@ -8,7 +8,33 @@ Every service that receives **inbound** gRPC calls **must** extract and forward 
 | `x-access-scope` | Bitmap of user roles | Frontend API routes; propagated by all backend services |
 | `x-trace-id` | Request trace identifier | Frontend `middleware.ts` (generates if absent); propagated by all backend services |
 
-Nginx strips all three headers from **inbound external requests** so internal services can trust them as platform-generated values.
+The platform entry points strip these headers from **inbound external requests** and re-set them from
+authenticated context, so internal services can trust them as platform-generated values. (nginx was
+removed by feature 045; the entry points are now the `xstockstrat-ui` BFF and the MCP agent SSE layer.)
+
+## Authorization model: entry authenticates, internal services role-check
+
+Authentication/authorization happens **once, at the entry point**; internal backend services do **not**
+re-authenticate — at most they perform a **role check** on the propagated `x-access-scope`:
+
+- **Entry points authenticate.** The `xstockstrat-ui` BFF validates the JWT and sets
+  `x-user-id` / `x-access-scope` from the verified claims. The **MCP agent** SSE layer authenticates the
+  caller (OAuth 2.1 audience-bound JWT or a legacy API key) and, for admin-scoped tools, validates the
+  admin role at the agent entry (`client.validate_admin`) before forwarding `x-access-scope`.
+- **Internal services role-check only.** Admin-gated RPCs check the ADMIN bit on the propagated scope:
+  `int(x-access-scope) & 0x04`. They abort `PERMISSION_DENIED` ("admin scope required") rather than
+  calling identity to re-validate a credential. Reference helper: `_has_admin_scope` in
+  `xstockstrat-analysis`, `xstockstrat-ingest`, and `xstockstrat-indicators` servicers (feature 049
+  unified these onto the single model).
+
+### Documented exception: indicators formula author-ownership
+
+`xstockstrat-indicators` formula management (`UpdateFormula` / `DeleteFormula`) keeps a distinct
+**author-ownership** check (`row.author == request.user_id`) as its primary authorization model — a
+deliberate, documented exception to the pure role-check model. Feature 049 added an **admin-scope
+override** (`x-access-scope & 0x04`) so platform admins can manage any formula, and closed the
+`RegisterFormula` gap (the author now defaults to the propagated `x-user-id`, required — no silent
+`"dev-user"` default).
 
 ## Go services
 

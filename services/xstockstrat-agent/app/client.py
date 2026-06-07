@@ -356,9 +356,11 @@ async def manage_signal_source(
     if credentials_ref:
         req.credentials_ref = credentials_ref
 
+    # Forward the admin access scope so ingest's role check (x-access-scope & 0x04) passes.
+    meta = list(_admin_metadata(api_key)) + [("x-access-scope", "7")]
     async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
-        resp = await stub.ManageSignalSource(req, metadata=_admin_metadata(api_key))
+        resp = await stub.ManageSignalSource(req, metadata=meta)
 
     # FR-12: never echo credentials_ref back to the caller.
     return {
@@ -390,6 +392,125 @@ async def validate_admin(api_key: str | None) -> bool:
             return "admin" in claims.roles
     except Exception:
         return False
+
+
+# ── OAuth 2.1 backend gRPC helpers (feature 049 Part B) ──────────────────────
+# These call identity's OAuth RPCs over gRPC. DCR + the OAuth handshake happen before any
+# inbound user context exists, so they carry only _metadata() (x-mcp-secret) — there is no
+# x-user-id/x-access-scope to forward at the pre-token stage.
+
+
+async def register_oauth_client(redirect_uris: list[str], client_name: str) -> dict[str, Any]:
+    """RFC 7591 DCR — register a public OAuth client via identity RegisterOAuthClient."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.RegisterOAuthClient(
+            identity_pb2.RegisterOAuthClientRequest(
+                redirect_uris=redirect_uris, client_name=client_name
+            ),
+            metadata=_metadata(),
+        )
+    return {"client_id": resp.client_id, "redirect_uris": list(resp.redirect_uris)}
+
+
+async def get_oauth_client(client_id: str) -> dict[str, Any]:
+    """Fetch a registered OAuth client (for exact-redirect validation at /oauth/authorize)."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.GetOAuthClient(
+            identity_pb2.GetOAuthClientRequest(client_id=client_id), metadata=_metadata()
+        )
+    return {"client_id": resp.client_id, "redirect_uris": list(resp.redirect_uris)}
+
+
+async def issue_auth_code(
+    user_id: str, client_id: str, redirect_uri: str, code_challenge: str, resource: str
+) -> str:
+    """Mint a single-use authorization code via identity IssueAuthCode."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.IssueAuthCode(
+            identity_pb2.IssueAuthCodeRequest(
+                user_id=user_id,
+                client_id=client_id,
+                redirect_uri=redirect_uri,
+                code_challenge=code_challenge,
+                resource=resource,
+            ),
+            metadata=_metadata(),
+        )
+    return resp.code
+
+
+async def validate_token(token: str) -> dict[str, Any]:
+    """Validate a session/access JWT via identity ValidateToken; returns the claims dict.
+
+    Used by /oauth/callback to derive a trustworthy user_id from the same-origin session
+    cookie (never from a query param).
+    """
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        claims = await stub.ValidateToken(
+            identity_pb2.ValidateTokenRequest(token=token), metadata=_metadata()
+        )
+    return {
+        "user_id": claims.user_id,
+        "email": claims.email,
+        "roles": list(claims.roles),
+        "aud": claims.aud,
+    }
+
+
+async def exchange_auth_code(
+    code: str, code_verifier: str, redirect_uri: str, client_id: str, resource: str
+) -> dict[str, Any]:
+    """Exchange an authorization code for tokens via identity ExchangeAuthCode (PKCE verified)."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.ExchangeAuthCode(
+            identity_pb2.ExchangeAuthCodeRequest(
+                code=code,
+                code_verifier=code_verifier,
+                redirect_uri=redirect_uri,
+                client_id=client_id,
+                resource=resource,
+            ),
+            metadata=_metadata(),
+        )
+    return {
+        "access_token": resp.access_token,
+        "token_type": resp.token_type,
+        "expires_in": resp.expires_in,
+        "refresh_token": resp.refresh_token,
+    }
+
+
+async def refresh_oauth_token(refresh_token: str, resource: str) -> dict[str, Any]:
+    """Rotate + refresh OAuth tokens via identity RefreshOAuthToken."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.RefreshOAuthToken(
+            identity_pb2.RefreshOAuthTokenRequest(refresh_token=refresh_token, resource=resource),
+            metadata=_metadata(),
+        )
+    return {
+        "access_token": resp.access_token,
+        "token_type": resp.token_type,
+        "expires_in": resp.expires_in,
+        "refresh_token": resp.refresh_token,
+    }
 
 
 async def set_strategy_live(
