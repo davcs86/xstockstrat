@@ -1,6 +1,6 @@
 # Feature: auth2-authorized-apps-ui
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `draft`
 **Development Branch**: `feature/auth2-authorized-apps-ui`
 **Created**: 2026-06-07
 **Last Updated**: 2026-06-07
@@ -13,6 +13,7 @@
 |---|---|---|---|
 | 2026-06-07 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-06-07 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings: UI overlap with 049, 050) |
+| 2026-06-07 | `spec-ready` → `draft` | user re-scope | Scope expanded: per-user authorized-app list + revoke (not UI-only); now spans ui + identity + proto + migration. Re-review required. |
 
 ---
 
@@ -26,7 +27,7 @@
 
 ## Summary
 
-Add an "Authorized Apps" UI module to `xstockstrat-ui` that surfaces a one-click button (and copyable URL) for connecting Claude.ai to the xstockstrat MCP agent via the OAuth 2.1 flow delivered by feature `049-unify-admin-auth-gates` (Part B, which supersedes feature `018-agent-mcp-oauth`).
+Add a per-user **"My Authorized Apps"** management module (new `/accounts` segment in `xstockstrat-ui`) that lets an operator list, audit, and **revoke** the OAuth apps (e.g. Claude.ai) they've authorized against the xstockstrat MCP agent, plus connect a new one. Extends feature `049-unify-admin-auth-gates`'s identity OAuth backend with additive list/revoke RPCs + a per-user linkage migration (049 shipped no list and no revocation).
 
 ## Reviewers
 
@@ -37,8 +38,11 @@ re-run /sdd-spec if the registry changes.)_
 | Role | Review Focus |
 |---|---|
 | `xstockstrat-ui` (service owner) | Trading UI correctness, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI |
-| Security | OAuth scope correctness, no secrets in UI/config, redirect URI / connect-URL construction safety |
+| `xstockstrat-identity` (service owner) | JWT/refresh-token handling, API key/token scoping, per-user isolation, no plaintext secrets |
+| Proto Reviewer | Additive identity RPCs (ListAuthorizedApps/RevokeAuthorizedApp); field-number uniqueness; `buf breaking` passes |
+| DBA | identity migration NNN numbering (after 049's 003), up+down pair, run-order vs 049 |
+| Security | Revocation correctness, per-user isolation / IDOR, no token/secret exposure in list responses, refresh-token invalidation semantics |
 
 ## Next Action
 
-`/sdd-spec auth2-authorized-apps-ui` — generate implementation spec from the approved product spec
+`/sdd-review auth2-authorized-apps-ui product-spec` — re-review the re-scoped product spec (was spec-ready; reverted to draft after scope expansion)

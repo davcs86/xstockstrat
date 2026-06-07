@@ -1,83 +1,105 @@
 # Product Spec: auth2-authorized-apps-ui
 
 **Created**: 2026-06-07
+**Last re-scoped**: 2026-06-07 (UI-only → full per-user authorized-app management; see context.md)
 
 ---
 
 ## Problem Statement
 
-Feature `049-unify-admin-auth-gates` (Part B — which supersedes and re-specs `018-agent-mcp-oauth`) makes `xstockstrat-agent` a fully OAuth 2.1-capable remote MCP server: RFC 9728/8414 discovery, `401 + WWW-Authenticate` trigger, RFC 7591 dynamic client registration, PKCE, audience-bound JWTs, and login delegated to the UI's `/auth/oauth-login` page. But there is no in-product way to *discover how to connect*. Today an operator must know the agent's public MCP URL (the host serving `/.well-known/oauth-protected-resource`) by heart and hand-assemble the connector entry in Claude.ai. Operators want a button or copyable URL inside their own web app (`xstockstrat-ui`) that gets them to a connected Claude.ai in one step.
+Feature `049-unify-admin-auth-gates` (Part B — which supersedes `018-agent-mcp-oauth`) makes `xstockstrat-agent` a fully OAuth 2.1 remote MCP server (RFC 9728/8414 discovery, RFC 7591 dynamic client registration, PKCE, audience-bound JWTs + rotating refresh tokens, login delegated to the UI). But once an operator grants Claude.ai (or any DCR-registered client) access, that grant is **fire-and-forget**: there is **no way to see which apps have access, when they last used it, or to revoke them**. 049 deliberately shipped no list and no revocation (RFC 7009 deferred). An operator cannot answer "what currently has access to my trading agent, and how do I cut it off?" — a basic security-hygiene need for an outward-facing OAuth resource.
 
-**Dependency:** this feature is the operator-facing front door to the OAuth 2.1 flow built in `049-unify-admin-auth-gates`. It should be specced/executed after 049 Part B lands (the agent must actually serve the OAuth discovery endpoints and `AGENT_PUBLIC_URL` must be defined). 049 completes the `/auth/oauth-login` *login delegation* page; this feature adds the separate operator-facing *connect/discovery* page — they do not overlap.
+**This feature exists precisely to close that gap.** "My Authorized Apps" is a per-user management surface: list the apps *I* authorized, inspect them, and **disconnect** any of them — plus connect a new one. (The copy-the-URL "connect" flow is the secondary *add / empty-state* affordance, not the point of the page.)
+
+**Relationship to 049:** this feature **extends 049's identity OAuth backend** — it adds the read/revoke RPCs and the user↔client association that 049 did not build. It therefore depends on 049 Part B merging first and touches the same identity OAuth schema.
 
 ## User Story
 
-As an operator, I want to see the xstockstrat MCP server URL inside the xstockstrat web app, so that I can add xstockstrat-agent as a remote MCP connector in Claude.ai (Settings → Connectors) without looking the URL up elsewhere or hand-constructing it.
+As an operator, I want a "My Authorized Apps" page that lists the external apps I've authorized to access the xstockstrat MCP agent — with the ability to audit and revoke each, and to connect a new one — so that I can review and control external access to my trading agent from my own web app.
 
 ## Functional Requirements
 
-FR-1. `xstockstrat-ui` adds a **new "Accounts" segment** with a **"My Authorized Apps"** page (e.g. route `/accounts/authorized-apps`), reachable from the existing authenticated navigation. This is a new top-level segment alongside the existing `/trader`, `/insights`, and `/config-ui` segments.
+FR-1. `xstockstrat-ui` adds a **new "Accounts" segment** with a **"My Authorized Apps"** page (route `/accounts/authorized-apps`), reachable from the existing authenticated navigation, alongside the existing `/trader`, `/insights`, `/config-ui` segments.
 
-FR-2. The "My Authorized Apps" page presents the **Claude.ai connector as a card/entry** with short instructions: copy the MCP server URL, then add it in Claude.ai under **Settings → Connectors → Add custom connector** (paste the URL; Claude.ai drives the OAuth 2.1 consent from there). There is **no in-app "Connect" button/deep-link** — Claude.ai has no documented query-param that pre-fills a custom MCP server URL, so the flow is copy-URL + paste-into-Claude.ai.
+FR-2. **List (per-user).** The page lists the OAuth apps the **currently authenticated user** has authorized against the agent. Each entry shows: app/client display name, a stable client identifier, when it was authorized, and (best-effort) when it was last used. The list is scoped to the caller's `x-user-id` and reflects only apps that user authorized.
 
-FR-3. The page displays the agent's public MCP server URL (the base Claude.ai uses for OAuth discovery, i.e. the host serving `/.well-known/oauth-protected-resource` / `/.well-known/oauth-authorization-server`) as a read-only, **copy-to-clipboard** field.
+FR-3. **Per-user isolation (server-enforced).** Listing and revocation are scoped to the caller in `xstockstrat-identity` itself (queries filtered by `user_id`), not merely filtered in the UI. A user can never see or revoke another user's authorized apps (no IDOR via a forged `client_id`).
 
-FR-4. The agent's public base URL is provided to the UI via an environment variable (no hardcoded URLs in source, per platform config governance). Feature 049 already establishes **`AGENT_PUBLIC_URL`** as the canonical agent public base URL (FR-B2/FR-B12); this feature reuses that same value rather than inventing a new var. (An `_ENDPOINT` suffix is not appropriate here — this is a browser-facing HTTPS URL, not a gRPC `host:port`.) Whether the UI receives it as its own env var or via a small BFF route is a `/sdd-spec` detail.
+FR-4. **Revoke / disconnect.** Each entry has a "Disconnect" action (with a confirmation step) that revokes that app's access by **invalidating its refresh token(s)** for that user in identity. The app's short-lived access JWT then expires naturally (no new access token can be minted because the refresh token is gone). After revoke, the app no longer appears in the user's list.
 
-FR-5. The page renders only OAuth/connection metadata (the MCP URL and connection status). It MUST NOT render any API keys, JWTs, client secrets, or other secret values (per `xstockstrat-ui` review focus).
+FR-5. **Connect a new app (add / empty state).** The page provides a "Connect a new app" affordance: the agent's MCP server URL as a read-only **copy-to-clipboard** field plus brief instructions to add it in Claude.ai under **Settings → Connectors → Add custom connector** (paste URL; Claude.ai drives the OAuth 2.1 consent). There is **no in-app deep-link/button** — Claude.ai has no documented param to pre-fill a custom MCP URL.
 
-FR-6. The page is gated behind the existing `xstockstrat-ui` JWT auth/middleware like all other authenticated pages; unauthenticated users are redirected to login. The new `/accounts` segment is added to the protected-route matcher.
+FR-6. **New additive identity gRPC RPCs.** `xstockstrat-identity` exposes (additively, in `packages/proto/identity/v1/identity.proto`):
+  - `ListAuthorizedApps` — returns the authorized apps for a user.
+  - `RevokeAuthorizedApp` — revokes a (user, client) grant by invalidating its refresh token(s).
+  These are consumed by the `xstockstrat-ui` **BFF** (server-side), which forwards `x-user-id` / `x-access-scope` / `x-trace-id` per `docs/patterns/header-propagation.md`. No browser-direct gRPC.
 
-FR-7. The page provides brief inline guidance (1–3 sentences) describing what connecting Claude.ai does and what the operator will be asked to authorize (the OAuth 2.1 consent/login delivered by feature 049).
+FR-7. **No secrets rendered.** The page and the list/revoke responses render only non-sensitive metadata (app name, client_id, timestamps, redirect URIs). They MUST NOT expose API keys, JWTs, refresh tokens, client secrets, or `code_verifier`/`code_challenge` values (per `xstockstrat-ui` review focus + identity review focus).
 
-FR-8. **Connection health indicator.** The page shows a reachable/unreachable status for the agent's OAuth discovery endpoint. A **UI BFF route** (server-side, to avoid browser CORS against the agent) probes `${AGENT_PUBLIC_URL}/.well-known/oauth-protected-resource` and returns a simple status (e.g. `reachable` / `unreachable` + HTTP code). The probe response MUST NOT expose any secret or sensitive payload — only reachability/status. Probe failures degrade gracefully (the URL is still shown and copyable).
+FR-8. **Auth-gated.** The page is behind the existing `xstockstrat-ui` JWT auth/middleware; unauthenticated users are redirected to login. The new `/accounts` segment is added to the protected-route matcher.
+
+FR-9. **Agent URL from config.** The connect URL (FR-5) is sourced from the env var **`AGENT_PUBLIC_URL`** established by feature 049 (FR-B2/FR-B12) — not hardcoded. (No `_ENDPOINT` suffix: this is a browser-facing HTTPS URL, not a gRPC `host:port`.)
+
+FR-10. **Connection health indicator.** The connect section shows a reachable/unreachable status for the agent's OAuth discovery endpoint via a **UI BFF route** that probes `${AGENT_PUBLIC_URL}/.well-known/oauth-protected-resource` server-side (avoids browser CORS). The probe returns only reachability/status (no payload), and failures degrade gracefully (the URL is still shown and copyable).
 
 ## Out of Scope
 
-- Building or changing the OAuth server itself (delivered by `049-unify-admin-auth-gates` Part B).
-- The OAuth *login delegation* page `/auth/oauth-login` (completed by feature 049) — this feature adds a distinct operator-facing *connect/discovery* page.
-- Listing, auditing, or revoking previously authorized OAuth clients/tokens (no revocation endpoint exists — see 049 Out of Scope, RFC 7009 excluded). Could be a follow-up feature.
-- Per-user / multi-tenant connector management (single operator persona).
-- The unified login page (delivered by `019-unified-login-page`).
-- Any proto, gRPC, or backend service changes.
+- Building the OAuth 2.1 grant/consent flow itself (delivered by `049-unify-admin-auth-gates` Part B). This feature consumes and extends it.
+- **Immediate, hard revocation of in-flight access JWTs (full RFC 7009 + denylist).** Revoke here invalidates refresh tokens; an already-issued access JWT remains valid until it expires (short TTL, per 049). A `jti` denylist / instant-kill is a possible follow-up.
+- **Admin/cross-user views** (an admin seeing or revoking *other* users' authorized apps) — this feature is strictly per-user ("My"). Could be a follow-up once a multi-user/role model is needed.
+- **Editing client registrations** (rename, change redirect URIs, rotate). View + revoke + connect only.
+- The OAuth login-delegation page `/auth/oauth-login` and the unified login page (delivered by `049` / `019`).
 
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-ui` — new `/accounts` segment with a "My Authorized Apps" page/component(s); reads the agent public URL from an env var (`AGENT_PUBLIC_URL`), renders the copyable MCP URL + Claude.ai instructions, and adds a server-side BFF route that probes the agent's `/.well-known/oauth-protected-resource` for the health indicator (FR-8). No backend service is modified.
+- `xstockstrat-ui` (Next.js) — new `/accounts` segment + "My Authorized Apps" page; BFF routes calling identity's `ListAuthorizedApps`/`RevokeAuthorizedApp` (header propagation) and the agent discovery health probe; copy-URL connect affordance.
+- `xstockstrat-identity` (Node.js) — implements the new `ListAuthorizedApps`/`RevokeAuthorizedApp` RPCs with per-user scoping; refresh-token invalidation for revoke; user↔client association needed to list/scope (extends 049's OAuth schema).
+- `packages/proto` — additive `identity/v1/identity.proto` RPCs + messages.
 
 ## Proto Contract Changes
 
-- [x] No proto changes required — this is a presentational UI surface over existing OAuth metadata.
+Additive, non-breaking, in `packages/proto/identity/v1/identity.proto`:
+- `ListAuthorizedApps(ListAuthorizedAppsRequest{ user_id }) → ListAuthorizedAppsResponse{ repeated AuthorizedApp apps }`
+- `RevokeAuthorizedApp(RevokeAuthorizedAppRequest{ user_id, client_id }) → RevokeAuthorizedAppResponse{ }`
+- `message AuthorizedApp { client_id, client_name, authorized_at, last_used_at, repeated redirect_uris }`
+- New field numbers only; no existing field/RPC changed or renumbered. Run `./scripts/buf-gen.sh`; `buf lint` + `buf breaking` must pass (additive → non-breaking). Exact field numbers fixed at `/sdd-spec`.
+- Approval: identity owner + proto reviewer (additive — not the 2-owner+lead breaking path).
 
 ## Config Key Changes
 
-- [x] No new config keys — reuses `AGENT_PUBLIC_URL` (established by feature 049) for the agent public base URL. To be confirmed at `/sdd-spec`: if the value should be live-tunable it would instead become an `xstockstrat-config` key (`ui.<category>.<key>`).
+- [x] No new config keys — reuses env var `AGENT_PUBLIC_URL` (from feature 049) for the connect URL / health probe.
 
 ## Database Changes
 
-- [x] No schema changes.
+Identity migration (golang-migrate; `services/xstockstrat-identity/migrations/NNN_*.up.sql` + `.down.sql`), NNN-sequenced **after 049's `003_oauth`** (i.e. likely `004`; confirm against the merged 049 + `merge-order.md` at `/sdd-spec` to avoid a number collision). Purpose: associate OAuth refresh tokens with the **(user_id, client_id)** pair so per-user listing (FR-2/FR-3) and per-app revoke (FR-4) work, and (best-effort) track `last_used_at`. Exact shape — add a `client_id` (and `last_used_at`) column to the existing `identity.refresh_tokens`, vs. a small join/index — is decided at `/sdd-spec` against 049's `003_oauth` schema. Never edit an applied migration; this is a new numbered one. Up+down pair required. DBA + identity owner review.
 
 ## Feature Workflow Notes
 
-Branch to create: `feature/auth2-authorized-apps-ui` (branch from `main-dev`)
-**Dependency:** `049-unify-admin-auth-gates` Part B must be merged first (provides the agent OAuth 2.1 endpoints + `AGENT_PUBLIC_URL`). Track in `docs/roadmap/features/merge-order.md` at /sdd-spec time.
+Branch to create: `feature/auth2-authorized-apps-ui` (branch from `main-dev`).
+**Hard dependency:** `049-unify-admin-auth-gates` Part B must merge first (provides the OAuth backend, `oauth_clients`/`oauth_auth_codes`/`refresh_tokens` schema, `AGENT_PUBLIC_URL`); this feature **extends** that schema and adds RPCs to it. Add a blocking row to `docs/roadmap/features/merge-order.md` at `/sdd-spec`.
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (`xstockstrat-ui`) — non-breaking, UI-only change
-- [ ] Security review — confirm no secrets rendered, connect-URL construction is safe
+- [x] 1 service owner approval each — `xstockstrat-ui` and `xstockstrat-identity`
+- [x] Additive proto change → identity owner + proto reviewer (`buf breaking` must pass)
+- [x] DB migration (identity `00N_*`) → DBA + identity owner
+- [x] Security review — revocation correctness, per-user isolation / IDOR, no secret/token exposure in list responses, refresh-token invalidation semantics
 
 ## Acceptance Criteria
 
-1. An authenticated operator can navigate to the new `/accounts` segment's "My Authorized Apps" page in `xstockstrat-ui` and see the Claude.ai connector entry with the agent's MCP server URL and copy/paste instructions.
-2. The MCP server URL field can be copied to the clipboard with one click.
-3. The displayed URL is the value of `AGENT_PUBLIC_URL` (sourced from env, not hardcoded); the page renders no API keys or secrets.
-4. The page shows a reachable/unreachable health indicator driven by the BFF probe of `${AGENT_PUBLIC_URL}/.well-known/oauth-protected-resource`; when the agent is up the indicator reads reachable, and when the probe fails the page still renders the URL (graceful degradation).
-5. The `/accounts/authorized-apps` page is unreachable without authentication (redirects to login), consistent with other `xstockstrat-ui` pages (the `/accounts` segment is in the protected-route matcher).
+1. An authenticated user navigating to `/accounts/authorized-apps` sees a list of the apps they have authorized against the agent, each with name, client identifier, authorized-at, and (when available) last-used.
+2. The list is per-user: user A never sees user B's authorized apps; a `RevokeAuthorizedApp` call with another user's `client_id` is rejected/no-ops server-side (no IDOR).
+3. "Disconnect" on an app revokes its refresh token(s) for that user; afterwards the app is gone from the list, and the app can no longer mint a new access token via refresh (verified against identity).
+4. The "Connect a new app" section shows the `AGENT_PUBLIC_URL`-derived MCP server URL (not hardcoded) with one-click copy and Claude.ai instructions; renders no API keys/tokens/secrets.
+5. The connect section shows a reachable/unreachable indicator from a BFF probe of `${AGENT_PUBLIC_URL}/.well-known/oauth-protected-resource`, degrading gracefully on probe failure.
+6. `/accounts/*` is unreachable without authentication (redirects to login).
+7. `buf lint` + `buf breaking` pass for the additive identity proto changes; the identity migration applies cleanly up and down via `scripts/db-migrate.sh`.
 
 ## Open Questions
 
-- [x] How does Claude.ai accept a custom MCP connector? **Resolved** (user, 2026-06-07): no in-app deep link — the page shows the copyable URL + instructions to paste it in Claude.ai Settings → Connectors. FR-2 reflects this (copy-URL only, no button).
-- [x] Which segment/nav hosts this? **Resolved** (user, 2026-06-07): a **new "Accounts" segment** with a "My Authorized Apps" page (`/accounts/authorized-apps`) — not config-ui.
-- [x] Should the agent public URL be an env var or a live config key? **Resolved**: reuse `AGENT_PUBLIC_URL` (established by feature 049). Env var unless live tuning becomes necessary.
-- [x] Should the page show connection/health status? **Resolved** (user, 2026-06-07): yes — include a health probe via a UI BFF route (FR-8).
-- [x] Confirm 049 Part B merges before this executes. **Resolved**: hard dependency recorded in Feature Workflow Notes; to be added to `merge-order.md` at `/sdd-spec` time.
+- [x] Should listing/auditing/revoking be in scope? **Resolved (user, 2026-06-07):** yes — it is the core purpose of this page (this corrected the earlier UI-only framing).
+- [x] Per-user vs single shared operator list? **Resolved (user, 2026-06-07):** per-user ("My" = the caller's own apps), server-enforced in identity (FR-3).
+- [x] Revoke depth? **Resolved (user, 2026-06-07):** refresh-token revoke reusing 049 infra; in-flight access JWT expires naturally. Immediate JWT denylist is out of scope / follow-up.
+- [x] Where does the backend live? **Resolved (user, 2026-06-07):** folded into 051 (identity RPCs + migration + UI in one feature).
+- [x] Agent URL source / nav placement / health probe? **Resolved earlier:** reuse `AGENT_PUBLIC_URL`; new "Accounts" segment; include BFF health probe.
+- [x] **/sdd-spec detail (approach decided; exact shape deferred):** the `identity` schema will associate refresh tokens with `(user_id, client_id)` + `last_used_at`; the exact column/table form and migration number are resolved against the merged 049 `003_oauth` schema at `/sdd-spec`.
+- [x] **/sdd-spec detail:** `/sdd-spec` confirms 049 persists enough to derive "authorized apps for a user" (refresh tokens carry/can carry `user_id` + `client_id`); if not, the migration adds the linkage (already accounted for in Database Changes).

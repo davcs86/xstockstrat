@@ -33,3 +33,28 @@
 - All 5 open questions now resolved (`- [x]`).
 - Warnings (advisory): overlap on `xstockstrat-ui` with `049-unify-admin-auth-gates` (hard dependency) and `050-strategy-creation-flow` (spec-ready, /insights — low risk). No proto/DB/config-key overlaps (this feature adds none).
 - Note for /sdd-spec: adding a new top-level UI segment (`/accounts`) is more than a single page — confirm segment scaffolding, nav wiring, and middleware matcher against the post-045 consolidated `xstockstrat-ui` structure.
+
+## Session 2026-06-07 — re-scope (user correction)
+
+- User: "these exclusions are exactly the reason why this 'My authorized apps' submodule exists at all."
+  The two items previously in Out of Scope (list/audit/revoke authorized OAuth clients; per-user
+  management) ARE the core purpose. The copy-URL connect flow is just the add/empty-state affordance.
+- **Status reverted spec-ready → draft** (material scope change requires re-review).
+- User decisions (2026-06-07):
+  - **Revoke depth**: refresh-token revoke reusing 049 infra (invalidate refresh token; access JWT
+    expires naturally). Immediate JWT denylist (RFC 7009 full) = out of scope / follow-up.
+  - **Ownership**: per-user ("My" = caller's own apps), server-enforced in identity (not UI-only filter).
+  - **Backend location**: folded into 051 (identity RPCs + migration + UI in one feature).
+- Scope now spans THREE areas (was UI-only):
+  - `xstockstrat-ui` — new `/accounts` segment + "My Authorized Apps" page; BFF calls to identity
+    (header propagation); copy-URL connect + health probe.
+  - `xstockstrat-identity` — new `ListAuthorizedApps` / `RevokeAuthorizedApp` RPCs, per-user scoped;
+    refresh-token invalidation; user↔client association.
+  - `packages/proto` — additive identity.proto RPCs + `AuthorizedApp` message.
+- New gates: additive proto (proto reviewer + identity owner), DB migration (DBA + identity owner),
+  heavy security review (revocation correctness, per-user IDOR, no token exposure). Reviewers table updated.
+- Dependency hardened: this EXTENDS 049's OAuth schema (oauth_clients/oauth_auth_codes/refresh_tokens),
+  so 049 must merge first AND the identity migration must sequence after 049's 003_oauth (confirm number
+  + linkage shape at /sdd-spec; add merge-order.md row).
+- Two /sdd-spec-level details flagged: exact refresh_tokens↔(user_id,client_id) linkage shape, and
+  confirming 049 persists enough to derive per-user authorized apps (else migration adds it).
