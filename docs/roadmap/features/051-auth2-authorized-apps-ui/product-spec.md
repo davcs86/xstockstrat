@@ -12,23 +12,25 @@ Feature `049-unify-admin-auth-gates` (Part B — which supersedes and re-specs `
 
 ## User Story
 
-As an operator, I want to see a "Connect Claude.ai" button (and the underlying MCP server URL) inside the xstockstrat web app, so that I can add xstockstrat-agent as a remote MCP connector in Claude.ai without manually constructing OAuth URLs.
+As an operator, I want to see the xstockstrat MCP server URL inside the xstockstrat web app, so that I can add xstockstrat-agent as a remote MCP connector in Claude.ai (Settings → Connectors) without looking the URL up elsewhere or hand-constructing it.
 
 ## Functional Requirements
 
-FR-1. `xstockstrat-ui` adds an "Authorized Apps" view (e.g. under the config-ui segment, or a dedicated `/config-ui/authorized-apps` route) reachable from the existing authenticated navigation.
+FR-1. `xstockstrat-ui` adds a **new "Accounts" segment** with a **"My Authorized Apps"** page (e.g. route `/accounts/authorized-apps`), reachable from the existing authenticated navigation. This is a new top-level segment alongside the existing `/trader`, `/insights`, and `/config-ui` segments.
 
-FR-2. The view displays a primary "Connect Claude.ai" action that takes the operator to Claude.ai's "Connect apps" / add-connector flow pre-filled with (or accompanied by) the xstockstrat-agent MCP server URL.
+FR-2. The "My Authorized Apps" page presents the **Claude.ai connector as a card/entry** with short instructions: copy the MCP server URL, then add it in Claude.ai under **Settings → Connectors → Add custom connector** (paste the URL; Claude.ai drives the OAuth 2.1 consent from there). There is **no in-app "Connect" button/deep-link** — Claude.ai has no documented query-param that pre-fills a custom MCP server URL, so the flow is copy-URL + paste-into-Claude.ai.
 
-FR-3. The view displays the agent's public MCP server URL (the base Claude.ai uses for OAuth discovery, i.e. the host serving `/.well-known/oauth-protected-resource` / `/.well-known/oauth-authorization-server`) as a read-only, copy-to-clipboard field, so operators who prefer to paste it manually can do so.
+FR-3. The page displays the agent's public MCP server URL (the base Claude.ai uses for OAuth discovery, i.e. the host serving `/.well-known/oauth-protected-resource` / `/.well-known/oauth-authorization-server`) as a read-only, **copy-to-clipboard** field.
 
 FR-4. The agent's public base URL is provided to the UI via an environment variable (no hardcoded URLs in source, per platform config governance). Feature 049 already establishes **`AGENT_PUBLIC_URL`** as the canonical agent public base URL (FR-B2/FR-B12); this feature reuses that same value rather than inventing a new var. (An `_ENDPOINT` suffix is not appropriate here — this is a browser-facing HTTPS URL, not a gRPC `host:port`.) Whether the UI receives it as its own env var or via a small BFF route is a `/sdd-spec` detail.
 
-FR-5. The view renders only OAuth/connection metadata (URLs, status). It MUST NOT render any API keys, JWTs, client secrets, or other secret values (per `xstockstrat-ui` review focus).
+FR-5. The page renders only OAuth/connection metadata (the MCP URL and connection status). It MUST NOT render any API keys, JWTs, client secrets, or other secret values (per `xstockstrat-ui` review focus).
 
-FR-6. The view is gated behind the existing `xstockstrat-ui` JWT auth/middleware like all other authenticated pages; unauthenticated users are redirected to login.
+FR-6. The page is gated behind the existing `xstockstrat-ui` JWT auth/middleware like all other authenticated pages; unauthenticated users are redirected to login. The new `/accounts` segment is added to the protected-route matcher.
 
 FR-7. The page provides brief inline guidance (1–3 sentences) describing what connecting Claude.ai does and what the operator will be asked to authorize (the OAuth 2.1 consent/login delivered by feature 049).
+
+FR-8. **Connection health indicator.** The page shows a reachable/unreachable status for the agent's OAuth discovery endpoint. A **UI BFF route** (server-side, to avoid browser CORS against the agent) probes `${AGENT_PUBLIC_URL}/.well-known/oauth-protected-resource` and returns a simple status (e.g. `reachable` / `unreachable` + HTTP code). The probe response MUST NOT expose any secret or sensitive payload — only reachability/status. Probe failures degrade gracefully (the URL is still shown and copyable).
 
 ## Out of Scope
 
@@ -42,7 +44,7 @@ FR-7. The page provides brief inline guidance (1–3 sentences) describing what 
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-ui` — new "Authorized Apps" route/component(s) in the config-ui segment; reads the agent public URL from an env var and renders the connect button + copyable URL.
+- `xstockstrat-ui` — new `/accounts` segment with a "My Authorized Apps" page/component(s); reads the agent public URL from an env var (`AGENT_PUBLIC_URL`), renders the copyable MCP URL + Claude.ai instructions, and adds a server-side BFF route that probes the agent's `/.well-known/oauth-protected-resource` for the health indicator (FR-8). No backend service is modified.
 
 ## Proto Contract Changes
 
@@ -66,16 +68,16 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Acceptance Criteria
 
-1. An authenticated operator can navigate to the "Authorized Apps" view in `xstockstrat-ui` and see a "Connect Claude.ai" button plus the agent's MCP server URL.
-2. Clicking the button takes the operator into Claude.ai's add-connector / OAuth flow for xstockstrat-agent.
-3. The MCP server URL field can be copied to the clipboard with one click.
-4. The agent base URL is sourced from configuration/env, not hardcoded; the page renders no API keys or secrets.
-5. The view is unreachable without authentication (redirects to login), consistent with other `xstockstrat-ui` pages.
+1. An authenticated operator can navigate to the new `/accounts` segment's "My Authorized Apps" page in `xstockstrat-ui` and see the Claude.ai connector entry with the agent's MCP server URL and copy/paste instructions.
+2. The MCP server URL field can be copied to the clipboard with one click.
+3. The displayed URL is the value of `AGENT_PUBLIC_URL` (sourced from env, not hardcoded); the page renders no API keys or secrets.
+4. The page shows a reachable/unreachable health indicator driven by the BFF probe of `${AGENT_PUBLIC_URL}/.well-known/oauth-protected-resource`; when the agent is up the indicator reads reachable, and when the probe fails the page still renders the URL (graceful degradation).
+5. The `/accounts/authorized-apps` page is unreachable without authentication (redirects to login), consistent with other `xstockstrat-ui` pages (the `/accounts` segment is in the protected-route matcher).
 
 ## Open Questions
 
-- [ ] What is the exact Claude.ai deep link for "Connect apps" (does it accept a prefilled MCP server URL query param, or does the operator paste the URL into Claude.ai)? If no deep link exists, FR-2 degrades to "open Claude.ai connectors page + copy URL".
-- [ ] Which segment/nav should host this — config-ui (operator/admin settings) or a new top-level "Apps" area? Recommended: config-ui.
+- [x] How does Claude.ai accept a custom MCP connector? **Resolved** (user, 2026-06-07): no in-app deep link — the page shows the copyable URL + instructions to paste it in Claude.ai Settings → Connectors. FR-2 reflects this (copy-URL only, no button).
+- [x] Which segment/nav hosts this? **Resolved** (user, 2026-06-07): a **new "Accounts" segment** with a "My Authorized Apps" page (`/accounts/authorized-apps`) — not config-ui.
 - [x] Should the agent public URL be an env var or a live config key? **Resolved**: reuse `AGENT_PUBLIC_URL` (established by feature 049). Env var unless live tuning becomes necessary.
-- [ ] Should the page show connection/health status of the agent's OAuth discovery endpoint (e.g. probe `/.well-known/oauth-protected-resource`), or just the static URL? (Status is a nice-to-have, possibly defer.)
-- [ ] Confirm 049 Part B will have merged before this is executed (hard dependency on the agent OAuth endpoints existing).
+- [x] Should the page show connection/health status? **Resolved** (user, 2026-06-07): yes — include a health probe via a UI BFF route (FR-8).
+- [x] Confirm 049 Part B merges before this executes. **Resolved**: hard dependency recorded in Feature Workflow Notes; to be added to `merge-order.md` at `/sdd-spec` time.

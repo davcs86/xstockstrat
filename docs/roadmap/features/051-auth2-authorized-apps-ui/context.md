@@ -21,3 +21,15 @@
   - **Hard dependency**: 049 Part B must merge first (agent must actually serve OAuth discovery endpoints). Note in merge-order.md at /sdd-spec.
   - Related: `019-unified-login-page` (login UI, out of scope here).
 - Open questions captured: Claude.ai deep-link mechanics, nav placement (config-ui recommended), optional discovery-endpoint health status, 049-merge sequencing. Env-var question resolved (reuse `AGENT_PUBLIC_URL`).
+
+## Session 2026-06-07 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Criteria: all PASS except initial criterion-9 FAIL (4 open questions unresolved). Resolved via user decisions, then re-passed.
+- User decisions (2026-06-07):
+  - **Connect UX**: copy-URL only, no in-app button/deep-link (Claude.ai has no documented prefill deep-link; operator pastes URL in Settings → Connectors). → FR-2.
+  - **Nav placement**: a NEW "Accounts" segment with a "My Authorized Apps" page (`/accounts/authorized-apps`) — NOT config-ui. → FR-1, FR-6 (add `/accounts` to protected matcher).
+  - **Health status**: include a reachable/unreachable health indicator via a UI BFF probe of `${AGENT_PUBLIC_URL}/.well-known/oauth-protected-resource`. → FR-8, AC-4.
+- All 5 open questions now resolved (`- [x]`).
+- Warnings (advisory): overlap on `xstockstrat-ui` with `049-unify-admin-auth-gates` (hard dependency) and `050-strategy-creation-flow` (spec-ready, /insights — low risk). No proto/DB/config-key overlaps (this feature adds none).
+- Note for /sdd-spec: adding a new top-level UI segment (`/accounts`) is more than a single page — confirm segment scaffolding, nav wiring, and middleware matcher against the post-045 consolidated `xstockstrat-ui` structure.
