@@ -58,3 +58,17 @@
   + linkage shape at /sdd-spec; add merge-order.md row).
 - Two /sdd-spec-level details flagged: exact refresh_tokens↔(user_id,client_id) linkage shape, and
   confirming 049 persists enough to derive per-user authorized apps (else migration adds it).
+
+## Session 2026-06-07 — sdd-review product-spec (re-scoped)
+
+- Re-scoped product spec approved. Status: draft → spec-ready.
+- All A3 criteria PASS; trading checks skipped (non-trading); 0 unchecked open questions.
+- Warnings (advisory):
+  - **049-unify-admin-auth-gates** — HARD DEPENDENCY + deep overlap: same proto file
+    (`packages/proto/identity/v1/identity.proto`), same services (`xstockstrat-identity`, `xstockstrat-ui`),
+    same DB surface (`identity.refresh_tokens` + identity `migrations/` dir; 049 uses `003_oauth` so this
+    feature's migration must be ≥ `004`). 049 must merge first; 051 extends its OAuth schema/RPCs.
+  - **050-strategy-creation-flow** — `xstockstrat-ui` only (different routes; low risk).
+- No FAIL-level overlap (no duplicate config keys; 051 adds none).
+- TODO at /sdd-spec: add a blocking row to `docs/roadmap/features/merge-order.md` (051 blocked by 049),
+  and pin the identity migration number (≥004) + proto field numbers against the merged 049.
