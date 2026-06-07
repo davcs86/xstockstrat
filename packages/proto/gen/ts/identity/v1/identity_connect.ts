@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ApiKey, AuthenticateUserRequest, AuthTokenResponse, CreateApiKeyRequest, ListApiKeysRequest, ListApiKeysResponse, RefreshTokenRequest, RevokeApiKeyRequest, RevokeApiKeyResponse, RevokeTokenRequest, RevokeTokenResponse, TokenClaims, ValidateApiKeyRequest, ValidateTokenRequest } from "./identity_pb.js";
+import { ApiKey, AuthenticateUserRequest, AuthTokenResponse, CreateApiKeyRequest, ExchangeAuthCodeRequest, GetOAuthClientRequest, IssueAuthCodeRequest, IssueAuthCodeResponse, ListApiKeysRequest, ListApiKeysResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeApiKeyRequest, RevokeApiKeyResponse, RevokeTokenRequest, RevokeTokenResponse, TokenClaims, ValidateApiKeyRequest, ValidateTokenRequest } from "./identity_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -82,6 +82,54 @@ export const IdentityService = {
       name: "RevokeApiKey",
       I: RevokeApiKeyRequest,
       O: RevokeApiKeyResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+     * OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.RegisterOAuthClient
+     */
+    registerOAuthClient: {
+      name: "RegisterOAuthClient",
+      I: RegisterOAuthClientRequest,
+      O: OAuthClient,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.GetOAuthClient
+     */
+    getOAuthClient: {
+      name: "GetOAuthClient",
+      I: GetOAuthClientRequest,
+      O: OAuthClient,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.IssueAuthCode
+     */
+    issueAuthCode: {
+      name: "IssueAuthCode",
+      I: IssueAuthCodeRequest,
+      O: IssueAuthCodeResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.ExchangeAuthCode
+     */
+    exchangeAuthCode: {
+      name: "ExchangeAuthCode",
+      I: ExchangeAuthCodeRequest,
+      O: OAuthTokenResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.RefreshOAuthToken
+     */
+    refreshOAuthToken: {
+      name: "RefreshOAuthToken",
+      I: RefreshOAuthTokenRequest,
+      O: OAuthTokenResponse,
       kind: MethodKind.Unary,
     },
   }

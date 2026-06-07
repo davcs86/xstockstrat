@@ -9,7 +9,6 @@ import uuid
 from datetime import UTC
 
 import grpc
-from gen.identity.v1 import identity_pb2, identity_pb2_grpc
 from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc
 from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
 from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc
@@ -33,33 +32,27 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         marketdata_channel,
         ledger_channel,
         db_pool=None,
-        identity_channel=None,
     ):
         self._cfg = config_watcher
         self._marketdata = marketdata_pb2_grpc.MarketDataServiceStub(marketdata_channel)
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
-        self._identity = (
-            identity_pb2_grpc.IdentityServiceStub(identity_channel) if identity_channel else None
-        )
         self._db = db_pool
         self._jobs: dict[str, ingest_pb2.BackfillJob] = {}
 
-    async def _validate_admin_token(self, context) -> bool:
-        """Returns True if Authorization header contains a valid admin API key."""
-        if self._identity is None:
-            return False
+    @staticmethod
+    def _has_admin_scope(context) -> bool:
+        """Role check on the propagated x-access-scope ADMIN bit (0x04).
+
+        Internal services trust the access scope set by the entry points (UI BFF via JWT,
+        MCP agent via its SSE auth layer) and do a role check at most — they do not
+        re-authenticate. Mirrors the analysis servicer's gate (feature 049 Part A).
+        """
         metadata = dict(context.invocation_metadata())
-        auth = metadata.get("authorization", "")
-        if not auth.startswith("Bearer "):
-            return False
-        api_key = auth[len("Bearer ") :]
         try:
-            claims = await self._identity.ValidateApiKey(
-                identity_pb2.ValidateApiKeyRequest(api_key=api_key)
-            )
-            return "admin" in claims.roles
-        except Exception:
-            return False
+            access_scope = int(metadata.get("x-access-scope", "0"))
+        except (TypeError, ValueError):
+            access_scope = 0
+        return bool(access_scope & 0x04)
 
     async def TriggerBackfill(self, request, context):
         job_id = str(uuid.uuid4())
@@ -424,9 +417,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
-        is_admin = await self._validate_admin_token(context)
-        if not is_admin:
-            await context.abort(grpc.StatusCode.UNAUTHENTICATED, "admin API key required")
+        if not self._has_admin_scope(context):
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
             return
         op = request.operation
         src = request.source

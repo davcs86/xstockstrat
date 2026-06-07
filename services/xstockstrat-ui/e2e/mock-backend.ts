@@ -12,6 +12,7 @@
  * IdentityService mock is identical across all three source services.
  */
 import * as http2 from 'node:http2';
+import { ConnectError, Code } from '@connectrpc/connect';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { SignJWT } from 'jose';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
@@ -22,12 +23,11 @@ import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_p
 import { NotifyService, type Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { TEST_JWT_SECRET } from './helpers/auth';
 
 export const TRADER_MOCK_PORT = 9091;
 export const INSIGHTS_MOCK_PORT = 9092;
 export const CONFIG_UI_MOCK_PORT = 9093;
-
-const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
 
 let traderServer: http2.Http2Server | null = null;
 let insightsServer: http2.Http2Server | null = null;
@@ -215,6 +215,30 @@ export async function startMockBackend(): Promise<void> {
         async setStrategyLive(req) {
           return {
             definition: { strategyId: req.strategyId, displayName: 'Live Test Strategy', active: true, liveEnabled: req.liveEnabled },
+          };
+        },
+        // Feature 050: strategy-authoring RPCs proxied by the insights BFF.
+        async manageStrategy(req) {
+          // Sentinel id used by the wizard server-error test (AC-13).
+          if (req.definition?.strategyId === 'invalid_ref') {
+            throw new ConnectError(
+              'component ref_name "missing" used in rule but not declared',
+              Code.InvalidArgument,
+            );
+          }
+          return req.definition ?? {};
+        },
+        async getStrategy(req) {
+          return {
+            strategyId: req.strategyId,
+            displayName: 'Editable Strategy',
+            components: [
+              { refName: 'sma_fast', kind: 1, indicator: 'SMA', formulaId: '', params: { period: 10 } },
+            ],
+            entryRule: '{"op":"and","conditions":[]}',
+            exitRule: '{"op":"or","conditions":[]}',
+            active: true,
+            liveEnabled: false,
           };
         },
       });

@@ -9,6 +9,8 @@ import { cn } from '@/components/ui/utils';
 import { ConnectError } from '@connectrpc/connect';
 import { useStrategyReport } from '@/hooks/useStrategies';
 import { useRunBacktest } from '@/hooks/useBacktest';
+import { useGetStrategy, useSetStrategyLiveInsights } from '@/hooks/useStrategyDefinitions';
+import { useIsAdmin } from '@/hooks/useLiveStrategies';
 import type { TradeRecord } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 interface BacktestFormState {
@@ -21,6 +23,9 @@ interface BacktestFormState {
 export default function StrategyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: report, isLoading } = useStrategyReport(id);
+  const { data: isAdmin } = useIsAdmin();
+  const { data: definition } = useGetStrategy(id);
+  const setLive = useSetStrategyLiveInsights();
   const { mutate: runBacktestMutate, data: backtestResult, isPending: running, error: runErrorObj } = useRunBacktest();
 
   const [form, setForm] = useState<BacktestFormState>({
@@ -91,6 +96,47 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                       </div>
                     ))}
                   </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Live evaluation toggle */}
+            {definition && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Live Evaluation</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={cn(
+                        'text-sm font-medium',
+                        definition.liveEnabled ? 'text-buy' : 'text-muted-foreground',
+                      )}
+                    >
+                      {definition.liveEnabled ? 'On' : 'Off'}
+                    </span>
+                    {isAdmin && (
+                      <Button
+                        size="sm"
+                        variant={definition.liveEnabled ? 'outline' : 'default'}
+                        disabled={setLive.isPending}
+                        onClick={() =>
+                          setLive.mutate({
+                            strategyId: id,
+                            liveEnabled: !definition.liveEnabled,
+                          })
+                        }
+                      >
+                        {definition.liveEnabled ? 'Disable' : 'Enable'}
+                      </Button>
+                    )}
+                  </div>
+                  {setLive.isError && (
+                    <p className="text-sm text-destructive mt-2">
+                      Could not update live status — admin scope required.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             )}

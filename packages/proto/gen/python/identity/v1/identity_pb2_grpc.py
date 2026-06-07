@@ -74,6 +74,31 @@ class IdentityServiceStub(object):
                 request_serializer=identity_dot_v1_dot_identity__pb2.RevokeApiKeyRequest.SerializeToString,
                 response_deserializer=identity_dot_v1_dot_identity__pb2.RevokeApiKeyResponse.FromString,
                 _registered_method=True)
+        self.RegisterOAuthClient = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/RegisterOAuthClient',
+                request_serializer=identity_dot_v1_dot_identity__pb2.RegisterOAuthClientRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.OAuthClient.FromString,
+                _registered_method=True)
+        self.GetOAuthClient = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/GetOAuthClient',
+                request_serializer=identity_dot_v1_dot_identity__pb2.GetOAuthClientRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.OAuthClient.FromString,
+                _registered_method=True)
+        self.IssueAuthCode = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/IssueAuthCode',
+                request_serializer=identity_dot_v1_dot_identity__pb2.IssueAuthCodeRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.IssueAuthCodeResponse.FromString,
+                _registered_method=True)
+        self.ExchangeAuthCode = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/ExchangeAuthCode',
+                request_serializer=identity_dot_v1_dot_identity__pb2.ExchangeAuthCodeRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.OAuthTokenResponse.FromString,
+                _registered_method=True)
+        self.RefreshOAuthToken = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken',
+                request_serializer=identity_dot_v1_dot_identity__pb2.RefreshOAuthTokenRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.OAuthTokenResponse.FromString,
+                _registered_method=True)
 
 
 class IdentityServiceServicer(object):
@@ -127,6 +152,38 @@ class IdentityServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def RegisterOAuthClient(self, request, context):
+        """OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
+        OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetOAuthClient(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def IssueAuthCode(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ExchangeAuthCode(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RefreshOAuthToken(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_IdentityServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -169,6 +226,31 @@ def add_IdentityServiceServicer_to_server(servicer, server):
                     servicer.RevokeApiKey,
                     request_deserializer=identity_dot_v1_dot_identity__pb2.RevokeApiKeyRequest.FromString,
                     response_serializer=identity_dot_v1_dot_identity__pb2.RevokeApiKeyResponse.SerializeToString,
+            ),
+            'RegisterOAuthClient': grpc.unary_unary_rpc_method_handler(
+                    servicer.RegisterOAuthClient,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.RegisterOAuthClientRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.OAuthClient.SerializeToString,
+            ),
+            'GetOAuthClient': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetOAuthClient,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.GetOAuthClientRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.OAuthClient.SerializeToString,
+            ),
+            'IssueAuthCode': grpc.unary_unary_rpc_method_handler(
+                    servicer.IssueAuthCode,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.IssueAuthCodeRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.IssueAuthCodeResponse.SerializeToString,
+            ),
+            'ExchangeAuthCode': grpc.unary_unary_rpc_method_handler(
+                    servicer.ExchangeAuthCode,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.ExchangeAuthCodeRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.OAuthTokenResponse.SerializeToString,
+            ),
+            'RefreshOAuthToken': grpc.unary_unary_rpc_method_handler(
+                    servicer.RefreshOAuthToken,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.RefreshOAuthTokenRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.OAuthTokenResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -387,6 +469,141 @@ class IdentityService(object):
             '/xstockstrat.identity.v1.IdentityService/RevokeApiKey',
             identity_dot_v1_dot_identity__pb2.RevokeApiKeyRequest.SerializeToString,
             identity_dot_v1_dot_identity__pb2.RevokeApiKeyResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RegisterOAuthClient(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/RegisterOAuthClient',
+            identity_dot_v1_dot_identity__pb2.RegisterOAuthClientRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.OAuthClient.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetOAuthClient(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/GetOAuthClient',
+            identity_dot_v1_dot_identity__pb2.GetOAuthClientRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.OAuthClient.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def IssueAuthCode(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/IssueAuthCode',
+            identity_dot_v1_dot_identity__pb2.IssueAuthCodeRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.IssueAuthCodeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ExchangeAuthCode(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/ExchangeAuthCode',
+            identity_dot_v1_dot_identity__pb2.ExchangeAuthCodeRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.OAuthTokenResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RefreshOAuthToken(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken',
+            identity_dot_v1_dot_identity__pb2.RefreshOAuthTokenRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.OAuthTokenResponse.FromString,
             options,
             channel_credentials,
             insecure,

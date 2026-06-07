@@ -149,6 +149,7 @@ type TokenClaims struct {
 	Roles         []string               `protobuf:"bytes,3,rep,name=roles,proto3" json:"roles,omitempty"`
 	IssuedAt      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
 	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	Aud           string                 `protobuf:"bytes,6,opt,name=aud,proto3" json:"aud,omitempty"` // audience / resource URI (OAuth audience-bound JWT, RFC 8707)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -216,6 +217,13 @@ func (x *TokenClaims) GetExpiresAt() *timestamppb.Timestamp {
 		return x.ExpiresAt
 	}
 	return nil
+}
+
+func (x *TokenClaims) GetAud() string {
+	if x != nil {
+		return x.Aud
+	}
+	return ""
 }
 
 type ValidateTokenRequest struct {
@@ -782,6 +790,487 @@ func (x *RevokeApiKeyResponse) GetSuccess() bool {
 	return false
 }
 
+// ── OAuth 2.1 messages (feature 049 Part B) ──────────────────────────────────
+type OAuthClient struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	RedirectUris  []string               `protobuf:"bytes,2,rep,name=redirect_uris,json=redirectUris,proto3" json:"redirect_uris,omitempty"`
+	ClientName    string                 `protobuf:"bytes,3,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OAuthClient) Reset() {
+	*x = OAuthClient{}
+	mi := &file_identity_v1_identity_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OAuthClient) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OAuthClient) ProtoMessage() {}
+
+func (x *OAuthClient) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OAuthClient.ProtoReflect.Descriptor instead.
+func (*OAuthClient) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *OAuthClient) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *OAuthClient) GetRedirectUris() []string {
+	if x != nil {
+		return x.RedirectUris
+	}
+	return nil
+}
+
+func (x *OAuthClient) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+func (x *OAuthClient) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+type RegisterOAuthClientRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RedirectUris  []string               `protobuf:"bytes,1,rep,name=redirect_uris,json=redirectUris,proto3" json:"redirect_uris,omitempty"`
+	ClientName    string                 `protobuf:"bytes,2,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterOAuthClientRequest) Reset() {
+	*x = RegisterOAuthClientRequest{}
+	mi := &file_identity_v1_identity_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterOAuthClientRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterOAuthClientRequest) ProtoMessage() {}
+
+func (x *RegisterOAuthClientRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterOAuthClientRequest.ProtoReflect.Descriptor instead.
+func (*RegisterOAuthClientRequest) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *RegisterOAuthClientRequest) GetRedirectUris() []string {
+	if x != nil {
+		return x.RedirectUris
+	}
+	return nil
+}
+
+func (x *RegisterOAuthClientRequest) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+type GetOAuthClientRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetOAuthClientRequest) Reset() {
+	*x = GetOAuthClientRequest{}
+	mi := &file_identity_v1_identity_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetOAuthClientRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetOAuthClientRequest) ProtoMessage() {}
+
+func (x *GetOAuthClientRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetOAuthClientRequest.ProtoReflect.Descriptor instead.
+func (*GetOAuthClientRequest) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *GetOAuthClientRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+type IssueAuthCodeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	ClientId      string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	RedirectUri   string                 `protobuf:"bytes,3,opt,name=redirect_uri,json=redirectUri,proto3" json:"redirect_uri,omitempty"`
+	CodeChallenge string                 `protobuf:"bytes,4,opt,name=code_challenge,json=codeChallenge,proto3" json:"code_challenge,omitempty"`
+	Resource      string                 `protobuf:"bytes,5,opt,name=resource,proto3" json:"resource,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueAuthCodeRequest) Reset() {
+	*x = IssueAuthCodeRequest{}
+	mi := &file_identity_v1_identity_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueAuthCodeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueAuthCodeRequest) ProtoMessage() {}
+
+func (x *IssueAuthCodeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueAuthCodeRequest.ProtoReflect.Descriptor instead.
+func (*IssueAuthCodeRequest) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *IssueAuthCodeRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *IssueAuthCodeRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *IssueAuthCodeRequest) GetRedirectUri() string {
+	if x != nil {
+		return x.RedirectUri
+	}
+	return ""
+}
+
+func (x *IssueAuthCodeRequest) GetCodeChallenge() string {
+	if x != nil {
+		return x.CodeChallenge
+	}
+	return ""
+}
+
+func (x *IssueAuthCodeRequest) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+type IssueAuthCodeResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueAuthCodeResponse) Reset() {
+	*x = IssueAuthCodeResponse{}
+	mi := &file_identity_v1_identity_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueAuthCodeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueAuthCodeResponse) ProtoMessage() {}
+
+func (x *IssueAuthCodeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueAuthCodeResponse.ProtoReflect.Descriptor instead.
+func (*IssueAuthCodeResponse) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *IssueAuthCodeResponse) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+type ExchangeAuthCodeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	CodeVerifier  string                 `protobuf:"bytes,2,opt,name=code_verifier,json=codeVerifier,proto3" json:"code_verifier,omitempty"`
+	RedirectUri   string                 `protobuf:"bytes,3,opt,name=redirect_uri,json=redirectUri,proto3" json:"redirect_uri,omitempty"`
+	ClientId      string                 `protobuf:"bytes,4,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	Resource      string                 `protobuf:"bytes,5,opt,name=resource,proto3" json:"resource,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExchangeAuthCodeRequest) Reset() {
+	*x = ExchangeAuthCodeRequest{}
+	mi := &file_identity_v1_identity_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExchangeAuthCodeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExchangeAuthCodeRequest) ProtoMessage() {}
+
+func (x *ExchangeAuthCodeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExchangeAuthCodeRequest.ProtoReflect.Descriptor instead.
+func (*ExchangeAuthCodeRequest) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ExchangeAuthCodeRequest) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *ExchangeAuthCodeRequest) GetCodeVerifier() string {
+	if x != nil {
+		return x.CodeVerifier
+	}
+	return ""
+}
+
+func (x *ExchangeAuthCodeRequest) GetRedirectUri() string {
+	if x != nil {
+		return x.RedirectUri
+	}
+	return ""
+}
+
+func (x *ExchangeAuthCodeRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *ExchangeAuthCodeRequest) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+type OAuthTokenResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AccessToken   string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	TokenType     string                 `protobuf:"bytes,2,opt,name=token_type,json=tokenType,proto3" json:"token_type,omitempty"`
+	ExpiresIn     int64                  `protobuf:"varint,3,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`
+	RefreshToken  string                 `protobuf:"bytes,4,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OAuthTokenResponse) Reset() {
+	*x = OAuthTokenResponse{}
+	mi := &file_identity_v1_identity_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OAuthTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OAuthTokenResponse) ProtoMessage() {}
+
+func (x *OAuthTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OAuthTokenResponse.ProtoReflect.Descriptor instead.
+func (*OAuthTokenResponse) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *OAuthTokenResponse) GetAccessToken() string {
+	if x != nil {
+		return x.AccessToken
+	}
+	return ""
+}
+
+func (x *OAuthTokenResponse) GetTokenType() string {
+	if x != nil {
+		return x.TokenType
+	}
+	return ""
+}
+
+func (x *OAuthTokenResponse) GetExpiresIn() int64 {
+	if x != nil {
+		return x.ExpiresIn
+	}
+	return 0
+}
+
+func (x *OAuthTokenResponse) GetRefreshToken() string {
+	if x != nil {
+		return x.RefreshToken
+	}
+	return ""
+}
+
+type RefreshOAuthTokenRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RefreshToken  string                 `protobuf:"bytes,1,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	Resource      string                 `protobuf:"bytes,2,opt,name=resource,proto3" json:"resource,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshOAuthTokenRequest) Reset() {
+	*x = RefreshOAuthTokenRequest{}
+	mi := &file_identity_v1_identity_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshOAuthTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshOAuthTokenRequest) ProtoMessage() {}
+
+func (x *RefreshOAuthTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshOAuthTokenRequest.ProtoReflect.Descriptor instead.
+func (*RefreshOAuthTokenRequest) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *RefreshOAuthTokenRequest) GetRefreshToken() string {
+	if x != nil {
+		return x.RefreshToken
+	}
+	return ""
+}
+
+func (x *RefreshOAuthTokenRequest) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
 var File_identity_v1_identity_proto protoreflect.FileDescriptor
 
 const file_identity_v1_identity_proto_rawDesc = "" +
@@ -795,14 +1284,15 @@ const file_identity_v1_identity_proto_rawDesc = "" +
 	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\x129\n" +
 	"\n" +
 	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12<\n" +
-	"\x06claims\x18\x04 \x01(\v2$.xstockstrat.identity.v1.TokenClaimsR\x06claims\"\xc6\x01\n" +
+	"\x06claims\x18\x04 \x01(\v2$.xstockstrat.identity.v1.TokenClaimsR\x06claims\"\xd8\x01\n" +
 	"\vTokenClaims\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x14\n" +
 	"\x05roles\x18\x03 \x03(\tR\x05roles\x127\n" +
 	"\tissued_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bissuedAt\x129\n" +
 	"\n" +
-	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\",\n" +
+	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x10\n" +
+	"\x03aud\x18\x06 \x01(\tR\x03aud\",\n" +
 	"\x14ValidateTokenRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\":\n" +
 	"\x13RefreshTokenRequest\x12#\n" +
@@ -838,7 +1328,44 @@ const file_identity_v1_identity_proto_rawDesc = "" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\"0\n" +
 	"\x14RevokeApiKeyResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess2\xdb\x06\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xab\x01\n" +
+	"\vOAuthClient\x12\x1b\n" +
+	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12#\n" +
+	"\rredirect_uris\x18\x02 \x03(\tR\fredirectUris\x12\x1f\n" +
+	"\vclient_name\x18\x03 \x01(\tR\n" +
+	"clientName\x129\n" +
+	"\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"b\n" +
+	"\x1aRegisterOAuthClientRequest\x12#\n" +
+	"\rredirect_uris\x18\x01 \x03(\tR\fredirectUris\x12\x1f\n" +
+	"\vclient_name\x18\x02 \x01(\tR\n" +
+	"clientName\"4\n" +
+	"\x15GetOAuthClientRequest\x12\x1b\n" +
+	"\tclient_id\x18\x01 \x01(\tR\bclientId\"\xb2\x01\n" +
+	"\x14IssueAuthCodeRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12!\n" +
+	"\fredirect_uri\x18\x03 \x01(\tR\vredirectUri\x12%\n" +
+	"\x0ecode_challenge\x18\x04 \x01(\tR\rcodeChallenge\x12\x1a\n" +
+	"\bresource\x18\x05 \x01(\tR\bresource\"+\n" +
+	"\x15IssueAuthCodeResponse\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\"\xae\x01\n" +
+	"\x17ExchangeAuthCodeRequest\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12#\n" +
+	"\rcode_verifier\x18\x02 \x01(\tR\fcodeVerifier\x12!\n" +
+	"\fredirect_uri\x18\x03 \x01(\tR\vredirectUri\x12\x1b\n" +
+	"\tclient_id\x18\x04 \x01(\tR\bclientId\x12\x1a\n" +
+	"\bresource\x18\x05 \x01(\tR\bresource\"\x9a\x01\n" +
+	"\x12OAuthTokenResponse\x12!\n" +
+	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1d\n" +
+	"\n" +
+	"token_type\x18\x02 \x01(\tR\ttokenType\x12\x1d\n" +
+	"\n" +
+	"expires_in\x18\x03 \x01(\x03R\texpiresIn\x12#\n" +
+	"\rrefresh_token\x18\x04 \x01(\tR\frefreshToken\"[\n" +
+	"\x18RefreshOAuthTokenRequest\x12#\n" +
+	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\x12\x1a\n" +
+	"\bresource\x18\x02 \x01(\tR\bresource2\x8d\v\n" +
 	"\x0fIdentityService\x12p\n" +
 	"\x10AuthenticateUser\x120.xstockstrat.identity.v1.AuthenticateUserRequest\x1a*.xstockstrat.identity.v1.AuthTokenResponse\x12d\n" +
 	"\rValidateToken\x12-.xstockstrat.identity.v1.ValidateTokenRequest\x1a$.xstockstrat.identity.v1.TokenClaims\x12h\n" +
@@ -847,7 +1374,12 @@ const file_identity_v1_identity_proto_rawDesc = "" +
 	"\fCreateApiKey\x12,.xstockstrat.identity.v1.CreateApiKeyRequest\x1a\x1f.xstockstrat.identity.v1.ApiKey\x12f\n" +
 	"\x0eValidateApiKey\x12..xstockstrat.identity.v1.ValidateApiKeyRequest\x1a$.xstockstrat.identity.v1.TokenClaims\x12h\n" +
 	"\vListApiKeys\x12+.xstockstrat.identity.v1.ListApiKeysRequest\x1a,.xstockstrat.identity.v1.ListApiKeysResponse\x12k\n" +
-	"\fRevokeApiKey\x12,.xstockstrat.identity.v1.RevokeApiKeyRequest\x1a-.xstockstrat.identity.v1.RevokeApiKeyResponseB@Z>github.com/xstockstrat/contracts/gen/go/identity/v1;identityv1b\x06proto3"
+	"\fRevokeApiKey\x12,.xstockstrat.identity.v1.RevokeApiKeyRequest\x1a-.xstockstrat.identity.v1.RevokeApiKeyResponse\x12p\n" +
+	"\x13RegisterOAuthClient\x123.xstockstrat.identity.v1.RegisterOAuthClientRequest\x1a$.xstockstrat.identity.v1.OAuthClient\x12f\n" +
+	"\x0eGetOAuthClient\x12..xstockstrat.identity.v1.GetOAuthClientRequest\x1a$.xstockstrat.identity.v1.OAuthClient\x12n\n" +
+	"\rIssueAuthCode\x12-.xstockstrat.identity.v1.IssueAuthCodeRequest\x1a..xstockstrat.identity.v1.IssueAuthCodeResponse\x12q\n" +
+	"\x10ExchangeAuthCode\x120.xstockstrat.identity.v1.ExchangeAuthCodeRequest\x1a+.xstockstrat.identity.v1.OAuthTokenResponse\x12s\n" +
+	"\x11RefreshOAuthToken\x121.xstockstrat.identity.v1.RefreshOAuthTokenRequest\x1a+.xstockstrat.identity.v1.OAuthTokenResponseB@Z>github.com/xstockstrat/contracts/gen/go/identity/v1;identityv1b\x06proto3"
 
 var (
 	file_identity_v1_identity_proto_rawDescOnce sync.Once
@@ -861,54 +1393,73 @@ func file_identity_v1_identity_proto_rawDescGZIP() []byte {
 	return file_identity_v1_identity_proto_rawDescData
 }
 
-var file_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_identity_v1_identity_proto_goTypes = []any{
-	(*AuthenticateUserRequest)(nil), // 0: xstockstrat.identity.v1.AuthenticateUserRequest
-	(*AuthTokenResponse)(nil),       // 1: xstockstrat.identity.v1.AuthTokenResponse
-	(*TokenClaims)(nil),             // 2: xstockstrat.identity.v1.TokenClaims
-	(*ValidateTokenRequest)(nil),    // 3: xstockstrat.identity.v1.ValidateTokenRequest
-	(*RefreshTokenRequest)(nil),     // 4: xstockstrat.identity.v1.RefreshTokenRequest
-	(*RevokeTokenRequest)(nil),      // 5: xstockstrat.identity.v1.RevokeTokenRequest
-	(*RevokeTokenResponse)(nil),     // 6: xstockstrat.identity.v1.RevokeTokenResponse
-	(*ApiKey)(nil),                  // 7: xstockstrat.identity.v1.ApiKey
-	(*CreateApiKeyRequest)(nil),     // 8: xstockstrat.identity.v1.CreateApiKeyRequest
-	(*ValidateApiKeyRequest)(nil),   // 9: xstockstrat.identity.v1.ValidateApiKeyRequest
-	(*ListApiKeysRequest)(nil),      // 10: xstockstrat.identity.v1.ListApiKeysRequest
-	(*ListApiKeysResponse)(nil),     // 11: xstockstrat.identity.v1.ListApiKeysResponse
-	(*RevokeApiKeyRequest)(nil),     // 12: xstockstrat.identity.v1.RevokeApiKeyRequest
-	(*RevokeApiKeyResponse)(nil),    // 13: xstockstrat.identity.v1.RevokeApiKeyResponse
-	(*timestamppb.Timestamp)(nil),   // 14: google.protobuf.Timestamp
+	(*AuthenticateUserRequest)(nil),    // 0: xstockstrat.identity.v1.AuthenticateUserRequest
+	(*AuthTokenResponse)(nil),          // 1: xstockstrat.identity.v1.AuthTokenResponse
+	(*TokenClaims)(nil),                // 2: xstockstrat.identity.v1.TokenClaims
+	(*ValidateTokenRequest)(nil),       // 3: xstockstrat.identity.v1.ValidateTokenRequest
+	(*RefreshTokenRequest)(nil),        // 4: xstockstrat.identity.v1.RefreshTokenRequest
+	(*RevokeTokenRequest)(nil),         // 5: xstockstrat.identity.v1.RevokeTokenRequest
+	(*RevokeTokenResponse)(nil),        // 6: xstockstrat.identity.v1.RevokeTokenResponse
+	(*ApiKey)(nil),                     // 7: xstockstrat.identity.v1.ApiKey
+	(*CreateApiKeyRequest)(nil),        // 8: xstockstrat.identity.v1.CreateApiKeyRequest
+	(*ValidateApiKeyRequest)(nil),      // 9: xstockstrat.identity.v1.ValidateApiKeyRequest
+	(*ListApiKeysRequest)(nil),         // 10: xstockstrat.identity.v1.ListApiKeysRequest
+	(*ListApiKeysResponse)(nil),        // 11: xstockstrat.identity.v1.ListApiKeysResponse
+	(*RevokeApiKeyRequest)(nil),        // 12: xstockstrat.identity.v1.RevokeApiKeyRequest
+	(*RevokeApiKeyResponse)(nil),       // 13: xstockstrat.identity.v1.RevokeApiKeyResponse
+	(*OAuthClient)(nil),                // 14: xstockstrat.identity.v1.OAuthClient
+	(*RegisterOAuthClientRequest)(nil), // 15: xstockstrat.identity.v1.RegisterOAuthClientRequest
+	(*GetOAuthClientRequest)(nil),      // 16: xstockstrat.identity.v1.GetOAuthClientRequest
+	(*IssueAuthCodeRequest)(nil),       // 17: xstockstrat.identity.v1.IssueAuthCodeRequest
+	(*IssueAuthCodeResponse)(nil),      // 18: xstockstrat.identity.v1.IssueAuthCodeResponse
+	(*ExchangeAuthCodeRequest)(nil),    // 19: xstockstrat.identity.v1.ExchangeAuthCodeRequest
+	(*OAuthTokenResponse)(nil),         // 20: xstockstrat.identity.v1.OAuthTokenResponse
+	(*RefreshOAuthTokenRequest)(nil),   // 21: xstockstrat.identity.v1.RefreshOAuthTokenRequest
+	(*timestamppb.Timestamp)(nil),      // 22: google.protobuf.Timestamp
 }
 var file_identity_v1_identity_proto_depIdxs = []int32{
-	14, // 0: xstockstrat.identity.v1.AuthTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
+	22, // 0: xstockstrat.identity.v1.AuthTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
 	2,  // 1: xstockstrat.identity.v1.AuthTokenResponse.claims:type_name -> xstockstrat.identity.v1.TokenClaims
-	14, // 2: xstockstrat.identity.v1.TokenClaims.issued_at:type_name -> google.protobuf.Timestamp
-	14, // 3: xstockstrat.identity.v1.TokenClaims.expires_at:type_name -> google.protobuf.Timestamp
-	14, // 4: xstockstrat.identity.v1.ApiKey.created_at:type_name -> google.protobuf.Timestamp
-	14, // 5: xstockstrat.identity.v1.ApiKey.expires_at:type_name -> google.protobuf.Timestamp
-	14, // 6: xstockstrat.identity.v1.CreateApiKeyRequest.expires_at:type_name -> google.protobuf.Timestamp
+	22, // 2: xstockstrat.identity.v1.TokenClaims.issued_at:type_name -> google.protobuf.Timestamp
+	22, // 3: xstockstrat.identity.v1.TokenClaims.expires_at:type_name -> google.protobuf.Timestamp
+	22, // 4: xstockstrat.identity.v1.ApiKey.created_at:type_name -> google.protobuf.Timestamp
+	22, // 5: xstockstrat.identity.v1.ApiKey.expires_at:type_name -> google.protobuf.Timestamp
+	22, // 6: xstockstrat.identity.v1.CreateApiKeyRequest.expires_at:type_name -> google.protobuf.Timestamp
 	7,  // 7: xstockstrat.identity.v1.ListApiKeysResponse.keys:type_name -> xstockstrat.identity.v1.ApiKey
-	0,  // 8: xstockstrat.identity.v1.IdentityService.AuthenticateUser:input_type -> xstockstrat.identity.v1.AuthenticateUserRequest
-	3,  // 9: xstockstrat.identity.v1.IdentityService.ValidateToken:input_type -> xstockstrat.identity.v1.ValidateTokenRequest
-	4,  // 10: xstockstrat.identity.v1.IdentityService.RefreshToken:input_type -> xstockstrat.identity.v1.RefreshTokenRequest
-	5,  // 11: xstockstrat.identity.v1.IdentityService.RevokeToken:input_type -> xstockstrat.identity.v1.RevokeTokenRequest
-	8,  // 12: xstockstrat.identity.v1.IdentityService.CreateApiKey:input_type -> xstockstrat.identity.v1.CreateApiKeyRequest
-	9,  // 13: xstockstrat.identity.v1.IdentityService.ValidateApiKey:input_type -> xstockstrat.identity.v1.ValidateApiKeyRequest
-	10, // 14: xstockstrat.identity.v1.IdentityService.ListApiKeys:input_type -> xstockstrat.identity.v1.ListApiKeysRequest
-	12, // 15: xstockstrat.identity.v1.IdentityService.RevokeApiKey:input_type -> xstockstrat.identity.v1.RevokeApiKeyRequest
-	1,  // 16: xstockstrat.identity.v1.IdentityService.AuthenticateUser:output_type -> xstockstrat.identity.v1.AuthTokenResponse
-	2,  // 17: xstockstrat.identity.v1.IdentityService.ValidateToken:output_type -> xstockstrat.identity.v1.TokenClaims
-	1,  // 18: xstockstrat.identity.v1.IdentityService.RefreshToken:output_type -> xstockstrat.identity.v1.AuthTokenResponse
-	6,  // 19: xstockstrat.identity.v1.IdentityService.RevokeToken:output_type -> xstockstrat.identity.v1.RevokeTokenResponse
-	7,  // 20: xstockstrat.identity.v1.IdentityService.CreateApiKey:output_type -> xstockstrat.identity.v1.ApiKey
-	2,  // 21: xstockstrat.identity.v1.IdentityService.ValidateApiKey:output_type -> xstockstrat.identity.v1.TokenClaims
-	11, // 22: xstockstrat.identity.v1.IdentityService.ListApiKeys:output_type -> xstockstrat.identity.v1.ListApiKeysResponse
-	13, // 23: xstockstrat.identity.v1.IdentityService.RevokeApiKey:output_type -> xstockstrat.identity.v1.RevokeApiKeyResponse
-	16, // [16:24] is the sub-list for method output_type
-	8,  // [8:16] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	22, // 8: xstockstrat.identity.v1.OAuthClient.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 9: xstockstrat.identity.v1.IdentityService.AuthenticateUser:input_type -> xstockstrat.identity.v1.AuthenticateUserRequest
+	3,  // 10: xstockstrat.identity.v1.IdentityService.ValidateToken:input_type -> xstockstrat.identity.v1.ValidateTokenRequest
+	4,  // 11: xstockstrat.identity.v1.IdentityService.RefreshToken:input_type -> xstockstrat.identity.v1.RefreshTokenRequest
+	5,  // 12: xstockstrat.identity.v1.IdentityService.RevokeToken:input_type -> xstockstrat.identity.v1.RevokeTokenRequest
+	8,  // 13: xstockstrat.identity.v1.IdentityService.CreateApiKey:input_type -> xstockstrat.identity.v1.CreateApiKeyRequest
+	9,  // 14: xstockstrat.identity.v1.IdentityService.ValidateApiKey:input_type -> xstockstrat.identity.v1.ValidateApiKeyRequest
+	10, // 15: xstockstrat.identity.v1.IdentityService.ListApiKeys:input_type -> xstockstrat.identity.v1.ListApiKeysRequest
+	12, // 16: xstockstrat.identity.v1.IdentityService.RevokeApiKey:input_type -> xstockstrat.identity.v1.RevokeApiKeyRequest
+	15, // 17: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:input_type -> xstockstrat.identity.v1.RegisterOAuthClientRequest
+	16, // 18: xstockstrat.identity.v1.IdentityService.GetOAuthClient:input_type -> xstockstrat.identity.v1.GetOAuthClientRequest
+	17, // 19: xstockstrat.identity.v1.IdentityService.IssueAuthCode:input_type -> xstockstrat.identity.v1.IssueAuthCodeRequest
+	19, // 20: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:input_type -> xstockstrat.identity.v1.ExchangeAuthCodeRequest
+	21, // 21: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:input_type -> xstockstrat.identity.v1.RefreshOAuthTokenRequest
+	1,  // 22: xstockstrat.identity.v1.IdentityService.AuthenticateUser:output_type -> xstockstrat.identity.v1.AuthTokenResponse
+	2,  // 23: xstockstrat.identity.v1.IdentityService.ValidateToken:output_type -> xstockstrat.identity.v1.TokenClaims
+	1,  // 24: xstockstrat.identity.v1.IdentityService.RefreshToken:output_type -> xstockstrat.identity.v1.AuthTokenResponse
+	6,  // 25: xstockstrat.identity.v1.IdentityService.RevokeToken:output_type -> xstockstrat.identity.v1.RevokeTokenResponse
+	7,  // 26: xstockstrat.identity.v1.IdentityService.CreateApiKey:output_type -> xstockstrat.identity.v1.ApiKey
+	2,  // 27: xstockstrat.identity.v1.IdentityService.ValidateApiKey:output_type -> xstockstrat.identity.v1.TokenClaims
+	11, // 28: xstockstrat.identity.v1.IdentityService.ListApiKeys:output_type -> xstockstrat.identity.v1.ListApiKeysResponse
+	13, // 29: xstockstrat.identity.v1.IdentityService.RevokeApiKey:output_type -> xstockstrat.identity.v1.RevokeApiKeyResponse
+	14, // 30: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
+	14, // 31: xstockstrat.identity.v1.IdentityService.GetOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
+	18, // 32: xstockstrat.identity.v1.IdentityService.IssueAuthCode:output_type -> xstockstrat.identity.v1.IssueAuthCodeResponse
+	20, // 33: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
+	20, // 34: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
+	22, // [22:35] is the sub-list for method output_type
+	9,  // [9:22] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_identity_v1_identity_proto_init() }
@@ -922,7 +1473,7 @@ func file_identity_v1_identity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_identity_v1_identity_proto_rawDesc), len(file_identity_v1_identity_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

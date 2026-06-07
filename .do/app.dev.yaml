@@ -259,6 +259,8 @@ services:
         type: SECRET
       - key: UI_BASE_URL
         value: ${APP_URL}
+      - key: AGENT_PUBLIC_URL
+        value: ${APP_URL}/agent
 
   # ── Node.js services ───────────────────────────────────────────────────────
 

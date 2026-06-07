@@ -1,4 +1,5 @@
 """Shared pytest fixtures for xstockstrat-agent tests."""
+
 import pathlib
 import sys
 import types
@@ -39,6 +40,7 @@ def set_env(monkeypatch):
     # Also patch module-level vars in client.py — they are read at import time so
     # setenv alone has no effect on tests that import the module before fixtures run.
     from app import client
+
     monkeypatch.setattr(client, "INGEST_ENDPOINT", "ingest-test:50055")
     monkeypatch.setattr(client, "NOTIFY_ENDPOINT", "notify-test:50059")
     monkeypatch.setattr(client, "ANALYSIS_ENDPOINT", "analysis-test:50056")
