@@ -214,7 +214,7 @@ and the two columns exist after up and are gone after down.
 
 ### Step 4 — service: Tag OAuth refresh tokens with client_id; implement list/revoke (per-user scoped)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify

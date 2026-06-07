@@ -185,3 +185,15 @@
   present after up, gone after down. See Deviation Log.
 - Files modified: `services/xstockstrat-identity/migrations/004_refresh_token_client.{up,down}.sql`
 - Deviations: DB verification via throwaway PG cluster — see Deviation Log.
+
+### Step 4 — service: client-tag OAuth refresh tokens + listAuthorizedApps/revokeAuthorizedApp [done]
+- `issueRefreshToken(userId, clientId?)` now inserts `client_id` (NULL for first-party callers,
+  left untouched). `exchangeAuthCode` passes the OAuth `clientId`; `refreshOAuthToken` selects
+  `rt.client_id`, bumps `last_used_at` on rotation, and carries `client_id` forward.
+- Added per-user `listAuthorizedApps` (JOIN oauth_clients, WHERE rt.user_id, non-sensitive fields
+  only) and IDOR-safe `revokeAuthorizedApp` (UPDATE ... WHERE user_id=$1 AND client_id=$2). No new
+  outbound gRPC call → header propagation N/A.
+- Verification: `pnpm run lint` exits 0 (warnings = file-wide pre-existing `any` convention; new
+  methods match it). Behavioral/coverage + 049 regression guard in Step 5.
+- Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`
+- Deviations: none.
