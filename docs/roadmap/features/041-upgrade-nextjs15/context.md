@@ -139,3 +139,10 @@
 **Progress**: 7 done / 7 total
 **Stopped at**: all complete — integration PR created
 **Next**: merge PR into main-dev, then `/sdd-execute upgrade-nextjs15 next` is not needed (feature complete)
+
+## Session 2026-06-07 (CI: feature status automation)
+
+- Promotion PR #620 merged to main
+- Feature promoted and committed: edc530f9dbc08bb9f523f556bd2d243a6ea20ace
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-07

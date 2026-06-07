@@ -487,3 +487,10 @@ postgres:16; proto stubs fresh+idempotent (identity/v1 only).
 reversibility via postgres:16; user-approved agent ruff debt cleanup; /sse Route→Mount latent bug fix;
 UI tsc+lint in lieu of full Playwright.
 **Next**: single integration PR → main-dev (per user branch decision).
+
+## Session 2026-06-07 (CI: feature status automation)
+
+- Promotion PR #620 merged to main
+- Feature promoted and committed: edc530f9dbc08bb9f523f556bd2d243a6ea20ace
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-07

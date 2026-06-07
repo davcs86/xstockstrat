@@ -1,6 +1,8 @@
 # Feature: upgrade-nextjs15
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: edc530f9dbc08bb9f523f556bd2d243a6ea20ace
+**Launched date**: 2026-06-07
 **Development Branch**: `feature/upgrade-nextjs15`
 **Created**: 2026-05-27
 **Last Updated**: 2026-05-31
@@ -18,6 +20,7 @@
 | 2026-05-31 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — insights package.json and pnpm-lock.yaml updated |
 | 2026-05-31 | `in-progress` → `code-completed` | /sdd-execute | All 7 steps done; E2E mock backends refactored to real gRPC/H2C; trader E2E aligned |
 
+| 2026-06-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #620; committed edc530f9dbc08bb9f523f556bd2d243a6ea20ace |
 ---
 
 ## Artifacts

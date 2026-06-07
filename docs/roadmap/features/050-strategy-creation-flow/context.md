@@ -173,3 +173,10 @@ Decisions recorded in product-spec.md §Decisions and reflected in FR-2 and acce
 - Rule editor: dual-mode (visual tree builder + raw JSON fallback toggle).
 - strategy_id: immutable after creation; rendered read-only on edit form.
 - Component count: no client-side limit; backend validation only.
+
+## Session 2026-06-07 (CI: feature status automation)
+
+- Promotion PR #620 merged to main
+- Feature promoted and committed: edc530f9dbc08bb9f523f556bd2d243a6ea20ace
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-07

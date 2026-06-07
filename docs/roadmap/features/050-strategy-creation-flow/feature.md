@@ -1,6 +1,8 @@
 # Feature: strategy-creation-flow
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: edc530f9dbc08bb9f523f556bd2d243a6ea20ace
+**Launched date**: 2026-06-07
 **Development Branch**: `feature/strategy-creation-flow`
 **Created**: 2026-06-06
 **Last Updated**: 2026-06-06
@@ -17,6 +19,7 @@
 | 2026-06-06 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (insights BFF proxy) complete |
 | 2026-06-06 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps done; E2E green (chromium+firefox) |
 
+| 2026-06-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #620; committed edc530f9dbc08bb9f523f556bd2d243a6ea20ace |
 ---
 
 ## Artifacts
