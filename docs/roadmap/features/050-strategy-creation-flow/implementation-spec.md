@@ -1,6 +1,6 @@
 # Implementation Spec: strategy-creation-flow
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-06-06
 **Feature**: `docs/roadmap/features/050-strategy-creation-flow/feature.md`
 **Total Steps**: 11
@@ -320,7 +320,7 @@ client plumbing (Steps 1–3) land before any page consumes them, and the wizard
 
 ### Step 11 — docs: Document the strategy authoring UI in the insights segment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/roadmap/features/050-strategy-creation-flow/context.md` — modify (append implementation notes during execution)
