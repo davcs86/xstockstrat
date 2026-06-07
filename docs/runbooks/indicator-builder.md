@@ -45,6 +45,30 @@ for point in resp.result:
 
 ## Custom Formula Development
 
+### Authoring in the UI (recommended)
+
+The fastest way to write, test, and register a formula is the notebook-style
+workspace in `xstockstrat-ui` at **Insights → Formulas**:
+
+- **Formulas list** (`/insights/formulas`) — search by name/description/author and
+  filter by Public/Private to see what already exists. Each row opens the editor.
+- **Workspace** (`/insights/formulas/new` or `/insights/formulas/<id>`) reads top to
+  bottom like a notebook:
+  1. **Metadata cell** — name, description, and the Public toggle.
+  2. **Code cell** — a Python editor that receives `data` and must assign `result`.
+  3. **Run cell** — edit the input JSON (or click **Load sample data** for an OHLCV
+     bundle) and press **Run**. This executes the *current, unsaved* editor buffer via
+     inline `formula_source`, so you can iterate before saving. Output renders the
+     `result` keys (with sparklines for numeric series), `stdout`/`stderr`, the exit
+     reason, and execution time.
+- A built-in **Reference** panel (toggle in the action bar) documents the
+  `data → result` contract, the available libraries (numpy, pandas, math, statistics)
+  with copy-ready examples, the sandbox limits, the blocked modules, and one-click
+  **starter templates** (Blank, SMA, RSI, Bollinger Bands, MACD).
+
+Clicking **Create formula** / **Save** registers the formula (author is set from your
+JWT, server-side). The gRPC path below remains available for automation.
+
 ### Formula Interface Contract
 
 Your Python formula receives a `data` dict and must assign its output to a `result` variable.
