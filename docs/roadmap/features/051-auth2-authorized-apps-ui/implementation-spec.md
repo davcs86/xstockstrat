@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-06-07 (regenerated 2026-06-07 against merged 049)
 **Feature**: `docs/roadmap/features/051-auth2-authorized-apps-ui/feature.md`
-**Total Steps**: 9
+**Total Steps**: 10
 **Feature Branch**: `feature/auth2-authorized-apps-ui`
 
 ---
@@ -51,10 +51,11 @@ protobuf-es `identity_pb.ts` consumed by the UI come from one `buf-gen.sh` run).
 `004` adds `client_id` + `last_used_at` to `refresh_tokens` (FK to `oauth_clients`). Then the
 identity service work: tag OAuth refresh tokens with their `client_id` on mint/rotation (so apps
 become listable), implement the per-user-scoped `listAuthorizedApps` (JOIN `oauth_clients`) and
-IDOR-safe `revokeAuthorizedApp`, plus unit tests. Finally the `xstockstrat-ui` work: new
-`/accounts` segment + "My Authorized Apps" page, BFF list/revoke route (header propagation), BFF
-agent-health probe, `AGENT_PUBLIC_URL` wiring into the UI deployment blocks, and E2E. Docs/
-merge-order last.
+IDOR-safe `revokeAuthorizedApp`, plus unit tests. Then the `xstockstrat-ui` work, split into a
+server-side data layer and the presentation layer: the BFF routes (list/revoke with header
+propagation + agent-health probe + segment health) [Step 6], then the `/accounts` segment + "My
+Authorized Apps" page + nav [Step 7], then `AGENT_PUBLIC_URL` wiring into the UI deployment blocks
+[Step 8], and E2E covering both UI steps [Step 9]. Docs/merge-order last [Step 10].
 
 ## Step Dependencies
 
@@ -62,12 +63,15 @@ merge-order last.
 - Step 3 (migration) requires 049's `003_oauth` (merged — `oauth_clients` is the FK target).
 - Step 4 (identity service) requires Step 2 (regenerated ts-proto stub exposes the new methods on
   `IdentityServiceService`) and Step 3 (the `client_id` / `last_used_at` columns).
-- Step 5 [test] covers Step 4 [service] — identity unit tests.
-- Step 6 (UI BFF + page) requires Step 2 (regenerated `identity_pb.ts` exposes the new methods on
+- Step 5 [test] covers Step 4 [service] — identity unit tests (also runs 049's existing OAuth tests
+  as a regression guard, since Step 4 edits the shared mint/rotation paths).
+- Step 6 (UI BFF routes) requires Step 2 (regenerated `identity_pb.ts` exposes the new methods on
   the protobuf-es `IdentityService` used by `identityClient`).
-- Step 7 (UI deployment wiring for `AGENT_PUBLIC_URL`) is required by Step 6's health probe.
-- Step 8 [test] covers Step 6 [service] — UI E2E.
-- Step 9 (docs) last — records merge-order block + identity CLAUDE.md update.
+- Step 7 (UI segment + page + nav) requires Step 6 (the page consumes the BFF routes at runtime).
+- Step 8 (UI deployment wiring for `AGENT_PUBLIC_URL`) is required by Step 6's agent-health probe
+  and Step 7's connect section at runtime.
+- Step 9 [test] covers Steps 6 + 7 [service] — UI E2E.
+- Step 10 (docs) last — identity CLAUDE.md update + merge-order note.
 
 ---
 
@@ -105,7 +109,9 @@ merge-order last.
     string client_id = 1;
     string client_name = 2;
     google.protobuf.Timestamp authorized_at = 3;
-    google.protobuf.Timestamp last_used_at = 4;   // best-effort; may be unset
+    // Best-effort "last refreshed" time (bumped on refresh-token rotation), NOT per-request
+    // access. May be unset. The UI labels this "Last refreshed", not "Last used".
+    google.protobuf.Timestamp last_used_at = 4;
     repeated string redirect_uris = 5;
   }
   message ListAuthorizedAppsRequest { string user_id = 1; }
@@ -118,9 +124,10 @@ merge-order last.
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/auth2-authorized-apps-ui"
+cd packages/proto && buf lint && buf breaking --against ".git#branch=main-dev"
 ```
-Both must pass (additive change → `buf breaking` reports no breaking changes).
+Both must pass (additive change → `buf breaking` reports no breaking changes). `main-dev` is the
+canonical breaking-check base per `docs/runbooks/feature-workflow.md`.
 
 ---
 
@@ -244,9 +251,12 @@ and the two columns exist after up and are gone after down.
      `call.request`, L443).
    - In `refreshOAuthToken` (L493-525): the rotation must carry the `client_id` forward. Add
      `rt.client_id` to the SELECT (L499-507), then `await this.issueRefreshToken(user_id, client_id)`
-     (L518). Also bump `last_used_at` on use: when a row is found, set
+     (L518). Also bump `last_used_at` on rotation: when a row is found, set
      `UPDATE identity.refresh_tokens SET last_used_at = NOW() WHERE token_id = $1` (best-effort,
-     before/with the revoke at L511-514) so `ListAuthorizedApps` can surface last-used.
+     before/with the revoke at L511-514) so `ListAuthorizedApps` can surface it. **Semantics:**
+     this is a "last refreshed" timestamp (bumped only on refresh-token rotation), **not** a
+     per-`/sse`-request access time — the UI labels it accordingly (Step 7). Tracking true
+     per-request access is out of scope (would require a write on every access-token validation).
 2. **Add `async listAuthorizedApps(call, callback)`:**
    - Read `userId` from `call.request`; if empty → `callback({ code: 3, message: 'userId required' })`.
    - Query distinct OAuth-client grants for that user, JOINing `oauth_clients` for name/redirects:
@@ -275,12 +285,19 @@ and the two columns exist after up and are gone after down.
    - `callback(null, { success: true })`; wrap in try/catch → `code: 13` on error.
 - These methods read/write only `identity.refresh_tokens` and read `identity.oauth_clients`; they
   make **no new outbound gRPC call**, so §5c header-propagation does not apply to this step.
+- **Regression guard (this step edits 049-owned code):** the changes to `issueRefreshToken`,
+  `exchangeAuthCode`, and `refreshOAuthToken` are the only non-additive part of this feature. The
+  first-party callers (`authenticateUser` L87-91, `refreshToken` L173-177) insert inline and are
+  left untouched, so their behavior is unchanged. 049's existing OAuth tests
+  (`exchangeAuthCode`/`refreshOAuthToken`, test L271-390) MUST still pass after this change — Step 5
+  re-runs the full identity suite to enforce that.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-identity && pnpm run lint
 ```
-Plus the behavioral/coverage check in Step 5. Lint (`eslint src --ext .ts`) must pass with no errors.
+Plus the behavioral/coverage check in Step 5 (which also re-runs 049's existing OAuth tests as a
+regression guard). Lint (`eslint src --ext .ts`) must pass with no errors.
 
 ---
 
@@ -325,39 +342,30 @@ Plus the behavioral/coverage check in Step 5. Lint (`eslint src --ext .ts`) must
 ```bash
 cd services/xstockstrat-identity && pnpm run lint && pnpm run test:coverage
 ```
-`test:coverage` must pass the `--lines 40` gate; new tests must pass.
+`test:coverage` must pass the `--lines 40` gate; new tests must pass. It runs **all**
+`src/__tests__/*.test.ts`, including 049's existing `exchangeAuthCode`/`refreshOAuthToken` tests —
+this is the regression guard for Step 4's edits to those shared paths (they must stay green).
 
 ---
 
-### Step 6 — service: UI /accounts segment, My Authorized Apps page, BFF routes
+### Step 6 — service: UI BFF routes (list/revoke + agent-health + segment health)
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/src/app/accounts/layout.tsx` — create
-- `services/xstockstrat-ui/src/app/accounts/providers.tsx` — create (only if the page uses react-query; mirror config-ui/providers.tsx — otherwise omit)
-- `services/xstockstrat-ui/src/app/accounts/authorized-apps/page.tsx` — create
 - `services/xstockstrat-ui/src/app/accounts/api/authorized-apps/route.ts` — create (BFF: list + revoke via identity)
 - `services/xstockstrat-ui/src/app/accounts/api/agent-health/route.ts` — create (BFF: probe agent discovery endpoint)
 - `services/xstockstrat-ui/src/app/accounts/api/health/route.ts` — create (segment health, mirrors config-ui)
-- `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify (add 'accounts' segment to nav)
 - `services/xstockstrat-ui/src/middleware.ts` — verify only (no change expected — see Evidence)
 
-**Reviewers**: `xstockstrat-ui` (service owner) — Connect-RPC call safety, environment scope correctness, no secret values rendered in UI
+**Reviewers**: `xstockstrat-ui` (service owner) — Connect-RPC call safety, environment scope correctness, no secret values rendered in UI; Security — per-user IDOR isolation, no token/secret exposure in BFF JSON
 
 **Codebase Evidence**:
-- Segment scaffolding pattern confirmed via Read of `src/app/config-ui/layout.tsx`: a `layout.tsx`
-  wraps children in `<Providers>` + `<PlatformHeader segment=... subNav={[...]} />` + `<main>`,
-  with exported `metadata`. Sub-nav items are `SubNavItem` (`PlatformHeader.tsx:15-20`).
-- Nav segments confirmed in `PlatformHeader.tsx`: `PlatformSegment = 'trader' | 'insights' | 'config'`
-  (L12); `PLATFORM_NAV` array (L29-33); `SEGMENT_HOME` map (L35-39). Icons imported from
-  `lucide-react` (L6: `BarChart2, TrendingUp, Settings, Menu, Activity`). Adding an "Accounts"
-  entry requires extending all three + adding one icon import (e.g. `KeyRound` or `ShieldCheck`).
 - **Middleware already protects `/accounts/*`**: confirmed via Read of `src/middleware.ts:9-14`. The
   matcher is a single negative-lookahead excluding only static assets + public auth routes
   (`api/auth/login`, `api/health`, `health`, `auth/login`, `auth/oauth-login`). Any other path —
-  including `/accounts/...` — already requires a valid session (redirects to `/auth/login`, L26-28).
-  **No matcher edit needed** (FR-8 satisfied by the existing catch-all).
+  including `/accounts/api/...` — already requires a valid session. **No matcher edit needed**
+  (FR-8); the BFF routes also call `getSessionFromRequest` for defense-in-depth + the 401 path.
 - BFF auth + header-propagation pattern confirmed via Read of `src/lib/configUiBff.ts`:
   `backendHeaders(claims, ctx)` (L21-27) sets `x-user-id` = `claims.user_id`, `x-access-scope` =
   `String(rolesToAccessScope(claims.roles))`, `x-trace-id` =
@@ -367,28 +375,13 @@ cd services/xstockstrat-identity && pnpm run lint && pnpm run test:coverage
   (`createClient(IdentityService, makeTransport(IDENTITY_ENDPOINT))`); after Step 2 it exposes
   `.listAuthorizedApps()` / `.revokeAuthorizedApp()`. Header forwarding via the options object
   `{ headers }` — pattern at `configUiBff.ts:34`. `connectCodeToHttp` exported at
-  `connectClients.ts:40` for error→HTTP mapping.
+  `connectClients.ts:40` for error→HTTP mapping. `IDENTITY_ENDPOINT` already wired for the UI (no new endpoint var).
 - Auth helpers in `src/lib/auth.ts`: `getSessionFromRequest`, `verifyAccessToken`,
   `rolesToAccessScope`, `generateTraceId` (imported in configUiBff.ts:6 and audit/route.ts:3).
 - Segment health route shape confirmed via Read of `config-ui/api/health/route.ts`:
   `export async function GET() { return NextResponse.json({ status: 'ok', service: 'xstockstrat-ui/config-ui' }); }`.
 
 **Instructions**:
-- **Nav (`PlatformHeader.tsx`)**: extend `PlatformSegment` (L12) to include `'accounts'`; add an
-  icon import on L6; add `{ segment: 'accounts', label: 'Accounts', href: '/accounts/authorized-apps', icon: <KeyRound className="h-4 w-4" /> }`
-  to `PLATFORM_NAV` (L29-33); add `accounts: '/accounts/authorized-apps'` to `SEGMENT_HOME` (L35-39).
-- **Layout (`accounts/layout.tsx`)**: mirror `config-ui/layout.tsx` — export `metadata`, render
-  `<PlatformHeader segment="accounts" subNav={[{ label: 'Authorized Apps', href: '/accounts/authorized-apps', match: 'exact' }]} />` and `<main className="p-4 sm:p-6">{children}</main>`. Wrap in `<Providers>` only if the page uses react-query.
-- **Page (`accounts/authorized-apps/page.tsx`)**: client component that (a) fetches the list from
-  `GET /accounts/api/authorized-apps`, rendering each app's name / client id / authorized-at /
-  last-used in a table (reuse `components/ui/table.tsx`, `card.tsx`, `button.tsx`); (b) a "Disconnect"
-  button per row that, after a confirm step, calls `POST /accounts/api/authorized-apps` with
-  `{ action: 'revoke', clientId }` then refetches; (c) a "Connect a new app" section showing
-  `AGENT_PUBLIC_URL` as a read-only copy-to-clipboard field + Claude.ai instructions ("Settings →
-  Connectors → Add custom connector"); and (d) a reachable/unreachable indicator driven by
-  `GET /accounts/api/agent-health`. The `AGENT_PUBLIC_URL` value must come from a **server boundary**
-  (read `process.env.AGENT_PUBLIC_URL` in the layout/page server scope or a small server route and
-  pass it down — never `NEXT_PUBLIC_*`). Render **no tokens/secrets** (FR-7).
 - **BFF list/revoke (`accounts/api/authorized-apps/route.ts`)**: implement `GET` and `POST` Route
   Handlers. Read the session via `getSessionFromRequest(req)` (→ 401 if none, like audit/route.ts).
   Build propagation headers like `configUiBff.ts:backendHeaders` (`x-user-id` = `claims.user_id`,
@@ -397,7 +390,8 @@ cd services/xstockstrat-identity && pnpm run lint && pnpm run test:coverage
   `identityClient.listAuthorizedApps({ userId: claims.user_id }, { headers })`. `POST` (revoke) →
   `identityClient.revokeAuthorizedApp({ userId: claims.user_id, clientId }, { headers })`. **Always
   derive `userId` from the verified session, never from the request body** (FR-3 IDOR). Map Connect
-  errors to HTTP via `connectCodeToHttp` (`connectClients.ts:40`).
+  errors to HTTP via `connectCodeToHttp` (`connectClients.ts:40`). Return only the non-sensitive
+  `AuthorizedApp` fields (FR-7).
 - **BFF agent health (`accounts/api/agent-health/route.ts`)**: `GET` reads the session (401 if none),
   then server-side `fetch(\`${process.env.AGENT_PUBLIC_URL}/.well-known/oauth-protected-resource\`)`
   and returns `{ reachable: res.ok, status: res.status }` — **no payload** (FR-10). On fetch throw,
@@ -413,13 +407,67 @@ cd services/xstockstrat-identity && pnpm run lint && pnpm run test:coverage
 ```bash
 cd services/xstockstrat-ui && pnpm run lint
 ```
-Plus the E2E check in Step 8. Lint = `next lint`. Manually confirm: navigating to
-`/accounts/authorized-apps` unauthenticated redirects to `/auth/login`; authenticated shows the
-list + connect section; no token/secret strings appear in the rendered HTML or BFF JSON.
+Plus the E2E check in Step 9. Lint = `next lint`. Manually confirm: `GET /accounts/api/authorized-apps`
+unauthenticated → 401; authenticated → the user's apps only; no token/secret strings appear in the BFF JSON.
 
 ---
 
-### Step 7 — service: Wire AGENT_PUBLIC_URL into the xstockstrat-ui deployment block
+### Step 7 — service: UI /accounts segment, My Authorized Apps page, nav
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/app/accounts/layout.tsx` — create
+- `services/xstockstrat-ui/src/app/accounts/authorized-apps/page.tsx` — create
+- `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify (add 'accounts' segment to nav)
+
+**Reviewers**: `xstockstrat-ui` (service owner) — environment scope correctness, no secret values rendered in UI
+
+**Codebase Evidence**:
+- Segment scaffolding pattern confirmed via Read of `src/app/config-ui/layout.tsx`: a `layout.tsx`
+  wraps children in `<PlatformHeader segment=... subNav={[...]} />` + `<main>`, with exported
+  `metadata`. Sub-nav items are `SubNavItem` (`PlatformHeader.tsx:15-20`). The authorized-apps page
+  uses simple `fetch` + `useState`/`useEffect` against the Step 6 BFF routes, so **no react-query
+  `Providers` wrapper is needed** (omit `providers.tsx`).
+- Nav segments confirmed in `PlatformHeader.tsx`: `PlatformSegment = 'trader' | 'insights' | 'config'`
+  (L12); `PLATFORM_NAV` array (L29-33); `SEGMENT_HOME` map (L35-39). Icons imported from
+  `lucide-react` (L6: `BarChart2, TrendingUp, Settings, Menu, Activity`). Adding an "Accounts" entry
+  requires extending all three + adding one icon import (e.g. `KeyRound`).
+- Reusable UI primitives confirmed under `components/ui/`: `table.tsx`, `card.tsx`, `button.tsx`.
+- The BFF routes this page calls are created in Step 6 (`/accounts/api/authorized-apps`,
+  `/accounts/api/agent-health`); the segment is already auth-gated by middleware (see Step 6 Evidence).
+
+**Instructions**:
+- **Nav (`PlatformHeader.tsx`)**: extend `PlatformSegment` (L12) to include `'accounts'`; add an
+  icon import on L6; add `{ segment: 'accounts', label: 'Accounts', href: '/accounts/authorized-apps', icon: <KeyRound className="h-4 w-4" /> }`
+  to `PLATFORM_NAV` (L29-33); add `accounts: '/accounts/authorized-apps'` to `SEGMENT_HOME` (L35-39).
+- **Layout (`accounts/layout.tsx`)**: mirror `config-ui/layout.tsx` — export `metadata`, render
+  `<PlatformHeader segment="accounts" subNav={[{ label: 'Authorized Apps', href: '/accounts/authorized-apps', match: 'exact' }]} />` and `<main className="p-4 sm:p-6">{children}</main>`. No `<Providers>` wrapper (no react-query — see Evidence).
+- **Page (`accounts/authorized-apps/page.tsx`)**: client component that (a) fetches the list from
+  `GET /accounts/api/authorized-apps`, rendering each app's name / client id / authorized-at /
+  **"Last refreshed"** in a table (reuse `components/ui/table.tsx`, `card.tsx`, `button.tsx`); label
+  the `lastUsedAt` column **"Last refreshed"** (not "Last used") — it reflects refresh-token rotation,
+  not per-request access (see Step 4 semantics); (b) a "Disconnect" button per row that, after a
+  confirm step, calls `POST /accounts/api/authorized-apps` with `{ action: 'revoke', clientId }` then
+  refetches; (c) a "Connect a new app" section showing `AGENT_PUBLIC_URL` as a read-only
+  copy-to-clipboard field + Claude.ai instructions ("Settings → Connectors → Add custom connector");
+  and (d) a reachable/unreachable indicator driven by `GET /accounts/api/agent-health`. The
+  `AGENT_PUBLIC_URL` value must come from a **server boundary** (read `process.env.AGENT_PUBLIC_URL`
+  in the layout/page server scope or a tiny server route and pass it down — never `NEXT_PUBLIC_*`).
+  Render **no tokens/secrets** (FR-7).
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm run lint
+```
+Plus the E2E check in Step 9. Lint = `next lint`. Manually confirm: navigating to
+`/accounts/authorized-apps` unauthenticated redirects to `/auth/login`; authenticated shows the
+list + connect section; the last-refreshed column is labeled accordingly; no token/secret strings
+appear in the rendered HTML.
+
+---
+
+### Step 8 — service: Wire AGENT_PUBLIC_URL into the xstockstrat-ui deployment block
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -464,7 +512,7 @@ block), with no `_ENDPOINT` suffix.
 
 ---
 
-### Step 8 — test: E2E for /accounts/authorized-apps
+### Step 9 — test: E2E for /accounts/authorized-apps (covers Steps 6 + 7)
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -505,7 +553,7 @@ No coverage threshold applies (Next.js segment) — the new E2E spec passing sat
 
 ---
 
-### Step 9 — docs: identity CLAUDE.md update + merge-order note
+### Step 10 — docs: identity CLAUDE.md update + merge-order note
 
 **Status**: `pending`
 **Service**: `docs/` + `services/xstockstrat-identity`
@@ -554,4 +602,10 @@ _Populated by /sdd-execute as implementation proceeds._
   `refresh_tokens`. Step 4 must extend the mint/rotation paths (`exchangeAuthCode`,
   `refreshOAuthToken`) to record `client_id` (and `last_used_at`) — otherwise `ListAuthorizedApps`
   returns nothing. `AGENT_PUBLIC_URL` exists only in the agent deployment block and must be added to
-  the UI block (Step 7).
+  the UI block (Step 8).
+- **(sdd-review impl-spec fixes, 2026-06-07):** Applied non-ordering advisory fixes — Step 1
+  `buf breaking` now targets `main-dev` (canonical base); the old 8-file UI step was split into
+  Step 6 (BFF routes) + Step 7 (segment/page/nav), dropping the conditional `providers.tsx`
+  (page uses plain `fetch`); Step 4/5 made the 049 OAuth-test regression guard explicit; and
+  `last_used_at` is documented/labeled as "last refreshed" (rotation-time, not per-request).
+  Total steps 9 → 10. The Step 6→Step 8 deployment-ordering note (B3) was intentionally left as-is.

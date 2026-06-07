@@ -129,3 +129,20 @@
     entry). `IDENTITY_ENDPOINT` already wired in all 3 deployment files; only `AGENT_PUBLIC_URL`
     is absent everywhere (grep → no match) and must be added to the UI block in all three (FR-9,
     no `_ENDPOINT` suffix). UI lint = `next lint`; no coverage threshold (E2E only).
+
+## Session 2026-06-07 — sdd-review impl-spec + advisory fixes
+
+- Ran `/sdd-review auth2-authorized-apps-ui impl-spec` (Mode B, advisory): 0 failures, ~6 warnings.
+  Overlap: none (049/050 launched; no active concurrent impl-specs; migration 004 free). Trading: N/A.
+- User: "fix advisory warnings as long as they are not B3." Applied all non-B3 fixes:
+  - Step 1: `buf breaking` base `feature/...` → `main-dev` (canonical per feature-workflow).
+  - Split the 8-file UI step: **Step 6** = BFF routes (list/revoke + agent-health + segment health),
+    **Step 7** = /accounts segment + page + nav. Dropped `providers.tsx` (page uses plain fetch).
+  - Step 4 + Step 5: made the 049 OAuth-test regression guard explicit (test:coverage re-runs
+    049's exchangeAuthCode/refreshOAuthToken tests; first-party callers untouched).
+  - `last_used_at` documented + UI-labeled as "Last refreshed" (rotation-time, not per-request).
+  - Renumbered: deploy 7→8, E2E 8→9 (now covers Steps 6+7), docs 9→10. Total steps 9 → 10.
+  - Updated feature.md Reviewers "Steps" column (UI: 1,2,6,7,8,9) + step-count refs; Deviation Log.
+- **Left as-is (B3, per user):** Step 8 (AGENT_PUBLIC_URL wiring) sequenced after its Step 6/7
+  consumers. Execute Step 8 before/with 6–7 at runtime, but step order unchanged.
+- Status unchanged: implementation-ready. Next: /sdd-execute.
