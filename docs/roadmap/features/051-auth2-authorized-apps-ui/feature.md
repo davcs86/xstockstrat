@@ -16,6 +16,7 @@
 | 2026-06-07 | `spec-ready` → `draft` | user re-scope | Scope expanded: per-user authorized-app list + revoke (not UI-only); now spans ui + identity + proto + migration. Re-review required. |
 | 2026-06-07 | `draft` → `spec-ready` | /sdd-review | Re-scoped spec approved (2 warnings: hard dep + deep overlap with 049; UI overlap with 050) |
 | 2026-06-07 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
+| 2026-06-07 | `implementation-ready` (re-spec) | /sdd-spec | Regenerated against merged 049: migration pinned to 004, proto RPCs after RefreshOAuthToken (L25); Step 4 now also tags OAuth refresh tokens with client_id (049's mint path omits it) so list/revoke work |
 
 ---
 

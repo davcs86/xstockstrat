@@ -93,7 +93,35 @@
     `UPDATE refresh_tokens SET revoked_at=NOW() WHERE user_id=$1` (revokeToken L200-217). Responses
     must carry `Date` timestamps (secondsToDate helper, L18-20). Tests: node:test + mock pool;
     coverage `c8 --lines 40` via `pnpm run test:coverage`.
-  - UI: middleware matcher (middleware.ts:9-14) is a negative-lookahead catch-all → `/accounts/*`
+## Session 2026-06-07 — sdd-spec (re-spec against merged 049)
+
+- Regenerated implementation-spec.md (9 steps). Status stays implementation-ready.
+- **Major change: feature 049 is now MERGED into main-dev** (was NOT merged at the prior
+  /sdd-spec run). Re-verified in the working tree:
+  - `packages/proto/identity/v1/identity.proto` now has the OAuth RPCs (RegisterOAuthClient,
+    GetOAuthClient, IssueAuthCode, ExchangeAuthCode, RefreshOAuthToken; service block ends L25)
+    + OAuth messages (OAuthClient etc.). New 051 RPCs go after L25; new messages after L120.
+  - `services/xstockstrat-identity/migrations/` ends at `003_oauth` → 051 migration is
+    unambiguously **004** (no collision). `003_oauth.up.sql` creates `oauth_clients`
+    (client_id PK) + `oauth_auth_codes`; this is the FK target for the new refresh_tokens.client_id.
+  - `AGENT_PUBLIC_URL` already wired but only in the **agent** block (docker-compose L500,
+    app.dev/app.yaml L262). Still ABSENT from the UI block → Step 7 still required.
+- **New correctness finding (drives Step 4):** 049's `issueRefreshToken(userId)`
+  (identityServiceImpl.ts:332-341) inserts only (user_id, token_hash, expires_at) — it does
+  NOT record `client_id`. So OAuth grants are indistinguishable from first-party sessions in
+  refresh_tokens, and ListAuthorizedApps would return nothing. Step 4 now also extends
+  `exchangeAuthCode` (L480) and `refreshOAuthToken` (L493-525) to pass clientId into a new
+  `issueRefreshToken(userId, clientId?)` signature, and bumps last_used_at on refresh. The
+  prior spec missed this.
+- Confirmed-unchanged patterns reused: IDOR-safe revoke mirrors revokeApiKey (WHERE key_id=$1
+  AND user_id=$2, L298); list mirrors listApiKeys (WHERE user_id=$1, L274-294) + JOIN
+  oauth_clients for name/redirects; Date-timestamp encoding rule (L11-20); test via
+  makeSpyPool + SQL-capture asserts (test file L224-239); coverage c8 --lines 40 via
+  `pnpm run test:coverage`; identity lint = `eslint src --ext .ts`; UI lint = `next lint`.
+- UI BFF: header propagation reuses configUiBff.ts backendHeaders (L21-27); session via
+  getSessionFromRequest like config-ui/api/audit/route.ts; identityClient (protobuf-es,
+  connectClients.ts:33) exposes the new methods after Step 2; connectCodeToHttp L40 for errors.
+- UI: middleware matcher (middleware.ts:9-14) is a negative-lookahead catch-all → `/accounts/*`
     is ALREADY auth-gated; no matcher edit needed (FR-8). BFF header propagation pattern from
     configUiBff.ts (backendHeaders L21-27: x-user-id/x-access-scope/x-trace-id) + simpler
     Route-Handler variant from config-ui/api/audit/route.ts. Segment scaffolding from
