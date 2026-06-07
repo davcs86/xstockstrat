@@ -25,7 +25,7 @@
 
 ## Summary
 
-Add an "Authorized Apps" UI module to `xstockstrat-ui` that surfaces a one-click button (and copyable URL) for connecting Claude.ai to the xstockstrat MCP agent via the OAuth 2.1 flow already built in feature `018-agent-mcp-oauth`.
+Add an "Authorized Apps" UI module to `xstockstrat-ui` that surfaces a one-click button (and copyable URL) for connecting Claude.ai to the xstockstrat MCP agent via the OAuth 2.1 flow delivered by feature `049-unify-admin-auth-gates` (Part B, which supersedes feature `018-agent-mcp-oauth`).
 
 ## Reviewers
 
