@@ -176,3 +176,12 @@
   `IdentityService`.
 - Files modified: `packages/proto/gen/{go,python,ts}/identity/v1/*` (12 files)
 - Deviations: toolchain installed on host — see Steps 1–2 Deviation Log entry.
+
+### Step 3 — migration: Add client_id + last_used_at to refresh_tokens [done]
+- Created `004_refresh_token_client.up.sql` (ADD COLUMN client_id TEXT FK→oauth_clients ON DELETE
+  CASCADE, nullable = first-party session; ADD COLUMN last_used_at TIMESTAMPTZ; partial index
+  idx_refresh_user_client WHERE client_id IS NOT NULL) + matching `.down.sql` (reverse order).
+- Verified up+down on a throwaway local PG16 cluster (Docker/migrate unavailable) — columns+index
+  present after up, gone after down. See Deviation Log.
+- Files modified: `services/xstockstrat-identity/migrations/004_refresh_token_client.{up,down}.sql`
+- Deviations: DB verification via throwaway PG cluster — see Deviation Log.

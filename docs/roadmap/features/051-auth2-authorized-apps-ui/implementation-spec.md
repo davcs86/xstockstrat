@@ -165,7 +165,7 @@ After running, `git diff packages/proto/gen/` must be empty on a second run (stu
 
 ### Step 3 — migration: Add client_id + last_used_at to refresh_tokens (link to oauth_clients)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/migrations/004_refresh_token_client.up.sql` — create
@@ -602,6 +602,17 @@ commands. `git diff packages/proto/gen/` after `buf-gen.sh` is limited to the in
 additions (mirrors CI's stale-stub check).
 **Reason**: Sequential-mode CI-equivalent verification fallback (skill REPO CONVENTIONS → "Proto
 codegen container blocked"). **Disposition**: CI-equivalent fallback.
+
+### Deviation: Step 3 — migration verified on a throwaway local PG cluster (no Docker/migrate)
+**Spec said**: Run `./scripts/db-migrate.sh` (requires DATABASE_URL + golang-migrate inside the
+db-migrator container).
+**Actual**: Docker was unavailable, `migrate` was not installed, and no DATABASE_URL was set.
+Initialized a throwaway PostgreSQL 16 cluster (the host's `/usr/lib/postgresql/16/bin`), applied
+identity migrations `000`→`003` then `004` up, asserted `client_id` + `last_used_at` columns and
+`idx_refresh_user_client` exist, then applied `004` down and asserted all three are gone (proves
+reversibility). Cluster torn down afterward.
+**Reason**: Sequential-mode CI-equivalent verification fallback (skill REPO CONVENTIONS → "migrate /
+DB unavailable"). **Disposition**: CI-equivalent fallback.
 
 - **(Re-spec, /sdd-spec 2026-06-07):** Feature 049 (hard dependency) is now **merged** into
   `main-dev` — the OAuth proto RPCs, `003_oauth` migration (`oauth_clients`/`oauth_auth_codes`),
