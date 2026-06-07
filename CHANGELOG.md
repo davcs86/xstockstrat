@@ -13,6 +13,21 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-06-07
+
+### Features
+- upgrade-nextjs15: Upgrade `xstockstrat-insights` and `xstockstrat-config-ui` from Next.js 14.2.x to Next.js 15.x (the version already used by `xstockstrat-trader`). The current workaround for the pnpm workspace standalone path issue (subdirectory CMD and static COPY paths) works correctly but leaves two services on an older, unsupported Next.js major version. Upgrading aligns all three frontends on the same major version and eliminates the version split.
+- unify-admin-auth-gates: **Unify agent auth across both layers** (working title: *unify-agent-auth*; directory slug retained for
+- strategy-creation-flow: Adds a full strategy authoring UI to the `/insights` segment so operators can create, update, deactivate, and toggle live evaluation for strategies directly in the browser — achieving parity with the `manage_strategy`, `manage_formula`, and `set_strategy_live` MCP agent tools.
+
+### Proto Changes
+- identity/v1/identity.proto
+
+### Summary
+10 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-06-06
 
 ### Features
