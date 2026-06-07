@@ -72,3 +72,32 @@
 - No FAIL-level overlap (no duplicate config keys; 051 adds none).
 - TODO at /sdd-spec: add a blocking row to `docs/roadmap/features/merge-order.md` (051 blocked by 049),
   and pin the identity migration number (≥004) + proto field numbers against the merged 049.
+
+## Session 2026-06-07 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
+- Key codebase findings:
+  - **049 OAuth backend is NOT in main-dev yet.** `packages/proto/identity/v1/identity.proto`
+    (read in full) has only the 8 original RPCs — no OAuth/DCR/AuthorizedApp. Identity migrations
+    end at `002_seed_admin` (`ls`) — no `003_oauth`, no `oauth_clients`/`oauth_auth_codes` tables.
+    `identity.refresh_tokens` (001_identity_tables.up.sql:27-34) has NO `client_id`/`last_used_at`
+    column — every token today is a first-party user session. So migration NNN (planned 004),
+    the oauth_clients join target, proto field numbers, and AGENT_PUBLIC_URL values must all be
+    re-confirmed against the merged 049 at execute time. Documented as a hard-dependency banner +
+    pre-execution deviation in the spec; merge-order row added in Step 9.
+  - Proto gen emits BOTH ts-proto (`identity.ts`, consumed by identity service as
+    `IdentityServiceService`, src/index.ts:5) and protobuf-es (`identity_pb.ts`, consumed by UI
+    as `IdentityService`, connectClients.ts:5) from one `./scripts/buf-gen.sh` run (buf.gen.yaml).
+  - Identity per-user-scoped patterns to mirror: `listApiKeys` (WHERE user_id=$1, impl L273-293)
+    and IDOR-safe `revokeApiKey` (WHERE key_id=$1 AND user_id=$2, L295-303); refresh-token revoke
+    `UPDATE refresh_tokens SET revoked_at=NOW() WHERE user_id=$1` (revokeToken L200-217). Responses
+    must carry `Date` timestamps (secondsToDate helper, L18-20). Tests: node:test + mock pool;
+    coverage `c8 --lines 40` via `pnpm run test:coverage`.
+  - UI: middleware matcher (middleware.ts:9-14) is a negative-lookahead catch-all → `/accounts/*`
+    is ALREADY auth-gated; no matcher edit needed (FR-8). BFF header propagation pattern from
+    configUiBff.ts (backendHeaders L21-27: x-user-id/x-access-scope/x-trace-id) + simpler
+    Route-Handler variant from config-ui/api/audit/route.ts. Segment scaffolding from
+    config-ui/layout.tsx + PlatformHeader (segment/PLATFORM_NAV/SEGMENT_HOME need an 'accounts'
+    entry). `IDENTITY_ENDPOINT` already wired in all 3 deployment files; only `AGENT_PUBLIC_URL`
+    is absent everywhere (grep → no match) and must be added to the UI block in all three (FR-9,
+    no `_ENDPOINT` suffix). UI lint = `next lint`; no coverage threshold (E2E only).
