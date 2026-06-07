@@ -1,6 +1,6 @@
 # Feature: strategy-creation-flow
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/strategy-creation-flow`
 **Created**: 2026-06-06
 **Last Updated**: 2026-06-06
@@ -14,6 +14,8 @@
 | 2026-06-06 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-06-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 | 2026-06-06 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
+| 2026-06-06 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (insights BFF proxy) complete |
+| 2026-06-06 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps done; E2E green (chromium+firefox) |
 
 ---
 
@@ -43,4 +45,4 @@ _All implementation steps modify `xstockstrat-ui` only (`service`/`test` steps �
 
 ## Next Action
 
-`/sdd-review strategy-creation-flow impl-spec` — validate implementation spec, then `/sdd-execute strategy-creation-flow`
+Merge the stacked step PRs (bottom-up), then merge the integration PR `feature/strategy-creation-flow → main-dev`. After it lands, `/promote` to ship to production.

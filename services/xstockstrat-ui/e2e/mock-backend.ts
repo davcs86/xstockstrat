@@ -12,6 +12,7 @@
  * IdentityService mock is identical across all three source services.
  */
 import * as http2 from 'node:http2';
+import { ConnectError, Code } from '@connectrpc/connect';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { SignJWT } from 'jose';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
@@ -214,6 +215,30 @@ export async function startMockBackend(): Promise<void> {
         async setStrategyLive(req) {
           return {
             definition: { strategyId: req.strategyId, displayName: 'Live Test Strategy', active: true, liveEnabled: req.liveEnabled },
+          };
+        },
+        // Feature 050: strategy-authoring RPCs proxied by the insights BFF.
+        async manageStrategy(req) {
+          // Sentinel id used by the wizard server-error test (AC-13).
+          if (req.definition?.strategyId === 'invalid_ref') {
+            throw new ConnectError(
+              'component ref_name "missing" used in rule but not declared',
+              Code.InvalidArgument,
+            );
+          }
+          return req.definition ?? {};
+        },
+        async getStrategy(req) {
+          return {
+            strategyId: req.strategyId,
+            displayName: 'Editable Strategy',
+            components: [
+              { refName: 'sma_fast', kind: 1, indicator: 'SMA', formulaId: '', params: { period: 10 } },
+            ],
+            entryRule: '{"op":"and","conditions":[]}',
+            exitRule: '{"op":"or","conditions":[]}',
+            active: true,
+            liveEnabled: false,
           };
         },
       });
