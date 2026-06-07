@@ -202,6 +202,19 @@ export async function dispatchConnect(req: Request): Promise<Response> {
   const responseHeaders = new Headers(uRes.header);
   uRes.trailer?.forEach((value, key) => responseHeaders.append(key, value));
 
+  // Connect unary errors are always uncompressed JSON. When a handler forwards a
+  // ConnectError from a downstream gRPC service, that error's metadata carries the
+  // gRPC response's content-type (application/grpc+proto) and content-encoding;
+  // createConnectRouter copies them onto the error response, so the browser's Connect
+  // client cannot parse the JSON body and surfaces a generic "HTTP <status>" instead
+  // of the real validation message. Normalise the headers on the error path.
+  if (uRes.status >= 400) {
+    responseHeaders.set('content-type', 'application/json');
+    responseHeaders.delete('content-encoding');
+    responseHeaders.delete('grpc-encoding');
+    responseHeaders.delete('content-length');
+  }
+
   return new Response(uRes.body ? iterableAsStream(uRes.body) : null, {
     status: uRes.status,
     headers: responseHeaders,
