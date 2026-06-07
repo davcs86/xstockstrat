@@ -146,3 +146,23 @@
 - **Left as-is (B3, per user):** Step 8 (AGENT_PUBLIC_URL wiring) sequenced after its Step 6/7
   consumers. Execute Step 8 before/with 6–7 at runtime, but step order unchanged.
 - Status unchanged: implementation-ready. Next: /sdd-execute.
+
+## Session 2026-06-07 — sdd-execute (sequential)
+
+- Sequential mode run started for the whole feature (10 steps). User chose **SDD stacked
+  per-step PRs** branch strategy (resolving the harness `claude/*` vs SDD `feature/*` conflict):
+  integration branch `feature/auth2-authorized-apps-ui` + `feature-steps/...-step-N` stacked PRs,
+  then integration PR → main-dev.
+- Re-spec gate: directive = none. Read-only validation of all 10 steps' evidence against the
+  live codebase — all matched (proto service block ends L25, migrations end at 003_oauth, UI
+  reference files present, accounts/ dir absent). No re-spec needed; no blocker.
+- **Tooling note:** `buf` and the proto codegen toolchain were not pre-installed and Docker was
+  not running. Installed `buf` v1.69.0 (CI proto-freshness pin) on the host to run Step 1's
+  `buf lint`/`buf breaking` and Step 2's `buf-gen.sh` (CI-equivalent fallback — see Deviation Log).
+
+### Step 1 — proto: Add ListAuthorizedApps / RevokeAuthorizedApp RPCs + AuthorizedApp message [done]
+- Added the two additive RPCs after `RefreshOAuthToken` and the `AuthorizedApp` +
+  request/response messages at end of file. `buf lint` clean; `buf breaking` (against main-dev)
+  reports no breaking changes.
+- Files modified: `packages/proto/identity/v1/identity.proto`
+- Deviations: proto toolchain installed on host (buf 1.69.0) — see Deviation Log.

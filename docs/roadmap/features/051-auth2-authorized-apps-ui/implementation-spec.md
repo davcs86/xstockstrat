@@ -77,7 +77,7 @@ Authorized Apps" page + nav [Step 7], then `AGENT_PUBLIC_URL` wiring into the UI
 
 ### Step 1 — proto: Add ListAuthorizedApps / RevokeAuthorizedApp RPCs + AuthorizedApp message
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/identity/v1/identity.proto` — modify
@@ -592,6 +592,16 @@ present. No build/test command (docs only).
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Steps 1–2 — proto toolchain installed on host (no Docker/buf preinstalled)
+**Spec said**: Run `buf lint && buf breaking` (Step 1) and `./scripts/buf-gen.sh` (Step 2).
+**Actual**: `buf` was not installed and the Docker codegen container could not run (Docker daemon
+not available). Installed `buf` v1.69.0 (the CI `proto-freshness` pin in `.github/workflows/ci.yml`)
+on the host, plus the Go/Python/TS proto plugins at their CI-pinned versions, then ran the same
+commands. `git diff packages/proto/gen/` after `buf-gen.sh` is limited to the intended identity
+additions (mirrors CI's stale-stub check).
+**Reason**: Sequential-mode CI-equivalent verification fallback (skill REPO CONVENTIONS → "Proto
+codegen container blocked"). **Disposition**: CI-equivalent fallback.
 
 - **(Re-spec, /sdd-spec 2026-06-07):** Feature 049 (hard dependency) is now **merged** into
   `main-dev` — the OAuth proto RPCs, `003_oauth` migration (`oauth_clients`/`oauth_auth_codes`),
