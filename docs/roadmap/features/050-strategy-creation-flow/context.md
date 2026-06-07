@@ -92,6 +92,25 @@ all 11 steps' Files/evidence validated against the live codebase — no mismatch
 - Deviations: none. Used `window.confirm` for the deactivate confirmation (spec sanctioned it — no
   AlertDialog primitive exists).
 
+### Step 11 — Documentation [done]
+- No `services/xstockstrat-ui/CLAUDE.md` exists, and this is a UI-only feature (no Dockerfile/proto/
+  migration/config changes), so the only doc artifact is this `context.md` (kept current per step).
+- **Feature summary** (what shipped):
+  - **Insights BFF** (`src/lib/insightsBff.ts`): proxies `ManageStrategy` (admin-gated on
+    register/update/deactivate), `GetStrategy`, `ListStrategyDefinitions`, `SetStrategyLive`
+    (admin-gated), and `IngestService.ListSignalSources`; plus a `dispatchConnect` error-passthrough
+    fix so downstream gRPC validation messages reach the browser.
+  - **Hooks**: `useStrategyDefinitions` (`useStrategyDefinitions`/`useGetStrategy`/`useManageStrategy`/
+    `useSetStrategyLiveInsights`), `useInsightsSignalSources` + `insightsIngestClient`.
+  - **Components**: `RuleEditor` (dual-mode visual/JSON), `ComponentEditor` (kind + formula picker +
+    params), `StrategyWizard` (5-step create/edit wizard).
+  - **Pages**: `/insights/strategies/new`, `/insights/strategies/[id]/edit`; modified
+    `/insights/strategies` (New/Edit/Deactivate, admin-gated) and `/insights/strategies/[id]` (live
+    toggle).
+  - **Tests**: `e2e/insights/strategy-authoring.spec.ts` (10 tests, green on chromium + firefox).
+- Files modified: `docs/roadmap/features/050-strategy-creation-flow/context.md`
+- Deviations: none.
+
 ### Step 10 — Playwright E2E + lint/build gate [done]
 - Created `e2e/insights/strategy-authoring.spec.ts` (10 tests: BFF admin-gate/proxy + UI wizard
   gating, AC-13 inline error, edit read-only id, formula-picker filter). Extended `e2e/mock-backend.ts`
