@@ -34,3 +34,15 @@
   - UI one-click backfill: out of scope (separate UI feature consuming this contract).
 - Trading domain checks: skipped (non-trading feature).
 - Overlap findings: shares marketdata with 052/054 (advisory WARN). No FAIL-level overlap.
+
+## Session 2026-06-08 — scope revision (user)
+
+- User directive: 053-Q4 must be IN scope. Reversed the earlier "UI out of scope" decision.
+- Added FR-6: xstockstrat-ui backtest view renders the insufficient-data message and a "backfill
+  this range" action that issues TriggerBackfill via the BFF chain (frontend-auth.md, header
+  propagation). Confirms job_id after trigger.
+- Live job-progress display kept as a soft follow-up (depends on P0 052 for reliable bars_total/status).
+- Affected services: xstockstrat-ui promoted from downstream-consumer to in-scope implementer.
+- Reviewers: added xstockstrat-ui owner (frontend service → Playwright E2E required at impl-spec).
+- Scope note: feature now spans backend (marketdata + analysis proto/service) AND frontend (ui).
+  Larger than P1's original backend-only footprint — flagged for the user. Status stays spec-ready.
