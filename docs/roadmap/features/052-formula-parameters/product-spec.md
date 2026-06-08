@@ -54,10 +54,11 @@ a formula.
 
 FR-2. Parameter *values* are supplied at execution through a new `ExecuteFormulaRequest.input_params`
 object, **separate from `input_data`**. The indicators engine MUST validate these values against the
-formula's parameter definitions at `ExecuteFormula` time: apply declared defaults for omitted
+formula's parameter definitions **before sandbox execution**: apply declared defaults for omitted
 parameters, coerce/type-check supplied values, reject values outside `min`/`max`, and reject unknown
-or missing-required parameters. Validation failures return a structured error with a clear reason
-(not an opaque sandbox `RUNTIME_ERROR`).
+or missing-required parameters. Validation failures return `success=false` with a **dedicated
+structured error field** on `ExecuteFormulaResponse` carrying per-parameter `{ name, reason }`
+entries (not an opaque sandbox `RUNTIME_ERROR`).
 
 FR-3. Validated, defaulted parameter values MUST be exposed to the formula source as a **separate
 `params` variable** (NOT merged into `data`). OHLCV/series inputs continue to arrive in `data` via
@@ -72,8 +73,11 @@ sample-data loader) is unchanged and remains the path for non-parameter inputs.
 
 FR-5. **Strategy management UI** (`StrategyWizard` / `ComponentEditor`) MUST, when a
 `CUSTOM_FORMULA` component is selected, fetch the chosen formula's parameter definitions and render a
-typed form (defaults pre-filled, bounds enforced) for setting that component's parameter values,
-replacing the current free-form `params` key/value editor for formula components.
+typed form (defaults pre-filled, bounds enforced) for setting that component's **numeric** parameter
+values, replacing the current free-form `params` key/value editor for formula components. Because
+strategy component params are numeric only (`map<string, double>`), the form surfaces int/float
+parameters; any bool/string parameters a formula declares are shown read-only (using their default)
+with a note that they are not settable per strategy component in this feature.
 
 FR-6. The **agent** `manage_formula` MCP tool MUST accept parameter definitions on register/update,
 and the `manage_strategy` MCP tool MUST accept per-formula-component parameter values, so an AI agent
@@ -94,6 +98,9 @@ field, `params` variable, and structured parameter definitions are all additive.
 - Changing the sandbox security model, allowed imports, timeout, or memory limits.
 - Parameter types beyond the scalar set (int/float/bool/string) — no list/struct/enum-of-strings
   parameters, no per-symbol or time-varying parameters in this feature.
+- Setting **bool/string** parameters per strategy component — strategy components remain numeric
+  (`map<string, double>`); bool/string parameters are settable only in standalone formula runs and
+  otherwise fall back to their declared defaults inside a strategy.
 - Parameter values sourced from live market data or other services (parameters are static per run /
   per strategy component).
 - Versioning or migration of parameter definitions across formula edits (an edit simply overwrites
@@ -116,21 +123,22 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Proto Contract Changes
 
-Anticipated (to be finalized in `/sdd-spec`):
+Confirmed direction (exact field numbers assigned in `/sdd-spec`); all changes target the
+**additive / non-breaking** path and `buf breaking` must pass against `main`:
 - New message `FormulaParameter` in `packages/proto/indicators/v1/indicators.proto`:
-  `name`, `type` (new enum `ParameterType` with `PARAMETER_TYPE_UNSPECIFIED = 0`), `default_value`
-  (`google.protobuf.Value` or typed), `description`, `required` (bool), `min`/`max` (optional doubles).
+  `name`, `type` (new enum `ParameterType` with `PARAMETER_TYPE_UNSPECIFIED = 0`; values for
+  int/float/bool/string), `default_value` (`google.protobuf.Value`), `description`, `required`
+  (bool), `min`/`max` (optional `double`, numeric params only).
 - Add `repeated FormulaParameter parameters` to `FormulaDefinition`, `RegisterFormulaRequest`, and
   `UpdateFormulaRequest` (additive, new field numbers — non-breaking; legacy `input_schema` retained).
-- Add a new field `google.protobuf.Struct input_params` to `ExecuteFormulaRequest` (next field
-  number after `memory_bytes_override = 6`, i.e. `= 7`) carrying parameter *values* at execution,
-  **separate from** `input_data` (field 3). Additive / non-breaking.
-- Possibly surface a structured validation error on `ExecuteFormulaResponse` (e.g. a new
-  `PARAMETER_INVALID` value on the existing `SandboxExitReason` enum, or a dedicated error field) —
-  decide in impl-spec.
-- `analysis.proto` `StrategyComponent` already has `map<string, double> params`; evaluate whether
-  formula-component parameter values can reuse it or need a richer type for bool/string params (the
-  evaluator builds `input_params` from these values).
+- Add `google.protobuf.Struct input_params` to `ExecuteFormulaRequest` (next field number after
+  `memory_bytes_override = 6`, i.e. `= 7`) carrying parameter *values* at execution, **separate
+  from** `input_data` (field 3).
+- Add a dedicated structured parameter-validation error field to `ExecuteFormulaResponse` — a
+  `repeated` message of `{ string name, string reason }` (new field number after `exit_reason = 8`).
+  The `SandboxExitReason` enum is **not** extended for this.
+- `analysis.proto` — **no change**. `StrategyComponent.params` (`map<string, double>`) is reused as-is;
+  the evaluator builds `input_params` from those numeric values (see FR-7).
 
 All proto changes target the **additive / non-breaking** path. `buf breaking` must pass against
 `main`.
@@ -177,17 +185,29 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 7. `buf lint` and `buf breaking` (against `main`) pass; CI coverage thresholds met
    (indicators ≥50%).
 
+## Resolved Decisions
+
+All product-level open questions were resolved during `/sdd-review` (2026-06-08). These are binding
+inputs for `/sdd-spec`:
+
+- [x] **Parameter typing in proto** — `FormulaParameter.default_value` is a `google.protobuf.Value`
+      (uniformly handles int/float/bool/string); `min`/`max` are optional `double` (numeric params
+      only). Matches the `input_params` Struct representation.
+- [x] **Validation-error surface** — `ExecuteFormulaResponse` gets a **dedicated structured error
+      field** for parameter validation (a repeated message of `{ name, reason }`), giving the UI
+      per-parameter detail rather than overloading the `SandboxExitReason` enum. Parameter validation
+      runs *before* sandbox execution; on failure the response carries these errors and `success=false`.
+- [x] **Parameter names** — validated at registration time as **Python identifiers**
+      (`[A-Za-z_][A-Za-z0-9_]*`), guaranteeing safe `params["<name>"]` keys.
+- [x] **Parameter count** — **soft cap enforced in the engine** (no new config key) — registration is
+      rejected above a sane hardcoded limit (target: 32). Honors the no-new-config-keys promise.
+- [x] **Strategy component param values** — **numeric only**: `StrategyComponent.params`
+      (`map<string, double>`) is kept unchanged, so `analysis.proto` needs no change. int/float
+      parameters are fully settable on strategy components; bool/string parameters are usable in
+      standalone formula runs but are **out of scope for strategy components** in this feature (see
+      Out of Scope).
+
 ## Open Questions
 
-- [ ] How should `default_value`, `min`, and `max` be typed in proto given the int/float/bool/string
-      mix? Single `google.protobuf.Value`, or a typed oneof? (Resolve in impl-spec.)
-- [ ] Should the structured parameter-validation failure reuse `SandboxExitReason` (new
-      `PARAMETER_INVALID` enum value) or a dedicated response field? Note this is the one place the
-      contract could be borderline-breaking if the enum is mishandled.
-- [ ] For strategy `CUSTOM_FORMULA` components, do we keep `map<string, double> params` (limits
-      bool/string params) or introduce a richer per-component param value type in `analysis.proto`?
-- [ ] Should parameter `name`s be validated as Python identifiers (to guarantee safe `params` dict
-      keys)? (Collision with OHLCV keys is no longer a concern — `params` and `data` are separate
-      namespaces per the design decision above.)
-- [ ] Is there a maximum parameter count per formula worth enforcing, and where (engine validation vs.
-      a new `indicators.*` config key)?
+- None — all resolved above. (Remaining mechanical details — exact proto field numbers, migration
+  number — are determined during `/sdd-spec`.)

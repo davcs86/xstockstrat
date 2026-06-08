@@ -1,6 +1,6 @@
 # Feature: formula-parameters
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/formula-parameters`
 **Created**: 2026-06-08
 **Last Updated**: 2026-06-08
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-06-08 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-06-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 overlap warnings, advisory) |
 
 ---
 
@@ -45,4 +46,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review formula-parameters product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec formula-parameters` — generate implementation spec from the approved product spec
