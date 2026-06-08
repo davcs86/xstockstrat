@@ -1,9 +1,9 @@
 name: Prod — bring up
 
 # Manual, on-demand recreation of the production app. Production is kept torn
-# down by default while the project is pre-maturity (see
-# docs/runbooks/infra-cost-reduction.md, Tier 2). Run this when you need prod
-# live, then run "Prod — tear down" when you're finished.
+# down by default (see "Production lifecycle" in
+# docs/runbooks/infra-cost-reduction.md). Run this when you need prod live, then
+# run "Prod — tear down" when you're finished.
 #
 # Recreating the app from scratch assigns a NEW app id and (without a custom
 # domain) a NEW *.ondigitalocean.app URL. The job prints both and reminds you
