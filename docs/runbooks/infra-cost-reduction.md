@@ -95,7 +95,47 @@ production app outside the active window and **recreates** it from
 - Biggest structural saving, but it touches the platform's core architecture
   and proto wiring. Treat as a roadmap feature (SDD), not a config tweak.
 
-## What NOT to change
+## Operating the production teardown (Tier 2)
+
+Production runs in a **down-by-default** model. Two manual GitHub Actions
+workflows toggle it (shared `prod-lifecycle` concurrency group so they can't
+race):
+
+| Workflow | What it does |
+|---|---|
+| **Prod — bring up** (`prod-up.yml`) | `doctl apps create` from `.do/app.yaml`, injecting all runtime secrets, waits for the deploy, prints the URL + new app id. Input: `image_tag` (default `latest`). |
+| **Prod — tear down** (`prod-down.yml`) | Looks the app up by name and `doctl apps delete`s it. Requires typing `destroy-prod` to confirm. |
+
+**Data safety:** teardown deletes only the App Platform app. The managed
+Postgres cluster `xstockstrat` is a separate resource and is never touched, so
+all data survives across down/up cycles.
+
+**Required GitHub Secrets** (bring-up injects these because a fresh
+`doctl apps create` does *not* inherit dashboard-set SECRET values the way
+`doctl apps update` does):
+
+`PROD_JWT_SECRET`, `PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY`, `ALPACA_API_KEY`,
+`ALPACA_API_SECRET`, `MCP_AGENT_SECRET`, plus `DIGITALOCEAN_ACCESS_TOKEN` and
+(optional) `DO_PROD_PROJECT_ID`. Injection is handled by
+`scripts/do-inject-prod-secrets.py`; a missing secret logs a warning and the
+component comes up with an unset value.
+
+**Caveats to know before relying on this:**
+
+- **New app id / URL each bring-up.** Recreating assigns a fresh app id and,
+  without a custom domain, a new `*.ondigitalocean.app` URL. The bring-up job
+  prints both and warns you to update the `DO_PROD_APP_ID` secret. Pin a custom
+  domain if you need a stable address.
+- **Stale `DO_PROD_APP_ID` breaks push-to-main deploys.** While prod is down
+  (or after a bring-up before you refresh the secret), `deploy-prod.yml` will
+  target a non-existent/old app id and fail. That's expected pre-maturity —
+  refresh `DO_PROD_APP_ID` after each bring-up, or redeploy via bring-up.
+- **First bring-up needs validation.** Confirm `doctl apps create` *attaches*
+  the existing `xstockstrat` cluster (via the spec `databases:` block) rather
+  than provisioning a new one, and that all secrets landed (check the running
+  spec / service logs).
+
+
 
 - **Don't split the database.** One shared single-node cluster for both envs
   is already the cheapest viable managed-PG setup. Splitting prod/staging into

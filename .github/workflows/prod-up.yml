@@ -1,0 +1,101 @@
+name: Prod — bring up
+
+# Manual, on-demand recreation of the production app. Production is kept torn
+# down by default while the project is pre-maturity (see
+# docs/runbooks/infra-cost-reduction.md, Tier 2). Run this when you need prod
+# live, then run "Prod — tear down" when you're finished.
+#
+# Recreating the app from scratch assigns a NEW app id and (without a custom
+# domain) a NEW *.ondigitalocean.app URL. The job prints both and reminds you
+# to refresh the DO_PROD_APP_ID secret so push-to-main deploys keep working.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "GHCR image tag to deploy (default: latest)"
+        required: false
+        default: latest
+
+concurrency: prod-lifecycle
+
+jobs:
+  up:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Check whether prod app already exists
+        id: check
+        run: |
+          APP_ID=$(doctl apps list --format ID,Spec.Name --no-header \
+            | awk '$2=="xstockstrat-production"{print $1}')
+          if [ -n "$APP_ID" ]; then
+            echo "Prod app already running ($APP_ID) — nothing to do."
+          fi
+          echo "app_id=$APP_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Render app spec with secrets
+        if: steps.check.outputs.app_id == ''
+        env:
+          JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
+          BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY }}
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+          MCP_AGENT_SECRET: ${{ secrets.MCP_AGENT_SECRET }}
+        run: |
+          sed \
+            -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \
+            -e "s|YOUR_IMAGE_TAG|${{ inputs.image_tag }}|g" \
+            .do/app.yaml \
+          | python3 scripts/do-inject-prod-secrets.py > /tmp/app.yaml
+
+      - name: Create prod app
+        if: steps.check.outputs.app_id == ''
+        id: create
+        run: |
+          APP_ID=$(doctl apps create --spec /tmp/app.yaml --format ID --no-header)
+          echo "Created app $APP_ID"
+          echo "app_id=$APP_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Assign to project
+        if: steps.create.outputs.app_id != ''
+        env:
+          DO_PROJECT_ID: ${{ secrets.DO_PROD_PROJECT_ID }}
+        run: |
+          if [ -n "$DO_PROJECT_ID" ]; then
+            doctl projects resources assign "$DO_PROJECT_ID" \
+              --resource "do:app:${{ steps.create.outputs.app_id }}"
+          else
+            echo "DO_PROD_PROJECT_ID not set — app stays in the default project."
+          fi
+
+      - name: Wait for deployment
+        if: steps.create.outputs.app_id != ''
+        run: |
+          APP_ID="${{ steps.create.outputs.app_id }}"
+          for i in $(seq 1 60); do
+            DEPLOY_ID=$(doctl apps list-deployments "$APP_ID" --format ID --no-header | head -1)
+            PHASE=$(doctl apps get-deployment "$APP_ID" "$DEPLOY_ID" --format Phase --no-header)
+            echo "  [$i/60] Phase: $PHASE"
+            if [ "$PHASE" = "ACTIVE" ]; then
+              echo "Deployment succeeded."
+              break
+            elif [ "$PHASE" = "ERROR" ] || [ "$PHASE" = "CANCELED" ]; then
+              echo "Deployment failed with phase: $PHASE"
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - name: Report URL and app id
+        if: steps.create.outputs.app_id != ''
+        run: |
+          APP_ID="${{ steps.create.outputs.app_id }}"
+          URL=$(doctl apps get "$APP_ID" --format DefaultIngress --no-header)
+          echo "Production is up at: $URL"
+          echo "::warning::Prod recreated with app id $APP_ID. Update the DO_PROD_APP_ID GitHub secret to this value so push-to-main deploys target the new app."
