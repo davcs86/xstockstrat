@@ -78,3 +78,67 @@
 - Updated product-spec.md accordingly: added "Resolved Decisions" section, emptied "Open Questions",
   revised FR-2, FR-5, proto-changes (dedicated error field; analysis.proto = no change), and Out of
   Scope (bool/string not settable per strategy component).
+
+## Session 2026-06-08 — sdd-spec
+
+- Generated implementation-spec.md with 14 steps. Status → implementation-ready.
+- Assigned proto field numbers (verified against current `indicators.proto`):
+  - `ExecuteFormulaRequest.input_params = 7` (after `memory_bytes_override = 6`)
+  - `ExecuteFormulaResponse.parameter_errors = 9` (after `exit_reason = 8`)
+  - `FormulaDefinition.parameters = 10` (after `input_schema = 9`)
+  - `RegisterFormulaRequest.parameters = 7` (after `author = 6`)
+  - `UpdateFormulaRequest.parameters = 7` (after `is_public = 6`)
+  - New enum `ParameterType` + messages `FormulaParameter`, `ParameterValidationError`.
+- Key codebase findings:
+  - Last indicators migration is `001_formulas` → new migration is `002_formula_parameters`
+    (adds `parameters JSONB NOT NULL DEFAULT '[]'`; existing `input_schema` uses `'{}'`).
+  - Sandbox `execute_formula` (sandbox.py L146) and `_SANDBOX_WRAPPER` (L95–143) load `data`
+    via `json.loads({input_json!r})` into `_formula_globals` (L136); `params` is injected the
+    same way as a SEPARATE global (not merged into `data`) — Step 6.
+  - Servicer `ExecuteFormula` (servicer.py L70–137) calls the sandbox at L107; validation must run
+    before that and short-circuit to `parameter_errors` on failure (FR-2). `RegisterFormula`
+    (L150) / `UpdateFormula` (L229) / `_row_to_formula` (L274) all need the `parameters` field.
+  - New `app/services/parameters.py` is created from scratch (no existing validation module);
+    32-param soft cap + Python-identifier name check live there (no new config key).
+  - Analysis evaluator CUSTOM_FORMULA branch (evaluator.py L117–133) already forwards
+    `metadata=self._meta`; only adds `input_params` from numeric `comp.params` — no new gRPC
+    client, so header propagation is reused (§5c satisfied). No `analysis.proto` change.
+  - Agent: `manage_strategy` already carries numeric `StrategyComponent.params` (client.py L207);
+    only `manage_formula` (client.py L263 / tools.py L284) needs `parameters` added.
+  - UI: `FormulaWorkspace.tsx`, `useFormulas.ts`, `ComponentEditor.tsx` need parameter forms;
+    new `ParameterEditor.tsx`; BFF route `insights/api/[...connect]` is unchanged (new fields ride
+    existing RPCs). No UI coverage gate — Playwright e2e under `e2e/` applies.
+- Note: `scripts/buf-gen.sh` runs `buf breaking` against `main-dev`; product spec / AC #7 require
+  passing against `main` — Step 1 verification includes an explicit `--against main` check.
+
+## Session 2026-06-08 — sdd-spec (re-run)
+
+- Re-ran /sdd-spec; feature was already `implementation-ready` with a 14-step spec. Re-verified
+  every load-bearing codebase reference against the current working tree — no drift detected, so
+  the spec content is unchanged (Created date preserved; added a Regenerated marker + a
+  status-history "re-run" row).
+- Evidence re-confirmed (all still accurate):
+  - `packages/proto/indicators/v1/indicators.proto`: `ExecuteFormulaRequest` ends at
+    `memory_bytes_override = 6` (L69); `ExecuteFormulaResponse` ends at `exit_reason = 8` (L80);
+    `FormulaDefinition.input_schema = 9` (L101); `RegisterFormulaRequest.author = 6` (L123);
+    `UpdateFormulaRequest.is_public = 6` (L153). Assigned field numbers (input_params=7,
+    parameter_errors=9, parameters=10/7/7) remain free and additive.
+  - Indicators migrations: last is `001_formulas` → new is `002_formula_parameters` (confirmed via
+    `ls migrations/`).
+  - `formulas_repository.py`: `_to_dict` L16-26, `create` INSERT (7 positional args today; add
+    `parameters` as `$8::jsonb`) L35-60, `update` SET clause L95-116 — match Step 4.
+  - `sandbox.py`: `data = json.loads({input_json!r})` L133, `_formula_globals` L136, `.format(...)`
+    L159-165 — match Step 6 (`params` injected as a separate global).
+  - `servicer.py`: `ExecuteFormula` L70-137 (sandbox call L107), `RegisterFormula` L150-195,
+    `UpdateFormula` L229-252, `_row_to_formula` L274-296 — match Step 7.
+  - `evaluator.py`: CUSTOM_FORMULA branch L117-133 forwards `metadata=self._meta`; numeric
+    `comp.params` reused; no new gRPC client — match Step 9 (header propagation reused, §5c).
+  - Agent `client.py` `manage_formula` L263-308 / `tools.py` `manage_formula` L284-317; strategy
+    path already carries numeric `StrategyComponent.params` (client.py L207) — match Step 11.
+  - UI: `FormulaWorkspace.tsx`, `useFormulas.ts` (register passes `inputSchema` not `parameters`
+    L39; execute has no `inputParams` L83-87), `ComponentEditor.tsx`, new/edit pages, and the BFF
+    `insights/api/[...connect]` route all exist; `ParameterEditor.tsx` correctly absent (create) —
+    match Step 13.
+  - Files correctly marked "create" (verified absent): `app/services/parameters.py`,
+    `tests/test_parameters.py`, `ParameterEditor.tsx`. All other referenced files exist.
+- Reviewers snapshot in feature.md is unchanged (reviewer-registry.md unchanged).
