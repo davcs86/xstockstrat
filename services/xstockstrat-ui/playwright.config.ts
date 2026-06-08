@@ -82,6 +82,10 @@ export default defineConfig({
       CONFIG_ENDPOINT:     '127.0.0.1:9093',
       INGEST_ENDPOINT:     '127.0.0.1:9093',
       JWT_SECRET:          'test-jwt-secret-for-e2e-tests-min32c',
+      // Feature 051 — the /accounts layout reads AGENT_PUBLIC_URL server-side to render the
+      // connector URL + drive the agent-health probe. Point at a dead port so the probe is
+      // deterministically "unreachable" unless a test overrides /accounts/api/agent-health.
+      AGENT_PUBLIC_URL:    'http://127.0.0.1:9099',
       // Build a regular (non-standalone) bundle so `next start` can serve it.
       NEXT_DISABLE_STANDALONE: '1',
     },

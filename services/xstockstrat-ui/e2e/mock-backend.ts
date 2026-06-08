@@ -73,6 +73,23 @@ export async function startMockBackend(): Promise<void> {
     async revokeToken() {
       return { success: true };
     },
+    // Feature 051 — authorized-apps management. Returns one app (no token/secret fields)
+    // so the /accounts page renders a deterministic row through the real BFF→gRPC path.
+    async listAuthorizedApps() {
+      return {
+        apps: [
+          {
+            clientId: 'oauthc_e2e',
+            clientName: 'Claude.ai (E2E)',
+            authorizedAt: { seconds: BigInt(Math.floor(Date.now() / 1000)), nanos: 0 },
+            redirectUris: ['https://claude.ai/cb'],
+          },
+        ],
+      };
+    },
+    async revokeAuthorizedApp() {
+      return { success: true };
+    },
   };
 
   // ── Port 9091 — Trader segment ──────────────────────────────────────────

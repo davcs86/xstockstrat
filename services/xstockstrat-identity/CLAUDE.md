@@ -19,9 +19,10 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 | gRPC | `50058` | Internal service-to-service (protobuf) |
 
 This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing all
-thirteen methods: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`, `CreateApiKey`,
-`ValidateApiKey`, `ListApiKeys`, `RevokeApiKey`, and the OAuth 2.1 backend RPCs (feature 049 Part B)
-`RegisterOAuthClient`, `GetOAuthClient`, `IssueAuthCode`, `ExchangeAuthCode`, `RefreshOAuthToken`).
+fifteen methods: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`, `CreateApiKey`,
+`ValidateApiKey`, `ListApiKeys`, `RevokeApiKey`, the OAuth 2.1 backend RPCs (feature 049 Part B)
+`RegisterOAuthClient`, `GetOAuthClient`, `IssueAuthCode`, `ExchangeAuthCode`, `RefreshOAuthToken`,
+and the per-user authorized-app RPCs (feature 051) `ListAuthorizedApps`, `RevokeAuthorizedApp`).
 The frontends validate tokens over gRPC `50058`.
 The former HTTP/Connect-RPC server on `8058` (and the `src/connect/` Connect router) was removed.
 
@@ -52,6 +53,13 @@ on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs 
   `client_id`/`user_id` FKs ON DELETE CASCADE, `redirect_uri`, `code_challenge`, `resource`,
   `expires_at`, `consumed_at`, `created_at`; index on `client_id`). Refresh tokens are **not** a new
   table — OAuth reuses `identity.refresh_tokens`.
+- `004_refresh_token_client` (feature 051) — adds `refresh_tokens.client_id` (FK → `oauth_clients`,
+  ON DELETE CASCADE; `NULL` = first-party user session, non-NULL = an OAuth-client grant) and
+  `refresh_tokens.last_used_at` (TIMESTAMPTZ, "last refreshed"), plus partial index
+  `idx_refresh_user_client (user_id, client_id) WHERE client_id IS NOT NULL`. OAuth refresh tokens
+  are now tagged with their `client_id` on mint (`ExchangeAuthCode`) and rotation
+  (`RefreshOAuthToken`) so `ListAuthorizedApps` / `RevokeAuthorizedApp` can list and revoke them
+  per-user.
 
 ## Config Keys Consumed
 
