@@ -412,6 +412,8 @@ services:
         value: ${xstockstrat-ingest.PRIVATE_DOMAIN}:50055
       - key: APP_URL
         value: ${APP_URL}
+      - key: AGENT_PUBLIC_URL
+        value: ${APP_URL}/agent
       - key: JWT_SECRET
         scope: RUN_TIME
         value: YOUR_PROD_JWT_SECRET

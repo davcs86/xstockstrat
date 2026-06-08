@@ -299,7 +299,8 @@ describe('exchangeAuthCode', () => {
 
   it('PKCE happy path returns access + refresh, JWT carries aud', async () => {
     process.env.JWT_SECRET = 'oauth-test-secret';
-    const impl = implWithPool(makeSpyPool([storedRow()]));
+    const pool = makeSpyPool([storedRow()]);
+    const impl = implWithPool(pool);
     if (!impl) return;
     const res: any = await new Promise((resolve, reject) => {
       impl.exchangeAuthCode(exchangeCall(), (err: any, r: any) => (err ? reject(err) : resolve(r)));
@@ -309,6 +310,9 @@ describe('exchangeAuthCode', () => {
     assert.strictEqual(res.tokenType, 'Bearer');
     const decoded: any = (jwt as any).verify(res.accessToken, process.env.JWT_SECRET);
     assert.strictEqual(decoded.aud, 'https://agent.example/agent');
+    // Feature 051: the OAuth grant's refresh token must be tagged with its client_id so
+    // it becomes listable/revocable in "My Authorized Apps".
+    assert.ok(pool.queries.some((q) => /INSERT INTO identity\.refresh_tokens[^)]*client_id/.test(q)));
   });
 
   it('rejects a bad code_verifier as invalid_grant', async () => {
@@ -403,5 +407,87 @@ describe('validateToken aud surfacing', () => {
       impl.validateToken(makeCall({ token }), (err: any, r: any) => (err ? reject(err) : resolve(r)));
     });
     assert.strictEqual(res.aud, 'https://agent.example/agent');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Authorized-apps management (feature 051)
+// ---------------------------------------------------------------------------
+
+describe('listAuthorizedApps', () => {
+  it('rejects when userId is missing', async () => {
+    const impl = makeImpl();
+    if (!impl) return;
+    await new Promise<void>((resolve) => {
+      impl.listAuthorizedApps(makeCall({ userId: '' }), (err: any) => {
+        assert.ok(err);
+        assert.strictEqual(err.code, 3);
+        resolve();
+      });
+    });
+  });
+
+  it('returns per-user apps with only non-sensitive fields and JOINs oauth_clients', async () => {
+    const pool = makeSpyPool([
+      {
+        client_id: 'oauthc_1',
+        client_name: 'Claude.ai',
+        redirect_uris: ['https://claude.ai/cb'],
+        authorized_at: new Date(),
+        last_used_at: null,
+      },
+    ]);
+    const impl = implWithPool(pool);
+    if (!impl) return;
+    const res: any = await new Promise((resolve, reject) => {
+      impl.listAuthorizedApps(makeCall({ userId: 'u1' }), (err: any, r: any) =>
+        err ? reject(err) : resolve(r),
+      );
+    });
+    assert.strictEqual(res.apps[0].clientId, 'oauthc_1');
+    assert.strictEqual(res.apps[0].clientName, 'Claude.ai');
+    assert.strictEqual(res.apps[0].lastUsedAt, undefined);
+    // No token/secret field ever leaks into the response (FR-7).
+    assert.ok(!('tokenHash' in res.apps[0]));
+    // Per-user scoped + joins the client metadata table.
+    assert.ok(pool.queries.some((q) => /JOIN identity\.oauth_clients/.test(q)));
+    assert.ok(pool.queries.some((q) => /WHERE rt\.user_id/.test(q)));
+  });
+});
+
+describe('revokeAuthorizedApp', () => {
+  it('rejects when userId is missing', async () => {
+    const impl = makeImpl();
+    if (!impl) return;
+    await new Promise<void>((resolve) => {
+      impl.revokeAuthorizedApp(makeCall({ userId: '', clientId: 'oauthc_1' }), (err: any) => {
+        assert.strictEqual(err.code, 3);
+        resolve();
+      });
+    });
+  });
+
+  it('rejects when clientId is missing', async () => {
+    const impl = makeImpl();
+    if (!impl) return;
+    await new Promise<void>((resolve) => {
+      impl.revokeAuthorizedApp(makeCall({ userId: 'u1', clientId: '' }), (err: any) => {
+        assert.strictEqual(err.code, 3);
+        resolve();
+      });
+    });
+  });
+
+  it('revokes scoped by both user_id AND client_id (IDOR-safe)', async () => {
+    const pool = makeSpyPool([]);
+    const impl = implWithPool(pool);
+    if (!impl) return;
+    const res: any = await new Promise((resolve, reject) => {
+      impl.revokeAuthorizedApp(makeCall({ userId: 'u1', clientId: 'oauthc_1' }), (err: any, r: any) =>
+        err ? reject(err) : resolve(r),
+      );
+    });
+    assert.strictEqual(res.success, true);
+    assert.ok(pool.queries.some((q) => /WHERE user_id = \$1 AND client_id = \$2/.test(q)));
   });
 });

@@ -99,6 +99,16 @@ class IdentityServiceStub(object):
                 request_serializer=identity_dot_v1_dot_identity__pb2.RefreshOAuthTokenRequest.SerializeToString,
                 response_deserializer=identity_dot_v1_dot_identity__pb2.OAuthTokenResponse.FromString,
                 _registered_method=True)
+        self.ListAuthorizedApps = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/ListAuthorizedApps',
+                request_serializer=identity_dot_v1_dot_identity__pb2.ListAuthorizedAppsRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.ListAuthorizedAppsResponse.FromString,
+                _registered_method=True)
+        self.RevokeAuthorizedApp = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/RevokeAuthorizedApp',
+                request_serializer=identity_dot_v1_dot_identity__pb2.RevokeAuthorizedAppRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.RevokeAuthorizedAppResponse.FromString,
+                _registered_method=True)
 
 
 class IdentityServiceServicer(object):
@@ -184,6 +194,20 @@ class IdentityServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListAuthorizedApps(self, request, context):
+        """Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+        calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RevokeAuthorizedApp(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_IdentityServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -251,6 +275,16 @@ def add_IdentityServiceServicer_to_server(servicer, server):
                     servicer.RefreshOAuthToken,
                     request_deserializer=identity_dot_v1_dot_identity__pb2.RefreshOAuthTokenRequest.FromString,
                     response_serializer=identity_dot_v1_dot_identity__pb2.OAuthTokenResponse.SerializeToString,
+            ),
+            'ListAuthorizedApps': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListAuthorizedApps,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.ListAuthorizedAppsRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.ListAuthorizedAppsResponse.SerializeToString,
+            ),
+            'RevokeAuthorizedApp': grpc.unary_unary_rpc_method_handler(
+                    servicer.RevokeAuthorizedApp,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.RevokeAuthorizedAppRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.RevokeAuthorizedAppResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -604,6 +638,60 @@ class IdentityService(object):
             '/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken',
             identity_dot_v1_dot_identity__pb2.RefreshOAuthTokenRequest.SerializeToString,
             identity_dot_v1_dot_identity__pb2.OAuthTokenResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListAuthorizedApps(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/ListAuthorizedApps',
+            identity_dot_v1_dot_identity__pb2.ListAuthorizedAppsRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.ListAuthorizedAppsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RevokeAuthorizedApp(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/RevokeAuthorizedApp',
+            identity_dot_v1_dot_identity__pb2.RevokeAuthorizedAppRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.RevokeAuthorizedAppResponse.FromString,
             options,
             channel_credentials,
             insecure,

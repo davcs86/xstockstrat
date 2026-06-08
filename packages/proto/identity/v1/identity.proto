@@ -23,6 +23,11 @@ service IdentityService {
   rpc IssueAuthCode(IssueAuthCodeRequest) returns (IssueAuthCodeResponse);
   rpc ExchangeAuthCode(ExchangeAuthCodeRequest) returns (OAuthTokenResponse);
   rpc RefreshOAuthToken(RefreshOAuthTokenRequest) returns (OAuthTokenResponse);
+
+  // Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+  // calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+  rpc ListAuthorizedApps(ListAuthorizedAppsRequest) returns (ListAuthorizedAppsResponse);
+  rpc RevokeAuthorizedApp(RevokeAuthorizedAppRequest) returns (RevokeAuthorizedAppResponse);
 }
 
 message AuthenticateUserRequest {
@@ -118,3 +123,18 @@ message RefreshOAuthTokenRequest {
   string refresh_token = 1;
   string resource = 2;
 }
+
+// ── Authorized-apps management (feature 051) ─────────────────────────────────
+message AuthorizedApp {
+  string client_id = 1;
+  string client_name = 2;
+  google.protobuf.Timestamp authorized_at = 3;
+  // Best-effort "last refreshed" time (bumped on refresh-token rotation), NOT per-request
+  // access. May be unset. The UI labels this "Last refreshed", not "Last used".
+  google.protobuf.Timestamp last_used_at = 4;
+  repeated string redirect_uris = 5;
+}
+message ListAuthorizedAppsRequest { string user_id = 1; }
+message ListAuthorizedAppsResponse { repeated AuthorizedApp apps = 1; }
+message RevokeAuthorizedAppRequest { string user_id = 1; string client_id = 2; }
+message RevokeAuthorizedAppResponse { bool success = 1; }
