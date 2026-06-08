@@ -1,0 +1,144 @@
+# Context: formula-parameters
+
+**Feature**: `docs/roadmap/features/052-formula-parameters/feature.md`
+**Product Spec**: `docs/roadmap/features/052-formula-parameters/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/052-formula-parameters/implementation-spec.md`
+
+---
+
+## Session 2026-06-08 — sdd-story
+
+- Created feature.md (status: draft), product-spec.md, context.md from user story:
+  "allow parameters into formulas — UI (manage formulas, manage strategies), agent
+  (manage formulas, manage strategies), and the indicators engine."
+- Codebase discovery (Explore agent) established the current state:
+  - Formula model: `indicators.formulas` table (`services/xstockstrat-indicators/migrations/001_formulas.up.sql`)
+    with advisory-only `input_schema JSONB` (`map<string,string>` name → type-name); no defaults,
+    no validation, no enforcement.
+  - Proto: `packages/proto/indicators/v1/indicators.proto` — `FormulaDefinition.input_schema`
+    (`map<string,string>`); `ExecuteFormulaRequest.input_data` is a `google.protobuf.Struct`.
+  - Sandbox: `services/xstockstrat-indicators/app/services/sandbox.py` — formula reads `data` dict,
+    assigns `result`; no parameter validation.
+  - UI: formula workspace at `services/xstockstrat-ui/src/components/insights/FormulaWorkspace.tsx`
+    + hooks `src/hooks/useFormulas.ts`; strategy authoring in `StrategyWizard.tsx` /
+    `ComponentEditor.tsx` (free-form `params` key/value editor for `CUSTOM_FORMULA` components).
+  - Agent: `manage_formula` / `manage_strategy` MCP tools in `services/xstockstrat-agent/app/tools.py`.
+  - Strategy linkage: `packages/proto/analysis/v1/analysis.proto` `StrategyComponent`
+    (`formula_id` + `map<string,double> params`); evaluator at
+    `services/xstockstrat-analysis/app/services/evaluator.py` (shared by RunBacktest + live alerts).
+- Scoping decisions captured in product-spec: structured typed parameters (int/float/bool/string),
+  additive/non-breaking proto path (new `FormulaParameter` message + `repeated parameters`, keep
+  legacy `input_schema`), new `parameters` JSONB column via a new indicators migration, engine-side
+  validation/defaulting at `ExecuteFormula`, dynamic parameter forms in formula + strategy editors.
+- Open questions recorded for impl-spec: proto typing of default/min/max, validation-error surface
+  (SandboxExitReason vs dedicated field), strategy-component param value type, parameter-name
+  validation, and an optional parameter-count cap.
+
+### Decision (2026-06-08, user) — separate parameters from series data
+
+- User: "I don't want to mix them. OHLCV data can stay in input_data, and use a different object for
+  parameters (eg. input_params)."
+- Confirmed current state: today OHLCV series and scalar knobs are conflated in the single
+  `ExecuteFormulaRequest.input_data` Struct → `data` dict; `input_schema` flatly lists both and is
+  never read at execution (`sandbox.py` ignores it).
+- Locked design:
+  - OHLCV/series stay in `input_data` → `data` (unchanged).
+  - Parameter *values* travel in a NEW `ExecuteFormulaRequest.input_params` Struct (field `= 7`,
+    additive/non-breaking) and are exposed to the formula as a SEPARATE `params` variable — NOT
+    merged into `data`. New formulas read `params["period"]`.
+  - Legacy formulas that stuff scalars into `input_data` keep reading `data[...]` unchanged.
+  - Param/OHLCV name collisions are now impossible (separate namespaces); that open question is
+    downgraded to "validate param names as Python identifiers" only.
+- Updated product-spec.md: added "Relationship to Existing Inputs" section; revised FR-2, FR-3, FR-4,
+  FR-7, FR-8, the proto-changes list (added `input_params` field), AC #2, and the name-collision open
+  question.
+
+## Session 2026-06-08 — sdd-review product-spec
+
+- Product spec reviewed. Result: PASS after resolving open questions. Status: draft → spec-ready.
+- Spec criteria: 8/9 ✓ on first pass; criterion 9 (open questions) initially ✗ — 5 unresolved
+  `- [ ]` items. Resolved via user decisions below, then re-evaluated to ✓.
+- Trading-domain checks: skipped (non-trading feature).
+- Overlap findings (all advisory ⚠ — no FAIL-level conflicts):
+  - `020-order-snapshots-pnl-patterns` (draft) also edits `analysis.proto` — only a risk if 052
+    touched StrategyComponent; it does not (see decision below). No collision.
+  - `022-signal-time-decay`, `032-walk-forward-backtesting` (draft) also modify `xstockstrat-analysis`
+    (evaluator) — coordinate merge order; no shared symbols.
+  - `010-agent-scheduler` (draft) also modifies `xstockstrat-agent` — different tools; no collision.
+- Decisions locked (user, during review) — binding for /sdd-spec:
+  1. Strategy CUSTOM_FORMULA param values: **numeric only** — keep `StrategyComponent.params`
+     (`map<string,double>`); **no `analysis.proto` change**. bool/string params usable only in
+     standalone formula runs (out of scope for strategy components).
+  2. Proto typing: `FormulaParameter.default_value` = `google.protobuf.Value`; `min`/`max` = optional
+     `double`.
+  3. Validation-error surface: **dedicated structured error field** on `ExecuteFormulaResponse`
+     (`repeated { name, reason }`); `SandboxExitReason` NOT extended; validation runs before sandbox.
+  4. Parameter names: validated as **Python identifiers** at registration.
+  5. Parameter count: **soft cap in engine (target 32), no new config key**.
+- Updated product-spec.md accordingly: added "Resolved Decisions" section, emptied "Open Questions",
+  revised FR-2, FR-5, proto-changes (dedicated error field; analysis.proto = no change), and Out of
+  Scope (bool/string not settable per strategy component).
+
+## Session 2026-06-08 — sdd-spec
+
+- Generated implementation-spec.md with 14 steps. Status → implementation-ready.
+- Assigned proto field numbers (verified against current `indicators.proto`):
+  - `ExecuteFormulaRequest.input_params = 7` (after `memory_bytes_override = 6`)
+  - `ExecuteFormulaResponse.parameter_errors = 9` (after `exit_reason = 8`)
+  - `FormulaDefinition.parameters = 10` (after `input_schema = 9`)
+  - `RegisterFormulaRequest.parameters = 7` (after `author = 6`)
+  - `UpdateFormulaRequest.parameters = 7` (after `is_public = 6`)
+  - New enum `ParameterType` + messages `FormulaParameter`, `ParameterValidationError`.
+- Key codebase findings:
+  - Last indicators migration is `001_formulas` → new migration is `002_formula_parameters`
+    (adds `parameters JSONB NOT NULL DEFAULT '[]'`; existing `input_schema` uses `'{}'`).
+  - Sandbox `execute_formula` (sandbox.py L146) and `_SANDBOX_WRAPPER` (L95–143) load `data`
+    via `json.loads({input_json!r})` into `_formula_globals` (L136); `params` is injected the
+    same way as a SEPARATE global (not merged into `data`) — Step 6.
+  - Servicer `ExecuteFormula` (servicer.py L70–137) calls the sandbox at L107; validation must run
+    before that and short-circuit to `parameter_errors` on failure (FR-2). `RegisterFormula`
+    (L150) / `UpdateFormula` (L229) / `_row_to_formula` (L274) all need the `parameters` field.
+  - New `app/services/parameters.py` is created from scratch (no existing validation module);
+    32-param soft cap + Python-identifier name check live there (no new config key).
+  - Analysis evaluator CUSTOM_FORMULA branch (evaluator.py L117–133) already forwards
+    `metadata=self._meta`; only adds `input_params` from numeric `comp.params` — no new gRPC
+    client, so header propagation is reused (§5c satisfied). No `analysis.proto` change.
+  - Agent: `manage_strategy` already carries numeric `StrategyComponent.params` (client.py L207);
+    only `manage_formula` (client.py L263 / tools.py L284) needs `parameters` added.
+  - UI: `FormulaWorkspace.tsx`, `useFormulas.ts`, `ComponentEditor.tsx` need parameter forms;
+    new `ParameterEditor.tsx`; BFF route `insights/api/[...connect]` is unchanged (new fields ride
+    existing RPCs). No UI coverage gate — Playwright e2e under `e2e/` applies.
+- Note: `scripts/buf-gen.sh` runs `buf breaking` against `main-dev`; product spec / AC #7 require
+  passing against `main` — Step 1 verification includes an explicit `--against main` check.
+
+## Session 2026-06-08 — sdd-spec (re-run)
+
+- Re-ran /sdd-spec; feature was already `implementation-ready` with a 14-step spec. Re-verified
+  every load-bearing codebase reference against the current working tree — no drift detected, so
+  the spec content is unchanged (Created date preserved; added a Regenerated marker + a
+  status-history "re-run" row).
+- Evidence re-confirmed (all still accurate):
+  - `packages/proto/indicators/v1/indicators.proto`: `ExecuteFormulaRequest` ends at
+    `memory_bytes_override = 6` (L69); `ExecuteFormulaResponse` ends at `exit_reason = 8` (L80);
+    `FormulaDefinition.input_schema = 9` (L101); `RegisterFormulaRequest.author = 6` (L123);
+    `UpdateFormulaRequest.is_public = 6` (L153). Assigned field numbers (input_params=7,
+    parameter_errors=9, parameters=10/7/7) remain free and additive.
+  - Indicators migrations: last is `001_formulas` → new is `002_formula_parameters` (confirmed via
+    `ls migrations/`).
+  - `formulas_repository.py`: `_to_dict` L16-26, `create` INSERT (7 positional args today; add
+    `parameters` as `$8::jsonb`) L35-60, `update` SET clause L95-116 — match Step 4.
+  - `sandbox.py`: `data = json.loads({input_json!r})` L133, `_formula_globals` L136, `.format(...)`
+    L159-165 — match Step 6 (`params` injected as a separate global).
+  - `servicer.py`: `ExecuteFormula` L70-137 (sandbox call L107), `RegisterFormula` L150-195,
+    `UpdateFormula` L229-252, `_row_to_formula` L274-296 — match Step 7.
+  - `evaluator.py`: CUSTOM_FORMULA branch L117-133 forwards `metadata=self._meta`; numeric
+    `comp.params` reused; no new gRPC client — match Step 9 (header propagation reused, §5c).
+  - Agent `client.py` `manage_formula` L263-308 / `tools.py` `manage_formula` L284-317; strategy
+    path already carries numeric `StrategyComponent.params` (client.py L207) — match Step 11.
+  - UI: `FormulaWorkspace.tsx`, `useFormulas.ts` (register passes `inputSchema` not `parameters`
+    L39; execute has no `inputParams` L83-87), `ComponentEditor.tsx`, new/edit pages, and the BFF
+    `insights/api/[...connect]` route all exist; `ParameterEditor.tsx` correctly absent (create) —
+    match Step 13.
+  - Files correctly marked "create" (verified absent): `app/services/parameters.py`,
+    `tests/test_parameters.py`, `ParameterEditor.tsx`. All other referenced files exist.
+- Reviewers snapshot in feature.md is unchanged (reviewer-registry.md unchanged).
