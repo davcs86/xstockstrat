@@ -22,6 +22,7 @@ cannot open its final integration PR to `main-dev` until the feature in the
 | `strategy-creation-flow` | `formula-management-ui` | Consumes `ListFormulas` RPC from `xstockstrat-indicators` (feature 003); formula picker in the component editor depends on this RPC existing in generated stubs | Yes |
 | `strategy-creation-flow` | `strategy-engine` | Consumes `ManageStrategy`, `GetStrategy`, `ListStrategyDefinitions`, and `SetStrategyLive` RPCs from `xstockstrat-analysis` (feature 047); all strategy authoring and live toggle RPCs must exist before the UI can call them | Yes |
 | `strategy-creation-flow` | `live-strategy-alert-engine` | FR-5 live evaluation toggle calls `SetStrategyLive` and reads `live_enabled` column on `analysis.strategies` — both introduced by feature 048 | Yes |
+| `auth2-authorized-apps-ui` | `unify-admin-auth-gates` | Extends 049's OAuth backend (`oauth_clients`/`refresh_tokens` schema, `AGENT_PUBLIC_URL`); 049 shipped the OAuth grant flow + `003_oauth` this feature builds on | Yes |
 
 ---
 
