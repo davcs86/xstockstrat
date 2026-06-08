@@ -72,6 +72,12 @@ const (
 	// IdentityServiceRefreshOAuthTokenProcedure is the fully-qualified name of the IdentityService's
 	// RefreshOAuthToken RPC.
 	IdentityServiceRefreshOAuthTokenProcedure = "/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken"
+	// IdentityServiceListAuthorizedAppsProcedure is the fully-qualified name of the IdentityService's
+	// ListAuthorizedApps RPC.
+	IdentityServiceListAuthorizedAppsProcedure = "/xstockstrat.identity.v1.IdentityService/ListAuthorizedApps"
+	// IdentityServiceRevokeAuthorizedAppProcedure is the fully-qualified name of the IdentityService's
+	// RevokeAuthorizedApp RPC.
+	IdentityServiceRevokeAuthorizedAppProcedure = "/xstockstrat.identity.v1.IdentityService/RevokeAuthorizedApp"
 )
 
 // IdentityServiceClient is a client for the xstockstrat.identity.v1.IdentityService service.
@@ -91,6 +97,10 @@ type IdentityServiceClient interface {
 	IssueAuthCode(context.Context, *connect.Request[v1.IssueAuthCodeRequest]) (*connect.Response[v1.IssueAuthCodeResponse], error)
 	ExchangeAuthCode(context.Context, *connect.Request[v1.ExchangeAuthCodeRequest]) (*connect.Response[v1.OAuthTokenResponse], error)
 	RefreshOAuthToken(context.Context, *connect.Request[v1.RefreshOAuthTokenRequest]) (*connect.Response[v1.OAuthTokenResponse], error)
+	// Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+	// calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+	ListAuthorizedApps(context.Context, *connect.Request[v1.ListAuthorizedAppsRequest]) (*connect.Response[v1.ListAuthorizedAppsResponse], error)
+	RevokeAuthorizedApp(context.Context, *connect.Request[v1.RevokeAuthorizedAppRequest]) (*connect.Response[v1.RevokeAuthorizedAppResponse], error)
 }
 
 // NewIdentityServiceClient constructs a client for the xstockstrat.identity.v1.IdentityService
@@ -182,6 +192,18 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(identityServiceMethods.ByName("RefreshOAuthToken")),
 			connect.WithClientOptions(opts...),
 		),
+		listAuthorizedApps: connect.NewClient[v1.ListAuthorizedAppsRequest, v1.ListAuthorizedAppsResponse](
+			httpClient,
+			baseURL+IdentityServiceListAuthorizedAppsProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("ListAuthorizedApps")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeAuthorizedApp: connect.NewClient[v1.RevokeAuthorizedAppRequest, v1.RevokeAuthorizedAppResponse](
+			httpClient,
+			baseURL+IdentityServiceRevokeAuthorizedAppProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("RevokeAuthorizedApp")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -200,6 +222,8 @@ type identityServiceClient struct {
 	issueAuthCode       *connect.Client[v1.IssueAuthCodeRequest, v1.IssueAuthCodeResponse]
 	exchangeAuthCode    *connect.Client[v1.ExchangeAuthCodeRequest, v1.OAuthTokenResponse]
 	refreshOAuthToken   *connect.Client[v1.RefreshOAuthTokenRequest, v1.OAuthTokenResponse]
+	listAuthorizedApps  *connect.Client[v1.ListAuthorizedAppsRequest, v1.ListAuthorizedAppsResponse]
+	revokeAuthorizedApp *connect.Client[v1.RevokeAuthorizedAppRequest, v1.RevokeAuthorizedAppResponse]
 }
 
 // AuthenticateUser calls xstockstrat.identity.v1.IdentityService.AuthenticateUser.
@@ -267,6 +291,16 @@ func (c *identityServiceClient) RefreshOAuthToken(ctx context.Context, req *conn
 	return c.refreshOAuthToken.CallUnary(ctx, req)
 }
 
+// ListAuthorizedApps calls xstockstrat.identity.v1.IdentityService.ListAuthorizedApps.
+func (c *identityServiceClient) ListAuthorizedApps(ctx context.Context, req *connect.Request[v1.ListAuthorizedAppsRequest]) (*connect.Response[v1.ListAuthorizedAppsResponse], error) {
+	return c.listAuthorizedApps.CallUnary(ctx, req)
+}
+
+// RevokeAuthorizedApp calls xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp.
+func (c *identityServiceClient) RevokeAuthorizedApp(ctx context.Context, req *connect.Request[v1.RevokeAuthorizedAppRequest]) (*connect.Response[v1.RevokeAuthorizedAppResponse], error) {
+	return c.revokeAuthorizedApp.CallUnary(ctx, req)
+}
+
 // IdentityServiceHandler is an implementation of the xstockstrat.identity.v1.IdentityService
 // service.
 type IdentityServiceHandler interface {
@@ -285,6 +319,10 @@ type IdentityServiceHandler interface {
 	IssueAuthCode(context.Context, *connect.Request[v1.IssueAuthCodeRequest]) (*connect.Response[v1.IssueAuthCodeResponse], error)
 	ExchangeAuthCode(context.Context, *connect.Request[v1.ExchangeAuthCodeRequest]) (*connect.Response[v1.OAuthTokenResponse], error)
 	RefreshOAuthToken(context.Context, *connect.Request[v1.RefreshOAuthTokenRequest]) (*connect.Response[v1.OAuthTokenResponse], error)
+	// Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+	// calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+	ListAuthorizedApps(context.Context, *connect.Request[v1.ListAuthorizedAppsRequest]) (*connect.Response[v1.ListAuthorizedAppsResponse], error)
+	RevokeAuthorizedApp(context.Context, *connect.Request[v1.RevokeAuthorizedAppRequest]) (*connect.Response[v1.RevokeAuthorizedAppResponse], error)
 }
 
 // NewIdentityServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -372,6 +410,18 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		connect.WithSchema(identityServiceMethods.ByName("RefreshOAuthToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	identityServiceListAuthorizedAppsHandler := connect.NewUnaryHandler(
+		IdentityServiceListAuthorizedAppsProcedure,
+		svc.ListAuthorizedApps,
+		connect.WithSchema(identityServiceMethods.ByName("ListAuthorizedApps")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceRevokeAuthorizedAppHandler := connect.NewUnaryHandler(
+		IdentityServiceRevokeAuthorizedAppProcedure,
+		svc.RevokeAuthorizedApp,
+		connect.WithSchema(identityServiceMethods.ByName("RevokeAuthorizedApp")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.identity.v1.IdentityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IdentityServiceAuthenticateUserProcedure:
@@ -400,6 +450,10 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 			identityServiceExchangeAuthCodeHandler.ServeHTTP(w, r)
 		case IdentityServiceRefreshOAuthTokenProcedure:
 			identityServiceRefreshOAuthTokenHandler.ServeHTTP(w, r)
+		case IdentityServiceListAuthorizedAppsProcedure:
+			identityServiceListAuthorizedAppsHandler.ServeHTTP(w, r)
+		case IdentityServiceRevokeAuthorizedAppProcedure:
+			identityServiceRevokeAuthorizedAppHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -459,4 +513,12 @@ func (UnimplementedIdentityServiceHandler) ExchangeAuthCode(context.Context, *co
 
 func (UnimplementedIdentityServiceHandler) RefreshOAuthToken(context.Context, *connect.Request[v1.RefreshOAuthTokenRequest]) (*connect.Response[v1.OAuthTokenResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.RefreshOAuthToken is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) ListAuthorizedApps(context.Context, *connect.Request[v1.ListAuthorizedAppsRequest]) (*connect.Response[v1.ListAuthorizedAppsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.ListAuthorizedApps is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) RevokeAuthorizedApp(context.Context, *connect.Request[v1.RevokeAuthorizedAppRequest]) (*connect.Response[v1.RevokeAuthorizedAppResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp is not implemented"))
 }

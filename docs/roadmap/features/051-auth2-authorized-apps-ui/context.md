@@ -166,3 +166,111 @@
   reports no breaking changes.
 - Files modified: `packages/proto/identity/v1/identity.proto`
 - Deviations: proto toolchain installed on host (buf 1.69.0) — see Deviation Log.
+
+### Step 2 — proto-gen: Regenerate stubs (Go / Python / TS) [done]
+- Installed CI-pinned toolchain (Go plugins protoc-gen-go@v1.36.11 / go-grpc@v1.6.2 /
+  connect-go@v1.19.2, grpcio-tools==1.80.0, pnpm --frozen-lockfile), then ran `./scripts/buf-gen.sh`.
+  Regenerated Go/Python/TS stubs. `git diff --stat packages/proto/gen/` confined to `identity/v1`
+  (no other service changed); a second `buf generate` produced no further diff (idempotent, mirrors
+  CI stale-stub check). New RPCs present in both ts-proto `IdentityServiceService` and protobuf-es
+  `IdentityService`.
+- Files modified: `packages/proto/gen/{go,python,ts}/identity/v1/*` (12 files)
+- Deviations: toolchain installed on host — see Steps 1–2 Deviation Log entry.
+
+### Step 3 — migration: Add client_id + last_used_at to refresh_tokens [done]
+- Created `004_refresh_token_client.up.sql` (ADD COLUMN client_id TEXT FK→oauth_clients ON DELETE
+  CASCADE, nullable = first-party session; ADD COLUMN last_used_at TIMESTAMPTZ; partial index
+  idx_refresh_user_client WHERE client_id IS NOT NULL) + matching `.down.sql` (reverse order).
+- Verified up+down on a throwaway local PG16 cluster (Docker/migrate unavailable) — columns+index
+  present after up, gone after down. See Deviation Log.
+- Files modified: `services/xstockstrat-identity/migrations/004_refresh_token_client.{up,down}.sql`
+- Deviations: DB verification via throwaway PG cluster — see Deviation Log.
+
+### Step 4 — service: client-tag OAuth refresh tokens + listAuthorizedApps/revokeAuthorizedApp [done]
+- `issueRefreshToken(userId, clientId?)` now inserts `client_id` (NULL for first-party callers,
+  left untouched). `exchangeAuthCode` passes the OAuth `clientId`; `refreshOAuthToken` selects
+  `rt.client_id`, bumps `last_used_at` on rotation, and carries `client_id` forward.
+- Added per-user `listAuthorizedApps` (JOIN oauth_clients, WHERE rt.user_id, non-sensitive fields
+  only) and IDOR-safe `revokeAuthorizedApp` (UPDATE ... WHERE user_id=$1 AND client_id=$2). No new
+  outbound gRPC call → header propagation N/A.
+- Verification: `pnpm run lint` exits 0 (warnings = file-wide pre-existing `any` convention; new
+  methods match it). Behavioral/coverage + 049 regression guard in Step 5.
+- Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`
+- Deviations: none.
+
+### Step 5 — test: unit tests for client-tagging + list/revoke [done]
+- Added `describe('listAuthorizedApps')` (missing-userId → code 3; happy path asserts clientId/
+  clientName/lastUsedAt undefined, no `tokenHash` leak, SQL JOINs oauth_clients + WHERE rt.user_id)
+  and `describe('revokeAuthorizedApp')` (missing userId/clientId → code 3; happy path success:true +
+  UPDATE scoped `WHERE user_id = $1 AND client_id = $2`). Extended the exchangeAuthCode PKCE
+  happy-path test to assert the INSERT into refresh_tokens carries client_id.
+- Verification: `pnpm run lint` exit 0; `pnpm run test:coverage` exit 0 — 23/23 pass including
+  049's exchangeAuthCode/refreshOAuthToken regression tests (Step 4's shared-path edits stay green).
+- Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`
+- Deviations: none.
+
+### Step 6 — service: UI BFF routes (list/revoke + agent-health + segment health) [done]
+- Created `accounts/api/authorized-apps/route.ts` (GET list / POST revoke; session via
+  getSessionFromRequest → 401; propagation headers like configUiBff.backendHeaders;
+  userId always from the verified session, never body — FR-3; Connect errors via
+  connectCodeToHttp; returns only non-sensitive AuthorizedApp fields — FR-7),
+  `accounts/api/agent-health/route.ts` (server-side probe of AGENT_PUBLIC_URL discovery endpoint,
+  returns {reachable,status} only, graceful 200 on failure — FR-10),
+  `accounts/api/health/route.ts` (mirrors config-ui health). middleware.ts unchanged — its
+  negative-lookahead matcher already gates `/accounts/*` (FR-8).
+- Verification: `pnpm run lint` (next lint) clean; `tsc --noEmit` no errors (regenerated client
+  methods resolve).
+- Files modified: `services/xstockstrat-ui/src/app/accounts/api/{authorized-apps,agent-health,health}/route.ts`
+- Deviations: none.
+
+### Step 7 — service: /accounts segment, My Authorized Apps page, nav [done]
+- PlatformHeader: added `'accounts'` to PlatformSegment + PLATFORM_NAV (KeyRound icon) + SEGMENT_HOME.
+- `accounts/layout.tsx` (server): reads `process.env.AGENT_PUBLIC_URL`, wraps children in
+  AgentUrlProvider + PlatformHeader(segment="accounts") + main. No react-query Providers (page uses
+  plain fetch).
+- `accounts/authorized-apps/page.tsx` (client): fetches list, renders table (App / Client ID /
+  Authorized / **Last refreshed** / Disconnect-with-confirm→refetch); "Connect a new app" section
+  with agent reachable/unreachable indicator (GET agent-health), read-only copy-to-clipboard MCP URL
+  (from useAgentUrl), and Claude.ai connector steps. No tokens/secrets rendered (FR-7).
+- **Blocker resolved (sequential §5.7):** AGENT_PUBLIC_URL server-boundary vs client page — user
+  chose **Option B** (layout reads env → client context provider). Added `accounts/AgentUrlContext.tsx`
+  (one file beyond the spec Files list). See Deviation Log.
+- Verification: `pnpm run lint` clean; `tsc --noEmit` no errors.
+- Files modified: `services/xstockstrat-ui/src/app/accounts/{layout.tsx,AgentUrlContext.tsx,authorized-apps/page.tsx}`,
+  `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx`
+- Deviations: added AgentUrlContext.tsx (Option B) — see Deviation Log.
+
+### Step 8 — service: Wire AGENT_PUBLIC_URL into the xstockstrat-ui deployment block [done]
+- Added AGENT_PUBLIC_URL to the xstockstrat-ui block in all three deploy files: docker-compose
+  (`http://xstockstrat-agent:9000` — compose service name), app.dev.yaml + app.yaml
+  (`value: ${APP_URL}/agent`, matching the agent block's DO route). No `_ENDPOINT` suffix (FR-9).
+- Verification: 2 occurrences per file (agent + UI blocks); all three YAML files parse.
+- Files modified: `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`
+- Deviations: none.
+
+### Step 9 — test: E2E for /accounts/authorized-apps (covers Steps 6+7) [done]
+- Added `e2e/accounts/authorized-apps.spec.ts` (5 tests: unauth→/auth/login redirect; authed table
+  render via real BFF→gRPC mock; Disconnect→confirm→row disappears via page.route stateful stub;
+  Connect section shows agent URL + copy control + reachable indicator; no token/secret in page).
+  Extended `e2e/mock-backend.ts` identityHandlers with listAuthorizedApps (one app, no secrets) +
+  revokeAuthorizedApp. Added AGENT_PUBLIC_URL to playwright webServer env (see Deviation Log).
+- Verification: lint clean + tsc --noEmit clean. `test:e2e` itself timed out (dev-server harness
+  420s) → sequential-mode fallback (tsc+lint). Spec runs in CI's Playwright job.
+- Files modified: `services/xstockstrat-ui/e2e/accounts/authorized-apps.spec.ts`,
+  `services/xstockstrat-ui/e2e/mock-backend.ts`, `services/xstockstrat-ui/playwright.config.ts`
+- Deviations: playwright env add + e2e fallback — see Deviation Log.
+
+### Step 10 — docs: identity CLAUDE.md update + merge-order note [done]
+- identity CLAUDE.md: method count 13 → 15 + appended ListAuthorizedApps/RevokeAuthorizedApp;
+  added a `004_refresh_token_client` line to Database/Migrations (client_id FK + last_used_at +
+  partial index; OAuth refresh tokens now client-tagged on mint/rotation).
+- merge-order.md: added a **resolved** row (auth2-authorized-apps-ui waits for unify-admin-auth-gates,
+  Resolved=Yes — 049 already launched).
+- Files modified: `services/xstockstrat-identity/CLAUDE.md`, `docs/roadmap/features/merge-order.md`
+- Deviations: none.
+
+## Session 2026-06-08 — sdd-execute (sequential) — feature complete
+- All 10 steps done; lifecycle → code-completed; impl-spec Status → complete.
+- Stacked per-step PRs: #623 (1) ← #624 (2) ← #625 (3) ← #626 (4) ← #627 (5) ← #628 (6) ←
+  #629 (7) ← #630 (8) ← #631 (9); Step 10 PR to follow, then integration PR (feature branch → main-dev).
+- Merge-order gate: 049 (unify-admin-auth-gates) already launched → Resolved=Yes → no block.
