@@ -1,6 +1,6 @@
 # Implementation Spec: auth2-authorized-apps-ui
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-07 (regenerated 2026-06-07 against merged 049)
 **Feature**: `docs/roadmap/features/051-auth2-authorized-apps-ui/feature.md`
 **Total Steps**: 10
@@ -555,7 +555,7 @@ No coverage threshold applies (Next.js segment) — the new E2E spec passing sat
 
 ### Step 10 — docs: identity CLAUDE.md update + merge-order note
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + `services/xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/CLAUDE.md` — modify (document new RPCs + refresh_tokens columns)
