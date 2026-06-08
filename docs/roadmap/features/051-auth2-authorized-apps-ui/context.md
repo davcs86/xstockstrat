@@ -274,3 +274,14 @@
 - Stacked per-step PRs: #623 (1) ← #624 (2) ← #625 (3) ← #626 (4) ← #627 (5) ← #628 (6) ←
   #629 (7) ← #630 (8) ← #631 (9); Step 10 PR to follow, then integration PR (feature branch → main-dev).
 - Merge-order gate: 049 (unify-admin-auth-gates) already launched → Resolved=Yes → no block.
+
+### Post-merge fix (2026-06-08) — empty MCP connector URL in production
+- Symptom (deployed dev app screenshot): /accounts/authorized-apps renders, "Agent status: Reachable",
+  but the "MCP connector URL" field is empty.
+- Root cause: `agent-health/route.ts` is a Route Handler (always dynamic) → reads runtime
+  AGENT_PUBLIC_URL → Reachable. `layout.tsx` (server component, no dynamic APIs) was statically
+  prerendered during `next build`, when AGENT_PUBLIC_URL is unset (it's a RUNTIME env, not a build
+  arg) → agentUrl baked in as '' → blank field at runtime. CI e2e didn't catch it because
+  playwright's webServer.env sets the var at BUILD time too.
+- Fix: `export const dynamic = 'force-dynamic'` in `accounts/layout.tsx` so the segment reads
+  process.env at request time. Lint + tsc clean. Lands in integration PR #634.
