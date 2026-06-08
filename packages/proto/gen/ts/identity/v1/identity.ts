@@ -150,6 +150,38 @@ export interface RefreshOAuthTokenRequest {
   resource: string;
 }
 
+/** ── Authorized-apps management (feature 051) ───────────────────────────────── */
+export interface AuthorizedApp {
+  clientId: string;
+  clientName: string;
+  authorizedAt?:
+    | Date
+    | undefined;
+  /**
+   * Best-effort "last refreshed" time (bumped on refresh-token rotation), NOT per-request
+   * access. May be unset. The UI labels this "Last refreshed", not "Last used".
+   */
+  lastUsedAt?: Date | undefined;
+  redirectUris: string[];
+}
+
+export interface ListAuthorizedAppsRequest {
+  userId: string;
+}
+
+export interface ListAuthorizedAppsResponse {
+  apps: AuthorizedApp[];
+}
+
+export interface RevokeAuthorizedAppRequest {
+  userId: string;
+  clientId: string;
+}
+
+export interface RevokeAuthorizedAppResponse {
+  success: boolean;
+}
+
 function createBaseAuthenticateUserRequest(): AuthenticateUserRequest {
   return { email: "", password: "" };
 }
@@ -2168,6 +2200,416 @@ export const RefreshOAuthTokenRequest: MessageFns<RefreshOAuthTokenRequest> = {
   },
 };
 
+function createBaseAuthorizedApp(): AuthorizedApp {
+  return { clientId: "", clientName: "", authorizedAt: undefined, lastUsedAt: undefined, redirectUris: [] };
+}
+
+export const AuthorizedApp: MessageFns<AuthorizedApp> = {
+  encode(message: AuthorizedApp, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.clientId !== "") {
+      writer.uint32(10).string(message.clientId);
+    }
+    if (message.clientName !== "") {
+      writer.uint32(18).string(message.clientName);
+    }
+    if (message.authorizedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.authorizedAt), writer.uint32(26).fork()).join();
+    }
+    if (message.lastUsedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.lastUsedAt), writer.uint32(34).fork()).join();
+    }
+    for (const v of message.redirectUris) {
+      writer.uint32(42).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AuthorizedApp {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAuthorizedApp();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.clientId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.clientName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.authorizedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.lastUsedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.redirectUris.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AuthorizedApp {
+    return {
+      clientId: isSet(object.clientId)
+        ? globalThis.String(object.clientId)
+        : isSet(object.client_id)
+        ? globalThis.String(object.client_id)
+        : "",
+      clientName: isSet(object.clientName)
+        ? globalThis.String(object.clientName)
+        : isSet(object.client_name)
+        ? globalThis.String(object.client_name)
+        : "",
+      authorizedAt: isSet(object.authorizedAt)
+        ? fromJsonTimestamp(object.authorizedAt)
+        : isSet(object.authorized_at)
+        ? fromJsonTimestamp(object.authorized_at)
+        : undefined,
+      lastUsedAt: isSet(object.lastUsedAt)
+        ? fromJsonTimestamp(object.lastUsedAt)
+        : isSet(object.last_used_at)
+        ? fromJsonTimestamp(object.last_used_at)
+        : undefined,
+      redirectUris: globalThis.Array.isArray(object?.redirectUris)
+        ? object.redirectUris.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.redirect_uris)
+        ? object.redirect_uris.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: AuthorizedApp): unknown {
+    const obj: any = {};
+    if (message.clientId !== "") {
+      obj.clientId = message.clientId;
+    }
+    if (message.clientName !== "") {
+      obj.clientName = message.clientName;
+    }
+    if (message.authorizedAt !== undefined) {
+      obj.authorizedAt = message.authorizedAt.toISOString();
+    }
+    if (message.lastUsedAt !== undefined) {
+      obj.lastUsedAt = message.lastUsedAt.toISOString();
+    }
+    if (message.redirectUris?.length) {
+      obj.redirectUris = message.redirectUris;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AuthorizedApp>, I>>(base?: I): AuthorizedApp {
+    return AuthorizedApp.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AuthorizedApp>, I>>(object: I): AuthorizedApp {
+    const message = createBaseAuthorizedApp();
+    message.clientId = object.clientId ?? "";
+    message.clientName = object.clientName ?? "";
+    message.authorizedAt = object.authorizedAt ?? undefined;
+    message.lastUsedAt = object.lastUsedAt ?? undefined;
+    message.redirectUris = object.redirectUris?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseListAuthorizedAppsRequest(): ListAuthorizedAppsRequest {
+  return { userId: "" };
+}
+
+export const ListAuthorizedAppsRequest: MessageFns<ListAuthorizedAppsRequest> = {
+  encode(message: ListAuthorizedAppsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListAuthorizedAppsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListAuthorizedAppsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListAuthorizedAppsRequest {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+    };
+  },
+
+  toJSON(message: ListAuthorizedAppsRequest): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListAuthorizedAppsRequest>, I>>(base?: I): ListAuthorizedAppsRequest {
+    return ListAuthorizedAppsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListAuthorizedAppsRequest>, I>>(object: I): ListAuthorizedAppsRequest {
+    const message = createBaseListAuthorizedAppsRequest();
+    message.userId = object.userId ?? "";
+    return message;
+  },
+};
+
+function createBaseListAuthorizedAppsResponse(): ListAuthorizedAppsResponse {
+  return { apps: [] };
+}
+
+export const ListAuthorizedAppsResponse: MessageFns<ListAuthorizedAppsResponse> = {
+  encode(message: ListAuthorizedAppsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.apps) {
+      AuthorizedApp.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListAuthorizedAppsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListAuthorizedAppsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.apps.push(AuthorizedApp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListAuthorizedAppsResponse {
+    return {
+      apps: globalThis.Array.isArray(object?.apps) ? object.apps.map((e: any) => AuthorizedApp.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: ListAuthorizedAppsResponse): unknown {
+    const obj: any = {};
+    if (message.apps?.length) {
+      obj.apps = message.apps.map((e) => AuthorizedApp.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListAuthorizedAppsResponse>, I>>(base?: I): ListAuthorizedAppsResponse {
+    return ListAuthorizedAppsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListAuthorizedAppsResponse>, I>>(object: I): ListAuthorizedAppsResponse {
+    const message = createBaseListAuthorizedAppsResponse();
+    message.apps = object.apps?.map((e) => AuthorizedApp.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseRevokeAuthorizedAppRequest(): RevokeAuthorizedAppRequest {
+  return { userId: "", clientId: "" };
+}
+
+export const RevokeAuthorizedAppRequest: MessageFns<RevokeAuthorizedAppRequest> = {
+  encode(message: RevokeAuthorizedAppRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    if (message.clientId !== "") {
+      writer.uint32(18).string(message.clientId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RevokeAuthorizedAppRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRevokeAuthorizedAppRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.clientId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RevokeAuthorizedAppRequest {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      clientId: isSet(object.clientId)
+        ? globalThis.String(object.clientId)
+        : isSet(object.client_id)
+        ? globalThis.String(object.client_id)
+        : "",
+    };
+  },
+
+  toJSON(message: RevokeAuthorizedAppRequest): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.clientId !== "") {
+      obj.clientId = message.clientId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RevokeAuthorizedAppRequest>, I>>(base?: I): RevokeAuthorizedAppRequest {
+    return RevokeAuthorizedAppRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RevokeAuthorizedAppRequest>, I>>(object: I): RevokeAuthorizedAppRequest {
+    const message = createBaseRevokeAuthorizedAppRequest();
+    message.userId = object.userId ?? "";
+    message.clientId = object.clientId ?? "";
+    return message;
+  },
+};
+
+function createBaseRevokeAuthorizedAppResponse(): RevokeAuthorizedAppResponse {
+  return { success: false };
+}
+
+export const RevokeAuthorizedAppResponse: MessageFns<RevokeAuthorizedAppResponse> = {
+  encode(message: RevokeAuthorizedAppResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.success !== false) {
+      writer.uint32(8).bool(message.success);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RevokeAuthorizedAppResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRevokeAuthorizedAppResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.success = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RevokeAuthorizedAppResponse {
+    return { success: isSet(object.success) ? globalThis.Boolean(object.success) : false };
+  },
+
+  toJSON(message: RevokeAuthorizedAppResponse): unknown {
+    const obj: any = {};
+    if (message.success !== false) {
+      obj.success = message.success;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RevokeAuthorizedAppResponse>, I>>(base?: I): RevokeAuthorizedAppResponse {
+    return RevokeAuthorizedAppResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RevokeAuthorizedAppResponse>, I>>(object: I): RevokeAuthorizedAppResponse {
+    const message = createBaseRevokeAuthorizedAppResponse();
+    message.success = object.success ?? false;
+    return message;
+  },
+};
+
 export type IdentityServiceService = typeof IdentityServiceService;
 export const IdentityServiceService = {
   authenticateUser: {
@@ -2299,6 +2741,32 @@ export const IdentityServiceService = {
     responseSerialize: (value: OAuthTokenResponse): Buffer => Buffer.from(OAuthTokenResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): OAuthTokenResponse => OAuthTokenResponse.decode(value),
   },
+  /**
+   * Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+   * calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+   */
+  listAuthorizedApps: {
+    path: "/xstockstrat.identity.v1.IdentityService/ListAuthorizedApps" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListAuthorizedAppsRequest): Buffer =>
+      Buffer.from(ListAuthorizedAppsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListAuthorizedAppsRequest => ListAuthorizedAppsRequest.decode(value),
+    responseSerialize: (value: ListAuthorizedAppsResponse): Buffer =>
+      Buffer.from(ListAuthorizedAppsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListAuthorizedAppsResponse => ListAuthorizedAppsResponse.decode(value),
+  },
+  revokeAuthorizedApp: {
+    path: "/xstockstrat.identity.v1.IdentityService/RevokeAuthorizedApp" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RevokeAuthorizedAppRequest): Buffer =>
+      Buffer.from(RevokeAuthorizedAppRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RevokeAuthorizedAppRequest => RevokeAuthorizedAppRequest.decode(value),
+    responseSerialize: (value: RevokeAuthorizedAppResponse): Buffer =>
+      Buffer.from(RevokeAuthorizedAppResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RevokeAuthorizedAppResponse => RevokeAuthorizedAppResponse.decode(value),
+  },
 } as const;
 
 export interface IdentityServiceServer extends UntypedServiceImplementation {
@@ -2319,6 +2787,12 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
   issueAuthCode: handleUnaryCall<IssueAuthCodeRequest, IssueAuthCodeResponse>;
   exchangeAuthCode: handleUnaryCall<ExchangeAuthCodeRequest, OAuthTokenResponse>;
   refreshOAuthToken: handleUnaryCall<RefreshOAuthTokenRequest, OAuthTokenResponse>;
+  /**
+   * Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+   * calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+   */
+  listAuthorizedApps: handleUnaryCall<ListAuthorizedAppsRequest, ListAuthorizedAppsResponse>;
+  revokeAuthorizedApp: handleUnaryCall<RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse>;
 }
 
 export interface IdentityServiceClient extends Client {
@@ -2520,6 +2994,40 @@ export interface IdentityServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: OAuthTokenResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+   * calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+   */
+  listAuthorizedApps(
+    request: ListAuthorizedAppsRequest,
+    callback: (error: ServiceError | null, response: ListAuthorizedAppsResponse) => void,
+  ): ClientUnaryCall;
+  listAuthorizedApps(
+    request: ListAuthorizedAppsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListAuthorizedAppsResponse) => void,
+  ): ClientUnaryCall;
+  listAuthorizedApps(
+    request: ListAuthorizedAppsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListAuthorizedAppsResponse) => void,
+  ): ClientUnaryCall;
+  revokeAuthorizedApp(
+    request: RevokeAuthorizedAppRequest,
+    callback: (error: ServiceError | null, response: RevokeAuthorizedAppResponse) => void,
+  ): ClientUnaryCall;
+  revokeAuthorizedApp(
+    request: RevokeAuthorizedAppRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: RevokeAuthorizedAppResponse) => void,
+  ): ClientUnaryCall;
+  revokeAuthorizedApp(
+    request: RevokeAuthorizedAppRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: RevokeAuthorizedAppResponse) => void,
   ): ClientUnaryCall;
 }
 
