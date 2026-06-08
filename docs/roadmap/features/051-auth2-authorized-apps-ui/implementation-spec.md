@@ -1,6 +1,6 @@
 # Implementation Spec: auth2-authorized-apps-ui
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-07 (regenerated 2026-06-07 against merged 049)
 **Feature**: `docs/roadmap/features/051-auth2-authorized-apps-ui/feature.md`
 **Total Steps**: 10
@@ -165,7 +165,7 @@ After running, `git diff packages/proto/gen/` must be empty on a second run (stu
 
 ### Step 3 — migration: Add client_id + last_used_at to refresh_tokens (link to oauth_clients)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/migrations/004_refresh_token_client.up.sql` — create
@@ -214,7 +214,7 @@ and the two columns exist after up and are gone after down.
 
 ### Step 4 — service: Tag OAuth refresh tokens with client_id; implement list/revoke (per-user scoped)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify
@@ -303,7 +303,7 @@ regression guard). Lint (`eslint src --ext .ts`) must pass with no errors.
 
 ### Step 5 — test: Unit tests for client-tagging + listAuthorizedApps / revokeAuthorizedApp
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
@@ -350,7 +350,7 @@ this is the regression guard for Step 4's edits to those shared paths (they must
 
 ### Step 6 — service: UI BFF routes (list/revoke + agent-health + segment health)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/api/authorized-apps/route.ts` — create (BFF: list + revoke via identity)
@@ -414,7 +414,7 @@ unauthenticated → 401; authenticated → the user's apps only; no token/secret
 
 ### Step 7 — service: UI /accounts segment, My Authorized Apps page, nav
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/layout.tsx` — create
@@ -469,7 +469,7 @@ appear in the rendered HTML.
 
 ### Step 8 — service: Wire AGENT_PUBLIC_URL into the xstockstrat-ui deployment block
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `docker-compose.yml` — modify (xstockstrat-ui `environment:` block)
@@ -514,7 +514,7 @@ block), with no `_ENDPOINT` suffix.
 
 ### Step 9 — test: E2E for /accounts/authorized-apps (covers Steps 6 + 7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/accounts/authorized-apps.spec.ts` — create
@@ -555,7 +555,7 @@ No coverage threshold applies (Next.js segment) — the new E2E spec passing sat
 
 ### Step 10 — docs: identity CLAUDE.md update + merge-order note
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + `services/xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/CLAUDE.md` — modify (document new RPCs + refresh_tokens columns)
@@ -593,6 +593,31 @@ present. No build/test command (docs only).
 
 _Populated by /sdd-execute as implementation proceeds._
 
+### Deviation: Step 9 — E2E verified via tsc+lint fallback; AGENT_PUBLIC_URL added to playwright env
+**Spec said**: Files = `e2e/accounts/authorized-apps.spec.ts`, `e2e/mock-backend.ts`; Verification =
+`pnpm run lint && pnpm run test:e2e`.
+**Actual**: (1) The `/accounts` layout reads `AGENT_PUBLIC_URL` server-side, so the dev server needs
+it set — added `AGENT_PUBLIC_URL: 'http://127.0.0.1:9099'` to `playwright.config.ts` `webServer.env`
+(one file beyond the Files list; the only place to give the harness's dev server the value).
+(2) `pnpm run test:e2e` could not complete here — the Playwright dev-server harness timed out after
+420s (cold `pnpm dev` build + browser launch in this container). Per the sequential-mode fallback
+("Playwright dev-server harness times out / browsers unavailable → `tsc --noEmit` + `lint`"), verified
+with `pnpm --filter xstockstrat-ui exec tsc --noEmit` (exit 0) + `pnpm run lint` (exit 0). The spec +
+mock stubs run in CI's Playwright job.
+**Reason**: test-infra necessity + sequential-mode CI-equivalent verification fallback.
+**Disposition**: CI-equivalent fallback.
+
+### Deviation: Step 7 — added a client AgentUrlContext file (server→client boundary for AGENT_PUBLIC_URL)
+**Spec said**: Files = `accounts/layout.tsx`, `accounts/authorized-apps/page.tsx`,
+`PlatformHeader.tsx`; "read `process.env.AGENT_PUBLIC_URL` in the layout/page server scope ... and
+pass it down — never `NEXT_PUBLIC_*`".
+**Actual**: The page is a client component (interactivity: disconnect, clipboard, health poll), so
+the server-resolved `AGENT_PUBLIC_URL` cannot be read in the same file. Per the user's choice
+(Option B at execute time), `layout.tsx` (server) reads the env and passes it through a small client
+context provider — a new file `accounts/AgentUrlContext.tsx` (`AgentUrlProvider` + `useAgentUrl`).
+This adds one file beyond the Files list. No `NEXT_PUBLIC_*` used; the value crosses the boundary as
+a prop. **Disposition**: accepted — user-approved (Option B) server-boundary pattern.
+
 ### Deviation: Steps 1–2 — proto toolchain installed on host (no Docker/buf preinstalled)
 **Spec said**: Run `buf lint && buf breaking` (Step 1) and `./scripts/buf-gen.sh` (Step 2).
 **Actual**: `buf` was not installed and the Docker codegen container could not run (Docker daemon
@@ -602,6 +627,17 @@ commands. `git diff packages/proto/gen/` after `buf-gen.sh` is limited to the in
 additions (mirrors CI's stale-stub check).
 **Reason**: Sequential-mode CI-equivalent verification fallback (skill REPO CONVENTIONS → "Proto
 codegen container blocked"). **Disposition**: CI-equivalent fallback.
+
+### Deviation: Step 3 — migration verified on a throwaway local PG cluster (no Docker/migrate)
+**Spec said**: Run `./scripts/db-migrate.sh` (requires DATABASE_URL + golang-migrate inside the
+db-migrator container).
+**Actual**: Docker was unavailable, `migrate` was not installed, and no DATABASE_URL was set.
+Initialized a throwaway PostgreSQL 16 cluster (the host's `/usr/lib/postgresql/16/bin`), applied
+identity migrations `000`→`003` then `004` up, asserted `client_id` + `last_used_at` columns and
+`idx_refresh_user_client` exist, then applied `004` down and asserted all three are gone (proves
+reversibility). Cluster torn down afterward.
+**Reason**: Sequential-mode CI-equivalent verification fallback (skill REPO CONVENTIONS → "migrate /
+DB unavailable"). **Disposition**: CI-equivalent fallback.
 
 - **(Re-spec, /sdd-spec 2026-06-07):** Feature 049 (hard dependency) is now **merged** into
   `main-dev` — the OAuth proto RPCs, `003_oauth` migration (`oauth_clients`/`oauth_auth_codes`),
