@@ -266,9 +266,12 @@ test.describe('Strategy authoring — UI', () => {
     await page.getByLabel('component kind').click();
     await page.getByRole('option', { name: 'Custom formula' }).click();
 
+    // Open the type-ahead formula combobox; both formulas listed.
+    await page.getByLabel('formula', { exact: true }).click();
     await expect(page.getByText('RSI Divergence')).toBeVisible();
     await expect(page.getByText('MACD Cross')).toBeVisible();
-    await page.getByPlaceholder('Search formulas…').fill('RSI');
+    // Typing filters the list by substring.
+    await page.getByLabel('formula', { exact: true }).fill('RSI');
     await expect(page.getByText('RSI Divergence')).toBeVisible();
     await expect(page.getByText('MACD Cross')).toHaveCount(0);
   });
