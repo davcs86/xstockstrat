@@ -1271,6 +1271,269 @@ func (x *RefreshOAuthTokenRequest) GetResource() string {
 	return ""
 }
 
+// ── Authorized-apps management (feature 051) ─────────────────────────────────
+type AuthorizedApp struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ClientId     string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientName   string                 `protobuf:"bytes,2,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
+	AuthorizedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=authorized_at,json=authorizedAt,proto3" json:"authorized_at,omitempty"`
+	// Best-effort "last refreshed" time (bumped on refresh-token rotation), NOT per-request
+	// access. May be unset. The UI labels this "Last refreshed", not "Last used".
+	LastUsedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_used_at,json=lastUsedAt,proto3" json:"last_used_at,omitempty"`
+	RedirectUris  []string               `protobuf:"bytes,5,rep,name=redirect_uris,json=redirectUris,proto3" json:"redirect_uris,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthorizedApp) Reset() {
+	*x = AuthorizedApp{}
+	mi := &file_identity_v1_identity_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthorizedApp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthorizedApp) ProtoMessage() {}
+
+func (x *AuthorizedApp) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthorizedApp.ProtoReflect.Descriptor instead.
+func (*AuthorizedApp) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *AuthorizedApp) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *AuthorizedApp) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+func (x *AuthorizedApp) GetAuthorizedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AuthorizedAt
+	}
+	return nil
+}
+
+func (x *AuthorizedApp) GetLastUsedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastUsedAt
+	}
+	return nil
+}
+
+func (x *AuthorizedApp) GetRedirectUris() []string {
+	if x != nil {
+		return x.RedirectUris
+	}
+	return nil
+}
+
+type ListAuthorizedAppsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAuthorizedAppsRequest) Reset() {
+	*x = ListAuthorizedAppsRequest{}
+	mi := &file_identity_v1_identity_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAuthorizedAppsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAuthorizedAppsRequest) ProtoMessage() {}
+
+func (x *ListAuthorizedAppsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAuthorizedAppsRequest.ProtoReflect.Descriptor instead.
+func (*ListAuthorizedAppsRequest) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ListAuthorizedAppsRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type ListAuthorizedAppsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Apps          []*AuthorizedApp       `protobuf:"bytes,1,rep,name=apps,proto3" json:"apps,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAuthorizedAppsResponse) Reset() {
+	*x = ListAuthorizedAppsResponse{}
+	mi := &file_identity_v1_identity_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAuthorizedAppsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAuthorizedAppsResponse) ProtoMessage() {}
+
+func (x *ListAuthorizedAppsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAuthorizedAppsResponse.ProtoReflect.Descriptor instead.
+func (*ListAuthorizedAppsResponse) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ListAuthorizedAppsResponse) GetApps() []*AuthorizedApp {
+	if x != nil {
+		return x.Apps
+	}
+	return nil
+}
+
+type RevokeAuthorizedAppRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	ClientId      string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeAuthorizedAppRequest) Reset() {
+	*x = RevokeAuthorizedAppRequest{}
+	mi := &file_identity_v1_identity_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeAuthorizedAppRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeAuthorizedAppRequest) ProtoMessage() {}
+
+func (x *RevokeAuthorizedAppRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeAuthorizedAppRequest.ProtoReflect.Descriptor instead.
+func (*RevokeAuthorizedAppRequest) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *RevokeAuthorizedAppRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *RevokeAuthorizedAppRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+type RevokeAuthorizedAppResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeAuthorizedAppResponse) Reset() {
+	*x = RevokeAuthorizedAppResponse{}
+	mi := &file_identity_v1_identity_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeAuthorizedAppResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeAuthorizedAppResponse) ProtoMessage() {}
+
+func (x *RevokeAuthorizedAppResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeAuthorizedAppResponse.ProtoReflect.Descriptor instead.
+func (*RevokeAuthorizedAppResponse) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *RevokeAuthorizedAppResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
 var File_identity_v1_identity_proto protoreflect.FileDescriptor
 
 const file_identity_v1_identity_proto_rawDesc = "" +
@@ -1365,7 +1628,24 @@ const file_identity_v1_identity_proto_rawDesc = "" +
 	"\rrefresh_token\x18\x04 \x01(\tR\frefreshToken\"[\n" +
 	"\x18RefreshOAuthTokenRequest\x12#\n" +
 	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\x12\x1a\n" +
-	"\bresource\x18\x02 \x01(\tR\bresource2\x8d\v\n" +
+	"\bresource\x18\x02 \x01(\tR\bresource\"\xf1\x01\n" +
+	"\rAuthorizedApp\x12\x1b\n" +
+	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
+	"\vclient_name\x18\x02 \x01(\tR\n" +
+	"clientName\x12?\n" +
+	"\rauthorized_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\fauthorizedAt\x12<\n" +
+	"\flast_used_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"lastUsedAt\x12#\n" +
+	"\rredirect_uris\x18\x05 \x03(\tR\fredirectUris\"4\n" +
+	"\x19ListAuthorizedAppsRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\"X\n" +
+	"\x1aListAuthorizedAppsResponse\x12:\n" +
+	"\x04apps\x18\x01 \x03(\v2&.xstockstrat.identity.v1.AuthorizedAppR\x04apps\"R\n" +
+	"\x1aRevokeAuthorizedAppRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\"7\n" +
+	"\x1bRevokeAuthorizedAppResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess2\x8f\r\n" +
 	"\x0fIdentityService\x12p\n" +
 	"\x10AuthenticateUser\x120.xstockstrat.identity.v1.AuthenticateUserRequest\x1a*.xstockstrat.identity.v1.AuthTokenResponse\x12d\n" +
 	"\rValidateToken\x12-.xstockstrat.identity.v1.ValidateTokenRequest\x1a$.xstockstrat.identity.v1.TokenClaims\x12h\n" +
@@ -1379,7 +1659,9 @@ const file_identity_v1_identity_proto_rawDesc = "" +
 	"\x0eGetOAuthClient\x12..xstockstrat.identity.v1.GetOAuthClientRequest\x1a$.xstockstrat.identity.v1.OAuthClient\x12n\n" +
 	"\rIssueAuthCode\x12-.xstockstrat.identity.v1.IssueAuthCodeRequest\x1a..xstockstrat.identity.v1.IssueAuthCodeResponse\x12q\n" +
 	"\x10ExchangeAuthCode\x120.xstockstrat.identity.v1.ExchangeAuthCodeRequest\x1a+.xstockstrat.identity.v1.OAuthTokenResponse\x12s\n" +
-	"\x11RefreshOAuthToken\x121.xstockstrat.identity.v1.RefreshOAuthTokenRequest\x1a+.xstockstrat.identity.v1.OAuthTokenResponseB@Z>github.com/xstockstrat/contracts/gen/go/identity/v1;identityv1b\x06proto3"
+	"\x11RefreshOAuthToken\x121.xstockstrat.identity.v1.RefreshOAuthTokenRequest\x1a+.xstockstrat.identity.v1.OAuthTokenResponse\x12}\n" +
+	"\x12ListAuthorizedApps\x122.xstockstrat.identity.v1.ListAuthorizedAppsRequest\x1a3.xstockstrat.identity.v1.ListAuthorizedAppsResponse\x12\x80\x01\n" +
+	"\x13RevokeAuthorizedApp\x123.xstockstrat.identity.v1.RevokeAuthorizedAppRequest\x1a4.xstockstrat.identity.v1.RevokeAuthorizedAppResponseB@Z>github.com/xstockstrat/contracts/gen/go/identity/v1;identityv1b\x06proto3"
 
 var (
 	file_identity_v1_identity_proto_rawDescOnce sync.Once
@@ -1393,73 +1675,85 @@ func file_identity_v1_identity_proto_rawDescGZIP() []byte {
 	return file_identity_v1_identity_proto_rawDescData
 }
 
-var file_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_identity_v1_identity_proto_goTypes = []any{
-	(*AuthenticateUserRequest)(nil),    // 0: xstockstrat.identity.v1.AuthenticateUserRequest
-	(*AuthTokenResponse)(nil),          // 1: xstockstrat.identity.v1.AuthTokenResponse
-	(*TokenClaims)(nil),                // 2: xstockstrat.identity.v1.TokenClaims
-	(*ValidateTokenRequest)(nil),       // 3: xstockstrat.identity.v1.ValidateTokenRequest
-	(*RefreshTokenRequest)(nil),        // 4: xstockstrat.identity.v1.RefreshTokenRequest
-	(*RevokeTokenRequest)(nil),         // 5: xstockstrat.identity.v1.RevokeTokenRequest
-	(*RevokeTokenResponse)(nil),        // 6: xstockstrat.identity.v1.RevokeTokenResponse
-	(*ApiKey)(nil),                     // 7: xstockstrat.identity.v1.ApiKey
-	(*CreateApiKeyRequest)(nil),        // 8: xstockstrat.identity.v1.CreateApiKeyRequest
-	(*ValidateApiKeyRequest)(nil),      // 9: xstockstrat.identity.v1.ValidateApiKeyRequest
-	(*ListApiKeysRequest)(nil),         // 10: xstockstrat.identity.v1.ListApiKeysRequest
-	(*ListApiKeysResponse)(nil),        // 11: xstockstrat.identity.v1.ListApiKeysResponse
-	(*RevokeApiKeyRequest)(nil),        // 12: xstockstrat.identity.v1.RevokeApiKeyRequest
-	(*RevokeApiKeyResponse)(nil),       // 13: xstockstrat.identity.v1.RevokeApiKeyResponse
-	(*OAuthClient)(nil),                // 14: xstockstrat.identity.v1.OAuthClient
-	(*RegisterOAuthClientRequest)(nil), // 15: xstockstrat.identity.v1.RegisterOAuthClientRequest
-	(*GetOAuthClientRequest)(nil),      // 16: xstockstrat.identity.v1.GetOAuthClientRequest
-	(*IssueAuthCodeRequest)(nil),       // 17: xstockstrat.identity.v1.IssueAuthCodeRequest
-	(*IssueAuthCodeResponse)(nil),      // 18: xstockstrat.identity.v1.IssueAuthCodeResponse
-	(*ExchangeAuthCodeRequest)(nil),    // 19: xstockstrat.identity.v1.ExchangeAuthCodeRequest
-	(*OAuthTokenResponse)(nil),         // 20: xstockstrat.identity.v1.OAuthTokenResponse
-	(*RefreshOAuthTokenRequest)(nil),   // 21: xstockstrat.identity.v1.RefreshOAuthTokenRequest
-	(*timestamppb.Timestamp)(nil),      // 22: google.protobuf.Timestamp
+	(*AuthenticateUserRequest)(nil),     // 0: xstockstrat.identity.v1.AuthenticateUserRequest
+	(*AuthTokenResponse)(nil),           // 1: xstockstrat.identity.v1.AuthTokenResponse
+	(*TokenClaims)(nil),                 // 2: xstockstrat.identity.v1.TokenClaims
+	(*ValidateTokenRequest)(nil),        // 3: xstockstrat.identity.v1.ValidateTokenRequest
+	(*RefreshTokenRequest)(nil),         // 4: xstockstrat.identity.v1.RefreshTokenRequest
+	(*RevokeTokenRequest)(nil),          // 5: xstockstrat.identity.v1.RevokeTokenRequest
+	(*RevokeTokenResponse)(nil),         // 6: xstockstrat.identity.v1.RevokeTokenResponse
+	(*ApiKey)(nil),                      // 7: xstockstrat.identity.v1.ApiKey
+	(*CreateApiKeyRequest)(nil),         // 8: xstockstrat.identity.v1.CreateApiKeyRequest
+	(*ValidateApiKeyRequest)(nil),       // 9: xstockstrat.identity.v1.ValidateApiKeyRequest
+	(*ListApiKeysRequest)(nil),          // 10: xstockstrat.identity.v1.ListApiKeysRequest
+	(*ListApiKeysResponse)(nil),         // 11: xstockstrat.identity.v1.ListApiKeysResponse
+	(*RevokeApiKeyRequest)(nil),         // 12: xstockstrat.identity.v1.RevokeApiKeyRequest
+	(*RevokeApiKeyResponse)(nil),        // 13: xstockstrat.identity.v1.RevokeApiKeyResponse
+	(*OAuthClient)(nil),                 // 14: xstockstrat.identity.v1.OAuthClient
+	(*RegisterOAuthClientRequest)(nil),  // 15: xstockstrat.identity.v1.RegisterOAuthClientRequest
+	(*GetOAuthClientRequest)(nil),       // 16: xstockstrat.identity.v1.GetOAuthClientRequest
+	(*IssueAuthCodeRequest)(nil),        // 17: xstockstrat.identity.v1.IssueAuthCodeRequest
+	(*IssueAuthCodeResponse)(nil),       // 18: xstockstrat.identity.v1.IssueAuthCodeResponse
+	(*ExchangeAuthCodeRequest)(nil),     // 19: xstockstrat.identity.v1.ExchangeAuthCodeRequest
+	(*OAuthTokenResponse)(nil),          // 20: xstockstrat.identity.v1.OAuthTokenResponse
+	(*RefreshOAuthTokenRequest)(nil),    // 21: xstockstrat.identity.v1.RefreshOAuthTokenRequest
+	(*AuthorizedApp)(nil),               // 22: xstockstrat.identity.v1.AuthorizedApp
+	(*ListAuthorizedAppsRequest)(nil),   // 23: xstockstrat.identity.v1.ListAuthorizedAppsRequest
+	(*ListAuthorizedAppsResponse)(nil),  // 24: xstockstrat.identity.v1.ListAuthorizedAppsResponse
+	(*RevokeAuthorizedAppRequest)(nil),  // 25: xstockstrat.identity.v1.RevokeAuthorizedAppRequest
+	(*RevokeAuthorizedAppResponse)(nil), // 26: xstockstrat.identity.v1.RevokeAuthorizedAppResponse
+	(*timestamppb.Timestamp)(nil),       // 27: google.protobuf.Timestamp
 }
 var file_identity_v1_identity_proto_depIdxs = []int32{
-	22, // 0: xstockstrat.identity.v1.AuthTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
+	27, // 0: xstockstrat.identity.v1.AuthTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
 	2,  // 1: xstockstrat.identity.v1.AuthTokenResponse.claims:type_name -> xstockstrat.identity.v1.TokenClaims
-	22, // 2: xstockstrat.identity.v1.TokenClaims.issued_at:type_name -> google.protobuf.Timestamp
-	22, // 3: xstockstrat.identity.v1.TokenClaims.expires_at:type_name -> google.protobuf.Timestamp
-	22, // 4: xstockstrat.identity.v1.ApiKey.created_at:type_name -> google.protobuf.Timestamp
-	22, // 5: xstockstrat.identity.v1.ApiKey.expires_at:type_name -> google.protobuf.Timestamp
-	22, // 6: xstockstrat.identity.v1.CreateApiKeyRequest.expires_at:type_name -> google.protobuf.Timestamp
+	27, // 2: xstockstrat.identity.v1.TokenClaims.issued_at:type_name -> google.protobuf.Timestamp
+	27, // 3: xstockstrat.identity.v1.TokenClaims.expires_at:type_name -> google.protobuf.Timestamp
+	27, // 4: xstockstrat.identity.v1.ApiKey.created_at:type_name -> google.protobuf.Timestamp
+	27, // 5: xstockstrat.identity.v1.ApiKey.expires_at:type_name -> google.protobuf.Timestamp
+	27, // 6: xstockstrat.identity.v1.CreateApiKeyRequest.expires_at:type_name -> google.protobuf.Timestamp
 	7,  // 7: xstockstrat.identity.v1.ListApiKeysResponse.keys:type_name -> xstockstrat.identity.v1.ApiKey
-	22, // 8: xstockstrat.identity.v1.OAuthClient.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 9: xstockstrat.identity.v1.IdentityService.AuthenticateUser:input_type -> xstockstrat.identity.v1.AuthenticateUserRequest
-	3,  // 10: xstockstrat.identity.v1.IdentityService.ValidateToken:input_type -> xstockstrat.identity.v1.ValidateTokenRequest
-	4,  // 11: xstockstrat.identity.v1.IdentityService.RefreshToken:input_type -> xstockstrat.identity.v1.RefreshTokenRequest
-	5,  // 12: xstockstrat.identity.v1.IdentityService.RevokeToken:input_type -> xstockstrat.identity.v1.RevokeTokenRequest
-	8,  // 13: xstockstrat.identity.v1.IdentityService.CreateApiKey:input_type -> xstockstrat.identity.v1.CreateApiKeyRequest
-	9,  // 14: xstockstrat.identity.v1.IdentityService.ValidateApiKey:input_type -> xstockstrat.identity.v1.ValidateApiKeyRequest
-	10, // 15: xstockstrat.identity.v1.IdentityService.ListApiKeys:input_type -> xstockstrat.identity.v1.ListApiKeysRequest
-	12, // 16: xstockstrat.identity.v1.IdentityService.RevokeApiKey:input_type -> xstockstrat.identity.v1.RevokeApiKeyRequest
-	15, // 17: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:input_type -> xstockstrat.identity.v1.RegisterOAuthClientRequest
-	16, // 18: xstockstrat.identity.v1.IdentityService.GetOAuthClient:input_type -> xstockstrat.identity.v1.GetOAuthClientRequest
-	17, // 19: xstockstrat.identity.v1.IdentityService.IssueAuthCode:input_type -> xstockstrat.identity.v1.IssueAuthCodeRequest
-	19, // 20: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:input_type -> xstockstrat.identity.v1.ExchangeAuthCodeRequest
-	21, // 21: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:input_type -> xstockstrat.identity.v1.RefreshOAuthTokenRequest
-	1,  // 22: xstockstrat.identity.v1.IdentityService.AuthenticateUser:output_type -> xstockstrat.identity.v1.AuthTokenResponse
-	2,  // 23: xstockstrat.identity.v1.IdentityService.ValidateToken:output_type -> xstockstrat.identity.v1.TokenClaims
-	1,  // 24: xstockstrat.identity.v1.IdentityService.RefreshToken:output_type -> xstockstrat.identity.v1.AuthTokenResponse
-	6,  // 25: xstockstrat.identity.v1.IdentityService.RevokeToken:output_type -> xstockstrat.identity.v1.RevokeTokenResponse
-	7,  // 26: xstockstrat.identity.v1.IdentityService.CreateApiKey:output_type -> xstockstrat.identity.v1.ApiKey
-	2,  // 27: xstockstrat.identity.v1.IdentityService.ValidateApiKey:output_type -> xstockstrat.identity.v1.TokenClaims
-	11, // 28: xstockstrat.identity.v1.IdentityService.ListApiKeys:output_type -> xstockstrat.identity.v1.ListApiKeysResponse
-	13, // 29: xstockstrat.identity.v1.IdentityService.RevokeApiKey:output_type -> xstockstrat.identity.v1.RevokeApiKeyResponse
-	14, // 30: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
-	14, // 31: xstockstrat.identity.v1.IdentityService.GetOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
-	18, // 32: xstockstrat.identity.v1.IdentityService.IssueAuthCode:output_type -> xstockstrat.identity.v1.IssueAuthCodeResponse
-	20, // 33: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
-	20, // 34: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
-	22, // [22:35] is the sub-list for method output_type
-	9,  // [9:22] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	27, // 8: xstockstrat.identity.v1.OAuthClient.created_at:type_name -> google.protobuf.Timestamp
+	27, // 9: xstockstrat.identity.v1.AuthorizedApp.authorized_at:type_name -> google.protobuf.Timestamp
+	27, // 10: xstockstrat.identity.v1.AuthorizedApp.last_used_at:type_name -> google.protobuf.Timestamp
+	22, // 11: xstockstrat.identity.v1.ListAuthorizedAppsResponse.apps:type_name -> xstockstrat.identity.v1.AuthorizedApp
+	0,  // 12: xstockstrat.identity.v1.IdentityService.AuthenticateUser:input_type -> xstockstrat.identity.v1.AuthenticateUserRequest
+	3,  // 13: xstockstrat.identity.v1.IdentityService.ValidateToken:input_type -> xstockstrat.identity.v1.ValidateTokenRequest
+	4,  // 14: xstockstrat.identity.v1.IdentityService.RefreshToken:input_type -> xstockstrat.identity.v1.RefreshTokenRequest
+	5,  // 15: xstockstrat.identity.v1.IdentityService.RevokeToken:input_type -> xstockstrat.identity.v1.RevokeTokenRequest
+	8,  // 16: xstockstrat.identity.v1.IdentityService.CreateApiKey:input_type -> xstockstrat.identity.v1.CreateApiKeyRequest
+	9,  // 17: xstockstrat.identity.v1.IdentityService.ValidateApiKey:input_type -> xstockstrat.identity.v1.ValidateApiKeyRequest
+	10, // 18: xstockstrat.identity.v1.IdentityService.ListApiKeys:input_type -> xstockstrat.identity.v1.ListApiKeysRequest
+	12, // 19: xstockstrat.identity.v1.IdentityService.RevokeApiKey:input_type -> xstockstrat.identity.v1.RevokeApiKeyRequest
+	15, // 20: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:input_type -> xstockstrat.identity.v1.RegisterOAuthClientRequest
+	16, // 21: xstockstrat.identity.v1.IdentityService.GetOAuthClient:input_type -> xstockstrat.identity.v1.GetOAuthClientRequest
+	17, // 22: xstockstrat.identity.v1.IdentityService.IssueAuthCode:input_type -> xstockstrat.identity.v1.IssueAuthCodeRequest
+	19, // 23: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:input_type -> xstockstrat.identity.v1.ExchangeAuthCodeRequest
+	21, // 24: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:input_type -> xstockstrat.identity.v1.RefreshOAuthTokenRequest
+	23, // 25: xstockstrat.identity.v1.IdentityService.ListAuthorizedApps:input_type -> xstockstrat.identity.v1.ListAuthorizedAppsRequest
+	25, // 26: xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp:input_type -> xstockstrat.identity.v1.RevokeAuthorizedAppRequest
+	1,  // 27: xstockstrat.identity.v1.IdentityService.AuthenticateUser:output_type -> xstockstrat.identity.v1.AuthTokenResponse
+	2,  // 28: xstockstrat.identity.v1.IdentityService.ValidateToken:output_type -> xstockstrat.identity.v1.TokenClaims
+	1,  // 29: xstockstrat.identity.v1.IdentityService.RefreshToken:output_type -> xstockstrat.identity.v1.AuthTokenResponse
+	6,  // 30: xstockstrat.identity.v1.IdentityService.RevokeToken:output_type -> xstockstrat.identity.v1.RevokeTokenResponse
+	7,  // 31: xstockstrat.identity.v1.IdentityService.CreateApiKey:output_type -> xstockstrat.identity.v1.ApiKey
+	2,  // 32: xstockstrat.identity.v1.IdentityService.ValidateApiKey:output_type -> xstockstrat.identity.v1.TokenClaims
+	11, // 33: xstockstrat.identity.v1.IdentityService.ListApiKeys:output_type -> xstockstrat.identity.v1.ListApiKeysResponse
+	13, // 34: xstockstrat.identity.v1.IdentityService.RevokeApiKey:output_type -> xstockstrat.identity.v1.RevokeApiKeyResponse
+	14, // 35: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
+	14, // 36: xstockstrat.identity.v1.IdentityService.GetOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
+	18, // 37: xstockstrat.identity.v1.IdentityService.IssueAuthCode:output_type -> xstockstrat.identity.v1.IssueAuthCodeResponse
+	20, // 38: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
+	20, // 39: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
+	24, // 40: xstockstrat.identity.v1.IdentityService.ListAuthorizedApps:output_type -> xstockstrat.identity.v1.ListAuthorizedAppsResponse
+	26, // 41: xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp:output_type -> xstockstrat.identity.v1.RevokeAuthorizedAppResponse
+	27, // [27:42] is the sub-list for method output_type
+	12, // [12:27] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_identity_v1_identity_proto_init() }
@@ -1473,7 +1767,7 @@ func file_identity_v1_identity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_identity_v1_identity_proto_rawDesc), len(file_identity_v1_identity_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   22,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
