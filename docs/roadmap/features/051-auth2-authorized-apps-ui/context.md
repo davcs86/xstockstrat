@@ -259,3 +259,18 @@
 - Files modified: `services/xstockstrat-ui/e2e/accounts/authorized-apps.spec.ts`,
   `services/xstockstrat-ui/e2e/mock-backend.ts`, `services/xstockstrat-ui/playwright.config.ts`
 - Deviations: playwright env add + e2e fallback — see Deviation Log.
+
+### Step 10 — docs: identity CLAUDE.md update + merge-order note [done]
+- identity CLAUDE.md: method count 13 → 15 + appended ListAuthorizedApps/RevokeAuthorizedApp;
+  added a `004_refresh_token_client` line to Database/Migrations (client_id FK + last_used_at +
+  partial index; OAuth refresh tokens now client-tagged on mint/rotation).
+- merge-order.md: added a **resolved** row (auth2-authorized-apps-ui waits for unify-admin-auth-gates,
+  Resolved=Yes — 049 already launched).
+- Files modified: `services/xstockstrat-identity/CLAUDE.md`, `docs/roadmap/features/merge-order.md`
+- Deviations: none.
+
+## Session 2026-06-08 — sdd-execute (sequential) — feature complete
+- All 10 steps done; lifecycle → code-completed; impl-spec Status → complete.
+- Stacked per-step PRs: #623 (1) ← #624 (2) ← #625 (3) ← #626 (4) ← #627 (5) ← #628 (6) ←
+  #629 (7) ← #630 (8) ← #631 (9); Step 10 PR to follow, then integration PR (feature branch → main-dev).
+- Merge-order gate: 049 (unify-admin-auth-gates) already launched → Resolved=Yes → no block.
