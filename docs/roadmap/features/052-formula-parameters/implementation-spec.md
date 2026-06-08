@@ -150,7 +150,7 @@ empty (the `proto-freshness` CI job enforces this — `docs/runbooks/proto-versi
 
 ### Step 3 — migration: Add parameters JSONB column to indicators.formulas
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/migrations/002_formula_parameters.up.sql` — create
@@ -609,3 +609,9 @@ No CI coverage threshold for the UI (root CLAUDE.md); existing Playwright e2e un
 **Actual**: The Docker codegen image build hit a Docker Hub `429 Too Many Requests` (unauthenticated pull rate limit) on `golang:1.25-trixie`. Per the sequential-mode "Proto codegen container blocked" fallback, the codegen toolchain was installed on the host pinned to the CI `proto-freshness` job versions (`.github/workflows/ci.yml` L136–138): `buf` (latest), `protoc-gen-go@v1.36.11`, `protoc-gen-go-grpc@v1.6.2`, `protoc-gen-connect-go@v1.19.2`, `grpcio-tools==1.80.0`, and the TS plugins `ts-proto@2.11.8` / `@bufbuild/protoc-gen-es@2.12.0` / `@connectrpc/protoc-gen-connect-es@1.7.0`. `./scripts/buf-gen.sh` was then run on the host; `git diff packages/proto/gen/` is scoped to the indicators service only and `buf-gen.sh` is idempotent (mirrors the CI stale-stub check).
 **Reason**: Docker Hub rate limit blocked the container path; host toolchain matches CI versions exactly.
 **Disposition**: CI-equivalent fallback. Note: `Dockerfile.codegen` pins `protoc-gen-go-grpc@v1.6.1` while CI (and the committed stubs) use `v1.6.2` — a pre-existing Dockerfile drift, not introduced here; v1.6.2 was used to match CI/committed output.
+
+### Deviation: Step 3 — migration verified against throwaway postgres:16 (CI-equivalent fallback)
+**Spec said**: `./scripts/db-migrate.sh` (golang-migrate against the running TimescaleDB).
+**Actual**: `migrate` binary and a running DB are unavailable in the environment. Per the sequential-mode "migrate / DB unavailable" fallback, `001_formulas.up.sql` then `002_formula_parameters.up.sql` were applied against a throwaway `postgres:16` container (`psql -v ON_ERROR_STOP=1`); `\d indicators.formulas` confirmed `parameters | jsonb | not null | '[]'::jsonb`, then `002_formula_parameters.down.sql` dropped the column cleanly (reversibility proven).
+**Reason**: no `migrate`/DB on host; container path proves both directions.
+**Disposition**: CI-equivalent fallback.

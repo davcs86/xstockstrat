@@ -168,4 +168,11 @@
   Diff scoped to the indicators service only; `buf-gen.sh` is idempotent (CI freshness check parity).
 - Files modified (generated): `packages/proto/gen/{go,python,ts}/indicators/v1/`, `gen/ts/dist/`.
 - Deviations: Step 2 toolchain host-install fallback — full detail in Deviation Log.
+
+### Step 3 — migration: Add parameters JSONB column to indicators.formulas [done]
+- Created `002_formula_parameters.{up,down}.sql` (add/drop `parameters JSONB NOT NULL DEFAULT '[]'`).
+- Verification: applied 001 + 002 up against a throwaway `postgres:16` container; `\d` confirmed
+  `parameters | jsonb | not null | '[]'::jsonb`; 002 down dropped it cleanly (reversibility proven).
+- Files created: `services/xstockstrat-indicators/migrations/002_formula_parameters.up.sql`, `.down.sql`
+- Deviations: migrate/DB unavailable → postgres:16 container fallback (Deviation Log).
 - Reviewers snapshot in feature.md is unchanged (reviewer-registry.md unchanged).
