@@ -414,7 +414,7 @@ unauthenticated → 401; authenticated → the user's apps only; no token/secret
 
 ### Step 7 — service: UI /accounts segment, My Authorized Apps page, nav
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/layout.tsx` — create
@@ -592,6 +592,17 @@ present. No build/test command (docs only).
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 7 — added a client AgentUrlContext file (server→client boundary for AGENT_PUBLIC_URL)
+**Spec said**: Files = `accounts/layout.tsx`, `accounts/authorized-apps/page.tsx`,
+`PlatformHeader.tsx`; "read `process.env.AGENT_PUBLIC_URL` in the layout/page server scope ... and
+pass it down — never `NEXT_PUBLIC_*`".
+**Actual**: The page is a client component (interactivity: disconnect, clipboard, health poll), so
+the server-resolved `AGENT_PUBLIC_URL` cannot be read in the same file. Per the user's choice
+(Option B at execute time), `layout.tsx` (server) reads the env and passes it through a small client
+context provider — a new file `accounts/AgentUrlContext.tsx` (`AgentUrlProvider` + `useAgentUrl`).
+This adds one file beyond the Files list. No `NEXT_PUBLIC_*` used; the value crosses the boundary as
+a prop. **Disposition**: accepted — user-approved (Option B) server-boundary pattern.
 
 ### Deviation: Steps 1–2 — proto toolchain installed on host (no Docker/buf preinstalled)
 **Spec said**: Run `buf lint && buf breaking` (Step 1) and `./scripts/buf-gen.sh` (Step 2).

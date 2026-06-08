@@ -222,3 +222,20 @@
   methods resolve).
 - Files modified: `services/xstockstrat-ui/src/app/accounts/api/{authorized-apps,agent-health,health}/route.ts`
 - Deviations: none.
+
+### Step 7 — service: /accounts segment, My Authorized Apps page, nav [done]
+- PlatformHeader: added `'accounts'` to PlatformSegment + PLATFORM_NAV (KeyRound icon) + SEGMENT_HOME.
+- `accounts/layout.tsx` (server): reads `process.env.AGENT_PUBLIC_URL`, wraps children in
+  AgentUrlProvider + PlatformHeader(segment="accounts") + main. No react-query Providers (page uses
+  plain fetch).
+- `accounts/authorized-apps/page.tsx` (client): fetches list, renders table (App / Client ID /
+  Authorized / **Last refreshed** / Disconnect-with-confirm→refetch); "Connect a new app" section
+  with agent reachable/unreachable indicator (GET agent-health), read-only copy-to-clipboard MCP URL
+  (from useAgentUrl), and Claude.ai connector steps. No tokens/secrets rendered (FR-7).
+- **Blocker resolved (sequential §5.7):** AGENT_PUBLIC_URL server-boundary vs client page — user
+  chose **Option B** (layout reads env → client context provider). Added `accounts/AgentUrlContext.tsx`
+  (one file beyond the spec Files list). See Deviation Log.
+- Verification: `pnpm run lint` clean; `tsc --noEmit` no errors.
+- Files modified: `services/xstockstrat-ui/src/app/accounts/{layout.tsx,AgentUrlContext.tsx,authorized-apps/page.tsx}`,
+  `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx`
+- Deviations: added AgentUrlContext.tsx (Option B) — see Deviation Log.
