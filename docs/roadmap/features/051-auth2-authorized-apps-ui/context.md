@@ -239,3 +239,11 @@
 - Files modified: `services/xstockstrat-ui/src/app/accounts/{layout.tsx,AgentUrlContext.tsx,authorized-apps/page.tsx}`,
   `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx`
 - Deviations: added AgentUrlContext.tsx (Option B) — see Deviation Log.
+
+### Step 8 — service: Wire AGENT_PUBLIC_URL into the xstockstrat-ui deployment block [done]
+- Added AGENT_PUBLIC_URL to the xstockstrat-ui block in all three deploy files: docker-compose
+  (`http://xstockstrat-agent:9000` — compose service name), app.dev.yaml + app.yaml
+  (`value: ${APP_URL}/agent`, matching the agent block's DO route). No `_ENDPOINT` suffix (FR-9).
+- Verification: 2 occurrences per file (agent + UI blocks); all three YAML files parse.
+- Files modified: `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`
+- Deviations: none.

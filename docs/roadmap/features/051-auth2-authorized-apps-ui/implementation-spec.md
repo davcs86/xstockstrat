@@ -469,7 +469,7 @@ appear in the rendered HTML.
 
 ### Step 8 — service: Wire AGENT_PUBLIC_URL into the xstockstrat-ui deployment block
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `docker-compose.yml` — modify (xstockstrat-ui `environment:` block)
