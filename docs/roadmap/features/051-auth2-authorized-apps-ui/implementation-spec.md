@@ -1,6 +1,6 @@
 # Implementation Spec: auth2-authorized-apps-ui
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-07 (regenerated 2026-06-07 against merged 049)
 **Feature**: `docs/roadmap/features/051-auth2-authorized-apps-ui/feature.md`
 **Total Steps**: 10
@@ -469,7 +469,7 @@ appear in the rendered HTML.
 
 ### Step 8 — service: Wire AGENT_PUBLIC_URL into the xstockstrat-ui deployment block
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `docker-compose.yml` — modify (xstockstrat-ui `environment:` block)
@@ -514,7 +514,7 @@ block), with no `_ENDPOINT` suffix.
 
 ### Step 9 — test: E2E for /accounts/authorized-apps (covers Steps 6 + 7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/accounts/authorized-apps.spec.ts` — create
@@ -555,7 +555,7 @@ No coverage threshold applies (Next.js segment) — the new E2E spec passing sat
 
 ### Step 10 — docs: identity CLAUDE.md update + merge-order note
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + `services/xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/CLAUDE.md` — modify (document new RPCs + refresh_tokens columns)
@@ -592,6 +592,20 @@ present. No build/test command (docs only).
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 9 — E2E verified via tsc+lint fallback; AGENT_PUBLIC_URL added to playwright env
+**Spec said**: Files = `e2e/accounts/authorized-apps.spec.ts`, `e2e/mock-backend.ts`; Verification =
+`pnpm run lint && pnpm run test:e2e`.
+**Actual**: (1) The `/accounts` layout reads `AGENT_PUBLIC_URL` server-side, so the dev server needs
+it set — added `AGENT_PUBLIC_URL: 'http://127.0.0.1:9099'` to `playwright.config.ts` `webServer.env`
+(one file beyond the Files list; the only place to give the harness's dev server the value).
+(2) `pnpm run test:e2e` could not complete here — the Playwright dev-server harness timed out after
+420s (cold `pnpm dev` build + browser launch in this container). Per the sequential-mode fallback
+("Playwright dev-server harness times out / browsers unavailable → `tsc --noEmit` + `lint`"), verified
+with `pnpm --filter xstockstrat-ui exec tsc --noEmit` (exit 0) + `pnpm run lint` (exit 0). The spec +
+mock stubs run in CI's Playwright job.
+**Reason**: test-infra necessity + sequential-mode CI-equivalent verification fallback.
+**Disposition**: CI-equivalent fallback.
 
 ### Deviation: Step 7 — added a client AgentUrlContext file (server→client boundary for AGENT_PUBLIC_URL)
 **Spec said**: Files = `accounts/layout.tsx`, `accounts/authorized-apps/page.tsx`,

@@ -239,3 +239,38 @@
 - Files modified: `services/xstockstrat-ui/src/app/accounts/{layout.tsx,AgentUrlContext.tsx,authorized-apps/page.tsx}`,
   `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx`
 - Deviations: added AgentUrlContext.tsx (Option B) — see Deviation Log.
+
+### Step 8 — service: Wire AGENT_PUBLIC_URL into the xstockstrat-ui deployment block [done]
+- Added AGENT_PUBLIC_URL to the xstockstrat-ui block in all three deploy files: docker-compose
+  (`http://xstockstrat-agent:9000` — compose service name), app.dev.yaml + app.yaml
+  (`value: ${APP_URL}/agent`, matching the agent block's DO route). No `_ENDPOINT` suffix (FR-9).
+- Verification: 2 occurrences per file (agent + UI blocks); all three YAML files parse.
+- Files modified: `docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`
+- Deviations: none.
+
+### Step 9 — test: E2E for /accounts/authorized-apps (covers Steps 6+7) [done]
+- Added `e2e/accounts/authorized-apps.spec.ts` (5 tests: unauth→/auth/login redirect; authed table
+  render via real BFF→gRPC mock; Disconnect→confirm→row disappears via page.route stateful stub;
+  Connect section shows agent URL + copy control + reachable indicator; no token/secret in page).
+  Extended `e2e/mock-backend.ts` identityHandlers with listAuthorizedApps (one app, no secrets) +
+  revokeAuthorizedApp. Added AGENT_PUBLIC_URL to playwright webServer env (see Deviation Log).
+- Verification: lint clean + tsc --noEmit clean. `test:e2e` itself timed out (dev-server harness
+  420s) → sequential-mode fallback (tsc+lint). Spec runs in CI's Playwright job.
+- Files modified: `services/xstockstrat-ui/e2e/accounts/authorized-apps.spec.ts`,
+  `services/xstockstrat-ui/e2e/mock-backend.ts`, `services/xstockstrat-ui/playwright.config.ts`
+- Deviations: playwright env add + e2e fallback — see Deviation Log.
+
+### Step 10 — docs: identity CLAUDE.md update + merge-order note [done]
+- identity CLAUDE.md: method count 13 → 15 + appended ListAuthorizedApps/RevokeAuthorizedApp;
+  added a `004_refresh_token_client` line to Database/Migrations (client_id FK + last_used_at +
+  partial index; OAuth refresh tokens now client-tagged on mint/rotation).
+- merge-order.md: added a **resolved** row (auth2-authorized-apps-ui waits for unify-admin-auth-gates,
+  Resolved=Yes — 049 already launched).
+- Files modified: `services/xstockstrat-identity/CLAUDE.md`, `docs/roadmap/features/merge-order.md`
+- Deviations: none.
+
+## Session 2026-06-08 — sdd-execute (sequential) — feature complete
+- All 10 steps done; lifecycle → code-completed; impl-spec Status → complete.
+- Stacked per-step PRs: #623 (1) ← #624 (2) ← #625 (3) ← #626 (4) ← #627 (5) ← #628 (6) ←
+  #629 (7) ← #630 (8) ← #631 (9); Step 10 PR to follow, then integration PR (feature branch → main-dev).
+- Merge-order gate: 049 (unify-admin-auth-gates) already launched → Resolved=Yes → no block.
