@@ -33,10 +33,9 @@ Architecture spec files:
 - `.do/app.dev.yaml` — staging app definition (paper trading, `basic-xxs`/`basic-xs` instances)
 - `.do/app.yaml` — production app definition (live trading, `basic-xs` / `basic-s` instances)
 
-> **Cost note:** Both apps run on the Basic tier. `professional-*` slugs were
-> dropped — they are the same shared 1 vCPU/1 GB hardware as `basic-*` here and
-> bought no benefit for this 1-instance-per-service topology. See
-> `docs/runbooks/infra-cost-reduction.md` for the full sizing rationale.
+> **Sizing:** Both apps run on the Basic tier. See
+> `docs/runbooks/infra-cost-reduction.md` for the per-service slug map and
+> sizing constraints.
 
 ---
 

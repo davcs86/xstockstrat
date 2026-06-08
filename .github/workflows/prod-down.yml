@@ -1,7 +1,7 @@
 name: Prod — tear down
 
-# Manual teardown of the production app to stop instance billing while the
-# project is pre-maturity (see docs/runbooks/infra-cost-reduction.md, Tier 2).
+# Manual teardown of the production app to stop instance billing (see
+# "Production lifecycle" in docs/runbooks/infra-cost-reduction.md).
 #
 # This deletes ONLY the App Platform app. The managed Postgres cluster
 # 'xstockstrat' is a separate resource and is left untouched, so all data
