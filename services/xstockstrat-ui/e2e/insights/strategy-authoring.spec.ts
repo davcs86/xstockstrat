@@ -175,7 +175,7 @@ test.describe('Strategy authoring — UI', () => {
 
     // Step 1 — Identity. Next disabled until valid id + display name.
     await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
-    const next = page.getByRole('button', { name: 'Next' });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
     await expect(next).toBeDisabled();
     await page.getByPlaceholder('e.g. sma_crossover').fill('sma_crossover');
     await page.getByPlaceholder('SMA Crossover').fill('SMA Crossover');
@@ -219,7 +219,7 @@ test.describe('Strategy authoring — UI', () => {
     await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
     await page.getByPlaceholder('e.g. sma_crossover').fill('invalid_ref'); // sentinel → mock errors
     await page.getByPlaceholder('SMA Crossover').fill('Invalid Ref Strategy');
-    const next = page.getByRole('button', { name: 'Next' });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
     await next.click();
 
     await page.getByRole('button', { name: 'Add component' }).click();
@@ -259,16 +259,19 @@ test.describe('Strategy authoring — UI', () => {
     await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
     await page.getByPlaceholder('e.g. sma_crossover').fill('with_formula');
     await page.getByPlaceholder('SMA Crossover').fill('With Formula');
-    await page.getByRole('button', { name: 'Next' }).click();
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
 
     await page.getByRole('button', { name: 'Add component' }).click();
     // Switch the component kind to Custom formula to reveal the picker.
     await page.getByLabel('component kind').click();
     await page.getByRole('option', { name: 'Custom formula' }).click();
 
+    // Open the type-ahead formula combobox; both formulas listed.
+    await page.getByLabel('formula', { exact: true }).click();
     await expect(page.getByText('RSI Divergence')).toBeVisible();
     await expect(page.getByText('MACD Cross')).toBeVisible();
-    await page.getByPlaceholder('Search formulas…').fill('RSI');
+    // Typing filters the list by substring.
+    await page.getByLabel('formula', { exact: true }).fill('RSI');
     await expect(page.getByText('RSI Divergence')).toBeVisible();
     await expect(page.getByText('MACD Cross')).toHaveCount(0);
   });

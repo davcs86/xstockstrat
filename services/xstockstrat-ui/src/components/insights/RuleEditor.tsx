@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Combobox } from '@/components/ui/combobox';
 import {
   Select,
   SelectContent,
@@ -10,36 +10,42 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/components/ui/utils';
+import { RULE_FUNCTIONS, fnPhrase, type RuleFn } from '@/lib/strategyCatalog';
 
-// Simple, documented condition-tree schema. Both the visual builder and the raw
-// JSON textarea produce the SAME string (AC-9):
-//   { "op": "and" | "or", "conditions": [ { "lhs": "...", "cmp": ">", "rhs": "..." } ] }
-type Comparator = '>' | '>=' | '<' | '<=' | '==' | '!=';
-type Condition = { lhs: string; cmp: Comparator; rhs: string };
-type RuleTree = { op: 'and' | 'or'; conditions: Condition[] };
+// Condition-tree schema accepted by the analysis evaluator (evaluator.py):
+//   { "op": "AND" | "OR", "conditions": [ { "fn": ">", "lhs": "sma_fast", "rhs": "sma_slow" } ] }
+// `lhs` is always a component ref_name; `rhs` is a ref_name (string) or a numeric
+// literal (JSON number). Both the visual builder and the raw JSON textarea produce
+// this identical string (AC-9).
+type Condition = { lhs: string; fn: RuleFn; rhs: string };
+type RuleTree = { op: 'AND' | 'OR'; conditions: Condition[] };
 
-const COMPARATORS: Comparator[] = ['>', '>=', '<', '<=', '==', '!='];
+const FNS = RULE_FUNCTIONS.map((f) => f.fn);
 
-function parseTree(value: string): RuleTree | null {
-  if (!value.trim()) return { op: 'and', conditions: [] };
+function normalizeOp(op: unknown): 'AND' | 'OR' {
+  return String(op).toUpperCase() === 'OR' ? 'OR' : 'AND';
+}
+
+function normalizeFn(node: { fn?: unknown; cmp?: unknown }): RuleFn {
+  // Accept the canonical `fn` key; tolerate the legacy `cmp` key from older drafts.
+  const raw = String(node.fn ?? node.cmp ?? '>');
+  return (FNS.includes(raw as RuleFn) ? raw : '>') as RuleFn;
+}
+
+export function parseRuleTree(value: string): RuleTree | null {
+  if (!value.trim()) return { op: 'AND', conditions: [] };
   try {
     const parsed = JSON.parse(value) as { op?: unknown; conditions?: unknown };
-    if (
-      parsed &&
-      (parsed.op === 'and' || parsed.op === 'or') &&
-      Array.isArray(parsed.conditions)
-    ) {
+    if (parsed && (normalizeOp(parsed.op) === 'AND' || normalizeOp(parsed.op) === 'OR') && Array.isArray(parsed.conditions)) {
       const conditions: Condition[] = parsed.conditions.map((c) => {
-        const cond = c as { lhs?: unknown; cmp?: unknown; rhs?: unknown };
+        const cond = c as { lhs?: unknown; fn?: unknown; cmp?: unknown; rhs?: unknown };
         return {
           lhs: String(cond.lhs ?? ''),
-          cmp: (COMPARATORS.includes(cond.cmp as Comparator)
-            ? (cond.cmp as Comparator)
-            : '>') as Comparator,
-          rhs: String(cond.rhs ?? ''),
+          fn: normalizeFn(cond),
+          rhs: cond.rhs === undefined || cond.rhs === null ? '' : String(cond.rhs),
         };
       });
-      return { op: parsed.op, conditions };
+      return { op: normalizeOp(parsed.op), conditions };
     }
     return null; // valid JSON but not the simple condition-tree shape
   } catch {
@@ -47,33 +53,71 @@ function parseTree(value: string): RuleTree | null {
   }
 }
 
-function serialize(tree: RuleTree): string {
-  return JSON.stringify({ op: tree.op, conditions: tree.conditions });
+// rhs is a numeric literal when it parses as a finite number and is NOT one of the
+// declared ref_names — the evaluator treats string rhs as a series lookup and numeric
+// rhs as a threshold, so the JSON type must reflect the operator's intent.
+function serializeRhs(rhs: string, refNames: string[]): string | number {
+  const trimmed = rhs.trim();
+  if (trimmed !== '' && !refNames.includes(trimmed) && Number.isFinite(Number(trimmed))) {
+    return Number(trimmed);
+  }
+  return rhs;
+}
+
+function serialize(tree: RuleTree, refNames: string[]): string {
+  return JSON.stringify({
+    op: tree.op,
+    conditions: tree.conditions.map((c) => ({
+      fn: c.fn,
+      lhs: c.lhs,
+      rhs: serializeRhs(c.rhs, refNames),
+    })),
+  });
+}
+
+/** Human-readable one-liner per condition, for the Review step. */
+export function summarizeRule(value: string): { op: 'AND' | 'OR'; parts: string[] } | null {
+  const tree = parseRuleTree(value);
+  if (!tree) return null;
+  const parts = tree.conditions.map(
+    (c) => `${c.lhs || '?'} ${fnPhrase(c.fn)} ${c.rhs || '?'}`,
+  );
+  return { op: tree.op, parts };
+}
+
+/** True when the serialized rule has at least one condition (used to gate Next). */
+export function ruleHasConditions(value: string): boolean {
+  const tree = parseRuleTree(value);
+  return !!tree && tree.conditions.length > 0;
 }
 
 interface RuleEditorProps {
   value: string;
   onChange: (json: string) => void;
   label: string;
+  /** Component ref_names available as operands (type-ahead options). */
+  refNames: string[];
 }
 
-export function RuleEditor({ value, onChange, label }: RuleEditorProps) {
+export function RuleEditor({ value, onChange, label, refNames }: RuleEditorProps) {
   const [mode, setMode] = useState<'visual' | 'json'>('visual');
   const [parseError, setParseError] = useState<string | null>(null);
   // The visual builder edits this local model; every edit re-serializes to onChange.
   const [tree, setTree] = useState<RuleTree>(
-    () => parseTree(value) ?? { op: 'and', conditions: [] },
+    () => parseRuleTree(value) ?? { op: 'AND', conditions: [] },
   );
+
+  const refOptions = refNames.filter((n) => n.trim() !== '').map((n) => ({ value: n }));
 
   function updateTree(next: RuleTree) {
     setTree(next);
-    onChange(serialize(next));
+    onChange(serialize(next, refNames));
   }
 
   function switchTo(next: 'visual' | 'json') {
     if (next === mode) return;
     if (next === 'visual') {
-      const parsed = parseTree(value);
+      const parsed = parseRuleTree(value);
       if (parsed === null) {
         setParseError(
           'Current JSON is not a simple condition tree. Edit it in JSON mode, or clear it to use the visual builder.',
@@ -84,7 +128,7 @@ export function RuleEditor({ value, onChange, label }: RuleEditorProps) {
       setTree(parsed);
     } else {
       // Entering JSON mode — make sure the string reflects the current tree.
-      onChange(serialize(tree));
+      onChange(serialize(tree, refNames));
       setParseError(null);
     }
     setMode(next);
@@ -122,57 +166,68 @@ export function RuleEditor({ value, onChange, label }: RuleEditorProps) {
             <span className="text-muted-foreground">Match</span>
             <Select
               value={tree.op}
-              onValueChange={(v) => updateTree({ ...tree, op: v as 'and' | 'or' })}
+              onValueChange={(v) => updateTree({ ...tree, op: v as 'AND' | 'OR' })}
             >
-              <SelectTrigger className="h-8 w-24">
+              <SelectTrigger className="h-8 w-28" aria-label="match mode">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="and">ALL (and)</SelectItem>
-                <SelectItem value="or">ANY (or)</SelectItem>
+                <SelectItem value="AND">ALL (and)</SelectItem>
+                <SelectItem value="OR">ANY (or)</SelectItem>
               </SelectContent>
             </Select>
             <span className="text-muted-foreground">of:</span>
           </div>
 
+          {refNames.filter((n) => n.trim() !== '').length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Add at least one component in Step 2 to reference it here.
+            </p>
+          )}
+
           {tree.conditions.map((cond, i) => (
             <div key={i} className="flex items-center gap-2">
-              <Input
+              <Combobox
                 aria-label="left operand"
-                placeholder="e.g. sma_fast"
+                placeholder="component"
+                emptyText="No components — add one in Step 2"
                 value={cond.lhs}
-                onChange={(e) => {
+                options={refOptions}
+                onChange={(lhs) => {
                   const conditions = [...tree.conditions];
-                  conditions[i] = { ...cond, lhs: e.target.value };
+                  conditions[i] = { ...cond, lhs };
                   updateTree({ ...tree, conditions });
                 }}
               />
               <Select
-                value={cond.cmp}
+                value={cond.fn}
                 onValueChange={(v) => {
                   const conditions = [...tree.conditions];
-                  conditions[i] = { ...cond, cmp: v as Comparator };
+                  conditions[i] = { ...cond, fn: v as RuleFn };
                   updateTree({ ...tree, conditions });
                 }}
               >
-                <SelectTrigger className="h-10 w-20">
+                <SelectTrigger className="h-10 w-44" aria-label="comparator">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {COMPARATORS.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
+                  {RULE_FUNCTIONS.map((f) => (
+                    <SelectItem key={f.fn} value={f.fn}>
+                      {f.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Input
+              <Combobox
                 aria-label="right operand"
-                placeholder="e.g. sma_slow"
+                placeholder="component or number"
+                emptyText="Type a number, or pick a component"
+                allowFreeText
                 value={cond.rhs}
-                onChange={(e) => {
+                options={refOptions}
+                onChange={(rhs) => {
                   const conditions = [...tree.conditions];
-                  conditions[i] = { ...cond, rhs: e.target.value };
+                  conditions[i] = { ...cond, rhs };
                   updateTree({ ...tree, conditions });
                 }}
               />
@@ -199,7 +254,7 @@ export function RuleEditor({ value, onChange, label }: RuleEditorProps) {
             onClick={() =>
               updateTree({
                 ...tree,
-                conditions: [...tree.conditions, { lhs: '', cmp: '>', rhs: '' }],
+                conditions: [...tree.conditions, { lhs: '', fn: '>', rhs: '' }],
               })
             }
           >
@@ -212,7 +267,7 @@ export function RuleEditor({ value, onChange, label }: RuleEditorProps) {
           className={cn(
             'flex min-h-[140px] w-full rounded-md border border-input bg-secondary px-3 py-2 font-mono text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           )}
-          placeholder='{ "op": "and", "conditions": [ { "lhs": "sma_fast", "cmp": ">", "rhs": "sma_slow" } ] }'
+          placeholder='{ "op": "AND", "conditions": [ { "fn": ">", "lhs": "sma_fast", "rhs": "sma_slow" } ] }'
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
