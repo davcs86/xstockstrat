@@ -252,6 +252,41 @@ describe('appendEvent', () => {
       });
     });
   });
+
+  // Regression: appendEvent must let `sequence` fall to its column DEFAULT
+  // (nextval('ledger.global_sequence')) — the globally-monotonic invariant.
+  // A previous version supplied nextval('ledger.event_seq_'||md5(stream_key)),
+  // a per-stream sequence that no migration ever creates, so every insert to a
+  // fresh stream_key failed with `relation "ledger.event_seq_…" does not exist`.
+  it('uses the global sequence default, not a per-stream sequence', async () => {
+    if (!LedgerServiceImpl) return;
+    let capturedSql = '';
+    let capturedParams: any[] = [];
+    const pool = {
+      async query(sql: string, params?: any[]) {
+        capturedSql = sql;
+        capturedParams = params ?? [];
+        return { rows: [{ sequence: 1, recorded_at: new Date() }] };
+      },
+    };
+    const impl = new LedgerServiceImpl(pool, {});
+    const call = makeCall({
+      eventType: 'analysis.backtest.started',
+      sourceService: 'analysis',
+      streamKey: 'backtest:abc',
+      payload: {},
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      impl.appendEvent(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+
+    assert.ok(!/event_seq_/.test(capturedSql), 'must not reference a per-stream sequence');
+    assert.ok(!/nextval/i.test(capturedSql), 'must not set sequence explicitly (rely on column DEFAULT)');
+    // event_id, event_type, source_service, correlation_id, stream_key,
+    // payload, metadata, occurred_at, recorded_at — 9 bound params.
+    assert.strictEqual(capturedParams.length, 9);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ApiKey, AuthenticateUserRequest, AuthTokenResponse, CreateApiKeyRequest, ExchangeAuthCodeRequest, GetOAuthClientRequest, IssueAuthCodeRequest, IssueAuthCodeResponse, ListApiKeysRequest, ListApiKeysResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeApiKeyRequest, RevokeApiKeyResponse, RevokeTokenRequest, RevokeTokenResponse, TokenClaims, ValidateApiKeyRequest, ValidateTokenRequest } from "./identity_pb.js";
+import { ApiKey, AuthenticateUserRequest, AuthTokenResponse, CreateApiKeyRequest, ExchangeAuthCodeRequest, GetOAuthClientRequest, IssueAuthCodeRequest, IssueAuthCodeResponse, ListApiKeysRequest, ListApiKeysResponse, ListAuthorizedAppsRequest, ListAuthorizedAppsResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeApiKeyRequest, RevokeApiKeyResponse, RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse, RevokeTokenRequest, RevokeTokenResponse, TokenClaims, ValidateApiKeyRequest, ValidateTokenRequest } from "./identity_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -130,6 +130,27 @@ export const IdentityService = {
       name: "RefreshOAuthToken",
       I: RefreshOAuthTokenRequest,
       O: OAuthTokenResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+     * calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.ListAuthorizedApps
+     */
+    listAuthorizedApps: {
+      name: "ListAuthorizedApps",
+      I: ListAuthorizedAppsRequest,
+      O: ListAuthorizedAppsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp
+     */
+    revokeAuthorizedApp: {
+      name: "RevokeAuthorizedApp",
+      I: RevokeAuthorizedAppRequest,
+      O: RevokeAuthorizedAppResponse,
       kind: MethodKind.Unary,
     },
   }

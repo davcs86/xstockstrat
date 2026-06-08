@@ -1,7 +1,7 @@
 'use client';
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Combobox } from '@/components/ui/combobox';
 import {
   Select,
   SelectContent,
@@ -9,9 +9,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { cn } from '@/components/ui/utils';
 import { useFormulas } from '@/hooks/useFormulas';
 import { ComponentKind } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import {
+  BUILTIN_INDICATORS,
+  defaultParamsFor,
+  findIndicator,
+} from '@/lib/strategyCatalog';
 
 // Editable draft mirroring StrategyComponent's field names so it assigns directly
 // to the proto init shape when the wizard submits.
@@ -42,29 +46,19 @@ interface ComponentEditorProps {
 export function ComponentEditor({ value, onChange, onRemove }: ComponentEditorProps) {
   const { data: formulasData } = useFormulas({ includePublic: true, pageSize: 50 });
   const formulas = formulasData?.formulas ?? [];
-  const [formulaQuery, setFormulaQuery] = useState('');
 
-  // Params are edited as a local row list so empty/in-progress keys don't churn the object.
-  const [paramRows, setParamRows] = useState<{ key: string; value: string }[]>(() =>
-    Object.entries(value.params).map(([k, v]) => ({ key: k, value: String(v) })),
-  );
+  const indicator = findIndicator(value.indicator);
 
-  function syncParams(rows: { key: string; value: string }[]) {
-    setParamRows(rows);
-    const params: Record<string, number> = {};
-    for (const r of rows) {
-      if (r.key.trim() === '') continue;
-      const n = Number(r.value);
-      params[r.key] = Number.isFinite(n) ? n : 0;
-    }
-    onChange({ ...value, params });
+  function selectIndicator(name: string) {
+    // Pre-fill the chosen indicator's parameters with their defaults so operators
+    // only ever tune known, available knobs — never invent param keys.
+    onChange({ ...value, indicator: name, params: defaultParamsFor(name) });
   }
 
-  const q = formulaQuery.toLowerCase();
-  const filteredFormulas = formulas.filter(
-    (f) => f.name.toLowerCase().includes(q) || f.formulaId.toLowerCase().includes(q),
-  );
-  const selectedFormula = formulas.find((f) => f.formulaId === value.formulaId);
+  function setParam(key: string, raw: string) {
+    const n = Number(raw);
+    onChange({ ...value, params: { ...value.params, [key]: Number.isFinite(n) ? n : 0 } });
+  }
 
   return (
     <div className="space-y-3 rounded-md border border-border p-3">
@@ -94,87 +88,60 @@ export function ComponentEditor({ value, onChange, onRemove }: ComponentEditorPr
 
       {value.kind === ComponentKind.CUSTOM_FORMULA ? (
         <div className="space-y-1">
-          <Input
-            aria-label="formula search"
-            placeholder="Search formulas…"
-            value={formulaQuery}
-            onChange={(e) => setFormulaQuery(e.target.value)}
+          <Combobox
+            aria-label="formula"
+            placeholder="Select a formula…"
+            emptyText="No matching formulas"
+            value={value.formulaId}
+            onChange={(formulaId) => onChange({ ...value, formulaId })}
+            options={formulas.map((f) => ({
+              value: f.formulaId,
+              label: f.name,
+              hint: f.formulaId,
+            }))}
           />
-          {selectedFormula && (
-            <p className="text-xs text-muted-foreground">Selected: {selectedFormula.name}</p>
-          )}
-          <div className="max-h-40 overflow-auto rounded-md border border-border">
-            {filteredFormulas.length === 0 && (
-              <p className="p-2 text-xs text-muted-foreground">No matching formulas</p>
-            )}
-            {filteredFormulas.map((f) => (
-              <button
-                key={f.formulaId}
-                type="button"
-                className={cn(
-                  'block w-full px-3 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground',
-                  f.formulaId === value.formulaId && 'bg-accent text-accent-foreground',
-                )}
-                onClick={() => onChange({ ...value, formulaId: f.formulaId })}
-              >
-                {f.name}
-              </button>
-            ))}
-          </div>
         </div>
       ) : (
-        <Input
-          aria-label="indicator name"
-          placeholder="indicator name (e.g. SMA)"
-          value={value.indicator}
-          onChange={(e) => onChange({ ...value, indicator: e.target.value })}
-        />
-      )}
+        <div className="space-y-2">
+          <Select value={indicator?.name ?? ''} onValueChange={selectIndicator}>
+            <SelectTrigger aria-label="indicator name">
+              <SelectValue placeholder="Select an indicator…" />
+            </SelectTrigger>
+            <SelectContent>
+              {BUILTIN_INDICATORS.map((ind) => (
+                <SelectItem key={ind.name} value={ind.name}>
+                  {ind.name} — {ind.description}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-      <div className="space-y-2">
-        <p className="text-xs font-medium text-muted-foreground">Params</p>
-        {paramRows.map((row, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <Input
-              aria-label="param key"
-              placeholder="key (e.g. period)"
-              value={row.key}
-              onChange={(e) => {
-                const rows = [...paramRows];
-                rows[i] = { ...row, key: e.target.value };
-                syncParams(rows);
-              }}
-            />
-            <Input
-              aria-label="param value"
-              type="number"
-              placeholder="value"
-              value={row.value}
-              onChange={(e) => {
-                const rows = [...paramRows];
-                rows[i] = { ...row, value: e.target.value };
-                syncParams(rows);
-              }}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => syncParams(paramRows.filter((_, j) => j !== i))}
-            >
-              Remove
-            </Button>
-          </div>
-        ))}
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => syncParams([...paramRows, { key: '', value: '' }])}
-        >
-          Add param
-        </Button>
-      </div>
+          {indicator && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Params</p>
+              {indicator.params.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {indicator.name} takes no parameters.
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {indicator.params.map((p) => (
+                    <div key={p.key}>
+                      <label className="mb-1 block text-xs text-muted-foreground">{p.label}</label>
+                      <Input
+                        aria-label={`param ${p.key}`}
+                        type="number"
+                        value={value.params[p.key] ?? p.default}
+                        onChange={(e) => setParam(p.key, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

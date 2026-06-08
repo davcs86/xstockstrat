@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/components/ui/utils';
-import { RuleEditor } from '@/components/insights/RuleEditor';
+import { RuleEditor, summarizeRule } from '@/components/insights/RuleEditor';
 import {
   ComponentEditor,
   emptyComponent,
@@ -81,6 +81,8 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
     if (m.includes('strategy_id') || m.includes('display')) return 1;
     return 5;
   }
+
+  const refNames = components.map((c) => c.refName);
 
   const idValid = STRATEGY_ID_RE.test(strategyId);
   const canAdvance =
@@ -210,8 +212,18 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
 
           {step === 3 && (
             <div className="space-y-4">
-              <RuleEditor label="Entry rule" value={entryRule} onChange={setEntryRule} />
-              <RuleEditor label="Exit rule" value={exitRule} onChange={setExitRule} />
+              <RuleEditor
+                label="Entry rule"
+                value={entryRule}
+                onChange={setEntryRule}
+                refNames={refNames}
+              />
+              <RuleEditor
+                label="Exit rule"
+                value={exitRule}
+                onChange={setExitRule}
+                refNames={refNames}
+              />
             </div>
           )}
 
@@ -291,12 +303,8 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
                   ))}
                 </ul>
               </div>
-              <div className="break-all">
-                <span className="text-muted-foreground">Entry rule:</span> {entryRule || '(empty)'}
-              </div>
-              <div className="break-all">
-                <span className="text-muted-foreground">Exit rule:</span> {exitRule || '(empty)'}
-              </div>
+              <RuleSummary label="Entry rule" value={entryRule} />
+              <RuleSummary label="Exit rule" value={exitRule} />
               <div>
                 <span className="text-muted-foreground">Signal sources:</span>{' '}
                 {signal.signalSources.join(', ') || '(none)'}
@@ -343,6 +351,33 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Read-only, human-readable rendering of an entry/exit rule for the Review step. */
+function RuleSummary({ label, value }: { label: string; value: string }) {
+  const summary = summarizeRule(value);
+
+  return (
+    <div>
+      <span className="text-muted-foreground">{label}:</span>{' '}
+      {!summary || summary.parts.length === 0 ? (
+        <span className="text-muted-foreground">(none)</span>
+      ) : (
+        <div className="mt-1 rounded-md border border-border p-2">
+          <p className="text-xs text-muted-foreground">
+            Match {summary.op === 'AND' ? 'ALL' : 'ANY'} of:
+          </p>
+          <ul className="ml-4 list-disc">
+            {summary.parts.map((p, i) => (
+              <li key={i} className="text-sm">
+                {p}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
