@@ -3,10 +3,15 @@
 ## Role
 
 Python MCP (Model Context Protocol) server exposing AI-agent tools for signal ingestion,
-alerting, backtesting, strategy/formula/source management, and live-strategy control. Runs
-over SSE (`MCP_TRANSPORT=sse`, port 9000). All outbound gRPC calls to platform services carry
-`x-mcp-secret` when `MCP_AGENT_SECRET` is set; admin-scoped tools additionally forward an
-`authorization: Bearer <admin_api_key>` validated at the entry point.
+alerting, backtesting, strategy/formula/source management, and live-strategy control
+(`MCP_TRANSPORT=sse`, port 9000). It serves **two MCP transports** from a single root ASGI
+dispatcher (`app/main.py` `handle_mcp`): the modern **Streamable HTTP** transport (MCP
+2025-03-26) at the agent root `/` — which is what the **Claude.ai remote connector** speaks
+against the connector URL (`AGENT_PUBLIC_URL`, `${APP_URL}/agent`, stripped to `/` by DO
+ingress) — plus the **legacy HTTP+SSE** transport at `/sse` + `/messages` for Claude Desktop.
+All outbound gRPC calls to platform services carry `x-mcp-secret` when `MCP_AGENT_SECRET` is
+set; admin-scoped tools additionally forward an `authorization: Bearer <admin_api_key>`
+validated at the entry point.
 
 ## Language
 
@@ -56,12 +61,18 @@ Routes (registered in `app/main.py` `build_sse_app`):
 | `GET /oauth/authorize` | PKCE/S256 + exact-redirect validation; delegates login to the UI |
 | `GET /oauth/callback` | Derives user from the same-origin `access_token` cookie; mints the code |
 | `POST /oauth/token` | `authorization_code` + `refresh_token` grants (tokens in JSON body only) |
+| `/` (GET/POST) | **Streamable HTTP** MCP endpoint (Claude.ai remote connector) |
+| `/sse` + `/messages` | Legacy HTTP+SSE MCP endpoint (Claude Desktop) |
 
-The `/sse` endpoint accepts an **`aud`-bound JWT** (`aud` == `AGENT_PUBLIC_URL`, validated first) and
-falls back to the legacy `Authorization: Bearer <api_key>` and the **deprecated** `?api_key=` query
-fallback; unauthenticated requests get `401` with a `WWW-Authenticate: Bearer resource_metadata=…`
-discovery pointer. `AGENT_PUBLIC_URL` builds all absolute discovery/endpoint URLs (in DO it is
-`${APP_URL}/agent`).
+Both MCP endpoints (root Streamable HTTP and `/sse`) accept an **`aud`-bound JWT** (`aud` ==
+`AGENT_PUBLIC_URL`, validated first) and fall back to the legacy `Authorization: Bearer <api_key>`
+and the **deprecated** `?api_key=` query fallback; unauthenticated requests get `401` with a
+`WWW-Authenticate: Bearer resource_metadata=…` discovery pointer. Note the **RFC 8414/9728 path
+insertion** quirk: because `AGENT_PUBLIC_URL` has a path (`/agent`), spec-compliant clients fetch
+the AS/PR metadata at `https://<host>/.well-known/oauth-authorization-server/agent`, which lands on
+`xstockstrat-ui` (the `/` catch-all), so the UI also serves that canonical metadata (UI
+`next.config.js` rewrites → `/api/oauth/*`). `AGENT_PUBLIC_URL` builds all absolute
+discovery/endpoint URLs (in DO it is `${APP_URL}/agent`).
 
 ## Config Keys Consumed
 

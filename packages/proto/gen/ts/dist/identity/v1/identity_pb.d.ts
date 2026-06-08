@@ -460,6 +460,101 @@ export type RefreshOAuthTokenRequest = Message<"xstockstrat.identity.v1.RefreshO
  */
 export declare const RefreshOAuthTokenRequestSchema: GenMessage<RefreshOAuthTokenRequest>;
 /**
+ * ── Authorized-apps management (feature 051) ─────────────────────────────────
+ *
+ * @generated from message xstockstrat.identity.v1.AuthorizedApp
+ */
+export type AuthorizedApp = Message<"xstockstrat.identity.v1.AuthorizedApp"> & {
+    /**
+     * @generated from field: string client_id = 1;
+     */
+    clientId: string;
+    /**
+     * @generated from field: string client_name = 2;
+     */
+    clientName: string;
+    /**
+     * @generated from field: google.protobuf.Timestamp authorized_at = 3;
+     */
+    authorizedAt?: Timestamp | undefined;
+    /**
+     * Best-effort "last refreshed" time (bumped on refresh-token rotation), NOT per-request
+     * access. May be unset. The UI labels this "Last refreshed", not "Last used".
+     *
+     * @generated from field: google.protobuf.Timestamp last_used_at = 4;
+     */
+    lastUsedAt?: Timestamp | undefined;
+    /**
+     * @generated from field: repeated string redirect_uris = 5;
+     */
+    redirectUris: string[];
+};
+/**
+ * Describes the message xstockstrat.identity.v1.AuthorizedApp.
+ * Use `create(AuthorizedAppSchema)` to create a new message.
+ */
+export declare const AuthorizedAppSchema: GenMessage<AuthorizedApp>;
+/**
+ * @generated from message xstockstrat.identity.v1.ListAuthorizedAppsRequest
+ */
+export type ListAuthorizedAppsRequest = Message<"xstockstrat.identity.v1.ListAuthorizedAppsRequest"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.ListAuthorizedAppsRequest.
+ * Use `create(ListAuthorizedAppsRequestSchema)` to create a new message.
+ */
+export declare const ListAuthorizedAppsRequestSchema: GenMessage<ListAuthorizedAppsRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.ListAuthorizedAppsResponse
+ */
+export type ListAuthorizedAppsResponse = Message<"xstockstrat.identity.v1.ListAuthorizedAppsResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.identity.v1.AuthorizedApp apps = 1;
+     */
+    apps: AuthorizedApp[];
+};
+/**
+ * Describes the message xstockstrat.identity.v1.ListAuthorizedAppsResponse.
+ * Use `create(ListAuthorizedAppsResponseSchema)` to create a new message.
+ */
+export declare const ListAuthorizedAppsResponseSchema: GenMessage<ListAuthorizedAppsResponse>;
+/**
+ * @generated from message xstockstrat.identity.v1.RevokeAuthorizedAppRequest
+ */
+export type RevokeAuthorizedAppRequest = Message<"xstockstrat.identity.v1.RevokeAuthorizedAppRequest"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+    /**
+     * @generated from field: string client_id = 2;
+     */
+    clientId: string;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.RevokeAuthorizedAppRequest.
+ * Use `create(RevokeAuthorizedAppRequestSchema)` to create a new message.
+ */
+export declare const RevokeAuthorizedAppRequestSchema: GenMessage<RevokeAuthorizedAppRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.RevokeAuthorizedAppResponse
+ */
+export type RevokeAuthorizedAppResponse = Message<"xstockstrat.identity.v1.RevokeAuthorizedAppResponse"> & {
+    /**
+     * @generated from field: bool success = 1;
+     */
+    success: boolean;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.RevokeAuthorizedAppResponse.
+ * Use `create(RevokeAuthorizedAppResponseSchema)` to create a new message.
+ */
+export declare const RevokeAuthorizedAppResponseSchema: GenMessage<RevokeAuthorizedAppResponse>;
+/**
  * @generated from service xstockstrat.identity.v1.IdentityService
  */
 export declare const IdentityService: GenService<{
@@ -569,5 +664,24 @@ export declare const IdentityService: GenService<{
         methodKind: "unary";
         input: typeof RefreshOAuthTokenRequestSchema;
         output: typeof OAuthTokenResponseSchema;
+    };
+    /**
+     * Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+     * calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.ListAuthorizedApps
+     */
+    listAuthorizedApps: {
+        methodKind: "unary";
+        input: typeof ListAuthorizedAppsRequestSchema;
+        output: typeof ListAuthorizedAppsResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp
+     */
+    revokeAuthorizedApp: {
+        methodKind: "unary";
+        input: typeof RevokeAuthorizedAppRequestSchema;
+        output: typeof RevokeAuthorizedAppResponseSchema;
     };
 }>;

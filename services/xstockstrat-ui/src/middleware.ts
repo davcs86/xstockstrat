@@ -9,7 +9,7 @@ import {
 export const config = {
   matcher: [
     '/',
-    '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|api/auth/login|api/health|health|auth/login|auth/oauth-login).+)',
+    '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|api/auth/login|api/health|health|auth/login|auth/oauth-login|\\.well-known|api/oauth).+)',
   ],
 };
 

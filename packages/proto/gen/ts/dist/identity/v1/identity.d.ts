@@ -105,6 +105,31 @@ export interface RefreshOAuthTokenRequest {
     refreshToken: string;
     resource: string;
 }
+/** ── Authorized-apps management (feature 051) ───────────────────────────────── */
+export interface AuthorizedApp {
+    clientId: string;
+    clientName: string;
+    authorizedAt?: Date | undefined;
+    /**
+     * Best-effort "last refreshed" time (bumped on refresh-token rotation), NOT per-request
+     * access. May be unset. The UI labels this "Last refreshed", not "Last used".
+     */
+    lastUsedAt?: Date | undefined;
+    redirectUris: string[];
+}
+export interface ListAuthorizedAppsRequest {
+    userId: string;
+}
+export interface ListAuthorizedAppsResponse {
+    apps: AuthorizedApp[];
+}
+export interface RevokeAuthorizedAppRequest {
+    userId: string;
+    clientId: string;
+}
+export interface RevokeAuthorizedAppResponse {
+    success: boolean;
+}
 export declare const AuthenticateUserRequest: MessageFns<AuthenticateUserRequest>;
 export declare const AuthTokenResponse: MessageFns<AuthTokenResponse>;
 export declare const TokenClaims: MessageFns<TokenClaims>;
@@ -127,6 +152,11 @@ export declare const IssueAuthCodeResponse: MessageFns<IssueAuthCodeResponse>;
 export declare const ExchangeAuthCodeRequest: MessageFns<ExchangeAuthCodeRequest>;
 export declare const OAuthTokenResponse: MessageFns<OAuthTokenResponse>;
 export declare const RefreshOAuthTokenRequest: MessageFns<RefreshOAuthTokenRequest>;
+export declare const AuthorizedApp: MessageFns<AuthorizedApp>;
+export declare const ListAuthorizedAppsRequest: MessageFns<ListAuthorizedAppsRequest>;
+export declare const ListAuthorizedAppsResponse: MessageFns<ListAuthorizedAppsResponse>;
+export declare const RevokeAuthorizedAppRequest: MessageFns<RevokeAuthorizedAppRequest>;
+export declare const RevokeAuthorizedAppResponse: MessageFns<RevokeAuthorizedAppResponse>;
 export type IdentityServiceService = typeof IdentityServiceService;
 export declare const IdentityServiceService: {
     readonly authenticateUser: {
@@ -250,6 +280,28 @@ export declare const IdentityServiceService: {
         readonly responseSerialize: (value: OAuthTokenResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => OAuthTokenResponse;
     };
+    /**
+     * Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+     * calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+     */
+    readonly listAuthorizedApps: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/ListAuthorizedApps";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListAuthorizedAppsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListAuthorizedAppsRequest;
+        readonly responseSerialize: (value: ListAuthorizedAppsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListAuthorizedAppsResponse;
+    };
+    readonly revokeAuthorizedApp: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/RevokeAuthorizedApp";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: RevokeAuthorizedAppRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => RevokeAuthorizedAppRequest;
+        readonly responseSerialize: (value: RevokeAuthorizedAppResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => RevokeAuthorizedAppResponse;
+    };
 };
 export interface IdentityServiceServer extends UntypedServiceImplementation {
     authenticateUser: handleUnaryCall<AuthenticateUserRequest, AuthTokenResponse>;
@@ -269,6 +321,12 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
     issueAuthCode: handleUnaryCall<IssueAuthCodeRequest, IssueAuthCodeResponse>;
     exchangeAuthCode: handleUnaryCall<ExchangeAuthCodeRequest, OAuthTokenResponse>;
     refreshOAuthToken: handleUnaryCall<RefreshOAuthTokenRequest, OAuthTokenResponse>;
+    /**
+     * Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+     * calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+     */
+    listAuthorizedApps: handleUnaryCall<ListAuthorizedAppsRequest, ListAuthorizedAppsResponse>;
+    revokeAuthorizedApp: handleUnaryCall<RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse>;
 }
 export interface IdentityServiceClient extends Client {
     authenticateUser(request: AuthenticateUserRequest, callback: (error: ServiceError | null, response: AuthTokenResponse) => void): ClientUnaryCall;
@@ -314,6 +372,16 @@ export interface IdentityServiceClient extends Client {
     refreshOAuthToken(request: RefreshOAuthTokenRequest, callback: (error: ServiceError | null, response: OAuthTokenResponse) => void): ClientUnaryCall;
     refreshOAuthToken(request: RefreshOAuthTokenRequest, metadata: Metadata, callback: (error: ServiceError | null, response: OAuthTokenResponse) => void): ClientUnaryCall;
     refreshOAuthToken(request: RefreshOAuthTokenRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: OAuthTokenResponse) => void): ClientUnaryCall;
+    /**
+     * Per-user authorized-app management (feature 051) — list/revoke OAuth clients the
+     * calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
+     */
+    listAuthorizedApps(request: ListAuthorizedAppsRequest, callback: (error: ServiceError | null, response: ListAuthorizedAppsResponse) => void): ClientUnaryCall;
+    listAuthorizedApps(request: ListAuthorizedAppsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListAuthorizedAppsResponse) => void): ClientUnaryCall;
+    listAuthorizedApps(request: ListAuthorizedAppsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListAuthorizedAppsResponse) => void): ClientUnaryCall;
+    revokeAuthorizedApp(request: RevokeAuthorizedAppRequest, callback: (error: ServiceError | null, response: RevokeAuthorizedAppResponse) => void): ClientUnaryCall;
+    revokeAuthorizedApp(request: RevokeAuthorizedAppRequest, metadata: Metadata, callback: (error: ServiceError | null, response: RevokeAuthorizedAppResponse) => void): ClientUnaryCall;
+    revokeAuthorizedApp(request: RevokeAuthorizedAppRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: RevokeAuthorizedAppResponse) => void): ClientUnaryCall;
 }
 export declare const IdentityServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): IdentityServiceClient;

@@ -75,6 +75,43 @@ def test_sse_accepts_valid_credential_reaching_transport():
                 tc.get("/sse", headers={"Authorization": "Bearer good.jwt"})
 
 
+# ── Streamable HTTP transport at root (Claude.ai remote connector) ──────────
+
+
+def test_streamable_root_unauthenticated_401_with_www_authenticate():
+    """Claude.ai POSTs the connector URL (→ `/`) with Streamable HTTP; unauthenticated → 401."""
+    with TestClient(_app()) as tc:
+        r = tc.post("/", json={"jsonrpc": "2.0", "id": 1, "method": "initialize"})
+    assert r.status_code == 401
+    assert "resource_metadata=" in r.headers.get("www-authenticate", "")
+
+
+def test_streamable_root_accepts_valid_credential_reaching_transport():
+    """A credential that passes the auth gate proceeds to the Streamable HTTP session manager."""
+
+    class _Sentinel(Exception):
+        pass
+
+    def _boom(*_a, **_k):
+        raise _Sentinel()
+
+    with (
+        patch("app.auth.validate_bearer_jwt", AsyncMock(return_value=True)),
+        patch(
+            "mcp.server.streamable_http_manager.StreamableHTTPSessionManager.handle_request",
+            _boom,
+        ),
+    ):
+        app = _app()
+        with pytest.raises(_Sentinel):
+            with TestClient(app) as tc:
+                tc.post(
+                    "/",
+                    json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+                    headers={"Authorization": "Bearer good.jwt"},
+                )
+
+
 # ── DCR /oauth/register (AC-B3 surface) ─────────────────────────────────────
 
 
