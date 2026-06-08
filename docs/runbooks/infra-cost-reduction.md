@@ -51,28 +51,38 @@ correctly shared — leave it alone.
 
 Pick a tier by risk appetite. Each builds on the previous.
 
-### Tier 1 — Right-size (no architecture change, low risk) → ~$250/mo, save ~$52/mo (~17%)
+### Tier 1 — Right-size (no architecture change, low risk) → ~$230/mo, save ~$72/mo (~24%) — **APPLIED**
 
-- **Prod:** `professional-xs` → `basic-xs` for all 11 services (keep `config`
-  on `professional-s`). Functionally identical, −$22/mo. *Optional:* keep
-  `trading` / `portfolio` / `marketdata` on `professional-xs` if you want a
-  CPU-scheduling cushion for live order execution (+$6/mo).
-- **Staging:** drop the 3 Go + 3 Node (`ledger`/`identity`/`notify`) services
-  to `basic-xxs` (512 MB, $5). −$30/mo. Python/`ui` stay on `basic-xs`;
-  `config` stays on `basic-s`.
+- **Prod:** moved entirely to the Basic tier — `professional-xs` → `basic-xs`
+  for all 11 services, `professional-s` → `basic-s` for `config`. Functionally
+  identical here (`professional-xs` is the same shared 1 vCPU/1 GB as
+  `basic-xs`; `basic-s` raises the idle timeout the same way `professional-s`
+  does — staging already proves this). Prod compute $157 → **$130**.
+- **Staging:** dropped the 3 Go + 3 Node (`ledger`/`identity`/`notify`)
+  services to `basic-xxs` (512 MB, $5). Python/`ui` stay on `basic-xs`;
+  `config` stays on `basic-s`. Staging compute $130 → **$100**.
 - Validation: watch DO Insights for OOM/restart after each change; roll back
-  the individual service if it trips.
+  the individual service's slug if it trips. `config` is the one to watch —
+  if `WatchConfig` subscribers drop, it needs to stay on a `*-s` size.
 
-### Tier 2 — On-demand staging (Tier 1 + scheduled teardown) → ~$180/mo, save ~$122/mo (~40%)
+### Tier 2 — Scheduled production teardown (pre-maturity) → ~$160–190/mo, save ~$110–140/mo (~35–45%)
 
-- Add a scheduled GitHub Actions job that **destroys** the staging app outside
-  working hours/weekends and **recreates** it from `.do/app.dev.yaml` on the
-  first push or on manual dispatch. Running staging ~50 h/week instead of 168
-  cuts its effective cost ~70% (→ ~$30/mo).
-- Keeps a true integration environment, but it's no longer always-on. The
-  shared DB stays up, so staging data survives teardown.
-- Cost: added operational complexity and a cold-start wait (~deploy time)
-  when staging is first hit after teardown.
+Because production is not yet truly live (`until project maturity`), it does
+not need to run 24/7. Add a scheduled GitHub Actions job that **destroys** the
+production app outside the active window and **recreates** it from
+`.do/app.yaml` on a schedule or on manual `workflow_dispatch`.
+
+- The shared Postgres cluster stays up, so **no data is lost** across teardown
+  — only the stateless service instances stop billing.
+- Running prod ~40–50 h/week instead of 168 cuts its compute ~70% (→ ~$40/mo).
+- **Trade-offs:** (1) the platform is fully offline while torn down — only do
+  this while there is no real live-trading obligation; (2) recreating the app
+  may assign a **new `*.ondigitalocean.app` URL** unless a custom domain is
+  attached, so pin a domain before relying on a stable address; (3) cold-start
+  is a full deploy (~minutes) on bring-up; (4) `DO_PROD_APP_ID` changes on
+  recreate — the teardown workflow must recapture it.
+- Revert path: when the project matures, disable the schedule and leave prod
+  permanently up.
 
 ### Tier 3 — Service consolidation (major refactor, highest leverage) → ~$120–150/mo, save ~50–60%
 
@@ -95,10 +105,10 @@ Pick a tier by risk appetite. Each builds on the previous.
 - **Don't shrink Python/Next.js services to 512 MB** without metrics — they
   will OOM under load.
 
-## Suggested execution order
+## Execution order
 
-1. Tier 1 prod right-size (`professional-xs` → `basic-xs`) — one `.do/app.yaml`
-   edit, redeploy, watch Insights for 24 h.
-2. Tier 1 staging right-size — one `.do/app.dev.yaml` edit.
-3. (Optional) Tier 2 on-demand staging — new scheduled workflow.
+1. ✅ Tier 1 prod right-size (`professional-*` → Basic tier) — `.do/app.yaml`.
+2. ✅ Tier 1 staging right-size (Go/Node → `basic-xxs`) — `.do/app.dev.yaml`.
+3. Tier 2 scheduled production teardown — new scheduled workflow, active until
+   project maturity (in progress).
 4. (Roadmap) Tier 3 consolidation — SDD feature.
