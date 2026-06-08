@@ -23,6 +23,11 @@ def _to_dict(row) -> dict:
         d["input_schema"] = json.loads(raw) if raw else {}
     elif raw is None:
         d["input_schema"] = {}
+    params_raw = d.get("parameters")
+    if isinstance(params_raw, str):
+        d["parameters"] = json.loads(params_raw) if params_raw else []
+    elif params_raw is None:
+        d["parameters"] = []
     return d
 
 
@@ -41,12 +46,13 @@ class FormulasRepository:
         author,
         is_public,
         input_schema,
+        parameters=None,
     ) -> dict:
         row = await self._db.fetchrow(
             """
             INSERT INTO indicators.formulas
-                (formula_id, name, description, source, author, is_public, input_schema)
-            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb)
+                (formula_id, name, description, source, author, is_public, input_schema, parameters)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb)
             RETURNING *
             """,
             formula_id,
@@ -56,6 +62,7 @@ class FormulasRepository:
             author,
             is_public,
             json.dumps(dict(input_schema) if input_schema else {}),
+            json.dumps(list(parameters) if parameters else []),
         )
         return _to_dict(row)
 
@@ -99,11 +106,13 @@ class FormulasRepository:
         description,
         source,
         is_public,
+        parameters=None,
     ) -> dict | None:
         row = await self._db.fetchrow(
             """
             UPDATE indicators.formulas
-               SET name = $2, description = $3, source = $4, is_public = $5, updated_at = NOW()
+               SET name = $2, description = $3, source = $4, is_public = $5,
+                   parameters = $6::jsonb, updated_at = NOW()
              WHERE formula_id = $1::uuid
             RETURNING *
             """,
@@ -112,6 +121,7 @@ class FormulasRepository:
             description or "",
             source,
             is_public,
+            json.dumps(list(parameters) if parameters else []),
         )
         return _to_dict(row)
 

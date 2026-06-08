@@ -46,6 +46,41 @@ class TestFormulasRepository:
         # JSONB string decoded back to a dict
         assert result["input_schema"] == {}
 
+    async def test_create_round_trips_parameters(self):
+        pool = MagicMock()
+        pool.fetchrow = AsyncMock(
+            return_value={
+                "formula_id": "11111111-1111-1111-1111-111111111111",
+                "name": "RSI",
+                "input_schema": "{}",
+                # JSONB array stored as a string, decoded back to a list
+                "parameters": '[{"name": "period", "type": "PARAMETER_TYPE_INT"}]',
+            }
+        )
+        repo = FormulasRepository(pool)
+        result = await repo.create(
+            formula_id="11111111-1111-1111-1111-111111111111",
+            name="RSI",
+            description="",
+            source="x = 1",
+            author="user-1",
+            is_public=False,
+            input_schema={},
+            parameters=[{"name": "period", "type": "PARAMETER_TYPE_INT"}],
+        )
+        assert result["parameters"] == [{"name": "period", "type": "PARAMETER_TYPE_INT"}]
+
+    async def test_list_decodes_parameters(self):
+        row = {"formula_id": "a", "name": "f1", "input_schema": "{}", "parameters": "[]"}
+        pool = MagicMock()
+        pool.fetchval = AsyncMock(return_value=1)
+        pool.fetch = AsyncMock(return_value=[row])
+        repo = FormulasRepository(pool)
+        rows, _ = await repo.list(
+            author_filter="user-1", include_public=True, page_size=0, page_offset=0
+        )
+        assert rows[0]["parameters"] == []
+
     async def test_get_by_id_returns_none_when_not_found(self):
         pool = MagicMock()
         pool.fetchrow = AsyncMock(return_value=None)
@@ -183,6 +218,37 @@ def _repo_servicer(author: str):
     repo.delete = AsyncMock(return_value=True)
     servicer._repo = repo
     return servicer
+
+
+class TestExecuteFormulaParameterErrors:
+    async def test_out_of_range_param_returns_parameter_errors(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=MagicMock())
+        repo = MagicMock()
+        repo.get_by_id = AsyncMock(
+            return_value={
+                "formula_id": "f-1",
+                "name": "f",
+                "description": "",
+                "source": "result = params['period']",
+                "author": "user-1",
+                "is_public": False,
+                "input_schema": {},
+                "parameters": [
+                    {"name": "period", "type": "PARAMETER_TYPE_INT", "min": 1, "max": 200}
+                ],
+            }
+        )
+        servicer._repo = repo
+
+        req = indicators_pb2.ExecuteFormulaRequest(formula_id="f-1")
+        req.input_params.update({"period": 500})  # above max → validation fails
+
+        resp = await servicer.ExecuteFormula(req, MagicMock())
+        assert resp.success is False
+        assert [e.name for e in resp.parameter_errors] == ["period"]
+        assert "maximum" in resp.parameter_errors[0].reason
 
 
 class TestFormulaAdminOverride:

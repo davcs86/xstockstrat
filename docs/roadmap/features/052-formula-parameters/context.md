@@ -175,4 +175,25 @@
   `parameters | jsonb | not null | '[]'::jsonb`; 002 down dropped it cleanly (reversibility proven).
 - Files created: `services/xstockstrat-indicators/migrations/002_formula_parameters.up.sql`, `.down.sql`
 - Deviations: migrate/DB unavailable → postgres:16 container fallback (Deviation Log).
+
+### Steps 4–8 — indicators service (repository, validation engine, sandbox, servicer, tests) [done]
+- Step 4: `formulas_repository.py` — `_to_dict` decodes the new `parameters` JSONB to a list;
+  `create`/`update` take a `parameters` arg and bind it as `$8::jsonb` / `parameters = $6::jsonb`.
+- Step 5: new `app/services/parameters.py` — `validate_definitions` (identifier/uniqueness/type/
+  min-max/32-cap checks, raises `ValueError`) and `resolve_and_validate` (defaulting, type coercion,
+  range + unknown/missing-required checks; returns `(resolved, errors)` without raising).
+- Step 6: `sandbox.py` — `execute_formula` gains a `params` arg; the wrapper loads `params` as a
+  SEPARATE global (`json.loads(...)`), never merged into `data`.
+- Step 7: `servicer.py` — validates `input_params` before the sandbox and short-circuits to
+  `parameter_errors` on failure; validates definitions on Register/Update; persists parameters;
+  `_row_to_formula` reconstructs `FormulaParameter` protos via `ParseDict`. Write side converts
+  protos→dicts via `MessageToDict` (Deviation Log) so the repo's `json.dumps` works.
+- Step 8: added `tests/test_parameters.py`; extended `test_sandbox.py` (params separate from data)
+  and `test_formulas.py` (parameters round-trip + ExecuteFormula parameter_errors).
+- Verification: `ruff check` + `ruff format --check` clean; `pytest --cov=app --cov-fail-under=50`
+  → 57 passed, 83% coverage.
+- Files: `app/services/formulas_repository.py`, `app/services/parameters.py` (new),
+  `app/services/sandbox.py`, `app/handlers/servicer.py`, `tests/test_parameters.py` (new),
+  `tests/test_sandbox.py`, `tests/test_formulas.py`.
+- Deviations: Step 7 proto→dict serialization (Deviation Log).
 - Reviewers snapshot in feature.md is unchanged (reviewer-registry.md unchanged).

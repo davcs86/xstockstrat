@@ -188,7 +188,7 @@ Then confirm the column exists (psql): `\d indicators.formulas` shows `parameter
 
 ### Step 4 — service: Persist parameters in FormulasRepository
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/formulas_repository.py` — modify
@@ -221,7 +221,7 @@ Then confirm the column exists (psql): `\d indicators.formulas` shows `parameter
 
 ### Step 5 — service: Add parameter validation/defaulting engine
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/parameters.py` — create
@@ -259,7 +259,7 @@ rejection, unknown/missing-required, identifier/uniqueness/cap rejection). Lint 
 
 ### Step 6 — service: Expose validated params as a separate `params` variable in the sandbox
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/sandbox.py` — modify
@@ -291,7 +291,7 @@ resolves the value; `data` does not contain the param key). Lint in Step 8.
 
 ### Step 7 — service: Wire validation + input_params + parameters into IndicatorsServicer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/handlers/servicer.py` — modify
@@ -338,7 +338,7 @@ only calls the local sandbox + repo), so §5c header-propagation does not apply.
 
 ### Step 8 — test: Indicators parameter validation, sandbox params, repository, servicer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_parameters.py` — create
@@ -615,3 +615,9 @@ No CI coverage threshold for the UI (root CLAUDE.md); existing Playwright e2e un
 **Actual**: `migrate` binary and a running DB are unavailable in the environment. Per the sequential-mode "migrate / DB unavailable" fallback, `001_formulas.up.sql` then `002_formula_parameters.up.sql` were applied against a throwaway `postgres:16` container (`psql -v ON_ERROR_STOP=1`); `\d indicators.formulas` confirmed `parameters | jsonb | not null | '[]'::jsonb`, then `002_formula_parameters.down.sql` dropped the column cleanly (reversibility proven).
 **Reason**: no `migrate`/DB on host; container path proves both directions.
 **Disposition**: CI-equivalent fallback.
+
+### Deviation: Step 7 — proto→dict serialization for persisted parameters
+**Spec said**: Step 7.4/7.5 — "pass `parameters=list(request.parameters)` to `self._repo.create(...)`/`update(...)`"; Step 4 repo binds the JSONB arg via `json.dumps(list(parameters) if parameters else [])`.
+**Actual**: `request.parameters` are `FormulaParameter` protobuf messages, which `json.dumps` cannot serialize. The servicer now converts each proto to a plain dict via `google.protobuf.json_format.MessageToDict` before passing the list to `self._repo.create(...)`/`update(...)`; the in-memory `FormulaDefinition` still gets the protos directly (`parameters=list(request.parameters)`). `_row_to_formula` reconstructs protos from the stored dicts via `json_format.ParseDict` (as the spec already directed in Step 7.6) — a symmetric write/read JSON round-trip.
+**Reason**: the spec's literal `list(request.parameters)` is not JSON-serializable; converting to dicts is the minimal change that satisfies the intent (persist parameter definitions as JSONB) and matches the documented `ParseDict` read path. Confined to Step 7's file (`servicer.py`).
+**Disposition**: accepted — minimal in-scope fix; no contract or test-surface change.
