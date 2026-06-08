@@ -1,6 +1,6 @@
 # Feature: formula-parameters
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/formula-parameters`
 **Created**: 2026-06-08
 **Last Updated**: 2026-06-08
@@ -16,6 +16,7 @@
 | 2026-06-08 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 14 steps |
 | 2026-06-08 | `implementation-ready` (re-run) | /sdd-spec | Re-verified all 14 steps' codebase evidence against current tree; no drift, spec unchanged |
 | 2026-06-08 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started; Steps 1–2 (proto + stub regen) done on `claude/sdd-execute-formula-params-gy0lgo` |
+| 2026-06-08 | `in-progress` → `code-completed` | /sdd-execute | All 14 steps done (proto, migration, indicators engine+tests, analysis evaluator+test, agent+tests, UI, docs); ready for integration PR → main-dev |
 
 ---
 

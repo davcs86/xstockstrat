@@ -242,4 +242,25 @@
 - Files: `ParameterEditor.tsx` (new), `FormulaWorkspace.tsx`, `useFormulas.ts`, `ComponentEditor.tsx`,
   `src/app/insights/formulas/[id]/page.tsx`.
 - Deviations: e2e → tsc+lint fallback (Deviation Log).
+
+### Step 14 — docs: parameter soft-cap + service CLAUDE.md notes [done]
+- `services/xstockstrat-indicators/CLAUDE.md`: documented the `parameters` JSONB column, the `params`
+  sandbox variable (separate from `data`), `input_params`, structured `parameter_errors`, definition
+  validation, and the engine-enforced 32-parameter soft cap (no new config key).
+- `docs/runbooks/indicator-builder.md`: added a "Typed Parameters" section (declare params, read
+  `params["<name>"]` vs. series in `data`, validation/`parameter_errors`, the 32 cap, and the numeric-
+  only strategy-component note).
+- Verification: manual read-through; consistent with Steps 3/5/6. No automated gate.
+- Files: `services/xstockstrat-indicators/CLAUDE.md`, `docs/runbooks/indicator-builder.md`.
+- Deviations: none.
+
+## Session 2026-06-08 — sdd-execute (sequential) — COMPLETE
+**Steps this session**: 1–14 (all)
+**Progress**: 14 done / 14 total → feature `code-completed`
+**Stopped at**: all complete
+**Next**: integration PR `claude/sdd-execute-formula-params-gy0lgo` → `main-dev`
+**Verification recap**: buf lint/breaking (vs main-dev & main) PASS; migration up/down on postgres:16;
+indicators `pytest` 57 passed / 83% cov; analysis 92 passed / 58.6%; agent 57 passed / 64.4%; UI
+`tsc --noEmit` + `next lint` + `prettier --check` clean. CI-equivalent fallbacks (host codegen
+toolchain, postgres:16 migration check, tsc+lint for UI e2e) logged in the Deviation Log.
 - Reviewers snapshot in feature.md is unchanged (reviewer-registry.md unchanged).

@@ -1,6 +1,6 @@
 # Implementation Spec: formula-parameters
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-06-08
 **Regenerated**: 2026-06-08 (re-run; all codebase evidence re-verified against current tree)
 **Feature**: `docs/roadmap/features/052-formula-parameters/feature.md`
@@ -574,7 +574,7 @@ No CI coverage threshold for the UI (root CLAUDE.md); existing Playwright e2e un
 
 ### Step 14 — docs: Record parameter soft-cap and update service CLAUDE.md notes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/` + service CLAUDE.md
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
