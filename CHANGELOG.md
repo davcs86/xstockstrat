@@ -13,6 +13,19 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-06-08
+
+### Features
+- auth2-authorized-apps-ui: Add a per-user **"My Authorized Apps"** management module (new `/accounts` segment in `xstockstrat-ui`) that lets an operator list, audit, and **revoke** the OAuth apps (e.g. Claude.ai) they've authorized against the xstockstrat MCP agent, plus connect a new one. Extends feature `049-unify-admin-auth-gates`'s identity OAuth backend with additive list/revoke RPCs + a per-user linkage migration (049 shipped no list and no revocation).
+
+### Proto Changes
+- identity/v1/identity.proto
+
+### Summary
+7 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-06-07
 
 ### Summary
