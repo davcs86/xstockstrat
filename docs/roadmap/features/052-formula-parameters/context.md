@@ -33,3 +33,22 @@
 - Open questions recorded for impl-spec: proto typing of default/min/max, validation-error surface
   (SandboxExitReason vs dedicated field), strategy-component param value type, parameter-name
   validation, and an optional parameter-count cap.
+
+### Decision (2026-06-08, user) — separate parameters from series data
+
+- User: "I don't want to mix them. OHLCV data can stay in input_data, and use a different object for
+  parameters (eg. input_params)."
+- Confirmed current state: today OHLCV series and scalar knobs are conflated in the single
+  `ExecuteFormulaRequest.input_data` Struct → `data` dict; `input_schema` flatly lists both and is
+  never read at execution (`sandbox.py` ignores it).
+- Locked design:
+  - OHLCV/series stay in `input_data` → `data` (unchanged).
+  - Parameter *values* travel in a NEW `ExecuteFormulaRequest.input_params` Struct (field `= 7`,
+    additive/non-breaking) and are exposed to the formula as a SEPARATE `params` variable — NOT
+    merged into `data`. New formulas read `params["period"]`.
+  - Legacy formulas that stuff scalars into `input_data` keep reading `data[...]` unchanged.
+  - Param/OHLCV name collisions are now impossible (separate namespaces); that open question is
+    downgraded to "validate param names as Python identifiers" only.
+- Updated product-spec.md: added "Relationship to Existing Inputs" section; revised FR-2, FR-3, FR-4,
+  FR-7, FR-8, the proto-changes list (added `input_params` field), AC #2, and the name-collision open
+  question.
