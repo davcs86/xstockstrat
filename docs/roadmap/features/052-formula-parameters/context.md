@@ -208,4 +208,19 @@
 - Files: `services/xstockstrat-analysis/app/services/evaluator.py`,
   `services/xstockstrat-analysis/tests/test_strategy_evaluator.py`.
 - Deviations: none.
+
+### Steps 11–12 — agent carries parameter definitions through manage_formula [done]
+- Step 11: `tools.py` `manage_formula` gains a `parameters: list[dict] | None` arg (documented) and
+  threads `parameters or []` into the `formula` dict. `client.py` `manage_formula` maps each
+  parameter dict to a `FormulaParameter` proto (type-string→enum, default→`Value`, min/max when
+  present) and passes `parameters=[...]` to both `RegisterFormulaRequest` and `UpdateFormulaRequest`.
+  `manage_strategy` already carries numeric `StrategyComponent.params` — no change (FR-6).
+- Step 12: `test_tools.py` asserts the tool forwards the `parameters` list into the `formula` dict;
+  `test_client.py` asserts the mapped `RegisterFormulaRequest.parameters[0]` (name/type/required/
+  default/min/max).
+- Verification: `ruff check`/`ruff format --check` clean; `pytest --cov=app --cov-fail-under=40`
+  → 57 passed, 64.4% coverage.
+- Files: `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/app/tools.py`,
+  `services/xstockstrat-agent/tests/test_tools.py`, `services/xstockstrat-agent/tests/test_client.py`.
+- Deviations: none.
 - Reviewers snapshot in feature.md is unchanged (reviewer-registry.md unchanged).

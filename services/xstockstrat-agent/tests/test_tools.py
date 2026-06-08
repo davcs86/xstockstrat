@@ -339,6 +339,40 @@ class TestManageFormulaTool:
         assert m.call_args_list[0].kwargs["operation"] == "register"
         assert m.call_args_list[1].kwargs["operation"] == "delete"
 
+    @pytest.mark.asyncio
+    async def test_register_carries_parameter_definitions(self):
+        server = _make_server()
+        with patch.object(
+            client, "manage_formula", AsyncMock(return_value={"formula_id": "f-2"})
+        ) as m:
+            await _tool_fn(server, "manage_formula")(
+                operation="register",
+                name="rsi3",
+                source="result = params['period']",
+                admin_api_key="k",
+                parameters=[
+                    {
+                        "name": "period",
+                        "type": "int",
+                        "default": 14,
+                        "required": True,
+                        "min": 1,
+                        "max": 200,
+                    }
+                ],
+            )
+        formula = m.call_args.kwargs["formula"]
+        assert formula["parameters"] == [
+            {
+                "name": "period",
+                "type": "int",
+                "default": 14,
+                "required": True,
+                "min": 1,
+                "max": 200,
+            }
+        ]
+
 
 class TestManageSignalSourceTool:
     @pytest.mark.asyncio

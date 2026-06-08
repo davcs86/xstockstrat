@@ -440,7 +440,7 @@ cd services/xstockstrat-analysis && pytest --cov=app --cov-fail-under=40
 
 ### Step 11 — service: Carry parameter definitions/values through agent client + MCP tools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -477,7 +477,7 @@ cd services/xstockstrat-analysis && pytest --cov=app --cov-fail-under=40
 
 ### Step 12 — test: Agent manage_formula carries parameter definitions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
