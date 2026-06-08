@@ -509,7 +509,7 @@ cd services/xstockstrat-agent && pytest --cov=app --cov-fail-under=40
 
 ### Step 13 — service: Parameter-definition and parameter-value forms in the UI
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/FormulaWorkspace.tsx` — modify
@@ -621,3 +621,9 @@ No CI coverage threshold for the UI (root CLAUDE.md); existing Playwright e2e un
 **Actual**: `request.parameters` are `FormulaParameter` protobuf messages, which `json.dumps` cannot serialize. The servicer now converts each proto to a plain dict via `google.protobuf.json_format.MessageToDict` before passing the list to `self._repo.create(...)`/`update(...)`; the in-memory `FormulaDefinition` still gets the protos directly (`parameters=list(request.parameters)`). `_row_to_formula` reconstructs protos from the stored dicts via `json_format.ParseDict` (as the spec already directed in Step 7.6) — a symmetric write/read JSON round-trip.
 **Reason**: the spec's literal `list(request.parameters)` is not JSON-serializable; converting to dicts is the minimal change that satisfies the intent (persist parameter definitions as JSONB) and matches the documented `ParseDict` read path. Confined to Step 7's file (`servicer.py`).
 **Disposition**: accepted — minimal in-scope fix; no contract or test-surface change.
+
+### Deviation: Step 13 — UI verified via tsc+lint fallback (Playwright browsers unavailable)
+**Spec said**: `pnpm run lint` + `pnpm test:e2e -- insights`.
+**Actual**: Playwright browser binaries are not installed in the environment (`~/.cache/ms-playwright` absent) and cannot be downloaded here, so the e2e harness cannot launch chromium. Per the sequential-mode "Playwright dev-server harness times out / browsers unavailable" fallback, verification used `pnpm exec tsc --noEmit` (exit 0) + `pnpm run lint` (no ESLint warnings/errors); changed files also pass `prettier --check`.
+**Reason**: no Playwright browsers / dev-server harness available; tsc+lint is the documented CI-equivalent fallback for the Next.js frontend.
+**Disposition**: CI-equivalent fallback.

@@ -1,9 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type {
-  ListFormulasRequest,
-  RegisterFormulaRequest,
-  UpdateFormulaRequest,
-} from '@xstockstrat/proto/indicators/v1/indicators_pb';
+import type { ListFormulasRequest } from '@xstockstrat/proto/indicators/v1/indicators_pb';
+import type { FormulaParameterInit } from '@/components/insights/ParameterEditor';
 import { indicatorsClient } from '@/lib/browserClients/indicatorsClient';
 
 export function useFormulas(params: Partial<ListFormulasRequest> = {}) {
@@ -30,7 +27,15 @@ export function useFormula(formulaId: string | undefined) {
 export function useRegisterFormula() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (req: Partial<RegisterFormulaRequest>) =>
+    mutationFn: (req: {
+      name?: string;
+      description?: string;
+      source?: string;
+      isPublic?: boolean;
+      inputSchema?: Record<string, string>;
+      author?: string;
+      parameters?: FormulaParameterInit[];
+    }) =>
       indicatorsClient.registerFormula({
         name: req.name ?? '',
         description: req.description ?? '',
@@ -38,6 +43,7 @@ export function useRegisterFormula() {
         isPublic: req.isPublic ?? false,
         inputSchema: req.inputSchema ?? {},
         author: req.author ?? '',
+        parameters: req.parameters ?? [],
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['indicators-formulas'] }),
   });
@@ -46,7 +52,15 @@ export function useRegisterFormula() {
 export function useUpdateFormula() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (req: Partial<UpdateFormulaRequest> & { formulaId: string }) =>
+    mutationFn: (req: {
+      formulaId: string;
+      userId?: string;
+      name?: string;
+      description?: string;
+      source?: string;
+      isPublic?: boolean;
+      parameters?: FormulaParameterInit[];
+    }) =>
       indicatorsClient.updateFormula({
         formulaId: req.formulaId,
         userId: req.userId ?? '',
@@ -54,6 +68,7 @@ export function useUpdateFormula() {
         description: req.description ?? '',
         source: req.source ?? '',
         isPublic: req.isPublic ?? false,
+        parameters: req.parameters ?? [],
       }),
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['indicators-formulas'] });
@@ -65,8 +80,7 @@ export function useUpdateFormula() {
 export function useDeleteFormula() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (req: { formulaId: string; userId: string }) =>
-      indicatorsClient.deleteFormula(req),
+    mutationFn: (req: { formulaId: string; userId: string }) => indicatorsClient.deleteFormula(req),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['indicators-formulas'] }),
   });
 }
@@ -79,11 +93,13 @@ export function useExecuteFormula() {
       formulaId?: string;
       formulaSource?: string;
       inputData: Record<string, unknown>;
+      inputParams?: Record<string, unknown>;
     }) =>
       indicatorsClient.executeFormula({
         formulaId: req.formulaId ?? '',
         formulaSource: req.formulaSource ?? '',
         inputData: req.inputData as Record<string, never>,
+        inputParams: (req.inputParams ?? {}) as Record<string, never>,
       }),
   });
 }

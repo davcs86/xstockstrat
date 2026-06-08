@@ -223,4 +223,23 @@
 - Files: `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/app/tools.py`,
   `services/xstockstrat-agent/tests/test_tools.py`, `services/xstockstrat-agent/tests/test_client.py`.
 - Deviations: none.
+
+### Step 13 — UI parameter-definition and parameter-value forms [done]
+- New `ParameterEditor.tsx`: add/edit/reorder/remove typed parameter definitions (Select over
+  int/float/bool/string; min/max only for numeric); exports `ParameterDraft`/`FormulaParameterInit`
+  plus `toParameterInit`/`draftFromProto`/`paramDefaultNumber`/`paramDefaultRaw`/`isNumericType`.
+- `FormulaWorkspace.tsx`: parameter-definitions cell threaded into `onSave` (value shape gains
+  `parameters`); Run cell renders a generated typed `params` form (pre-filled with defaults) sent as
+  `inputParams` alongside the unchanged `inputData` JSON; surfaces `result.parameterErrors`.
+- `useFormulas.ts`: register/update pass `parameters`; `useExecuteFormula` adds `inputParams`.
+- `ComponentEditor.tsx`: CUSTOM_FORMULA branch reads `selectedFormula.parameters`, renders numeric
+  params bound to `value.params` (pre-filled with defaults on selection), and shows bool/string
+  read-only with "not settable per strategy component" (FR-5). Builtin path unchanged.
+- `[id]/page.tsx`: passes `initialParameters={formula.parameters}`. `new/page.tsx` needed no change
+  (the `onSave` values flow through the spread).
+- Verification: `pnpm exec tsc --noEmit` (exit 0) + `pnpm run lint` (clean) + `prettier --check`
+  (clean). Playwright e2e fallback applied — browsers unavailable (Deviation Log).
+- Files: `ParameterEditor.tsx` (new), `FormulaWorkspace.tsx`, `useFormulas.ts`, `ComponentEditor.tsx`,
+  `src/app/insights/formulas/[id]/page.tsx`.
+- Deviations: e2e → tsc+lint fallback (Deviation Log).
 - Reviewers snapshot in feature.md is unchanged (reviewer-registry.md unchanged).
