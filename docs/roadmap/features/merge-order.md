@@ -22,6 +22,8 @@ cannot open its final integration PR to `main-dev` until the feature in the
 | `strategy-creation-flow` | `formula-management-ui` | Consumes `ListFormulas` RPC from `xstockstrat-indicators` (feature 003); formula picker in the component editor depends on this RPC existing in generated stubs | Yes |
 | `strategy-creation-flow` | `strategy-engine` | Consumes `ManageStrategy`, `GetStrategy`, `ListStrategyDefinitions`, and `SetStrategyLive` RPCs from `xstockstrat-analysis` (feature 047); all strategy authoring and live toggle RPCs must exist before the UI can call them | Yes |
 | `strategy-creation-flow` | `live-strategy-alert-engine` | FR-5 live evaluation toggle calls `SetStrategyLive` and reads `live_enabled` column on `analysis.strategies` — both introduced by feature 048 | Yes |
+| `resumable-chunked-backfills` | `durable-observable-backfills` | Builds directly on the `ingest.backfill_jobs` table and `max_concurrent_jobs` gate (FR-2/FR-6); the `ingest.backfill_chunks` migration must run-order after feature 052's migration | No |
+| `resumable-chunked-backfills` | `backfill-backtest-coverage` | `GAPS_ONLY` fill mode (FR-4) consumes the `GetDataCoverage` RPC introduced by feature 053 | No |
 
 ---
 

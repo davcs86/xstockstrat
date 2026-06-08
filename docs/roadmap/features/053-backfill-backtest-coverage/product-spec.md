@@ -38,14 +38,17 @@ message and (ideally) offer a one-click / one-call "backfill this range" action 
 existing `TriggerBackfill` RPC. (Wiring the actual UI button may be a follow-up; the contract must
 support it.)
 
-FR-4. Normalize the timeframe vocabulary so backfill and backtest speak the same language. Either
-introduce a shared timeframe enum (preferred per the repo's "prefer enums" proto governance) or
-converge on one canonical string and translate at the edges. `"1d"` (backfill) and `"1Day"`
-(backtest's `GetBars` call) MUST no longer be able to silently miss each other.
+FR-4. Normalize the timeframe vocabulary via a **shared proto enum** (decision: shared enum, per the
+repo's "prefer enums" governance — sdd-review 2026-06-08). Introduce a `Timeframe` enum (with the
+mandatory `TIMEFRAME_UNSPECIFIED = 0` sentinel) in `common/v1`, and migrate the existing string
+`timeframe` fields on the backfill and `GetBars` paths to it. `"1d"` (backfill) and `"1Day"`
+(backtest's `GetBars` call) MUST no longer be able to silently miss each other. **This is a breaking
+proto change** — see Proto Contract Changes and Feature Workflow Notes for the deprecation path and
+elevated approval gate.
 
-FR-5. `GetDataCoverage` MUST be exposed to the MCP agent (a new agent tool or an extension of an
-existing one) so the AI agent can check coverage before proposing a backtest. _(Confirm scope at
-/sdd-spec time; may be deferred to keep this feature backend-only.)_
+FR-5. _(Deferred — out of scope for this feature; decision sdd-review 2026-06-08.)_ Exposing
+`GetDataCoverage` to the MCP agent as a tool is a thin follow-up that consumes this contract. This
+feature stays backend-only (`marketdata` + `analysis`). Tracked for a later agent-tool feature.
 
 ## Out of Scope
 
@@ -55,6 +58,9 @@ existing one) so the AI agent can check coverage before proposing a backtest. _(
 - Changing the backtest engine's strategy logic (SMA crossover) or scoring.
 - Auto-triggering a backfill from inside `RunBacktest` (we return the gap; we do not silently
   fetch — that would hide cost and latency from the caller).
+- Exposing `GetDataCoverage` as an MCP agent tool (FR-5, deferred to a follow-up).
+- The UI "one-click backfill this range" action (separate `xstockstrat-ui` feature; this feature
+  only guarantees the contract supports it).
 
 ## Affected Services
 
@@ -76,9 +82,12 @@ Exact service names from CLAUDE.md Service Registry:
     insufficient-data variant (e.g. a `coverage_gap` message / status enum). Prefer **additive**
     fields to stay non-breaking; if the existing response shape can't express it cleanly, evaluate a
     v2 per `docs/runbooks/proto-versioning.md` (avoid if possible).
-  - Timeframe enum (FR-4): if introduced, lives in `common/v1` or `marketdata/v1`. Adding an enum +
-    new fields is additive; **changing existing string fields to enum is breaking** — needs the
-    deprecation path. Decide approach at /sdd-spec time.
+  - `packages/proto/common/v1/common.proto` — new `Timeframe` enum (FR-4) with
+    `TIMEFRAME_UNSPECIFIED = 0`. **Migrating existing string `timeframe` fields to the enum is a
+    breaking change** → follow the deprecation path in `docs/runbooks/proto-versioning.md`: add the
+    enum field alongside the deprecated string field for one release cycle, with a deprecation
+    comment, before removing the string. `buf breaking` will flag the eventual removal — gated by the
+    elevated approval below.
 
 ## Config Key Changes
 
@@ -94,8 +103,10 @@ Exact service names from CLAUDE.md Service Registry:
 
 Branch to create: `feature/backfill-backtest-coverage` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (non-breaking proto change) — marketdata + analysis owners
-- [ ] 2 service owners + platform lead (only if a breaking proto change / v2 is chosen for FR-4)
+- [ ] 1 service owner approval (non-breaking proto change) — superseded by the breaking gate below
+- [x] **2 service owners + platform lead** — the `Timeframe` enum migration (FR-4) is a breaking
+  proto change (see `docs/runbooks/approval-flow.md`); requires marketdata + analysis owners + the
+  platform lead, plus a one-release deprecation cycle.
 - [ ] DBA review + service owner (only if a coverage-supporting index migration is added)
 
 ## Acceptance Criteria
@@ -109,11 +120,16 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    that backfills then immediately backtests the same symbol/timeframe and gets non-empty results.
 4. (If FR-5 in scope) the MCP agent can query coverage before proposing a backtest.
 
-## Open Questions
+## Resolved Decisions
 
-- [ ] Timeframe normalization: shared enum (cleaner, but touches existing string fields → breaking
-      unless additive) vs. canonical string + edge translation (non-breaking, less clean)?
-- [ ] Should `RunBacktest` return the gap as a soft result (status field) or as a gRPC error with
-      details? Soft result is friendlier for partial multi-symbol backtests.
-- [ ] Is FR-5 (agent tool for coverage) in this feature, or a thin follow-up?
-- [ ] Does the UI "one-click backfill" land here or as a separate UI feature consuming this contract?
+_(Resolved during /sdd-review product-spec, 2026-06-08.)_
+
+- [x] **Timeframe normalization**: shared `Timeframe` proto enum in `common/v1` (FR-4). Accepted as a
+      breaking proto change with a one-release deprecation cycle and the elevated approval gate above.
+- [x] **Insufficient-data signaling**: `RunBacktest` returns a **soft structured result** (status +
+      `coverage_gap` detail), not a gRPC error — friendlier for partial multi-symbol backtests where
+      some symbols have data and others don't.
+- [x] **Agent tool (FR-5)**: deferred — out of scope; a thin follow-up feature will expose
+      `GetDataCoverage` to the MCP agent. This feature stays backend-only.
+- [x] **UI "one-click backfill"**: out of scope — a separate `xstockstrat-ui` feature consuming this
+      contract. This feature only guarantees the contract supports it (FR-3).

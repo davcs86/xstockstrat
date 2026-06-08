@@ -20,3 +20,17 @@
   - No coverage/gap query RPC exists on marketdata today.
 - Depends on nothing in P0 for the contract, but the `GetDataCoverage` primitive defined here is a
   prerequisite for P2's "fill only the gaps" mode.
+
+## Session 2026-06-08 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- All structural criteria passed; gate initially failed only on criterion 9 (unchecked Open
+  Questions). Resolved all 4 via /sdd-review decisions:
+  - Timeframe normalization: shared `Timeframe` proto enum in common/v1. This is a BREAKING proto
+    change → approval gate elevated to 2 owners + Platform Lead + one-release deprecation cycle.
+    Reviewers table updated to add Platform Lead.
+  - Insufficient-data: RunBacktest returns a soft structured result (status + coverage_gap), not an error.
+  - FR-5 agent tool: deferred (out of scope; thin follow-up).
+  - UI one-click backfill: out of scope (separate UI feature consuming this contract).
+- Trading domain checks: skipped (non-trading feature).
+- Overlap findings: shares marketdata with 052/054 (advisory WARN). No FAIL-level overlap.

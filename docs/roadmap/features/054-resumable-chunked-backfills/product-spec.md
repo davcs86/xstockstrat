@@ -79,11 +79,12 @@ Exact service names from CLAUDE.md Service Registry:
 ## Config Key Changes
 
 - [ ] No new config keys
-- **Possible new keys (decide at /sdd-spec):**
-  - `ingest.backfill.chunk_max_bars` (int) — target max bars per chunk (chunk-size bound for FR-1).
-  - `ingest.backfill.chunk_window_days` (int) — time-window chunk size for FR-1.
-  - `ingest.backfill.max_concurrent_chunks` (int) — if chunk concurrency is gated separately from
-    `max_concurrent_jobs` (FR-6).
+- **New keys (confirmed — sdd-review 2026-06-08):**
+  - `ingest.backfill.chunk_max_bars` (int) — hard per-chunk bar cap the planner never exceeds (FR-1).
+  - `ingest.backfill.chunk_window_days` (int) — default time-window chunk size; scaled down for
+    high-density timeframes (FR-1).
+  - `ingest.backfill.max_concurrent_chunks` (int, default `3`) — chunk-level concurrency gate,
+    separate from P0's job-level `max_concurrent_jobs` (FR-6).
   - All follow `<service>.<category>.<key>` and are documented in `xstockstrat-ingest/CLAUDE.md`.
 
 ## Database Changes
@@ -120,12 +121,23 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 5. `docs/runbooks/historical-backfill.md` is updated — the manual "split into yearly jobs" `for`-loop
    is replaced with "trigger one job; the server chunks it".
 
-## Open Questions
+## Resolved Decisions
 
-- [ ] Chunk boundary strategy: by time window (e.g. 1 year), by symbol batch (e.g. 20), or both?
-      How does timeframe density (`1m` vs `1d`) drive chunk sizing?
-- [ ] Resume idempotency: rely on marketdata `BackfillBars` upsert semantics, or have chunks write
-      only after a clean fetch? What is marketdata's current behavior on partial-write + re-fetch?
-- [ ] Separate `max_concurrent_chunks` key, or reuse `max_concurrent_jobs` for chunk-level gating?
-- [ ] Retention/cleanup of `ingest.backfill_chunks` rows for completed jobs.
-- [ ] Should `GAPS_ONLY` become the default mode for agent-scheduled (feature 010) refreshes?
+_(Resolved during /sdd-review product-spec, 2026-06-08.)_
+
+- [x] **Chunk boundary strategy**: both axes — primary split by time window
+      (`ingest.backfill.chunk_window_days`) and secondary by symbol batch. Timeframe density drives
+      sizing: high-density timeframes (`1m`) use a smaller window so no chunk approaches the runbook's
+      ~1M-bar ceiling; `1d` uses a larger window. `ingest.backfill.chunk_max_bars` is the hard
+      per-chunk cap that the planner respects regardless of window.
+- [x] **Resume idempotency**: a chunk is marked `COMPLETED` only after a clean fetch; on resume an
+      incomplete chunk re-fetches its **entire** window, relying on marketdata `BackfillBars` upsert
+      semantics to make re-fetch safe. _(Impl-spec verification: confirm marketdata's OHLCV write is
+      an idempotent upsert; if it is insert-only, that must be fixed first — flag at /sdd-spec.)_
+- [x] **Chunk concurrency key**: add a separate `ingest.backfill.max_concurrent_chunks` (default `3`)
+      for chunk-level gating; `max_concurrent_jobs` (from P0) stays the job-level gate.
+- [x] **`ingest.backfill_chunks` retention**: same policy as `ingest.backfill_jobs` (retain; rows are
+      FK-bound to the parent job and cascade-delete with it if/when job retention is added).
+- [x] **`GAPS_ONLY` default for scheduled refreshes**: yes — agent-scheduled (feature 010) refreshes
+      default to `GAPS_ONLY`; manual operator triggers default to `FULL`. (Surfaced as a request
+      default, not enforced in the proto.)

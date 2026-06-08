@@ -19,3 +19,19 @@
   - `docs/runbooks/historical-backfill.md` "Large Backfill Strategy" tells operators to manually
     split into per-year loops — this feature moves that into the server.
   - Only knob today is a binary `overwrite` flag; no gap-aware refresh.
+
+## Session 2026-06-08 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- All structural criteria passed; gate initially failed only on criterion 9 (unchecked Open
+  Questions). Resolved all 5 via /sdd-review decisions:
+  - Chunk strategy: both time-window + symbol-batch; density-driven sizing; chunk_max_bars hard cap.
+  - Resume idempotency: chunk COMPLETED only after clean fetch; re-fetch whole window relying on
+    marketdata upsert. Impl-spec must verify marketdata OHLCV write is an upsert (not insert-only).
+  - Chunk concurrency: separate key `ingest.backfill.max_concurrent_chunks` (default 3).
+  - Retention: same as backfill_jobs; chunks FK-bound, cascade with parent.
+  - GAPS_ONLY default: yes for agent-scheduled (feature 010) refreshes; manual triggers default FULL.
+- Recorded blocking deps in merge-order.md: 054 waits for 052 (backfill_jobs table + concurrency
+  gate, migration run-order) and 053 (GetDataCoverage for GAPS_ONLY).
+- Trading domain checks: N/A — "Alpaca"/"backfill"(contains "fill") matched incidentally; no
+  order/fill lifecycle behavior touched.

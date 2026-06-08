@@ -1,6 +1,6 @@
 # Feature: durable-observable-backfills
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/durable-observable-backfills`
 **Created**: 2026-06-08
 **Last Updated**: 2026-06-08
@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-06-08 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-06-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved; 4 open questions resolved (retry impl, marketdata bars_total, drop in-memory dict, retain jobs) |
 
 ---
 
@@ -49,4 +50,4 @@ _Downstream-only (not modified, called as a dependency): `xstockstrat-notify`, `
 
 ## Next Action
 
-`/sdd-review durable-observable-backfills product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec durable-observable-backfills` — generate implementation spec from the approved product spec

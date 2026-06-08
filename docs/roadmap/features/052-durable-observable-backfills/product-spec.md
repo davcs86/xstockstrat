@@ -59,13 +59,16 @@ alone, not only from the ledger payload. (New repeated-string field on the proto
 
 **Honesty (implement or remove)**
 
-FR-8. `ingest.backfill.retry_on_failure` (default `true`): MUST be honored — on a transient
-`BackfillBars` failure, retry per a bounded policy (see Open Questions for max attempts / backoff) —
-OR the key MUST be removed from config defaults and `xstockstrat-ingest/CLAUDE.md`. No inert key.
+FR-8. `ingest.backfill.retry_on_failure` (default `true`) MUST be **implemented** (decision:
+implement, not remove — sdd-review 2026-06-08): on a transient `BackfillBars` failure, retry per a
+bounded policy — max attempts governed by the new `ingest.backfill.max_retry_attempts` key
+(default `3`), exponential backoff `2s / 4s / 8s`, retrying only the failed symbols of the job. When
+`retry_on_failure=false`, the first failure is terminal (no retry).
 
-FR-9. `ingest.backfill.max_concurrent_jobs` (default `3`): MUST be enforced with a real concurrency
-gate (semaphore / queue) around `_run_backfill` — OR removed. Today every `TriggerBackfill` fires an
-unbounded `asyncio.create_task`. If enforced, jobs above the limit stay `QUEUED` until a slot frees.
+FR-9. `ingest.backfill.max_concurrent_jobs` (default `3`) MUST be **implemented** (decision:
+implement, not remove — sdd-review 2026-06-08): enforce a real concurrency gate (asyncio semaphore /
+queue) around `_run_backfill`. Today every `TriggerBackfill` fires an unbounded
+`asyncio.create_task`. Jobs above the limit stay `QUEUED` until a slot frees.
 
 ## Out of Scope
 
@@ -92,19 +95,20 @@ Exact service names from CLAUDE.md Service Registry:
 - **Changes required (non-breaking, additive):**
   - `packages/proto/ingest/v1/ingest.proto` — add `repeated string failed_symbols` to `BackfillJob`
     (next free field number — currently fields 1–10, so `11`). Populates FR-7.
-  - Optional: add an expected-bar-count field to `marketdata.v1` `BackfillBarsResponse` for FR-6,
-    if ingest cannot derive the estimate itself. Decide at /sdd-spec time.
+  - `packages/proto/marketdata/v1/marketdata.proto` — add an expected-bar-count field to
+    `BackfillBarsResponse` (decision: marketdata returns the estimate — sdd-review 2026-06-08).
+    Ingest sets `BackfillJob.bars_total` from this value (FR-6). Next free field number.
   - Both are additive field additions → non-breaking; `buf breaking` must still pass.
 
 ## Config Key Changes
 
 - [ ] No new config keys
-- **Existing keys whose behavior changes (no new keys):**
-  - `ingest.backfill.retry_on_failure` (bool, default `true`) — implement or remove (FR-8).
-  - `ingest.backfill.max_concurrent_jobs` (int, default `3`) — implement or remove (FR-9).
-  - If retry is implemented, may introduce `ingest.backfill.max_retry_attempts` (int) — see Open
-    Questions. Any new key follows `<service>.<category>.<key>` and is documented in the service
-    CLAUDE.md.
+- **Existing keys whose behavior changes (now implemented, not inert):**
+  - `ingest.backfill.retry_on_failure` (bool, default `true`) — implemented (FR-8).
+  - `ingest.backfill.max_concurrent_jobs` (int, default `3`) — implemented (FR-9).
+- **New key:**
+  - `ingest.backfill.max_retry_attempts` (int, default `3`) — bounds FR-8 retries. Follows
+    `<service>.<category>.<key>`; documented in `xstockstrat-ingest/CLAUDE.md` Config Keys table.
 
 ## Database Changes
 
@@ -135,17 +139,23 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 4. A `PARTIAL` job returns its `failed_symbols` list directly from `GetBackfillStatus`.
 5. With `max_concurrent_jobs=1`, triggering two jobs leaves the second `QUEUED` until the first
    finishes (verifiable via `ListBackfillJobs`). _(If FR-9 is implemented rather than removed.)_
-6. `ingest.backfill.retry_on_failure` and `max_concurrent_jobs` either visibly change behavior in
-   tests, or are absent from config defaults and the service CLAUDE.md. No documented-but-inert key
-   remains.
+6. `ingest.backfill.retry_on_failure` visibly changes behavior in tests: with it `true`, a transient
+   `BackfillBars` failure is retried up to `max_retry_attempts` with backoff; with it `false`, the
+   first failure is terminal. No documented-but-inert key remains.
 7. `xstockstrat-ingest/CLAUDE.md` "Ledger Events Emitted" table matches what the code actually emits.
 
-## Open Questions
+## Resolved Decisions
 
-- [ ] Retry policy specifics: max attempts (propose 3) and backoff (propose exponential 2s/4s/8s)?
-      Per-job or per-symbol retry? Does retry need its own config key (`max_retry_attempts`)?
-- [ ] For FR-6, does `marketdata` return an expected-bar-count, or does ingest estimate locally from
-      a trading-day calendar? (Affects whether a marketdata proto field is needed.)
-- [ ] Should `ingest.backfill_jobs` retain history indefinitely or have a retention/cleanup policy?
-- [ ] Write-through-cache the dict over the table, or read the table on every RPC and drop the dict
-      entirely? (Multi-replica correctness favors dropping the dict.)
+_(Resolved during /sdd-review product-spec, 2026-06-08.)_
+
+- [x] **Retry policy**: implement (FR-8). Max attempts via new `ingest.backfill.max_retry_attempts`
+      (default `3`); exponential backoff `2s / 4s / 8s`; retry only the failed symbols of the job.
+- [x] **`bars_total` source** (FR-6): `marketdata` returns an expected-bar-count from
+      `BackfillBarsResponse`; ingest sets `bars_total` from it. (Authoritative; avoids ingest owning
+      a market calendar.)
+- [x] **Job-state model**: drop the in-memory `self._jobs` dict entirely and read/write
+      `ingest.backfill_jobs` on every RPC — required for multi-replica correctness, not a
+      write-through cache.
+- [x] **`ingest.backfill_jobs` retention**: retain indefinitely for now (low-volume operational
+      state keyed by uuid). A retention/cleanup policy is explicitly out of scope here and noted as a
+      future ops concern (revisit alongside P2 `ingest.backfill_chunks` retention).
