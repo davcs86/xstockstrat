@@ -1,6 +1,6 @@
 # Implementation Spec: formula-parameters
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-06-08
 **Regenerated**: 2026-06-08 (re-run; all codebase evidence re-verified against current tree)
 **Feature**: `docs/roadmap/features/052-formula-parameters/feature.md`
@@ -44,7 +44,7 @@ records config-key and CLAUDE.md updates. Backward compatibility is preserved th
 
 ### Step 1 — proto: Add FormulaParameter, ParameterType, input_params, and parameter_errors
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/indicators/v1/indicators.proto` — modify
@@ -115,7 +115,7 @@ Also confirm non-breaking against the production baseline the product spec requi
 
 ### Step 2 — proto-gen: Regenerate Go/Python/TS stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/indicators/v1/` — modify (generated)
@@ -604,4 +604,8 @@ No CI coverage threshold for the UI (root CLAUDE.md); existing Playwright e2e un
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 2 — proto-gen toolchain via host install (CI-equivalent fallback)
+**Spec said**: Run `./scripts/buf-gen.sh` (via the Docker codegen container, `Dockerfile.codegen` / `localenv-setup.sh`).
+**Actual**: The Docker codegen image build hit a Docker Hub `429 Too Many Requests` (unauthenticated pull rate limit) on `golang:1.25-trixie`. Per the sequential-mode "Proto codegen container blocked" fallback, the codegen toolchain was installed on the host pinned to the CI `proto-freshness` job versions (`.github/workflows/ci.yml` L136–138): `buf` (latest), `protoc-gen-go@v1.36.11`, `protoc-gen-go-grpc@v1.6.2`, `protoc-gen-connect-go@v1.19.2`, `grpcio-tools==1.80.0`, and the TS plugins `ts-proto@2.11.8` / `@bufbuild/protoc-gen-es@2.12.0` / `@connectrpc/protoc-gen-connect-es@1.7.0`. `./scripts/buf-gen.sh` was then run on the host; `git diff packages/proto/gen/` is scoped to the indicators service only and `buf-gen.sh` is idempotent (mirrors the CI stale-stub check).
+**Reason**: Docker Hub rate limit blocked the container path; host toolchain matches CI versions exactly.
+**Disposition**: CI-equivalent fallback. Note: `Dockerfile.codegen` pins `protoc-gen-go-grpc@v1.6.1` while CI (and the committed stubs) use `v1.6.2` — a pre-existing Dockerfile drift, not introduced here; v1.6.2 was used to match CI/committed output.

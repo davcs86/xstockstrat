@@ -27,7 +27,7 @@ from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 from common.v1 import common_pb2 as common_dot_v1_dot_common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1eindicators/v1/indicators.proto\x12\x19xstockstrat.indicators.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x16\x63ommon/v1/common.proto\"\x8f\x02\n\x17\x43omputeIndicatorRequest\x12\x11\n\tindicator\x18\x01 \x01(\t\x12\x0e\n\x06values\x18\x02 \x03(\x01\x12N\n\x06params\x18\x03 \x03(\x0b\x32>.xstockstrat.indicators.v1.ComputeIndicatorRequest.ParamsEntry\x12/\n\x05range\x18\x04 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x0e\n\x06symbol\x18\x05 \x01(\t\x12\x11\n\ttimeframe\x18\x06 \x01(\t\x1a-\n\x0bParamsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\"\xf5\x01\n\x18\x43omputeIndicatorResponse\x12\x39\n\x06result\x18\x01 \x03(\x0b\x32).xstockstrat.indicators.v1.IndicatorPoint\x12\x11\n\tindicator\x18\x02 \x01(\t\x12X\n\x0bparams_used\x18\x03 \x03(\x0b\x32\x43.xstockstrat.indicators.v1.ComputeIndicatorResponse.ParamsUsedEntry\x1a\x31\n\x0fParamsUsedEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\"\xbc\x01\n\x0eIndicatorPoint\x12(\n\x04time\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05value\x18\x02 \x01(\x01\x12\x43\n\x05\x65xtra\x18\x03 \x03(\x0b\x32\x34.xstockstrat.indicators.v1.IndicatorPoint.ExtraEntry\x1a,\n\nExtraEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\"\xa0\x02\n\x15\x45xecuteFormulaRequest\x12\x12\n\nformula_id\x18\x01 \x01(\t\x12\x16\n\x0e\x66ormula_source\x18\x02 \x01(\t\x12+\n\ninput_data\x18\x03 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x46\n\x03\x65nv\x18\x04 \x03(\x0b\x32\x39.xstockstrat.indicators.v1.ExecuteFormulaRequest.EnvEntry\x12\x1b\n\x13timeout_ms_override\x18\x05 \x01(\x05\x12\x1d\n\x15memory_bytes_override\x18\x06 \x01(\x03\x1a*\n\x08\x45nvEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xf5\x01\n\x16\x45xecuteFormulaResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\'\n\x06output\x18\x02 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x0e\n\x06stdout\x18\x03 \x01(\t\x12\x0e\n\x06stderr\x18\x04 \x01(\t\x12\x14\n\x0c\x65xecution_ms\x18\x05 \x01(\x03\x12\x19\n\x11memory_used_bytes\x18\x06 \x01(\x03\x12\r\n\x05\x65rror\x18\x07 \x01(\t\x12\x41\n\x0b\x65xit_reason\x18\x08 \x01(\x0e\x32,.xstockstrat.indicators.v1.SandboxExitReason\"\xe6\x02\n\x11\x46ormulaDefinition\x12\x12\n\nformula_id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\x12\x0e\n\x06source\x18\x04 \x01(\t\x12\x0e\n\x06\x61uthor\x18\x05 \x01(\t\x12.\n\ncreated_at\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nupdated_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x11\n\tis_public\x18\x08 \x01(\x08\x12S\n\x0cinput_schema\x18\t \x03(\x0b\x32=.xstockstrat.indicators.v1.FormulaDefinition.InputSchemaEntry\x1a\x32\n\x10InputSchemaEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x17\n\x15ListIndicatorsRequest\"V\n\x16ListIndicatorsResponse\x12<\n\nindicators\x18\x01 \x03(\x0b\x32(.xstockstrat.indicators.v1.IndicatorMeta\"d\n\rIndicatorMeta\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x17\n\x0frequired_params\x18\x03 \x03(\t\x12\x17\n\x0foptional_params\x18\x04 \x03(\t\"\xfc\x01\n\x16RegisterFormulaRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x0e\n\x06source\x18\x03 \x01(\t\x12\x11\n\tis_public\x18\x04 \x01(\x08\x12X\n\x0cinput_schema\x18\x05 \x03(\x0b\x32\x42.xstockstrat.indicators.v1.RegisterFormulaRequest.InputSchemaEntry\x12\x0e\n\x06\x61uthor\x18\x06 \x01(\t\x1a\x32\n\x10InputSchemaEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"-\n\x17RegisterFormulaResponse\x12\x12\n\nformula_id\x18\x01 \x01(\t\"\'\n\x11GetFormulaRequest\x12\x12\n\nformula_id\x18\x01 \x01(\t\"l\n\x13ListFormulasRequest\x12\x15\n\rauthor_filter\x18\x01 \x01(\t\x12\x16\n\x0einclude_public\x18\x02 \x01(\x08\x12\x11\n\tpage_size\x18\x03 \x01(\x05\x12\x13\n\x0bpage_offset\x18\x04 \x01(\x05\"k\n\x14ListFormulasResponse\x12>\n\x08\x66ormulas\x18\x01 \x03(\x0b\x32,.xstockstrat.indicators.v1.FormulaDefinition\x12\x13\n\x0btotal_count\x18\x02 \x01(\x05\"\x81\x01\n\x14UpdateFormulaRequest\x12\x12\n\nformula_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x04 \x01(\t\x12\x0e\n\x06source\x18\x05 \x01(\t\x12\x11\n\tis_public\x18\x06 \x01(\x08\"V\n\x15UpdateFormulaResponse\x12=\n\x07\x66ormula\x18\x01 \x01(\x0b\x32,.xstockstrat.indicators.v1.FormulaDefinition\";\n\x14\x44\x65leteFormulaRequest\x12\x12\n\nformula_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\"(\n\x15\x44\x65leteFormulaResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08*\xf2\x01\n\x11SandboxExitReason\x12#\n\x1fSANDBOX_EXIT_REASON_UNSPECIFIED\x10\x00\x12\x1f\n\x1bSANDBOX_EXIT_REASON_SUCCESS\x10\x01\x12\x1f\n\x1bSANDBOX_EXIT_REASON_TIMEOUT\x10\x02\x12\'\n#SANDBOX_EXIT_REASON_MEMORY_EXCEEDED\x10\x03\x12%\n!SANDBOX_EXIT_REASON_RUNTIME_ERROR\x10\x04\x12&\n\"SANDBOX_EXIT_REASON_IMPORT_BLOCKED\x10\x05\x32\xbb\x07\n\x11IndicatorsService\x12{\n\x10\x43omputeIndicator\x12\x32.xstockstrat.indicators.v1.ComputeIndicatorRequest\x1a\x33.xstockstrat.indicators.v1.ComputeIndicatorResponse\x12u\n\x0e\x45xecuteFormula\x12\x30.xstockstrat.indicators.v1.ExecuteFormulaRequest\x1a\x31.xstockstrat.indicators.v1.ExecuteFormulaResponse\x12u\n\x0eListIndicators\x12\x30.xstockstrat.indicators.v1.ListIndicatorsRequest\x1a\x31.xstockstrat.indicators.v1.ListIndicatorsResponse\x12x\n\x0fRegisterFormula\x12\x31.xstockstrat.indicators.v1.RegisterFormulaRequest\x1a\x32.xstockstrat.indicators.v1.RegisterFormulaResponse\x12h\n\nGetFormula\x12,.xstockstrat.indicators.v1.GetFormulaRequest\x1a,.xstockstrat.indicators.v1.FormulaDefinition\x12o\n\x0cListFormulas\x12..xstockstrat.indicators.v1.ListFormulasRequest\x1a/.xstockstrat.indicators.v1.ListFormulasResponse\x12r\n\rUpdateFormula\x12/.xstockstrat.indicators.v1.UpdateFormulaRequest\x1a\x30.xstockstrat.indicators.v1.UpdateFormulaResponse\x12r\n\rDeleteFormula\x12/.xstockstrat.indicators.v1.DeleteFormulaRequest\x1a\x30.xstockstrat.indicators.v1.DeleteFormulaResponseBDZBgithub.com/xstockstrat/contracts/gen/go/indicators/v1;indicatorsv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1eindicators/v1/indicators.proto\x12\x19xstockstrat.indicators.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x16\x63ommon/v1/common.proto\"\x8f\x02\n\x17\x43omputeIndicatorRequest\x12\x11\n\tindicator\x18\x01 \x01(\t\x12\x0e\n\x06values\x18\x02 \x03(\x01\x12N\n\x06params\x18\x03 \x03(\x0b\x32>.xstockstrat.indicators.v1.ComputeIndicatorRequest.ParamsEntry\x12/\n\x05range\x18\x04 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x0e\n\x06symbol\x18\x05 \x01(\t\x12\x11\n\ttimeframe\x18\x06 \x01(\t\x1a-\n\x0bParamsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\"\xf5\x01\n\x18\x43omputeIndicatorResponse\x12\x39\n\x06result\x18\x01 \x03(\x0b\x32).xstockstrat.indicators.v1.IndicatorPoint\x12\x11\n\tindicator\x18\x02 \x01(\t\x12X\n\x0bparams_used\x18\x03 \x03(\x0b\x32\x43.xstockstrat.indicators.v1.ComputeIndicatorResponse.ParamsUsedEntry\x1a\x31\n\x0fParamsUsedEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\"\xbc\x01\n\x0eIndicatorPoint\x12(\n\x04time\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05value\x18\x02 \x01(\x01\x12\x43\n\x05\x65xtra\x18\x03 \x03(\x0b\x32\x34.xstockstrat.indicators.v1.IndicatorPoint.ExtraEntry\x1a,\n\nExtraEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\"\xcf\x02\n\x15\x45xecuteFormulaRequest\x12\x12\n\nformula_id\x18\x01 \x01(\t\x12\x16\n\x0e\x66ormula_source\x18\x02 \x01(\t\x12+\n\ninput_data\x18\x03 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x46\n\x03\x65nv\x18\x04 \x03(\x0b\x32\x39.xstockstrat.indicators.v1.ExecuteFormulaRequest.EnvEntry\x12\x1b\n\x13timeout_ms_override\x18\x05 \x01(\x05\x12\x1d\n\x15memory_bytes_override\x18\x06 \x01(\x03\x12-\n\x0cinput_params\x18\x07 \x01(\x0b\x32\x17.google.protobuf.Struct\x1a*\n\x08\x45nvEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xc4\x02\n\x16\x45xecuteFormulaResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\'\n\x06output\x18\x02 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x0e\n\x06stdout\x18\x03 \x01(\t\x12\x0e\n\x06stderr\x18\x04 \x01(\t\x12\x14\n\x0c\x65xecution_ms\x18\x05 \x01(\x03\x12\x19\n\x11memory_used_bytes\x18\x06 \x01(\x03\x12\r\n\x05\x65rror\x18\x07 \x01(\t\x12\x41\n\x0b\x65xit_reason\x18\x08 \x01(\x0e\x32,.xstockstrat.indicators.v1.SandboxExitReason\x12M\n\x10parameter_errors\x18\t \x03(\x0b\x32\x33.xstockstrat.indicators.v1.ParameterValidationError\"\xe2\x01\n\x10\x46ormulaParameter\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x36\n\x04type\x18\x02 \x01(\x0e\x32(.xstockstrat.indicators.v1.ParameterType\x12-\n\rdefault_value\x18\x03 \x01(\x0b\x32\x16.google.protobuf.Value\x12\x13\n\x0b\x64\x65scription\x18\x04 \x01(\t\x12\x10\n\x08required\x18\x05 \x01(\x08\x12\x10\n\x03min\x18\x06 \x01(\x01H\x00\x88\x01\x01\x12\x10\n\x03max\x18\x07 \x01(\x01H\x01\x88\x01\x01\x42\x06\n\x04_minB\x06\n\x04_max\"8\n\x18ParameterValidationError\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0e\n\x06reason\x18\x02 \x01(\t\"\xa7\x03\n\x11\x46ormulaDefinition\x12\x12\n\nformula_id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\x12\x0e\n\x06source\x18\x04 \x01(\t\x12\x0e\n\x06\x61uthor\x18\x05 \x01(\t\x12.\n\ncreated_at\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nupdated_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x11\n\tis_public\x18\x08 \x01(\x08\x12S\n\x0cinput_schema\x18\t \x03(\x0b\x32=.xstockstrat.indicators.v1.FormulaDefinition.InputSchemaEntry\x12?\n\nparameters\x18\n \x03(\x0b\x32+.xstockstrat.indicators.v1.FormulaParameter\x1a\x32\n\x10InputSchemaEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x17\n\x15ListIndicatorsRequest\"V\n\x16ListIndicatorsResponse\x12<\n\nindicators\x18\x01 \x03(\x0b\x32(.xstockstrat.indicators.v1.IndicatorMeta\"d\n\rIndicatorMeta\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x17\n\x0frequired_params\x18\x03 \x03(\t\x12\x17\n\x0foptional_params\x18\x04 \x03(\t\"\xbd\x02\n\x16RegisterFormulaRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x0e\n\x06source\x18\x03 \x01(\t\x12\x11\n\tis_public\x18\x04 \x01(\x08\x12X\n\x0cinput_schema\x18\x05 \x03(\x0b\x32\x42.xstockstrat.indicators.v1.RegisterFormulaRequest.InputSchemaEntry\x12\x0e\n\x06\x61uthor\x18\x06 \x01(\t\x12?\n\nparameters\x18\x07 \x03(\x0b\x32+.xstockstrat.indicators.v1.FormulaParameter\x1a\x32\n\x10InputSchemaEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"-\n\x17RegisterFormulaResponse\x12\x12\n\nformula_id\x18\x01 \x01(\t\"\'\n\x11GetFormulaRequest\x12\x12\n\nformula_id\x18\x01 \x01(\t\"l\n\x13ListFormulasRequest\x12\x15\n\rauthor_filter\x18\x01 \x01(\t\x12\x16\n\x0einclude_public\x18\x02 \x01(\x08\x12\x11\n\tpage_size\x18\x03 \x01(\x05\x12\x13\n\x0bpage_offset\x18\x04 \x01(\x05\"k\n\x14ListFormulasResponse\x12>\n\x08\x66ormulas\x18\x01 \x03(\x0b\x32,.xstockstrat.indicators.v1.FormulaDefinition\x12\x13\n\x0btotal_count\x18\x02 \x01(\x05\"\xc2\x01\n\x14UpdateFormulaRequest\x12\x12\n\nformula_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x04 \x01(\t\x12\x0e\n\x06source\x18\x05 \x01(\t\x12\x11\n\tis_public\x18\x06 \x01(\x08\x12?\n\nparameters\x18\x07 \x03(\x0b\x32+.xstockstrat.indicators.v1.FormulaParameter\"V\n\x15UpdateFormulaResponse\x12=\n\x07\x66ormula\x18\x01 \x01(\x0b\x32,.xstockstrat.indicators.v1.FormulaDefinition\";\n\x14\x44\x65leteFormulaRequest\x12\x12\n\nformula_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\"(\n\x15\x44\x65leteFormulaResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08*\xf2\x01\n\x11SandboxExitReason\x12#\n\x1fSANDBOX_EXIT_REASON_UNSPECIFIED\x10\x00\x12\x1f\n\x1bSANDBOX_EXIT_REASON_SUCCESS\x10\x01\x12\x1f\n\x1bSANDBOX_EXIT_REASON_TIMEOUT\x10\x02\x12\'\n#SANDBOX_EXIT_REASON_MEMORY_EXCEEDED\x10\x03\x12%\n!SANDBOX_EXIT_REASON_RUNTIME_ERROR\x10\x04\x12&\n\"SANDBOX_EXIT_REASON_IMPORT_BLOCKED\x10\x05*\x95\x01\n\rParameterType\x12\x1e\n\x1aPARAMETER_TYPE_UNSPECIFIED\x10\x00\x12\x16\n\x12PARAMETER_TYPE_INT\x10\x01\x12\x18\n\x14PARAMETER_TYPE_FLOAT\x10\x02\x12\x17\n\x13PARAMETER_TYPE_BOOL\x10\x03\x12\x19\n\x15PARAMETER_TYPE_STRING\x10\x04\x32\xbb\x07\n\x11IndicatorsService\x12{\n\x10\x43omputeIndicator\x12\x32.xstockstrat.indicators.v1.ComputeIndicatorRequest\x1a\x33.xstockstrat.indicators.v1.ComputeIndicatorResponse\x12u\n\x0e\x45xecuteFormula\x12\x30.xstockstrat.indicators.v1.ExecuteFormulaRequest\x1a\x31.xstockstrat.indicators.v1.ExecuteFormulaResponse\x12u\n\x0eListIndicators\x12\x30.xstockstrat.indicators.v1.ListIndicatorsRequest\x1a\x31.xstockstrat.indicators.v1.ListIndicatorsResponse\x12x\n\x0fRegisterFormula\x12\x31.xstockstrat.indicators.v1.RegisterFormulaRequest\x1a\x32.xstockstrat.indicators.v1.RegisterFormulaResponse\x12h\n\nGetFormula\x12,.xstockstrat.indicators.v1.GetFormulaRequest\x1a,.xstockstrat.indicators.v1.FormulaDefinition\x12o\n\x0cListFormulas\x12..xstockstrat.indicators.v1.ListFormulasRequest\x1a/.xstockstrat.indicators.v1.ListFormulasResponse\x12r\n\rUpdateFormula\x12/.xstockstrat.indicators.v1.UpdateFormulaRequest\x1a\x30.xstockstrat.indicators.v1.UpdateFormulaResponse\x12r\n\rDeleteFormula\x12/.xstockstrat.indicators.v1.DeleteFormulaRequest\x1a\x30.xstockstrat.indicators.v1.DeleteFormulaResponseBDZBgithub.com/xstockstrat/contracts/gen/go/indicators/v1;indicatorsv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -47,8 +47,10 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_FORMULADEFINITION_INPUTSCHEMAENTRY']._serialized_options = b'8\001'
   _globals['_REGISTERFORMULAREQUEST_INPUTSCHEMAENTRY']._loaded_options = None
   _globals['_REGISTERFORMULAREQUEST_INPUTSCHEMAENTRY']._serialized_options = b'8\001'
-  _globals['_SANDBOXEXITREASON']._serialized_start=2862
-  _globals['_SANDBOXEXITREASON']._serialized_end=3104
+  _globals['_SANDBOXEXITREASON']._serialized_start=3470
+  _globals['_SANDBOXEXITREASON']._serialized_end=3712
+  _globals['_PARAMETERTYPE']._serialized_start=3715
+  _globals['_PARAMETERTYPE']._serialized_end=3864
   _globals['_COMPUTEINDICATORREQUEST']._serialized_start=149
   _globals['_COMPUTEINDICATORREQUEST']._serialized_end=420
   _globals['_COMPUTEINDICATORREQUEST_PARAMSENTRY']._serialized_start=375
@@ -62,41 +64,45 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_INDICATORPOINT_EXTRAENTRY']._serialized_start=815
   _globals['_INDICATORPOINT_EXTRAENTRY']._serialized_end=859
   _globals['_EXECUTEFORMULAREQUEST']._serialized_start=862
-  _globals['_EXECUTEFORMULAREQUEST']._serialized_end=1150
-  _globals['_EXECUTEFORMULAREQUEST_ENVENTRY']._serialized_start=1108
-  _globals['_EXECUTEFORMULAREQUEST_ENVENTRY']._serialized_end=1150
-  _globals['_EXECUTEFORMULARESPONSE']._serialized_start=1153
-  _globals['_EXECUTEFORMULARESPONSE']._serialized_end=1398
-  _globals['_FORMULADEFINITION']._serialized_start=1401
-  _globals['_FORMULADEFINITION']._serialized_end=1759
-  _globals['_FORMULADEFINITION_INPUTSCHEMAENTRY']._serialized_start=1709
-  _globals['_FORMULADEFINITION_INPUTSCHEMAENTRY']._serialized_end=1759
-  _globals['_LISTINDICATORSREQUEST']._serialized_start=1761
-  _globals['_LISTINDICATORSREQUEST']._serialized_end=1784
-  _globals['_LISTINDICATORSRESPONSE']._serialized_start=1786
-  _globals['_LISTINDICATORSRESPONSE']._serialized_end=1872
-  _globals['_INDICATORMETA']._serialized_start=1874
-  _globals['_INDICATORMETA']._serialized_end=1974
-  _globals['_REGISTERFORMULAREQUEST']._serialized_start=1977
-  _globals['_REGISTERFORMULAREQUEST']._serialized_end=2229
-  _globals['_REGISTERFORMULAREQUEST_INPUTSCHEMAENTRY']._serialized_start=1709
-  _globals['_REGISTERFORMULAREQUEST_INPUTSCHEMAENTRY']._serialized_end=1759
-  _globals['_REGISTERFORMULARESPONSE']._serialized_start=2231
-  _globals['_REGISTERFORMULARESPONSE']._serialized_end=2276
-  _globals['_GETFORMULAREQUEST']._serialized_start=2278
-  _globals['_GETFORMULAREQUEST']._serialized_end=2317
-  _globals['_LISTFORMULASREQUEST']._serialized_start=2319
-  _globals['_LISTFORMULASREQUEST']._serialized_end=2427
-  _globals['_LISTFORMULASRESPONSE']._serialized_start=2429
-  _globals['_LISTFORMULASRESPONSE']._serialized_end=2536
-  _globals['_UPDATEFORMULAREQUEST']._serialized_start=2539
-  _globals['_UPDATEFORMULAREQUEST']._serialized_end=2668
-  _globals['_UPDATEFORMULARESPONSE']._serialized_start=2670
-  _globals['_UPDATEFORMULARESPONSE']._serialized_end=2756
-  _globals['_DELETEFORMULAREQUEST']._serialized_start=2758
-  _globals['_DELETEFORMULAREQUEST']._serialized_end=2817
-  _globals['_DELETEFORMULARESPONSE']._serialized_start=2819
-  _globals['_DELETEFORMULARESPONSE']._serialized_end=2859
-  _globals['_INDICATORSSERVICE']._serialized_start=3107
-  _globals['_INDICATORSSERVICE']._serialized_end=4062
+  _globals['_EXECUTEFORMULAREQUEST']._serialized_end=1197
+  _globals['_EXECUTEFORMULAREQUEST_ENVENTRY']._serialized_start=1155
+  _globals['_EXECUTEFORMULAREQUEST_ENVENTRY']._serialized_end=1197
+  _globals['_EXECUTEFORMULARESPONSE']._serialized_start=1200
+  _globals['_EXECUTEFORMULARESPONSE']._serialized_end=1524
+  _globals['_FORMULAPARAMETER']._serialized_start=1527
+  _globals['_FORMULAPARAMETER']._serialized_end=1753
+  _globals['_PARAMETERVALIDATIONERROR']._serialized_start=1755
+  _globals['_PARAMETERVALIDATIONERROR']._serialized_end=1811
+  _globals['_FORMULADEFINITION']._serialized_start=1814
+  _globals['_FORMULADEFINITION']._serialized_end=2237
+  _globals['_FORMULADEFINITION_INPUTSCHEMAENTRY']._serialized_start=2187
+  _globals['_FORMULADEFINITION_INPUTSCHEMAENTRY']._serialized_end=2237
+  _globals['_LISTINDICATORSREQUEST']._serialized_start=2239
+  _globals['_LISTINDICATORSREQUEST']._serialized_end=2262
+  _globals['_LISTINDICATORSRESPONSE']._serialized_start=2264
+  _globals['_LISTINDICATORSRESPONSE']._serialized_end=2350
+  _globals['_INDICATORMETA']._serialized_start=2352
+  _globals['_INDICATORMETA']._serialized_end=2452
+  _globals['_REGISTERFORMULAREQUEST']._serialized_start=2455
+  _globals['_REGISTERFORMULAREQUEST']._serialized_end=2772
+  _globals['_REGISTERFORMULAREQUEST_INPUTSCHEMAENTRY']._serialized_start=2187
+  _globals['_REGISTERFORMULAREQUEST_INPUTSCHEMAENTRY']._serialized_end=2237
+  _globals['_REGISTERFORMULARESPONSE']._serialized_start=2774
+  _globals['_REGISTERFORMULARESPONSE']._serialized_end=2819
+  _globals['_GETFORMULAREQUEST']._serialized_start=2821
+  _globals['_GETFORMULAREQUEST']._serialized_end=2860
+  _globals['_LISTFORMULASREQUEST']._serialized_start=2862
+  _globals['_LISTFORMULASREQUEST']._serialized_end=2970
+  _globals['_LISTFORMULASRESPONSE']._serialized_start=2972
+  _globals['_LISTFORMULASRESPONSE']._serialized_end=3079
+  _globals['_UPDATEFORMULAREQUEST']._serialized_start=3082
+  _globals['_UPDATEFORMULAREQUEST']._serialized_end=3276
+  _globals['_UPDATEFORMULARESPONSE']._serialized_start=3278
+  _globals['_UPDATEFORMULARESPONSE']._serialized_end=3364
+  _globals['_DELETEFORMULAREQUEST']._serialized_start=3366
+  _globals['_DELETEFORMULAREQUEST']._serialized_end=3425
+  _globals['_DELETEFORMULARESPONSE']._serialized_start=3427
+  _globals['_DELETEFORMULARESPONSE']._serialized_end=3467
+  _globals['_INDICATORSSERVICE']._serialized_start=3867
+  _globals['_INDICATORSSERVICE']._serialized_end=4822
 # @@protoc_insertion_point(module_scope)

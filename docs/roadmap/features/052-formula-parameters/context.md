@@ -141,4 +141,31 @@
     match Step 13.
   - Files correctly marked "create" (verified absent): `app/services/parameters.py`,
     `tests/test_parameters.py`, `ParameterEditor.tsx`. All other referenced files exist.
+
+## Session 2026-06-08 — sdd-execute (sequential)
+
+- Mode: SEQUENTIAL, single feature (052). User directive: run all 14 steps but **open only the
+  final integration PR** (no per-step PRs). Per the harness, all work lands on the pre-assigned
+  branch `claude/sdd-execute-formula-params-gy0lgo` (fast-forwarded to `origin/main-dev` at start —
+  it had been based on `main`/the promote commit and lacked the feature dir). Final PR target: `main-dev`.
+- Tooling: `buf`/`migrate` absent on host; Docker present but Docker Hub pulls are rate-limited (429).
+  Verification uses sequential-mode CI-equivalent fallbacks (see Deviation Log).
+
+### Step 1 — proto: FormulaParameter, ParameterType, input_params, parameter_errors [done]
+- Added `ParameterType` enum, `FormulaParameter` + `ParameterValidationError` messages; appended
+  `ExecuteFormulaRequest.input_params=7`, `ExecuteFormulaResponse.parameter_errors=9`,
+  `FormulaDefinition.parameters=10`, `RegisterFormulaRequest.parameters=7`,
+  `UpdateFormulaRequest.parameters=7`. No existing field removed/renumbered; `input_schema` retained.
+- Verification: `buf lint` PASS; `buf breaking` against `origin/main-dev` PASS and against
+  `origin/main` (production baseline, AC #7) PASS — all additive.
+- Files modified: `packages/proto/indicators/v1/indicators.proto`
+- Deviations: none for Step 1 (buf installed on host since the Docker codegen container was blocked).
+
+### Step 2 — proto-gen: Regenerate Go/Python/TS stubs [done]
+- Regenerated Go/Python/TS stubs via `./scripts/buf-gen.sh` on the host (codegen container blocked by
+  Docker Hub 429). New symbols verified present in all three languages (`FormulaParameter`,
+  `ParameterType`, `parameterErrors`/`parameter_errors`, `input_params`, `FormulaDefinition.parameters`).
+  Diff scoped to the indicators service only; `buf-gen.sh` is idempotent (CI freshness check parity).
+- Files modified (generated): `packages/proto/gen/{go,python,ts}/indicators/v1/`, `gen/ts/dist/`.
+- Deviations: Step 2 toolchain host-install fallback — full detail in Deviation Log.
 - Reviewers snapshot in feature.md is unchanged (reviewer-registry.md unchanged).
