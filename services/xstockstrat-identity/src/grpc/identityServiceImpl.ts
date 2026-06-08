@@ -328,14 +328,19 @@ export class IdentityServiceImpl {
     return { accessToken, expiresIn: this.accessTtlSeconds };
   }
 
-  /** Insert a fresh rotating refresh token for a user; returns the raw token. */
-  private async issueRefreshToken(userId: string): Promise<string> {
+  /**
+   * Insert a fresh rotating refresh token for a user; returns the raw token.
+   * An optional `clientId` tags the token with the OAuth client that minted it so
+   * "My Authorized Apps" (feature 051) can list/revoke it. First-party sessions pass
+   * no clientId → NULL client_id (unchanged behavior).
+   */
+  private async issueRefreshToken(userId: string, clientId?: string): Promise<string> {
     const refreshToken = uuidv4();
     const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
     await this.pool.query(
-      `INSERT INTO identity.refresh_tokens (user_id, token_hash, expires_at)
-       VALUES ($1, $2, NOW() + ($3 || ' seconds')::interval)`,
-      [userId, refreshTokenHash, this.refreshTtlSeconds]
+      `INSERT INTO identity.refresh_tokens (user_id, token_hash, expires_at, client_id)
+       VALUES ($1, $2, NOW() + ($3 || ' seconds')::interval, $4)`,
+      [userId, refreshTokenHash, this.refreshTtlSeconds, clientId ?? null]
     );
     return refreshToken;
   }
@@ -477,7 +482,7 @@ export class IdentityServiceImpl {
       const { accessToken, expiresIn } = this.mintOAuthAccessToken(
         row.user_id, row.email, row.roles ?? [], audience,
       );
-      const refreshToken = await this.issueRefreshToken(row.user_id);
+      const refreshToken = await this.issueRefreshToken(row.user_id, clientId);
       log.info('OAuth code exchanged', { clientId, userId: row.user_id });
       callback(null, { accessToken, tokenType: 'Bearer', expiresIn, refreshToken });
     } catch (err: any) {
@@ -496,7 +501,7 @@ export class IdentityServiceImpl {
     const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
     try {
       const result = await this.pool.query(
-        `SELECT rt.token_id, rt.user_id, u.email, u.roles
+        `SELECT rt.token_id, rt.user_id, rt.client_id, u.email, u.roles
          FROM identity.refresh_tokens rt
          JOIN identity.users u ON u.user_id = rt.user_id
          WHERE rt.token_hash = $1
@@ -506,7 +511,13 @@ export class IdentityServiceImpl {
         [tokenHash]
       );
       if (result.rows.length === 0) return callback({ code: 16, message: 'invalid_grant' });
-      const { token_id, user_id, email, roles } = result.rows[0];
+      const { token_id, user_id, client_id, email, roles } = result.rows[0];
+      // Best-effort "last refreshed" timestamp (feature 051) — bumped only on rotation,
+      // surfaced by ListAuthorizedApps and labeled "Last refreshed" in the UI (NOT per-request access).
+      await this.pool.query(
+        'UPDATE identity.refresh_tokens SET last_used_at = NOW() WHERE token_id = $1',
+        [token_id]
+      );
       // Rotation: revoke the presented refresh token.
       await this.pool.query(
         'UPDATE identity.refresh_tokens SET revoked_at = NOW() WHERE token_id = $1',
@@ -515,11 +526,78 @@ export class IdentityServiceImpl {
       const { accessToken, expiresIn } = this.mintOAuthAccessToken(
         user_id, email, roles ?? [], resource || '',
       );
-      const newRefreshToken = await this.issueRefreshToken(user_id);
+      // Carry the OAuth client_id forward so the rotated token stays listable/revocable.
+      const newRefreshToken = await this.issueRefreshToken(user_id, client_id ?? undefined);
       log.info('OAuth token refreshed', { userId: user_id });
       callback(null, { accessToken, tokenType: 'Bearer', expiresIn, refreshToken: newRefreshToken });
     } catch (err: any) {
       log.error('refreshOAuthToken failed', { error: err.message });
+      callback({ code: 13, message: err.message });
+    }
+  }
+
+  // ── Authorized-apps management (feature 051) ──────────────────────────────
+
+  /**
+   * ListAuthorizedApps — the OAuth clients the calling user has active grants for, derived
+   * from `identity.refresh_tokens` rows tagged with a `client_id` (JOIN `oauth_clients` for
+   * name/redirects). Per-user scoped (WHERE rt.user_id = $1). Returns only non-sensitive
+   * metadata — never token hashes or secrets (FR-7).
+   */
+  async listAuthorizedApps(call: any, callback: any) {
+    const { userId } = call.request;
+    if (!userId) return callback({ code: 3, message: 'userId required' });
+    try {
+      const result = await this.pool.query(
+        `SELECT rt.client_id,
+                oc.client_name,
+                oc.redirect_uris,
+                MIN(rt.created_at)   AS authorized_at,
+                MAX(rt.last_used_at) AS last_used_at
+         FROM identity.refresh_tokens rt
+         JOIN identity.oauth_clients oc ON oc.client_id = rt.client_id
+         WHERE rt.user_id = $1
+           AND rt.client_id IS NOT NULL
+           AND rt.revoked_at IS NULL
+           AND rt.expires_at > NOW()
+         GROUP BY rt.client_id, oc.client_name, oc.redirect_uris`,
+        [userId]
+      );
+      callback(null, {
+        apps: result.rows.map(r => ({
+          clientId: r.client_id,
+          clientName: r.client_name ?? r.client_id,
+          authorizedAt: new Date(r.authorized_at),
+          lastUsedAt: r.last_used_at ? new Date(r.last_used_at) : undefined,
+          redirectUris: r.redirect_uris ?? [],
+        })),
+      });
+    } catch (err: any) {
+      log.error('listAuthorizedApps failed', { error: err.message });
+      callback({ code: 13, message: err.message });
+    }
+  }
+
+  /**
+   * RevokeAuthorizedApp — revoke all of the calling user's active refresh tokens for one OAuth
+   * client (invalidates the grant; access JWTs expire naturally). Scoped by BOTH user_id AND
+   * client_id (IDOR-safe, mirrors revokeApiKey) — a forged/foreign client_id matches zero rows.
+   */
+  async revokeAuthorizedApp(call: any, callback: any) {
+    const { userId, clientId } = call.request;
+    if (!userId || !clientId) {
+      return callback({ code: 3, message: 'userId and clientId required' });
+    }
+    try {
+      await this.pool.query(
+        `UPDATE identity.refresh_tokens SET revoked_at = NOW()
+         WHERE user_id = $1 AND client_id = $2 AND revoked_at IS NULL`,
+        [userId, clientId]
+      );
+      log.info('Authorized app revoked', { userId, clientId });
+      callback(null, { success: true });
+    } catch (err: any) {
+      log.error('revokeAuthorizedApp failed', { error: err.message });
       callback({ code: 13, message: err.message });
     }
   }
