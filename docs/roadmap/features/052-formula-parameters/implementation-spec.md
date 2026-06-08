@@ -377,7 +377,7 @@ cd services/xstockstrat-indicators && pytest --cov=app --cov-fail-under=50
 
 ### Step 9 — service: Forward StrategyComponent.params as input_params in the evaluator
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify
@@ -410,7 +410,7 @@ cd services/xstockstrat-indicators && pytest --cov=app --cov-fail-under=50
 
 ### Step 10 — test: Evaluator forwards input_params for CUSTOM_FORMULA components
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_strategy_evaluator.py` — modify

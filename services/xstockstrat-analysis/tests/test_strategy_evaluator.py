@@ -166,3 +166,38 @@ class TestEvaluate:
         evaluator = StrategyEvaluator(AsyncMock(), propagation_meta=())
         definition = analysis_pb2.StrategyDefinition(components=[_builtin()])
         assert await evaluator.evaluate(definition, [], None) == []
+
+    @pytest.mark.asyncio
+    async def test_formula_component_forwards_input_params(self):
+        """CUSTOM_FORMULA numeric params ride input_params; series stays in input_data."""
+        from google.protobuf.struct_pb2 import Struct
+
+        closes = [90.0, 95.0, 105.0, 110.0]
+        bars = [SimpleNamespace(close=c, timestamp=None) for c in closes]
+        output = Struct()
+        output.update({"value": closes})
+        resp = SimpleNamespace(success=True, output=output, error="")
+        stub = AsyncMock()
+        stub.ExecuteFormula = AsyncMock(return_value=resp)
+
+        comp = analysis_pb2.StrategyComponent(
+            ref_name="myf",
+            kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+            formula_id="f-1",
+            params={"period": 14.0},
+        )
+        definition = analysis_pb2.StrategyDefinition(
+            strategy_id="s",
+            display_name="S",
+            components=[comp],
+            entry_rule=json.dumps({"fn": ">", "lhs": "myf", "rhs": 100}),
+        )
+
+        evaluator = StrategyEvaluator(stub, propagation_meta=())
+        decisions = await evaluator.evaluate(definition, bars, None)
+
+        assert len(decisions) == len(bars)
+        stub.ExecuteFormula.assert_awaited()
+        req = stub.ExecuteFormula.await_args.args[0]
+        assert dict(req.input_params)["period"] == 14.0
+        assert "close" in dict(req.input_data)

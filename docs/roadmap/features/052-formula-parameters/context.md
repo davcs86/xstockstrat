@@ -196,4 +196,16 @@
   `app/services/sandbox.py`, `app/handlers/servicer.py`, `tests/test_parameters.py` (new),
   `tests/test_sandbox.py`, `tests/test_formulas.py`.
 - Deviations: Step 7 proto→dict serialization (Deviation Log).
+
+### Steps 9–10 — analysis evaluator forwards input_params [done]
+- Step 9: `evaluator.py` CUSTOM_FORMULA branch builds a `params_struct` from numeric `comp.params`
+  and passes it as `input_params` on `ExecuteFormulaRequest`; series stays in `input_data`. No
+  `analysis.proto` change; existing `metadata=self._meta` propagation reused.
+- Step 10: added `test_formula_component_forwards_input_params` asserting the request carries
+  `input_params["period"] == 14.0` and `input_data` still carries `close`.
+- Verification: `ruff check`/`ruff format --check` clean; `pytest --cov=app --cov-fail-under=40`
+  → 92 passed, 58.6% coverage.
+- Files: `services/xstockstrat-analysis/app/services/evaluator.py`,
+  `services/xstockstrat-analysis/tests/test_strategy_evaluator.py`.
+- Deviations: none.
 - Reviewers snapshot in feature.md is unchanged (reviewer-registry.md unchanged).
