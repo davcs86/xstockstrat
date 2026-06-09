@@ -25,12 +25,26 @@ type BrokerPosition struct {
 	AvgCost  float64
 }
 
+// BrokerBalance is a normalized account-balance snapshot from a broker.
+// LastEquity is the account equity at the previous trading day's close; it is
+// used to derive intraday (day) P&L as Equity - LastEquity. When a broker does
+// not report a previous-close equity, LastEquity equals Equity (day P&L = 0).
+type BrokerBalance struct {
+	Cash        float64
+	BuyingPower float64
+	Equity      float64
+	LastEquity  float64
+}
+
 // Broker is the interface all broker clients must satisfy.
 type Broker interface {
 	SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrder, error)
 	CancelOrder(ctx context.Context, brokerOrderID string) error
 	GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrder, error)
 	GetPositions(ctx context.Context) ([]BrokerPosition, error)
+	// GetAccount returns a normalized account-balance snapshot (cash, buying
+	// power, equity, and previous-close equity for day-P&L derivation).
+	GetAccount(ctx context.Context) (*BrokerBalance, error)
 	IsPaper() bool
 	// ValidateCredentials performs a lightweight authenticated request to confirm
 	// the stored API secrets still work. It returns nil when valid,

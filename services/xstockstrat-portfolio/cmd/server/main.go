@@ -60,9 +60,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Start consuming ledger events for order fills and broker position syncs
+	// Start consuming ledger events for order fills and broker position/balance syncs
 	go svc.ConsumeOrderFills(ctx)
 	go svc.ConsumePositionSyncs(ctx)
+	go svc.ConsumeBalanceSyncs(ctx)
 
 	hdl := handler.NewPortfolioHandler(svc)
 

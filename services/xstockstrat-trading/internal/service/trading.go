@@ -617,6 +617,24 @@ func (s *TradingService) syncPositions(ctx context.Context) {
 			"positions":    posEntries,
 		}
 		s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), payload)
+
+		// Sync the account balance snapshot (cash, buying power, equity) alongside
+		// positions. Best-effort: a balance fetch failure must not block position sync.
+		bal, err := acct.client.GetAccount(ctx)
+		if err != nil {
+			slog.Warn("syncPositions: GetAccount failed", "account_id", accountID, "error", err)
+			continue
+		}
+		balPayload := map[string]interface{}{
+			"account_id":   accountID,
+			"user_id":      acct.userID,
+			"trading_mode": tradingMode,
+			"cash":         bal.Cash,
+			"buying_power": bal.BuyingPower,
+			"equity":       bal.Equity,
+			"last_equity":  bal.LastEquity,
+		}
+		s.emitLedgerEvent(ctx, "account.balance.synced", fmt.Sprintf("account:%s", accountID), balPayload)
 	}
 }
 

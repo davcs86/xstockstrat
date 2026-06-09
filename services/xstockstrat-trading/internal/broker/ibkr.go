@@ -268,6 +268,48 @@ func (c *IBKRClient) GetPositions(ctx context.Context) ([]BrokerPosition, error)
 	return positions, nil
 }
 
+// GetAccount fetches the account balance snapshot via
+// GET /v1/api/portfolio/{accountID}/summary. IBKR returns a map of named
+// figures, each an object with an `amount` field. Best-effort: figures absent
+// from the response are left zero (and LastEquity falls back to Equity so day
+// P&L is reported as zero rather than a spurious value).
+func (c *IBKRClient) GetAccount(ctx context.Context) (*BrokerBalance, error) {
+	endpoint := fmt.Sprintf("%s/portfolio/%s/summary", c.baseURL, c.ibkrAccountID)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("ibkr GetAccount: build request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", c.signRequest(http.MethodGet, endpoint))
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("ibkr GetAccount: http: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ibkr GetAccount: status %d: %s", resp.StatusCode, respBody)
+	}
+
+	var raw map[string]struct {
+		Amount float64 `json:"amount"`
+	}
+	if err := json.Unmarshal(respBody, &raw); err != nil {
+		return nil, fmt.Errorf("ibkr GetAccount: parse response: %w", err)
+	}
+	bal := &BrokerBalance{
+		Cash:        raw["totalcashvalue"].Amount,
+		BuyingPower: raw["buyingpower"].Amount,
+		Equity:      raw["netliquidation"].Amount,
+		LastEquity:  raw["previousdayequitywithloanvalue"].Amount,
+	}
+	if bal.LastEquity == 0 {
+		bal.LastEquity = bal.Equity
+	}
+	return bal, nil
+}
+
 // ValidateCredentials confirms the OAuth credentials still authenticate by
 // calling GET /portfolio/accounts. A 401/403 maps to ErrInvalidCredentials;
 // other non-200 responses and transport errors are returned as transient errors.

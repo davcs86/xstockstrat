@@ -173,3 +173,63 @@ func TestGetOrder_AlpacaFilledAvgPrice(t *testing.T) {
 		t.Errorf("expected status filled, got %s", o.Status)
 	}
 }
+
+func TestGetAccount_Alpaca(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v2/account", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Alpaca returns monetary fields as decimal strings.
+		_, _ = w.Write([]byte(`{
+			"cash": "1000.50",
+			"buying_power": "4000.00",
+			"equity": "2500.25",
+			"last_equity": "2400.00"
+		}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{
+		APIKey: "k", APISecret: "s", PaperURL: srv.URL, LiveURL: srv.URL, Paper: true,
+	})
+
+	bal, err := c.GetAccount(context.Background())
+	if err != nil {
+		t.Fatalf("GetAccount failed: %v", err)
+	}
+	if bal.Cash != 1000.50 {
+		t.Errorf("Cash: got %v, want 1000.50", bal.Cash)
+	}
+	if bal.BuyingPower != 4000.00 {
+		t.Errorf("BuyingPower: got %v, want 4000.00", bal.BuyingPower)
+	}
+	if bal.Equity != 2500.25 {
+		t.Errorf("Equity: got %v, want 2500.25", bal.Equity)
+	}
+	if bal.LastEquity != 2400.00 {
+		t.Errorf("LastEquity: got %v, want 2400.00", bal.LastEquity)
+	}
+}
+
+func TestGetAccount_Alpaca_LastEquityFallback(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v2/account", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// No last_equity reported → falls back to equity (day P&L = 0).
+		_, _ = w.Write([]byte(`{"cash": "0", "buying_power": "0", "equity": "500.00"}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{
+		APIKey: "k", APISecret: "s", PaperURL: srv.URL, LiveURL: srv.URL, Paper: true,
+	})
+
+	bal, err := c.GetAccount(context.Background())
+	if err != nil {
+		t.Fatalf("GetAccount failed: %v", err)
+	}
+	if bal.LastEquity != 500.00 {
+		t.Errorf("LastEquity fallback: got %v, want 500.00", bal.LastEquity)
+	}
+}
