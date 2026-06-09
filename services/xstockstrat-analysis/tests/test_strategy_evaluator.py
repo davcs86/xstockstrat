@@ -82,6 +82,46 @@ class TestValidateDefinition:
         with pytest.raises(ValueError, match="not valid JSON"):
             _validate_definition(d)
 
+    def test_accepts_dotted_series_ref(self):
+        # Bollinger Bands exposes value/upper/lower; rules may select any of them.
+        d = analysis_pb2.StrategyDefinition(
+            components=[_builtin(ref_name="bb", indicator="BB", period=20.0)],
+            entry_rule=json.dumps({"fn": "<", "lhs": "bb.lower", "rhs": 100}),
+            exit_rule=json.dumps({"fn": ">", "lhs": "bb.upper", "rhs": 100}),
+        )
+        _validate_definition(d)  # should not raise
+
+    def test_accepts_dotted_series_on_both_sides(self):
+        d = analysis_pb2.StrategyDefinition(
+            components=[_builtin(ref_name="bb", indicator="BB", period=20.0)],
+            entry_rule=json.dumps({"fn": ">", "lhs": "bb.upper", "rhs": "bb.lower"}),
+        )
+        _validate_definition(d)  # should not raise
+
+    def test_rejects_unknown_series_for_indicator(self):
+        d = analysis_pb2.StrategyDefinition(
+            components=[_builtin(ref_name="bb", indicator="BB", period=20.0)],
+            entry_rule=json.dumps({"fn": ">", "lhs": "bb.middle", "rhs": 100}),
+        )
+        with pytest.raises(ValueError, match="has no output series 'middle'"):
+            _validate_definition(d)
+
+    def test_rejects_unknown_base_ref_in_dotted_term(self):
+        d = analysis_pb2.StrategyDefinition(
+            components=[_builtin(ref_name="bb", indicator="BB", period=20.0)],
+            entry_rule=json.dumps({"fn": ">", "lhs": "nope.upper", "rhs": 100}),
+        )
+        with pytest.raises(ValueError, match="not defined as a component ref_name"):
+            _validate_definition(d)
+
+    def test_accepts_any_dotted_series_for_custom_formula(self):
+        # Custom-formula outputs are dynamic, so series can't be checked statically.
+        d = analysis_pb2.StrategyDefinition(
+            components=[_formula(ref_name="myf")],
+            entry_rule=json.dumps({"fn": ">", "lhs": "myf.band", "rhs": 0}),
+        )
+        _validate_definition(d)  # should not raise
+
 
 # ---------------------------------------------------------------------------
 # _eval_condition — no look-ahead
@@ -160,6 +200,73 @@ class TestEvaluate:
         # exit (fast < 100) at indices 0 and 1
         assert decisions[0].exit is True
         assert decisions[2].exit is False
+
+    @pytest.mark.asyncio
+    async def test_evaluate_resolves_dotted_output_series(self):
+        """Multi-output indicators expose each series as '<ref_name>.<series>'."""
+        closes = [10.0, 20.0, 30.0]
+        bars = [SimpleNamespace(close=c, timestamp=None) for c in closes]
+        # Bollinger-bands-like result: primary value (mid) + extra upper/lower bands.
+        result_points = [
+            SimpleNamespace(value=10.0, extra={"upper": 15.0, "lower": 5.0}),
+            SimpleNamespace(value=20.0, extra={"upper": 25.0, "lower": 15.0}),
+            SimpleNamespace(value=30.0, extra={"upper": 35.0, "lower": 25.0}),
+        ]
+        stub = AsyncMock()
+        stub.ComputeIndicator = AsyncMock(return_value=SimpleNamespace(result=result_points))
+
+        bb = analysis_pb2.StrategyComponent(
+            ref_name="bb",
+            kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+            indicator="BB",
+            params={"period": 2.0},
+        )
+        definition = analysis_pb2.StrategyDefinition(
+            strategy_id="s",
+            display_name="S",
+            components=[bb],
+            # entry when the upper band exceeds 24 → bars 1 and 2
+            entry_rule=json.dumps({"fn": ">", "lhs": "bb.upper", "rhs": 24}),
+            # exit when the lower band exceeds 24 → bar 2 only
+            exit_rule=json.dumps({"fn": ">", "lhs": "bb.lower", "rhs": 24}),
+        )
+
+        evaluator = StrategyEvaluator(stub, propagation_meta=())
+        decisions = await evaluator.evaluate(definition, bars, None)
+
+        assert [d.entry for d in decisions] == [False, True, True]
+        assert [d.exit for d in decisions] == [False, False, True]
+
+    @pytest.mark.asyncio
+    async def test_bare_ref_resolves_to_primary_value_series(self):
+        """A bare ref_name still resolves to the primary 'value' series (back-compat)."""
+        closes = [10.0, 20.0, 30.0]
+        bars = [SimpleNamespace(close=c, timestamp=None) for c in closes]
+        result_points = [
+            SimpleNamespace(value=10.0, extra={"upper": 15.0, "lower": 5.0}),
+            SimpleNamespace(value=20.0, extra={"upper": 25.0, "lower": 15.0}),
+            SimpleNamespace(value=30.0, extra={"upper": 35.0, "lower": 25.0}),
+        ]
+        stub = AsyncMock()
+        stub.ComputeIndicator = AsyncMock(return_value=SimpleNamespace(result=result_points))
+
+        bb = analysis_pb2.StrategyComponent(
+            ref_name="bb",
+            kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+            indicator="BB",
+            params={"period": 2.0},
+        )
+        definition = analysis_pb2.StrategyDefinition(
+            strategy_id="s",
+            display_name="S",
+            components=[bb],
+            entry_rule=json.dumps({"fn": ">", "lhs": "bb", "rhs": 15}),  # bare ref → mid
+        )
+
+        evaluator = StrategyEvaluator(stub, propagation_meta=())
+        decisions = await evaluator.evaluate(definition, bars, None)
+        # mid values 10/20/30 > 15 → bars 1 and 2
+        assert [d.entry for d in decisions] == [False, True, True]
 
     @pytest.mark.asyncio
     async def test_evaluate_empty_bars(self):

@@ -23,6 +23,21 @@ log = logging.getLogger(__name__)
 
 _SUPPORTED_INDICATORS = {"SMA", "EMA", "RSI", "MACD", "BB", "ATR", "VWAP", "STOCH"}
 
+# Output series each built-in indicator emits. The first entry ("value") is the
+# primary series a bare ref_name resolves to; the rest are addressable in rules via
+# the dotted form "<ref_name>.<series>" (e.g. "bb.upper", "macd.signal", "stoch.d").
+# Mirrors the extra-key shape produced by xstockstrat-indicators' indicators_engine.py.
+_INDICATOR_SERIES = {
+    "SMA": ("value",),
+    "EMA": ("value",),
+    "RSI": ("value",),
+    "MACD": ("value", "signal", "histogram"),
+    "BB": ("value", "upper", "lower"),
+    "ATR": ("value",),
+    "VWAP": ("value",),
+    "STOCH": ("value", "d"),
+}
+
 # Supported condition functions in leaf nodes (FR-3)
 _SUPPORTED_FNS = {"crosses_above", "crosses_below", ">", "<", ">=", "<="}
 
@@ -80,10 +95,16 @@ class StrategyEvaluator:
         closes = [b.close for b in bars]
 
         # Step 2: compute component series
+        # Each component may emit several series (e.g. Bollinger Bands → value/upper/lower).
+        # A bare ref_name resolves to the primary "value" series; every emitted series is
+        # also addressable in rules as "<ref_name>.<series>" (e.g. "bb.upper").
         component_series = {}
         for comp in definition.components:
-            series = await self._compute_component(comp, closes)
-            component_series[comp.ref_name] = series  # list[float | None], len == len(bars)
+            series_map = await self._compute_component(comp, closes)
+            primary = series_map.get("value", [None] * len(closes))
+            component_series[comp.ref_name] = primary  # bare ref → primary series
+            for series_name, series in series_map.items():
+                component_series[f"{comp.ref_name}.{series_name}"] = series
 
         # Step 3: parse rules
         entry_rule = json.loads(definition.entry_rule) if definition.entry_rule else None
@@ -100,8 +121,19 @@ class StrategyEvaluator:
             )
         return decisions
 
-    async def _compute_component(self, comp, closes: list[float]) -> list[float | None]:
-        """Compute a single component's series over all bars."""
+    async def _compute_component(
+        self, comp, closes: list[float]
+    ) -> dict[str, list[float | None]]:
+        """
+        Compute a single component's output series over all bars.
+
+        Returns a mapping of series name → aligned list (len == len(closes)). Every
+        component yields at least a "value" series (the primary output); multi-output
+        indicators/formulas add extra named series (e.g. "upper"/"lower" for BB,
+        "signal"/"histogram" for MACD), which become addressable in rules as
+        "<ref_name>.<series>".
+        """
+        n = len(closes)
         if comp.kind == analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR:
             resp = await self._indicators.ComputeIndicator(
                 indicators_pb2.ComputeIndicatorRequest(
@@ -111,9 +143,17 @@ class StrategyEvaluator:
                 ),
                 metadata=self._meta,
             )
-            # Build aligned list — None for warm-up bars where result is absent
-            result_map = {i: p.value for i, p in enumerate(resp.result)}
-            return [result_map.get(i) for i in range(len(closes))]
+            # Build aligned series — None for warm-up bars where the result is absent.
+            # Each IndicatorPoint carries the primary `.value` plus an `.extra` map of
+            # secondary series (upper/lower/signal/…). Capture them all.
+            series: dict[str, list[float | None]] = {"value": [None] * n}
+            for i, p in enumerate(resp.result):
+                if i >= n:
+                    break
+                series["value"][i] = p.value
+                for k, v in dict(getattr(p, "extra", {}) or {}).items():
+                    series.setdefault(k, [None] * n)[i] = v
+            return series
         elif comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
             input_struct = Struct()
             input_struct.update({"close": closes})
@@ -132,23 +172,30 @@ class StrategyEvaluator:
             )
             if not resp.success:
                 log.warning("formula %s execution failed: %s", comp.formula_id, resp.error)
-                return [None] * len(closes)
-            # Formula output must contain a "value" key with a list
+                return {"value": [None] * n}
+            # Formula output must contain a "value" key with a list. Any additional
+            # list-valued outputs are exposed as secondary series ("<ref_name>.<key>").
             output = dict(resp.output)
-            raw = output.get("value", [])
-            return [float(v) if v is not None else None for v in raw]
-        return [None] * len(closes)
+            series = {}
+            for key, raw in output.items():
+                if isinstance(raw, (list, tuple)):
+                    series[key] = [float(v) if v is not None else None for v in raw]
+            series.setdefault("value", [None] * n)
+            return series
+        return {"value": [None] * n}
 
 
 def _validate_definition(definition) -> None:
     """FR-5: Validate at write time. Raises ValueError on invalid definition."""
     ref_names = set()
+    ref_to_comp = {}
     for comp in definition.components:
         if not comp.ref_name:
             raise ValueError("Each component must have a non-empty ref_name")
         if comp.ref_name in ref_names:
             raise ValueError(f"Duplicate ref_name: {comp.ref_name}")
         ref_names.add(comp.ref_name)
+        ref_to_comp[comp.ref_name] = comp
         if comp.kind == analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR:
             if comp.indicator.upper() not in _SUPPORTED_INDICATORS:
                 raise ValueError(
@@ -172,20 +219,46 @@ def _validate_definition(definition) -> None:
             rule = json.loads(rule_json)
         except json.JSONDecodeError as e:
             raise ValueError(f"{rule_name} is not valid JSON: {e}") from e
-        _validate_rule_refs(rule, ref_names, rule_name)
+        _validate_rule_refs(rule, ref_to_comp, rule_name)
 
 
-def _validate_rule_refs(node: Any, ref_names: set[str], rule_name: str) -> None:
-    """Recursively validate that all lhs ref_names in leaf nodes exist as components."""
+def _validate_term_ref(term: str, ref_to_comp: dict, rule_name: str, side: str) -> None:
+    """
+    Validate a string operand: either a component ref_name, or the dotted form
+    "<ref_name>.<series>" selecting a specific output series of that component.
+
+    For built-in indicators the series must be one the indicator actually emits
+    (see _INDICATOR_SERIES). Custom-formula outputs are dynamic, so any series is
+    accepted (a missing one resolves to None — i.e. no signal — at evaluation time).
+    """
+    base, sep, series = term.partition(".")
+    comp = ref_to_comp.get(base)
+    if comp is None:
+        raise ValueError(
+            f"{rule_name}: leaf node {side}='{term}' is not defined as a component ref_name"
+        )
+    if sep and comp.kind == analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR:
+        allowed = _INDICATOR_SERIES.get(comp.indicator.upper(), ("value",))
+        if series not in allowed:
+            raise ValueError(
+                f"{rule_name}: indicator '{comp.indicator}' (ref '{base}') has no output "
+                f"series '{series}'. Available: {sorted(allowed)}"
+            )
+
+
+def _validate_rule_refs(node: Any, ref_to_comp: dict, rule_name: str) -> None:
+    """Recursively validate that leaf-node operands reference defined components/series."""
     if "op" in node and node["op"] in ("AND", "OR"):
         for child in node.get("conditions", []):
-            _validate_rule_refs(child, ref_names, rule_name)
+            _validate_rule_refs(child, ref_to_comp, rule_name)
     elif "fn" in node:
         lhs = node.get("lhs", "")
-        if isinstance(lhs, str) and lhs not in ref_names:
-            raise ValueError(
-                f"{rule_name}: leaf node lhs='{lhs}' is not defined as a component ref_name"
-            )
+        if isinstance(lhs, str):
+            _validate_term_ref(lhs, ref_to_comp, rule_name, "lhs")
+        # rhs may be a numeric literal (threshold) or a string operand (ref / ref.series).
+        rhs = node.get("rhs")
+        if isinstance(rhs, str):
+            _validate_term_ref(rhs, ref_to_comp, rule_name, "rhs")
         fn = node.get("fn", "")
         if fn not in _SUPPORTED_FNS:
             raise ValueError(
