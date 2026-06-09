@@ -185,6 +185,11 @@ async def _run_sse() -> None:
 if __name__ == "__main__":
     import asyncio
 
+    from app.telemetry import init_telemetry
+
+    # Non-fatal: init_telemetry no-ops unless OTEL_ENABLED=true and swallows its own errors.
+    init_telemetry()
+
     if MCP_TRANSPORT == "sse":
         asyncio.run(_run_sse())
     else:

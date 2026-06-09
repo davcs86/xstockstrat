@@ -1,0 +1,111 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus / Mimir",
+      "description": "Grafana Cloud Prometheus (metrics) datasource",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    },
+    {
+      "name": "DS_LOKI",
+      "label": "Loki",
+      "description": "Grafana Cloud Loki (logs) datasource",
+      "type": "datasource",
+      "pluginId": "loki",
+      "pluginName": "Loki"
+    }
+  ],
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "tags": ["xstockstrat", "phase7", "infrastructure"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "label": "Prometheus / Mimir"
+      },
+      {
+        "name": "DS_LOKI",
+        "type": "datasource",
+        "query": "loki",
+        "current": {},
+        "hide": 0,
+        "label": "Loki"
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "xstockstrat — Infrastructure",
+  "uid": "xstk-infrastructure",
+  "panels": [
+    {
+      "title": "gRPC connection / transport errors per service (req/s)",
+      "description": "Non-OK gRPC status codes that indicate connectivity issues: UNAVAILABLE(14), DEADLINE_EXCEEDED(4), RESOURCE_EXHAUSTED(8).",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service_name) (rate(rpc_server_duration_milliseconds_count{rpc_grpc_status_code=~\"4|8|14\"}[5m]))",
+          "legendFormat": "{{service_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Database connection error logs (rate)",
+      "description": "Loki match on connection-pool / asyncpg / pg driver error strings across services. A sustained non-zero line indicates pool exhaustion or DB unavailability.",
+      "type": "timeseries",
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service_name) (rate({platform=\"xstockstrat\"} |~ \"(?i)connection pool|too many clients|connection refused|pool timeout\" [5m]))",
+          "legendFormat": "{{service_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Services reporting telemetry (last 5m)",
+      "description": "Each service with any gRPC metric activity in the window. A drop here means a service stopped emitting telemetry.",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(count by (service_name) (rate(rpc_server_duration_milliseconds_count[5m]) > 0))",
+          "legendFormat": "services up"
+        }
+      ]
+    },
+    {
+      "title": "OTLP export errors (collector / SDK)",
+      "description": "Telemetry export failures surfaced in service or collector logs — a self-monitor for the observability pipeline itself.",
+      "type": "timeseries",
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate({platform=\"xstockstrat\"} |~ \"(?i)otlp|otel\" |~ \"(?i)export|failed\" [5m]))",
+          "legendFormat": "export errors/s"
+        }
+      ]
+    }
+  ]
+}
