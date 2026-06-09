@@ -1,6 +1,6 @@
 # Implementation Spec: durable-observable-backfills
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-06-08
 **Feature**: `docs/roadmap/features/052-durable-observable-backfills/feature.md`
 **Total Steps**: 12
@@ -172,7 +172,7 @@ indexes; `./scripts/db-migrate.sh down 1` then `up` round-trips cleanly.
 
 ### Step 4 — service: Add `backfill_jobs` repository
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/repositories/backfill_jobs.py` — create
@@ -223,7 +223,7 @@ cd services/xstockstrat-ingest && uv run python -c "from app.repositories import
 
 ### Step 5 — config: Add `ingest.backfill.max_retry_attempts` + watcher accessors
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/config/watcher.py` — modify
@@ -269,7 +269,7 @@ Step 10's verification.
 
 ### Step 6 — service: Persist job state to the table; wire notify channel; drop `self._jobs`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -336,7 +336,7 @@ Step 10's verification.
 
 ### Step 7 — service: Emit full lifecycle events, notify alert, retry policy, concurrency gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -401,7 +401,7 @@ job. Lint runs in Step 10's verification.
 
 ### Step 8 — service: Startup reconciliation of interrupted jobs (FR-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/main.py` — modify
@@ -440,7 +440,7 @@ terminal status, not `NOT_FOUND`.
 
 ### Step 9 — service: marketdata returns `expected_bars` estimate (FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -477,7 +477,7 @@ terminal status, not `NOT_FOUND`.
 
 ### Step 10 — test: ingest servicer durability, lifecycle, retry, concurrency, reconciliation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify
@@ -525,7 +525,7 @@ All tests pass, lint+format clean, coverage ≥ 40%.
 
 ### Step 11 — test: marketdata `expected_bars` estimate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — create (or modify if present)
@@ -564,7 +564,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 12 — docs: Reconcile `xstockstrat-ingest/CLAUDE.md`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`services/xstockstrat-ingest/CLAUDE.md`)
 **Files**:
 - `services/xstockstrat-ingest/CLAUDE.md` — modify

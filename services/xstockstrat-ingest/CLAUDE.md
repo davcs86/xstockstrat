@@ -39,6 +39,12 @@ ingests signals via the `IngestSignal` gRPC RPC. The former HTTP/Connect-RPC ser
 - Schema: `ingest`
 - Table: `ingest.newsletter_signals` — TimescaleDB hypertable (7-day chunks by `ingested_at`)
 - Migration: `migrations/001_newsletter_signals.up.sql`
+- Table: `ingest.backfill_jobs` — durable backfill job state (plain table, **not** a hypertable);
+  replaces the former in-memory `self._jobs` dict. Persists status, progress (`bars_processed` /
+  `bars_total`), `failed_symbols`, and timestamps so jobs survive a restart. On startup the servicer
+  reconciles any job left `RUNNING`/`QUEUED` by a previous process to `FAILED` ("interrupted by
+  restart", FR-3 — no automatic resume).
+- Migration: `migrations/003_backfill_jobs.up.sql`
 
 ## Config Keys Consumed
 
@@ -49,6 +55,7 @@ Namespace: `ingest`
 | `ingest.backfill.max_concurrent_jobs` | int | `3` | Max parallel backfill jobs |
 | `ingest.backfill.default_timeframe` | string | `1d` | Default bar timeframe |
 | `ingest.backfill.retry_on_failure` | bool | `true` | Auto-retry failed jobs |
+| `ingest.backfill.max_retry_attempts` | int | `3` | Max retry attempts for transient backfill failures (FR-8) |
 | `ingest.signals.unusual_whales.enabled` | bool | `false` | Enable Unusual Whales signal ingestion |
 | `ingest.signals.unusual_whales.default_window_days` | int | `5` | Default validity window |
 | `ingest.signals.unusual_whales.default_conviction` | float | `0.5` | Default conviction if not provided |

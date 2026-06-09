@@ -31,6 +31,7 @@ GRPC_PORT = os.environ.get("GRPC_PORT", "50055")
 CONFIG_ENDPOINT = os.environ.get("CONFIG_ENDPOINT", "xstockstrat-config:50060")
 MARKETDATA_ENDPOINT = os.environ.get("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053")
 LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
+NOTIFY_ENDPOINT = os.environ.get("NOTIFY_ENDPOINT", "xstockstrat-notify:50059")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError(
@@ -54,14 +55,31 @@ async def serve():
     db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10, ssl=_ssl_ctx)
     log.info("database pool established")
 
+    # FR-3: reconcile backfill jobs left RUNNING/QUEUED by a previous process. Enum ints are
+    # passed in so the repository stays proto-free. No automatic resume (P0 scope).
+    from gen.ingest.v1 import ingest_pb2
+
+    from app.repositories import backfill_jobs
+
+    reconciled = await backfill_jobs.reconcile_interrupted(
+        db_pool,
+        failed_status=ingest_pb2.BACKFILL_STATUS_FAILED,
+        running_status=ingest_pb2.BACKFILL_STATUS_RUNNING,
+        queued_status=ingest_pb2.BACKFILL_STATUS_QUEUED,
+        error_msg="interrupted by restart",
+    )
+    log.info("reconciled %d interrupted backfill job(s)", reconciled)
+
     marketdata_channel = grpc.aio.insecure_channel(MARKETDATA_ENDPOINT)
     ledger_channel = grpc.aio.insecure_channel(LEDGER_ENDPOINT)
+    notify_channel = grpc.aio.insecure_channel(NOTIFY_ENDPOINT)
 
     servicer = IngestServicer(
         config_watcher=cfg_watcher,
         marketdata_channel=marketdata_channel,
         ledger_channel=ledger_channel,
         db_pool=db_pool,
+        notify_channel=notify_channel,
     )
 
     # ── gRPC server (internal, port 50055) ────────────────────────────────

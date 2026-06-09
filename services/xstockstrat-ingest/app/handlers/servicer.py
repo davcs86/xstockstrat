@@ -6,15 +6,19 @@ normalises raw data payloads, and persists newsletter signals to TimescaleDB.
 import asyncio
 import logging
 import uuid
-from datetime import UTC
+from datetime import UTC, datetime
 
 import grpc
+from gen.common.v1 import common_pb2
 from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc
 from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
 from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc
+from gen.notify.v1 import notify_pb2, notify_pb2_grpc
+from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
+from app.repositories import backfill_jobs
 from app.repositories.signal_sources import (
     deactivate_source,
     list_all_sources,
@@ -25,6 +29,45 @@ from app.repositories.signal_sources import (
 log = logging.getLogger(__name__)
 
 
+def _ts_to_dt(ts) -> datetime | None:
+    """Convert a protobuf Timestamp to an aware datetime, or None if unset."""
+    if ts is None or ts.seconds == 0:
+        return None
+    return ts.ToDatetime(tzinfo=UTC)
+
+
+def _dt_to_ts(dt: datetime) -> Timestamp:
+    ts = Timestamp()
+    ts.FromDatetime(dt)
+    return ts
+
+
+def job_row_to_proto(row: dict) -> ingest_pb2.BackfillJob:
+    """Map an ``ingest.backfill_jobs`` row to a BackfillJob message."""
+    job = ingest_pb2.BackfillJob(
+        job_id=str(row["job_id"]),
+        symbols=list(row["symbols"] or []),
+        timeframe=row["timeframe"] or "",
+        status=row["status"],
+        bars_processed=row["bars_processed"] or 0,
+        bars_total=row["bars_total"] or 0,
+        failed_symbols=list(row["failed_symbols"] or []),
+        error=row["error"] or "",
+    )
+    if row.get("range_start") or row.get("range_end"):
+        tr = common_pb2.TimeRange()
+        if row.get("range_start"):
+            tr.start.CopyFrom(_dt_to_ts(row["range_start"]))
+        if row.get("range_end"):
+            tr.end.CopyFrom(_dt_to_ts(row["range_end"]))
+        job.range.CopyFrom(tr)
+    if row.get("started_at"):
+        job.started_at.CopyFrom(_dt_to_ts(row["started_at"]))
+    if row.get("completed_at"):
+        job.completed_at.CopyFrom(_dt_to_ts(row["completed_at"]))
+    return job
+
+
 class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
     def __init__(
         self,
@@ -32,12 +75,16 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         marketdata_channel,
         ledger_channel,
         db_pool=None,
+        notify_channel=None,
     ):
         self._cfg = config_watcher
         self._marketdata = marketdata_pb2_grpc.MarketDataServiceStub(marketdata_channel)
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
+        self._notify = notify_pb2_grpc.NotifyServiceStub(notify_channel) if notify_channel else None
         self._db = db_pool
-        self._jobs: dict[str, ingest_pb2.BackfillJob] = {}
+        # Concurrency gate (FR-9): read once at init. Jobs above the limit stay QUEUED in
+        # the table until the semaphore is acquired. Live re-read of the key is out of scope.
+        self._backfill_sem = asyncio.Semaphore(self._cfg.backfill_max_concurrent_jobs)
 
     @staticmethod
     def _has_admin_scope(context) -> bool:
@@ -54,70 +101,49 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             access_scope = 0
         return bool(access_scope & 0x04)
 
-    async def TriggerBackfill(self, request, context):
-        job_id = str(uuid.uuid4())
-        job = ingest_pb2.BackfillJob(
-            job_id=job_id,
-            symbols=list(request.symbols),
-            timeframe=request.timeframe,
-            range=request.range,
-            status=ingest_pb2.BACKFILL_STATUS_QUEUED,
-        )
-        self._jobs[job_id] = job
-        propagation_meta = [
+    @staticmethod
+    def _propagation_meta(context):
+        return [
             (k, v)
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
+
+    async def TriggerBackfill(self, request, context):
+        if self._db is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
+            return
+        job_id = str(uuid.uuid4())
+        propagation_meta = self._propagation_meta(context)
+        await backfill_jobs.insert_job(
+            self._db,
+            job_id=job_id,
+            symbols=list(request.symbols),
+            timeframe=request.timeframe,
+            range_start=_ts_to_dt(request.range.start),
+            range_end=_ts_to_dt(request.range.end),
+            status=ingest_pb2.BACKFILL_STATUS_QUEUED,
+        )
+        await self._emit_backfill_event(
+            "ingest.backfill.queued",
+            job_id,
+            {"symbols": list(request.symbols), "timeframe": request.timeframe},
+            propagation_meta,
+        )
         asyncio.create_task(self._run_backfill(job_id, request, propagation_meta))
         return ingest_pb2.TriggerBackfillResponse(
             job_id=job_id,
             status=ingest_pb2.BACKFILL_STATUS_QUEUED,
         )
 
-    async def _run_backfill(self, job_id: str, request, propagation_meta=()):
-        job = self._jobs[job_id]
-        job.status = ingest_pb2.BACKFILL_STATUS_RUNNING
-        log.info("backfill job %s starting symbols=%s", job_id, list(request.symbols))
-
+    async def _emit_backfill_event(self, event_type, job_id, payload_dict, propagation_meta):
+        """Emit a backfill lifecycle event to the ledger. Ledger errors are non-fatal."""
+        payload = Struct()
+        payload.update({"job_id": job_id, **payload_dict})
         try:
-            resp = await self._marketdata.BackfillBars(
-                marketdata_pb2.BackfillBarsRequest(
-                    symbols=list(request.symbols),
-                    timeframe=request.timeframe,
-                    range=request.range,
-                    overwrite_existing=request.overwrite,
-                ),
-                metadata=propagation_meta,
-            )
-            job.bars_processed = resp.bars_written
-            job.status = (
-                ingest_pb2.BACKFILL_STATUS_PARTIAL
-                if resp.failed_symbols
-                else ingest_pb2.BACKFILL_STATUS_COMPLETED
-            )
-            log.info(
-                "backfill job %s completed bars=%d failed=%s",
-                job_id,
-                resp.bars_written,
-                resp.failed_symbols,
-            )
-
-            # Emit ledger event
-            from google.protobuf.struct_pb2 import Struct
-
-            payload = Struct()
-            payload.update(
-                {
-                    "job_id": job_id,
-                    "symbols": list(request.symbols),
-                    "bars_written": resp.bars_written,
-                    "failed_symbols": list(resp.failed_symbols),
-                }
-            )
             await self._ledger.AppendEvent(
                 ledger_pb2.AppendEventRequest(
-                    event_type="ingest.backfill.completed",
+                    event_type=event_type,
                     source_service="xstockstrat-ingest",
                     stream_key=f"backfill:{job_id}",
                     payload=payload,
@@ -125,22 +151,188 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 metadata=propagation_meta,
             )
         except Exception as e:
-            job.status = ingest_pb2.BACKFILL_STATUS_FAILED
-            job.error = str(e)
+            log.warning("failed to emit %s for job %s: %s", event_type, job_id, e)
+
+    async def _emit_backfill_alert(self, job_id, status, failed_symbols, error, propagation_meta):
+        """Emit a notify alert on FAILED (ERROR) or PARTIAL (WARNING). Guarded + non-fatal."""
+        if self._notify is None:
+            return
+        is_failed = status == ingest_pb2.BACKFILL_STATUS_FAILED
+        label = "failed" if is_failed else "partial"
+        severity = (
+            notify_pb2.ALERT_SEVERITY_ERROR if is_failed else notify_pb2.ALERT_SEVERITY_WARNING
+        )
+        ctx = Struct()
+        ctx.update({"job_id": job_id, "failed_symbols": list(failed_symbols), "error": error or ""})
+        try:
+            await self._notify.EmitAlert(
+                notify_pb2.EmitAlertRequest(
+                    severity=severity,
+                    category="backfill",
+                    title=f"Backfill {job_id} {label}",
+                    body=f"Backfill job {job_id} {label}: {error}",
+                    source_service="xstockstrat-ingest",
+                    tags=[f"job_id:{job_id}"],
+                    context=ctx,
+                ),
+                metadata=propagation_meta,
+            )
+        except Exception as e:
+            log.warning("failed to emit alert for job %s: %s", job_id, e)
+
+    async def _run_backfill(self, job_id: str, request, propagation_meta=()):
+        symbols = list(request.symbols)
+        try:
+            # Concurrency gate: a job above max_concurrent_jobs blocks here, staying QUEUED
+            # in the table until the semaphore is free, then transitions to RUNNING.
+            async with self._backfill_sem:
+                await backfill_jobs.update_job(
+                    self._db,
+                    job_id,
+                    status=ingest_pb2.BACKFILL_STATUS_RUNNING,
+                    started_at=datetime.now(UTC),
+                )
+                await self._emit_backfill_event(
+                    "ingest.backfill.running", job_id, {"symbols": symbols}, propagation_meta
+                )
+                log.info("backfill job %s running symbols=%s", job_id, symbols)
+                await self._execute_backfill(job_id, request, symbols, propagation_meta)
+        except Exception as e:
+            # Total failure (e.g. marketdata RPC error) → FAILED + failed event + alert.
             log.error("backfill job %s failed: %s", job_id, e)
+            await backfill_jobs.update_job(
+                self._db,
+                job_id,
+                status=ingest_pb2.BACKFILL_STATUS_FAILED,
+                error=str(e),
+                completed_at=datetime.now(UTC),
+            )
+            await self._emit_backfill_event(
+                "ingest.backfill.failed", job_id, {"error": str(e)}, propagation_meta
+            )
+            await self._emit_backfill_alert(
+                job_id, ingest_pb2.BACKFILL_STATUS_FAILED, symbols, str(e), propagation_meta
+            )
+
+    async def _execute_backfill(self, job_id, request, symbols, propagation_meta):
+        """Run the marketdata backfill with retry-on-transient-failure (FR-8).
+
+        Retries only the still-failing symbols with 2s/4s/8s backoff up to
+        ``max_retry_attempts`` when ``retry_on_failure`` is enabled. A non-empty
+        ``failed_symbols`` after retries is a PARTIAL outcome; a raised exception
+        propagates to ``_run_backfill`` as a total FAILED.
+        """
+        remaining = list(symbols)
+        total_bars = 0
+        expected_bars = 0
+        failed: list[str] = []
+        max_attempts = (
+            self._cfg.backfill_max_retry_attempts if self._cfg.backfill_retry_on_failure else 0
+        )
+        attempt = 0
+        while True:
+            resp = await self._marketdata.BackfillBars(
+                marketdata_pb2.BackfillBarsRequest(
+                    symbols=remaining,
+                    timeframe=request.timeframe,
+                    range=request.range,
+                    overwrite_existing=request.overwrite,
+                ),
+                metadata=propagation_meta,
+            )
+            total_bars += resp.bars_written
+            if resp.expected_bars:
+                expected_bars = resp.expected_bars
+            failed = list(resp.failed_symbols)
+            await backfill_jobs.update_job(
+                self._db,
+                job_id,
+                bars_processed=total_bars,
+                bars_total=expected_bars,
+                failed_symbols=failed,
+            )
+            if not failed or attempt >= max_attempts:
+                break
+            attempt += 1
+            await asyncio.sleep(2**attempt)  # 2s, 4s, 8s
+            remaining = failed
+
+        now = datetime.now(UTC)
+        if failed:
+            # PARTIAL: some symbols failed — emit `completed` (with failed_symbols), NOT `failed`.
+            await backfill_jobs.update_job(
+                self._db,
+                job_id,
+                status=ingest_pb2.BACKFILL_STATUS_PARTIAL,
+                failed_symbols=failed,
+                bars_processed=total_bars,
+                bars_total=expected_bars,
+                completed_at=now,
+            )
+            await self._emit_backfill_event(
+                "ingest.backfill.completed",
+                job_id,
+                {"bars_written": total_bars, "failed_symbols": failed},
+                propagation_meta,
+            )
+            await self._emit_backfill_alert(
+                job_id,
+                ingest_pb2.BACKFILL_STATUS_PARTIAL,
+                failed,
+                "some symbols failed to backfill",
+                propagation_meta,
+            )
+            log.info("backfill job %s partial bars=%d failed=%s", job_id, total_bars, failed)
+        else:
+            await backfill_jobs.update_job(
+                self._db,
+                job_id,
+                status=ingest_pb2.BACKFILL_STATUS_COMPLETED,
+                failed_symbols=[],
+                bars_processed=total_bars,
+                bars_total=expected_bars,
+                completed_at=now,
+            )
+            await self._emit_backfill_event(
+                "ingest.backfill.completed",
+                job_id,
+                {"bars_written": total_bars, "failed_symbols": []},
+                propagation_meta,
+            )
+            log.info("backfill job %s completed bars=%d", job_id, total_bars)
 
     async def GetBackfillStatus(self, request, context):
-        job = self._jobs.get(request.job_id)
-        if job is None:
+        if self._db is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
+            return
+        row = await backfill_jobs.get_job(self._db, request.job_id)
+        if row is None:
             await context.abort(grpc.StatusCode.NOT_FOUND, f"job {request.job_id} not found")
             return
-        return job
+        return job_row_to_proto(row)
 
     async def ListBackfillJobs(self, request, context):
-        jobs = list(self._jobs.values())
-        if request.status_filter != ingest_pb2.BACKFILL_STATUS_UNSPECIFIED:
-            jobs = [j for j in jobs if j.status == request.status_filter]
-        return ingest_pb2.ListBackfillJobsResponse(jobs=jobs)
+        if self._db is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
+            return
+        status_filter = (
+            request.status_filter
+            if request.status_filter != ingest_pb2.BACKFILL_STATUS_UNSPECIFIED
+            else None
+        )
+        limit = request.page.page_size if request.page.page_size > 0 else 100
+        try:
+            offset = int(request.page.page_token) if request.page.page_token else 0
+        except ValueError:
+            offset = 0
+        rows = await backfill_jobs.list_jobs(
+            self._db, status_filter=status_filter, limit=limit, offset=offset
+        )
+        next_token = str(offset + len(rows)) if len(rows) == limit else ""
+        return ingest_pb2.ListBackfillJobsResponse(
+            jobs=[job_row_to_proto(r) for r in rows],
+            page=common_pb2.PageResponse(next_page_token=next_token, total_count=len(rows)),
+        )
 
     async def NormalizeRawData(self, request, context):
         # Normalise CSV/JSON/alpaca_v2 payloads into ledger events

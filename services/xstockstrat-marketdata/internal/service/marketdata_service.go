@@ -193,7 +193,43 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 	return &marketdatav1.BackfillBarsResponse{
 		BarsWritten:   totalWritten,
 		FailedSymbols: failedSymbols,
+		ExpectedBars:  estimateExpectedBars(req.Symbols, req.Timeframe, start, end),
 	}, nil
+}
+
+// estimateExpectedBars approximates the total bar count across the requested
+// symbols/range, used by xstockstrat-ingest as a progress denominator (FR-6).
+// It counts weekdays (Mon–Fri) in [start, end] as a trading-day approximation
+// (a US-holiday calendar is out of scope for a progress estimate) and multiplies
+// by a per-day bar factor keyed off the timeframe and by the number of symbols.
+func estimateExpectedBars(symbols []string, timeframe string, start, end time.Time) int64 {
+	if len(symbols) == 0 || !end.After(start) {
+		return 0
+	}
+
+	// Count weekdays in [start, end] (inclusive of both endpoint dates).
+	var tradingDays int64
+	for d := start.Truncate(24 * time.Hour); !d.After(end); d = d.Add(24 * time.Hour) {
+		if wd := d.Weekday(); wd != time.Saturday && wd != time.Sunday {
+			tradingDays++
+		}
+	}
+
+	var perDay int64
+	switch timeframe {
+	case "1d", "1Day":
+		perDay = 1
+	case "1h", "1Hour":
+		perDay = 7 // ~6.5 RTH hours, rounded up
+	case "5m", "5Min":
+		perDay = 78
+	case "1m", "1Min":
+		perDay = 390
+	default:
+		perDay = 1
+	}
+
+	return tradingDays * perDay * int64(len(symbols))
 }
 
 // SubscribeBars registers a subscriber channel for live bars and returns its ID.

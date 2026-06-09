@@ -97,3 +97,43 @@ Environment notes (apply to all three features):
   Runtime descriptor confirms BackfillJob.failed_symbols=11, BackfillBarsResponse.expected_bars=3.
 - Files modified: `packages/proto/gen/{go,python,ts}/**`
 - Deviations: codegen via host toolchain instead of Docker image (logged above; CI-equivalent).
+
+### Step 3 — migration: ingest.backfill_jobs table [done]
+- Verified up+down on a throwaway local postgres:16 cluster (docker unavailable): table with 13
+  columns + status/created_at indexes created on UP, dropped cleanly on DOWN.
+- Files: `services/xstockstrat-ingest/migrations/003_backfill_jobs.{up,down}.sql`
+
+### Step 4 — service: backfill_jobs repository [done]
+- `app/repositories/backfill_jobs.py`: insert_job, update_job (dynamic SET, column allowlist),
+  get_job, list_jobs, reconcile_interrupted. Proto-free (status ints passed by servicer). uuid casts.
+
+### Step 5 — config: watcher accessors [done]
+- Added backfill_max_concurrent_jobs / backfill_retry_on_failure / backfill_max_retry_attempts (=3, new key).
+
+### Steps 6–8 — servicer durability + lifecycle/alert/retry/concurrency + startup reconciliation [done]
+- servicer.py: dropped self._jobs; TriggerBackfill/_run_backfill/GetBackfillStatus/ListBackfillJobs
+  now read/write the table; notify channel wired; job_row_to_proto helper.
+- Lifecycle events queued/running/completed/failed; PARTIAL emits `completed` (not `failed`) + WARNING
+  alert; total failure emits `failed` + ERROR alert. Retry: failed symbols only, 2/4/8s backoff,
+  max_retry_attempts; concurrency via asyncio.Semaphore(max_concurrent_jobs).
+- main.py: NOTIFY_ENDPOINT + notify channel; startup reconcile_interrupted (RUNNING/QUEUED → FAILED).
+- Files: `app/handlers/servicer.py`, `app/main.py`
+
+### Step 9 — service: marketdata expected_bars estimate [done]
+- `estimateExpectedBars` (weekday count × per-timeframe factor × symbols); set on BackfillBarsResponse.
+- File: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+
+### Step 10 — test: ingest [done]
+- Rewrote the 4 self._jobs-based test classes to repo-mock/db-mock; added lifecycle/alert/retry/
+  concurrency tests + test_backfill_jobs.py + 3 new config-getter tests. 108 passed, cov 69.5% (≥40).
+- Files: `tests/test_ingest_servicer.py`, `tests/test_backfill_jobs.py`
+
+### Step 11 — test: marketdata estimateExpectedBars [done]
+- Table test (weekday counting, per-timeframe factors, symbol multiplier, aliases, edge cases).
+  go test ok; golangci-lint 0 issues.
+- File: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+
+### Step 12 — docs: ingest CLAUDE.md [done]
+- Added max_retry_attempts config row + ingest.backfill_jobs table/migration to Database section.
+
+All 12 steps done → feature code-completed. merge-order: 052 has no "must wait for" entry → integration PR can open.

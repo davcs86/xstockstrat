@@ -1,6 +1,6 @@
 # Feature: durable-observable-backfills
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/durable-observable-backfills`
 **Created**: 2026-06-08
 **Last Updated**: 2026-06-09
@@ -17,6 +17,7 @@
 | 2026-06-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved; 4 open questions resolved (retry impl, marketdata bars_total, drop in-memory dict, retain jobs) |
 | 2026-06-08 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 | 2026-06-09 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential stacked run started; Steps 1–2 (proto + regen) done |
+| 2026-06-09 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done; ingest pytest 108 passed (cov 69.5%), marketdata go test ok + golangci-lint 0 issues |
 
 ---
 
