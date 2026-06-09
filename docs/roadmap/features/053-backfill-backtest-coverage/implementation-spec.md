@@ -168,7 +168,7 @@ The timeframe normalization is the load-bearing correctness fix: today `services
 
 ### Step 3 — service: Add timeframe normalizer package to marketdata
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/timeframe/timeframe.go` — create
@@ -196,7 +196,7 @@ The timeframe normalization is the load-bearing correctness fix: today `services
 
 ### Step 4 — service: Add coverage query to marketdata repository
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify
@@ -220,7 +220,7 @@ The timeframe normalization is the load-bearing correctness fix: today `services
 
 ### Step 5 — service: Wire `GetDataCoverage` through marketdata service + handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -252,7 +252,7 @@ The timeframe normalization is the load-bearing correctness fix: today `services
 
 ### Step 6 — test: marketdata timeframe normalizer + coverage gap logic
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/timeframe/timeframe_test.go` — create
@@ -432,4 +432,8 @@ The timeframe normalization is the load-bearing correctness fix: today `services
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Steps 1/3-6 — `//nolint:staticcheck` on existing deprecated-timeframe reads
+**Spec said**: Mark the existing `string timeframe` fields `[deprecated = true]` and keep them for a one-release deprecation cycle (do not remove).
+**Actual**: Marking the proto fields deprecated made `golangci-lint` (staticcheck SA1019) fail on the marketdata Go code that still legitimately reads the string field during the deprecation window (`internal/repository/marketdata_repo.go`, `internal/handler/marketdata_handler.go`, `internal/service/marketdata_service.go`). Added `//nolint:staticcheck` annotations (with a deprecation-window reason) on those intentional reads so the lint gate passes without prematurely ripping out the still-needed string readers.
+**Reason**: One-release deprecation cycle is by design (callers migrate to `timeframe_enum` over the next release); suppressing SA1019 on intentional reads during the window is the idiomatic Go approach. In-scope: the findings were caused by this feature's own deprecation change.
+**Disposition**: accepted (deprecation-window lint suppression)
