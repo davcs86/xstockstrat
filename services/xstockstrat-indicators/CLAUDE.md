@@ -41,8 +41,10 @@ HTTP/Connect-RPC server on `8054` was removed.
   - `input_schema JSONB` — legacy advisory map (retained, not validated)
   - `parameters JSONB` (default `'[]'`) — ordered list of typed parameter definitions
     (`FormulaParameter`: `name`, `type`, `default_value`, `required`, `min`/`max`, `description`)
+  - `outputs JSONB` (default `'[]'`) — ordered list of declared output series
+    (`FormulaOutput`: `name`, `description`); the primary `value` series is implicit
 - Migrations: `migrations/001_formulas.*` (table); `migrations/002_formula_parameters.*` (adds the
-  `parameters` JSONB column)
+  `parameters` JSONB column); `migrations/003_formula_outputs.*` (adds the `outputs` JSONB column)
 - Pool: `asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)` created in `app/main.py`
 
 ## Config Keys Consumed
@@ -81,6 +83,21 @@ descriptions. Distinct from the OHLCV/series `data` input:
   must not be `UNSPECIFIED`; `min`/`max` apply to numeric params only.
 - **Soft cap**: at most **32 parameters** per formula, hardcoded in `app/services/parameters.py`
   (`MAX_PARAMETERS`). **No new config key** — the cap is engine-enforced, not in `indicators.*`.
+
+## Declared Formula Outputs
+
+Formulas may declare the output series they emit (`FormulaOutput`: `name`, `description`),
+analogous to typed parameters. This lets the analysis service validate strategy rules that
+reference a formula series as `<ref_name>.<series>` and lets the sandbox enforce the contract:
+
+- **Implicit primary series**: every formula emits `value` (the `result` dict's `value` key).
+  `value` is reserved and must **not** be declared in `outputs`.
+- **Definition validation** (Register/Update, `app/services/parameters.py` `validate_outputs`):
+  output names must be valid, unique Python identifiers; at most **16** outputs (`MAX_OUTPUTS`).
+- **Execution enforcement** (`ExecuteFormula`): when a stored formula declares outputs, the
+  sandbox result dict must contain every declared series, else the run fails with
+  `SANDBOX_EXIT_REASON_RUNTIME_ERROR` and an error naming the missing series. Inline
+  `formula_source` runs have no stored definition, so no output enforcement applies.
 
 ## Webhooks
 

@@ -565,6 +565,7 @@ type fillAccumulator struct {
 // positionSyncPayload is the expected shape of the account.positions.synced event payload.
 type positionSyncPayload struct {
 	AccountID   string `json:"account_id"`
+	UserID      string `json:"user_id"`
 	TradingMode string `json:"trading_mode"`
 	Positions   []struct {
 		Symbol  string  `json:"symbol"`
@@ -624,8 +625,13 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 		return
 	}
 
-	// account.positions.synced events don't carry user_id; use "default" as placeholder.
-	userID := "default"
+	// Store synced positions under the account owner's user_id so they reconcile
+	// with order-fill positions and are visible to per-user portfolio queries.
+	// Fall back to "default" for legacy events emitted before user_id was carried.
+	userID := sync.UserID
+	if userID == "" {
+		userID = "default"
+	}
 	presentSymbols := make([]string, 0, len(sync.Positions))
 	for _, p := range sync.Positions {
 		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost); err != nil {

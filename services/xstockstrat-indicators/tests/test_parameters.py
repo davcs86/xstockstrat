@@ -44,6 +44,43 @@ def _struct(d: dict) -> Struct:
 
 
 # ---------------------------------------------------------------------------
+# validate_outputs
+# ---------------------------------------------------------------------------
+
+
+class TestValidateOutputs:
+    def test_valid_outputs_pass(self):
+        params_validation.validate_outputs(
+            [
+                pb.FormulaOutput(name="upper", description="upper band"),
+                pb.FormulaOutput(name="lower", description="lower band"),
+            ]
+        )
+
+    def test_empty_outputs_pass(self):
+        params_validation.validate_outputs([])
+
+    def test_rejects_reserved_value_name(self):
+        with pytest.raises(ValueError, match="reserved"):
+            params_validation.validate_outputs([pb.FormulaOutput(name="value")])
+
+    def test_rejects_invalid_identifier(self):
+        with pytest.raises(ValueError, match="valid Python identifier"):
+            params_validation.validate_outputs([pb.FormulaOutput(name="upper band")])
+
+    def test_rejects_duplicate_name(self):
+        with pytest.raises(ValueError, match="duplicate output name"):
+            params_validation.validate_outputs(
+                [pb.FormulaOutput(name="upper"), pb.FormulaOutput(name="upper")]
+            )
+
+    def test_rejects_too_many_outputs(self):
+        outs = [pb.FormulaOutput(name=f"s{i}") for i in range(params_validation.MAX_OUTPUTS + 1)]
+        with pytest.raises(ValueError, match="too many outputs"):
+            params_validation.validate_outputs(outs)
+
+
+# ---------------------------------------------------------------------------
 # validate_definitions
 # ---------------------------------------------------------------------------
 

@@ -216,3 +216,35 @@ export declare enum BrokerType {
  * Describes the enum xstockstrat.common.v1.BrokerType.
  */
 export declare const BrokerTypeSchema: GenEnum<BrokerType>;
+/**
+ * Timeframe is the canonical OHLCV bar interval, shared by marketdata + analysis + ingest.
+ * Replaces the free-text "1d"/"1Day"/"1m" strings that previously mismatched across services.
+ *
+ * @generated from enum xstockstrat.common.v1.Timeframe
+ */
+export declare enum Timeframe {
+    /**
+     * @generated from enum value: TIMEFRAME_UNSPECIFIED = 0;
+     */
+    TIMEFRAME_UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: TIMEFRAME_1MIN = 1;
+     */
+    TIMEFRAME_1MIN = 1,
+    /**
+     * @generated from enum value: TIMEFRAME_5MIN = 2;
+     */
+    TIMEFRAME_5MIN = 2,
+    /**
+     * @generated from enum value: TIMEFRAME_1HOUR = 3;
+     */
+    TIMEFRAME_1HOUR = 3,
+    /**
+     * @generated from enum value: TIMEFRAME_1DAY = 4;
+     */
+    TIMEFRAME_1DAY = 4
+}
+/**
+ * Describes the enum xstockstrat.common.v1.Timeframe.
+ */
+export declare const TimeframeSchema: GenEnum<Timeframe>;

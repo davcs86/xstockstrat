@@ -28,6 +28,11 @@ def _to_dict(row) -> dict:
         d["parameters"] = json.loads(params_raw) if params_raw else []
     elif params_raw is None:
         d["parameters"] = []
+    outputs_raw = d.get("outputs")
+    if isinstance(outputs_raw, str):
+        d["outputs"] = json.loads(outputs_raw) if outputs_raw else []
+    elif outputs_raw is None:
+        d["outputs"] = []
     return d
 
 
@@ -47,12 +52,14 @@ class FormulasRepository:
         is_public,
         input_schema,
         parameters=None,
+        outputs=None,
     ) -> dict:
         row = await self._db.fetchrow(
             """
             INSERT INTO indicators.formulas
-                (formula_id, name, description, source, author, is_public, input_schema, parameters)
-            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb)
+                (formula_id, name, description, source, author, is_public, input_schema,
+                 parameters, outputs)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb)
             RETURNING *
             """,
             formula_id,
@@ -63,6 +70,7 @@ class FormulasRepository:
             is_public,
             json.dumps(dict(input_schema) if input_schema else {}),
             json.dumps(list(parameters) if parameters else []),
+            json.dumps(list(outputs) if outputs else []),
         )
         return _to_dict(row)
 
@@ -107,12 +115,13 @@ class FormulasRepository:
         source,
         is_public,
         parameters=None,
+        outputs=None,
     ) -> dict | None:
         row = await self._db.fetchrow(
             """
             UPDATE indicators.formulas
                SET name = $2, description = $3, source = $4, is_public = $5,
-                   parameters = $6::jsonb, updated_at = NOW()
+                   parameters = $6::jsonb, outputs = $7::jsonb, updated_at = NOW()
              WHERE formula_id = $1::uuid
             RETURNING *
             """,
@@ -122,6 +131,7 @@ class FormulasRepository:
             source,
             is_public,
             json.dumps(list(parameters) if parameters else []),
+            json.dumps(list(outputs) if outputs else []),
         )
         return _to_dict(row)
 

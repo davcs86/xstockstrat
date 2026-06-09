@@ -52,7 +52,7 @@ func (r *MarketDataRepo) InsertBars(ctx context.Context, bars []*marketdatav1.Ba
 			ts = b.Time.AsTime()
 		}
 		_, err := tx.Exec(ctx, q,
-			ts, b.Symbol, b.Timeframe,
+			ts, b.Symbol, b.Timeframe, //nolint:staticcheck // SA1019: canonical string timeframe stored during one-release deprecation window (053)
 			b.Open, b.High, b.Low, b.Close,
 			b.Volume, b.Vwap, b.TradeCount,
 			b.Source,
@@ -130,6 +130,29 @@ func (r *MarketDataRepo) QueryBars(ctx context.Context, symbol, timeframe string
 		bars = bars[:pageSize]
 	}
 	return bars, nextToken, nil
+}
+
+// GetCoverage returns the earliest/latest stored bar timestamps and the bar count for a
+// symbol+timeframe within [start, end]. The PRIMARY KEY (symbol, timeframe, time) backs an
+// efficient MIN/MAX/COUNT scan. When no rows match, earliest/latest are zero and count is 0.
+// timeframe must be the canonical DB string (resolved via internal/timeframe.Resolve).
+func (r *MarketDataRepo) GetCoverage(ctx context.Context, symbol, timeframe string, start, end time.Time) (earliest, latest time.Time, barCount int64, err error) {
+	const sql = `
+		SELECT MIN(time), MAX(time), COUNT(*)
+		FROM marketdata.ohlcv
+		WHERE symbol=$1 AND timeframe=$2 AND time >= $3 AND time <= $4`
+	var minT, maxT *time.Time
+	row := r.pool.QueryRow(ctx, sql, symbol, timeframe, start, end)
+	if err = row.Scan(&minT, &maxT, &barCount); err != nil {
+		return time.Time{}, time.Time{}, 0, err
+	}
+	if minT != nil {
+		earliest = *minT
+	}
+	if maxT != nil {
+		latest = *maxT
+	}
+	return earliest, latest, barCount, nil
 }
 
 // InsertQuote upserts a single quote into the marketdata.quotes hypertable.

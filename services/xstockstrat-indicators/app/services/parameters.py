@@ -26,6 +26,10 @@ from gen.indicators.v1 import indicators_pb2 as pb
 from google.protobuf.json_format import MessageToDict
 
 MAX_PARAMETERS = 32
+MAX_OUTPUTS = 16
+# "value" is the implicit primary output series; it is always available and must not
+# be declared explicitly.
+RESERVED_OUTPUT_NAMES = frozenset({"value"})
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 _NUMERIC_TYPES = (pb.PARAMETER_TYPE_INT, pb.PARAMETER_TYPE_FLOAT)
@@ -72,6 +76,28 @@ def validate_definitions(parameters) -> None:
             raise ValueError(f"parameter {p.name!r} sets min/max on a non-numeric type")
         if has_min and has_max and p.min > p.max:
             raise ValueError(f"parameter {p.name!r} has min ({p.min}) greater than max ({p.max})")
+
+
+def validate_outputs(outputs) -> None:
+    """Validate a list of FormulaOutput definitions; raise ValueError if invalid.
+
+    Used at register/update time (called from the servicer). Output names declare the
+    secondary series a formula emits (addressable in strategy rules as
+    ``<ref_name>.<name>``); the primary ``"value"`` series is implicit and reserved.
+    """
+    if len(outputs) > MAX_OUTPUTS:
+        raise ValueError(f"too many outputs: {len(outputs)} (max {MAX_OUTPUTS})")
+    seen: set[str] = set()
+    for o in outputs:
+        if not _IDENT_RE.match(o.name or ""):
+            raise ValueError(f"output name {o.name!r} is not a valid Python identifier")
+        if o.name in RESERVED_OUTPUT_NAMES:
+            raise ValueError(
+                f"output name {o.name!r} is reserved (the primary 'value' series is implicit)"
+            )
+        if o.name in seen:
+            raise ValueError(f"duplicate output name {o.name!r}")
+        seen.add(o.name)
 
 
 def _coerce(p, raw):

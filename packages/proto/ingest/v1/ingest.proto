@@ -24,7 +24,8 @@ service IngestService {
 message BackfillJob {
   string job_id = 1;
   repeated string symbols = 2;
-  string timeframe = 3;
+  // DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+  string timeframe = 3 [deprecated = true];
   xstockstrat.common.v1.TimeRange range = 4;
   BackfillStatus status = 5;
   int64 bars_processed = 6;
@@ -32,6 +33,10 @@ message BackfillJob {
   google.protobuf.Timestamp started_at = 8;
   google.protobuf.Timestamp completed_at = 9;
   string error = 10;
+  repeated string failed_symbols = 11; // symbols that failed in a PARTIAL/FAILED job (FR-7)
+  xstockstrat.common.v1.Timeframe timeframe_enum = 12;
+  int32 chunks_total = 13;      // planned chunk count (FR-5)
+  int32 chunks_completed = 14;  // chunks in COMPLETED state (FR-5)
 }
 
 enum BackfillStatus {
@@ -43,11 +48,21 @@ enum BackfillStatus {
   BACKFILL_STATUS_PARTIAL = 5;
 }
 
+// FillMode selects how much of the requested range a backfill fetches (feature 054, FR-4).
+enum FillMode {
+  FILL_MODE_UNSPECIFIED = 0;  // treated as FILL_MODE_FULL by the server
+  FILL_MODE_FULL = 1;         // fetch the entire requested range (current behavior)
+  FILL_MODE_GAPS_ONLY = 2;    // fetch only ranges missing per GetDataCoverage
+}
+
 message TriggerBackfillRequest {
   repeated string symbols = 1;
-  string timeframe = 2;
+  // DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+  string timeframe = 2 [deprecated = true];
   xstockstrat.common.v1.TimeRange range = 3;
   bool overwrite = 4;
+  xstockstrat.common.v1.Timeframe timeframe_enum = 5;
+  FillMode fill_mode = 6;  // FR-4; UNSPECIFIED == FULL. Independent of `overwrite`.
 }
 
 message TriggerBackfillResponse {

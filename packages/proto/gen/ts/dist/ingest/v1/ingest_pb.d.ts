@@ -1,6 +1,6 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest, PageResponse, TimeRange } from "../../common/v1/common_pb";
+import type { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
  * Describes the file ingest/v1/ingest.proto.
@@ -19,7 +19,10 @@ export type BackfillJob = Message<"xstockstrat.ingest.v1.BackfillJob"> & {
      */
     symbols: string[];
     /**
-     * @generated from field: string timeframe = 3;
+     * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+     *
+     * @generated from field: string timeframe = 3 [deprecated = true];
+     * @deprecated
      */
     timeframe: string;
     /**
@@ -50,6 +53,28 @@ export type BackfillJob = Message<"xstockstrat.ingest.v1.BackfillJob"> & {
      * @generated from field: string error = 10;
      */
     error: string;
+    /**
+     * symbols that failed in a PARTIAL/FAILED job (FR-7)
+     *
+     * @generated from field: repeated string failed_symbols = 11;
+     */
+    failedSymbols: string[];
+    /**
+     * @generated from field: xstockstrat.common.v1.Timeframe timeframe_enum = 12;
+     */
+    timeframeEnum: Timeframe;
+    /**
+     * planned chunk count (FR-5)
+     *
+     * @generated from field: int32 chunks_total = 13;
+     */
+    chunksTotal: number;
+    /**
+     * chunks in COMPLETED state (FR-5)
+     *
+     * @generated from field: int32 chunks_completed = 14;
+     */
+    chunksCompleted: number;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.BackfillJob.
@@ -65,7 +90,10 @@ export type TriggerBackfillRequest = Message<"xstockstrat.ingest.v1.TriggerBackf
      */
     symbols: string[];
     /**
-     * @generated from field: string timeframe = 2;
+     * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+     *
+     * @generated from field: string timeframe = 2 [deprecated = true];
+     * @deprecated
      */
     timeframe: string;
     /**
@@ -76,6 +104,16 @@ export type TriggerBackfillRequest = Message<"xstockstrat.ingest.v1.TriggerBackf
      * @generated from field: bool overwrite = 4;
      */
     overwrite: boolean;
+    /**
+     * @generated from field: xstockstrat.common.v1.Timeframe timeframe_enum = 5;
+     */
+    timeframeEnum: Timeframe;
+    /**
+     * FR-4; UNSPECIFIED == FULL. Independent of `overwrite`.
+     *
+     * @generated from field: xstockstrat.ingest.v1.FillMode fill_mode = 6;
+     */
+    fillMode: FillMode;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.TriggerBackfillRequest.
@@ -475,6 +513,35 @@ export declare enum BackfillStatus {
  * Describes the enum xstockstrat.ingest.v1.BackfillStatus.
  */
 export declare const BackfillStatusSchema: GenEnum<BackfillStatus>;
+/**
+ * FillMode selects how much of the requested range a backfill fetches (feature 054, FR-4).
+ *
+ * @generated from enum xstockstrat.ingest.v1.FillMode
+ */
+export declare enum FillMode {
+    /**
+     * treated as FILL_MODE_FULL by the server
+     *
+     * @generated from enum value: FILL_MODE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * fetch the entire requested range (current behavior)
+     *
+     * @generated from enum value: FILL_MODE_FULL = 1;
+     */
+    FULL = 1,
+    /**
+     * fetch only ranges missing per GetDataCoverage
+     *
+     * @generated from enum value: FILL_MODE_GAPS_ONLY = 2;
+     */
+    GAPS_ONLY = 2
+}
+/**
+ * Describes the enum xstockstrat.ingest.v1.FillMode.
+ */
+export declare const FillModeSchema: GenEnum<FillMode>;
 /**
  * @generated from service xstockstrat.ingest.v1.IngestService
  */

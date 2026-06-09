@@ -13,6 +13,25 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-06-09
+
+### Features
+- durable-observable-backfills: Make historical-backfill jobs durable and observable: persist job state to a new
+- backfill-backtest-coverage: Make backtests aware of data coverage. Add a `GetDataCoverage` RPC on `xstockstrat-marketdata`,
+- resumable-chunked-backfills: Make large backfills scale and survive interruption: split a job into server-side chunks
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- common/v1/common.proto
+- indicators/v1/indicators.proto
+- ingest/v1/ingest.proto
+- marketdata/v1/marketdata.proto
+
+### Summary
+6 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-06-08
 
 ### Features

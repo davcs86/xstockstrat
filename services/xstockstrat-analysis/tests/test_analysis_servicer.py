@@ -175,6 +175,55 @@ class TestRunBacktest:
         assert result.strategy_id == "s1"
         assert "s1" in svc._backtests
 
+    def _legacy_req(self, symbols):
+        req = MagicMock()
+        req.strategy_id = "s1"
+        req.symbols = symbols
+        req.initial_capital = 100_000.0
+        req.strategy_id_ref = ""
+        req.HasField = MagicMock(return_value=False)  # no params/inline/ref → legacy SMA path
+        req.range = common_pb2.TimeRange()
+        return req
+
+    @pytest.mark.asyncio
+    async def test_insufficient_data_returns_structured_gap(self):
+        """AC-2: too few bars → INSUFFICIENT_DATA + coverage_gaps, not a fake flat success."""
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        # Only 3 bars — far below the default slow_period(50)+2.
+        bars_resp = MagicMock()
+        bars_resp.bars = [MagicMock(), MagicMock(), MagicMock()]
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
+
+        result = await svc.RunBacktest(self._legacy_req(["AAPL"]), context=MagicMock())
+
+        assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
+        assert result.total_trades == 0
+        assert len(result.coverage_gaps) == 1
+        gap = result.coverage_gaps[0]
+        assert gap.symbol == "AAPL"
+        assert gap.bars_have == 3
+        assert gap.bars_need == 52  # slow_period(50) + 2
+
+    @pytest.mark.asyncio
+    async def test_getbars_called_with_normalized_timeframe(self):
+        """AC-3: the GetBars call uses canonical "1d" + enum, not the legacy "1Day"."""
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        bars_resp = MagicMock()
+        bars_resp.bars = [MagicMock(), MagicMock()]  # insufficient → short-circuits after GetBars
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
+
+        await svc.RunBacktest(self._legacy_req(["AAPL"]), context=MagicMock())
+
+        called_req = svc._marketdata.GetBars.await_args.args[0]
+        assert called_req.timeframe == "1d"
+        assert called_req.timeframe_enum == common_pb2.Timeframe.TIMEFRAME_1DAY
+
 
 # ---------------------------------------------------------------------------
 # ListStrategies
