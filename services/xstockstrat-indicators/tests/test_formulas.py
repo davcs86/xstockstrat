@@ -357,6 +357,32 @@ class TestExecuteFormulaOutputEnforcement:
         assert dict(resp.output) == {"value": 1, "upper": 2}
 
 
+class TestExecuteFormulaInputData:
+    def _cfg(self):
+        cfg = MagicMock()
+        cfg.sandbox_timeout_ms = 5000
+        cfg.sandbox_memory_bytes = 256 * 1024 * 1024
+        cfg.sandbox_allowed_imports = []
+        return cfg
+
+    async def test_nested_list_input_data_serializes(self):
+        """Regression: input_data with a nested list (e.g. {"close": [...]}) must be
+        converted to native Python types before reaching the sandbox. A plain dict()
+        leaves nested lists as protobuf ListValue objects, which json.dumps rejects
+        ("Object of type ListValue is not JSON serializable")."""
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=self._cfg())
+        req = indicators_pb2.ExecuteFormulaRequest(
+            formula_source="result = {'value': sum(data['close']) / len(data['close'])}",
+        )
+        req.input_data.update({"close": [10.0, 20.0, 30.0], "period": 3})
+
+        resp = await servicer.ExecuteFormula(req, MagicMock())
+        assert resp.success is True, resp.error
+        assert dict(resp.output) == {"value": 20.0}
+
+
 class TestFormulaAdminOverride:
     async def test_owner_updates_without_admin_scope(self):
         from gen.indicators.v1 import indicators_pb2
