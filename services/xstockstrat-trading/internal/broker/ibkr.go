@@ -216,16 +216,17 @@ func (c *IBKRClient) GetOrder(ctx context.Context, brokerOrderID string) (*Broke
 
 	var result struct {
 		Orders []struct {
-			OrderID  string  `json:"orderId"`
-			Status   string  `json:"status"`
-			AvgPrice float64 `json:"avgPrice"`
+			OrderID   string  `json:"orderId"`
+			Status    string  `json:"status"`
+			AvgPrice  float64 `json:"avgPrice"`
+			FilledQty float64 `json:"filledQuantity"`
 		} `json:"orders"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil || len(result.Orders) == 0 {
 		return nil, fmt.Errorf("ibkr GetOrder: parse response: %w", err)
 	}
 	o := result.Orders[0]
-	return &BrokerOrder{BrokerOrderID: o.OrderID, Status: o.Status, FilledAvgPrice: o.AvgPrice}, nil
+	return &BrokerOrder{BrokerOrderID: o.OrderID, Status: o.Status, FilledQty: o.FilledQty, FilledAvgPrice: o.AvgPrice}, nil
 }
 
 // GetPositions fetches all open positions via GET /v1/api/portfolio/{accountID}/positions/0.

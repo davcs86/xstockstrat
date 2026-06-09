@@ -15,6 +15,7 @@ var ErrInvalidCredentials = errors.New("broker rejected credentials")
 type BrokerOrder struct {
 	BrokerOrderID  string
 	Status         string
+	FilledQty      float64 // cumulative filled quantity; zero for unfilled orders
 	FilledAvgPrice float64 // zero for unfilled orders
 }
 
