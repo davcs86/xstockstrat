@@ -15,7 +15,8 @@ import {
 } from '@/components/insights/ComponentEditor';
 import { useInsightsSignalSources } from '@/hooks/useInsightsSignalSources';
 import { useManageStrategy } from '@/hooks/useStrategyDefinitions';
-import { operandRefs } from '@/lib/strategyCatalog';
+import { useFormulas } from '@/hooks/useFormulas';
+import { operandRefs, type FormulaOutputsMap } from '@/lib/strategyCatalog';
 
 const STEPS = ['Identity', 'Components', 'Rules', 'Signal Params', 'Review'] as const;
 
@@ -48,6 +49,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
   const [step, setStep] = useState(1);
   const { mutate, isPending, error: errorObj } = useManageStrategy();
   const { sources } = useInsightsSignalSources();
+  const { data: formulasData } = useFormulas({ includePublic: true, pageSize: 50 });
 
   const initialSignal = initial?.signalParams as Record<string, unknown> | undefined;
 
@@ -83,9 +85,22 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
     return 5;
   }
 
+  // Declared outputs per custom-formula id, so formula components expose their
+  // series as rule operands just like multi-output built-in indicators.
+  const formulaOutputs: FormulaOutputsMap = {};
+  for (const f of formulasData?.formulas ?? []) {
+    if (f.outputs.length > 0) {
+      formulaOutputs[f.formulaId] = f.outputs.map((o) => ({
+        name: o.name,
+        description: o.description,
+      }));
+    }
+  }
+
   // Rule operands = one entry per component, plus a `<ref>.<series>` entry for each
-  // selectable output series of multi-output indicators (e.g. bb.upper / bb.lower).
-  const operands = operandRefs(components);
+  // selectable output series of multi-output indicators (e.g. bb.upper / bb.lower)
+  // and declared custom-formula outputs.
+  const operands = operandRefs(components, formulaOutputs);
 
   const idValid = STRATEGY_ID_RE.test(strategyId);
   const canAdvance =

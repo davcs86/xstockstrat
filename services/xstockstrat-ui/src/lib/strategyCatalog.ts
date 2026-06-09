@@ -158,7 +158,18 @@ export type OperandComponent = {
   refName: string;
   kind: ComponentKind;
   indicator: string;
+  formulaId: string;
 };
+
+/** A declared output series of a custom formula (name + optional description). */
+export type FormulaOutputMeta = { name: string; description?: string };
+
+/**
+ * Declared outputs per custom-formula `formula_id`. Supplied by the strategy
+ * authoring UI (from the indicators service) so formula components expose their
+ * declared series as rule operands, just like built-in multi-output indicators.
+ */
+export type FormulaOutputsMap = Record<string, FormulaOutputMeta[]>;
 
 /**
  * Expand a single component into the operands a rule may reference.
@@ -166,11 +177,15 @@ export type OperandComponent = {
  * - Single-output components yield just the bare `ref_name`.
  * - Multi-output built-in indicators (BB, MACD, STOCH) yield the bare `ref_name`
  *   (the primary series) plus one `<ref_name>.<series>` entry per extra series.
- *
- * Custom formulas have dynamic outputs that can't be enumerated here, so only the
- * bare ref is offered; authors can still type `<ref_name>.<series>` in JSON mode.
+ * - Custom formulas yield the bare `ref_name` (the implicit "value" series) plus one
+ *   `<ref_name>.<series>` entry per declared output (looked up by formula_id in
+ *   `formulaOutputs`). When a formula's outputs are unknown, only the bare ref is
+ *   offered; authors can still type `<ref_name>.<series>` in JSON mode.
  */
-export function operandRefsForComponent(c: OperandComponent): OperandRef[] {
+export function operandRefsForComponent(
+  c: OperandComponent,
+  formulaOutputs?: FormulaOutputsMap,
+): OperandRef[] {
   const refName = (c.refName ?? '').trim();
   if (!refName) return [];
 
@@ -185,16 +200,31 @@ export function operandRefsForComponent(c: OperandComponent): OperandRef[] {
         hint: o.label,
       }));
     }
+  } else if (c.kind === ComponentKind.CUSTOM_FORMULA) {
+    const declared = formulaOutputs?.[c.formulaId] ?? [];
+    if (declared.length > 0) {
+      return [
+        { value: refName, label: refName, hint: 'value' },
+        ...declared.map((o) => ({
+          value: `${refName}.${o.name}`,
+          label: `${refName}.${o.name}`,
+          hint: o.description || o.name,
+        })),
+      ];
+    }
   }
   return [{ value: refName, label: refName }];
 }
 
 /** Expand all components into a flat, de-duplicated operand list for the rule editor. */
-export function operandRefs(components: OperandComponent[]): OperandRef[] {
+export function operandRefs(
+  components: OperandComponent[],
+  formulaOutputs?: FormulaOutputsMap,
+): OperandRef[] {
   const seen = new Set<string>();
   const out: OperandRef[] = [];
   for (const c of components) {
-    for (const op of operandRefsForComponent(c)) {
+    for (const op of operandRefsForComponent(c, formulaOutputs)) {
       if (seen.has(op.value)) continue;
       seen.add(op.value);
       out.push(op);

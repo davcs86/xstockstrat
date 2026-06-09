@@ -114,13 +114,45 @@ class TestValidateDefinition:
         with pytest.raises(ValueError, match="not defined as a component ref_name"):
             _validate_definition(d)
 
-    def test_accepts_any_dotted_series_for_custom_formula(self):
-        # Custom-formula outputs are dynamic, so series can't be checked statically.
+    def test_accepts_any_dotted_series_for_custom_formula_when_outputs_unknown(self):
+        # Without a formula_outputs map (e.g. runtime path), formula series aren't
+        # statically checked.
         d = analysis_pb2.StrategyDefinition(
             components=[_formula(ref_name="myf")],
             entry_rule=json.dumps({"fn": ">", "lhs": "myf.band", "rhs": 0}),
         )
         _validate_definition(d)  # should not raise
+
+    def test_accepts_declared_formula_output_series(self):
+        d = analysis_pb2.StrategyDefinition(
+            components=[_formula(ref_name="myf", formula_id="f-1")],
+            entry_rule=json.dumps({"fn": ">", "lhs": "myf.band", "rhs": 0}),
+        )
+        _validate_definition(d, formula_outputs={"f-1": {"value", "band"}})  # ok
+
+    def test_rejects_undeclared_formula_output_series(self):
+        d = analysis_pb2.StrategyDefinition(
+            components=[_formula(ref_name="myf", formula_id="f-1")],
+            entry_rule=json.dumps({"fn": ">", "lhs": "myf.zzz", "rhs": 0}),
+        )
+        with pytest.raises(ValueError, match="does not declare output series 'zzz'"):
+            _validate_definition(d, formula_outputs={"f-1": {"value", "band"}})
+
+    def test_strict_when_formula_declares_no_outputs(self):
+        # A formula with no declared outputs exposes only the implicit "value".
+        d = analysis_pb2.StrategyDefinition(
+            components=[_formula(ref_name="myf", formula_id="f-1")],
+            entry_rule=json.dumps({"fn": ">", "lhs": "myf.band", "rhs": 0}),
+        )
+        with pytest.raises(ValueError, match="does not declare output series 'band'"):
+            _validate_definition(d, formula_outputs={"f-1": {"value"}})
+
+    def test_bare_formula_ref_always_valid_even_with_outputs_map(self):
+        d = analysis_pb2.StrategyDefinition(
+            components=[_formula(ref_name="myf", formula_id="f-1")],
+            entry_rule=json.dumps({"fn": ">", "lhs": "myf", "rhs": 0}),
+        )
+        _validate_definition(d, formula_outputs={"f-1": {"value"}})  # ok
 
 
 # ---------------------------------------------------------------------------

@@ -69,10 +69,41 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             access_scope = 0
         return bool(access_scope & 0x04)
 
+    async def _fetch_formula_outputs(self, definition, propagation_meta) -> dict:
+        """Map each custom-formula component's formula_id to the set of series it exposes.
+
+        Always includes the implicit "value" series. Used at strategy write time to
+        validate dotted ``<ref_name>.<series>`` references against the formula's declared
+        outputs. A formula that can't be fetched defaults to {"value"} (strict).
+        """
+        formula_outputs: dict[str, set[str]] = {}
+        for comp in definition.components:
+            if comp.kind != analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
+                continue
+            if not comp.formula_id or comp.formula_id in formula_outputs:
+                continue
+            allowed = {"value"}
+            try:
+                formula = await self._indicators.GetFormula(
+                    indicators_pb2.GetFormulaRequest(formula_id=comp.formula_id),
+                    metadata=propagation_meta,
+                )
+                allowed.update(o.name for o in formula.outputs)
+            except grpc.aio.AioRpcError as e:
+                log.warning("could not fetch formula %s outputs: %s", comp.formula_id, e)
+            formula_outputs[comp.formula_id] = allowed
+        return formula_outputs
+
     async def _validate_definition_proto(self, definition, context) -> None:
         """Validate a StrategyDefinition; abort INVALID_ARGUMENT on failure."""
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+        formula_outputs = await self._fetch_formula_outputs(definition, propagation_meta)
         try:
-            _validate_definition(definition)
+            _validate_definition(definition, formula_outputs)
         except ValueError as e:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
 

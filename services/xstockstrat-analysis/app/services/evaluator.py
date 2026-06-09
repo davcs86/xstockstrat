@@ -185,8 +185,16 @@ class StrategyEvaluator:
         return {"value": [None] * n}
 
 
-def _validate_definition(definition) -> None:
-    """FR-5: Validate at write time. Raises ValueError on invalid definition."""
+def _validate_definition(definition, formula_outputs: dict | None = None) -> None:
+    """FR-5: Validate at write time. Raises ValueError on invalid definition.
+
+    ``formula_outputs`` optionally maps a custom-formula ``formula_id`` to the set of
+    series it exposes (always including the implicit ``"value"``). When supplied, a
+    dotted ``<ref_name>.<series>`` reference into a formula component is checked against
+    that set — a formula that declares no extra outputs exposes only ``"value"``. When
+    omitted (e.g. the runtime evaluate path, already validated at write time), formula
+    series references are not statically checked.
+    """
     ref_names = set()
     ref_to_comp = {}
     for comp in definition.components:
@@ -219,17 +227,21 @@ def _validate_definition(definition) -> None:
             rule = json.loads(rule_json)
         except json.JSONDecodeError as e:
             raise ValueError(f"{rule_name} is not valid JSON: {e}") from e
-        _validate_rule_refs(rule, ref_to_comp, rule_name)
+        _validate_rule_refs(rule, ref_to_comp, rule_name, formula_outputs)
 
 
-def _validate_term_ref(term: str, ref_to_comp: dict, rule_name: str, side: str) -> None:
+def _validate_term_ref(
+    term: str, ref_to_comp: dict, rule_name: str, side: str, formula_outputs: dict | None
+) -> None:
     """
     Validate a string operand: either a component ref_name, or the dotted form
     "<ref_name>.<series>" selecting a specific output series of that component.
 
     For built-in indicators the series must be one the indicator actually emits
-    (see _INDICATOR_SERIES). Custom-formula outputs are dynamic, so any series is
-    accepted (a missing one resolves to None — i.e. no signal — at evaluation time).
+    (see _INDICATOR_SERIES). For custom formulas the series is checked against the
+    declared outputs in ``formula_outputs`` when available (a formula with no declared
+    outputs exposes only "value"); when ``formula_outputs`` is None the formula series
+    is not statically checked.
     """
     base, sep, series = term.partition(".")
     comp = ref_to_comp.get(base)
@@ -237,28 +249,40 @@ def _validate_term_ref(term: str, ref_to_comp: dict, rule_name: str, side: str) 
         raise ValueError(
             f"{rule_name}: leaf node {side}='{term}' is not defined as a component ref_name"
         )
-    if sep and comp.kind == analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR:
+    if not sep:
+        return  # bare ref → primary "value" series, always valid
+    if comp.kind == analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR:
         allowed = _INDICATOR_SERIES.get(comp.indicator.upper(), ("value",))
         if series not in allowed:
             raise ValueError(
                 f"{rule_name}: indicator '{comp.indicator}' (ref '{base}') has no output "
                 f"series '{series}'. Available: {sorted(allowed)}"
             )
+    elif comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA and formula_outputs is not None:
+        # "value" is implicit; a formula with no declared outputs exposes only it.
+        allowed = formula_outputs.get(comp.formula_id, {"value"})
+        if series not in allowed:
+            raise ValueError(
+                f"{rule_name}: formula '{comp.formula_id}' (ref '{base}') does not declare output "
+                f"series '{series}'. Available: {sorted(allowed)}"
+            )
 
 
-def _validate_rule_refs(node: Any, ref_to_comp: dict, rule_name: str) -> None:
+def _validate_rule_refs(
+    node: Any, ref_to_comp: dict, rule_name: str, formula_outputs: dict | None = None
+) -> None:
     """Recursively validate that leaf-node operands reference defined components/series."""
     if "op" in node and node["op"] in ("AND", "OR"):
         for child in node.get("conditions", []):
-            _validate_rule_refs(child, ref_to_comp, rule_name)
+            _validate_rule_refs(child, ref_to_comp, rule_name, formula_outputs)
     elif "fn" in node:
         lhs = node.get("lhs", "")
         if isinstance(lhs, str):
-            _validate_term_ref(lhs, ref_to_comp, rule_name, "lhs")
+            _validate_term_ref(lhs, ref_to_comp, rule_name, "lhs", formula_outputs)
         # rhs may be a numeric literal (threshold) or a string operand (ref / ref.series).
         rhs = node.get("rhs")
         if isinstance(rhs, str):
-            _validate_term_ref(rhs, ref_to_comp, rule_name, "rhs")
+            _validate_term_ref(rhs, ref_to_comp, rule_name, "rhs", formula_outputs)
         fn = node.get("fn", "")
         if fn not in _SUPPORTED_FNS:
             raise ValueError(

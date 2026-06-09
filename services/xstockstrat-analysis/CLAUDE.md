@@ -76,9 +76,13 @@ series**:
   `macd.signal` / `macd.histogram`, `stoch.d`.
 
 Built-in indicator series are catalogued in `_INDICATOR_SERIES` (evaluator.py) and validated
-at write time (an unknown series is rejected). Custom-formula outputs are dynamic, so any
-`<ref_name>.<series>` is accepted and resolves to `None` (no signal) if the formula doesn't
-emit it. The UI exposes these series as dropdown operands via
+at write time (an unknown series is rejected). Custom-formula series are validated against the
+formula's **declared outputs** (`FormulaOutput`, owned by xstockstrat-indicators): at strategy
+write time the servicer calls `GetFormula` for each formula component and passes the allowed
+series (`{"value"}` ∪ declared output names) into `_validate_definition`. A formula that declares
+no outputs exposes only the implicit `value` series — any other `<ref_name>.<series>` is rejected.
+The runtime evaluate path skips this re-fetch (already validated at write time). The UI exposes
+both indicator and declared-formula series as dropdown operands via
 `services/xstockstrat-ui/src/lib/strategyCatalog.ts` (`operandRefs`).
 
 ## Config Keys Consumed
