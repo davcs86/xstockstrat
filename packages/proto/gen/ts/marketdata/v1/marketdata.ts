@@ -89,6 +89,8 @@ export interface BackfillBarsRequest {
 export interface BackfillBarsResponse {
   barsWritten: number;
   failedSymbols: string[];
+  /** estimated total bars across requested symbols/range (FR-6) */
+  expectedBars: number;
 }
 
 export interface ListAssetsRequest {
@@ -1048,7 +1050,7 @@ export const BackfillBarsRequest: MessageFns<BackfillBarsRequest> = {
 };
 
 function createBaseBackfillBarsResponse(): BackfillBarsResponse {
-  return { barsWritten: 0, failedSymbols: [] };
+  return { barsWritten: 0, failedSymbols: [], expectedBars: 0 };
 }
 
 export const BackfillBarsResponse: MessageFns<BackfillBarsResponse> = {
@@ -1058,6 +1060,9 @@ export const BackfillBarsResponse: MessageFns<BackfillBarsResponse> = {
     }
     for (const v of message.failedSymbols) {
       writer.uint32(18).string(v!);
+    }
+    if (message.expectedBars !== 0) {
+      writer.uint32(24).int64(message.expectedBars);
     }
     return writer;
   },
@@ -1085,6 +1090,14 @@ export const BackfillBarsResponse: MessageFns<BackfillBarsResponse> = {
           message.failedSymbols.push(reader.string());
           continue;
         }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.expectedBars = longToNumber(reader.int64());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1106,6 +1119,11 @@ export const BackfillBarsResponse: MessageFns<BackfillBarsResponse> = {
         : globalThis.Array.isArray(object?.failed_symbols)
         ? object.failed_symbols.map((e: any) => globalThis.String(e))
         : [],
+      expectedBars: isSet(object.expectedBars)
+        ? globalThis.Number(object.expectedBars)
+        : isSet(object.expected_bars)
+        ? globalThis.Number(object.expected_bars)
+        : 0,
     };
   },
 
@@ -1117,6 +1135,9 @@ export const BackfillBarsResponse: MessageFns<BackfillBarsResponse> = {
     if (message.failedSymbols?.length) {
       obj.failedSymbols = message.failedSymbols;
     }
+    if (message.expectedBars !== 0) {
+      obj.expectedBars = Math.round(message.expectedBars);
+    }
     return obj;
   },
 
@@ -1127,6 +1148,7 @@ export const BackfillBarsResponse: MessageFns<BackfillBarsResponse> = {
     const message = createBaseBackfillBarsResponse();
     message.barsWritten = object.barsWritten ?? 0;
     message.failedSymbols = object.failedSymbols?.map((e) => e) || [];
+    message.expectedBars = object.expectedBars ?? 0;
     return message;
   },
 };

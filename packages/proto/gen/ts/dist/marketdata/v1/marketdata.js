@@ -877,7 +877,7 @@ exports.BackfillBarsRequest = {
     },
 };
 function createBaseBackfillBarsResponse() {
-    return { barsWritten: 0, failedSymbols: [] };
+    return { barsWritten: 0, failedSymbols: [], expectedBars: 0 };
 }
 exports.BackfillBarsResponse = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -886,6 +886,9 @@ exports.BackfillBarsResponse = {
         }
         for (const v of message.failedSymbols) {
             writer.uint32(18).string(v);
+        }
+        if (message.expectedBars !== 0) {
+            writer.uint32(24).int64(message.expectedBars);
         }
         return writer;
     },
@@ -910,6 +913,13 @@ exports.BackfillBarsResponse = {
                     message.failedSymbols.push(reader.string());
                     continue;
                 }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.expectedBars = longToNumber(reader.int64());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -930,6 +940,11 @@ exports.BackfillBarsResponse = {
                 : globalThis.Array.isArray(object?.failed_symbols)
                     ? object.failed_symbols.map((e) => globalThis.String(e))
                     : [],
+            expectedBars: isSet(object.expectedBars)
+                ? globalThis.Number(object.expectedBars)
+                : isSet(object.expected_bars)
+                    ? globalThis.Number(object.expected_bars)
+                    : 0,
         };
     },
     toJSON(message) {
@@ -940,6 +955,9 @@ exports.BackfillBarsResponse = {
         if (message.failedSymbols?.length) {
             obj.failedSymbols = message.failedSymbols;
         }
+        if (message.expectedBars !== 0) {
+            obj.expectedBars = Math.round(message.expectedBars);
+        }
         return obj;
     },
     create(base) {
@@ -949,6 +967,7 @@ exports.BackfillBarsResponse = {
         const message = createBaseBackfillBarsResponse();
         message.barsWritten = object.barsWritten ?? 0;
         message.failedSymbols = object.failedSymbols?.map((e) => e) || [];
+        message.expectedBars = object.expectedBars ?? 0;
         return message;
     },
 };

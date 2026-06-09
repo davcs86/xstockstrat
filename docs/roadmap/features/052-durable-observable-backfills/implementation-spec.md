@@ -1,6 +1,6 @@
 # Implementation Spec: durable-observable-backfills
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-08
 **Feature**: `docs/roadmap/features/052-durable-observable-backfills/feature.md`
 **Total Steps**: 12
@@ -38,7 +38,7 @@ reconciles `xstockstrat-ingest/CLAUDE.md`.
 
 ### Step 1 — proto: Add `failed_symbols` to `BackfillJob` and `expected_bars` to `BackfillBarsResponse`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
@@ -72,7 +72,7 @@ Both must pass (additive change is non-breaking).
 
 ### Step 2 — proto-gen: Regenerate stubs (Go, Python, TS)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/**` — modify (regenerated)
@@ -105,7 +105,7 @@ Exit code 0 after running means stubs are fresh (no diff). Confirm `failed_symbo
 
 ### Step 3 — migration: Create `ingest.backfill_jobs` table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/003_backfill_jobs.up.sql` — create
@@ -172,7 +172,7 @@ indexes; `./scripts/db-migrate.sh down 1` then `up` round-trips cleanly.
 
 ### Step 4 — service: Add `backfill_jobs` repository
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/repositories/backfill_jobs.py` — create
@@ -223,7 +223,7 @@ cd services/xstockstrat-ingest && uv run python -c "from app.repositories import
 
 ### Step 5 — config: Add `ingest.backfill.max_retry_attempts` + watcher accessors
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/config/watcher.py` — modify
@@ -269,7 +269,7 @@ Step 10's verification.
 
 ### Step 6 — service: Persist job state to the table; wire notify channel; drop `self._jobs`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -336,7 +336,7 @@ Step 10's verification.
 
 ### Step 7 — service: Emit full lifecycle events, notify alert, retry policy, concurrency gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -401,7 +401,7 @@ job. Lint runs in Step 10's verification.
 
 ### Step 8 — service: Startup reconciliation of interrupted jobs (FR-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/main.py` — modify
@@ -440,7 +440,7 @@ terminal status, not `NOT_FOUND`.
 
 ### Step 9 — service: marketdata returns `expected_bars` estimate (FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -477,7 +477,7 @@ terminal status, not `NOT_FOUND`.
 
 ### Step 10 — test: ingest servicer durability, lifecycle, retry, concurrency, reconciliation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify
@@ -525,7 +525,7 @@ All tests pass, lint+format clean, coverage ≥ 40%.
 
 ### Step 11 — test: marketdata `expected_bars` estimate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — create (or modify if present)
@@ -564,7 +564,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 12 — docs: Reconcile `xstockstrat-ingest/CLAUDE.md`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`services/xstockstrat-ingest/CLAUDE.md`)
 **Files**:
 - `services/xstockstrat-ingest/CLAUDE.md` — modify
@@ -601,4 +601,8 @@ Ledger Events table matches the events emitted in Step 7. (Docs-only — no buil
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 2 — proto codegen toolchain
+**Spec said**: Run `./scripts/buf-gen.sh` (normally run inside the `Dockerfile.codegen` container via `scripts/localenv-setup.sh`).
+**Actual**: Docker daemon is unavailable in this execution sandbox. Installed the codegen toolchain directly on the host, pinned to the CI `proto-freshness` job versions (buf v1.50.0; protoc-gen-go@v1.36.11; protoc-gen-go-grpc@v1.6.2; protoc-gen-connect-go@v1.19.2; grpcio-tools==1.80.0; TS plugins from the committed pnpm lockfile), then ran `./scripts/buf-gen.sh`. `git diff` of `packages/proto/gen/` is limited to the intended ingest/marketdata files (mirrors CI's stale-stub check).
+**Reason**: Docker unavailable; host toolchain pinned to CI versions is the sanctioned sequential-mode CI-equivalent fallback.
+**Disposition**: CI-equivalent fallback

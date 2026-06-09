@@ -587,6 +587,7 @@ type BackfillBarsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	BarsWritten   int64                  `protobuf:"varint,1,opt,name=bars_written,json=barsWritten,proto3" json:"bars_written,omitempty"`
 	FailedSymbols []string               `protobuf:"bytes,2,rep,name=failed_symbols,json=failedSymbols,proto3" json:"failed_symbols,omitempty"`
+	ExpectedBars  int64                  `protobuf:"varint,3,opt,name=expected_bars,json=expectedBars,proto3" json:"expected_bars,omitempty"` // estimated total bars across requested symbols/range (FR-6)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -633,6 +634,13 @@ func (x *BackfillBarsResponse) GetFailedSymbols() []string {
 		return x.FailedSymbols
 	}
 	return nil
+}
+
+func (x *BackfillBarsResponse) GetExpectedBars() int64 {
+	if x != nil {
+		return x.ExpectedBars
+	}
+	return 0
 }
 
 type ListAssetsRequest struct {
@@ -779,10 +787,11 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\asymbols\x18\x01 \x03(\tR\asymbols\x12\x1c\n" +
 	"\ttimeframe\x18\x02 \x01(\tR\ttimeframe\x126\n" +
 	"\x05range\x18\x03 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x05range\x12-\n" +
-	"\x12overwrite_existing\x18\x04 \x01(\bR\x11overwriteExisting\"`\n" +
+	"\x12overwrite_existing\x18\x04 \x01(\bR\x11overwriteExisting\"\x85\x01\n" +
 	"\x14BackfillBarsResponse\x12!\n" +
 	"\fbars_written\x18\x01 \x01(\x03R\vbarsWritten\x12%\n" +
-	"\x0efailed_symbols\x18\x02 \x03(\tR\rfailedSymbols\"Y\n" +
+	"\x0efailed_symbols\x18\x02 \x03(\tR\rfailedSymbols\x12#\n" +
+	"\rexpected_bars\x18\x03 \x01(\x03R\fexpectedBars\"Y\n" +
 	"\x11ListAssetsRequest\x12\x1f\n" +
 	"\vasset_class\x18\x01 \x01(\tR\n" +
 	"assetClass\x12#\n" +

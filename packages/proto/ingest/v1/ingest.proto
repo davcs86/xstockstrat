@@ -32,6 +32,7 @@ message BackfillJob {
   google.protobuf.Timestamp started_at = 8;
   google.protobuf.Timestamp completed_at = 9;
   string error = 10;
+  repeated string failed_symbols = 11; // symbols that failed in a PARTIAL/FAILED job (FR-7)
 }
 
 enum BackfillStatus {

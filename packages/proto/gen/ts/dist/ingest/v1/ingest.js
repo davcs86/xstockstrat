@@ -102,6 +102,7 @@ function createBaseBackfillJob() {
         startedAt: undefined,
         completedAt: undefined,
         error: "",
+        failedSymbols: [],
     };
 }
 exports.BackfillJob = {
@@ -135,6 +136,9 @@ exports.BackfillJob = {
         }
         if (message.error !== "") {
             writer.uint32(82).string(message.error);
+        }
+        for (const v of message.failedSymbols) {
+            writer.uint32(90).string(v);
         }
         return writer;
     },
@@ -215,6 +219,13 @@ exports.BackfillJob = {
                     message.error = reader.string();
                     continue;
                 }
+                case 11: {
+                    if (tag !== 90) {
+                        break;
+                    }
+                    message.failedSymbols.push(reader.string());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -255,6 +266,11 @@ exports.BackfillJob = {
                     ? fromJsonTimestamp(object.completed_at)
                     : undefined,
             error: isSet(object.error) ? globalThis.String(object.error) : "",
+            failedSymbols: globalThis.Array.isArray(object?.failedSymbols)
+                ? object.failedSymbols.map((e) => globalThis.String(e))
+                : globalThis.Array.isArray(object?.failed_symbols)
+                    ? object.failed_symbols.map((e) => globalThis.String(e))
+                    : [],
         };
     },
     toJSON(message) {
@@ -289,6 +305,9 @@ exports.BackfillJob = {
         if (message.error !== "") {
             obj.error = message.error;
         }
+        if (message.failedSymbols?.length) {
+            obj.failedSymbols = message.failedSymbols;
+        }
         return obj;
     },
     create(base) {
@@ -308,6 +327,7 @@ exports.BackfillJob = {
         message.startedAt = object.startedAt ?? undefined;
         message.completedAt = object.completedAt ?? undefined;
         message.error = object.error ?? "";
+        message.failedSymbols = object.failedSymbols?.map((e) => e) || [];
         return message;
     },
 };

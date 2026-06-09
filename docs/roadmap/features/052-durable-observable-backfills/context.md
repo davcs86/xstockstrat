@@ -69,3 +69,71 @@
     gRPC call, no header-propagation change for marketdata.
   - **Not trading-domain-relevant**: only TRADING_MODE ref in ingest is telemetry tagging
     (telemetry.py L29) — Step 5b trading constraints do not apply.
+
+## Session 2026-06-09 — sdd-execute (sequential, stacked 052>053>054)
+
+Running all three backfill-hardening features as a stacked sequential run (user-confirmed
+strategy: 052 off main-dev, 053 off 052, 054 off 053; per-feature integration PRs; build now,
+user obtains Platform Lead approval for 053's breaking enum + merge-order overrides).
+
+Environment notes (apply to all three features):
+- Docker daemon unavailable in this sandbox → codegen Docker image path is dead. Installed the
+  proto toolchain on the host pinned to the CI `proto-freshness` versions instead:
+  buf v1.50.0, protoc-gen-go@v1.36.11, protoc-gen-go-grpc@v1.6.2, protoc-gen-connect-go@v1.19.2,
+  grpcio-tools==1.80.0, TS plugins from the committed pnpm lockfile. (CI-equivalent fallback per
+  the skill's sequential-mode verification fallbacks.)
+- `migrate` binary absent → migrations verified against a throwaway postgres:16 (psql 16 present).
+- PR granularity: user chose ONE integration PR per feature (not ~36 per-step stacked PRs),
+  because proto source+stubs must commit together (proto-versioning PR1 / proto-freshness CI) and
+  36 PRs is impractical. Per-step commits land on the feature branch; the integration PR is the gate.
+
+### Step 1 — proto: add BackfillJob.failed_symbols=11 + BackfillBarsResponse.expected_bars=3 [done]
+- Additive fields only. buf lint + buf breaking (against feature branch) both pass → non-breaking.
+- Files modified: `packages/proto/ingest/v1/ingest.proto`, `packages/proto/marketdata/v1/marketdata.proto`
+- Deviations: none
+
+### Step 2 — proto-gen: regenerate Go/Python/TS stubs [done]
+- Ran ./scripts/buf-gen.sh with host toolchain. Diff scoped to 18 ingest/marketdata gen files.
+  Runtime descriptor confirms BackfillJob.failed_symbols=11, BackfillBarsResponse.expected_bars=3.
+- Files modified: `packages/proto/gen/{go,python,ts}/**`
+- Deviations: codegen via host toolchain instead of Docker image (logged above; CI-equivalent).
+
+### Step 3 — migration: ingest.backfill_jobs table [done]
+- Verified up+down on a throwaway local postgres:16 cluster (docker unavailable): table with 13
+  columns + status/created_at indexes created on UP, dropped cleanly on DOWN.
+- Files: `services/xstockstrat-ingest/migrations/003_backfill_jobs.{up,down}.sql`
+
+### Step 4 — service: backfill_jobs repository [done]
+- `app/repositories/backfill_jobs.py`: insert_job, update_job (dynamic SET, column allowlist),
+  get_job, list_jobs, reconcile_interrupted. Proto-free (status ints passed by servicer). uuid casts.
+
+### Step 5 — config: watcher accessors [done]
+- Added backfill_max_concurrent_jobs / backfill_retry_on_failure / backfill_max_retry_attempts (=3, new key).
+
+### Steps 6–8 — servicer durability + lifecycle/alert/retry/concurrency + startup reconciliation [done]
+- servicer.py: dropped self._jobs; TriggerBackfill/_run_backfill/GetBackfillStatus/ListBackfillJobs
+  now read/write the table; notify channel wired; job_row_to_proto helper.
+- Lifecycle events queued/running/completed/failed; PARTIAL emits `completed` (not `failed`) + WARNING
+  alert; total failure emits `failed` + ERROR alert. Retry: failed symbols only, 2/4/8s backoff,
+  max_retry_attempts; concurrency via asyncio.Semaphore(max_concurrent_jobs).
+- main.py: NOTIFY_ENDPOINT + notify channel; startup reconcile_interrupted (RUNNING/QUEUED → FAILED).
+- Files: `app/handlers/servicer.py`, `app/main.py`
+
+### Step 9 — service: marketdata expected_bars estimate [done]
+- `estimateExpectedBars` (weekday count × per-timeframe factor × symbols); set on BackfillBarsResponse.
+- File: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+
+### Step 10 — test: ingest [done]
+- Rewrote the 4 self._jobs-based test classes to repo-mock/db-mock; added lifecycle/alert/retry/
+  concurrency tests + test_backfill_jobs.py + 3 new config-getter tests. 108 passed, cov 69.5% (≥40).
+- Files: `tests/test_ingest_servicer.py`, `tests/test_backfill_jobs.py`
+
+### Step 11 — test: marketdata estimateExpectedBars [done]
+- Table test (weekday counting, per-timeframe factors, symbol multiplier, aliases, edge cases).
+  go test ok; golangci-lint 0 issues.
+- File: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+
+### Step 12 — docs: ingest CLAUDE.md [done]
+- Added max_retry_attempts config row + ingest.backfill_jobs table/migration to Database section.
+
+All 12 steps done → feature code-completed. merge-order: 052 has no "must wait for" entry → integration PR can open.

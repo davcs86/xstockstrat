@@ -90,6 +90,7 @@ message BackfillBarsRequest {
 message BackfillBarsResponse {
   int64 bars_written = 1;
   repeated string failed_symbols = 2;
+  int64 expected_bars = 3; // estimated total bars across requested symbols/range (FR-6)
 }
 
 message ListAssetsRequest {

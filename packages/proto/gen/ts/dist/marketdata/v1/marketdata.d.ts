@@ -58,6 +58,8 @@ export interface BackfillBarsRequest {
 export interface BackfillBarsResponse {
     barsWritten: number;
     failedSymbols: string[];
+    /** estimated total bars across requested symbols/range (FR-6) */
+    expectedBars: number;
 }
 export interface ListAssetsRequest {
     /** optional: "us_equity", "crypto" */

@@ -25,6 +25,8 @@ export interface BackfillJob {
     startedAt?: Date | undefined;
     completedAt?: Date | undefined;
     error: string;
+    /** symbols that failed in a PARTIAL/FAILED job (FR-7) */
+    failedSymbols: string[];
 }
 export interface TriggerBackfillRequest {
     symbols: string[];

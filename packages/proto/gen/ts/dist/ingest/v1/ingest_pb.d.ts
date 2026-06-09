@@ -50,6 +50,12 @@ export type BackfillJob = Message<"xstockstrat.ingest.v1.BackfillJob"> & {
      * @generated from field: string error = 10;
      */
     error: string;
+    /**
+     * symbols that failed in a PARTIAL/FAILED job (FR-7)
+     *
+     * @generated from field: repeated string failed_symbols = 11;
+     */
+    failedSymbols: string[];
 };
 /**
  * Describes the message xstockstrat.ingest.v1.BackfillJob.
