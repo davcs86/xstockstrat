@@ -37,3 +37,35 @@
   052 uses field 11, 054 must use 12+). Advisory only.
 - Overlap findings: no FAIL-level (no duplicate config keys). No active concurrent feature conflicts
   (only 051-auth2-authorized-apps-ui in flight; unrelated).
+
+## Session 2026-06-08 — sdd-spec
+
+- Generated implementation-spec.md with 12 steps. Status → implementation-ready.
+- Key codebase findings (corrections / confirmations vs. product spec):
+  - **Migration number is `003`, not `002`**: `ls services/xstockstrat-ingest/migrations/` shows
+    last file is `002_add_signal_sources_registry.{up,down}.sql`. The product spec assumed "next
+    after `001_newsletter_signals`" — corrected to `003_backfill_jobs.{up,down}.sql`. The `ingest`
+    schema is created in `000_schema.up.sql`, so no `CREATE SCHEMA`.
+  - **Proto field numbers confirmed**: `BackfillJob` uses 1–10 (`error=10`) → `failed_symbols=11`
+    (matches 054-overlap note). `BackfillBarsResponse` uses 1–2 → `expected_bars=3`. Both additive
+    → non-breaking.
+  - **Notify wiring already exists for ingest**: `NOTIFY_ENDPOINT=xstockstrat-notify:50059` is
+    present in all three deployment files (docker-compose L308, .do/app.dev.yaml L210, .do/app.yaml
+    L210) — but the ingest servicer has **no** notify channel today (`__init__` takes only
+    config/marketdata/ledger/db). main.py also doesn't read NOTIFY_ENDPOINT yet. So no
+    deployment-file change is needed; only main.py + servicer must add the notify stub. EmitAlert
+    shape reference: `analysis/app/engine/live_loop.py` L156–167.
+  - **Inert config keys confirmed**: grep for `max_concurrent_jobs` / `retry_on_failure` in
+    `services/xstockstrat-ingest/` matches only CLAUDE.md — no code reads them today. New key
+    `ingest.backfill.max_retry_attempts` (default 3) added via watcher `@property` accessors
+    (pattern: `sandbox_timeout_ms` in watcher.py). Config keys served live via WatchConfig → no env
+    change.
+  - **Existing tests manipulate `self._jobs` directly** (test_ingest_servicer.py L47/66/92/207/244)
+    — must be rewritten in Step 10 since the dict is dropped. Coverage threshold 40%.
+  - **marketdata `BackfillBars`** is in `internal/service/marketdata_service.go` L131–197 (returns
+    `BackfillBarsResponse{BarsWritten, FailedSymbols}`). `internal/service/` is **excluded** from Go
+    CI coverage measurement (COVERPKGS filter), so Step 11 requires a test but no coverage gate;
+    there is no existing `marketdata_service_test.go`. Estimate computed locally → no new outbound
+    gRPC call, no header-propagation change for marketdata.
+  - **Not trading-domain-relevant**: only TRADING_MODE ref in ingest is telemetry tagging
+    (telemetry.py L29) — Step 5b trading constraints do not apply.

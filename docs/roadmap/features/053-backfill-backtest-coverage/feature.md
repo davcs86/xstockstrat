@@ -1,9 +1,9 @@
 # Feature: backfill-backtest-coverage
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/backfill-backtest-coverage`
 **Created**: 2026-06-08
-**Last Updated**: 2026-06-08
+**Last Updated**: 2026-06-09
 
 **Priority Bucket**: P1 — Close the backfill↔backtest loop (2 of 3 in the backfill-hardening initiative)
 
@@ -16,13 +16,14 @@
 | 2026-06-08 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-06-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved; timeframe normalization chosen as shared proto enum (breaking → elevated approval gate); 4 open questions resolved |
 | 2026-06-08 | `spec-ready` (revised) | user | Scope change: UI "backfill this range" action (FR-6) moved IN scope; `xstockstrat-ui` added as affected service + reviewer |
+| 2026-06-09 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec backfill-backtest-coverage`_
+- [Implementation Spec](implementation-spec.md) — 12 steps, status `pending`
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -51,4 +52,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec backfill-backtest-coverage` — generate implementation spec from the approved product spec
+`/sdd-review backfill-backtest-coverage impl-spec` — validate implementation spec, then `/sdd-execute backfill-backtest-coverage`

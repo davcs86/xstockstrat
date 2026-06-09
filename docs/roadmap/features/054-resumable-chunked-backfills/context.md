@@ -35,3 +35,33 @@
   gate, migration run-order) and 053 (GetDataCoverage for GAPS_ONLY).
 - Trading domain checks: N/A — "Alpaca"/"backfill"(contains "fill") matched incidentally; no
   order/fill lifecycle behavior touched.
+
+## Session 2026-06-09 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps (numbered 1, 2, 4, 6, 7, 8, 9 — gaps are
+  intentional to keep category numbers stable; no Steps 3 or 5). Status → implementation-ready.
+- **Critical prerequisite, flagged prominently in the spec's "Prerequisite Warning" section**:
+  features 052 (P0) and 053 (P1) are NOT yet on main-dev. Confirmed by codebase survey:
+  - No `ingest.backfill_jobs` migration (last ingest migration is `002_add_signal_sources_registry`);
+    `IngestServicer` stores jobs in-memory only (`self._jobs: dict`, servicer.py:40,66). No
+    concurrency gate in `_run_backfill` (servicer.py:78).
+  - `ingest.backfill.max_concurrent_jobs` is documented in ingest CLAUDE.md but NOT seeded in any
+    config migration and NOT read in ingest code — it ships with 052.
+  - `GetDataCoverage` RPC absent from marketdata.proto (only Stream/Get/Backfill/ListAssets exist) —
+    ships with 053. GAPS_ONLY (FR-4) consumes it.
+  - Recommendation written into spec + feature.md Next Action: re-run /sdd-spec after 052+053 merge
+    to re-ground the forward-looking references, before /sdd-execute.
+- Key codebase findings:
+  - **Resume idempotency is SAFE** (the /sdd-review-flagged verification): marketdata OHLCV write is
+    an idempotent upsert — `marketdata_repo.go:42-47` `ON CONFLICT (symbol, timeframe, time) DO
+    UPDATE`. Re-fetching a chunk's full window on resume overwrites, not duplicates. No marketdata
+    code change needed for idempotency.
+  - `bars_total` already exists on BackfillJob (ingest.proto:31, field 7) — FR-5 only needs to
+    populate it. Next free field: TriggerBackfillRequest=5, BackfillJob=11/12.
+  - Config seed pattern: `INSERT INTO config.config_values (...) VALUES (dev-row), (prod-row) ON
+    CONFLICT (namespace,key,environment,trading_mode) DO NOTHING` — see config migration
+    004_agent_config.up.sql. Last config migration: 004.
+  - Header propagation already correct in ingest (servicer.py:67-71); new per-chunk BackfillBars +
+    GetDataCoverage calls must reuse `metadata=propagation_meta`.
+  - No new env vars or ports needed — ingest already wires MARKETDATA_ENDPOINT/LEDGER_ENDPOINT/
+    DATABASE_URL in docker-compose + both DO app specs.

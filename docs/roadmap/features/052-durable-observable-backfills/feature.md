@@ -1,6 +1,6 @@
 # Feature: durable-observable-backfills
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/durable-observable-backfills`
 **Created**: 2026-06-08
 **Last Updated**: 2026-06-08
@@ -15,13 +15,14 @@
 |---|---|---|---|
 | 2026-06-08 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-06-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved; 4 open questions resolved (retry impl, marketdata bars_total, drop in-memory dict, retain jobs) |
+| 2026-06-08 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec durable-observable-backfills`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -36,18 +37,18 @@ real `bars_total` progress, and either implement or remove the `retry_on_failure
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized at /sdd-spec time from docs/runbooks/reviewer-registry.md and the
+per-step Reviewers in implementation-spec.md. Re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| Proto Reviewer | Field number uniqueness, no breaking changes without deprecation, `buf lint`/`buf breaking` pass (adds `failed_symbols` + `bars_total` population to `BackfillJob`) |
-| DBA | Migration NNN numbering (no gaps), up+down pair present, hypertable vs. plain-table choice for `ingest.backfill_jobs`, index correctness |
-| `xstockstrat-ingest` (service owner) | Idempotent ingestion, job-state durability, concurrency-gate correctness, no lost jobs across restart |
+| Proto Reviewer | Field number uniqueness, no breaking changes without deprecation, `buf lint`/`buf breaking` pass (Steps 1–2: adds `BackfillJob.failed_symbols` field 11 + `BackfillBarsResponse.expected_bars` field 3) |
+| DBA | Migration NNN numbering (no gaps — new migration is `003`, not `002`), up+down pair present, plain-table (not hypertable) choice for `ingest.backfill_jobs`, index correctness (Step 3) |
+| `xstockstrat-ingest` (service owner) | Job-state durability, concurrency-gate correctness, no lost jobs across restart, idempotent ingestion, config key naming/defaults (Steps 3–8, 10, 12) |
+| `xstockstrat-marketdata` (service owner) | OHLCV ingestion integrity, Alpaca feed idempotency, `expected_bars` estimate correctness (Steps 1–2, 9, 11) |
 
 _Downstream-only (not modified, called as a dependency): `xstockstrat-notify`, `xstockstrat-ledger`._
 
 ## Next Action
 
-`/sdd-spec durable-observable-backfills` — generate implementation spec from the approved product spec
+`/sdd-review durable-observable-backfills impl-spec` — validate implementation spec, then `/sdd-execute durable-observable-backfills`

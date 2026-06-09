@@ -46,3 +46,33 @@
 - Reviewers: added xstockstrat-ui owner (frontend service → Playwright E2E required at impl-spec).
 - Scope note: feature now spans backend (marketdata + analysis proto/service) AND frontend (ui).
   Larger than P1's original backend-only footprint — flagged for the user. Status stays spec-ready.
+
+## Session 2026-06-09 — sdd-spec
+
+- Generated implementation-spec.md with 12 steps. Status → implementation-ready.
+- Key codebase findings:
+  - **`TriggerBackfill` lives on IngestService, not marketdata.** FR-6's "TriggerBackfill RPC"
+    target is `packages/proto/ingest/v1/ingest.proto:12` (`IngestService.TriggerBackfill`), which
+    fans out to marketdata's `BackfillBars` (`services/xstockstrat-ingest/app/handlers/servicer.py:84`).
+    The UI step calls ingest's `TriggerBackfill` via the existing `ingestClient`.
+  - **Timeframe mismatch is real and load-bearing.** Analysis queries `GetBars` with
+    `timeframe="1Day"` (`services/xstockstrat-analysis/app/handlers/servicer.py:271,292,302,474`);
+    backfill + `ingest.backfill.default_timeframe` use `"1d"`; DB stores the literal string in
+    `marketdata.ohlcv.timeframe` (migration comment says canonical is `'1m','5m','1h','1d'`). Fix =
+    new `internal/timeframe/` normalizer in marketdata + analysis sending `"1d"`/`TIMEFRAME_1DAY`.
+  - **No new index migration / no DB schema change.** `marketdata.ohlcv` PRIMARY KEY is
+    `(symbol, timeframe, time)` (`migrations/001_marketdata_hypertables.up.sql:20`) — already
+    supports the MIN/MAX/COUNT coverage scan. Matches the product-spec Database Changes box.
+  - **Timeframe enum migration is additive in this feature (no v2).** Per `proto-versioning.md`,
+    add `common.v1.Timeframe` enum + `timeframe_enum` fields alongside the existing string fields
+    marked `[deprecated = true]`; the breaking string removal is deferred to a future release.
+    `buf breaking` passes this feature's steps.
+  - **No new env vars / ports.** UI→ingest uses the already-wired `INGEST_ENDPOINT` (present in
+    docker-compose.yml:452 and both DO app specs at line 411 in the ui block).
+  - **Coverage threshold met via `internal/timeframe/`** (not CI-excluded), since the DB query +
+    service/handler wiring sit in excluded packages (`repository/`,`service/`,`handler/`).
+  - Insufficient-data no-op confirmed at `servicer.py:277-281` and `:478-480` (returns fabricated
+    flat equity with only a log.warning) — replaced by structured `BACKTEST_STATUS_INSUFFICIENT_DATA`
+    + `coverage_gaps`.
+- Reviewers snapshot in feature.md already matched the per-step reviewer set (Proto Reviewer,
+  Platform Lead, marketdata owner, analysis owner, ui owner) — left as the canonical snapshot.
