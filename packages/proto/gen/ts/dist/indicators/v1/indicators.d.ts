@@ -116,6 +116,19 @@ export interface FormulaParameter {
     /** numeric params only */
     max?: number | undefined;
 }
+/**
+ * A declared output series a formula emits. The primary series is always "value"
+ * (implicit — need not be declared). Each additional FormulaOutput names a series
+ * addressable in strategy rules as "<ref_name>.<name>". Declaring outputs lets the
+ * analysis service validate strategy rules and the sandbox enforce that the formula
+ * actually produces every declared series.
+ */
+export interface FormulaOutput {
+    /** series key; valid Python identifier, unique per formula */
+    name: string;
+    /** human-readable description shown in authoring UIs */
+    description: string;
+}
 export interface ParameterValidationError {
     name: string;
     reason: string;
@@ -134,6 +147,8 @@ export interface FormulaDefinition {
         [key: string]: string;
     };
     parameters: FormulaParameter[];
+    /** declared output series (beyond implicit "value") */
+    outputs: FormulaOutput[];
 }
 export interface FormulaDefinition_InputSchemaEntry {
     key: string;
@@ -161,6 +176,8 @@ export interface RegisterFormulaRequest {
     /** set by BFF from JWT claims; stored immutably */
     author: string;
     parameters: FormulaParameter[];
+    /** declared output series (beyond implicit "value") */
+    outputs: FormulaOutput[];
 }
 export interface RegisterFormulaRequest_InputSchemaEntry {
     key: string;
@@ -195,6 +212,8 @@ export interface UpdateFormulaRequest {
     source: string;
     isPublic: boolean;
     parameters: FormulaParameter[];
+    /** declared output series (beyond implicit "value") */
+    outputs: FormulaOutput[];
 }
 export interface UpdateFormulaResponse {
     formula?: FormulaDefinition | undefined;
@@ -217,6 +236,7 @@ export declare const ExecuteFormulaRequest: MessageFns<ExecuteFormulaRequest>;
 export declare const ExecuteFormulaRequest_EnvEntry: MessageFns<ExecuteFormulaRequest_EnvEntry>;
 export declare const ExecuteFormulaResponse: MessageFns<ExecuteFormulaResponse>;
 export declare const FormulaParameter: MessageFns<FormulaParameter>;
+export declare const FormulaOutput: MessageFns<FormulaOutput>;
 export declare const ParameterValidationError: MessageFns<ParameterValidationError>;
 export declare const FormulaDefinition: MessageFns<FormulaDefinition>;
 export declare const FormulaDefinition_InputSchemaEntry: MessageFns<FormulaDefinition_InputSchemaEntry>;

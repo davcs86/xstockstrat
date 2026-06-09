@@ -633,6 +633,63 @@ func (x *FormulaParameter) GetMax() float64 {
 	return 0
 }
 
+// A declared output series a formula emits. The primary series is always "value"
+// (implicit — need not be declared). Each additional FormulaOutput names a series
+// addressable in strategy rules as "<ref_name>.<name>". Declaring outputs lets the
+// analysis service validate strategy rules and the sandbox enforce that the formula
+// actually produces every declared series.
+type FormulaOutput struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`               // series key; valid Python identifier, unique per formula
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"` // human-readable description shown in authoring UIs
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FormulaOutput) Reset() {
+	*x = FormulaOutput{}
+	mi := &file_indicators_v1_indicators_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FormulaOutput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FormulaOutput) ProtoMessage() {}
+
+func (x *FormulaOutput) ProtoReflect() protoreflect.Message {
+	mi := &file_indicators_v1_indicators_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FormulaOutput.ProtoReflect.Descriptor instead.
+func (*FormulaOutput) Descriptor() ([]byte, []int) {
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *FormulaOutput) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *FormulaOutput) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
 type ParameterValidationError struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -643,7 +700,7 @@ type ParameterValidationError struct {
 
 func (x *ParameterValidationError) Reset() {
 	*x = ParameterValidationError{}
-	mi := &file_indicators_v1_indicators_proto_msgTypes[6]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -655,7 +712,7 @@ func (x *ParameterValidationError) String() string {
 func (*ParameterValidationError) ProtoMessage() {}
 
 func (x *ParameterValidationError) ProtoReflect() protoreflect.Message {
-	mi := &file_indicators_v1_indicators_proto_msgTypes[6]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -668,7 +725,7 @@ func (x *ParameterValidationError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ParameterValidationError.ProtoReflect.Descriptor instead.
 func (*ParameterValidationError) Descriptor() ([]byte, []int) {
-	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{6}
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ParameterValidationError) GetName() string {
@@ -697,13 +754,14 @@ type FormulaDefinition struct {
 	IsPublic      bool                   `protobuf:"varint,8,opt,name=is_public,json=isPublic,proto3" json:"is_public,omitempty"`
 	InputSchema   map[string]string      `protobuf:"bytes,9,rep,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // expected input keys and types
 	Parameters    []*FormulaParameter    `protobuf:"bytes,10,rep,name=parameters,proto3" json:"parameters,omitempty"`
+	Outputs       []*FormulaOutput       `protobuf:"bytes,11,rep,name=outputs,proto3" json:"outputs,omitempty"` // declared output series (beyond implicit "value")
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *FormulaDefinition) Reset() {
 	*x = FormulaDefinition{}
-	mi := &file_indicators_v1_indicators_proto_msgTypes[7]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -715,7 +773,7 @@ func (x *FormulaDefinition) String() string {
 func (*FormulaDefinition) ProtoMessage() {}
 
 func (x *FormulaDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_indicators_v1_indicators_proto_msgTypes[7]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -728,7 +786,7 @@ func (x *FormulaDefinition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FormulaDefinition.ProtoReflect.Descriptor instead.
 func (*FormulaDefinition) Descriptor() ([]byte, []int) {
-	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{7}
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *FormulaDefinition) GetFormulaId() string {
@@ -801,6 +859,13 @@ func (x *FormulaDefinition) GetParameters() []*FormulaParameter {
 	return nil
 }
 
+func (x *FormulaDefinition) GetOutputs() []*FormulaOutput {
+	if x != nil {
+		return x.Outputs
+	}
+	return nil
+}
+
 type ListIndicatorsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -809,7 +874,7 @@ type ListIndicatorsRequest struct {
 
 func (x *ListIndicatorsRequest) Reset() {
 	*x = ListIndicatorsRequest{}
-	mi := &file_indicators_v1_indicators_proto_msgTypes[8]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -821,7 +886,7 @@ func (x *ListIndicatorsRequest) String() string {
 func (*ListIndicatorsRequest) ProtoMessage() {}
 
 func (x *ListIndicatorsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indicators_v1_indicators_proto_msgTypes[8]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -834,7 +899,7 @@ func (x *ListIndicatorsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIndicatorsRequest.ProtoReflect.Descriptor instead.
 func (*ListIndicatorsRequest) Descriptor() ([]byte, []int) {
-	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{8}
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{9}
 }
 
 type ListIndicatorsResponse struct {
@@ -846,7 +911,7 @@ type ListIndicatorsResponse struct {
 
 func (x *ListIndicatorsResponse) Reset() {
 	*x = ListIndicatorsResponse{}
-	mi := &file_indicators_v1_indicators_proto_msgTypes[9]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -858,7 +923,7 @@ func (x *ListIndicatorsResponse) String() string {
 func (*ListIndicatorsResponse) ProtoMessage() {}
 
 func (x *ListIndicatorsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indicators_v1_indicators_proto_msgTypes[9]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -871,7 +936,7 @@ func (x *ListIndicatorsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIndicatorsResponse.ProtoReflect.Descriptor instead.
 func (*ListIndicatorsResponse) Descriptor() ([]byte, []int) {
-	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{9}
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListIndicatorsResponse) GetIndicators() []*IndicatorMeta {
@@ -893,7 +958,7 @@ type IndicatorMeta struct {
 
 func (x *IndicatorMeta) Reset() {
 	*x = IndicatorMeta{}
-	mi := &file_indicators_v1_indicators_proto_msgTypes[10]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -905,7 +970,7 @@ func (x *IndicatorMeta) String() string {
 func (*IndicatorMeta) ProtoMessage() {}
 
 func (x *IndicatorMeta) ProtoReflect() protoreflect.Message {
-	mi := &file_indicators_v1_indicators_proto_msgTypes[10]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -918,7 +983,7 @@ func (x *IndicatorMeta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndicatorMeta.ProtoReflect.Descriptor instead.
 func (*IndicatorMeta) Descriptor() ([]byte, []int) {
-	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{10}
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *IndicatorMeta) GetName() string {
@@ -958,13 +1023,14 @@ type RegisterFormulaRequest struct {
 	InputSchema   map[string]string      `protobuf:"bytes,5,rep,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Author        string                 `protobuf:"bytes,6,opt,name=author,proto3" json:"author,omitempty"` // set by BFF from JWT claims; stored immutably
 	Parameters    []*FormulaParameter    `protobuf:"bytes,7,rep,name=parameters,proto3" json:"parameters,omitempty"`
+	Outputs       []*FormulaOutput       `protobuf:"bytes,8,rep,name=outputs,proto3" json:"outputs,omitempty"` // declared output series (beyond implicit "value")
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RegisterFormulaRequest) Reset() {
 	*x = RegisterFormulaRequest{}
-	mi := &file_indicators_v1_indicators_proto_msgTypes[11]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -976,7 +1042,7 @@ func (x *RegisterFormulaRequest) String() string {
 func (*RegisterFormulaRequest) ProtoMessage() {}
 
 func (x *RegisterFormulaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indicators_v1_indicators_proto_msgTypes[11]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -989,7 +1055,7 @@ func (x *RegisterFormulaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterFormulaRequest.ProtoReflect.Descriptor instead.
 func (*RegisterFormulaRequest) Descriptor() ([]byte, []int) {
-	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{11}
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RegisterFormulaRequest) GetName() string {
@@ -1041,6 +1107,13 @@ func (x *RegisterFormulaRequest) GetParameters() []*FormulaParameter {
 	return nil
 }
 
+func (x *RegisterFormulaRequest) GetOutputs() []*FormulaOutput {
+	if x != nil {
+		return x.Outputs
+	}
+	return nil
+}
+
 type RegisterFormulaResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	FormulaId     string                 `protobuf:"bytes,1,opt,name=formula_id,json=formulaId,proto3" json:"formula_id,omitempty"`
@@ -1050,7 +1123,7 @@ type RegisterFormulaResponse struct {
 
 func (x *RegisterFormulaResponse) Reset() {
 	*x = RegisterFormulaResponse{}
-	mi := &file_indicators_v1_indicators_proto_msgTypes[12]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1062,7 +1135,7 @@ func (x *RegisterFormulaResponse) String() string {
 func (*RegisterFormulaResponse) ProtoMessage() {}
 
 func (x *RegisterFormulaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indicators_v1_indicators_proto_msgTypes[12]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1075,7 +1148,7 @@ func (x *RegisterFormulaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterFormulaResponse.ProtoReflect.Descriptor instead.
 func (*RegisterFormulaResponse) Descriptor() ([]byte, []int) {
-	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{12}
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RegisterFormulaResponse) GetFormulaId() string {
@@ -1094,7 +1167,7 @@ type GetFormulaRequest struct {
 
 func (x *GetFormulaRequest) Reset() {
 	*x = GetFormulaRequest{}
-	mi := &file_indicators_v1_indicators_proto_msgTypes[13]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1106,7 +1179,7 @@ func (x *GetFormulaRequest) String() string {
 func (*GetFormulaRequest) ProtoMessage() {}
 
 func (x *GetFormulaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indicators_v1_indicators_proto_msgTypes[13]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1119,7 +1192,7 @@ func (x *GetFormulaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFormulaRequest.ProtoReflect.Descriptor instead.
 func (*GetFormulaRequest) Descriptor() ([]byte, []int) {
-	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{13}
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetFormulaRequest) GetFormulaId() string {
@@ -1141,7 +1214,7 @@ type ListFormulasRequest struct {
 
 func (x *ListFormulasRequest) Reset() {
 	*x = ListFormulasRequest{}
-	mi := &file_indicators_v1_indicators_proto_msgTypes[14]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1153,7 +1226,7 @@ func (x *ListFormulasRequest) String() string {
 func (*ListFormulasRequest) ProtoMessage() {}
 
 func (x *ListFormulasRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indicators_v1_indicators_proto_msgTypes[14]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1166,7 +1239,7 @@ func (x *ListFormulasRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFormulasRequest.ProtoReflect.Descriptor instead.
 func (*ListFormulasRequest) Descriptor() ([]byte, []int) {
-	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{14}
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListFormulasRequest) GetAuthorFilter() string {
@@ -1207,7 +1280,7 @@ type ListFormulasResponse struct {
 
 func (x *ListFormulasResponse) Reset() {
 	*x = ListFormulasResponse{}
-	mi := &file_indicators_v1_indicators_proto_msgTypes[15]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1219,7 +1292,7 @@ func (x *ListFormulasResponse) String() string {
 func (*ListFormulasResponse) ProtoMessage() {}
 
 func (x *ListFormulasResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indicators_v1_indicators_proto_msgTypes[15]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1232,7 +1305,7 @@ func (x *ListFormulasResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFormulasResponse.ProtoReflect.Descriptor instead.
 func (*ListFormulasResponse) Descriptor() ([]byte, []int) {
-	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{15}
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListFormulasResponse) GetFormulas() []*FormulaDefinition {
@@ -1258,13 +1331,14 @@ type UpdateFormulaRequest struct {
 	Source        string                 `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
 	IsPublic      bool                   `protobuf:"varint,6,opt,name=is_public,json=isPublic,proto3" json:"is_public,omitempty"`
 	Parameters    []*FormulaParameter    `protobuf:"bytes,7,rep,name=parameters,proto3" json:"parameters,omitempty"`
+	Outputs       []*FormulaOutput       `protobuf:"bytes,8,rep,name=outputs,proto3" json:"outputs,omitempty"` // declared output series (beyond implicit "value")
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateFormulaRequest) Reset() {
 	*x = UpdateFormulaRequest{}
-	mi := &file_indicators_v1_indicators_proto_msgTypes[16]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1276,7 +1350,7 @@ func (x *UpdateFormulaRequest) String() string {
 func (*UpdateFormulaRequest) ProtoMessage() {}
 
 func (x *UpdateFormulaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indicators_v1_indicators_proto_msgTypes[16]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1289,7 +1363,7 @@ func (x *UpdateFormulaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateFormulaRequest.ProtoReflect.Descriptor instead.
 func (*UpdateFormulaRequest) Descriptor() ([]byte, []int) {
-	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{16}
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *UpdateFormulaRequest) GetFormulaId() string {
@@ -1341,6 +1415,13 @@ func (x *UpdateFormulaRequest) GetParameters() []*FormulaParameter {
 	return nil
 }
 
+func (x *UpdateFormulaRequest) GetOutputs() []*FormulaOutput {
+	if x != nil {
+		return x.Outputs
+	}
+	return nil
+}
+
 type UpdateFormulaResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Formula       *FormulaDefinition     `protobuf:"bytes,1,opt,name=formula,proto3" json:"formula,omitempty"`
@@ -1350,7 +1431,7 @@ type UpdateFormulaResponse struct {
 
 func (x *UpdateFormulaResponse) Reset() {
 	*x = UpdateFormulaResponse{}
-	mi := &file_indicators_v1_indicators_proto_msgTypes[17]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1362,7 +1443,7 @@ func (x *UpdateFormulaResponse) String() string {
 func (*UpdateFormulaResponse) ProtoMessage() {}
 
 func (x *UpdateFormulaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indicators_v1_indicators_proto_msgTypes[17]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1375,7 +1456,7 @@ func (x *UpdateFormulaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateFormulaResponse.ProtoReflect.Descriptor instead.
 func (*UpdateFormulaResponse) Descriptor() ([]byte, []int) {
-	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{17}
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *UpdateFormulaResponse) GetFormula() *FormulaDefinition {
@@ -1395,7 +1476,7 @@ type DeleteFormulaRequest struct {
 
 func (x *DeleteFormulaRequest) Reset() {
 	*x = DeleteFormulaRequest{}
-	mi := &file_indicators_v1_indicators_proto_msgTypes[18]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1407,7 +1488,7 @@ func (x *DeleteFormulaRequest) String() string {
 func (*DeleteFormulaRequest) ProtoMessage() {}
 
 func (x *DeleteFormulaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indicators_v1_indicators_proto_msgTypes[18]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1420,7 +1501,7 @@ func (x *DeleteFormulaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFormulaRequest.ProtoReflect.Descriptor instead.
 func (*DeleteFormulaRequest) Descriptor() ([]byte, []int) {
-	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{18}
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *DeleteFormulaRequest) GetFormulaId() string {
@@ -1446,7 +1527,7 @@ type DeleteFormulaResponse struct {
 
 func (x *DeleteFormulaResponse) Reset() {
 	*x = DeleteFormulaResponse{}
-	mi := &file_indicators_v1_indicators_proto_msgTypes[19]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1458,7 +1539,7 @@ func (x *DeleteFormulaResponse) String() string {
 func (*DeleteFormulaResponse) ProtoMessage() {}
 
 func (x *DeleteFormulaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indicators_v1_indicators_proto_msgTypes[19]
+	mi := &file_indicators_v1_indicators_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1471,7 +1552,7 @@ func (x *DeleteFormulaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFormulaResponse.ProtoReflect.Descriptor instead.
 func (*DeleteFormulaResponse) Descriptor() ([]byte, []int) {
-	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{19}
+	return file_indicators_v1_indicators_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *DeleteFormulaResponse) GetSuccess() bool {
@@ -1545,10 +1626,13 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	"\x03min\x18\x06 \x01(\x01H\x00R\x03min\x88\x01\x01\x12\x15\n" +
 	"\x03max\x18\a \x01(\x01H\x01R\x03max\x88\x01\x01B\x06\n" +
 	"\x04_minB\x06\n" +
-	"\x04_max\"F\n" +
+	"\x04_max\"E\n" +
+	"\rFormulaOutput\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\"F\n" +
 	"\x18ParameterValidationError\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x9a\x04\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xde\x04\n" +
 	"\x11FormulaDefinition\x12\x1d\n" +
 	"\n" +
 	"formula_id\x18\x01 \x01(\tR\tformulaId\x12\x12\n" +
@@ -1565,7 +1649,8 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	"\n" +
 	"parameters\x18\n" +
 	" \x03(\v2+.xstockstrat.indicators.v1.FormulaParameterR\n" +
-	"parameters\x1a>\n" +
+	"parameters\x12B\n" +
+	"\aoutputs\x18\v \x03(\v2(.xstockstrat.indicators.v1.FormulaOutputR\aoutputs\x1a>\n" +
 	"\x10InputSchemaEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x17\n" +
@@ -1578,7 +1663,7 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12'\n" +
 	"\x0frequired_params\x18\x03 \x03(\tR\x0erequiredParams\x12'\n" +
-	"\x0foptional_params\x18\x04 \x03(\tR\x0eoptionalParams\"\x8f\x03\n" +
+	"\x0foptional_params\x18\x04 \x03(\tR\x0eoptionalParams\"\xd3\x03\n" +
 	"\x16RegisterFormulaRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x16\n" +
@@ -1588,7 +1673,8 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	"\x06author\x18\x06 \x01(\tR\x06author\x12K\n" +
 	"\n" +
 	"parameters\x18\a \x03(\v2+.xstockstrat.indicators.v1.FormulaParameterR\n" +
-	"parameters\x1a>\n" +
+	"parameters\x12B\n" +
+	"\aoutputs\x18\b \x03(\v2(.xstockstrat.indicators.v1.FormulaOutputR\aoutputs\x1a>\n" +
 	"\x10InputSchemaEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"8\n" +
@@ -1607,7 +1693,7 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	"\x14ListFormulasResponse\x12H\n" +
 	"\bformulas\x18\x01 \x03(\v2,.xstockstrat.indicators.v1.FormulaDefinitionR\bformulas\x12\x1f\n" +
 	"\vtotal_count\x18\x02 \x01(\x05R\n" +
-	"totalCount\"\x86\x02\n" +
+	"totalCount\"\xca\x02\n" +
 	"\x14UpdateFormulaRequest\x12\x1d\n" +
 	"\n" +
 	"formula_id\x18\x01 \x01(\tR\tformulaId\x12\x17\n" +
@@ -1618,7 +1704,8 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	"\tis_public\x18\x06 \x01(\bR\bisPublic\x12K\n" +
 	"\n" +
 	"parameters\x18\a \x03(\v2+.xstockstrat.indicators.v1.FormulaParameterR\n" +
-	"parameters\"_\n" +
+	"parameters\x12B\n" +
+	"\aoutputs\x18\b \x03(\v2(.xstockstrat.indicators.v1.FormulaOutputR\aoutputs\"_\n" +
 	"\x15UpdateFormulaResponse\x12F\n" +
 	"\aformula\x18\x01 \x01(\v2,.xstockstrat.indicators.v1.FormulaDefinitionR\aformula\"N\n" +
 	"\x14DeleteFormulaRequest\x12\x1d\n" +
@@ -1664,7 +1751,7 @@ func file_indicators_v1_indicators_proto_rawDescGZIP() []byte {
 }
 
 var file_indicators_v1_indicators_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_indicators_v1_indicators_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_indicators_v1_indicators_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_indicators_v1_indicators_proto_goTypes = []any{
 	(SandboxExitReason)(0),           // 0: xstockstrat.indicators.v1.SandboxExitReason
 	(ParameterType)(0),               // 1: xstockstrat.indicators.v1.ParameterType
@@ -1674,77 +1761,81 @@ var file_indicators_v1_indicators_proto_goTypes = []any{
 	(*ExecuteFormulaRequest)(nil),    // 5: xstockstrat.indicators.v1.ExecuteFormulaRequest
 	(*ExecuteFormulaResponse)(nil),   // 6: xstockstrat.indicators.v1.ExecuteFormulaResponse
 	(*FormulaParameter)(nil),         // 7: xstockstrat.indicators.v1.FormulaParameter
-	(*ParameterValidationError)(nil), // 8: xstockstrat.indicators.v1.ParameterValidationError
-	(*FormulaDefinition)(nil),        // 9: xstockstrat.indicators.v1.FormulaDefinition
-	(*ListIndicatorsRequest)(nil),    // 10: xstockstrat.indicators.v1.ListIndicatorsRequest
-	(*ListIndicatorsResponse)(nil),   // 11: xstockstrat.indicators.v1.ListIndicatorsResponse
-	(*IndicatorMeta)(nil),            // 12: xstockstrat.indicators.v1.IndicatorMeta
-	(*RegisterFormulaRequest)(nil),   // 13: xstockstrat.indicators.v1.RegisterFormulaRequest
-	(*RegisterFormulaResponse)(nil),  // 14: xstockstrat.indicators.v1.RegisterFormulaResponse
-	(*GetFormulaRequest)(nil),        // 15: xstockstrat.indicators.v1.GetFormulaRequest
-	(*ListFormulasRequest)(nil),      // 16: xstockstrat.indicators.v1.ListFormulasRequest
-	(*ListFormulasResponse)(nil),     // 17: xstockstrat.indicators.v1.ListFormulasResponse
-	(*UpdateFormulaRequest)(nil),     // 18: xstockstrat.indicators.v1.UpdateFormulaRequest
-	(*UpdateFormulaResponse)(nil),    // 19: xstockstrat.indicators.v1.UpdateFormulaResponse
-	(*DeleteFormulaRequest)(nil),     // 20: xstockstrat.indicators.v1.DeleteFormulaRequest
-	(*DeleteFormulaResponse)(nil),    // 21: xstockstrat.indicators.v1.DeleteFormulaResponse
-	nil,                              // 22: xstockstrat.indicators.v1.ComputeIndicatorRequest.ParamsEntry
-	nil,                              // 23: xstockstrat.indicators.v1.ComputeIndicatorResponse.ParamsUsedEntry
-	nil,                              // 24: xstockstrat.indicators.v1.IndicatorPoint.ExtraEntry
-	nil,                              // 25: xstockstrat.indicators.v1.ExecuteFormulaRequest.EnvEntry
-	nil,                              // 26: xstockstrat.indicators.v1.FormulaDefinition.InputSchemaEntry
-	nil,                              // 27: xstockstrat.indicators.v1.RegisterFormulaRequest.InputSchemaEntry
-	(*v1.TimeRange)(nil),             // 28: xstockstrat.common.v1.TimeRange
-	(*timestamppb.Timestamp)(nil),    // 29: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),          // 30: google.protobuf.Struct
-	(*structpb.Value)(nil),           // 31: google.protobuf.Value
+	(*FormulaOutput)(nil),            // 8: xstockstrat.indicators.v1.FormulaOutput
+	(*ParameterValidationError)(nil), // 9: xstockstrat.indicators.v1.ParameterValidationError
+	(*FormulaDefinition)(nil),        // 10: xstockstrat.indicators.v1.FormulaDefinition
+	(*ListIndicatorsRequest)(nil),    // 11: xstockstrat.indicators.v1.ListIndicatorsRequest
+	(*ListIndicatorsResponse)(nil),   // 12: xstockstrat.indicators.v1.ListIndicatorsResponse
+	(*IndicatorMeta)(nil),            // 13: xstockstrat.indicators.v1.IndicatorMeta
+	(*RegisterFormulaRequest)(nil),   // 14: xstockstrat.indicators.v1.RegisterFormulaRequest
+	(*RegisterFormulaResponse)(nil),  // 15: xstockstrat.indicators.v1.RegisterFormulaResponse
+	(*GetFormulaRequest)(nil),        // 16: xstockstrat.indicators.v1.GetFormulaRequest
+	(*ListFormulasRequest)(nil),      // 17: xstockstrat.indicators.v1.ListFormulasRequest
+	(*ListFormulasResponse)(nil),     // 18: xstockstrat.indicators.v1.ListFormulasResponse
+	(*UpdateFormulaRequest)(nil),     // 19: xstockstrat.indicators.v1.UpdateFormulaRequest
+	(*UpdateFormulaResponse)(nil),    // 20: xstockstrat.indicators.v1.UpdateFormulaResponse
+	(*DeleteFormulaRequest)(nil),     // 21: xstockstrat.indicators.v1.DeleteFormulaRequest
+	(*DeleteFormulaResponse)(nil),    // 22: xstockstrat.indicators.v1.DeleteFormulaResponse
+	nil,                              // 23: xstockstrat.indicators.v1.ComputeIndicatorRequest.ParamsEntry
+	nil,                              // 24: xstockstrat.indicators.v1.ComputeIndicatorResponse.ParamsUsedEntry
+	nil,                              // 25: xstockstrat.indicators.v1.IndicatorPoint.ExtraEntry
+	nil,                              // 26: xstockstrat.indicators.v1.ExecuteFormulaRequest.EnvEntry
+	nil,                              // 27: xstockstrat.indicators.v1.FormulaDefinition.InputSchemaEntry
+	nil,                              // 28: xstockstrat.indicators.v1.RegisterFormulaRequest.InputSchemaEntry
+	(*v1.TimeRange)(nil),             // 29: xstockstrat.common.v1.TimeRange
+	(*timestamppb.Timestamp)(nil),    // 30: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),          // 31: google.protobuf.Struct
+	(*structpb.Value)(nil),           // 32: google.protobuf.Value
 }
 var file_indicators_v1_indicators_proto_depIdxs = []int32{
-	22, // 0: xstockstrat.indicators.v1.ComputeIndicatorRequest.params:type_name -> xstockstrat.indicators.v1.ComputeIndicatorRequest.ParamsEntry
-	28, // 1: xstockstrat.indicators.v1.ComputeIndicatorRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	23, // 0: xstockstrat.indicators.v1.ComputeIndicatorRequest.params:type_name -> xstockstrat.indicators.v1.ComputeIndicatorRequest.ParamsEntry
+	29, // 1: xstockstrat.indicators.v1.ComputeIndicatorRequest.range:type_name -> xstockstrat.common.v1.TimeRange
 	4,  // 2: xstockstrat.indicators.v1.ComputeIndicatorResponse.result:type_name -> xstockstrat.indicators.v1.IndicatorPoint
-	23, // 3: xstockstrat.indicators.v1.ComputeIndicatorResponse.params_used:type_name -> xstockstrat.indicators.v1.ComputeIndicatorResponse.ParamsUsedEntry
-	29, // 4: xstockstrat.indicators.v1.IndicatorPoint.time:type_name -> google.protobuf.Timestamp
-	24, // 5: xstockstrat.indicators.v1.IndicatorPoint.extra:type_name -> xstockstrat.indicators.v1.IndicatorPoint.ExtraEntry
-	30, // 6: xstockstrat.indicators.v1.ExecuteFormulaRequest.input_data:type_name -> google.protobuf.Struct
-	25, // 7: xstockstrat.indicators.v1.ExecuteFormulaRequest.env:type_name -> xstockstrat.indicators.v1.ExecuteFormulaRequest.EnvEntry
-	30, // 8: xstockstrat.indicators.v1.ExecuteFormulaRequest.input_params:type_name -> google.protobuf.Struct
-	30, // 9: xstockstrat.indicators.v1.ExecuteFormulaResponse.output:type_name -> google.protobuf.Struct
+	24, // 3: xstockstrat.indicators.v1.ComputeIndicatorResponse.params_used:type_name -> xstockstrat.indicators.v1.ComputeIndicatorResponse.ParamsUsedEntry
+	30, // 4: xstockstrat.indicators.v1.IndicatorPoint.time:type_name -> google.protobuf.Timestamp
+	25, // 5: xstockstrat.indicators.v1.IndicatorPoint.extra:type_name -> xstockstrat.indicators.v1.IndicatorPoint.ExtraEntry
+	31, // 6: xstockstrat.indicators.v1.ExecuteFormulaRequest.input_data:type_name -> google.protobuf.Struct
+	26, // 7: xstockstrat.indicators.v1.ExecuteFormulaRequest.env:type_name -> xstockstrat.indicators.v1.ExecuteFormulaRequest.EnvEntry
+	31, // 8: xstockstrat.indicators.v1.ExecuteFormulaRequest.input_params:type_name -> google.protobuf.Struct
+	31, // 9: xstockstrat.indicators.v1.ExecuteFormulaResponse.output:type_name -> google.protobuf.Struct
 	0,  // 10: xstockstrat.indicators.v1.ExecuteFormulaResponse.exit_reason:type_name -> xstockstrat.indicators.v1.SandboxExitReason
-	8,  // 11: xstockstrat.indicators.v1.ExecuteFormulaResponse.parameter_errors:type_name -> xstockstrat.indicators.v1.ParameterValidationError
+	9,  // 11: xstockstrat.indicators.v1.ExecuteFormulaResponse.parameter_errors:type_name -> xstockstrat.indicators.v1.ParameterValidationError
 	1,  // 12: xstockstrat.indicators.v1.FormulaParameter.type:type_name -> xstockstrat.indicators.v1.ParameterType
-	31, // 13: xstockstrat.indicators.v1.FormulaParameter.default_value:type_name -> google.protobuf.Value
-	29, // 14: xstockstrat.indicators.v1.FormulaDefinition.created_at:type_name -> google.protobuf.Timestamp
-	29, // 15: xstockstrat.indicators.v1.FormulaDefinition.updated_at:type_name -> google.protobuf.Timestamp
-	26, // 16: xstockstrat.indicators.v1.FormulaDefinition.input_schema:type_name -> xstockstrat.indicators.v1.FormulaDefinition.InputSchemaEntry
+	32, // 13: xstockstrat.indicators.v1.FormulaParameter.default_value:type_name -> google.protobuf.Value
+	30, // 14: xstockstrat.indicators.v1.FormulaDefinition.created_at:type_name -> google.protobuf.Timestamp
+	30, // 15: xstockstrat.indicators.v1.FormulaDefinition.updated_at:type_name -> google.protobuf.Timestamp
+	27, // 16: xstockstrat.indicators.v1.FormulaDefinition.input_schema:type_name -> xstockstrat.indicators.v1.FormulaDefinition.InputSchemaEntry
 	7,  // 17: xstockstrat.indicators.v1.FormulaDefinition.parameters:type_name -> xstockstrat.indicators.v1.FormulaParameter
-	12, // 18: xstockstrat.indicators.v1.ListIndicatorsResponse.indicators:type_name -> xstockstrat.indicators.v1.IndicatorMeta
-	27, // 19: xstockstrat.indicators.v1.RegisterFormulaRequest.input_schema:type_name -> xstockstrat.indicators.v1.RegisterFormulaRequest.InputSchemaEntry
-	7,  // 20: xstockstrat.indicators.v1.RegisterFormulaRequest.parameters:type_name -> xstockstrat.indicators.v1.FormulaParameter
-	9,  // 21: xstockstrat.indicators.v1.ListFormulasResponse.formulas:type_name -> xstockstrat.indicators.v1.FormulaDefinition
-	7,  // 22: xstockstrat.indicators.v1.UpdateFormulaRequest.parameters:type_name -> xstockstrat.indicators.v1.FormulaParameter
-	9,  // 23: xstockstrat.indicators.v1.UpdateFormulaResponse.formula:type_name -> xstockstrat.indicators.v1.FormulaDefinition
-	2,  // 24: xstockstrat.indicators.v1.IndicatorsService.ComputeIndicator:input_type -> xstockstrat.indicators.v1.ComputeIndicatorRequest
-	5,  // 25: xstockstrat.indicators.v1.IndicatorsService.ExecuteFormula:input_type -> xstockstrat.indicators.v1.ExecuteFormulaRequest
-	10, // 26: xstockstrat.indicators.v1.IndicatorsService.ListIndicators:input_type -> xstockstrat.indicators.v1.ListIndicatorsRequest
-	13, // 27: xstockstrat.indicators.v1.IndicatorsService.RegisterFormula:input_type -> xstockstrat.indicators.v1.RegisterFormulaRequest
-	15, // 28: xstockstrat.indicators.v1.IndicatorsService.GetFormula:input_type -> xstockstrat.indicators.v1.GetFormulaRequest
-	16, // 29: xstockstrat.indicators.v1.IndicatorsService.ListFormulas:input_type -> xstockstrat.indicators.v1.ListFormulasRequest
-	18, // 30: xstockstrat.indicators.v1.IndicatorsService.UpdateFormula:input_type -> xstockstrat.indicators.v1.UpdateFormulaRequest
-	20, // 31: xstockstrat.indicators.v1.IndicatorsService.DeleteFormula:input_type -> xstockstrat.indicators.v1.DeleteFormulaRequest
-	3,  // 32: xstockstrat.indicators.v1.IndicatorsService.ComputeIndicator:output_type -> xstockstrat.indicators.v1.ComputeIndicatorResponse
-	6,  // 33: xstockstrat.indicators.v1.IndicatorsService.ExecuteFormula:output_type -> xstockstrat.indicators.v1.ExecuteFormulaResponse
-	11, // 34: xstockstrat.indicators.v1.IndicatorsService.ListIndicators:output_type -> xstockstrat.indicators.v1.ListIndicatorsResponse
-	14, // 35: xstockstrat.indicators.v1.IndicatorsService.RegisterFormula:output_type -> xstockstrat.indicators.v1.RegisterFormulaResponse
-	9,  // 36: xstockstrat.indicators.v1.IndicatorsService.GetFormula:output_type -> xstockstrat.indicators.v1.FormulaDefinition
-	17, // 37: xstockstrat.indicators.v1.IndicatorsService.ListFormulas:output_type -> xstockstrat.indicators.v1.ListFormulasResponse
-	19, // 38: xstockstrat.indicators.v1.IndicatorsService.UpdateFormula:output_type -> xstockstrat.indicators.v1.UpdateFormulaResponse
-	21, // 39: xstockstrat.indicators.v1.IndicatorsService.DeleteFormula:output_type -> xstockstrat.indicators.v1.DeleteFormulaResponse
-	32, // [32:40] is the sub-list for method output_type
-	24, // [24:32] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	8,  // 18: xstockstrat.indicators.v1.FormulaDefinition.outputs:type_name -> xstockstrat.indicators.v1.FormulaOutput
+	13, // 19: xstockstrat.indicators.v1.ListIndicatorsResponse.indicators:type_name -> xstockstrat.indicators.v1.IndicatorMeta
+	28, // 20: xstockstrat.indicators.v1.RegisterFormulaRequest.input_schema:type_name -> xstockstrat.indicators.v1.RegisterFormulaRequest.InputSchemaEntry
+	7,  // 21: xstockstrat.indicators.v1.RegisterFormulaRequest.parameters:type_name -> xstockstrat.indicators.v1.FormulaParameter
+	8,  // 22: xstockstrat.indicators.v1.RegisterFormulaRequest.outputs:type_name -> xstockstrat.indicators.v1.FormulaOutput
+	10, // 23: xstockstrat.indicators.v1.ListFormulasResponse.formulas:type_name -> xstockstrat.indicators.v1.FormulaDefinition
+	7,  // 24: xstockstrat.indicators.v1.UpdateFormulaRequest.parameters:type_name -> xstockstrat.indicators.v1.FormulaParameter
+	8,  // 25: xstockstrat.indicators.v1.UpdateFormulaRequest.outputs:type_name -> xstockstrat.indicators.v1.FormulaOutput
+	10, // 26: xstockstrat.indicators.v1.UpdateFormulaResponse.formula:type_name -> xstockstrat.indicators.v1.FormulaDefinition
+	2,  // 27: xstockstrat.indicators.v1.IndicatorsService.ComputeIndicator:input_type -> xstockstrat.indicators.v1.ComputeIndicatorRequest
+	5,  // 28: xstockstrat.indicators.v1.IndicatorsService.ExecuteFormula:input_type -> xstockstrat.indicators.v1.ExecuteFormulaRequest
+	11, // 29: xstockstrat.indicators.v1.IndicatorsService.ListIndicators:input_type -> xstockstrat.indicators.v1.ListIndicatorsRequest
+	14, // 30: xstockstrat.indicators.v1.IndicatorsService.RegisterFormula:input_type -> xstockstrat.indicators.v1.RegisterFormulaRequest
+	16, // 31: xstockstrat.indicators.v1.IndicatorsService.GetFormula:input_type -> xstockstrat.indicators.v1.GetFormulaRequest
+	17, // 32: xstockstrat.indicators.v1.IndicatorsService.ListFormulas:input_type -> xstockstrat.indicators.v1.ListFormulasRequest
+	19, // 33: xstockstrat.indicators.v1.IndicatorsService.UpdateFormula:input_type -> xstockstrat.indicators.v1.UpdateFormulaRequest
+	21, // 34: xstockstrat.indicators.v1.IndicatorsService.DeleteFormula:input_type -> xstockstrat.indicators.v1.DeleteFormulaRequest
+	3,  // 35: xstockstrat.indicators.v1.IndicatorsService.ComputeIndicator:output_type -> xstockstrat.indicators.v1.ComputeIndicatorResponse
+	6,  // 36: xstockstrat.indicators.v1.IndicatorsService.ExecuteFormula:output_type -> xstockstrat.indicators.v1.ExecuteFormulaResponse
+	12, // 37: xstockstrat.indicators.v1.IndicatorsService.ListIndicators:output_type -> xstockstrat.indicators.v1.ListIndicatorsResponse
+	15, // 38: xstockstrat.indicators.v1.IndicatorsService.RegisterFormula:output_type -> xstockstrat.indicators.v1.RegisterFormulaResponse
+	10, // 39: xstockstrat.indicators.v1.IndicatorsService.GetFormula:output_type -> xstockstrat.indicators.v1.FormulaDefinition
+	18, // 40: xstockstrat.indicators.v1.IndicatorsService.ListFormulas:output_type -> xstockstrat.indicators.v1.ListFormulasResponse
+	20, // 41: xstockstrat.indicators.v1.IndicatorsService.UpdateFormula:output_type -> xstockstrat.indicators.v1.UpdateFormulaResponse
+	22, // 42: xstockstrat.indicators.v1.IndicatorsService.DeleteFormula:output_type -> xstockstrat.indicators.v1.DeleteFormulaResponse
+	35, // [35:43] is the sub-list for method output_type
+	27, // [27:35] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_indicators_v1_indicators_proto_init() }
@@ -1759,7 +1850,7 @@ func file_indicators_v1_indicators_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_indicators_v1_indicators_proto_rawDesc), len(file_indicators_v1_indicators_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   26,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

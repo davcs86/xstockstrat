@@ -243,6 +243,34 @@ export type FormulaParameter = Message<"xstockstrat.indicators.v1.FormulaParamet
  */
 export declare const FormulaParameterSchema: GenMessage<FormulaParameter>;
 /**
+ * A declared output series a formula emits. The primary series is always "value"
+ * (implicit — need not be declared). Each additional FormulaOutput names a series
+ * addressable in strategy rules as "<ref_name>.<name>". Declaring outputs lets the
+ * analysis service validate strategy rules and the sandbox enforce that the formula
+ * actually produces every declared series.
+ *
+ * @generated from message xstockstrat.indicators.v1.FormulaOutput
+ */
+export type FormulaOutput = Message<"xstockstrat.indicators.v1.FormulaOutput"> & {
+    /**
+     * series key; valid Python identifier, unique per formula
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+    /**
+     * human-readable description shown in authoring UIs
+     *
+     * @generated from field: string description = 2;
+     */
+    description: string;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.FormulaOutput.
+ * Use `create(FormulaOutputSchema)` to create a new message.
+ */
+export declare const FormulaOutputSchema: GenMessage<FormulaOutput>;
+/**
  * @generated from message xstockstrat.indicators.v1.ParameterValidationError
  */
 export type ParameterValidationError = Message<"xstockstrat.indicators.v1.ParameterValidationError"> & {
@@ -308,6 +336,12 @@ export type FormulaDefinition = Message<"xstockstrat.indicators.v1.FormulaDefini
      * @generated from field: repeated xstockstrat.indicators.v1.FormulaParameter parameters = 10;
      */
     parameters: FormulaParameter[];
+    /**
+     * declared output series (beyond implicit "value")
+     *
+     * @generated from field: repeated xstockstrat.indicators.v1.FormulaOutput outputs = 11;
+     */
+    outputs: FormulaOutput[];
 };
 /**
  * Describes the message xstockstrat.indicators.v1.FormulaDefinition.
@@ -399,6 +433,12 @@ export type RegisterFormulaRequest = Message<"xstockstrat.indicators.v1.Register
      * @generated from field: repeated xstockstrat.indicators.v1.FormulaParameter parameters = 7;
      */
     parameters: FormulaParameter[];
+    /**
+     * declared output series (beyond implicit "value")
+     *
+     * @generated from field: repeated xstockstrat.indicators.v1.FormulaOutput outputs = 8;
+     */
+    outputs: FormulaOutput[];
 };
 /**
  * Describes the message xstockstrat.indicators.v1.RegisterFormulaRequest.
@@ -519,6 +559,12 @@ export type UpdateFormulaRequest = Message<"xstockstrat.indicators.v1.UpdateForm
      * @generated from field: repeated xstockstrat.indicators.v1.FormulaParameter parameters = 7;
      */
     parameters: FormulaParameter[];
+    /**
+     * declared output series (beyond implicit "value")
+     *
+     * @generated from field: repeated xstockstrat.indicators.v1.FormulaOutput outputs = 8;
+     */
+    outputs: FormulaOutput[];
 };
 /**
  * Describes the message xstockstrat.indicators.v1.UpdateFormulaRequest.
