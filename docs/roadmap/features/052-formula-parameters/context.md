@@ -264,3 +264,10 @@ indicators `pytest` 57 passed / 83% cov; analysis 92 passed / 58.6%; agent 57 pa
 `tsc --noEmit` + `next lint` + `prettier --check` clean. CI-equivalent fallbacks (host codegen
 toolchain, postgres:16 migration check, tsc+lint for UI e2e) logged in the Deviation Log.
 - Reviewers snapshot in feature.md is unchanged (reviewer-registry.md unchanged).
+
+## Session 2026-06-09 (CI: feature status automation)
+
+- Promotion PR #641 merged to main
+- Feature promoted and committed: 1fb6f613ead4b2ed4316d24c9af680dc88c7d4e8
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-09

@@ -1,6 +1,8 @@
 # Feature: formula-parameters
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 1fb6f613ead4b2ed4316d24c9af680dc88c7d4e8
+**Launched date**: 2026-06-09
 **Development Branch**: `feature/formula-parameters`
 **Created**: 2026-06-08
 **Last Updated**: 2026-06-08
@@ -18,6 +20,7 @@
 | 2026-06-08 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started; Steps 1–2 (proto + stub regen) done on `claude/sdd-execute-formula-params-gy0lgo` |
 | 2026-06-08 | `in-progress` → `code-completed` | /sdd-execute | All 14 steps done (proto, migration, indicators engine+tests, analysis evaluator+test, agent+tests, UI, docs); ready for integration PR → main-dev |
 
+| 2026-06-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #641; committed 1fb6f613ead4b2ed4316d24c9af680dc88c7d4e8 |
 ---
 
 ## Artifacts

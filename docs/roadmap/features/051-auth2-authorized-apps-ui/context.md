@@ -285,3 +285,10 @@
   playwright's webServer.env sets the var at BUILD time too.
 - Fix: `export const dynamic = 'force-dynamic'` in `accounts/layout.tsx` so the segment reads
   process.env at request time. Lint + tsc clean. Lands in integration PR #634.
+
+## Session 2026-06-09 (CI: feature status automation)
+
+- Promotion PR #641 merged to main
+- Feature promoted and committed: 1fb6f613ead4b2ed4316d24c9af680dc88c7d4e8
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-09
