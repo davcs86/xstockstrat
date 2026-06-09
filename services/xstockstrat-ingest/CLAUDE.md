@@ -39,6 +39,18 @@ ingests signals via the `IngestSignal` gRPC RPC. The former HTTP/Connect-RPC ser
 - Schema: `ingest`
 - Table: `ingest.newsletter_signals` — TimescaleDB hypertable (7-day chunks by `ingested_at`)
 - Migration: `migrations/001_newsletter_signals.up.sql`
+- Table: `ingest.backfill_jobs` — durable backfill job state (plain table, **not** a hypertable);
+  replaces the former in-memory `self._jobs` dict. Persists status, progress (`bars_processed` /
+  `bars_total`), `failed_symbols`, and timestamps so jobs survive a restart. On startup the servicer
+  reconciles any job left `RUNNING`/`QUEUED` by a previous process to `FAILED` ("interrupted by
+  restart", FR-3 — no automatic resume).
+- Migration: `migrations/003_backfill_jobs.up.sql`
+- Table: `ingest.backfill_chunks` — per-chunk progress for resumable/chunked backfills (feature 054);
+  FK to `ingest.backfill_jobs(job_id)` (cascade). A job is planned into time/symbol chunks
+  (`chunk_window_days` × `chunk_max_bars`); chunks run in parallel (`max_concurrent_chunks`) and on
+  restart any PENDING/FAILED chunks are re-driven (idempotent marketdata upsert makes re-fetch safe).
+  `fill_mode=GAPS_ONLY` plans only the ranges marketdata's `GetDataCoverage` reports missing.
+- Migration: `migrations/004_add_backfill_chunks.up.sql`
 
 ## Config Keys Consumed
 
@@ -49,6 +61,10 @@ Namespace: `ingest`
 | `ingest.backfill.max_concurrent_jobs` | int | `3` | Max parallel backfill jobs |
 | `ingest.backfill.default_timeframe` | string | `1d` | Default bar timeframe |
 | `ingest.backfill.retry_on_failure` | bool | `true` | Auto-retry failed jobs |
+| `ingest.backfill.max_retry_attempts` | int | `3` | Max retry attempts for transient backfill failures |
+| `ingest.backfill.chunk_max_bars` | int | `200000` | Max estimated bars per backfill chunk (planner cap, feature 054) |
+| `ingest.backfill.chunk_window_days` | int | `90` | Time-window size (days) the chunk planner splits a range into |
+| `ingest.backfill.max_concurrent_chunks` | int | `3` | Max chunks of one job fetched in parallel |
 | `ingest.signals.unusual_whales.enabled` | bool | `false` | Enable Unusual Whales signal ingestion |
 | `ingest.signals.unusual_whales.default_window_days` | int | `5` | Default validity window |
 | `ingest.signals.unusual_whales.default_conviction` | float | `0.5` | Default conviction if not provided |

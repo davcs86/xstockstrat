@@ -261,6 +261,20 @@ export interface FormulaParameter {
   max?: number | undefined;
 }
 
+/**
+ * A declared output series a formula emits. The primary series is always "value"
+ * (implicit — need not be declared). Each additional FormulaOutput names a series
+ * addressable in strategy rules as "<ref_name>.<name>". Declaring outputs lets the
+ * analysis service validate strategy rules and the sandbox enforce that the formula
+ * actually produces every declared series.
+ */
+export interface FormulaOutput {
+  /** series key; valid Python identifier, unique per formula */
+  name: string;
+  /** human-readable description shown in authoring UIs */
+  description: string;
+}
+
 export interface ParameterValidationError {
   name: string;
   reason: string;
@@ -278,6 +292,8 @@ export interface FormulaDefinition {
   /** expected input keys and types */
   inputSchema: { [key: string]: string };
   parameters: FormulaParameter[];
+  /** declared output series (beyond implicit "value") */
+  outputs: FormulaOutput[];
 }
 
 export interface FormulaDefinition_InputSchemaEntry {
@@ -308,6 +324,8 @@ export interface RegisterFormulaRequest {
   /** set by BFF from JWT claims; stored immutably */
   author: string;
   parameters: FormulaParameter[];
+  /** declared output series (beyond implicit "value") */
+  outputs: FormulaOutput[];
 }
 
 export interface RegisterFormulaRequest_InputSchemaEntry {
@@ -348,6 +366,8 @@ export interface UpdateFormulaRequest {
   source: string;
   isPublic: boolean;
   parameters: FormulaParameter[];
+  /** declared output series (beyond implicit "value") */
+  outputs: FormulaOutput[];
 }
 
 export interface UpdateFormulaResponse {
@@ -1694,6 +1714,82 @@ export const FormulaParameter: MessageFns<FormulaParameter> = {
   },
 };
 
+function createBaseFormulaOutput(): FormulaOutput {
+  return { name: "", description: "" };
+}
+
+export const FormulaOutput: MessageFns<FormulaOutput> = {
+  encode(message: FormulaOutput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.description !== "") {
+      writer.uint32(18).string(message.description);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FormulaOutput {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFormulaOutput();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.description = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FormulaOutput {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      description: isSet(object.description) ? globalThis.String(object.description) : "",
+    };
+  },
+
+  toJSON(message: FormulaOutput): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.description !== "") {
+      obj.description = message.description;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FormulaOutput>, I>>(base?: I): FormulaOutput {
+    return FormulaOutput.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FormulaOutput>, I>>(object: I): FormulaOutput {
+    const message = createBaseFormulaOutput();
+    message.name = object.name ?? "";
+    message.description = object.description ?? "";
+    return message;
+  },
+};
+
 function createBaseParameterValidationError(): ParameterValidationError {
   return { name: "", reason: "" };
 }
@@ -1782,6 +1878,7 @@ function createBaseFormulaDefinition(): FormulaDefinition {
     isPublic: false,
     inputSchema: {},
     parameters: [],
+    outputs: [],
   };
 }
 
@@ -1816,6 +1913,9 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
     });
     for (const v of message.parameters) {
       FormulaParameter.encode(v!, writer.uint32(82).fork()).join();
+    }
+    for (const v of message.outputs) {
+      FormulaOutput.encode(v!, writer.uint32(90).fork()).join();
     }
     return writer;
   },
@@ -1910,6 +2010,14 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
           message.parameters.push(FormulaParameter.decode(reader, reader.uint32()));
           continue;
         }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.outputs.push(FormulaOutput.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1965,6 +2073,9 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
       parameters: globalThis.Array.isArray(object?.parameters)
         ? object.parameters.map((e: any) => FormulaParameter.fromJSON(e))
         : [],
+      outputs: globalThis.Array.isArray(object?.outputs)
+        ? object.outputs.map((e: any) => FormulaOutput.fromJSON(e))
+        : [],
     };
   },
 
@@ -2006,6 +2117,9 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
     if (message.parameters?.length) {
       obj.parameters = message.parameters.map((e) => FormulaParameter.toJSON(e));
     }
+    if (message.outputs?.length) {
+      obj.outputs = message.outputs.map((e) => FormulaOutput.toJSON(e));
+    }
     return obj;
   },
 
@@ -2032,6 +2146,7 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
       {},
     );
     message.parameters = object.parameters?.map((e) => FormulaParameter.fromPartial(e)) || [];
+    message.outputs = object.outputs?.map((e) => FormulaOutput.fromPartial(e)) || [];
     return message;
   },
 };
@@ -2338,7 +2453,16 @@ export const IndicatorMeta: MessageFns<IndicatorMeta> = {
 };
 
 function createBaseRegisterFormulaRequest(): RegisterFormulaRequest {
-  return { name: "", description: "", source: "", isPublic: false, inputSchema: {}, author: "", parameters: [] };
+  return {
+    name: "",
+    description: "",
+    source: "",
+    isPublic: false,
+    inputSchema: {},
+    author: "",
+    parameters: [],
+    outputs: [],
+  };
 }
 
 export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
@@ -2363,6 +2487,9 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
     }
     for (const v of message.parameters) {
       FormulaParameter.encode(v!, writer.uint32(58).fork()).join();
+    }
+    for (const v of message.outputs) {
+      FormulaOutput.encode(v!, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -2433,6 +2560,14 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
           message.parameters.push(FormulaParameter.decode(reader, reader.uint32()));
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.outputs.push(FormulaOutput.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2473,6 +2608,9 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
       parameters: globalThis.Array.isArray(object?.parameters)
         ? object.parameters.map((e: any) => FormulaParameter.fromJSON(e))
         : [],
+      outputs: globalThis.Array.isArray(object?.outputs)
+        ? object.outputs.map((e: any) => FormulaOutput.fromJSON(e))
+        : [],
     };
   },
 
@@ -2505,6 +2643,9 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
     if (message.parameters?.length) {
       obj.parameters = message.parameters.map((e) => FormulaParameter.toJSON(e));
     }
+    if (message.outputs?.length) {
+      obj.outputs = message.outputs.map((e) => FormulaOutput.toJSON(e));
+    }
     return obj;
   },
 
@@ -2528,6 +2669,7 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
     );
     message.author = object.author ?? "";
     message.parameters = object.parameters?.map((e) => FormulaParameter.fromPartial(e)) || [];
+    message.outputs = object.outputs?.map((e) => FormulaOutput.fromPartial(e)) || [];
     return message;
   },
 };
@@ -2947,7 +3089,16 @@ export const ListFormulasResponse: MessageFns<ListFormulasResponse> = {
 };
 
 function createBaseUpdateFormulaRequest(): UpdateFormulaRequest {
-  return { formulaId: "", userId: "", name: "", description: "", source: "", isPublic: false, parameters: [] };
+  return {
+    formulaId: "",
+    userId: "",
+    name: "",
+    description: "",
+    source: "",
+    isPublic: false,
+    parameters: [],
+    outputs: [],
+  };
 }
 
 export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
@@ -2972,6 +3123,9 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
     }
     for (const v of message.parameters) {
       FormulaParameter.encode(v!, writer.uint32(58).fork()).join();
+    }
+    for (const v of message.outputs) {
+      FormulaOutput.encode(v!, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -3039,6 +3193,14 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
           message.parameters.push(FormulaParameter.decode(reader, reader.uint32()));
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.outputs.push(FormulaOutput.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3071,6 +3233,9 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
       parameters: globalThis.Array.isArray(object?.parameters)
         ? object.parameters.map((e: any) => FormulaParameter.fromJSON(e))
         : [],
+      outputs: globalThis.Array.isArray(object?.outputs)
+        ? object.outputs.map((e: any) => FormulaOutput.fromJSON(e))
+        : [],
     };
   },
 
@@ -3097,6 +3262,9 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
     if (message.parameters?.length) {
       obj.parameters = message.parameters.map((e) => FormulaParameter.toJSON(e));
     }
+    if (message.outputs?.length) {
+      obj.outputs = message.outputs.map((e) => FormulaOutput.toJSON(e));
+    }
     return obj;
   },
 
@@ -3112,6 +3280,7 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
     message.source = object.source ?? "";
     message.isPublic = object.isPublic ?? false;
     message.parameters = object.parameters?.map((e) => FormulaParameter.fromPartial(e)) || [];
+    message.outputs = object.outputs?.map((e) => FormulaOutput.fromPartial(e)) || [];
     return message;
   },
 };

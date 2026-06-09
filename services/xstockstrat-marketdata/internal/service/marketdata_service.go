@@ -20,6 +20,7 @@ import (
 	"github.com/xstockstrat/marketdata/internal/middleware"
 	"github.com/xstockstrat/marketdata/internal/repository"
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/timeframe"
 )
 
 // MarketDataService implements business logic for the marketdata service.
@@ -90,7 +91,7 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 		pageToken = req.Page.PageToken
 	}
 
-	bars, nextToken, err := s.repo.QueryBars(ctx, req.Symbol, req.Timeframe, start, end, pageSize, pageToken)
+	bars, nextToken, err := s.repo.QueryBars(ctx, req.Symbol, req.Timeframe, start, end, pageSize, pageToken) //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
 	if err != nil {
 		return nil, fmt.Errorf("query bars: %w", err)
 	}
@@ -98,6 +99,62 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 		Bars: bars,
 		Page: &commonv1.PageResponse{NextPageToken: nextToken},
 	}, nil
+}
+
+// GetDataCoverage reports stored OHLCV coverage (earliest/latest/count + gaps) for a
+// symbol+timeframe. Read-only DB query — no outbound gRPC call, so no header propagation needed.
+func (s *MarketDataService) GetDataCoverage(ctx context.Context, req *marketdatav1.GetDataCoverageRequest) (*marketdatav1.GetDataCoverageResponse, error) {
+	if req.Symbol == "" {
+		return nil, fmt.Errorf("symbol required")
+	}
+	canonical, err := timeframe.Resolve(req.GetTimeframe(), "")
+	if err != nil {
+		return nil, fmt.Errorf("resolve timeframe: %w", err)
+	}
+
+	var start, end time.Time
+	if req.Range != nil {
+		if req.Range.Start != nil {
+			start = req.Range.Start.AsTime()
+		}
+		if req.Range.End != nil {
+			end = req.Range.End.AsTime()
+		}
+	}
+	if end.IsZero() {
+		end = time.Now()
+	}
+	if start.IsZero() {
+		// "full history" floor when no range is supplied.
+		start = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	}
+
+	earliest, latest, count, err := s.repo.GetCoverage(ctx, req.Symbol, canonical, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("get coverage: %w", err)
+	}
+
+	resp := &marketdatav1.GetDataCoverageResponse{
+		Symbol:    req.Symbol,
+		Timeframe: req.GetTimeframe(),
+		BarsTotal: count,
+	}
+	if count > 0 {
+		resp.Earliest = timestamppb.New(earliest)
+		resp.Latest = timestamppb.New(latest)
+		resp.CoveredRanges = []*marketdatav1.CoverageRange{{
+			Start:    timestamppb.New(earliest),
+			End:      timestamppb.New(latest),
+			BarCount: count,
+		}}
+	}
+	for _, g := range timeframe.ComputeGaps(start, end, earliest, latest, count) {
+		resp.Gaps = append(resp.Gaps, &commonv1.TimeRange{
+			Start: timestamppb.New(g.Start),
+			End:   timestamppb.New(g.End),
+		})
+	}
+	return resp, nil
 }
 
 // GetLatestQuote returns the most recent quote for a symbol from the DB.
@@ -150,7 +207,7 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 
 	s.emitEvent(ctx, "marketdata.backfill.started", "marketdata:backfill", map[string]interface{}{
 		"symbols":   req.Symbols,
-		"timeframe": req.Timeframe,
+		"timeframe": req.Timeframe, //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
 	})
 
 	var totalWritten int64
@@ -162,7 +219,7 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 	}
 
 	for _, sym := range req.Symbols {
-		bars, err := src.GetBars(ctx, sym, req.Timeframe, start, end)
+		bars, err := src.GetBars(ctx, sym, req.Timeframe, start, end) //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
 		if err != nil {
 			slog.Error("backfill failed", "symbol", sym, "error", err)
 			failedSymbols = append(failedSymbols, sym)
@@ -193,7 +250,43 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 	return &marketdatav1.BackfillBarsResponse{
 		BarsWritten:   totalWritten,
 		FailedSymbols: failedSymbols,
+		ExpectedBars:  estimateExpectedBars(req.Symbols, req.Timeframe, start, end), //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
 	}, nil
+}
+
+// estimateExpectedBars approximates the total bar count across the requested
+// symbols/range, used by xstockstrat-ingest as a progress denominator (FR-6).
+// It counts weekdays (Mon–Fri) in [start, end] as a trading-day approximation
+// (a US-holiday calendar is out of scope for a progress estimate) and multiplies
+// by a per-day bar factor keyed off the timeframe and by the number of symbols.
+func estimateExpectedBars(symbols []string, timeframe string, start, end time.Time) int64 {
+	if len(symbols) == 0 || !end.After(start) {
+		return 0
+	}
+
+	// Count weekdays in [start, end] (inclusive of both endpoint dates).
+	var tradingDays int64
+	for d := start.Truncate(24 * time.Hour); !d.After(end); d = d.Add(24 * time.Hour) {
+		if wd := d.Weekday(); wd != time.Saturday && wd != time.Sunday {
+			tradingDays++
+		}
+	}
+
+	var perDay int64
+	switch timeframe {
+	case "1d", "1Day":
+		perDay = 1
+	case "1h", "1Hour":
+		perDay = 7 // ~6.5 RTH hours, rounded up
+	case "5m", "5Min":
+		perDay = 78
+	case "1m", "1Min":
+		perDay = 390
+	default:
+		perDay = 1
+	}
+
+	return tradingDays * perDay * int64(len(symbols))
 }
 
 // SubscribeBars registers a subscriber channel for live bars and returns its ID.

@@ -18,11 +18,72 @@ import {
   type ServiceError,
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
-import { PageRequest, PageResponse, TimeRange } from "../../common/v1/common";
+import {
+  PageRequest,
+  PageResponse,
+  Timeframe,
+  timeframeFromJSON,
+  timeframeToJSON,
+  timeframeToNumber,
+  TimeRange,
+} from "../../common/v1/common";
 import { Struct } from "../../google/protobuf/struct";
 import { Timestamp } from "../../google/protobuf/timestamp";
 
 export const protobufPackage = "xstockstrat.analysis.v1";
+
+export enum BacktestStatus {
+  BACKTEST_STATUS_UNSPECIFIED = "BACKTEST_STATUS_UNSPECIFIED",
+  BACKTEST_STATUS_OK = "BACKTEST_STATUS_OK",
+  BACKTEST_STATUS_INSUFFICIENT_DATA = "BACKTEST_STATUS_INSUFFICIENT_DATA",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function backtestStatusFromJSON(object: any): BacktestStatus {
+  switch (object) {
+    case 0:
+    case "BACKTEST_STATUS_UNSPECIFIED":
+      return BacktestStatus.BACKTEST_STATUS_UNSPECIFIED;
+    case 1:
+    case "BACKTEST_STATUS_OK":
+      return BacktestStatus.BACKTEST_STATUS_OK;
+    case 2:
+    case "BACKTEST_STATUS_INSUFFICIENT_DATA":
+      return BacktestStatus.BACKTEST_STATUS_INSUFFICIENT_DATA;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return BacktestStatus.UNRECOGNIZED;
+  }
+}
+
+export function backtestStatusToJSON(object: BacktestStatus): string {
+  switch (object) {
+    case BacktestStatus.BACKTEST_STATUS_UNSPECIFIED:
+      return "BACKTEST_STATUS_UNSPECIFIED";
+    case BacktestStatus.BACKTEST_STATUS_OK:
+      return "BACKTEST_STATUS_OK";
+    case BacktestStatus.BACKTEST_STATUS_INSUFFICIENT_DATA:
+      return "BACKTEST_STATUS_INSUFFICIENT_DATA";
+    case BacktestStatus.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function backtestStatusToNumber(object: BacktestStatus): number {
+  switch (object) {
+    case BacktestStatus.BACKTEST_STATUS_UNSPECIFIED:
+      return 0;
+    case BacktestStatus.BACKTEST_STATUS_OK:
+      return 1;
+    case BacktestStatus.BACKTEST_STATUS_INSUFFICIENT_DATA:
+      return 2;
+    case BacktestStatus.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
 
 export enum ComponentKind {
   COMPONENT_KIND_UNSPECIFIED = "COMPONENT_KIND_UNSPECIFIED",
@@ -152,6 +213,16 @@ export interface RunBacktestRequest {
   inlineDefinition?: StrategyDefinition | undefined;
 }
 
+export interface CoverageGap {
+  symbol: string;
+  timeframe: Timeframe;
+  requestedRange?: TimeRange | undefined;
+  barsHave: number;
+  barsNeed: number;
+  /** The range a caller should backfill to satisfy this backtest. */
+  gap?: TimeRange | undefined;
+}
+
 export interface BacktestResult {
   backtestId: string;
   strategyId: string;
@@ -164,6 +235,9 @@ export interface BacktestResult {
   profitFactor: number;
   completedAt?: Date | undefined;
   trades: TradeRecord[];
+  status: BacktestStatus;
+  /** populated per-symbol when status == INSUFFICIENT_DATA */
+  coverageGaps: CoverageGap[];
 }
 
 export interface TradeRecord {
@@ -462,6 +536,167 @@ export const RunBacktestRequest: MessageFns<RunBacktestRequest> = {
   },
 };
 
+function createBaseCoverageGap(): CoverageGap {
+  return {
+    symbol: "",
+    timeframe: Timeframe.TIMEFRAME_UNSPECIFIED,
+    requestedRange: undefined,
+    barsHave: 0,
+    barsNeed: 0,
+    gap: undefined,
+  };
+}
+
+export const CoverageGap: MessageFns<CoverageGap> = {
+  encode(message: CoverageGap, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.timeframe !== Timeframe.TIMEFRAME_UNSPECIFIED) {
+      writer.uint32(16).int32(timeframeToNumber(message.timeframe));
+    }
+    if (message.requestedRange !== undefined) {
+      TimeRange.encode(message.requestedRange, writer.uint32(26).fork()).join();
+    }
+    if (message.barsHave !== 0) {
+      writer.uint32(32).int64(message.barsHave);
+    }
+    if (message.barsNeed !== 0) {
+      writer.uint32(40).int64(message.barsNeed);
+    }
+    if (message.gap !== undefined) {
+      TimeRange.encode(message.gap, writer.uint32(50).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CoverageGap {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCoverageGap();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.timeframe = timeframeFromJSON(reader.int32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.requestedRange = TimeRange.decode(reader, reader.uint32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.barsHave = longToNumber(reader.int64());
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.barsNeed = longToNumber(reader.int64());
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.gap = TimeRange.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CoverageGap {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      timeframe: isSet(object.timeframe) ? timeframeFromJSON(object.timeframe) : Timeframe.TIMEFRAME_UNSPECIFIED,
+      requestedRange: isSet(object.requestedRange)
+        ? TimeRange.fromJSON(object.requestedRange)
+        : isSet(object.requested_range)
+        ? TimeRange.fromJSON(object.requested_range)
+        : undefined,
+      barsHave: isSet(object.barsHave)
+        ? globalThis.Number(object.barsHave)
+        : isSet(object.bars_have)
+        ? globalThis.Number(object.bars_have)
+        : 0,
+      barsNeed: isSet(object.barsNeed)
+        ? globalThis.Number(object.barsNeed)
+        : isSet(object.bars_need)
+        ? globalThis.Number(object.bars_need)
+        : 0,
+      gap: isSet(object.gap) ? TimeRange.fromJSON(object.gap) : undefined,
+    };
+  },
+
+  toJSON(message: CoverageGap): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.timeframe !== Timeframe.TIMEFRAME_UNSPECIFIED) {
+      obj.timeframe = timeframeToJSON(message.timeframe);
+    }
+    if (message.requestedRange !== undefined) {
+      obj.requestedRange = TimeRange.toJSON(message.requestedRange);
+    }
+    if (message.barsHave !== 0) {
+      obj.barsHave = Math.round(message.barsHave);
+    }
+    if (message.barsNeed !== 0) {
+      obj.barsNeed = Math.round(message.barsNeed);
+    }
+    if (message.gap !== undefined) {
+      obj.gap = TimeRange.toJSON(message.gap);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<CoverageGap>, I>>(base?: I): CoverageGap {
+    return CoverageGap.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CoverageGap>, I>>(object: I): CoverageGap {
+    const message = createBaseCoverageGap();
+    message.symbol = object.symbol ?? "";
+    message.timeframe = object.timeframe ?? Timeframe.TIMEFRAME_UNSPECIFIED;
+    message.requestedRange = (object.requestedRange !== undefined && object.requestedRange !== null)
+      ? TimeRange.fromPartial(object.requestedRange)
+      : undefined;
+    message.barsHave = object.barsHave ?? 0;
+    message.barsNeed = object.barsNeed ?? 0;
+    message.gap = (object.gap !== undefined && object.gap !== null) ? TimeRange.fromPartial(object.gap) : undefined;
+    return message;
+  },
+};
+
 function createBaseBacktestResult(): BacktestResult {
   return {
     backtestId: "",
@@ -475,6 +710,8 @@ function createBaseBacktestResult(): BacktestResult {
     profitFactor: 0,
     completedAt: undefined,
     trades: [],
+    status: BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
+    coverageGaps: [],
   };
 }
 
@@ -512,6 +749,12 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     }
     for (const v of message.trades) {
       TradeRecord.encode(v!, writer.uint32(90).fork()).join();
+    }
+    if (message.status !== BacktestStatus.BACKTEST_STATUS_UNSPECIFIED) {
+      writer.uint32(96).int32(backtestStatusToNumber(message.status));
+    }
+    for (const v of message.coverageGaps) {
+      CoverageGap.encode(v!, writer.uint32(106).fork()).join();
     }
     return writer;
   },
@@ -611,6 +854,22 @@ export const BacktestResult: MessageFns<BacktestResult> = {
           message.trades.push(TradeRecord.decode(reader, reader.uint32()));
           continue;
         }
+        case 12: {
+          if (tag !== 96) {
+            break;
+          }
+
+          message.status = backtestStatusFromJSON(reader.int32());
+          continue;
+        }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          message.coverageGaps.push(CoverageGap.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -675,6 +934,12 @@ export const BacktestResult: MessageFns<BacktestResult> = {
       trades: globalThis.Array.isArray(object?.trades)
         ? object.trades.map((e: any) => TradeRecord.fromJSON(e))
         : [],
+      status: isSet(object.status) ? backtestStatusFromJSON(object.status) : BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
+      coverageGaps: globalThis.Array.isArray(object?.coverageGaps)
+        ? object.coverageGaps.map((e: any) => CoverageGap.fromJSON(e))
+        : globalThis.Array.isArray(object?.coverage_gaps)
+        ? object.coverage_gaps.map((e: any) => CoverageGap.fromJSON(e))
+        : [],
     };
   },
 
@@ -713,6 +978,12 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     if (message.trades?.length) {
       obj.trades = message.trades.map((e) => TradeRecord.toJSON(e));
     }
+    if (message.status !== BacktestStatus.BACKTEST_STATUS_UNSPECIFIED) {
+      obj.status = backtestStatusToJSON(message.status);
+    }
+    if (message.coverageGaps?.length) {
+      obj.coverageGaps = message.coverageGaps.map((e) => CoverageGap.toJSON(e));
+    }
     return obj;
   },
 
@@ -732,6 +1003,8 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     message.profitFactor = object.profitFactor ?? 0;
     message.completedAt = object.completedAt ?? undefined;
     message.trades = object.trades?.map((e) => TradeRecord.fromPartial(e)) || [];
+    message.status = object.status ?? BacktestStatus.BACKTEST_STATUS_UNSPECIFIED;
+    message.coverageGaps = object.coverageGaps?.map((e) => CoverageGap.fromPartial(e)) || [];
     return message;
   },
 };
@@ -2770,6 +3043,17 @@ function fromJsonTimestamp(o: any): Date {
   } else {
     return fromTimestamp(Timestamp.fromJSON(o));
   }
+}
+
+function longToNumber(int64: { toString(): string }): number {
+  const num = globalThis.Number(int64.toString());
+  if (num > globalThis.Number.MAX_SAFE_INTEGER) {
+    throw new globalThis.Error("Value is larger than Number.MAX_SAFE_INTEGER");
+  }
+  if (num < globalThis.Number.MIN_SAFE_INTEGER) {
+    throw new globalThis.Error("Value is smaller than Number.MIN_SAFE_INTEGER");
+  }
+  return num;
 }
 
 function isObject(value: any): boolean {

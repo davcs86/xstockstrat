@@ -8,10 +8,11 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/components/ui/utils';
 import { ConnectError } from '@connectrpc/connect';
 import { useStrategyReport } from '@/hooks/useStrategies';
-import { useRunBacktest } from '@/hooks/useBacktest';
+import { useRunBacktest, useTriggerBackfill } from '@/hooks/useBacktest';
 import { useGetStrategy, useSetStrategyLiveInsights } from '@/hooks/useStrategyDefinitions';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
 import type { TradeRecord } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { BacktestStatus } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 interface BacktestFormState {
   symbol: string;
@@ -27,6 +28,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
   const { data: definition } = useGetStrategy(id);
   const setLive = useSetStrategyLiveInsights();
   const { mutate: runBacktestMutate, data: backtestResult, isPending: running, error: runErrorObj } = useRunBacktest();
+  const { mutate: triggerBackfillMutate, data: backfillData, isPending: backfilling, error: backfillErrorObj } = useTriggerBackfill();
 
   const [form, setForm] = useState<BacktestFormState>({
     symbol: 'AAPL',
@@ -194,7 +196,47 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
 
           {/* Right: results */}
           <div className="flex-1 min-w-0 space-y-4">
-            {result && (
+            {result && result.status === BacktestStatus.INSUFFICIENT_DATA && result.coverageGaps[0] && (
+              <Card data-testid="insufficient-data">
+                <CardHeader>
+                  <CardTitle>Insufficient data for this backtest</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    {result.coverageGaps[0].symbol} has {String(result.coverageGaps[0].barsHave)} bars
+                    stored, but this backtest needs at least {String(result.coverageGaps[0].barsNeed)}.
+                    Backfill the missing range to run it.
+                  </p>
+                  <Button
+                    data-testid="backfill-action"
+                    disabled={backfilling}
+                    onClick={() => {
+                      const gap = result.coverageGaps[0];
+                      triggerBackfillMutate({
+                        symbols: [gap.symbol],
+                        timeframeEnum: gap.timeframe,
+                        range: gap.gap,
+                        overwrite: false,
+                      });
+                    }}
+                  >
+                    {backfilling ? 'Starting backfill…' : 'Backfill this range'}
+                  </Button>
+                  {backfillData && (
+                    <p data-testid="backfill-confirmation" className="text-sm text-[hsl(163_100%_44%)]">
+                      Backfill started — job {backfillData.jobId}
+                    </p>
+                  )}
+                  {backfillErrorObj && (
+                    <p className="text-sm text-destructive">
+                      Could not start backfill: {backfillErrorObj.message}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {result && result.status !== BacktestStatus.INSUFFICIENT_DATA && (
               <>
                 {/* Metrics grid */}
                 <Card>

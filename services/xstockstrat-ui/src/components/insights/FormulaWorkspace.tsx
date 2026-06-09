@@ -4,6 +4,7 @@ import { BookOpen, Play, Sparkles } from 'lucide-react';
 import {
   ParameterType,
   type FormulaParameter,
+  type FormulaOutput,
 } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -27,6 +28,13 @@ import {
   type FormulaParameterInit,
   type ParameterDraft,
 } from '@/components/insights/ParameterEditor';
+import {
+  OutputEditor,
+  outputDraftFromProto,
+  toOutputInit,
+  type FormulaOutputInit,
+  type OutputDraft,
+} from '@/components/insights/OutputEditor';
 import { useExecuteFormula } from '@/hooks/useFormulas';
 import {
   BLANK_TEMPLATE,
@@ -42,6 +50,7 @@ export interface FormulaWorkspaceProps {
   initialSource?: string;
   initialIsPublic?: boolean;
   initialParameters?: FormulaParameter[];
+  initialOutputs?: FormulaOutput[];
   author?: string;
   saving: boolean;
   saveError: string | null;
@@ -51,6 +60,7 @@ export interface FormulaWorkspaceProps {
     source: string;
     isPublic: boolean;
     parameters: FormulaParameterInit[];
+    outputs: FormulaOutputInit[];
   }) => void;
   onCancel: () => void;
   onDelete?: () => void;
@@ -73,6 +83,7 @@ export function FormulaWorkspace({
   initialSource,
   initialIsPublic = false,
   initialParameters,
+  initialOutputs,
   author,
   saving,
   saveError,
@@ -87,6 +98,9 @@ export function FormulaWorkspace({
   const [isPublic, setIsPublic] = useState(initialIsPublic);
   const [parameters, setParameters] = useState<ParameterDraft[]>(() =>
     (initialParameters ?? []).map(draftFromProto),
+  );
+  const [outputs, setOutputs] = useState<OutputDraft[]>(() =>
+    (initialOutputs ?? []).map(outputDraftFromProto),
   );
   const [paramValues, setParamValues] = useState<Record<string, string>>({});
   const [jsonInput, setJsonInput] = useState(SAMPLE_INPUT_JSON);
@@ -166,6 +180,7 @@ export function FormulaWorkspace({
                 source,
                 isPublic,
                 parameters: parameters.filter((p) => p.name.trim()).map(toParameterInit),
+                outputs: outputs.filter((o) => o.name.trim()).map(toOutputInit),
               })
             }
             disabled={saving || !name.trim()}
@@ -220,6 +235,19 @@ export function FormulaWorkspace({
             </CardHeader>
             <CardContent>
               <ParameterEditor value={parameters} onChange={setParameters} />
+            </CardContent>
+          </Card>
+
+          {/* Outputs cell */}
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <CardTitle>Outputs</CardTitle>
+              <span className="text-[11px] text-muted-foreground">
+                series in <code className="text-foreground">result</code>, used in rules
+              </span>
+            </CardHeader>
+            <CardContent>
+              <OutputEditor value={outputs} onChange={setOutputs} />
             </CardContent>
           </Card>
 

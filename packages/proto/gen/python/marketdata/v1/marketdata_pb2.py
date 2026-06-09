@@ -26,7 +26,7 @@ from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__
 from common.v1 import common_pb2 as common_dot_v1_dot_common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1emarketdata/v1/marketdata.proto\x12\x19xstockstrat.marketdata.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16\x63ommon/v1/common.proto\"\xcd\x01\n\x03\x42\x61r\x12\x0e\n\x06symbol\x18\x01 \x01(\t\x12(\n\x04time\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0c\n\x04open\x18\x03 \x01(\x01\x12\x0c\n\x04high\x18\x04 \x01(\x01\x12\x0b\n\x03low\x18\x05 \x01(\x01\x12\r\n\x05\x63lose\x18\x06 \x01(\x01\x12\x0e\n\x06volume\x18\x07 \x01(\x03\x12\x0c\n\x04vwap\x18\x08 \x01(\x01\x12\x13\n\x0btrade_count\x18\t \x01(\x05\x12\x11\n\ttimeframe\x18\n \x01(\t\x12\x0e\n\x06source\x18\x0b \x01(\t\"\x9b\x01\n\x05Quote\x12\x0e\n\x06symbol\x18\x01 \x01(\t\x12(\n\x04time\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x11\n\task_price\x18\x03 \x01(\x01\x12\x10\n\x08\x61sk_size\x18\x04 \x01(\x05\x12\x11\n\tbid_price\x18\x05 \x01(\x01\x12\x10\n\x08\x62id_size\x18\x06 \x01(\x05\x12\x0e\n\x06source\x18\x07 \x01(\t\"n\n\x11StreamBarsRequest\x12\x0f\n\x07symbols\x18\x01 \x03(\t\x12\x11\n\ttimeframe\x18\x02 \x01(\t\x12\x19\n\x11include_premarket\x18\x03 \x01(\x08\x12\x1a\n\x12include_afterhours\x18\x04 \x01(\x08\"&\n\x13StreamQuotesRequest\x12\x0f\n\x07symbols\x18\x01 \x03(\t\"\x96\x01\n\x0eGetBarsRequest\x12\x0e\n\x06symbol\x18\x01 \x01(\t\x12\x11\n\ttimeframe\x18\x02 \x01(\t\x12/\n\x05range\x18\x03 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x30\n\x04page\x18\x04 \x01(\x0b\x32\".xstockstrat.common.v1.PageRequest\"r\n\x0fGetBarsResponse\x12,\n\x04\x62\x61rs\x18\x01 \x03(\x0b\x32\x1e.xstockstrat.marketdata.v1.Bar\x12\x31\n\x04page\x18\x02 \x01(\x0b\x32#.xstockstrat.common.v1.PageResponse\"\'\n\x15GetLatestQuoteRequest\x12\x0e\n\x06symbol\x18\x01 \x01(\t\"\x86\x01\n\x13\x42\x61\x63kfillBarsRequest\x12\x0f\n\x07symbols\x18\x01 \x03(\t\x12\x11\n\ttimeframe\x18\x02 \x01(\t\x12/\n\x05range\x18\x03 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x1a\n\x12overwrite_existing\x18\x04 \x01(\x08\"D\n\x14\x42\x61\x63kfillBarsResponse\x12\x14\n\x0c\x62\x61rs_written\x18\x01 \x01(\x03\x12\x16\n\x0e\x66\x61iled_symbols\x18\x02 \x03(\t\"?\n\x11ListAssetsRequest\x12\x13\n\x0b\x61sset_class\x18\x01 \x01(\t\x12\x15\n\rtradable_only\x18\x02 \x01(\x08\"B\n\x12ListAssetsResponse\x12,\n\x06\x61ssets\x18\x01 \x03(\x0b\x32\x1c.xstockstrat.common.v1.Asset2\xf9\x04\n\x11MarketDataService\x12\\\n\nStreamBars\x12,.xstockstrat.marketdata.v1.StreamBarsRequest\x1a\x1e.xstockstrat.marketdata.v1.Bar0\x01\x12\x62\n\x0cStreamQuotes\x12..xstockstrat.marketdata.v1.StreamQuotesRequest\x1a .xstockstrat.marketdata.v1.Quote0\x01\x12`\n\x07GetBars\x12).xstockstrat.marketdata.v1.GetBarsRequest\x1a*.xstockstrat.marketdata.v1.GetBarsResponse\x12\x64\n\x0eGetLatestQuote\x12\x30.xstockstrat.marketdata.v1.GetLatestQuoteRequest\x1a .xstockstrat.marketdata.v1.Quote\x12o\n\x0c\x42\x61\x63kfillBars\x12..xstockstrat.marketdata.v1.BackfillBarsRequest\x1a/.xstockstrat.marketdata.v1.BackfillBarsResponse\x12i\n\nListAssets\x12,.xstockstrat.marketdata.v1.ListAssetsRequest\x1a-.xstockstrat.marketdata.v1.ListAssetsResponseBDZBgithub.com/xstockstrat/contracts/gen/go/marketdata/v1;marketdatav1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1emarketdata/v1/marketdata.proto\x12\x19xstockstrat.marketdata.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16\x63ommon/v1/common.proto\"\x8b\x02\n\x03\x42\x61r\x12\x0e\n\x06symbol\x18\x01 \x01(\t\x12(\n\x04time\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0c\n\x04open\x18\x03 \x01(\x01\x12\x0c\n\x04high\x18\x04 \x01(\x01\x12\x0b\n\x03low\x18\x05 \x01(\x01\x12\r\n\x05\x63lose\x18\x06 \x01(\x01\x12\x0e\n\x06volume\x18\x07 \x01(\x03\x12\x0c\n\x04vwap\x18\x08 \x01(\x01\x12\x13\n\x0btrade_count\x18\t \x01(\x05\x12\x15\n\ttimeframe\x18\n \x01(\tB\x02\x18\x01\x12\x0e\n\x06source\x18\x0b \x01(\t\x12\x38\n\x0etimeframe_enum\x18\x0c \x01(\x0e\x32 .xstockstrat.common.v1.Timeframe\"\x9b\x01\n\x05Quote\x12\x0e\n\x06symbol\x18\x01 \x01(\t\x12(\n\x04time\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x11\n\task_price\x18\x03 \x01(\x01\x12\x10\n\x08\x61sk_size\x18\x04 \x01(\x05\x12\x11\n\tbid_price\x18\x05 \x01(\x01\x12\x10\n\x08\x62id_size\x18\x06 \x01(\x05\x12\x0e\n\x06source\x18\x07 \x01(\t\"\xac\x01\n\x11StreamBarsRequest\x12\x0f\n\x07symbols\x18\x01 \x03(\t\x12\x15\n\ttimeframe\x18\x02 \x01(\tB\x02\x18\x01\x12\x19\n\x11include_premarket\x18\x03 \x01(\x08\x12\x1a\n\x12include_afterhours\x18\x04 \x01(\x08\x12\x38\n\x0etimeframe_enum\x18\x05 \x01(\x0e\x32 .xstockstrat.common.v1.Timeframe\"&\n\x13StreamQuotesRequest\x12\x0f\n\x07symbols\x18\x01 \x03(\t\"\xd4\x01\n\x0eGetBarsRequest\x12\x0e\n\x06symbol\x18\x01 \x01(\t\x12\x15\n\ttimeframe\x18\x02 \x01(\tB\x02\x18\x01\x12/\n\x05range\x18\x03 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x30\n\x04page\x18\x04 \x01(\x0b\x32\".xstockstrat.common.v1.PageRequest\x12\x38\n\x0etimeframe_enum\x18\x05 \x01(\x0e\x32 .xstockstrat.common.v1.Timeframe\"r\n\x0fGetBarsResponse\x12,\n\x04\x62\x61rs\x18\x01 \x03(\x0b\x32\x1e.xstockstrat.marketdata.v1.Bar\x12\x31\n\x04page\x18\x02 \x01(\x0b\x32#.xstockstrat.common.v1.PageResponse\"\'\n\x15GetLatestQuoteRequest\x12\x0e\n\x06symbol\x18\x01 \x01(\t\"\xc4\x01\n\x13\x42\x61\x63kfillBarsRequest\x12\x0f\n\x07symbols\x18\x01 \x03(\t\x12\x15\n\ttimeframe\x18\x02 \x01(\tB\x02\x18\x01\x12/\n\x05range\x18\x03 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x1a\n\x12overwrite_existing\x18\x04 \x01(\x08\x12\x38\n\x0etimeframe_enum\x18\x05 \x01(\x0e\x32 .xstockstrat.common.v1.Timeframe\"[\n\x14\x42\x61\x63kfillBarsResponse\x12\x14\n\x0c\x62\x61rs_written\x18\x01 \x01(\x03\x12\x16\n\x0e\x66\x61iled_symbols\x18\x02 \x03(\t\x12\x15\n\rexpected_bars\x18\x03 \x01(\x03\"\x8e\x01\n\x16GetDataCoverageRequest\x12\x0e\n\x06symbol\x18\x01 \x01(\t\x12\x33\n\ttimeframe\x18\x02 \x01(\x0e\x32 .xstockstrat.common.v1.Timeframe\x12/\n\x05range\x18\x03 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\"v\n\rCoverageRange\x12)\n\x05start\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x11\n\tbar_count\x18\x03 \x01(\x03\"\xbe\x02\n\x17GetDataCoverageResponse\x12\x0e\n\x06symbol\x18\x01 \x01(\t\x12\x33\n\ttimeframe\x18\x02 \x01(\x0e\x32 .xstockstrat.common.v1.Timeframe\x12\x12\n\nbars_total\x18\x03 \x01(\x03\x12,\n\x08\x65\x61rliest\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12*\n\x06latest\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12@\n\x0e\x63overed_ranges\x18\x06 \x03(\x0b\x32(.xstockstrat.marketdata.v1.CoverageRange\x12.\n\x04gaps\x18\x07 \x03(\x0b\x32 .xstockstrat.common.v1.TimeRange\"?\n\x11ListAssetsRequest\x12\x13\n\x0b\x61sset_class\x18\x01 \x01(\t\x12\x15\n\rtradable_only\x18\x02 \x01(\x08\"B\n\x12ListAssetsResponse\x12,\n\x06\x61ssets\x18\x01 \x03(\x0b\x32\x1c.xstockstrat.common.v1.Asset2\xf3\x05\n\x11MarketDataService\x12\\\n\nStreamBars\x12,.xstockstrat.marketdata.v1.StreamBarsRequest\x1a\x1e.xstockstrat.marketdata.v1.Bar0\x01\x12\x62\n\x0cStreamQuotes\x12..xstockstrat.marketdata.v1.StreamQuotesRequest\x1a .xstockstrat.marketdata.v1.Quote0\x01\x12`\n\x07GetBars\x12).xstockstrat.marketdata.v1.GetBarsRequest\x1a*.xstockstrat.marketdata.v1.GetBarsResponse\x12\x64\n\x0eGetLatestQuote\x12\x30.xstockstrat.marketdata.v1.GetLatestQuoteRequest\x1a .xstockstrat.marketdata.v1.Quote\x12o\n\x0c\x42\x61\x63kfillBars\x12..xstockstrat.marketdata.v1.BackfillBarsRequest\x1a/.xstockstrat.marketdata.v1.BackfillBarsResponse\x12x\n\x0fGetDataCoverage\x12\x31.xstockstrat.marketdata.v1.GetDataCoverageRequest\x1a\x32.xstockstrat.marketdata.v1.GetDataCoverageResponse\x12i\n\nListAssets\x12,.xstockstrat.marketdata.v1.ListAssetsRequest\x1a-.xstockstrat.marketdata.v1.ListAssetsResponseBDZBgithub.com/xstockstrat/contracts/gen/go/marketdata/v1;marketdatav1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,28 +34,42 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'marketdata.v1.marketdata_pb
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'ZBgithub.com/xstockstrat/contracts/gen/go/marketdata/v1;marketdatav1'
+  _globals['_BAR'].fields_by_name['timeframe']._loaded_options = None
+  _globals['_BAR'].fields_by_name['timeframe']._serialized_options = b'\030\001'
+  _globals['_STREAMBARSREQUEST'].fields_by_name['timeframe']._loaded_options = None
+  _globals['_STREAMBARSREQUEST'].fields_by_name['timeframe']._serialized_options = b'\030\001'
+  _globals['_GETBARSREQUEST'].fields_by_name['timeframe']._loaded_options = None
+  _globals['_GETBARSREQUEST'].fields_by_name['timeframe']._serialized_options = b'\030\001'
+  _globals['_BACKFILLBARSREQUEST'].fields_by_name['timeframe']._loaded_options = None
+  _globals['_BACKFILLBARSREQUEST'].fields_by_name['timeframe']._serialized_options = b'\030\001'
   _globals['_BAR']._serialized_start=119
-  _globals['_BAR']._serialized_end=324
-  _globals['_QUOTE']._serialized_start=327
-  _globals['_QUOTE']._serialized_end=482
-  _globals['_STREAMBARSREQUEST']._serialized_start=484
-  _globals['_STREAMBARSREQUEST']._serialized_end=594
-  _globals['_STREAMQUOTESREQUEST']._serialized_start=596
-  _globals['_STREAMQUOTESREQUEST']._serialized_end=634
-  _globals['_GETBARSREQUEST']._serialized_start=637
-  _globals['_GETBARSREQUEST']._serialized_end=787
-  _globals['_GETBARSRESPONSE']._serialized_start=789
-  _globals['_GETBARSRESPONSE']._serialized_end=903
-  _globals['_GETLATESTQUOTEREQUEST']._serialized_start=905
-  _globals['_GETLATESTQUOTEREQUEST']._serialized_end=944
-  _globals['_BACKFILLBARSREQUEST']._serialized_start=947
-  _globals['_BACKFILLBARSREQUEST']._serialized_end=1081
-  _globals['_BACKFILLBARSRESPONSE']._serialized_start=1083
-  _globals['_BACKFILLBARSRESPONSE']._serialized_end=1151
-  _globals['_LISTASSETSREQUEST']._serialized_start=1153
-  _globals['_LISTASSETSREQUEST']._serialized_end=1216
-  _globals['_LISTASSETSRESPONSE']._serialized_start=1218
-  _globals['_LISTASSETSRESPONSE']._serialized_end=1284
-  _globals['_MARKETDATASERVICE']._serialized_start=1287
-  _globals['_MARKETDATASERVICE']._serialized_end=1920
+  _globals['_BAR']._serialized_end=386
+  _globals['_QUOTE']._serialized_start=389
+  _globals['_QUOTE']._serialized_end=544
+  _globals['_STREAMBARSREQUEST']._serialized_start=547
+  _globals['_STREAMBARSREQUEST']._serialized_end=719
+  _globals['_STREAMQUOTESREQUEST']._serialized_start=721
+  _globals['_STREAMQUOTESREQUEST']._serialized_end=759
+  _globals['_GETBARSREQUEST']._serialized_start=762
+  _globals['_GETBARSREQUEST']._serialized_end=974
+  _globals['_GETBARSRESPONSE']._serialized_start=976
+  _globals['_GETBARSRESPONSE']._serialized_end=1090
+  _globals['_GETLATESTQUOTEREQUEST']._serialized_start=1092
+  _globals['_GETLATESTQUOTEREQUEST']._serialized_end=1131
+  _globals['_BACKFILLBARSREQUEST']._serialized_start=1134
+  _globals['_BACKFILLBARSREQUEST']._serialized_end=1330
+  _globals['_BACKFILLBARSRESPONSE']._serialized_start=1332
+  _globals['_BACKFILLBARSRESPONSE']._serialized_end=1423
+  _globals['_GETDATACOVERAGEREQUEST']._serialized_start=1426
+  _globals['_GETDATACOVERAGEREQUEST']._serialized_end=1568
+  _globals['_COVERAGERANGE']._serialized_start=1570
+  _globals['_COVERAGERANGE']._serialized_end=1688
+  _globals['_GETDATACOVERAGERESPONSE']._serialized_start=1691
+  _globals['_GETDATACOVERAGERESPONSE']._serialized_end=2009
+  _globals['_LISTASSETSREQUEST']._serialized_start=2011
+  _globals['_LISTASSETSREQUEST']._serialized_end=2074
+  _globals['_LISTASSETSRESPONSE']._serialized_start=2076
+  _globals['_LISTASSETSRESPONSE']._serialized_end=2142
+  _globals['_MARKETDATASERVICE']._serialized_start=2145
+  _globals['_MARKETDATASERVICE']._serialized_end=2900
 # @@protoc_insertion_point(module_scope)
