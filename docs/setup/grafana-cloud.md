@@ -313,6 +313,65 @@ Use these exact service names when querying by `service.name` or `service_name` 
 
 ---
 
+## Step 9 — (Optional) Grafana MCP Server for the Claude Code Agent
+
+The repo ships a pre-wired **Grafana MCP server** (`grafana/mcp-grafana`) so the
+Claude Code agent can query your Grafana Cloud stack directly — dashboards,
+Prometheus/Mimir metrics, Loki logs, Tempo traces, and incidents — instead of
+you copy-pasting query results into the chat.
+
+This is **developer tooling only**. Runtime services do not use it; it has
+nothing to do with the OTLP export pipeline above (those push telemetry *into*
+Grafana — this pulls data *out* for the agent).
+
+### How it's wired
+
+- **`.mcp.json`** defines a `grafana` server that runs the official
+  `mcp/grafana` image locally over stdio via Docker.
+- **`.claude/settings.json`** lists `grafana` in `enabledMcpjsonServers` so it
+  auto-starts in Claude Code sessions.
+- It reads two env vars (substituted from your `.env` / shell):
+  `GRAFANA_URL` and `GRAFANA_SERVICE_ACCOUNT_TOKEN`.
+
+> **Prerequisite:** the local Docker daemon must be running, and your network
+> policy must allow pulling `mcp/grafana` from Docker Hub. In the web-based
+> remote execution environment (no Docker daemon), the server won't start —
+> use it from a local Claude Code session instead.
+
+### Setup
+
+1. **Create a service account token** in Grafana Cloud:
+   - **Administration → Users and access → Service accounts → Add service account**
+   - Role: **Viewer** for read-only queries, or **Editor** to let the agent
+     create/edit dashboards.
+   - **Add service account token** → copy the `glsa_...` value (shown once).
+
+2. **Set the env vars** in your `.env` (see `.env.example`):
+
+   ```bash
+   GRAFANA_URL=https://<your-stack>.grafana.net
+   GRAFANA_SERVICE_ACCOUNT_TOKEN=glsa_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+
+   `GRAFANA_URL` is your **stack URL** (e.g. `https://xstockstrat.grafana.net`),
+   not the `otlp-gateway-*` endpoint used for OTLP export.
+
+3. **Restart your Claude Code session** so the MCP server picks up the vars.
+   On first run Docker pulls `mcp/grafana`.
+
+### Verify
+
+In a Claude Code session, ask the agent to list available datasources or run a
+query (e.g. *"list my Grafana datasources"* or *"query Loki for config service
+errors in the last hour"*). The agent's `mcp__grafana__*` tools should return
+live results from your stack.
+
+> **Security:** the token grants API access to your Grafana stack — keep it in
+> `.env` (gitignored), never commit it, and prefer **Viewer** scope unless the
+> agent genuinely needs to write dashboards.
+
+---
+
 ## Troubleshooting
 
 ### No data in Grafana after starting the stack
