@@ -513,6 +513,12 @@ func (s *TradingService) pollFills(ctx context.Context) {
 		order.Status = newStatus
 		order.UpdatedAt = timestamppb.New(time.Now())
 		order.FilledAvgPrice = brokerOrder.FilledAvgPrice
+		order.FilledQty = brokerOrder.FilledQty
+		// A fully-filled order always has filled qty == order qty, even if the
+		// broker omitted the figure from its response.
+		if newStatus == tradingv1.OrderStatus_ORDER_STATUS_FILLED && order.FilledQty == 0 {
+			order.FilledQty = order.Qty
+		}
 
 		if err := s.repo.UpsertOrder(ctx, order); err != nil {
 			slog.Warn("fill poll: db upsert failed", "order_id", order.OrderId, "error", err)

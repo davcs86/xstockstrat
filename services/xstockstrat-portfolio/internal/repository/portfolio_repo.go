@@ -212,34 +212,41 @@ func scanPositionRow(row pgxRow) (*portfoliov1.Position, error) {
 }
 
 // UpsertPositionFromSync inserts or updates a position from a broker position sync.
-// Unlike UpsertPosition, opened_at is never overwritten on conflict.
+// Unlike UpsertPosition, opened_at is never overwritten on conflict. cost_basis is
+// the total cost (qty × avg_cost) to match the per-fill path and the P&L math in
+// GetPortfolio/ListPortfolios (which compute market_value − cost_basis).
 func (r *PortfolioRepo) UpsertPositionFromSync(ctx context.Context, userID, symbol, tradingMode, accountID string, qty, avgCost float64) error {
+	costBasis := qty * avgCost
 	const q = `
 		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, opened_at, updated_at)
-		VALUES ($1, $2, $3, $4, $4, $5, $6, NOW(), NOW())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
 		ON CONFLICT (user_id, symbol, trading_mode, account_id) DO UPDATE
-		SET qty=$3, avg_entry_price=$4, cost_basis=$4, updated_at=NOW()`
-	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgCost, tradingMode, accountID)
+		SET qty=$3, avg_entry_price=$4, cost_basis=$5, updated_at=NOW()`
+	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgCost, costBasis, tradingMode, accountID)
 	return err
 }
 
-// DeletePositionsNotInSync deletes positions for an account whose symbols are not in presentSymbols.
+// DeletePositionsNotInSync reconciles an account against a broker snapshot: it
+// deletes every position row for the account that is not (userID, symbol-in-snapshot).
+// This removes both symbols the broker no longer reports AND stale rows left under a
+// different user_id (e.g. the legacy "default" placeholder used before user_id was
+// carried on the sync event), which would otherwise surface as duplicate positions.
 // When presentSymbols is empty, all positions for the account are deleted.
-func (r *PortfolioRepo) DeletePositionsNotInSync(ctx context.Context, accountID string, presentSymbols []string) error {
+func (r *PortfolioRepo) DeletePositionsNotInSync(ctx context.Context, accountID, userID string, presentSymbols []string) error {
 	if len(presentSymbols) == 0 {
 		const q = `DELETE FROM portfolio.positions WHERE account_id=$1`
 		_, err := r.pool.Exec(ctx, q, accountID)
 		return err
 	}
-	// Build $2, $3, ... placeholders for the IN clause.
-	args := make([]interface{}, 0, len(presentSymbols)+1)
-	args = append(args, accountID)
+	// $1=accountID, $2=userID, $3.. = present symbols.
+	args := make([]interface{}, 0, len(presentSymbols)+2)
+	args = append(args, accountID, userID)
 	placeholders := make([]string, len(presentSymbols))
 	for i, s := range presentSymbols {
 		args = append(args, s)
-		placeholders[i] = fmt.Sprintf("$%d", i+2)
+		placeholders[i] = fmt.Sprintf("$%d", i+3)
 	}
-	q := fmt.Sprintf(`DELETE FROM portfolio.positions WHERE account_id=$1 AND symbol NOT IN (%s)`,
+	q := fmt.Sprintf(`DELETE FROM portfolio.positions WHERE account_id=$1 AND (user_id <> $2 OR symbol NOT IN (%s))`,
 		joinStrings(placeholders, ","))
 	_, err := r.pool.Exec(ctx, q, args...)
 	return err

@@ -207,7 +207,11 @@ func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrd
 	if alpacaResp.FilledAvgPrice != "" {
 		filledAvgPrice, _ = strconv.ParseFloat(alpacaResp.FilledAvgPrice, 64)
 	}
-	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status, FilledAvgPrice: filledAvgPrice}, nil
+	var filledQty float64
+	if alpacaResp.FilledQty != "" {
+		filledQty, _ = strconv.ParseFloat(alpacaResp.FilledQty, 64)
+	}
+	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status, FilledQty: filledQty, FilledAvgPrice: filledAvgPrice}, nil
 }
 
 // GetPositions fetches all open positions via GET /v2/positions.

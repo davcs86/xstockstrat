@@ -233,3 +233,29 @@ func TestGetAccount_Alpaca_LastEquityFallback(t *testing.T) {
 		t.Errorf("LastEquity fallback: got %v, want 500.00", bal.LastEquity)
 	}
 }
+
+func TestGetOrder_AlpacaFilledQty(t *testing.T) {
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(broker.AlpacaOrder{
+			ID:             "order-xyz",
+			Status:         "filled",
+			Qty:            "10",
+			FilledQty:      "10",
+			FilledAvgPrice: "42.00",
+		})
+	})
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{
+		APIKey: "k", APISecret: "s", PaperURL: srv.URL, LiveURL: srv.URL, Paper: true,
+	})
+
+	o, err := c.GetOrder(context.Background(), "order-xyz")
+	if err != nil {
+		t.Fatalf("GetOrder failed: %v", err)
+	}
+	if o.FilledQty != 10 {
+		t.Errorf("expected FilledQty 10, got %f", o.FilledQty)
+	}
+}
