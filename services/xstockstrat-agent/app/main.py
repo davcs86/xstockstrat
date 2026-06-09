@@ -53,7 +53,11 @@ def build_sse_app():
     Extracted into a factory so tests can exercise the routes via Starlette's test client
     without binding a real socket.
     """
+    from contextlib import asynccontextmanager
+    from urllib.parse import parse_qs
+
     from mcp.server.sse import SseServerTransport
+    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
     from starlette.applications import Starlette
     from starlette.responses import Response
     from starlette.routing import Mount, Route
@@ -71,51 +75,85 @@ def build_sse_app():
     server = create_server()
     sse = SseServerTransport("/messages")
 
-    async def handle_sse(scope, receive, send):
-        from urllib.parse import parse_qs  # noqa: PLC0415
+    # Streamable HTTP transport (MCP 2025-03-26). Claude.ai's remote connector speaks Streamable
+    # HTTP against the connector URL itself — POST <url> for client→server JSON-RPC and GET <url>
+    # for the server→client stream. The connector URL is AGENT_PUBLIC_URL (`${APP_URL}/agent`),
+    # which DO ingress strips to `/`, so the Streamable HTTP transport is served at the agent root
+    # (see handle_mcp). The legacy /sse + /messages paths are kept for Claude Desktop (feature 049).
+    session_manager = StreamableHTTPSessionManager(app=server._mcp_server)
 
+    async def _authorized(scope) -> bool:
+        """Shared OAuth/API-key gate for both transports.
+
+        Tries the OAuth 2.1 aud-bound JWT first (so a token whose aud is wrong is rejected even if
+        it would validate as some other credential — FR-B8), then the legacy API-key path (FR-B10),
+        including the deprecated `?api_key=` query fallback for clients that cannot set headers
+        (Claude Desktop SSE — OAuth 2.1 forbids credentials in query strings; OQ-G).
+        """
         headers = dict(scope.get("headers", []))
         auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
-        # Fall back to ?api_key= query param for clients that cannot set custom headers
-        # (e.g. Claude Desktop SSE, which does not support Authorization headers).
-        # DEPRECATED: OAuth 2.1 forbids credentials in query strings — kept only as a
-        # Desktop-only fallback (feature 049 OQ-G).
         if not auth_header:
             qs = parse_qs(scope.get("query_string", b"").decode())
             raw_key = (qs.get("api_key") or [""])[0]
             if raw_key:
                 auth_header = f"Bearer {raw_key}"
-
-        # Try the OAuth 2.1 aud-bound JWT first (so a token whose aud is wrong is rejected even if
-        # it would otherwise validate as some other credential — FR-B8), then the legacy API-key
-        # path (FR-B10). On total failure, 401 with a WWW-Authenticate discovery pointer (FR-B0).
         token = auth_header[len("Bearer ") :] if auth_header.startswith("Bearer ") else ""
-        authorized = (token and await validate_bearer_jwt(token)) or await validate_api_key(
-            auth_header
+        return bool(
+            (token and await validate_bearer_jwt(token)) or await validate_api_key(auth_header)
         )
-        if not authorized:
-            response = Response(
-                "Unauthorized",
-                status_code=401,
-                headers={
-                    "WWW-Authenticate": (
-                        "Bearer resource_metadata="
-                        f'"{AGENT_PUBLIC_URL}/.well-known/oauth-protected-resource"'
-                    )
-                },
-            )
-            await response(scope, receive, send)
+
+    async def _send_unauthorized(scope, receive, send) -> None:
+        # 401 with a WWW-Authenticate discovery pointer so the client starts OAuth (FR-B0).
+        response = Response(
+            "Unauthorized",
+            status_code=401,
+            headers={
+                "WWW-Authenticate": (
+                    "Bearer resource_metadata="
+                    f'"{AGENT_PUBLIC_URL}/.well-known/oauth-protected-resource"'
+                )
+            },
+        )
+        await response(scope, receive, send)
+
+    async def handle_mcp(scope, receive, send):
+        """Single raw-ASGI entry for both MCP transports, mounted at the agent root.
+
+        - `/messages`: legacy HTTP+SSE message channel (auth rides the established stream session).
+        - `/sse`: legacy HTTP+SSE event stream (OAuth/API-key gated).
+        - everything else (incl. `/`): Streamable HTTP (OAuth/API-key gated) — Claude.ai's remote
+          connector POSTs/GETs the connector URL (AGENT_PUBLIC_URL → `/`).
+
+        Mounting at the root (not `/sse`) keeps the ASGI `root_path` empty, so the SSE transport
+        advertises its message endpoint as `/messages` (matching the branch below). The OAuth and
+        well-known routes are matched earlier and never reach here.
+        """
+        path = (scope.get("path") or "/").rstrip("/") or "/"
+
+        if path == "/messages":
+            await sse.handle_post_message(scope, receive, send)
             return
-        async with sse.connect_sse(scope, receive, send) as streams:
-            await server._mcp_server.run(
-                streams[0], streams[1], server._mcp_server.create_initialization_options()
-            )
+
+        if not await _authorized(scope):
+            await _send_unauthorized(scope, receive, send)
+            return
+
+        if path == "/sse":
+            async with sse.connect_sse(scope, receive, send) as streams:
+                await server._mcp_server.run(
+                    streams[0], streams[1], server._mcp_server.create_initialization_options()
+                )
+            return
+
+        await session_manager.handle_request(scope, receive, send)
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        # The Streamable HTTP session manager must be running for the lifetime of the app.
+        async with session_manager.run():
+            yield
 
     routes = [
-        # /sse is a raw-ASGI handler (scope, receive, send) — mount it as an ASGI app (like
-        # /messages) rather than a request-response Route, which would call it as f(request).
-        Mount("/sse", app=handle_sse),
-        Mount("/messages", app=sse.handle_post_message),
         Route(
             "/.well-known/oauth-protected-resource",
             endpoint=protected_resource_metadata,
@@ -128,8 +166,10 @@ def build_sse_app():
         Route("/oauth/authorize", endpoint=oauth_authorize, methods=["GET"]),
         Route("/oauth/callback", endpoint=oauth_callback, methods=["GET"]),
         Route("/oauth/token", endpoint=oauth_token, methods=["POST"]),
+        # Both MCP transports at the agent root. MUST be last — the specific routes above win.
+        Mount("/", app=handle_mcp),
     ]
-    return Starlette(routes=routes)
+    return Starlette(routes=routes, lifespan=lifespan)
 
 
 async def _run_sse() -> None:

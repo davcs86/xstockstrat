@@ -117,10 +117,16 @@ class StrategyEvaluator:
         elif comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
             input_struct = Struct()
             input_struct.update({"close": closes})
+            # Numeric component params travel in input_params (not input_data); the
+            # series stays in input_data. The engine applies declared defaults for
+            # anything omitted (FR-7).
+            params_struct = Struct()
+            params_struct.update(dict(comp.params))
             resp = await self._indicators.ExecuteFormula(
                 indicators_pb2.ExecuteFormulaRequest(
                     formula_id=comp.formula_id,
                     input_data=input_struct,
+                    input_params=params_struct,
                 ),
                 metadata=self._meta,
             )

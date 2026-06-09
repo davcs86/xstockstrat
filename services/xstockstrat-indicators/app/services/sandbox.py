@@ -132,8 +132,11 @@ _restricted_builtins['__import__'] = _safe_import
 # Load input data
 data = json.loads({input_json!r})
 
+# Load validated parameter values (separate namespace from `data`)
+params = json.loads({params_json!r})
+
 # ── User formula begins ──────────────────────────────────────────────────────
-_formula_globals = {{'__builtins__': _restricted_builtins, 'data': data}}
+_formula_globals = {{'__builtins__': _restricted_builtins, 'data': data, 'params': params}}
 exec({source!r}, _formula_globals)
 # ── User formula ends ────────────────────────────────────────────────────────
 
@@ -149,6 +152,7 @@ def execute_formula(
     allowed_imports: list[str],
     timeout_ms: int = 5000,
     memory_bytes: int = 128 * 1024 * 1024,
+    params: dict | None = None,
 ) -> SandboxResult:
     """
     Execute formula source in an isolated subprocess with resource limits.
@@ -161,6 +165,7 @@ def execute_formula(
         safe_builtins=sorted(_SAFE_BUILTINS),
         allowed_imports=allowed_imports,
         input_json=json.dumps(input_data),
+        params_json=json.dumps(params or {}),
         source=source,
     )
 

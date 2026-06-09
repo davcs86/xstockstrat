@@ -1,6 +1,8 @@
 # Feature: auth2-authorized-apps-ui
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `launched`
+**Committed to main**: 1fb6f613ead4b2ed4316d24c9af680dc88c7d4e8
+**Launched date**: 2026-06-09
 **Development Branch**: `feature/auth2-authorized-apps-ui`
 **Created**: 2026-06-07
 **Last Updated**: 2026-06-07
@@ -18,7 +20,10 @@
 | 2026-06-07 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-06-07 | `implementation-ready` (re-spec) | /sdd-spec | Regenerated against merged 049: migration pinned to 004, proto RPCs after RefreshOAuthToken (L25); Step 4 now also tags OAuth refresh tokens with client_id (049's mint path omits it) so list/revoke work |
 | 2026-06-07 | `implementation-ready` (review fixes) | /sdd-review impl-spec | Applied non-B3 advisory fixes: buf-breaking base → main-dev; split 8-file UI step into Step 6 (BFF) + Step 7 (page/nav), drop providers.tsx; explicit 049 OAuth-test regression guard; last_used_at labeled "last refreshed". Steps 9 → 10 |
+| 2026-06-07 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started (stacked per-step PRs). Step 1 (proto RPCs/message) done |
+| 2026-06-08 | `in-progress` → `code-completed` | /sdd-execute | All 10 steps done (PRs #623–#631 stacked → feature branch). Deviations: host proto toolchain, throwaway-PG migration test, AgentUrlContext (Option B), playwright env + e2e tsc/lint fallback |
 
+| 2026-06-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #641; committed 1fb6f613ead4b2ed4316d24c9af680dc88c7d4e8 |
 ---
 
 ## Artifacts

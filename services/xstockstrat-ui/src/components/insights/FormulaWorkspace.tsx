@@ -1,13 +1,32 @@
 'use client';
 import { useState } from 'react';
 import { BookOpen, Play, Sparkles } from 'lucide-react';
+import {
+  ParameterType,
+  type FormulaParameter,
+} from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { FormulaEditor } from '@/components/insights/FormulaEditor';
 import { FormulaReferencePanel } from '@/components/insights/FormulaReferencePanel';
 import { FormulaRunResult } from '@/components/insights/FormulaRunResult';
+import {
+  ParameterEditor,
+  draftFromProto,
+  isNumericType,
+  toParameterInit,
+  type FormulaParameterInit,
+  type ParameterDraft,
+} from '@/components/insights/ParameterEditor';
 import { useExecuteFormula } from '@/hooks/useFormulas';
 import {
   BLANK_TEMPLATE,
@@ -22,10 +41,17 @@ export interface FormulaWorkspaceProps {
   initialDescription?: string;
   initialSource?: string;
   initialIsPublic?: boolean;
+  initialParameters?: FormulaParameter[];
   author?: string;
   saving: boolean;
   saveError: string | null;
-  onSave: (values: { name: string; description: string; source: string; isPublic: boolean }) => void;
+  onSave: (values: {
+    name: string;
+    description: string;
+    source: string;
+    isPublic: boolean;
+    parameters: FormulaParameterInit[];
+  }) => void;
   onCancel: () => void;
   onDelete?: () => void;
   deleting?: boolean;
@@ -46,6 +72,7 @@ export function FormulaWorkspace({
   initialDescription = '',
   initialSource,
   initialIsPublic = false,
+  initialParameters,
   author,
   saving,
   saveError,
@@ -58,6 +85,10 @@ export function FormulaWorkspace({
   const [description, setDescription] = useState(initialDescription);
   const [source, setSource] = useState(initialSource ?? BLANK_TEMPLATE.source);
   const [isPublic, setIsPublic] = useState(initialIsPublic);
+  const [parameters, setParameters] = useState<ParameterDraft[]>(() =>
+    (initialParameters ?? []).map(draftFromProto),
+  );
+  const [paramValues, setParamValues] = useState<Record<string, string>>({});
   const [jsonInput, setJsonInput] = useState(SAMPLE_INPUT_JSON);
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [showReference, setShowReference] = useState(true);
@@ -73,7 +104,21 @@ export function FormulaWorkspace({
       setJsonError('Input must be valid JSON');
       return;
     }
-    executeMut.mutate({ formulaSource: source, inputData: parsed });
+    // Build typed parameter VALUES from the generated form; omitted/blank values
+    // are left out so the engine applies the declared defaults.
+    const inputParams: Record<string, unknown> = {};
+    for (const p of parameters) {
+      if (!p.name) continue;
+      const raw = paramValues[p.name] ?? p.default;
+      if (raw === '') continue;
+      if (p.type === ParameterType.BOOL) inputParams[p.name] = raw === 'true';
+      else if (p.type === ParameterType.STRING) inputParams[p.name] = raw;
+      else {
+        const n = Number(raw);
+        if (Number.isFinite(n)) inputParams[p.name] = n;
+      }
+    }
+    executeMut.mutate({ formulaSource: source, inputData: parsed, inputParams });
   }
 
   function loadTemplate(t: FormulaTemplate) {
@@ -114,7 +159,15 @@ export function FormulaWorkspace({
           </Button>
           <Button
             size="sm"
-            onClick={() => onSave({ name: name.trim(), description, source, isPublic })}
+            onClick={() =>
+              onSave({
+                name: name.trim(),
+                description,
+                source,
+                isPublic,
+                parameters: parameters.filter((p) => p.name.trim()).map(toParameterInit),
+              })
+            }
             disabled={saving || !name.trim()}
           >
             {saving ? 'Saving…' : mode === 'create' ? 'Create formula' : 'Save'}
@@ -157,6 +210,19 @@ export function FormulaWorkspace({
             </CardContent>
           </Card>
 
+          {/* Parameters cell */}
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <CardTitle>Parameters</CardTitle>
+              <span className="text-[11px] text-muted-foreground">
+                typed inputs, read via <code className="text-foreground">params</code>
+              </span>
+            </CardHeader>
+            <CardContent>
+              <ParameterEditor value={parameters} onChange={setParameters} />
+            </CardContent>
+          </Card>
+
           {/* Code cell */}
           <Card>
             <CardHeader className="flex-row items-center justify-between space-y-0">
@@ -195,6 +261,49 @@ export function FormulaWorkspace({
                 />
               </div>
               {jsonError && <p className="text-xs text-destructive">{jsonError}</p>}
+
+              {parameters.filter((p) => p.name.trim()).length > 0 && (
+                <div className="space-y-2">
+                  <label className="block text-xs text-muted-foreground">
+                    Parameters — available as <code className="text-foreground">params</code>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {parameters
+                      .filter((p) => p.name.trim())
+                      .map((p) => (
+                        <div key={p.name}>
+                          <label className="mb-1 block text-[11px] text-muted-foreground">
+                            {p.name}
+                          </label>
+                          {p.type === ParameterType.BOOL ? (
+                            <Select
+                              value={paramValues[p.name] ?? (p.default || 'false')}
+                              onValueChange={(v) => setParamValues((s) => ({ ...s, [p.name]: v }))}
+                            >
+                              <SelectTrigger aria-label={`run param ${p.name}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="true">true</SelectItem>
+                                <SelectItem value="false">false</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              aria-label={`run param ${p.name}`}
+                              type={isNumericType(p.type) ? 'number' : 'text'}
+                              value={paramValues[p.name] ?? p.default}
+                              onChange={(e) =>
+                                setParamValues((s) => ({ ...s, [p.name]: e.target.value }))
+                              }
+                            />
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
               <Button onClick={handleRun} disabled={executeMut.isPending}>
                 <Play className="mr-1.5 h-4 w-4" />
                 {executeMut.isPending ? 'Running…' : 'Run'}
@@ -202,8 +311,19 @@ export function FormulaWorkspace({
 
               {executeMut.error && (
                 <p className="text-xs text-destructive">
-                  {executeMut.error instanceof Error ? executeMut.error.message : 'Execution failed'}
+                  {executeMut.error instanceof Error
+                    ? executeMut.error.message
+                    : 'Execution failed'}
                 </p>
+              )}
+              {executeMut.data && executeMut.data.parameterErrors.length > 0 && (
+                <div className="space-y-0.5 text-xs text-destructive">
+                  {executeMut.data.parameterErrors.map((pe) => (
+                    <p key={pe.name}>
+                      <code className="text-foreground">{pe.name}</code>: {pe.reason}
+                    </p>
+                  ))}
+                </div>
               )}
               {executeMut.data && <FormulaRunResult result={executeMut.data} />}
             </CardContent>

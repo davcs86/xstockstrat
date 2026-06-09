@@ -128,6 +128,44 @@ class TestManageFormulaClient:
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.INDICATORS_ENDPOINT
         assert result == {"formula_id": "f-9"}
 
+    @pytest.mark.asyncio
+    async def test_register_maps_parameter_definitions(self):
+        from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # type: ignore
+
+        resp = indicators_pb2.RegisterFormulaResponse(formula_id="f-10")
+        mock_stub = MagicMock()
+        mock_stub.RegisterFormula = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
+                await client.manage_formula(
+                    operation="register",
+                    formula={
+                        "name": "rsi3",
+                        "source": "result = params['period']",
+                        "parameters": [
+                            {
+                                "name": "period",
+                                "type": "int",
+                                "default": 14,
+                                "required": True,
+                                "min": 1,
+                                "max": 200,
+                            }
+                        ],
+                    },
+                    api_key="k",
+                )
+        req = mock_stub.RegisterFormula.call_args.args[0]
+        assert len(req.parameters) == 1
+        p = req.parameters[0]
+        assert p.name == "period"
+        assert p.type == indicators_pb2.PARAMETER_TYPE_INT
+        assert p.required is True
+        assert p.default_value.number_value == 14
+        assert p.min == 1
+        assert p.max == 200
+
 
 class TestManageSignalSourceClient:
     @pytest.mark.asyncio

@@ -24,9 +24,8 @@ export class LedgerServiceImpl {
       const result = await this.pool.query(
         `INSERT INTO ledger.events
            (event_id, event_type, source_service, correlation_id, stream_key,
-            payload, metadata, occurred_at, recorded_at, sequence)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-           nextval('ledger.event_seq_' || md5($5)::text))
+            payload, metadata, occurred_at, recorded_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING sequence, recorded_at`,
         [
           eventId,

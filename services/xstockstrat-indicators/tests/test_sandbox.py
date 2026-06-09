@@ -63,3 +63,27 @@ class TestSandboxExecution:
         )
         assert res.success is False
         assert res.exit_reason == "import_blocked"
+
+
+class TestSandboxParams:
+    def test_params_available_as_separate_variable(self):
+        """`params` is exposed as its own global, resolved from input_params."""
+        res = execute_formula(
+            source="result = params['period'] * 2",
+            input_data={},
+            allowed_imports=[],
+            params={"period": 7},
+        )
+        assert res.success is True
+        assert res.output == {"value": 14}
+
+    def test_params_not_merged_into_data(self):
+        """A parameter key must NOT leak into the `data` namespace (FR-3)."""
+        res = execute_formula(
+            source="result = 'period' in data",
+            input_data={"close": [1, 2, 3]},
+            allowed_imports=[],
+            params={"period": 7},
+        )
+        assert res.success is True
+        assert res.output == {"value": False}

@@ -271,6 +271,38 @@ async def manage_formula(
     if operation not in ("register", "update", "delete"):
         raise ValueError(f"unknown operation '{operation}' (expected register/update/delete)")
 
+    param_type_map = {
+        "int": indicators_pb2.PARAMETER_TYPE_INT,
+        "float": indicators_pb2.PARAMETER_TYPE_FLOAT,
+        "bool": indicators_pb2.PARAMETER_TYPE_BOOL,
+        "string": indicators_pb2.PARAMETER_TYPE_STRING,
+    }
+
+    def _build_parameter(d: dict):
+        p = indicators_pb2.FormulaParameter(
+            name=d.get("name", ""),
+            type=param_type_map.get(
+                str(d.get("type", "")).lower(),
+                indicators_pb2.PARAMETER_TYPE_UNSPECIFIED,
+            ),
+            description=d.get("description", ""),
+            required=bool(d.get("required", False)),
+        )
+        default = d.get("default")
+        if isinstance(default, bool):
+            p.default_value.bool_value = default
+        elif isinstance(default, (int, float)):
+            p.default_value.number_value = default
+        elif isinstance(default, str):
+            p.default_value.string_value = default
+        if d.get("min") is not None:
+            p.min = float(d["min"])
+        if d.get("max") is not None:
+            p.max = float(d["max"])
+        return p
+
+    parameters = [_build_parameter(d) for d in formula.get("parameters", [])]
+
     async with grpc.aio.insecure_channel(INDICATORS_ENDPOINT) as channel:
         stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
         if operation == "register":
@@ -281,6 +313,7 @@ async def manage_formula(
                     source=formula["source"],
                     is_public=formula.get("is_public", False),
                     author=formula.get("author", ""),
+                    parameters=parameters,
                 ),
                 metadata=_admin_metadata(api_key),
             )
@@ -294,6 +327,7 @@ async def manage_formula(
                     description=formula.get("description", ""),
                     source=formula.get("source", ""),
                     is_public=formula.get("is_public", False),
+                    parameters=parameters,
                 ),
                 metadata=_admin_metadata(api_key),
             )
