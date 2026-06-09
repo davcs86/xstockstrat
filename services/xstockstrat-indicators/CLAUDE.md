@@ -38,7 +38,11 @@ HTTP/Connect-RPC server on `8054` was removed.
 
 - Schema: `indicators`
 - Table: `indicators.formulas` — stores formula definitions, scoped by `author`
-- Migration: `migrations/001_formulas.up.sql` / `migrations/001_formulas.down.sql`
+  - `input_schema JSONB` — legacy advisory map (retained, not validated)
+  - `parameters JSONB` (default `'[]'`) — ordered list of typed parameter definitions
+    (`FormulaParameter`: `name`, `type`, `default_value`, `required`, `min`/`max`, `description`)
+- Migrations: `migrations/001_formulas.*` (table); `migrations/002_formula_parameters.*` (adds the
+  `parameters` JSONB column)
 - Pool: `asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)` created in `app/main.py`
 
 ## Config Keys Consumed
@@ -60,6 +64,23 @@ Namespace: `indicators`
 - **Import whitelist**: only `allowed_imports` config keys may be `import`ed
 - **Builtin filter**: dangerous builtins (`open`, `exec`, `eval`, `__import__` override, etc.) removed
 - **No network/filesystem**: `socket`, `urllib`, `requests`, `os.system` not in whitelist
+
+## Typed Formula Parameters
+
+Formulas may declare typed parameters (`FormulaParameter`) with defaults, validation, and
+descriptions. Distinct from the OHLCV/series `data` input:
+
+- **Execution input**: parameter VALUES arrive in `ExecuteFormulaRequest.input_params` (a
+  `google.protobuf.Struct`), separate from `input_data`. The sandbox exposes them to the formula as
+  a dedicated `params` dict (read via `params["<name>"]`) — **never** merged into `data`.
+- **Validation before execution**: `app/services/parameters.py` resolves defaults, coerces/type-checks
+  values (int/float/bool/string), and enforces `min`/`max` (numeric only). Failures return a
+  structured `ExecuteFormulaResponse.parameter_errors` (`{name, reason}`) with `success=false`, and the
+  sandbox is never invoked.
+- **Definition validation**: at Register/Update, names must be valid, unique Python identifiers; type
+  must not be `UNSPECIFIED`; `min`/`max` apply to numeric params only.
+- **Soft cap**: at most **32 parameters** per formula, hardcoded in `app/services/parameters.py`
+  (`MAX_PARAMETERS`). **No new config key** — the cap is engine-enforced, not in `indicators.*`.
 
 ## Webhooks
 

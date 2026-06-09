@@ -1,5 +1,5 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import type { Timestamp, Value } from "@bufbuild/protobuf/wkt";
 import type { TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
@@ -140,6 +140,12 @@ export type ExecuteFormulaRequest = Message<"xstockstrat.indicators.v1.ExecuteFo
      * @generated from field: int64 memory_bytes_override = 6;
      */
     memoryBytesOverride: bigint;
+    /**
+     * parameter VALUES, separate from input_data
+     *
+     * @generated from field: google.protobuf.Struct input_params = 7;
+     */
+    inputParams?: JsonObject | undefined;
 };
 /**
  * Describes the message xstockstrat.indicators.v1.ExecuteFormulaRequest.
@@ -182,12 +188,78 @@ export type ExecuteFormulaResponse = Message<"xstockstrat.indicators.v1.ExecuteF
      * @generated from field: xstockstrat.indicators.v1.SandboxExitReason exit_reason = 8;
      */
     exitReason: SandboxExitReason;
+    /**
+     * @generated from field: repeated xstockstrat.indicators.v1.ParameterValidationError parameter_errors = 9;
+     */
+    parameterErrors: ParameterValidationError[];
 };
 /**
  * Describes the message xstockstrat.indicators.v1.ExecuteFormulaResponse.
  * Use `create(ExecuteFormulaResponseSchema)` to create a new message.
  */
 export declare const ExecuteFormulaResponseSchema: GenMessage<ExecuteFormulaResponse>;
+/**
+ * @generated from message xstockstrat.indicators.v1.FormulaParameter
+ */
+export type FormulaParameter = Message<"xstockstrat.indicators.v1.FormulaParameter"> & {
+    /**
+     * Python identifier; key in `params`
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+    /**
+     * @generated from field: xstockstrat.indicators.v1.ParameterType type = 2;
+     */
+    type: ParameterType;
+    /**
+     * @generated from field: google.protobuf.Value default_value = 3;
+     */
+    defaultValue?: Value | undefined;
+    /**
+     * @generated from field: string description = 4;
+     */
+    description: string;
+    /**
+     * @generated from field: bool required = 5;
+     */
+    required: boolean;
+    /**
+     * numeric params only
+     *
+     * @generated from field: optional double min = 6;
+     */
+    min?: number | undefined;
+    /**
+     * numeric params only
+     *
+     * @generated from field: optional double max = 7;
+     */
+    max?: number | undefined;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.FormulaParameter.
+ * Use `create(FormulaParameterSchema)` to create a new message.
+ */
+export declare const FormulaParameterSchema: GenMessage<FormulaParameter>;
+/**
+ * @generated from message xstockstrat.indicators.v1.ParameterValidationError
+ */
+export type ParameterValidationError = Message<"xstockstrat.indicators.v1.ParameterValidationError"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
+    /**
+     * @generated from field: string reason = 2;
+     */
+    reason: string;
+};
+/**
+ * Describes the message xstockstrat.indicators.v1.ParameterValidationError.
+ * Use `create(ParameterValidationErrorSchema)` to create a new message.
+ */
+export declare const ParameterValidationErrorSchema: GenMessage<ParameterValidationError>;
 /**
  * @generated from message xstockstrat.indicators.v1.FormulaDefinition
  */
@@ -232,6 +304,10 @@ export type FormulaDefinition = Message<"xstockstrat.indicators.v1.FormulaDefini
     inputSchema: {
         [key: string]: string;
     };
+    /**
+     * @generated from field: repeated xstockstrat.indicators.v1.FormulaParameter parameters = 10;
+     */
+    parameters: FormulaParameter[];
 };
 /**
  * Describes the message xstockstrat.indicators.v1.FormulaDefinition.
@@ -319,6 +395,10 @@ export type RegisterFormulaRequest = Message<"xstockstrat.indicators.v1.Register
      * @generated from field: string author = 6;
      */
     author: string;
+    /**
+     * @generated from field: repeated xstockstrat.indicators.v1.FormulaParameter parameters = 7;
+     */
+    parameters: FormulaParameter[];
 };
 /**
  * Describes the message xstockstrat.indicators.v1.RegisterFormulaRequest.
@@ -435,6 +515,10 @@ export type UpdateFormulaRequest = Message<"xstockstrat.indicators.v1.UpdateForm
      * @generated from field: bool is_public = 6;
      */
     isPublic: boolean;
+    /**
+     * @generated from field: repeated xstockstrat.indicators.v1.FormulaParameter parameters = 7;
+     */
+    parameters: FormulaParameter[];
 };
 /**
  * Describes the message xstockstrat.indicators.v1.UpdateFormulaRequest.
@@ -522,6 +606,35 @@ export declare enum SandboxExitReason {
  * Describes the enum xstockstrat.indicators.v1.SandboxExitReason.
  */
 export declare const SandboxExitReasonSchema: GenEnum<SandboxExitReason>;
+/**
+ * @generated from enum xstockstrat.indicators.v1.ParameterType
+ */
+export declare enum ParameterType {
+    /**
+     * @generated from enum value: PARAMETER_TYPE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: PARAMETER_TYPE_INT = 1;
+     */
+    INT = 1,
+    /**
+     * @generated from enum value: PARAMETER_TYPE_FLOAT = 2;
+     */
+    FLOAT = 2,
+    /**
+     * @generated from enum value: PARAMETER_TYPE_BOOL = 3;
+     */
+    BOOL = 3,
+    /**
+     * @generated from enum value: PARAMETER_TYPE_STRING = 4;
+     */
+    STRING = 4
+}
+/**
+ * Describes the enum xstockstrat.indicators.v1.ParameterType.
+ */
+export declare const ParameterTypeSchema: GenEnum<ParameterType>;
 /**
  * IndicatorsService — formula engine and sandboxed Python execution.
  * Sandbox timeout and memory limits are configured via xstockstrat-config.

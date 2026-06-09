@@ -4,7 +4,7 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import type { Timestamp, Value } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { TimeRange } from "../../common/v1/common_pb";
 import { file_common_v1_common } from "../../common/v1/common_pb";
@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file indicators/v1/indicators.proto.
  */
 export const file_indicators_v1_indicators: GenFile = /*@__PURE__*/
-  fileDesc("Ch5pbmRpY2F0b3JzL3YxL2luZGljYXRvcnMucHJvdG8SGXhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEijwIKF0NvbXB1dGVJbmRpY2F0b3JSZXF1ZXN0EhEKCWluZGljYXRvchgBIAEoCRIOCgZ2YWx1ZXMYAiADKAESTgoGcGFyYW1zGAMgAygLMj4ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Db21wdXRlSW5kaWNhdG9yUmVxdWVzdC5QYXJhbXNFbnRyeRIvCgVyYW5nZRgEIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USDgoGc3ltYm9sGAUgASgJEhEKCXRpbWVmcmFtZRgGIAEoCRotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAE6AjgBIvUBChhDb21wdXRlSW5kaWNhdG9yUmVzcG9uc2USOQoGcmVzdWx0GAEgAygLMikueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JQb2ludBIRCglpbmRpY2F0b3IYAiABKAkSWAoLcGFyYW1zX3VzZWQYAyADKAsyQy54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkNvbXB1dGVJbmRpY2F0b3JSZXNwb25zZS5QYXJhbXNVc2VkRW50cnkaMQoPUGFyYW1zVXNlZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEivAEKDkluZGljYXRvclBvaW50EigKBHRpbWUYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBXZhbHVlGAIgASgBEkMKBWV4dHJhGAMgAygLMjQueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JQb2ludC5FeHRyYUVudHJ5GiwKCkV4dHJhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASKgAgoVRXhlY3V0ZUZvcm11bGFSZXF1ZXN0EhIKCmZvcm11bGFfaWQYASABKAkSFgoOZm9ybXVsYV9zb3VyY2UYAiABKAkSKwoKaW5wdXRfZGF0YRgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSRgoDZW52GAQgAygLMjkueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5FeGVjdXRlRm9ybXVsYVJlcXVlc3QuRW52RW50cnkSGwoTdGltZW91dF9tc19vdmVycmlkZRgFIAEoBRIdChVtZW1vcnlfYnl0ZXNfb3ZlcnJpZGUYBiABKAMaKgoIRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASL1AQoWRXhlY3V0ZUZvcm11bGFSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEicKBm91dHB1dBgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSDgoGc3Rkb3V0GAMgASgJEg4KBnN0ZGVychgEIAEoCRIUCgxleGVjdXRpb25fbXMYBSABKAMSGQoRbWVtb3J5X3VzZWRfYnl0ZXMYBiABKAMSDQoFZXJyb3IYByABKAkSQQoLZXhpdF9yZWFzb24YCCABKA4yLC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLlNhbmRib3hFeGl0UmVhc29uIuYCChFGb3JtdWxhRGVmaW5pdGlvbhISCgpmb3JtdWxhX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSDgoGc291cmNlGAQgASgJEg4KBmF1dGhvchgFIAEoCRIuCgpjcmVhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglpc19wdWJsaWMYCCABKAgSUwoMaW5wdXRfc2NoZW1hGAkgAygLMj0ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhRGVmaW5pdGlvbi5JbnB1dFNjaGVtYUVudHJ5GjIKEElucHV0U2NoZW1hRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASIXChVMaXN0SW5kaWNhdG9yc1JlcXVlc3QiVgoWTGlzdEluZGljYXRvcnNSZXNwb25zZRI8CgppbmRpY2F0b3JzGAEgAygLMigueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JNZXRhImQKDUluZGljYXRvck1ldGESDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIXCg9yZXF1aXJlZF9wYXJhbXMYAyADKAkSFwoPb3B0aW9uYWxfcGFyYW1zGAQgAygJIvwBChZSZWdpc3RlckZvcm11bGFSZXF1ZXN0EgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDgoGc291cmNlGAMgASgJEhEKCWlzX3B1YmxpYxgEIAEoCBJYCgxpbnB1dF9zY2hlbWEYBSADKAsyQi54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLlJlZ2lzdGVyRm9ybXVsYVJlcXVlc3QuSW5wdXRTY2hlbWFFbnRyeRIOCgZhdXRob3IYBiABKAkaMgoQSW5wdXRTY2hlbWFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIi0KF1JlZ2lzdGVyRm9ybXVsYVJlc3BvbnNlEhIKCmZvcm11bGFfaWQYASABKAkiJwoRR2V0Rm9ybXVsYVJlcXVlc3QSEgoKZm9ybXVsYV9pZBgBIAEoCSJsChNMaXN0Rm9ybXVsYXNSZXF1ZXN0EhUKDWF1dGhvcl9maWx0ZXIYASABKAkSFgoOaW5jbHVkZV9wdWJsaWMYAiABKAgSEQoJcGFnZV9zaXplGAMgASgFEhMKC3BhZ2Vfb2Zmc2V0GAQgASgFImsKFExpc3RGb3JtdWxhc1Jlc3BvbnNlEj4KCGZvcm11bGFzGAEgAygLMiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhRGVmaW5pdGlvbhITCgt0b3RhbF9jb3VudBgCIAEoBSKBAQoUVXBkYXRlRm9ybXVsYVJlcXVlc3QSEgoKZm9ybXVsYV9pZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSDgoGc291cmNlGAUgASgJEhEKCWlzX3B1YmxpYxgGIAEoCCJWChVVcGRhdGVGb3JtdWxhUmVzcG9uc2USPQoHZm9ybXVsYRgBIAEoCzIsLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRm9ybXVsYURlZmluaXRpb24iOwoURGVsZXRlRm9ybXVsYVJlcXVlc3QSEgoKZm9ybXVsYV9pZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJIigKFURlbGV0ZUZvcm11bGFSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIKvIBChFTYW5kYm94RXhpdFJlYXNvbhIjCh9TQU5EQk9YX0VYSVRfUkVBU09OX1VOU1BFQ0lGSUVEEAASHwobU0FOREJPWF9FWElUX1JFQVNPTl9TVUNDRVNTEAESHwobU0FOREJPWF9FWElUX1JFQVNPTl9USU1FT1VUEAISJwojU0FOREJPWF9FWElUX1JFQVNPTl9NRU1PUllfRVhDRUVERUQQAxIlCiFTQU5EQk9YX0VYSVRfUkVBU09OX1JVTlRJTUVfRVJST1IQBBImCiJTQU5EQk9YX0VYSVRfUkVBU09OX0lNUE9SVF9CTE9DS0VEEAUyuwcKEUluZGljYXRvcnNTZXJ2aWNlEnsKEENvbXB1dGVJbmRpY2F0b3ISMi54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkNvbXB1dGVJbmRpY2F0b3JSZXF1ZXN0GjMueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Db21wdXRlSW5kaWNhdG9yUmVzcG9uc2USdQoORXhlY3V0ZUZvcm11bGESMC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkV4ZWN1dGVGb3JtdWxhUmVxdWVzdBoxLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRXhlY3V0ZUZvcm11bGFSZXNwb25zZRJ1Cg5MaXN0SW5kaWNhdG9ycxIwLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuTGlzdEluZGljYXRvcnNSZXF1ZXN0GjEueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5MaXN0SW5kaWNhdG9yc1Jlc3BvbnNlEngKD1JlZ2lzdGVyRm9ybXVsYRIxLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuUmVnaXN0ZXJGb3JtdWxhUmVxdWVzdBoyLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuUmVnaXN0ZXJGb3JtdWxhUmVzcG9uc2USaAoKR2V0Rm9ybXVsYRIsLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuR2V0Rm9ybXVsYVJlcXVlc3QaLC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkZvcm11bGFEZWZpbml0aW9uEm8KDExpc3RGb3JtdWxhcxIuLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuTGlzdEZvcm11bGFzUmVxdWVzdBovLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuTGlzdEZvcm11bGFzUmVzcG9uc2UScgoNVXBkYXRlRm9ybXVsYRIvLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuVXBkYXRlRm9ybXVsYVJlcXVlc3QaMC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLlVwZGF0ZUZvcm11bGFSZXNwb25zZRJyCg1EZWxldGVGb3JtdWxhEi8ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5EZWxldGVGb3JtdWxhUmVxdWVzdBowLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRGVsZXRlRm9ybXVsYVJlc3BvbnNlQkRaQmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9pbmRpY2F0b3JzL3YxO2luZGljYXRvcnN2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
+  fileDesc("Ch5pbmRpY2F0b3JzL3YxL2luZGljYXRvcnMucHJvdG8SGXhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEijwIKF0NvbXB1dGVJbmRpY2F0b3JSZXF1ZXN0EhEKCWluZGljYXRvchgBIAEoCRIOCgZ2YWx1ZXMYAiADKAESTgoGcGFyYW1zGAMgAygLMj4ueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Db21wdXRlSW5kaWNhdG9yUmVxdWVzdC5QYXJhbXNFbnRyeRIvCgVyYW5nZRgEIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USDgoGc3ltYm9sGAUgASgJEhEKCXRpbWVmcmFtZRgGIAEoCRotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAE6AjgBIvUBChhDb21wdXRlSW5kaWNhdG9yUmVzcG9uc2USOQoGcmVzdWx0GAEgAygLMikueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JQb2ludBIRCglpbmRpY2F0b3IYAiABKAkSWAoLcGFyYW1zX3VzZWQYAyADKAsyQy54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkNvbXB1dGVJbmRpY2F0b3JSZXNwb25zZS5QYXJhbXNVc2VkRW50cnkaMQoPUGFyYW1zVXNlZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEivAEKDkluZGljYXRvclBvaW50EigKBHRpbWUYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBXZhbHVlGAIgASgBEkMKBWV4dHJhGAMgAygLMjQueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5JbmRpY2F0b3JQb2ludC5FeHRyYUVudHJ5GiwKCkV4dHJhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASLPAgoVRXhlY3V0ZUZvcm11bGFSZXF1ZXN0EhIKCmZvcm11bGFfaWQYASABKAkSFgoOZm9ybXVsYV9zb3VyY2UYAiABKAkSKwoKaW5wdXRfZGF0YRgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSRgoDZW52GAQgAygLMjkueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5FeGVjdXRlRm9ybXVsYVJlcXVlc3QuRW52RW50cnkSGwoTdGltZW91dF9tc19vdmVycmlkZRgFIAEoBRIdChVtZW1vcnlfYnl0ZXNfb3ZlcnJpZGUYBiABKAMSLQoMaW5wdXRfcGFyYW1zGAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBoqCghFbnZFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIsQCChZFeGVjdXRlRm9ybXVsYVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSJwoGb3V0cHV0GAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIOCgZzdGRvdXQYAyABKAkSDgoGc3RkZXJyGAQgASgJEhQKDGV4ZWN1dGlvbl9tcxgFIAEoAxIZChFtZW1vcnlfdXNlZF9ieXRlcxgGIAEoAxINCgVlcnJvchgHIAEoCRJBCgtleGl0X3JlYXNvbhgIIAEoDjIsLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuU2FuZGJveEV4aXRSZWFzb24STQoQcGFyYW1ldGVyX2Vycm9ycxgJIAMoCzIzLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuUGFyYW1ldGVyVmFsaWRhdGlvbkVycm9yIuIBChBGb3JtdWxhUGFyYW1ldGVyEgwKBG5hbWUYASABKAkSNgoEdHlwZRgCIAEoDjIoLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuUGFyYW1ldGVyVHlwZRItCg1kZWZhdWx0X3ZhbHVlGAMgASgLMhYuZ29vZ2xlLnByb3RvYnVmLlZhbHVlEhMKC2Rlc2NyaXB0aW9uGAQgASgJEhAKCHJlcXVpcmVkGAUgASgIEhAKA21pbhgGIAEoAUgAiAEBEhAKA21heBgHIAEoAUgBiAEBQgYKBF9taW5CBgoEX21heCI4ChhQYXJhbWV0ZXJWYWxpZGF0aW9uRXJyb3ISDAoEbmFtZRgBIAEoCRIOCgZyZWFzb24YAiABKAkipwMKEUZvcm11bGFEZWZpbml0aW9uEhIKCmZvcm11bGFfaWQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIOCgZzb3VyY2UYBCABKAkSDgoGYXV0aG9yGAUgASgJEi4KCmNyZWF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhEKCWlzX3B1YmxpYxgIIAEoCBJTCgxpbnB1dF9zY2hlbWEYCSADKAsyPS54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkZvcm11bGFEZWZpbml0aW9uLklucHV0U2NoZW1hRW50cnkSPwoKcGFyYW1ldGVycxgKIAMoCzIrLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRm9ybXVsYVBhcmFtZXRlchoyChBJbnB1dFNjaGVtYUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiFwoVTGlzdEluZGljYXRvcnNSZXF1ZXN0IlYKFkxpc3RJbmRpY2F0b3JzUmVzcG9uc2USPAoKaW5kaWNhdG9ycxgBIAMoCzIoLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuSW5kaWNhdG9yTWV0YSJkCg1JbmRpY2F0b3JNZXRhEgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSFwoPcmVxdWlyZWRfcGFyYW1zGAMgAygJEhcKD29wdGlvbmFsX3BhcmFtcxgEIAMoCSK9AgoWUmVnaXN0ZXJGb3JtdWxhUmVxdWVzdBIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEg4KBnNvdXJjZRgDIAEoCRIRCglpc19wdWJsaWMYBCABKAgSWAoMaW5wdXRfc2NoZW1hGAUgAygLMkIueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5SZWdpc3RlckZvcm11bGFSZXF1ZXN0LklucHV0U2NoZW1hRW50cnkSDgoGYXV0aG9yGAYgASgJEj8KCnBhcmFtZXRlcnMYByADKAsyKy54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkZvcm11bGFQYXJhbWV0ZXIaMgoQSW5wdXRTY2hlbWFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIi0KF1JlZ2lzdGVyRm9ybXVsYVJlc3BvbnNlEhIKCmZvcm11bGFfaWQYASABKAkiJwoRR2V0Rm9ybXVsYVJlcXVlc3QSEgoKZm9ybXVsYV9pZBgBIAEoCSJsChNMaXN0Rm9ybXVsYXNSZXF1ZXN0EhUKDWF1dGhvcl9maWx0ZXIYASABKAkSFgoOaW5jbHVkZV9wdWJsaWMYAiABKAgSEQoJcGFnZV9zaXplGAMgASgFEhMKC3BhZ2Vfb2Zmc2V0GAQgASgFImsKFExpc3RGb3JtdWxhc1Jlc3BvbnNlEj4KCGZvcm11bGFzGAEgAygLMiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhRGVmaW5pdGlvbhITCgt0b3RhbF9jb3VudBgCIAEoBSLCAQoUVXBkYXRlRm9ybXVsYVJlcXVlc3QSEgoKZm9ybXVsYV9pZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSDgoGc291cmNlGAUgASgJEhEKCWlzX3B1YmxpYxgGIAEoCBI/CgpwYXJhbWV0ZXJzGAcgAygLMisueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhUGFyYW1ldGVyIlYKFVVwZGF0ZUZvcm11bGFSZXNwb25zZRI9Cgdmb3JtdWxhGAEgASgLMiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhRGVmaW5pdGlvbiI7ChREZWxldGVGb3JtdWxhUmVxdWVzdBISCgpmb3JtdWxhX2lkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkiKAoVRGVsZXRlRm9ybXVsYVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgq8gEKEVNhbmRib3hFeGl0UmVhc29uEiMKH1NBTkRCT1hfRVhJVF9SRUFTT05fVU5TUEVDSUZJRUQQABIfChtTQU5EQk9YX0VYSVRfUkVBU09OX1NVQ0NFU1MQARIfChtTQU5EQk9YX0VYSVRfUkVBU09OX1RJTUVPVVQQAhInCiNTQU5EQk9YX0VYSVRfUkVBU09OX01FTU9SWV9FWENFRURFRBADEiUKIVNBTkRCT1hfRVhJVF9SRUFTT05fUlVOVElNRV9FUlJPUhAEEiYKIlNBTkRCT1hfRVhJVF9SRUFTT05fSU1QT1JUX0JMT0NLRUQQBSqVAQoNUGFyYW1ldGVyVHlwZRIeChpQQVJBTUVURVJfVFlQRV9VTlNQRUNJRklFRBAAEhYKElBBUkFNRVRFUl9UWVBFX0lOVBABEhgKFFBBUkFNRVRFUl9UWVBFX0ZMT0FUEAISFwoTUEFSQU1FVEVSX1RZUEVfQk9PTBADEhkKFVBBUkFNRVRFUl9UWVBFX1NUUklORxAEMrsHChFJbmRpY2F0b3JzU2VydmljZRJ7ChBDb21wdXRlSW5kaWNhdG9yEjIueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Db21wdXRlSW5kaWNhdG9yUmVxdWVzdBozLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuQ29tcHV0ZUluZGljYXRvclJlc3BvbnNlEnUKDkV4ZWN1dGVGb3JtdWxhEjAueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5FeGVjdXRlRm9ybXVsYVJlcXVlc3QaMS54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkV4ZWN1dGVGb3JtdWxhUmVzcG9uc2USdQoOTGlzdEluZGljYXRvcnMSMC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkxpc3RJbmRpY2F0b3JzUmVxdWVzdBoxLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuTGlzdEluZGljYXRvcnNSZXNwb25zZRJ4Cg9SZWdpc3RlckZvcm11bGESMS54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLlJlZ2lzdGVyRm9ybXVsYVJlcXVlc3QaMi54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLlJlZ2lzdGVyRm9ybXVsYVJlc3BvbnNlEmgKCkdldEZvcm11bGESLC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkdldEZvcm11bGFSZXF1ZXN0GiwueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5Gb3JtdWxhRGVmaW5pdGlvbhJvCgxMaXN0Rm9ybXVsYXMSLi54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkxpc3RGb3JtdWxhc1JlcXVlc3QaLy54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkxpc3RGb3JtdWxhc1Jlc3BvbnNlEnIKDVVwZGF0ZUZvcm11bGESLy54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLlVwZGF0ZUZvcm11bGFSZXF1ZXN0GjAueHN0b2Nrc3RyYXQuaW5kaWNhdG9ycy52MS5VcGRhdGVGb3JtdWxhUmVzcG9uc2UScgoNRGVsZXRlRm9ybXVsYRIvLnhzdG9ja3N0cmF0LmluZGljYXRvcnMudjEuRGVsZXRlRm9ybXVsYVJlcXVlc3QaMC54c3RvY2tzdHJhdC5pbmRpY2F0b3JzLnYxLkRlbGV0ZUZvcm11bGFSZXNwb25zZUJEWkJnaXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vaW5kaWNhdG9ycy92MTtpbmRpY2F0b3JzdjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.indicators.v1.ComputeIndicatorRequest
@@ -165,6 +165,13 @@ export type ExecuteFormulaRequest = Message<"xstockstrat.indicators.v1.ExecuteFo
    * @generated from field: int64 memory_bytes_override = 6;
    */
   memoryBytesOverride: bigint;
+
+  /**
+   * parameter VALUES, separate from input_data
+   *
+   * @generated from field: google.protobuf.Struct input_params = 7;
+   */
+  inputParams?: JsonObject | undefined;
 };
 
 /**
@@ -217,6 +224,11 @@ export type ExecuteFormulaResponse = Message<"xstockstrat.indicators.v1.ExecuteF
    * @generated from field: xstockstrat.indicators.v1.SandboxExitReason exit_reason = 8;
    */
   exitReason: SandboxExitReason;
+
+  /**
+   * @generated from field: repeated xstockstrat.indicators.v1.ParameterValidationError parameter_errors = 9;
+   */
+  parameterErrors: ParameterValidationError[];
 };
 
 /**
@@ -225,6 +237,81 @@ export type ExecuteFormulaResponse = Message<"xstockstrat.indicators.v1.ExecuteF
  */
 export const ExecuteFormulaResponseSchema: GenMessage<ExecuteFormulaResponse> = /*@__PURE__*/
   messageDesc(file_indicators_v1_indicators, 4);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.FormulaParameter
+ */
+export type FormulaParameter = Message<"xstockstrat.indicators.v1.FormulaParameter"> & {
+  /**
+   * Python identifier; key in `params`
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: xstockstrat.indicators.v1.ParameterType type = 2;
+   */
+  type: ParameterType;
+
+  /**
+   * @generated from field: google.protobuf.Value default_value = 3;
+   */
+  defaultValue?: Value | undefined;
+
+  /**
+   * @generated from field: string description = 4;
+   */
+  description: string;
+
+  /**
+   * @generated from field: bool required = 5;
+   */
+  required: boolean;
+
+  /**
+   * numeric params only
+   *
+   * @generated from field: optional double min = 6;
+   */
+  min?: number | undefined;
+
+  /**
+   * numeric params only
+   *
+   * @generated from field: optional double max = 7;
+   */
+  max?: number | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.FormulaParameter.
+ * Use `create(FormulaParameterSchema)` to create a new message.
+ */
+export const FormulaParameterSchema: GenMessage<FormulaParameter> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 5);
+
+/**
+ * @generated from message xstockstrat.indicators.v1.ParameterValidationError
+ */
+export type ParameterValidationError = Message<"xstockstrat.indicators.v1.ParameterValidationError"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string reason = 2;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message xstockstrat.indicators.v1.ParameterValidationError.
+ * Use `create(ParameterValidationErrorSchema)` to create a new message.
+ */
+export const ParameterValidationErrorSchema: GenMessage<ParameterValidationError> = /*@__PURE__*/
+  messageDesc(file_indicators_v1_indicators, 6);
 
 /**
  * @generated from message xstockstrat.indicators.v1.FormulaDefinition
@@ -276,6 +363,11 @@ export type FormulaDefinition = Message<"xstockstrat.indicators.v1.FormulaDefini
    * @generated from field: map<string, string> input_schema = 9;
    */
   inputSchema: { [key: string]: string };
+
+  /**
+   * @generated from field: repeated xstockstrat.indicators.v1.FormulaParameter parameters = 10;
+   */
+  parameters: FormulaParameter[];
 };
 
 /**
@@ -283,7 +375,7 @@ export type FormulaDefinition = Message<"xstockstrat.indicators.v1.FormulaDefini
  * Use `create(FormulaDefinitionSchema)` to create a new message.
  */
 export const FormulaDefinitionSchema: GenMessage<FormulaDefinition> = /*@__PURE__*/
-  messageDesc(file_indicators_v1_indicators, 5);
+  messageDesc(file_indicators_v1_indicators, 7);
 
 /**
  * @generated from message xstockstrat.indicators.v1.ListIndicatorsRequest
@@ -296,7 +388,7 @@ export type ListIndicatorsRequest = Message<"xstockstrat.indicators.v1.ListIndic
  * Use `create(ListIndicatorsRequestSchema)` to create a new message.
  */
 export const ListIndicatorsRequestSchema: GenMessage<ListIndicatorsRequest> = /*@__PURE__*/
-  messageDesc(file_indicators_v1_indicators, 6);
+  messageDesc(file_indicators_v1_indicators, 8);
 
 /**
  * @generated from message xstockstrat.indicators.v1.ListIndicatorsResponse
@@ -313,7 +405,7 @@ export type ListIndicatorsResponse = Message<"xstockstrat.indicators.v1.ListIndi
  * Use `create(ListIndicatorsResponseSchema)` to create a new message.
  */
 export const ListIndicatorsResponseSchema: GenMessage<ListIndicatorsResponse> = /*@__PURE__*/
-  messageDesc(file_indicators_v1_indicators, 7);
+  messageDesc(file_indicators_v1_indicators, 9);
 
 /**
  * @generated from message xstockstrat.indicators.v1.IndicatorMeta
@@ -345,7 +437,7 @@ export type IndicatorMeta = Message<"xstockstrat.indicators.v1.IndicatorMeta"> &
  * Use `create(IndicatorMetaSchema)` to create a new message.
  */
 export const IndicatorMetaSchema: GenMessage<IndicatorMeta> = /*@__PURE__*/
-  messageDesc(file_indicators_v1_indicators, 8);
+  messageDesc(file_indicators_v1_indicators, 10);
 
 /**
  * @generated from message xstockstrat.indicators.v1.RegisterFormulaRequest
@@ -382,6 +474,11 @@ export type RegisterFormulaRequest = Message<"xstockstrat.indicators.v1.Register
    * @generated from field: string author = 6;
    */
   author: string;
+
+  /**
+   * @generated from field: repeated xstockstrat.indicators.v1.FormulaParameter parameters = 7;
+   */
+  parameters: FormulaParameter[];
 };
 
 /**
@@ -389,7 +486,7 @@ export type RegisterFormulaRequest = Message<"xstockstrat.indicators.v1.Register
  * Use `create(RegisterFormulaRequestSchema)` to create a new message.
  */
 export const RegisterFormulaRequestSchema: GenMessage<RegisterFormulaRequest> = /*@__PURE__*/
-  messageDesc(file_indicators_v1_indicators, 9);
+  messageDesc(file_indicators_v1_indicators, 11);
 
 /**
  * @generated from message xstockstrat.indicators.v1.RegisterFormulaResponse
@@ -406,7 +503,7 @@ export type RegisterFormulaResponse = Message<"xstockstrat.indicators.v1.Registe
  * Use `create(RegisterFormulaResponseSchema)` to create a new message.
  */
 export const RegisterFormulaResponseSchema: GenMessage<RegisterFormulaResponse> = /*@__PURE__*/
-  messageDesc(file_indicators_v1_indicators, 10);
+  messageDesc(file_indicators_v1_indicators, 12);
 
 /**
  * @generated from message xstockstrat.indicators.v1.GetFormulaRequest
@@ -423,7 +520,7 @@ export type GetFormulaRequest = Message<"xstockstrat.indicators.v1.GetFormulaReq
  * Use `create(GetFormulaRequestSchema)` to create a new message.
  */
 export const GetFormulaRequestSchema: GenMessage<GetFormulaRequest> = /*@__PURE__*/
-  messageDesc(file_indicators_v1_indicators, 11);
+  messageDesc(file_indicators_v1_indicators, 13);
 
 /**
  * @generated from message xstockstrat.indicators.v1.ListFormulasRequest
@@ -463,7 +560,7 @@ export type ListFormulasRequest = Message<"xstockstrat.indicators.v1.ListFormula
  * Use `create(ListFormulasRequestSchema)` to create a new message.
  */
 export const ListFormulasRequestSchema: GenMessage<ListFormulasRequest> = /*@__PURE__*/
-  messageDesc(file_indicators_v1_indicators, 12);
+  messageDesc(file_indicators_v1_indicators, 14);
 
 /**
  * @generated from message xstockstrat.indicators.v1.ListFormulasResponse
@@ -485,7 +582,7 @@ export type ListFormulasResponse = Message<"xstockstrat.indicators.v1.ListFormul
  * Use `create(ListFormulasResponseSchema)` to create a new message.
  */
 export const ListFormulasResponseSchema: GenMessage<ListFormulasResponse> = /*@__PURE__*/
-  messageDesc(file_indicators_v1_indicators, 13);
+  messageDesc(file_indicators_v1_indicators, 15);
 
 /**
  * @generated from message xstockstrat.indicators.v1.UpdateFormulaRequest
@@ -522,6 +619,11 @@ export type UpdateFormulaRequest = Message<"xstockstrat.indicators.v1.UpdateForm
    * @generated from field: bool is_public = 6;
    */
   isPublic: boolean;
+
+  /**
+   * @generated from field: repeated xstockstrat.indicators.v1.FormulaParameter parameters = 7;
+   */
+  parameters: FormulaParameter[];
 };
 
 /**
@@ -529,7 +631,7 @@ export type UpdateFormulaRequest = Message<"xstockstrat.indicators.v1.UpdateForm
  * Use `create(UpdateFormulaRequestSchema)` to create a new message.
  */
 export const UpdateFormulaRequestSchema: GenMessage<UpdateFormulaRequest> = /*@__PURE__*/
-  messageDesc(file_indicators_v1_indicators, 14);
+  messageDesc(file_indicators_v1_indicators, 16);
 
 /**
  * @generated from message xstockstrat.indicators.v1.UpdateFormulaResponse
@@ -546,7 +648,7 @@ export type UpdateFormulaResponse = Message<"xstockstrat.indicators.v1.UpdateFor
  * Use `create(UpdateFormulaResponseSchema)` to create a new message.
  */
 export const UpdateFormulaResponseSchema: GenMessage<UpdateFormulaResponse> = /*@__PURE__*/
-  messageDesc(file_indicators_v1_indicators, 15);
+  messageDesc(file_indicators_v1_indicators, 17);
 
 /**
  * @generated from message xstockstrat.indicators.v1.DeleteFormulaRequest
@@ -570,7 +672,7 @@ export type DeleteFormulaRequest = Message<"xstockstrat.indicators.v1.DeleteForm
  * Use `create(DeleteFormulaRequestSchema)` to create a new message.
  */
 export const DeleteFormulaRequestSchema: GenMessage<DeleteFormulaRequest> = /*@__PURE__*/
-  messageDesc(file_indicators_v1_indicators, 16);
+  messageDesc(file_indicators_v1_indicators, 18);
 
 /**
  * @generated from message xstockstrat.indicators.v1.DeleteFormulaResponse
@@ -587,7 +689,7 @@ export type DeleteFormulaResponse = Message<"xstockstrat.indicators.v1.DeleteFor
  * Use `create(DeleteFormulaResponseSchema)` to create a new message.
  */
 export const DeleteFormulaResponseSchema: GenMessage<DeleteFormulaResponse> = /*@__PURE__*/
-  messageDesc(file_indicators_v1_indicators, 17);
+  messageDesc(file_indicators_v1_indicators, 19);
 
 /**
  * @generated from enum xstockstrat.indicators.v1.SandboxExitReason
@@ -629,6 +731,42 @@ export enum SandboxExitReason {
  */
 export const SandboxExitReasonSchema: GenEnum<SandboxExitReason> = /*@__PURE__*/
   enumDesc(file_indicators_v1_indicators, 0);
+
+/**
+ * @generated from enum xstockstrat.indicators.v1.ParameterType
+ */
+export enum ParameterType {
+  /**
+   * @generated from enum value: PARAMETER_TYPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: PARAMETER_TYPE_INT = 1;
+   */
+  INT = 1,
+
+  /**
+   * @generated from enum value: PARAMETER_TYPE_FLOAT = 2;
+   */
+  FLOAT = 2,
+
+  /**
+   * @generated from enum value: PARAMETER_TYPE_BOOL = 3;
+   */
+  BOOL = 3,
+
+  /**
+   * @generated from enum value: PARAMETER_TYPE_STRING = 4;
+   */
+  STRING = 4,
+}
+
+/**
+ * Describes the enum xstockstrat.indicators.v1.ParameterType.
+ */
+export const ParameterTypeSchema: GenEnum<ParameterType> = /*@__PURE__*/
+  enumDesc(file_indicators_v1_indicators, 1);
 
 /**
  * IndicatorsService — formula engine and sandboxed Python execution.

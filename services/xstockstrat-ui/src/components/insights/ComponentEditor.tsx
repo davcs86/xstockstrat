@@ -11,11 +11,13 @@ import {
 } from '@/components/ui/select';
 import { useFormulas } from '@/hooks/useFormulas';
 import { ComponentKind } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { ParameterType } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import {
-  BUILTIN_INDICATORS,
-  defaultParamsFor,
-  findIndicator,
-} from '@/lib/strategyCatalog';
+  isNumericType,
+  paramDefaultNumber,
+  paramDefaultRaw,
+} from '@/components/insights/ParameterEditor';
+import { BUILTIN_INDICATORS, defaultParamsFor, findIndicator } from '@/lib/strategyCatalog';
 
 // Editable draft mirroring StrategyComponent's field names so it assigns directly
 // to the proto init shape when the wizard submits.
@@ -48,11 +50,24 @@ export function ComponentEditor({ value, onChange, onRemove }: ComponentEditorPr
   const formulas = formulasData?.formulas ?? [];
 
   const indicator = findIndicator(value.indicator);
+  const selectedFormula = formulas.find((f) => f.formulaId === value.formulaId);
 
   function selectIndicator(name: string) {
     // Pre-fill the chosen indicator's parameters with their defaults so operators
     // only ever tune known, available knobs — never invent param keys.
     onChange({ ...value, indicator: name, params: defaultParamsFor(name) });
+  }
+
+  function selectFormula(formulaId: string) {
+    // Pre-fill the formula's numeric parameters with their declared defaults so
+    // each strategy component carries known, typed knobs. bool/string params are
+    // not settable per component (FR-5) and are shown read-only below.
+    const f = formulas.find((x) => x.formulaId === formulaId);
+    const params: Record<string, number> = {};
+    for (const p of f?.parameters ?? []) {
+      if (isNumericType(p.type)) params[p.name] = paramDefaultNumber(p) ?? 0;
+    }
+    onChange({ ...value, formulaId, params });
   }
 
   function setParam(key: string, raw: string) {
@@ -70,14 +85,18 @@ export function ComponentEditor({ value, onChange, onRemove }: ComponentEditorPr
           onChange={(e) => onChange({ ...value, refName: e.target.value })}
         />
         <Select
-          value={String(value.kind === ComponentKind.UNSPECIFIED ? ComponentKind.BUILTIN_INDICATOR : value.kind)}
+          value={String(
+            value.kind === ComponentKind.UNSPECIFIED ? ComponentKind.BUILTIN_INDICATOR : value.kind,
+          )}
           onValueChange={(v) => onChange({ ...value, kind: Number(v) as ComponentKind })}
         >
           <SelectTrigger className="w-52" aria-label="component kind">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={String(ComponentKind.BUILTIN_INDICATOR)}>Builtin indicator</SelectItem>
+            <SelectItem value={String(ComponentKind.BUILTIN_INDICATOR)}>
+              Builtin indicator
+            </SelectItem>
             <SelectItem value={String(ComponentKind.CUSTOM_FORMULA)}>Custom formula</SelectItem>
           </SelectContent>
         </Select>
@@ -87,19 +106,53 @@ export function ComponentEditor({ value, onChange, onRemove }: ComponentEditorPr
       </div>
 
       {value.kind === ComponentKind.CUSTOM_FORMULA ? (
-        <div className="space-y-1">
+        <div className="space-y-2">
           <Combobox
             aria-label="formula"
             placeholder="Select a formula…"
             emptyText="No matching formulas"
             value={value.formulaId}
-            onChange={(formulaId) => onChange({ ...value, formulaId })}
+            onChange={selectFormula}
             options={formulas.map((f) => ({
               value: f.formulaId,
               label: f.name,
               hint: f.formulaId,
             }))}
           />
+
+          {selectedFormula && selectedFormula.parameters.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Parameters</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {selectedFormula.parameters.map((p) =>
+                  isNumericType(p.type) ? (
+                    <div key={p.name}>
+                      <label className="mb-1 block text-xs text-muted-foreground">{p.name}</label>
+                      <Input
+                        aria-label={`param ${p.name}`}
+                        type="number"
+                        value={value.params[p.name] ?? paramDefaultNumber(p) ?? 0}
+                        onChange={(e) => setParam(p.name, e.target.value)}
+                      />
+                    </div>
+                  ) : (
+                    <div key={p.name}>
+                      <label className="mb-1 block text-xs text-muted-foreground">{p.name}</label>
+                      <Input
+                        aria-label={`param ${p.name} (read-only)`}
+                        disabled
+                        value={paramDefaultRaw(p)}
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        {p.type === ParameterType.BOOL ? 'bool' : 'string'} — not settable per
+                        strategy component
+                      </p>
+                    </div>
+                  ),
+                )}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-2">

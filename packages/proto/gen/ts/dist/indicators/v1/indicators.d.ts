@@ -14,6 +14,17 @@ export declare enum SandboxExitReason {
 export declare function sandboxExitReasonFromJSON(object: any): SandboxExitReason;
 export declare function sandboxExitReasonToJSON(object: SandboxExitReason): string;
 export declare function sandboxExitReasonToNumber(object: SandboxExitReason): number;
+export declare enum ParameterType {
+    PARAMETER_TYPE_UNSPECIFIED = "PARAMETER_TYPE_UNSPECIFIED",
+    PARAMETER_TYPE_INT = "PARAMETER_TYPE_INT",
+    PARAMETER_TYPE_FLOAT = "PARAMETER_TYPE_FLOAT",
+    PARAMETER_TYPE_BOOL = "PARAMETER_TYPE_BOOL",
+    PARAMETER_TYPE_STRING = "PARAMETER_TYPE_STRING",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function parameterTypeFromJSON(object: any): ParameterType;
+export declare function parameterTypeToJSON(object: ParameterType): string;
+export declare function parameterTypeToNumber(object: ParameterType): number;
 export interface ComputeIndicatorRequest {
     /** "SMA", "EMA", "RSI", "MACD", "BB", "ATR", "VWAP" */
     indicator: string;
@@ -71,6 +82,10 @@ export interface ExecuteFormulaRequest {
     timeoutMsOverride: number;
     /** 0 = use config value */
     memoryBytesOverride: number;
+    /** parameter VALUES, separate from input_data */
+    inputParams?: {
+        [key: string]: any;
+    } | undefined;
 }
 export interface ExecuteFormulaRequest_EnvEntry {
     key: string;
@@ -87,6 +102,23 @@ export interface ExecuteFormulaResponse {
     memoryUsedBytes: number;
     error: string;
     exitReason: SandboxExitReason;
+    parameterErrors: ParameterValidationError[];
+}
+export interface FormulaParameter {
+    /** Python identifier; key in `params` */
+    name: string;
+    type: ParameterType;
+    defaultValue?: any | undefined;
+    description: string;
+    required: boolean;
+    /** numeric params only */
+    min?: number | undefined;
+    /** numeric params only */
+    max?: number | undefined;
+}
+export interface ParameterValidationError {
+    name: string;
+    reason: string;
 }
 export interface FormulaDefinition {
     formulaId: string;
@@ -101,6 +133,7 @@ export interface FormulaDefinition {
     inputSchema: {
         [key: string]: string;
     };
+    parameters: FormulaParameter[];
 }
 export interface FormulaDefinition_InputSchemaEntry {
     key: string;
@@ -127,6 +160,7 @@ export interface RegisterFormulaRequest {
     };
     /** set by BFF from JWT claims; stored immutably */
     author: string;
+    parameters: FormulaParameter[];
 }
 export interface RegisterFormulaRequest_InputSchemaEntry {
     key: string;
@@ -160,6 +194,7 @@ export interface UpdateFormulaRequest {
     description: string;
     source: string;
     isPublic: boolean;
+    parameters: FormulaParameter[];
 }
 export interface UpdateFormulaResponse {
     formula?: FormulaDefinition | undefined;
@@ -181,6 +216,8 @@ export declare const IndicatorPoint_ExtraEntry: MessageFns<IndicatorPoint_ExtraE
 export declare const ExecuteFormulaRequest: MessageFns<ExecuteFormulaRequest>;
 export declare const ExecuteFormulaRequest_EnvEntry: MessageFns<ExecuteFormulaRequest_EnvEntry>;
 export declare const ExecuteFormulaResponse: MessageFns<ExecuteFormulaResponse>;
+export declare const FormulaParameter: MessageFns<FormulaParameter>;
+export declare const ParameterValidationError: MessageFns<ParameterValidationError>;
 export declare const FormulaDefinition: MessageFns<FormulaDefinition>;
 export declare const FormulaDefinition_InputSchemaEntry: MessageFns<FormulaDefinition_InputSchemaEntry>;
 export declare const ListIndicatorsRequest: MessageFns<ListIndicatorsRequest>;

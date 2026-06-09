@@ -141,4 +141,126 @@
     match Step 13.
   - Files correctly marked "create" (verified absent): `app/services/parameters.py`,
     `tests/test_parameters.py`, `ParameterEditor.tsx`. All other referenced files exist.
+
+## Session 2026-06-08 — sdd-execute (sequential)
+
+- Mode: SEQUENTIAL, single feature (052). User directive: run all 14 steps but **open only the
+  final integration PR** (no per-step PRs). Per the harness, all work lands on the pre-assigned
+  branch `claude/sdd-execute-formula-params-gy0lgo` (fast-forwarded to `origin/main-dev` at start —
+  it had been based on `main`/the promote commit and lacked the feature dir). Final PR target: `main-dev`.
+- Tooling: `buf`/`migrate` absent on host; Docker present but Docker Hub pulls are rate-limited (429).
+  Verification uses sequential-mode CI-equivalent fallbacks (see Deviation Log).
+
+### Step 1 — proto: FormulaParameter, ParameterType, input_params, parameter_errors [done]
+- Added `ParameterType` enum, `FormulaParameter` + `ParameterValidationError` messages; appended
+  `ExecuteFormulaRequest.input_params=7`, `ExecuteFormulaResponse.parameter_errors=9`,
+  `FormulaDefinition.parameters=10`, `RegisterFormulaRequest.parameters=7`,
+  `UpdateFormulaRequest.parameters=7`. No existing field removed/renumbered; `input_schema` retained.
+- Verification: `buf lint` PASS; `buf breaking` against `origin/main-dev` PASS and against
+  `origin/main` (production baseline, AC #7) PASS — all additive.
+- Files modified: `packages/proto/indicators/v1/indicators.proto`
+- Deviations: none for Step 1 (buf installed on host since the Docker codegen container was blocked).
+
+### Step 2 — proto-gen: Regenerate Go/Python/TS stubs [done]
+- Regenerated Go/Python/TS stubs via `./scripts/buf-gen.sh` on the host (codegen container blocked by
+  Docker Hub 429). New symbols verified present in all three languages (`FormulaParameter`,
+  `ParameterType`, `parameterErrors`/`parameter_errors`, `input_params`, `FormulaDefinition.parameters`).
+  Diff scoped to the indicators service only; `buf-gen.sh` is idempotent (CI freshness check parity).
+- Files modified (generated): `packages/proto/gen/{go,python,ts}/indicators/v1/`, `gen/ts/dist/`.
+- Deviations: Step 2 toolchain host-install fallback — full detail in Deviation Log.
+
+### Step 3 — migration: Add parameters JSONB column to indicators.formulas [done]
+- Created `002_formula_parameters.{up,down}.sql` (add/drop `parameters JSONB NOT NULL DEFAULT '[]'`).
+- Verification: applied 001 + 002 up against a throwaway `postgres:16` container; `\d` confirmed
+  `parameters | jsonb | not null | '[]'::jsonb`; 002 down dropped it cleanly (reversibility proven).
+- Files created: `services/xstockstrat-indicators/migrations/002_formula_parameters.up.sql`, `.down.sql`
+- Deviations: migrate/DB unavailable → postgres:16 container fallback (Deviation Log).
+
+### Steps 4–8 — indicators service (repository, validation engine, sandbox, servicer, tests) [done]
+- Step 4: `formulas_repository.py` — `_to_dict` decodes the new `parameters` JSONB to a list;
+  `create`/`update` take a `parameters` arg and bind it as `$8::jsonb` / `parameters = $6::jsonb`.
+- Step 5: new `app/services/parameters.py` — `validate_definitions` (identifier/uniqueness/type/
+  min-max/32-cap checks, raises `ValueError`) and `resolve_and_validate` (defaulting, type coercion,
+  range + unknown/missing-required checks; returns `(resolved, errors)` without raising).
+- Step 6: `sandbox.py` — `execute_formula` gains a `params` arg; the wrapper loads `params` as a
+  SEPARATE global (`json.loads(...)`), never merged into `data`.
+- Step 7: `servicer.py` — validates `input_params` before the sandbox and short-circuits to
+  `parameter_errors` on failure; validates definitions on Register/Update; persists parameters;
+  `_row_to_formula` reconstructs `FormulaParameter` protos via `ParseDict`. Write side converts
+  protos→dicts via `MessageToDict` (Deviation Log) so the repo's `json.dumps` works.
+- Step 8: added `tests/test_parameters.py`; extended `test_sandbox.py` (params separate from data)
+  and `test_formulas.py` (parameters round-trip + ExecuteFormula parameter_errors).
+- Verification: `ruff check` + `ruff format --check` clean; `pytest --cov=app --cov-fail-under=50`
+  → 57 passed, 83% coverage.
+- Files: `app/services/formulas_repository.py`, `app/services/parameters.py` (new),
+  `app/services/sandbox.py`, `app/handlers/servicer.py`, `tests/test_parameters.py` (new),
+  `tests/test_sandbox.py`, `tests/test_formulas.py`.
+- Deviations: Step 7 proto→dict serialization (Deviation Log).
+
+### Steps 9–10 — analysis evaluator forwards input_params [done]
+- Step 9: `evaluator.py` CUSTOM_FORMULA branch builds a `params_struct` from numeric `comp.params`
+  and passes it as `input_params` on `ExecuteFormulaRequest`; series stays in `input_data`. No
+  `analysis.proto` change; existing `metadata=self._meta` propagation reused.
+- Step 10: added `test_formula_component_forwards_input_params` asserting the request carries
+  `input_params["period"] == 14.0` and `input_data` still carries `close`.
+- Verification: `ruff check`/`ruff format --check` clean; `pytest --cov=app --cov-fail-under=40`
+  → 92 passed, 58.6% coverage.
+- Files: `services/xstockstrat-analysis/app/services/evaluator.py`,
+  `services/xstockstrat-analysis/tests/test_strategy_evaluator.py`.
+- Deviations: none.
+
+### Steps 11–12 — agent carries parameter definitions through manage_formula [done]
+- Step 11: `tools.py` `manage_formula` gains a `parameters: list[dict] | None` arg (documented) and
+  threads `parameters or []` into the `formula` dict. `client.py` `manage_formula` maps each
+  parameter dict to a `FormulaParameter` proto (type-string→enum, default→`Value`, min/max when
+  present) and passes `parameters=[...]` to both `RegisterFormulaRequest` and `UpdateFormulaRequest`.
+  `manage_strategy` already carries numeric `StrategyComponent.params` — no change (FR-6).
+- Step 12: `test_tools.py` asserts the tool forwards the `parameters` list into the `formula` dict;
+  `test_client.py` asserts the mapped `RegisterFormulaRequest.parameters[0]` (name/type/required/
+  default/min/max).
+- Verification: `ruff check`/`ruff format --check` clean; `pytest --cov=app --cov-fail-under=40`
+  → 57 passed, 64.4% coverage.
+- Files: `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/app/tools.py`,
+  `services/xstockstrat-agent/tests/test_tools.py`, `services/xstockstrat-agent/tests/test_client.py`.
+- Deviations: none.
+
+### Step 13 — UI parameter-definition and parameter-value forms [done]
+- New `ParameterEditor.tsx`: add/edit/reorder/remove typed parameter definitions (Select over
+  int/float/bool/string; min/max only for numeric); exports `ParameterDraft`/`FormulaParameterInit`
+  plus `toParameterInit`/`draftFromProto`/`paramDefaultNumber`/`paramDefaultRaw`/`isNumericType`.
+- `FormulaWorkspace.tsx`: parameter-definitions cell threaded into `onSave` (value shape gains
+  `parameters`); Run cell renders a generated typed `params` form (pre-filled with defaults) sent as
+  `inputParams` alongside the unchanged `inputData` JSON; surfaces `result.parameterErrors`.
+- `useFormulas.ts`: register/update pass `parameters`; `useExecuteFormula` adds `inputParams`.
+- `ComponentEditor.tsx`: CUSTOM_FORMULA branch reads `selectedFormula.parameters`, renders numeric
+  params bound to `value.params` (pre-filled with defaults on selection), and shows bool/string
+  read-only with "not settable per strategy component" (FR-5). Builtin path unchanged.
+- `[id]/page.tsx`: passes `initialParameters={formula.parameters}`. `new/page.tsx` needed no change
+  (the `onSave` values flow through the spread).
+- Verification: `pnpm exec tsc --noEmit` (exit 0) + `pnpm run lint` (clean) + `prettier --check`
+  (clean). Playwright e2e fallback applied — browsers unavailable (Deviation Log).
+- Files: `ParameterEditor.tsx` (new), `FormulaWorkspace.tsx`, `useFormulas.ts`, `ComponentEditor.tsx`,
+  `src/app/insights/formulas/[id]/page.tsx`.
+- Deviations: e2e → tsc+lint fallback (Deviation Log).
+
+### Step 14 — docs: parameter soft-cap + service CLAUDE.md notes [done]
+- `services/xstockstrat-indicators/CLAUDE.md`: documented the `parameters` JSONB column, the `params`
+  sandbox variable (separate from `data`), `input_params`, structured `parameter_errors`, definition
+  validation, and the engine-enforced 32-parameter soft cap (no new config key).
+- `docs/runbooks/indicator-builder.md`: added a "Typed Parameters" section (declare params, read
+  `params["<name>"]` vs. series in `data`, validation/`parameter_errors`, the 32 cap, and the numeric-
+  only strategy-component note).
+- Verification: manual read-through; consistent with Steps 3/5/6. No automated gate.
+- Files: `services/xstockstrat-indicators/CLAUDE.md`, `docs/runbooks/indicator-builder.md`.
+- Deviations: none.
+
+## Session 2026-06-08 — sdd-execute (sequential) — COMPLETE
+**Steps this session**: 1–14 (all)
+**Progress**: 14 done / 14 total → feature `code-completed`
+**Stopped at**: all complete
+**Next**: integration PR `claude/sdd-execute-formula-params-gy0lgo` → `main-dev`
+**Verification recap**: buf lint/breaking (vs main-dev & main) PASS; migration up/down on postgres:16;
+indicators `pytest` 57 passed / 83% cov; analysis 92 passed / 58.6%; agent 57 passed / 64.4%; UI
+`tsc --noEmit` + `next lint` + `prettier --check` clean. CI-equivalent fallbacks (host codegen
+toolchain, postgres:16 migration check, tsc+lint for UI e2e) logged in the Deviation Log.
 - Reviewers snapshot in feature.md is unchanged (reviewer-registry.md unchanged).

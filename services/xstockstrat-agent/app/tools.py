@@ -291,6 +291,7 @@ def register_tools(server: FastMCP) -> None:
         author: str = "",
         formula_author_user_id: str = "",
         admin_api_key: str = "",
+        parameters: list[dict] | None = None,
     ) -> dict:
         """Register/update/delete a custom formula in xstockstrat-indicators (admin-scoped).
         operation: 'register' | 'update' | 'delete'.
@@ -299,7 +300,11 @@ def register_tools(server: FastMCP) -> None:
         formula_id: required for update/delete.
         formula_author_user_id: required for update/delete; must match the formula's original
             author (the indicators backend returns PERMISSION_DENIED otherwise).
-        admin_api_key: required; validated by the indicators backend."""
+        admin_api_key: required; validated by the indicators backend.
+        parameters: typed parameter definitions for register/update — a list of
+            {name, type, default, description, required, min, max} where type is one of
+            'int'|'float'|'bool'|'string' and min/max apply to numeric params only. Values
+            are read inside the formula via params["<name>"]."""
         formula: dict = {
             "formula_id": formula_id,
             "user_id": formula_author_user_id,
@@ -308,6 +313,7 @@ def register_tools(server: FastMCP) -> None:
             "source": source,
             "is_public": is_public,
             "author": author,
+            "parameters": parameters or [],
         }
         try:
             return await client.manage_formula(
