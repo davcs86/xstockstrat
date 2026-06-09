@@ -1,0 +1,115 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus / Mimir",
+      "description": "Grafana Cloud Prometheus (metrics) datasource",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    },
+    {
+      "name": "DS_LOKI",
+      "label": "Loki",
+      "description": "Grafana Cloud Loki (logs) datasource",
+      "type": "datasource",
+      "pluginId": "loki",
+      "pluginName": "Loki"
+    }
+  ],
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "tags": ["xstockstrat", "phase7", "signal-pipeline"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "label": "Prometheus / Mimir"
+      },
+      {
+        "name": "DS_LOKI",
+        "type": "datasource",
+        "query": "loki",
+        "current": {},
+        "hide": 0,
+        "label": "Loki"
+      }
+    ]
+  },
+  "time": { "from": "now-24h", "to": "now" },
+  "title": "xstockstrat — Signal Pipeline Throughput",
+  "uid": "xstk-signal-pipeline",
+  "panels": [
+    {
+      "title": "Signals ingested per hour",
+      "description": "Counted from xstockstrat-ingest emitting the ingest.signal.ingested ledger event / log line on each IngestSignal.",
+      "type": "timeseries",
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (source) (count_over_time({service_name=\"ingest\"} |= \"signal.ingested\" | json [1h]))",
+          "legendFormat": "{{source}}"
+        }
+      ]
+    },
+    {
+      "title": "Total signals ingested (1h)",
+      "type": "stat",
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({service_name=\"ingest\"} |= \"signal.ingested\" [1h]))",
+          "legendFormat": "signals"
+        }
+      ]
+    },
+    {
+      "title": "Analysis scoring latency (P99 ms)",
+      "description": "P99 of RunBacktest / ScoreStrategy gRPC handler duration on xstockstrat-analysis.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (le, rpc_method) (rate(rpc_server_duration_milliseconds_bucket{service_name=\"analysis\"}[5m])))",
+          "legendFormat": "{{rpc_method}}"
+        }
+      ]
+    },
+    {
+      "title": "Agent scheduler run duration & success",
+      "description": "Derived from xstockstrat-agent scheduler log lines (feature 010). Success vs failure run counts over 5m.",
+      "type": "timeseries",
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({service_name=\"agent\"} |= \"scheduler\" |= \"run.completed\" [5m]))",
+          "legendFormat": "completed"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(count_over_time({service_name=\"agent\"} |= \"scheduler\" |= \"run.failed\" [5m]))",
+          "legendFormat": "failed"
+        }
+      ]
+    }
+  ]
+}

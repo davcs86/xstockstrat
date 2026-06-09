@@ -1,6 +1,8 @@
 # Grafana Cloud & OpenTelemetry Setup
 
-This runbook walks through creating a Grafana Cloud account and wiring the xstockstrat platform's OpenTelemetry (OTEL) telemetry pipeline into it. All 13 services emit traces, metrics, and logs via OTLP. In local dev, an `otel-collector` Docker container aggregates and forwards signals. In production (DO App Platform), services push OTLP directly to Grafana Cloud.
+This runbook walks through creating a Grafana Cloud account and wiring the xstockstrat platform's OpenTelemetry (OTEL) telemetry pipeline into it. Every deployable workload — the eleven backend/UI services plus the `xstockstrat-agent` MCP server — emits traces, metrics, and logs via OTLP. In local dev, an `otel-collector` Docker container aggregates and forwards signals. In production (DO App Platform), services push OTLP directly to Grafana Cloud.
+
+The four V1 dashboards and the alert rules are checked into the repo as the reproducible source of truth — see `packages/otel/dashboards/` and `packages/otel/alerts/`. Steps 6 and 7 below explain how to import them.
 
 ---
 
@@ -136,7 +138,7 @@ Expected output:
 
 ## Step 4 — Production Setup (DO App Platform)
 
-In production there is no collector container — each service pushes OTLP **directly** to Grafana Cloud. Set these environment variables on all 13 services via the DO App Platform console or `doctl`:
+In production there is no collector container — each service pushes OTLP **directly** to Grafana Cloud. These variables are declared once at the **global `envs:` level** in `.do/app.yaml` / `.do/app.dev.yaml` and inherited by every component (each component sets its own `SERVICE_NAME`). Set the values via the DO App Platform console or `doctl`:
 
 ```
 OTEL_ENABLED=true
@@ -192,103 +194,63 @@ After starting the stack (dev) or deploying to DO (prod):
 
 ---
 
-## Step 6 — Recommended Dashboards
+## Step 6 — Dashboards (checked into the repo)
 
-Create these dashboards in Grafana Cloud (Dashboards → New → New Dashboard):
+The four V1 dashboards are version-controlled JSON under **`packages/otel/dashboards/`** — that
+directory is the source of truth, not the Grafana UI. See its `README.md` for the panel/metric
+assumptions.
 
-### Dashboard 1: Service Health Overview
+| File | Dashboard | Covers |
+|---|---|---|
+| `service-health.json` | Service Health | gRPC request rate, error rate, P99 latency, and log error volume — one series per service |
+| `signal-pipeline-throughput.json` | Signal Pipeline Throughput | signals ingested/hour, analysis scoring latency, agent scheduler run duration & success |
+| `trading-service.json` | Trading Service | order submission rate, PlaceOrder latency, fills/5m, trading error logs |
+| `infrastructure.json` | Infrastructure | gRPC connection errors, DB connection error logs, services-reporting count, OTLP export errors |
 
-Panels:
+**Import (UI):** Grafana → Dashboards → New → **Import** → upload the JSON → select your
+Prometheus/Mimir and Loki datasources when prompted (each dashboard declares them as
+`__inputs`).
 
-| Panel | Query |
-|---|---|
-| Services Up | Count of services with traces in last 5 min, grouped by `service.name` |
-| Request Rate | `rate(http_server_request_duration_count[1m])` by service |
-| Error Rate (%) | `rate(errors_total[1m]) / rate(requests_total[1m]) * 100` |
-| p99 Latency | `histogram_quantile(0.99, rate(http_server_request_duration_bucket[5m]))` |
+**Import (file-based provisioning):** point a Grafana dashboard provider at
+`packages/otel/dashboards/`; the `${DS_PROMETHEUS}` / `${DS_LOKI}` template variables resolve to
+the provisioned datasource UIDs.
 
-### Dashboard 2: Order Flow Traces
+> V1 ships **metrics + logs** dashboards. Distributed-trace visualization (Tempo) is out of
+> scope for V1 — traces are still collected and can be explored ad hoc via Tempo Search.
 
-Use Tempo's **Trace to logs** and **Trace to metrics** features:
-
-- Search for `root.name = "PlaceOrder"` in Tempo
-- Enable trace correlation in Loki and Prometheus datasources
-- Shows the full span tree: trading → portfolio → indicators → ledger
-
-### Dashboard 3: Market Data & Alpaca
-
-| Panel | Description |
-|---|---|
-| OHLCV Ingestion Rate | Bars stored per minute by symbol |
-| Alpaca Stream Reconnects | Count of WebSocket reconnect events from xstockstrat-marketdata |
-| Backfill Job Duration | Histogram of historical backfill durations |
-| Quote Tick Rate | Quotes received per second from Alpaca stream |
-
-### Dashboard 4: Config Change Audit
-
-Query Loki for config change events:
+### Ad-hoc Loki/Tempo queries (supplementary)
 
 ```logql
+# Config change audit
 {service_name="config"} |= "SetConfig" | json | line_format "{{.namespace}}.{{.key}} = {{.value}} by {{.author}}"
 ```
 
-### Dashboard 5: WatchConfig Stream Health
-
-| Panel | Description |
-|---|---|
-| Active Subscribers | Count of open WatchConfig gRPC streams on config |
-| Config Delta Broadcast Latency | Time from DB `pg_notify` to subscriber delivery |
-| Reconnect Events | Count of subscriber reconnections (indicates instability) |
+```traceql
+# Full order-flow span tree: trading → portfolio → indicators → ledger
+{ name = "PlaceOrder" }
+```
 
 ---
 
-## Step 7 — Recommended Alert Rules
+## Step 7 — Alert Rules (checked into the repo)
 
-Create these in Grafana Cloud → **Alerting → Alert Rules → New alert rule**:
+The alert rules are version-controlled under **`packages/otel/alerts/`** as Grafana
+unified-alerting provisioning files. See its `README.md` for datasource-UID substitution and
+notification routing.
 
-### Alert: Service Down
+| File | Contents |
+|---|---|
+| `alert-rules.yaml` | `xstk-error-rate-high` (>1% errors, 5m), `xstk-p99-latency-high` (P99 >2s, 3m), `xstk-analysis-no-scoring` (no scoring events 30m) |
+| `mute-timings.yaml` | `outside-us-market-hours` mute timing for the no-scoring alert |
 
-```promql
-# Trigger when no OTLP data received from a service for > 2 minutes
-absent(rate(http_server_request_duration_count{job=~"xstockstrat-.*"}[2m]))
-```
+**Apply:** substitute `${DS_PROMETHEUS_UID}` / `${DS_LOKI_UID}` with your datasource UIDs, then
+provision the files (self-hosted) or recreate the rules via Alerting → Alert rules → **Import**
+(Grafana Cloud). Attach the `outside-us-market-hours` mute timing to the notification policy
+matching `mute_outside_market_hours = "true"` so the analysis no-scoring alert only pages during
+the US session.
 
-Severity: **Critical** | Notification: Slack/PagerDuty
-
-### Alert: Trading Service Error Rate High
-
-```promql
-rate(errors_total{service_name="trading"}[5m]) /
-rate(requests_total{service_name="trading"}[5m]) > 0.05
-```
-
-Severity: **Critical** (> 5% error rate on order execution)
-
-### Alert: Alpaca Stream Reconnect Loop
-
-```promql
-increase(alpaca_stream_reconnect_total{service_name="marketdata"}[5m]) > 3
-```
-
-Severity: **Warning** — indicates Alpaca WebSocket instability
-
-### Alert: Maintenance Mode Enabled
-
-Query Loki for config change event:
-
-```logql
-count_over_time({service_name="config"} |= "platform.maintenance_mode" |= "true" [1m]) > 0
-```
-
-Severity: **Warning** — all trading halted when this key is set
-
-### Alert: Ledger Write Failures
-
-```promql
-rate(errors_total{service_name="ledger"}[5m]) > 0
-```
-
-Severity: **Critical** — ledger is append-only; write failures mean audit trail gaps
+Routing (contact points + notification policies) is left to each environment — route to email or
+to Slack via feature `020-notify-external-fanout`.
 
 ---
 
@@ -308,7 +270,8 @@ Use these exact service names when querying by `service.name` or `service_name` 
 | xstockstrat-identity | `identity` |
 | xstockstrat-notify | `notify` |
 | xstockstrat-config | `config` |
-| xstockstrat-ui | `ui` |
+| xstockstrat-ui | `xstockstrat-ui` |
+| xstockstrat-agent | `agent` |
 | otel-collector | `otel-collector` (local dev only) |
 
 ---

@@ -1,0 +1,113 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus / Mimir",
+      "description": "Grafana Cloud Prometheus (metrics) datasource",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    },
+    {
+      "name": "DS_LOKI",
+      "label": "Loki",
+      "description": "Grafana Cloud Loki (logs) datasource",
+      "type": "datasource",
+      "pluginId": "loki",
+      "pluginName": "Loki"
+    }
+  ],
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "tags": ["xstockstrat", "phase7", "trading"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "label": "Prometheus / Mimir"
+      },
+      {
+        "name": "DS_LOKI",
+        "type": "datasource",
+        "query": "loki",
+        "current": {},
+        "hide": 0,
+        "label": "Loki"
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "xstockstrat — Trading Service",
+  "uid": "xstk-trading-service",
+  "panels": [
+    {
+      "title": "Order submission rate (PlaceOrder req/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (rpc_grpc_status_code) (rate(rpc_server_duration_milliseconds_count{service_name=\"trading\", rpc_method=\"PlaceOrder\"}[5m]))",
+          "legendFormat": "status {{rpc_grpc_status_code}}"
+        }
+      ]
+    },
+    {
+      "title": "PlaceOrder latency (P50 / P99 ms)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(rpc_server_duration_milliseconds_bucket{service_name=\"trading\", rpc_method=\"PlaceOrder\"}[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(rpc_server_duration_milliseconds_bucket{service_name=\"trading\", rpc_method=\"PlaceOrder\"}[5m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "title": "Order fills per 5m (order.filled ledger events)",
+      "description": "Counted from xstockstrat-trading ledger lifecycle log lines.",
+      "type": "timeseries",
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({service_name=\"trading\"} |= \"order.filled\" [5m]))",
+          "legendFormat": "fills"
+        }
+      ]
+    },
+    {
+      "title": "Trading error logs (rate)",
+      "description": "Bracket/order rejection and risk-check failures surface as error-level logs. Inspect lines to distinguish bracket-order failures.",
+      "type": "timeseries",
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate({service_name=\"trading\"} | json | level=~\"error|ERROR\" [5m]))",
+          "legendFormat": "errors/s"
+        }
+      ]
+    }
+  ]
+}
