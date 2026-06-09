@@ -276,3 +276,51 @@ func TestPositionSyncPayload_FallsBackToDefault(t *testing.T) {
 		t.Errorf("resolveSyncUserID (legacy): got %q, want %q", got, "default")
 	}
 }
+
+// dayPnL mirrors the day-P&L derivation in ListPortfolios: equity vs. previous
+// close, guarding the percentage against a zero LastEquity divisor.
+func dayPnL(bal balanceSyncPayload) (pnl, pct float64) {
+	pnl = bal.Equity - bal.LastEquity
+	if bal.LastEquity > 0 {
+		pct = pnl / bal.LastEquity
+	}
+	return pnl, pct
+}
+
+func TestBalanceSyncPayload_ParsesAndDerivesDayPnL(t *testing.T) {
+	raw := `{
+		"account_id": "acct-123",
+		"user_id": "user-abc",
+		"trading_mode": "TRADING_MODE_PAPER",
+		"cash": 1000.50,
+		"buying_power": 4000,
+		"equity": 2500,
+		"last_equity": 2400
+	}`
+	var bal balanceSyncPayload
+	if err := json.Unmarshal([]byte(raw), &bal); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if bal.Cash != 1000.50 || bal.BuyingPower != 4000 || bal.Equity != 2500 {
+		t.Errorf("balance fields parsed wrong: %+v", bal)
+	}
+	pnl, pct := dayPnL(bal)
+	if pnl != 100 {
+		t.Errorf("dayPnL: got %v, want 100", pnl)
+	}
+	if math.Abs(pct-100.0/2400.0) > 1e-9 {
+		t.Errorf("dayPnLPct: got %v, want %v", pct, 100.0/2400.0)
+	}
+}
+
+func TestBalanceSyncPayload_ZeroLastEquityGuardsPct(t *testing.T) {
+	// last_equity == 0 must not divide-by-zero; pct stays 0.
+	bal := balanceSyncPayload{Equity: 500, LastEquity: 0}
+	pnl, pct := dayPnL(bal)
+	if pnl != 500 {
+		t.Errorf("dayPnL: got %v, want 500", pnl)
+	}
+	if pct != 0 {
+		t.Errorf("dayPnLPct guard: got %v, want 0", pct)
+	}
+}

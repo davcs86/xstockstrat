@@ -2,9 +2,11 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -252,6 +254,43 @@ func joinStrings(ss []string, sep string) string {
 		result += s
 	}
 	return result
+}
+
+// AccountBalance is the latest broker-reported balance snapshot for an account.
+type AccountBalance struct {
+	Cash        float64
+	BuyingPower float64
+	Equity      float64
+	LastEquity  float64
+}
+
+// UpsertAccountBalance inserts or updates the latest balance snapshot for an account.
+func (r *PortfolioRepo) UpsertAccountBalance(ctx context.Context, accountID, userID, tradingMode string, cash, buyingPower, equity, lastEquity float64) error {
+	const q = `
+		INSERT INTO portfolio.account_balances (account_id, user_id, trading_mode, cash, buying_power, equity, last_equity, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+		ON CONFLICT (account_id) DO UPDATE
+		SET user_id=$2, trading_mode=$3, cash=$4, buying_power=$5, equity=$6, last_equity=$7, updated_at=NOW()`
+	_, err := r.pool.Exec(ctx, q, accountID, userID, tradingMode, cash, buyingPower, equity, lastEquity)
+	return err
+}
+
+// GetAccountBalance returns the latest balance snapshot for an account, or
+// (nil, nil) when no balance has been synced yet.
+func (r *PortfolioRepo) GetAccountBalance(ctx context.Context, accountID string) (*AccountBalance, error) {
+	const q = `
+		SELECT cash, buying_power, equity, last_equity
+		FROM portfolio.account_balances
+		WHERE account_id=$1`
+	var b AccountBalance
+	err := r.pool.QueryRow(ctx, q, accountID).Scan(&b.Cash, &b.BuyingPower, &b.Equity, &b.LastEquity)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get account balance: %w", err)
+	}
+	return &b, nil
 }
 
 // ListPositionsByAccount returns all positions for a given account, optionally filtered by tradingMode.
