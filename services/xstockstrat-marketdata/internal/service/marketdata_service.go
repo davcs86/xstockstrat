@@ -35,6 +35,12 @@ type MarketDataService struct {
 	mu        sync.RWMutex
 	barSubs   map[string]chan *marketdatav1.Bar
 	quoteSubs map[string]chan *marketdatav1.Quote
+
+	// warmSymbols is the set of symbols GetLatestQuote has been asked for; a
+	// background poller (StartWarmQuotePoller) keeps their latest quote fresh in
+	// the DB so subsequent reads hit the cache instead of a live Alpaca call.
+	warmMu      sync.Mutex
+	warmSymbols map[string]struct{}
 }
 
 // NewMarketDataService creates the service and dials ledger + notify.
@@ -59,8 +65,9 @@ func NewMarketDataService(
 		cfg:       cfgWatcher,
 		ledger:    ledgerv1.NewLedgerServiceClient(ledgerConn),
 		notify:    notifyv1.NewNotifyServiceClient(notifyConn),
-		barSubs:   make(map[string]chan *marketdatav1.Bar),
-		quoteSubs: make(map[string]chan *marketdatav1.Quote),
+		barSubs:     make(map[string]chan *marketdatav1.Bar),
+		quoteSubs:   make(map[string]chan *marketdatav1.Quote),
+		warmSymbols: make(map[string]struct{}),
 	}, nil
 }
 
@@ -159,15 +166,88 @@ func (s *MarketDataService) GetDataCoverage(ctx context.Context, req *marketdata
 
 // GetLatestQuote returns the most recent quote for a symbol from the DB.
 func (s *MarketDataService) GetLatestQuote(ctx context.Context, symbol string) (*marketdatav1.Quote, error) {
+	// Track the symbol so the warm poller keeps its quote fresh in the DB.
+	s.markWarm(symbol)
+
 	q, err := s.repo.GetLatestQuote(ctx, symbol)
-	if err != nil {
-		src, err := s.registry.Get("")
-		if err != nil {
-			return nil, err
-		}
-		return src.GetLatestQuote(ctx, symbol)
+	if err == nil {
+		return q, nil
 	}
-	return q, nil
+	// DB miss — fall back to the live source and cache the result so the next
+	// read (and the warm poller) can serve it from the DB.
+	src, srcErr := s.registry.Get("")
+	if srcErr != nil {
+		return nil, srcErr
+	}
+	live, liveErr := src.GetLatestQuote(ctx, symbol)
+	if liveErr != nil {
+		return nil, liveErr
+	}
+	if err := s.repo.InsertQuote(ctx, live); err != nil {
+		slog.Warn("GetLatestQuote: cache insert failed", "symbol", symbol, "error", err)
+	}
+	return live, nil
+}
+
+// markWarm adds a symbol to the warm set polled by StartWarmQuotePoller.
+func (s *MarketDataService) markWarm(symbol string) {
+	if symbol == "" {
+		return
+	}
+	s.warmMu.Lock()
+	s.warmSymbols[symbol] = struct{}{}
+	s.warmMu.Unlock()
+}
+
+// StartWarmQuotePoller periodically refreshes the latest quote for every symbol
+// that has been queried via GetLatestQuote, writing it to the DB so reads serve
+// from the cache instead of a live Alpaca call. Interval is configurable via
+// marketdata.stream.warm_interval_ms (default 30s); set to 0 to pause.
+func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
+	const defaultIntervalMs = 30000
+	interval := time.Duration(s.cfg.GetInt("marketdata.stream.warm_interval_ms", defaultIntervalMs)) * time.Millisecond
+	if interval <= 0 {
+		interval = defaultIntervalMs * time.Millisecond
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ms := s.cfg.GetInt("marketdata.stream.warm_interval_ms", defaultIntervalMs)
+			if ms <= 0 {
+				continue // paused via config
+			}
+			if newInterval := time.Duration(ms) * time.Millisecond; newInterval != interval {
+				interval = newInterval
+				ticker.Reset(interval)
+			}
+			s.warmMu.Lock()
+			symbols := make([]string, 0, len(s.warmSymbols))
+			for sym := range s.warmSymbols {
+				symbols = append(symbols, sym)
+			}
+			s.warmMu.Unlock()
+			if len(symbols) == 0 {
+				continue
+			}
+			src, err := s.registry.Get("")
+			if err != nil {
+				continue
+			}
+			for _, sym := range symbols {
+				q, err := src.GetLatestQuote(ctx, sym)
+				if err != nil {
+					continue
+				}
+				if err := s.repo.InsertQuote(ctx, q); err != nil {
+					slog.Warn("warm poller: cache insert failed", "symbol", sym, "error", err)
+				}
+			}
+		}
+	}
 }
 
 // ListAssets delegates to the default data source.
