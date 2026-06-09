@@ -33,6 +33,9 @@ import (
 type brokerPoolEntry struct {
 	client     broker.Broker
 	brokerType int32
+	// userID is the owner of the account; propagated into account.positions.synced
+	// events so xstockstrat-portfolio stores synced positions under the right user.
+	userID string
 }
 
 // alpacaCreds is the JSON shape for Alpaca broker account credentials.
@@ -142,7 +145,7 @@ func (s *TradingService) LoadBrokerPool(ctx context.Context) error {
 			slog.Warn("LoadBrokerPool: instantiate broker failed, skipping account", "account_id", rec.ID, "error", err)
 			continue
 		}
-		s.brokers[rec.ID] = brokerPoolEntry{client: b, brokerType: rec.BrokerType}
+		s.brokers[rec.ID] = brokerPoolEntry{client: b, brokerType: rec.BrokerType, userID: rec.UserID}
 		s.credStatusMu.Lock()
 		s.credStatus[rec.ID] = rec.CredentialStatus
 		s.credStatusMu.Unlock()
@@ -575,21 +578,25 @@ func (s *TradingService) StartPositionSyncPoller(ctx context.Context) {
 }
 
 func (s *TradingService) syncPositions(ctx context.Context) {
+	type syncAccount struct {
+		client broker.Broker
+		userID string
+	}
 	s.brokersMu.RLock()
-	accounts := make(map[string]broker.Broker, len(s.brokers))
+	accounts := make(map[string]syncAccount, len(s.brokers))
 	for id, e := range s.brokers {
-		accounts[id] = e.client
+		accounts[id] = syncAccount{client: e.client, userID: e.userID}
 	}
 	s.brokersMu.RUnlock()
 
-	for accountID, b := range accounts {
-		positions, err := b.GetPositions(ctx)
+	for accountID, acct := range accounts {
+		positions, err := acct.client.GetPositions(ctx)
 		if err != nil {
 			slog.Warn("syncPositions: GetPositions failed", "account_id", accountID, "error", err)
 			continue
 		}
 		tradingMode := "TRADING_MODE_LIVE"
-		if b.IsPaper() {
+		if acct.client.IsPaper() {
 			tradingMode = "TRADING_MODE_PAPER"
 		}
 		// structpb.NewStruct only accepts []interface{}, not typed slices.
@@ -603,6 +610,7 @@ func (s *TradingService) syncPositions(ctx context.Context) {
 		}
 		payload := map[string]interface{}{
 			"account_id":   accountID,
+			"user_id":      acct.userID,
 			"trading_mode": tradingMode,
 			"positions":    posEntries,
 		}
@@ -642,7 +650,7 @@ func (s *TradingService) RegisterBrokerAccount(ctx context.Context, req *trading
 		slog.Warn("RegisterBrokerAccount: broker instantiation failed", "account_id", accountID, "error", err)
 	} else {
 		s.brokersMu.Lock()
-		s.brokers[accountID] = brokerPoolEntry{client: b, brokerType: int32(req.BrokerType)}
+		s.brokers[accountID] = brokerPoolEntry{client: b, brokerType: int32(req.BrokerType), userID: userID}
 		s.brokersMu.Unlock()
 		// Validate immediately so the UI gets an accurate status without waiting
 		// for the next health poll. Best-effort: failures only affect status.
@@ -688,7 +696,7 @@ func (s *TradingService) UpdateBrokerAccountCredentials(ctx context.Context, acc
 		slog.Warn("UpdateBrokerAccountCredentials: broker instantiation failed", "account_id", accountID, "error", err)
 	} else {
 		s.brokersMu.Lock()
-		s.brokers[accountID] = brokerPoolEntry{client: b, brokerType: rec.BrokerType}
+		s.brokers[accountID] = brokerPoolEntry{client: b, brokerType: rec.BrokerType, userID: rec.UserID}
 		s.brokersMu.Unlock()
 		rec.CredentialStatus, rec.CredentialCheckedAt = s.validateAndRecordCredential(ctx, accountID, b)
 	}
