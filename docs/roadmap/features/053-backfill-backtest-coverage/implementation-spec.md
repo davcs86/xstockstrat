@@ -276,7 +276,7 @@ The timeframe normalization is the load-bearing correctness fix: today `services
 
 ### Step 7 — service: Structured insufficient-data result + timeframe normalization in `RunBacktest`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -305,7 +305,7 @@ The timeframe normalization is the load-bearing correctness fix: today `services
 
 ### Step 8 — test: analysis insufficient-data result + timeframe normalization
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
