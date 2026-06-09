@@ -14,6 +14,19 @@ export declare enum BackfillStatus {
 export declare function backfillStatusFromJSON(object: any): BackfillStatus;
 export declare function backfillStatusToJSON(object: BackfillStatus): string;
 export declare function backfillStatusToNumber(object: BackfillStatus): number;
+/** FillMode selects how much of the requested range a backfill fetches (feature 054, FR-4). */
+export declare enum FillMode {
+    /** FILL_MODE_UNSPECIFIED - treated as FILL_MODE_FULL by the server */
+    FILL_MODE_UNSPECIFIED = "FILL_MODE_UNSPECIFIED",
+    /** FILL_MODE_FULL - fetch the entire requested range (current behavior) */
+    FILL_MODE_FULL = "FILL_MODE_FULL",
+    /** FILL_MODE_GAPS_ONLY - fetch only ranges missing per GetDataCoverage */
+    FILL_MODE_GAPS_ONLY = "FILL_MODE_GAPS_ONLY",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function fillModeFromJSON(object: any): FillMode;
+export declare function fillModeToJSON(object: FillMode): string;
+export declare function fillModeToNumber(object: FillMode): number;
 export interface BackfillJob {
     jobId: string;
     symbols: string[];
@@ -33,6 +46,10 @@ export interface BackfillJob {
     /** symbols that failed in a PARTIAL/FAILED job (FR-7) */
     failedSymbols: string[];
     timeframeEnum: Timeframe;
+    /** planned chunk count (FR-5) */
+    chunksTotal: number;
+    /** chunks in COMPLETED state (FR-5) */
+    chunksCompleted: number;
 }
 export interface TriggerBackfillRequest {
     symbols: string[];
@@ -45,6 +62,8 @@ export interface TriggerBackfillRequest {
     range?: TimeRange | undefined;
     overwrite: boolean;
     timeframeEnum: Timeframe;
+    /** FR-4; UNSPECIFIED == FULL. Independent of `overwrite`. */
+    fillMode: FillMode;
 }
 export interface TriggerBackfillResponse {
     jobId: string;

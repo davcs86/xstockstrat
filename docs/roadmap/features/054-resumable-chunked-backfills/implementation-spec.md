@@ -1,6 +1,6 @@
 # Implementation Spec: resumable-chunked-backfills
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-09
 **Feature**: `docs/roadmap/features/054-resumable-chunked-backfills/feature.md`
 **Total Steps**: 9
@@ -84,7 +84,7 @@ by 053.
 
 ### Step 1 — proto: add FillMode enum and chunk-progress fields to ingest.proto
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
@@ -92,11 +92,8 @@ by 053.
 **Reviewers**: Proto Reviewer — field number uniqueness, no breaking changes without deprecation, `buf lint`/`buf breaking` pass; `xstockstrat-ingest` (service owner) — additive fields match servicer needs; `xstockstrat-marketdata` (service owner) — no marketdata proto change here
 
 **Codebase Evidence**:
-- `TriggerBackfillRequest` currently ends at field 4: `bool overwrite = 4;` —
-  `packages/proto/ingest/v1/ingest.proto:46-51`. **Next free field number: 5.**
-- `BackfillJob` currently ends at field 10: `string error = 10;` —
-  `packages/proto/ingest/v1/ingest.proto:24-35`. `bars_total` already present at field 7.
-  **Next free field numbers: 11, 12.**
+- `TriggerBackfillRequest` on the stacked base ends at field 5 (`timeframe_enum = 5`, added by feature 053). **Re-spec: next free field number is `6`** (was 5 at spec time).
+- `BackfillJob` on the stacked base ends at field 12 (`failed_symbols = 11` from 052, `timeframe_enum = 12` from 053). `bars_total` already present at field 7. **Re-spec: next free field numbers are `13, 14`** (were 11, 12 at spec time).
 - Existing enum convention (zero-value `_UNSPECIFIED = 0`): `BackfillStatus` at
   `packages/proto/ingest/v1/ingest.proto:37-44` (`BACKFILL_STATUS_UNSPECIFIED = 0;`).
 - Root CLAUDE.md proto governance: "Prefer enums over strings … Every enum must have a zero-value
@@ -112,15 +109,15 @@ by 053.
      FILL_MODE_GAPS_ONLY = 2;    // fetch only ranges missing per GetDataCoverage
    }
    ```
-2. In `TriggerBackfillRequest`, add field 5 (keep the existing `overwrite` bool for back-compat —
+2. In `TriggerBackfillRequest`, add field 6 (keep the existing `overwrite` bool for back-compat —
    do not remove it):
    ```proto
-   FillMode fill_mode = 5;  // FR-4; UNSPECIFIED == FULL. Independent of `overwrite`.
+   FillMode fill_mode = 6;  // FR-4; UNSPECIFIED == FULL. Independent of `overwrite`. (re-spec: 6, 053 took 5)
    ```
-3. In `BackfillJob`, add fields 11 and 12 for FR-5 per-chunk monitoring:
+3. In `BackfillJob`, add fields 13 and 14 for FR-5 per-chunk monitoring (re-spec: 13/14, 052+053 took 11/12):
    ```proto
-   int32 chunks_total = 11;      // planned chunk count
-   int32 chunks_completed = 12;  // chunks in COMPLETED state
+   int32 chunks_total = 13;      // planned chunk count
+   int32 chunks_completed = 14;  // chunks in COMPLETED state
    ```
 4. Do not renumber or remove any existing field.
 
@@ -132,7 +129,7 @@ by 053.
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/python/**` — modify (regenerated)
@@ -168,20 +165,19 @@ by 053.
 > Numbered Step 4 (not 3) to keep `service`/`test`/`config`/`docs` step numbers stable; there is no
 > Step 3. (Ordering in the file is logical, not by integer gaps.)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
-- `services/xstockstrat-ingest/migrations/NNN_add_backfill_chunks.up.sql` — create
-- `services/xstockstrat-ingest/migrations/NNN_add_backfill_chunks.down.sql` — create
+- `services/xstockstrat-ingest/migrations/004_add_backfill_chunks.up.sql` — create
+- `services/xstockstrat-ingest/migrations/004_add_backfill_chunks.down.sql` — create
 
 **Reviewers**: DBA — migration NNN numbering (no gaps), up+down pair present, index correctness, run-order vs. feature 052's `backfill_jobs` migration; `xstockstrat-ingest` (service owner) — chunk schema matches planner/resume logic
 
 **Codebase Evidence**:
 - Last migration on `main-dev` today: `services/xstockstrat-ingest/migrations/002_add_signal_sources_registry.up.sql`
-  (confirmed via `ls services/xstockstrat-ingest/migrations/`). **NNN is `003` only if feature 052
-  has NOT added a migration; if 052 adds `003_backfill_jobs`, this becomes `004` (or higher).**
+  (confirmed via `ls services/xstockstrat-ingest/migrations/`). **Re-spec: 052 added `003_backfill_jobs`, so this migration is `004`.** The parent `ingest.backfill_jobs(job_id)` (uuid PK) exists on the stacked base.
   golang-migrate requires sequential numbering with no gaps (phase3-deviations.md §"Migration
-  naming"). **Resolve the real NNN at execute time, after 052 is merged.**
+  naming"). **Resolved: `004`.**
 - This table has a FK to `ingest.backfill_jobs(job_id)` — **a table that does not yet exist on
   `main-dev`** (provided by feature 052). The exact PK column name/type of `backfill_jobs.job_id`
   must be read from 052's migration before writing this FK. The product spec assumes
@@ -191,8 +187,7 @@ by 053.
   `002_add_signal_sources_registry.up.sql`.
 
 **Instructions**:
-1. After 052 is merged, read its `backfill_jobs` migration to confirm the parent table's schema name
-   (`ingest.backfill_jobs`) and PK column (`job_id`, expected uuid). Pick the next sequential NNN.
+1. (Confirmed on stacked base) parent is `ingest.backfill_jobs(job_id uuid PRIMARY KEY)` from 052's `003_backfill_jobs.up.sql`. This migration is `004`.
 2. Create `NNN_add_backfill_chunks.up.sql` per the product-spec Database Changes section:
    ```sql
    CREATE TABLE ingest.backfill_chunks (
@@ -232,7 +227,7 @@ by 053.
 
 ### Step 6 — service: chunk planner, chunk repository, resume, and GAPS_ONLY mode
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -328,7 +323,7 @@ by 053.
 
 ### Step 7 — test: chunk planner, resume, GAPS_ONLY, concurrency
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_backfill_chunks.py` — create
@@ -368,11 +363,11 @@ by 053.
 
 ### Step 8 — config: seed the three new backfill chunk keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/NNN_ingest_backfill_chunking.up.sql` — create
-- `services/xstockstrat-config/migrations/NNN_ingest_backfill_chunking.down.sql` — create
+- `services/xstockstrat-config/migrations/005_ingest_backfill_chunking.up.sql` — create
+- `services/xstockstrat-config/migrations/005_ingest_backfill_chunking.down.sql` — create
 
 **Reviewers**: `xstockstrat-config` (service owner) — config key naming (`<service>.<category>.<key>`), environment/trading_mode scoping
 
@@ -382,15 +377,13 @@ by 053.
   environment, trading_mode) DO NOTHING` — pattern in
   `services/xstockstrat-config/migrations/004_agent_config.up.sql:5-14`.
 - Last config migration on `main-dev`: `004_agent_config.up.sql` (confirmed via
-  `ls services/xstockstrat-config/migrations/`). **NNN is `005` only if feature 052 has not added a
-  config migration; 052 likely seeds `ingest.backfill.max_concurrent_jobs` — if so this becomes
-  `006`+. Resolve real NNN after 052 is merged** (golang-migrate sequential, no gaps).
+  `ls services/xstockstrat-config/migrations/`). **Re-spec: 052 added NO config migration (it relies on watcher defaults), so the last config migration is `004_agent_config`; this seed migration is `005`.**
 - The three keys are **absent** today: `grep -rn "ingest.backfill" services/xstockstrat-config/migrations/`
   → no match (the existing `ingest.backfill.*` keys live only in ingest's CLAUDE.md doc table, not
   seeded — they come from 052).
 
 **Instructions**:
-1. After 052 is merged, pick the next sequential NNN. Create the up migration seeding three keys for
+1. (Re-spec: NNN = `005`.) Create the up migration seeding three keys for
    both `dev` and `production` (`trading_mode='all'`, `ON CONFLICT ... DO NOTHING`), following the
    004 pattern exactly:
    - `ingest` / `backfill.chunk_max_bars` (int) — hard per-chunk bar cap (FR-1). Choose a default
@@ -415,7 +408,7 @@ by 053.
 
 ### Step 9 — docs: replace the manual per-year loop in historical-backfill.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/historical-backfill.md` — modify
@@ -451,4 +444,23 @@ by 053.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 6/7 — full chunked rewrite of 052's backfill execution model
+**Spec said**: Replace the single `BackfillBars` call in `_run_backfill` with chunk planning/execution.
+**Actual**: On this stacked branch `_run_backfill`/`_execute_backfill` already carried feature 052's
+single-fetch model (retry + `failed_symbols`→PARTIAL + job-level semaphore) and 052's committed
+servicer tests assert it. Per an explicit user decision (sdd-execute blocker → "Full chunked
+rewrite"), `_execute_backfill` was rewritten to plan→persist→execute chunks for every job, with
+per-chunk retry preserving FR-8 and chunk-level outcomes mapped to job status (COMPLETED / PARTIAL
+when some symbols/chunks fail but progress is made / FAILED when no chunk progresses). The affected
+052 tests were updated to the chunked model (chunk-repo patched via a `patch_chunk_repo` helper;
+`make_servicer` now supplies the chunk config) and new plan_chunks/resume/GAPS_ONLY/chunk-concurrency
+tests added — Step 7 is sanctioned to modify `test_ingest_servicer.py`.
+**Reason**: User-approved; keeps a single coherent execution model rather than two parallel paths.
+**Disposition**: accepted (user decision)
+
+### Deviation: Steps 4/8 codegen+migration verification environment
+**Spec said**: run migrations via golang-migrate; codegen via the Docker image.
+**Actual**: Docker unavailable → proto regen via host toolchain pinned to CI `proto-freshness`
+versions; migrations 004 (ingest) + 005 (config) verified by applying up+down on a throwaway local
+postgres:16 (FK enforcement + reversibility checked). CI-equivalent fallbacks.
+**Disposition**: CI-equivalent fallback

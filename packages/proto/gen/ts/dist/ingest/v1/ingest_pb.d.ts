@@ -63,6 +63,18 @@ export type BackfillJob = Message<"xstockstrat.ingest.v1.BackfillJob"> & {
      * @generated from field: xstockstrat.common.v1.Timeframe timeframe_enum = 12;
      */
     timeframeEnum: Timeframe;
+    /**
+     * planned chunk count (FR-5)
+     *
+     * @generated from field: int32 chunks_total = 13;
+     */
+    chunksTotal: number;
+    /**
+     * chunks in COMPLETED state (FR-5)
+     *
+     * @generated from field: int32 chunks_completed = 14;
+     */
+    chunksCompleted: number;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.BackfillJob.
@@ -96,6 +108,12 @@ export type TriggerBackfillRequest = Message<"xstockstrat.ingest.v1.TriggerBackf
      * @generated from field: xstockstrat.common.v1.Timeframe timeframe_enum = 5;
      */
     timeframeEnum: Timeframe;
+    /**
+     * FR-4; UNSPECIFIED == FULL. Independent of `overwrite`.
+     *
+     * @generated from field: xstockstrat.ingest.v1.FillMode fill_mode = 6;
+     */
+    fillMode: FillMode;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.TriggerBackfillRequest.
@@ -495,6 +513,35 @@ export declare enum BackfillStatus {
  * Describes the enum xstockstrat.ingest.v1.BackfillStatus.
  */
 export declare const BackfillStatusSchema: GenEnum<BackfillStatus>;
+/**
+ * FillMode selects how much of the requested range a backfill fetches (feature 054, FR-4).
+ *
+ * @generated from enum xstockstrat.ingest.v1.FillMode
+ */
+export declare enum FillMode {
+    /**
+     * treated as FILL_MODE_FULL by the server
+     *
+     * @generated from enum value: FILL_MODE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * fetch the entire requested range (current behavior)
+     *
+     * @generated from enum value: FILL_MODE_FULL = 1;
+     */
+    FULL = 1,
+    /**
+     * fetch only ranges missing per GetDataCoverage
+     *
+     * @generated from enum value: FILL_MODE_GAPS_ONLY = 2;
+     */
+    GAPS_ONLY = 2
+}
+/**
+ * Describes the enum xstockstrat.ingest.v1.FillMode.
+ */
+export declare const FillModeSchema: GenEnum<FillMode>;
 /**
  * @generated from service xstockstrat.ingest.v1.IngestService
  */

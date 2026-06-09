@@ -8,6 +8,8 @@ a running gRPC server or database.
 
 import asyncio
 import json
+from contextlib import ExitStack, contextmanager
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,16 +29,24 @@ def make_servicer(
     max_concurrent: int = 5,
     retry: bool = True,
     max_retry: int = 3,
+    max_concurrent_chunks: int = 5,
+    chunk_window_days: int = 400,
+    chunk_max_bars: int = 10_000_000,
 ) -> IngestServicer:
     """Return an IngestServicer with fully mocked dependencies.
 
     The config getters are real ints/bools (not MagicMocks) because __init__ builds an
-    asyncio.Semaphore from ``backfill_max_concurrent_jobs``.
+    asyncio.Semaphore from them and the chunk planner does arithmetic on them. The default
+    400-day window + huge bar cap make a 1-symbol / default-range job plan exactly one chunk,
+    so the per-job lifecycle/retry/partial behavior is exercised through the chunked path.
     """
     cfg = MagicMock()
     cfg.backfill_max_concurrent_jobs = max_concurrent
     cfg.backfill_retry_on_failure = retry
     cfg.backfill_max_retry_attempts = max_retry
+    cfg.backfill_max_concurrent_chunks = max_concurrent_chunks
+    cfg.backfill_chunk_window_days = chunk_window_days
+    cfg.backfill_chunk_max_bars = chunk_max_bars
     marketdata_ch = MagicMock()
     ledger_ch = MagicMock()
     svc = IngestServicer(cfg, marketdata_ch, ledger_ch, db_pool=db)
@@ -272,86 +282,117 @@ class TestTriggerBackfill:
 # ---------------------------------------------------------------------------
 
 
+_CHUNKS = "app.repositories.backfill_chunks"
+
+
 def _make_backfill_req(symbols, timeframe="1d"):
     req = MagicMock()
     req.symbols = symbols
     req.timeframe = timeframe
+    req.timeframe_enum = 0
     req.overwrite = False
+    req.fill_mode = ingest_pb2.FILL_MODE_FULL
     req.range = common_pb2.TimeRange()
     return req
 
 
+def _chunk(symbols, cid="chunk-1"):
+    return {
+        "chunk_id": cid,
+        "symbols": symbols,
+        "range_start": datetime(2024, 1, 1, tzinfo=UTC),
+        "range_end": datetime(2024, 2, 1, tzinfo=UTC),
+    }
+
+
+@contextmanager
+def patch_chunk_repo(incomplete):
+    """Patch the backfill_chunks + backfill_jobs writes so the chunked path runs against mocks.
+
+    ``get_incomplete_chunks`` returns ``incomplete`` (the chunks _run_chunks iterates). Yields
+    a dict of the key AsyncMocks for assertions.
+    """
+    with ExitStack() as st:
+        ids = [c["chunk_id"] for c in incomplete]
+        st.enter_context(patch(f"{_CHUNKS}.insert_chunks", AsyncMock(return_value=ids)))
+        st.enter_context(
+            patch(f"{_CHUNKS}.get_incomplete_chunks", AsyncMock(return_value=incomplete))
+        )
+        st.enter_context(patch(f"{_CHUNKS}.mark_chunk_running", AsyncMock()))
+        mc = st.enter_context(patch(f"{_CHUNKS}.mark_chunk_completed", AsyncMock()))
+        mf = st.enter_context(patch(f"{_CHUNKS}.mark_chunk_failed", AsyncMock()))
+        uj = st.enter_context(patch(f"{_REPO}.update_job", AsyncMock()))
+        yield {"mark_completed": mc, "mark_failed": mf, "update_job": uj}
+
+
 class TestRunBackfill:
     @pytest.mark.asyncio
-    async def test_success_emits_running_then_completed_and_sets_bars_total(self):
+    async def test_success_emits_running_then_completed(self):
         svc = make_servicer(db=MagicMock())
         svc._marketdata = MagicMock()
-        svc._marketdata.BackfillBars = AsyncMock(
-            return_value=_mk_backfill_resp(100, [], expected_bars=250)
-        )
-        with patch(f"{_REPO}.update_job", AsyncMock()) as update:
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_mk_backfill_resp(100, []))
+        with patch_chunk_repo([_chunk(["AAPL"])]) as m:
             await svc._run_backfill("job-1", _make_backfill_req(["AAPL"]))
 
         events = [c.args[0].event_type for c in svc._ledger.AppendEvent.call_args_list]
         assert events == ["ingest.backfill.running", "ingest.backfill.completed"]
-        # Final update marks COMPLETED with bars_total from expected_bars.
-        final = update.await_args_list[-1].kwargs
+        m["mark_completed"].assert_awaited_once()
+        final = m["update_job"].await_args_list[-1].kwargs
         assert final["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
-        assert final["bars_total"] == 250
         assert final["bars_processed"] == 100
 
     @pytest.mark.asyncio
     async def test_partial_emits_completed_and_warning_alert(self):
+        # A chunk that returns failed_symbols (retry off) → job PARTIAL, completed event, WARNING.
         svc = make_servicer(db=MagicMock(), retry=False)
         svc._marketdata = MagicMock()
-        svc._marketdata.BackfillBars = AsyncMock(
-            return_value=_mk_backfill_resp(50, ["TSLA"], expected_bars=100)
-        )
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_mk_backfill_resp(50, ["TSLA"]))
         svc._notify = MagicMock()
         svc._notify.EmitAlert = AsyncMock(return_value=MagicMock())
 
-        with patch(f"{_REPO}.update_job", AsyncMock()) as update:
+        with patch_chunk_repo([_chunk(["AAPL", "TSLA"])]) as m:
             await svc._run_backfill("job-2", _make_backfill_req(["AAPL", "TSLA"]))
 
         events = [c.args[0].event_type for c in svc._ledger.AppendEvent.call_args_list]
-        # PARTIAL emits `completed`, never `failed`.
         assert "ingest.backfill.completed" in events
         assert "ingest.backfill.failed" not in events
-        assert update.await_args_list[-1].kwargs["status"] == ingest_pb2.BACKFILL_STATUS_PARTIAL
+        assert (
+            m["update_job"].await_args_list[-1].kwargs["status"]
+            == ingest_pb2.BACKFILL_STATUS_PARTIAL
+        )
         svc._notify.EmitAlert.assert_awaited_once()
-        alert = svc._notify.EmitAlert.await_args.args[0]
-        assert alert.severity == notify_pb2.ALERT_SEVERITY_WARNING
+        assert (
+            svc._notify.EmitAlert.await_args.args[0].severity == notify_pb2.ALERT_SEVERITY_WARNING
+        )
 
     @pytest.mark.asyncio
-    async def test_total_failure_emits_failed_and_error_alert(self):
+    async def test_all_chunks_fail_emits_failed_and_error_alert(self):
         svc = make_servicer(db=MagicMock())
         svc._marketdata = MagicMock()
         svc._marketdata.BackfillBars = AsyncMock(side_effect=Exception("network error"))
         svc._notify = MagicMock()
         svc._notify.EmitAlert = AsyncMock(return_value=MagicMock())
 
-        with patch(f"{_REPO}.update_job", AsyncMock()) as update:
+        with patch_chunk_repo([_chunk(["AAPL"])]) as m:
             await svc._run_backfill("job-3", _make_backfill_req(["AAPL"]))
 
         events = [c.args[0].event_type for c in svc._ledger.AppendEvent.call_args_list]
         assert "ingest.backfill.failed" in events
-        assert update.await_args_list[-1].kwargs["status"] == ingest_pb2.BACKFILL_STATUS_FAILED
-        alert = svc._notify.EmitAlert.await_args.args[0]
-        assert alert.severity == notify_pb2.ALERT_SEVERITY_ERROR
+        assert (
+            m["update_job"].await_args_list[-1].kwargs["status"]
+            == ingest_pb2.BACKFILL_STATUS_FAILED
+        )
+        m["mark_failed"].assert_awaited_once()
+        assert svc._notify.EmitAlert.await_args.args[0].severity == notify_pb2.ALERT_SEVERITY_ERROR
 
     @pytest.mark.asyncio
     async def test_retry_on_failure_retries_failed_symbols(self):
         svc = make_servicer(db=MagicMock(), retry=True, max_retry=2)
         svc._marketdata = MagicMock()
-        # Always returns a failed symbol → exhausts the 2 retries (3 calls total).
         svc._marketdata.BackfillBars = AsyncMock(return_value=_mk_backfill_resp(10, ["TSLA"]))
-        svc._notify = MagicMock()
-        svc._notify.EmitAlert = AsyncMock(return_value=MagicMock())
-
-        with patch(f"{_REPO}.update_job", AsyncMock()), patch("asyncio.sleep", AsyncMock()):
+        with patch_chunk_repo([_chunk(["TSLA"])]), patch("asyncio.sleep", AsyncMock()):
             await svc._run_backfill("job-4", _make_backfill_req(["TSLA"]))
-
-        # initial attempt + 2 retries
+        # initial attempt + 2 retries, per chunk
         assert svc._marketdata.BackfillBars.await_count == 3
 
     @pytest.mark.asyncio
@@ -359,16 +400,12 @@ class TestRunBackfill:
         svc = make_servicer(db=MagicMock(), retry=False)
         svc._marketdata = MagicMock()
         svc._marketdata.BackfillBars = AsyncMock(return_value=_mk_backfill_resp(10, ["TSLA"]))
-        svc._notify = MagicMock()
-        svc._notify.EmitAlert = AsyncMock(return_value=MagicMock())
-
-        with patch(f"{_REPO}.update_job", AsyncMock()), patch("asyncio.sleep", AsyncMock()):
+        with patch_chunk_repo([_chunk(["TSLA"])]), patch("asyncio.sleep", AsyncMock()):
             await svc._run_backfill("job-5", _make_backfill_req(["TSLA"]))
-
         assert svc._marketdata.BackfillBars.await_count == 1
 
     @pytest.mark.asyncio
-    async def test_concurrency_gate_serializes_jobs(self):
+    async def test_job_concurrency_gate_serializes_jobs(self):
         svc = make_servicer(db=MagicMock(), max_concurrent=1)
         in_flight = 0
         peak = 0
@@ -384,13 +421,99 @@ class TestRunBackfill:
         svc._marketdata = MagicMock()
         svc._marketdata.BackfillBars = _backfill
 
-        with patch(f"{_REPO}.update_job", AsyncMock()):
+        with patch_chunk_repo([_chunk(["AAPL"])]):
             await asyncio.gather(
                 svc._run_backfill("c1", _make_backfill_req(["AAPL"])),
                 svc._run_backfill("c2", _make_backfill_req(["TSLA"])),
             )
-        # With max_concurrent_jobs=1 the semaphore must serialize the two jobs.
+        assert peak == 1  # max_concurrent_jobs=1 serializes the two jobs
+
+    @pytest.mark.asyncio
+    async def test_chunk_concurrency_gate_limits_parallel_chunks(self):
+        # Two chunks, max_concurrent_chunks=1 → chunk semaphore serializes them.
+        svc = make_servicer(db=MagicMock(), max_concurrent_chunks=1)
+        in_flight = 0
+        peak = 0
+
+        async def _backfill(_req, metadata=None):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0.01)
+            in_flight -= 1
+            return _mk_backfill_resp(10, [])
+
+        svc._marketdata = MagicMock()
+        svc._marketdata.BackfillBars = _backfill
+        with patch_chunk_repo([_chunk(["AAPL"], "c1"), _chunk(["TSLA"], "c2")]):
+            await svc._run_backfill("job-6", _make_backfill_req(["AAPL", "TSLA"]))
         assert peak == 1
+
+    @pytest.mark.asyncio
+    async def test_gaps_only_plans_from_coverage_gaps(self):
+        # FILL_MODE_GAPS_ONLY → GetDataCoverage drives planning; a gap range is fetched.
+        svc = make_servicer(db=MagicMock())
+        gap = common_pb2.TimeRange(
+            start=Timestamp(seconds=1_700_000_000), end=Timestamp(seconds=1_701_000_000)
+        )
+        cov = MagicMock()
+        cov.gaps = [gap]
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetDataCoverage = AsyncMock(return_value=cov)
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_mk_backfill_resp(5, []))
+
+        req = _make_backfill_req(["AAPL"])
+        req.fill_mode = ingest_pb2.FILL_MODE_GAPS_ONLY
+        # Real plan_chunks/insert/get must run for GAPS_ONLY; only patch the writes + reads.
+        with (
+            patch(f"{_CHUNKS}.insert_chunks", AsyncMock(return_value=["g1"])),
+            patch(
+                f"{_CHUNKS}.get_incomplete_chunks", AsyncMock(return_value=[_chunk(["AAPL"], "g1")])
+            ),
+            patch(f"{_CHUNKS}.mark_chunk_running", AsyncMock()),
+            patch(f"{_CHUNKS}.mark_chunk_completed", AsyncMock()),
+            patch(f"{_REPO}.update_job", AsyncMock()),
+        ):
+            await svc._run_backfill("job-7", req)
+
+        svc._marketdata.GetDataCoverage.assert_awaited_once()
+        svc._marketdata.BackfillBars.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_resume_incomplete_jobs_returns_count(self):
+        # FR-3: resume discovers jobs with PENDING/FAILED chunks and schedules a re-drive each.
+        svc = make_servicer(db=MagicMock())
+        with (
+            patch(
+                f"{_CHUNKS}.list_jobs_with_incomplete_chunks",
+                AsyncMock(return_value=["resume-1", "resume-2"]),
+            ),
+            patch("asyncio.create_task", MagicMock(side_effect=lambda coro: coro.close())) as ct,
+        ):
+            count = await svc.resume_incomplete_jobs()
+        assert count == 2
+        assert ct.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_resume_job_redrives_incomplete_chunks(self):
+        # FR-3: _resume_job re-runs a job's incomplete chunks and finalizes its status.
+        svc = make_servicer(db=MagicMock())
+        svc._marketdata = MagicMock()
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_mk_backfill_resp(7, []))
+        job_row = _job_row("resume-1", ingest_pb2.BACKFILL_STATUS_RUNNING)
+        job_row["timeframe_enum"] = 4  # TIMEFRAME_1DAY
+
+        with (
+            patch(f"{_REPO}.get_job", AsyncMock(return_value=job_row)),
+            patch(f"{_CHUNKS}.get_incomplete_chunks", AsyncMock(return_value=[_chunk(["AAPL"])])),
+            patch(f"{_CHUNKS}.mark_chunk_running", AsyncMock()),
+            patch(f"{_CHUNKS}.mark_chunk_completed", AsyncMock()) as mc,
+            patch(f"{_REPO}.update_job", AsyncMock()) as uj,
+        ):
+            await svc._resume_job("resume-1")
+
+        mc.assert_awaited_once()  # the incomplete chunk was re-run and completed
+        assert uj.await_args_list[-1].kwargs["status"] == ingest_pb2.BACKFILL_STATUS_COMPLETED
 
 
 # ---------------------------------------------------------------------------
