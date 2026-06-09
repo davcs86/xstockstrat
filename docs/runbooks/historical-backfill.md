@@ -167,24 +167,22 @@ ORDER BY missing_day;
 
 ## Large Backfill Strategy
 
-For large datasets, split by:
-1. **Time**: one job per year
-2. **Symbols**: batch of 20 symbols per job
-3. **Timeframe**: run 1d first, then 1h, then 1m (lowest to highest density)
+**Server-side chunking (feature 054)** — you no longer split large jobs by hand. A single
+`TriggerBackfill` over a wide range is planned by `xstockstrat-ingest` into chunks bounded by
+`ingest.backfill.chunk_window_days` (default 90) and `ingest.backfill.chunk_max_bars` (default
+200000, density-aware so 1m ranges produce more, smaller chunks than 1d). Chunks run in parallel up
+to `ingest.backfill.max_concurrent_chunks` (default 3), per-chunk progress is tracked in
+`ingest.backfill_chunks`, and the job exposes `chunks_total` / `chunks_completed`.
 
-```bash
-# Example: 4-year backfill split by year
-for year in 2020 2021 2022 2023; do
-  curl -X POST http://xstockstrat-ingest:8055/webhooks/trigger-backfill \
-    -H 'Content-Type: application/json' \
-    -d "{
-      \"symbols\": [\"AAPL\",\"MSFT\",\"NVDA\",\"TSLA\",\"GOOGL\"],
-      \"timeframe\": \"1d\",
-      \"start\": \"${year}-01-01T00:00:00Z\",
-      \"end\": \"${year}-12-31T00:00:00Z\"
-    }"
-done
-```
+- **Resumable**: if the service restarts mid-job, any incomplete chunks are re-driven on startup
+  (re-fetch is safe — marketdata upserts bars idempotently). No manual re-trigger needed.
+- **Gaps-only**: set `fill_mode = FILL_MODE_GAPS_ONLY` on `TriggerBackfill` to fetch *only* the
+  ranges `marketdata.GetDataCoverage` reports missing — ideal for topping up a partially-covered
+  symbol without re-downloading existing bars.
+- **Tuning**: lower `chunk_max_bars` for finer progress granularity / smaller Alpaca requests; raise
+  `max_concurrent_chunks` to fetch faster (watch `marketdata.backfill.rate_limit_rps`).
+
+You still choose timeframe per job (run 1d first, then 1h, then 1m if you need multiple densities).
 
 ---
 

@@ -96,6 +96,12 @@ async def serve():
     log.info("ingest gRPC service starting on port %s", GRPC_PORT)
     await grpc_server.start()
 
+    # FR-3: resume backfill jobs that still have incomplete chunks from a prior process.
+    # Runs after the reconcile pass above; re-drives chunked jobs to completion (the reconcile
+    # only flips chunk-less jobs to FAILED). Each resumed job runs as a background task.
+    resumed = await servicer.resume_incomplete_jobs()
+    log.info("resumed %d backfill job(s) with incomplete chunks", resumed)
+
     def handle_shutdown(sig, _):
         async def _stop():
             await grpc_server.stop(grace=5)

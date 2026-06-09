@@ -79,3 +79,24 @@ as 052/053 (host proto toolchain; throwaway postgres:16; per-feature integration
 - ingest migration NNN = 004 (052 added 003_backfill_jobs); FK parent ingest.backfill_jobs(job_id uuid) confirmed.
 - config migration NNN = 005 (052 added no config migration; last is 004_agent_config).
 - Committed as respec(resumable-chunked-backfills).
+
+### Steps 1-9 — execution summary [done]
+- Step 1-2 proto+regen: common Timeframe already present (053); added FillMode enum, BackfillJob
+  chunks_total=13/chunks_completed=14, TriggerBackfillRequest fill_mode=6. buf lint+breaking pass.
+- Step 4 migration 004_add_backfill_chunks: ingest.backfill_chunks (FK→backfill_jobs cascade,
+  (job_id,status) index). Verified up+down+FK on throwaway pg.
+- Step 6 service: watcher chunk config helpers; backfill_chunks repo (pure plan_chunks density-aware,
+  insert/get_incomplete/mark_*; list_jobs_with_incomplete_chunks; estimate_bars). Rewrote servicer
+  _execute_backfill → chunk planning/persist/execute under chunk semaphore w/ per-chunk retry (FR-8);
+  GAPS_ONLY via marketdata.GetDataCoverage; _finalize_backfill shared; resume_incomplete_jobs +
+  _resume_job; main.py resume-on-startup after reconcile. USER DECISION: full chunked rewrite
+  (replaces 052 single-fetch model) — see Deviation Log.
+- Step 7 tests: updated 052 servicer tests to chunked model (patch_chunk_repo helper, make_servicer
+  chunk config) + new plan_chunks/estimate_bars/chunk-repo/resume/GAPS_ONLY/chunk-concurrency tests.
+  121 passed, cov 74%.
+- Step 8 config migration 005_ingest_backfill_chunking (3 keys × dev/prod, verified up+down on pg) +
+  ingest CLAUDE.md config table + Database section.
+- Step 9 docs: historical-backfill.md Large Backfill Strategy → server-side chunking + GAPS_ONLY + resume.
+
+All steps done → code-completed. merge-order: 054 merges LAST (after 052 then 053). No breaking proto
+(FillMode + chunk fields are additive); inherits 053's Platform Lead gate transitively via stacking.

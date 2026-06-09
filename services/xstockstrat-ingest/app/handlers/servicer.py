@@ -6,7 +6,7 @@ normalises raw data payloads, and persists newsletter signals to TimescaleDB.
 import asyncio
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import grpc
 from gen.common.v1 import common_pb2
@@ -18,7 +18,7 @@ from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
-from app.repositories import backfill_jobs
+from app.repositories import backfill_chunks, backfill_jobs
 from app.repositories.signal_sources import (
     deactivate_source,
     list_all_sources,
@@ -27,6 +27,30 @@ from app.repositories.signal_sources import (
 )
 
 log = logging.getLogger(__name__)
+
+# Canonical timeframe <-> Timeframe enum int (mirrors marketdata internal/timeframe + 053).
+_STR_TO_ENUM = {"1m": 1, "5m": 2, "1h": 3, "1d": 4}
+_ENUM_TO_STR = {v: k for k, v in _STR_TO_ENUM.items()}
+_TF_ALIASES = {
+    "1m": "1m",
+    "1Min": "1m",
+    "5m": "5m",
+    "5Min": "5m",
+    "1h": "1h",
+    "1Hour": "1h",
+    "1d": "1d",
+    "1Day": "1d",
+}
+
+
+def _canonical_timeframe(request) -> str:
+    """Resolve a request's timeframe to the canonical DB string (enum preferred, else string)."""
+    enum = getattr(request, "timeframe_enum", 0)
+    if isinstance(enum, int) and enum in _ENUM_TO_STR:
+        return _ENUM_TO_STR[enum]
+    return _TF_ALIASES.get(
+        getattr(request, "timeframe", ""), getattr(request, "timeframe", "") or "1d"
+    )
 
 
 def _ts_to_dt(ts) -> datetime | None:
@@ -214,92 +238,251 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 job_id, ingest_pb2.BACKFILL_STATUS_FAILED, symbols, str(e), propagation_meta
             )
 
-    async def _execute_backfill(self, job_id, request, symbols, propagation_meta):
-        """Run the marketdata backfill with retry-on-transient-failure (FR-8).
+    async def _plan_work_ranges(self, request, symbols, timeframe, propagation_meta):
+        """Return a list of plan_chunks() inputs as (symbols, start, end) work units.
 
-        Retries only the still-failing symbols with 2s/4s/8s backoff up to
-        ``max_retry_attempts`` when ``retry_on_failure`` is enabled. A non-empty
-        ``failed_symbols`` after retries is a PARTIAL outcome; a raised exception
-        propagates to ``_run_backfill`` as a total FAILED.
+        FULL mode → one unit over the whole requested range. GAPS_ONLY (FR-4) → per-symbol
+        units, one per gap reported by marketdata's GetDataCoverage; symbols already fully
+        covered contribute nothing.
         """
-        remaining = list(symbols)
-        total_bars = 0
-        expected_bars = 0
-        failed: list[str] = []
-        max_attempts = (
-            self._cfg.backfill_max_retry_attempts if self._cfg.backfill_retry_on_failure else 0
-        )
-        attempt = 0
-        while True:
-            resp = await self._marketdata.BackfillBars(
-                marketdata_pb2.BackfillBarsRequest(
-                    symbols=remaining,
-                    timeframe=request.timeframe,
-                    range=request.range,
-                    overwrite_existing=request.overwrite,
-                ),
-                metadata=propagation_meta,
+        range_end = _ts_to_dt(request.range.end) or datetime.now(UTC)
+        range_start = _ts_to_dt(request.range.start) or (range_end - timedelta(days=365))
+        tf_enum = _STR_TO_ENUM.get(timeframe, 0)
+
+        if getattr(request, "fill_mode", 0) == ingest_pb2.FILL_MODE_GAPS_ONLY:
+            units = []
+            for sym in symbols:
+                cov = await self._marketdata.GetDataCoverage(
+                    marketdata_pb2.GetDataCoverageRequest(
+                        symbol=sym, timeframe=tf_enum, range=request.range
+                    ),
+                    metadata=propagation_meta,
+                )
+                for gap in cov.gaps:
+                    gs = _ts_to_dt(gap.start) or range_start
+                    ge = _ts_to_dt(gap.end) or range_end
+                    units.append(([sym], gs, ge))
+            return units
+        return [(list(symbols), range_start, range_end)]
+
+    async def _execute_backfill(self, job_id, request, symbols, propagation_meta):
+        """Plan the job into chunks, persist them, and execute (resumable, FR-1/FR-4/FR-5).
+
+        Chunk planning is density-aware (chunk_window_days × chunk_max_bars). Chunks run
+        concurrently under a chunk-level semaphore, each with per-symbol retry (FR-8). A chunk
+        that returns is COMPLETED (its unresolved ``failed_symbols`` accumulate to the job); a
+        chunk whose RPC keeps raising is FAILED. Final job status: COMPLETED (clean), PARTIAL
+        (some symbols/chunks failed but progress made), or FAILED (no chunk made progress).
+        """
+        timeframe = _canonical_timeframe(request)
+        window_days = self._cfg.backfill_chunk_window_days
+        max_bars = self._cfg.backfill_chunk_max_bars
+
+        units = await self._plan_work_ranges(request, symbols, timeframe, propagation_meta)
+        planned: list[dict] = []
+        for unit_symbols, start, end in units:
+            planned += backfill_chunks.plan_chunks(
+                unit_symbols, timeframe, start, end, window_days, max_bars
             )
-            total_bars += resp.bars_written
-            if resp.expected_bars:
-                expected_bars = resp.expected_bars
-            failed = list(resp.failed_symbols)
-            await backfill_jobs.update_job(
-                self._db,
-                job_id,
-                bars_processed=total_bars,
-                bars_total=expected_bars,
-                failed_symbols=failed,
-            )
-            if not failed or attempt >= max_attempts:
-                break
-            attempt += 1
-            await asyncio.sleep(2**attempt)  # 2s, 4s, 8s
-            remaining = failed
 
         now = datetime.now(UTC)
-        if failed:
-            # PARTIAL: some symbols failed — emit `completed` (with failed_symbols), NOT `failed`.
-            await backfill_jobs.update_job(
-                self._db,
-                job_id,
-                status=ingest_pb2.BACKFILL_STATUS_PARTIAL,
-                failed_symbols=failed,
-                bars_processed=total_bars,
-                bars_total=expected_bars,
-                completed_at=now,
-            )
-            await self._emit_backfill_event(
-                "ingest.backfill.completed",
-                job_id,
-                {"bars_written": total_bars, "failed_symbols": failed},
-                propagation_meta,
-            )
-            await self._emit_backfill_alert(
-                job_id,
-                ingest_pb2.BACKFILL_STATUS_PARTIAL,
-                failed,
-                "some symbols failed to backfill",
-                propagation_meta,
-            )
-            log.info("backfill job %s partial bars=%d failed=%s", job_id, total_bars, failed)
-        else:
+        if not planned:
+            # e.g. GAPS_ONLY with full coverage → nothing to fetch.
             await backfill_jobs.update_job(
                 self._db,
                 job_id,
                 status=ingest_pb2.BACKFILL_STATUS_COMPLETED,
-                failed_symbols=[],
-                bars_processed=total_bars,
-                bars_total=expected_bars,
+                chunks_total=0,
+                chunks_completed=0,
                 completed_at=now,
             )
             await self._emit_backfill_event(
                 "ingest.backfill.completed",
                 job_id,
-                {"bars_written": total_bars, "failed_symbols": []},
+                {"bars_written": 0, "failed_symbols": [], "chunks_total": 0},
                 propagation_meta,
             )
-            log.info("backfill job %s completed bars=%d", job_id, total_bars)
+            log.info("backfill job %s completed with no chunks (nothing to fetch)", job_id)
+            return
+
+        await backfill_chunks.insert_chunks(self._db, job_id, planned)
+        await backfill_jobs.update_job(
+            self._db,
+            job_id,
+            chunks_total=len(planned),
+            bars_total=backfill_chunks.estimate_bars(planned, timeframe),
+        )
+        log.info("backfill job %s planned %d chunk(s)", job_id, len(planned))
+
+        chunks = await backfill_chunks.get_incomplete_chunks(self._db, job_id)
+        state = await self._run_chunks(job_id, request, timeframe, chunks, propagation_meta)
+        await self._finalize_backfill(job_id, state, len(planned), propagation_meta)
+
+    async def _finalize_backfill(self, job_id, state, total_chunks, propagation_meta):
+        """Set terminal job status from chunk outcomes and emit the completed/failed event+alert.
+
+        Shared by a fresh run and resume-on-startup. COMPLETED (clean) / PARTIAL (progress made
+        but some symbols/chunks failed) / FAILED (no chunk made progress).
+        """
+        now = datetime.now(UTC)
+        failed_symbols = sorted(state["failed_symbols"])
+        if state["chunks_failed"] > 0 and state["chunks_done"] == 0:
+            status = ingest_pb2.BACKFILL_STATUS_FAILED
+        elif failed_symbols or state["chunks_failed"] > 0:
+            status = ingest_pb2.BACKFILL_STATUS_PARTIAL
+        else:
+            status = ingest_pb2.BACKFILL_STATUS_COMPLETED
+
+        await backfill_jobs.update_job(
+            self._db,
+            job_id,
+            status=status,
+            bars_processed=state["bars"],
+            chunks_completed=state["chunks_done"],
+            failed_symbols=failed_symbols,
+            completed_at=now,
+        )
+
+        if status == ingest_pb2.BACKFILL_STATUS_FAILED:
+            await self._emit_backfill_event(
+                "ingest.backfill.failed",
+                job_id,
+                {"error": "all chunks failed", "failed_symbols": failed_symbols},
+                propagation_meta,
+            )
+            await self._emit_backfill_alert(
+                job_id, status, failed_symbols, "all backfill chunks failed", propagation_meta
+            )
+            log.error("backfill job %s failed: all chunk(s) errored", job_id)
+        else:
+            await self._emit_backfill_event(
+                "ingest.backfill.completed",
+                job_id,
+                {"bars_written": state["bars"], "failed_symbols": failed_symbols},
+                propagation_meta,
+            )
+            if status == ingest_pb2.BACKFILL_STATUS_PARTIAL:
+                await self._emit_backfill_alert(
+                    job_id,
+                    status,
+                    failed_symbols,
+                    "some chunks/symbols failed to backfill",
+                    propagation_meta,
+                )
+            log.info(
+                "backfill job %s %s bars=%d chunks=%d/%d",
+                job_id,
+                "partial" if status == ingest_pb2.BACKFILL_STATUS_PARTIAL else "completed",
+                state["bars"],
+                state["chunks_done"],
+                total_chunks,
+            )
+
+    async def resume_incomplete_jobs(self) -> int:
+        """FR-3: on startup, re-drive jobs that still have PENDING/FAILED chunks. Returns count."""
+        if self._db is None:
+            return 0
+        job_ids = await backfill_chunks.list_jobs_with_incomplete_chunks(self._db)
+        for job_id in job_ids:
+            asyncio.create_task(self._resume_job(job_id))
+        return len(job_ids)
+
+    async def _resume_job(self, job_id: str):
+        row = await backfill_jobs.get_job(self._db, job_id)
+        if row is None:
+            return
+        enum = row.get("timeframe_enum") or 0
+        timeframe = _ENUM_TO_STR.get(enum) or _TF_ALIASES.get(
+            row.get("timeframe") or "", row.get("timeframe") or "1d"
+        )
+        # Re-fetch is idempotent (marketdata upsert), so resume always uses overwrite=False.
+        from types import SimpleNamespace
+
+        req = SimpleNamespace(overwrite=False)
+        await backfill_jobs.update_job(self._db, job_id, status=ingest_pb2.BACKFILL_STATUS_RUNNING)
+        chunks = await backfill_chunks.get_incomplete_chunks(self._db, job_id)
+        log.info("resuming backfill job %s with %d incomplete chunk(s)", job_id, len(chunks))
+        state = await self._run_chunks(job_id, req, timeframe, chunks, ())
+        await self._finalize_backfill(job_id, state, len(chunks), ())
+
+    async def _run_chunks(self, job_id, request, timeframe, chunks, propagation_meta):
+        """Execute chunks concurrently under the chunk-level semaphore (FR-6).
+
+        Returns a state dict: bars, chunks_done, chunks_failed, failed_symbols (set).
+        Job progress (bars_processed / chunks_completed) is advanced after each chunk.
+        """
+        sem = asyncio.Semaphore(self._cfg.backfill_max_concurrent_chunks)
+        max_attempts = (
+            self._cfg.backfill_max_retry_attempts if self._cfg.backfill_retry_on_failure else 0
+        )
+        tf_enum = _STR_TO_ENUM.get(timeframe, 0)
+        state = {"bars": 0, "chunks_done": 0, "chunks_failed": 0, "failed_symbols": set()}
+        lock = asyncio.Lock()
+
+        async def run_one(chunk):
+            chunk_id = str(chunk["chunk_id"])
+            chunk_range = common_pb2.TimeRange(
+                start=_dt_to_ts(chunk["range_start"]), end=_dt_to_ts(chunk["range_end"])
+            )
+            async with sem:
+                await backfill_chunks.mark_chunk_running(self._db, chunk_id)
+                remaining = list(chunk["symbols"])
+                bars = 0
+                failed: list[str] = []
+                last_exc = None
+                attempt = 0
+                while True:
+                    try:
+                        resp = await self._marketdata.BackfillBars(
+                            marketdata_pb2.BackfillBarsRequest(
+                                symbols=remaining,
+                                timeframe=timeframe,
+                                timeframe_enum=tf_enum,
+                                range=chunk_range,
+                                overwrite_existing=request.overwrite,
+                            ),
+                            metadata=propagation_meta,
+                        )
+                        bars += resp.bars_written
+                        failed = list(resp.failed_symbols)
+                        last_exc = None
+                    except Exception as e:  # transient RPC error — retry the whole chunk
+                        last_exc = e
+                        failed = remaining
+                    if not failed or attempt >= max_attempts:
+                        break
+                    attempt += 1
+                    await asyncio.sleep(2**attempt)  # 2s, 4s, 8s
+                    remaining = failed
+
+                async with lock:
+                    if last_exc is not None and bars == 0:
+                        # Chunk never succeeded (RPC kept raising) → FAILED, resumable later.
+                        await backfill_chunks.mark_chunk_failed(
+                            self._db, chunk_id, error=str(last_exc)
+                        )
+                        state["chunks_failed"] += 1
+                        state["failed_symbols"].update(chunk["symbols"])
+                        log.warning(
+                            "backfill job %s chunk %s failed: %s", job_id, chunk_id, last_exc
+                        )
+                    else:
+                        await backfill_chunks.mark_chunk_completed(
+                            self._db, chunk_id, bars_written=bars
+                        )
+                        state["chunks_done"] += 1
+                        state["bars"] += bars
+                        if failed:
+                            state["failed_symbols"].update(failed)
+                    await backfill_jobs.update_job(
+                        self._db,
+                        job_id,
+                        bars_processed=state["bars"],
+                        chunks_completed=state["chunks_done"],
+                    )
+
+        await asyncio.gather(*(run_one(c) for c in chunks))
+        return state
 
     async def GetBackfillStatus(self, request, context):
         if self._db is None:

@@ -71,6 +71,15 @@ def plan_chunks(
     return chunks
 
 
+def estimate_bars(chunks: list[dict], timeframe: str) -> int:
+    """Sum the estimated bar count across planned chunks (job bars_total denominator)."""
+    bpd = _BARS_PER_DAY.get(timeframe, 1)
+    total = 0
+    for c in chunks:
+        total += len(c["symbols"]) * max(1, _weekdays(c["range_start"], c["range_end"])) * bpd
+    return total
+
+
 async def insert_chunks(db_pool, job_id: str, chunks: list[dict]) -> list[str]:
     """Bulk-insert planned chunks as PENDING. Returns the created chunk_ids (uuid strings)."""
     chunk_ids: list[str] = []

@@ -1,6 +1,6 @@
 # Implementation Spec: resumable-chunked-backfills
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-06-09
 **Feature**: `docs/roadmap/features/054-resumable-chunked-backfills/feature.md`
 **Total Steps**: 9
@@ -227,7 +227,7 @@ by 053.
 
 ### Step 6 — service: chunk planner, chunk repository, resume, and GAPS_ONLY mode
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -323,7 +323,7 @@ by 053.
 
 ### Step 7 — test: chunk planner, resume, GAPS_ONLY, concurrency
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_backfill_chunks.py` — create
@@ -363,7 +363,7 @@ by 053.
 
 ### Step 8 — config: seed the three new backfill chunk keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/005_ingest_backfill_chunking.up.sql` — create
@@ -408,7 +408,7 @@ by 053.
 
 ### Step 9 — docs: replace the manual per-year loop in historical-backfill.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/historical-backfill.md` — modify
@@ -444,4 +444,23 @@ by 053.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 6/7 — full chunked rewrite of 052's backfill execution model
+**Spec said**: Replace the single `BackfillBars` call in `_run_backfill` with chunk planning/execution.
+**Actual**: On this stacked branch `_run_backfill`/`_execute_backfill` already carried feature 052's
+single-fetch model (retry + `failed_symbols`→PARTIAL + job-level semaphore) and 052's committed
+servicer tests assert it. Per an explicit user decision (sdd-execute blocker → "Full chunked
+rewrite"), `_execute_backfill` was rewritten to plan→persist→execute chunks for every job, with
+per-chunk retry preserving FR-8 and chunk-level outcomes mapped to job status (COMPLETED / PARTIAL
+when some symbols/chunks fail but progress is made / FAILED when no chunk progresses). The affected
+052 tests were updated to the chunked model (chunk-repo patched via a `patch_chunk_repo` helper;
+`make_servicer` now supplies the chunk config) and new plan_chunks/resume/GAPS_ONLY/chunk-concurrency
+tests added — Step 7 is sanctioned to modify `test_ingest_servicer.py`.
+**Reason**: User-approved; keeps a single coherent execution model rather than two parallel paths.
+**Disposition**: accepted (user decision)
+
+### Deviation: Steps 4/8 codegen+migration verification environment
+**Spec said**: run migrations via golang-migrate; codegen via the Docker image.
+**Actual**: Docker unavailable → proto regen via host toolchain pinned to CI `proto-freshness`
+versions; migrations 004 (ingest) + 005 (config) verified by applying up+down on a throwaway local
+postgres:16 (FK enforcement + reversibility checked). CI-equivalent fallbacks.
+**Disposition**: CI-equivalent fallback
