@@ -192,9 +192,41 @@ After starting the stack (dev) or deploying to DO (prod):
 
 ---
 
-## Step 6 — Recommended Dashboards
+## Step 6 — Dashboards (as code)
 
-Create these dashboards in Grafana Cloud (Dashboards → New → New Dashboard):
+Dashboards are managed **as code** in [`grafana/dashboards/`](../../grafana/dashboards/)
+and deployed to Grafana Cloud by CI — that directory is the source of truth, not
+the Grafana UI. On every push to `main-dev`/`main` that touches `grafana/**`, the
+**Grafana dashboards** workflow (`.github/workflows/grafana-dashboards.yml`) runs
+`scripts/grafana-deploy-dashboards.sh`, which uploads each dashboard JSON via the
+Grafana HTTP API (idempotent, keyed by `uid`, into a managed `xstockstrat` folder).
+
+### Required repository secrets
+
+Add these in **GitHub → Settings → Secrets and variables → Actions** so the
+workflow can authenticate (they are **not** the same as the OTLP export creds):
+
+| Secret | Value | How to obtain |
+|---|---|---|
+| `GRAFANA_URL` | Your stack URL, e.g. `https://xstockstrat.grafana.net` | Grafana Cloud portal home |
+| `GRAFANA_SERVICE_ACCOUNT_TOKEN` | `glsa_...` token with **Editor** role (needed to create/update dashboards) | Administration → Users and access → Service accounts → Add service account → Add token |
+
+### Adding or editing a dashboard
+
+1. Build/tweak it in the Grafana UI → **Export → Export as JSON** (keep the raw
+   model — leave "Export for sharing externally" off).
+2. Save it into `grafana/dashboards/` (one file per dashboard) with a stable
+   `uid` and a `${datasource}` template variable instead of a hardcoded
+   datasource uid (uids differ per stack). Full guidance:
+   [`grafana/dashboards/README.md`](../../grafana/dashboards/README.md).
+3. Open a PR to `main-dev`. On merge, CI deploys it. You can also deploy
+   manually: `GRAFANA_URL=... GRAFANA_SERVICE_ACCOUNT_TOKEN=... ./scripts/grafana-deploy-dashboards.sh`.
+
+### Dashboards to maintain here
+
+`service-health-overview.json` is already in the repo. The following are
+described below for reference and can be added to `grafana/dashboards/` the same
+way as they're built out:
 
 ### Dashboard 1: Service Health Overview
 
