@@ -349,9 +349,7 @@ class TestExecuteFormulaOutputEnforcement:
         from gen.indicators.v1 import indicators_pb2
 
         servicer = IndicatorsServicer(config_watcher=self._cfg())
-        servicer._repo = self._repo_for(
-            "result = {'value': 1, 'upper': 2}", [{"name": "upper"}]
-        )
+        servicer._repo = self._repo_for("result = {'value': 1, 'upper': 2}", [{"name": "upper"}])
         resp = await servicer.ExecuteFormula(
             indicators_pb2.ExecuteFormulaRequest(formula_id="f-1"), MagicMock()
         )

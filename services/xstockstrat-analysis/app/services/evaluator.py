@@ -121,9 +121,7 @@ class StrategyEvaluator:
             )
         return decisions
 
-    async def _compute_component(
-        self, comp, closes: list[float]
-    ) -> dict[str, list[float | None]]:
+    async def _compute_component(self, comp, closes: list[float]) -> dict[str, list[float | None]]:
         """
         Compute a single component's output series over all bars.
 

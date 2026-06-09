@@ -155,8 +155,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                     execution_ms=result.execution_ms,
                     memory_used_bytes=result.memory_used_bytes,
                     error=(
-                        "formula did not emit declared output series: "
-                        + ", ".join(sorted(missing))
+                        "formula did not emit declared output series: " + ", ".join(sorted(missing))
                     ),
                     exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR,
                 )
@@ -359,7 +358,5 @@ def _row_to_formula(row: dict) -> "indicators_pb2.FormulaDefinition":
         parameters=[
             ParseDict(p, indicators_pb2.FormulaParameter()) for p in (row.get("parameters") or [])
         ],
-        outputs=[
-            ParseDict(o, indicators_pb2.FormulaOutput()) for o in (row.get("outputs") or [])
-        ],
+        outputs=[ParseDict(o, indicators_pb2.FormulaOutput()) for o in (row.get("outputs") or [])],
     )
