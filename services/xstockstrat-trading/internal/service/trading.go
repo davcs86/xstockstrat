@@ -526,6 +526,7 @@ func (s *TradingService) pollFills(ctx context.Context) {
 				"order_id": order.OrderId, "symbol": order.Symbol,
 				"qty": order.Qty, "fill_price": order.FilledAvgPrice,
 				"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
+				"account_id": order.AccountId,
 			})
 			go s.emitFillAlert(context.Background(), order)
 			slog.Info("order filled", "order_id", order.OrderId, "symbol", order.Symbol,
@@ -536,6 +537,7 @@ func (s *TradingService) pollFills(ctx context.Context) {
 				"order_id": order.OrderId, "symbol": order.Symbol,
 				"filled_qty": order.FilledQty, "fill_price": order.FilledAvgPrice,
 				"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
+				"account_id": order.AccountId,
 			})
 
 		case tradingv1.OrderStatus_ORDER_STATUS_CANCELED:
