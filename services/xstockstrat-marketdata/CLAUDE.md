@@ -48,8 +48,10 @@ Namespace: `marketdata`
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `marketdata.alpaca.paper` | bool | `true` | Use paper trading endpoint |
+| `marketdata.alpaca.feed` | string | `iex` | Alpaca market-data feed for bar/quote requests (`iex`/`sip`/`otc`). The free/basic (paper) data plan only permits `iex`; omitting the param defaults Alpaca to SIP, which those plans reject with HTTP 403. Read at startup. |
 | `marketdata.stream.reconnect_delay_ms` | int | `2000` | Reconnect delay on stream drop |
 | `marketdata.stream.max_reconnects` | int | `10` | Max reconnect attempts before alert |
+| `marketdata.stream.warm_interval_ms` | int | `30000` | Interval for the warm-quote poller that refreshes the latest quote of every queried symbol into the DB cache. Read live each cycle; `0`/negative pauses it. |
 | `marketdata.backfill.batch_size` | int | `1000` | Bars per Alpaca API request |
 | `marketdata.backfill.rate_limit_rps` | int | `200` | Alpaca API rate limit |
 | `marketdata.retention.quotes_days` | int | `90` | Quote data retention |
@@ -69,6 +71,8 @@ Namespace: `marketdata`
 - REST: historical bars, asset listing, latest quotes — `internal/alpaca/client.go`
 - WebSocket: real-time bar stream, quote stream — same package
 - Credentials sourced from env vars (never from config service — these are secrets)
+- Bar/quote requests send `feed=<marketdata.alpaca.feed>` (default `iex`) — required by the free/basic data plan, which 403s the SIP default
+- `GetLatestQuote` serves from the `marketdata.quotes` cache, falling back to a live Alpaca call (and caching the result). A background warm poller (`StartWarmQuotePoller`) keeps every queried symbol's latest quote fresh in the DB so per-position P&L reads avoid repeated live calls
 
 ## Environment Variables
 
