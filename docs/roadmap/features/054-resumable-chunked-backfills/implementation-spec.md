@@ -84,7 +84,7 @@ by 053.
 
 ### Step 1 — proto: add FillMode enum and chunk-progress fields to ingest.proto
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
@@ -129,7 +129,7 @@ by 053.
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/python/**` — modify (regenerated)
