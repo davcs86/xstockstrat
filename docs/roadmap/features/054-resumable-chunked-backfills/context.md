@@ -65,3 +65,17 @@
     GetDataCoverage calls must reuse `metadata=propagation_meta`.
   - No new env vars or ports needed — ingest already wires MARKETDATA_ENDPOINT/LEDGER_ENDPOINT/
     DATABASE_URL in docker-compose + both DO app specs.
+
+## Session 2026-06-09 — sdd-execute (sequential, stacked on 053)
+
+Branch `feature/resumable-chunked-backfills` cut from `feature/backfill-backtest-coverage` (053),
+which is itself stacked on 052. The hard prerequisites the spec flagged (052 backfill_jobs table +
+concurrency gate; 053 GetDataCoverage RPC) are now present on the stacked base. Same env fallbacks
+as 052/053 (host proto toolchain; throwaway postgres:16; per-feature integration PR).
+
+### Re-spec gate (§5.3) — applied before the step loop
+- BackfillJob highest field on stacked base is 12 → chunks_total=13, chunks_completed=14 (was 11/12).
+- TriggerBackfillRequest highest field is 5 → fill_mode=6 (was 5).
+- ingest migration NNN = 004 (052 added 003_backfill_jobs); FK parent ingest.backfill_jobs(job_id uuid) confirmed.
+- config migration NNN = 005 (052 added no config migration; last is 004_agent_config).
+- Committed as respec(resumable-chunked-backfills).

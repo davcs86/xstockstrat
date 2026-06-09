@@ -1,6 +1,6 @@
 # Feature: resumable-chunked-backfills
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/resumable-chunked-backfills`
 **Created**: 2026-06-08
 **Last Updated**: 2026-06-09
@@ -16,6 +16,7 @@
 | 2026-06-08 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-06-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved; 5 open questions resolved (chunk strategy, resume idempotency, separate chunk-concurrency key, retention, GAPS_ONLY default); merge-order deps on 052+053 recorded |
 | 2026-06-09 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps. Flagged hard prerequisite: 052 (backfill_jobs table + concurrency gate) and 053 (GetDataCoverage RPC) are NOT yet on main-dev; re-run /sdd-spec after they merge. Confirmed marketdata OHLCV write is an idempotent upsert (resume-safe). |
+| 2026-06-09 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential stacked run (on 053). Re-spec vs stacked base: BackfillJob chunks_total/completed=13/14 (052+053 took 11/12), TriggerBackfillRequest fill_mode=6 (053 took 5), ingest migration=004 (052 took 003), config migration=005 (052 added none). GetDataCoverage + backfill_jobs now present. |
 
 ---
 
