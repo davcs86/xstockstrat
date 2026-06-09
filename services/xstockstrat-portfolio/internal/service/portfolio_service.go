@@ -639,7 +639,7 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 		}
 		presentSymbols = append(presentSymbols, p.Symbol)
 	}
-	if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, presentSymbols); err != nil {
+	if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, userID, presentSymbols); err != nil {
 		slog.Warn("delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
 	}
 }
