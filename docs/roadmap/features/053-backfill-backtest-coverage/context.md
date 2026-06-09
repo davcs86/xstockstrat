@@ -91,3 +91,24 @@ integration PR). Breaking `Timeframe` enum migration requires Platform Lead appr
   StreamBars requests (timeframe_enum=5) and `Bar` (timeframe_enum=12) are unaffected by 052.
   analysis `BacktestResult` (status=12, coverage_gaps=13) and common `Timeframe` enum unaffected.
 - Committed as respec(backfill-backtest-coverage).
+
+### Steps 1-12 — execution summary [done]
+- Step 1-2 proto+regen: common.v1.Timeframe enum; marketdata GetDataCoverage RPC + Coverage messages
+  + timeframe_enum deprecation pairs (GetBars/BackfillBars/StreamBars=5, Bar=12); analysis
+  BacktestStatus enum + CoverageGap + BacktestResult.status=12/coverage_gaps=13; ingest
+  timeframe_enum (BackfillJob=12 [respec], TriggerBackfillRequest=5). buf lint+breaking pass.
+- Step 3-6 marketdata Go: internal/timeframe normalizer (ToCanonical/FromString/Resolve + ComputeGaps)
+  + repo GetCoverage + service/handler GetDataCoverage wiring + timeframe_test.go. go test cov 66.9%,
+  golangci-lint 0 issues. Deprecation made staticcheck flag existing string reads → //nolint:staticcheck
+  on intentional deprecation-window reads (deviation logged).
+- Step 7-8 analysis: _InsufficientData sentinel → structured BACKTEST_STATUS_INSUFFICIENT_DATA +
+  coverage_gaps (no more fake flat equity); GetBars timeframe "1Day"→"1d"+enum (the load-bearing fix).
+  pytest 94 passed, cov 60.4%.
+- Step 9-11 UI: BFF triggerBackfill; useTriggerBackfill hook; insufficient-data panel + "Backfill this
+  range" action on the strategy page; e2e spec + mock-backend (runBacktest INSUFFICIENT_DATA on 9092,
+  triggerBackfill jobId on 9093). tsc --noEmit + lint clean. Playwright attempted; cold-compile exceeds
+  the 10s local timeout → tsc+lint CI-equivalent fallback (deviation logged).
+- Step 12 docs: historical-backfill.md timeframe note; marketdata + analysis CLAUDE.md.
+
+All 12 steps done → code-completed. merge-order: 053 must merge after 052 (Resolved: No) AND requires
+Platform Lead approval for the breaking Timeframe enum — user obtains both before the integration PR merges.

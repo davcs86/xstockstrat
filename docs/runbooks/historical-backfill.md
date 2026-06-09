@@ -154,6 +154,15 @@ ORDER BY missing_day;
 
 > **Warning**: 1-minute bars for 5 years × 100 symbols ≈ 500M rows. Split into yearly jobs.
 
+> **Canonical timeframe vocabulary** (feature 053): the strings above (`1m`/`5m`/`1h`/`1d`) are the
+> canonical forms stored in `marketdata.ohlcv.timeframe`. A shared `common.v1.Timeframe` enum
+> (`TIMEFRAME_1MIN`/`_5MIN`/`_1HOUR`/`_1DAY`) is now the **preferred** field on the marketdata,
+> ingest, and analysis messages (`timeframe_enum`); prefer it in new code. The legacy string
+> `timeframe` fields remain for backward compatibility but are **deprecated for one release** (per
+> `proto-versioning.md`'s deprecation cycle) and will be removed in a future gated breaking change.
+> The marketdata `internal/timeframe` normalizer reconciles legacy aliases — notably `"1Day"`
+> (previously sent by the backtest path) now maps to the same stored `"1d"` bars the backfill writes.
+
 ---
 
 ## Large Backfill Strategy
