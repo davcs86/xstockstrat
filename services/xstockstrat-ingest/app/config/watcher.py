@@ -104,3 +104,29 @@ class ConfigWatcher:
             "indicators.sandbox.allowed_imports", default="numpy,pandas,math,statistics"
         )
         return [m.strip() for m in raw.split(",") if m.strip()]
+
+    # Backfill config helpers — ingest.backfill.*
+    @property
+    def backfill_max_concurrent_jobs(self) -> int:
+        return self.get_int("ingest.backfill.max_concurrent_jobs", default=3)
+
+    @property
+    def backfill_retry_on_failure(self) -> bool:
+        return self.get_bool("ingest.backfill.retry_on_failure", default=True)
+
+    @property
+    def backfill_max_retry_attempts(self) -> int:
+        return self.get_int("ingest.backfill.max_retry_attempts", default=3)
+
+    # Chunked-backfill config helpers — ingest.backfill.* (feature 054)
+    @property
+    def backfill_chunk_max_bars(self) -> int:
+        return self.get_int("ingest.backfill.chunk_max_bars", default=200000)
+
+    @property
+    def backfill_chunk_window_days(self) -> int:
+        return self.get_int("ingest.backfill.chunk_window_days", default=90)
+
+    @property
+    def backfill_max_concurrent_chunks(self) -> int:
+        return self.get_int("ingest.backfill.max_concurrent_chunks", default=3)

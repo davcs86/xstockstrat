@@ -1,6 +1,6 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest, PageResponse, TimeRange } from "../../common/v1/common_pb";
+import type { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
  * Describes the file analysis/v1/analysis.proto.
@@ -49,6 +49,42 @@ export type RunBacktestRequest = Message<"xstockstrat.analysis.v1.RunBacktestReq
  */
 export declare const RunBacktestRequestSchema: GenMessage<RunBacktestRequest>;
 /**
+ * @generated from message xstockstrat.analysis.v1.CoverageGap
+ */
+export type CoverageGap = Message<"xstockstrat.analysis.v1.CoverageGap"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: xstockstrat.common.v1.Timeframe timeframe = 2;
+     */
+    timeframe: Timeframe;
+    /**
+     * @generated from field: xstockstrat.common.v1.TimeRange requested_range = 3;
+     */
+    requestedRange?: TimeRange | undefined;
+    /**
+     * @generated from field: int64 bars_have = 4;
+     */
+    barsHave: bigint;
+    /**
+     * @generated from field: int64 bars_need = 5;
+     */
+    barsNeed: bigint;
+    /**
+     * The range a caller should backfill to satisfy this backtest.
+     *
+     * @generated from field: xstockstrat.common.v1.TimeRange gap = 6;
+     */
+    gap?: TimeRange | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.CoverageGap.
+ * Use `create(CoverageGapSchema)` to create a new message.
+ */
+export declare const CoverageGapSchema: GenMessage<CoverageGap>;
+/**
  * @generated from message xstockstrat.analysis.v1.BacktestResult
  */
 export type BacktestResult = Message<"xstockstrat.analysis.v1.BacktestResult"> & {
@@ -96,6 +132,16 @@ export type BacktestResult = Message<"xstockstrat.analysis.v1.BacktestResult"> &
      * @generated from field: repeated xstockstrat.analysis.v1.TradeRecord trades = 11;
      */
     trades: TradeRecord[];
+    /**
+     * @generated from field: xstockstrat.analysis.v1.BacktestStatus status = 12;
+     */
+    status: BacktestStatus;
+    /**
+     * populated per-symbol when status == INSUFFICIENT_DATA
+     *
+     * @generated from field: repeated xstockstrat.analysis.v1.CoverageGap coverage_gaps = 13;
+     */
+    coverageGaps: CoverageGap[];
 };
 /**
  * Describes the message xstockstrat.analysis.v1.BacktestResult.
@@ -456,6 +502,27 @@ export type SetStrategyLiveResponse = Message<"xstockstrat.analysis.v1.SetStrate
  * Use `create(SetStrategyLiveResponseSchema)` to create a new message.
  */
 export declare const SetStrategyLiveResponseSchema: GenMessage<SetStrategyLiveResponse>;
+/**
+ * @generated from enum xstockstrat.analysis.v1.BacktestStatus
+ */
+export declare enum BacktestStatus {
+    /**
+     * @generated from enum value: BACKTEST_STATUS_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: BACKTEST_STATUS_OK = 1;
+     */
+    OK = 1,
+    /**
+     * @generated from enum value: BACKTEST_STATUS_INSUFFICIENT_DATA = 2;
+     */
+    INSUFFICIENT_DATA = 2
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.BacktestStatus.
+ */
+export declare const BacktestStatusSchema: GenEnum<BacktestStatus>;
 /**
  * @generated from enum xstockstrat.analysis.v1.ComponentKind
  */

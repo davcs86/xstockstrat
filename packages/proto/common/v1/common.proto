@@ -66,3 +66,13 @@ enum BrokerType {
   BROKER_TYPE_ALPACA = 1;
   BROKER_TYPE_IBKR = 2;
 }
+
+// Timeframe is the canonical OHLCV bar interval, shared by marketdata + analysis + ingest.
+// Replaces the free-text "1d"/"1Day"/"1m" strings that previously mismatched across services.
+enum Timeframe {
+  TIMEFRAME_UNSPECIFIED = 0;
+  TIMEFRAME_1MIN = 1;
+  TIMEFRAME_5MIN = 2;
+  TIMEFRAME_1HOUR = 3;
+  TIMEFRAME_1DAY = 4;
+}

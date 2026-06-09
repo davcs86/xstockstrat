@@ -48,6 +48,9 @@ const (
 	// MarketDataServiceBackfillBarsProcedure is the fully-qualified name of the MarketDataService's
 	// BackfillBars RPC.
 	MarketDataServiceBackfillBarsProcedure = "/xstockstrat.marketdata.v1.MarketDataService/BackfillBars"
+	// MarketDataServiceGetDataCoverageProcedure is the fully-qualified name of the MarketDataService's
+	// GetDataCoverage RPC.
+	MarketDataServiceGetDataCoverageProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetDataCoverage"
 	// MarketDataServiceListAssetsProcedure is the fully-qualified name of the MarketDataService's
 	// ListAssets RPC.
 	MarketDataServiceListAssetsProcedure = "/xstockstrat.marketdata.v1.MarketDataService/ListAssets"
@@ -65,6 +68,8 @@ type MarketDataServiceClient interface {
 	GetLatestQuote(context.Context, *connect.Request[v1.GetLatestQuoteRequest]) (*connect.Response[v1.Quote], error)
 	// Trigger historical backfill (used by xstockstrat-ingest)
 	BackfillBars(context.Context, *connect.Request[v1.BackfillBarsRequest]) (*connect.Response[v1.BackfillBarsResponse], error)
+	// Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
+	GetDataCoverage(context.Context, *connect.Request[v1.GetDataCoverageRequest]) (*connect.Response[v1.GetDataCoverageResponse], error)
 	// Get available symbols
 	ListAssets(context.Context, *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error)
 }
@@ -111,6 +116,12 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(marketDataServiceMethods.ByName("BackfillBars")),
 			connect.WithClientOptions(opts...),
 		),
+		getDataCoverage: connect.NewClient[v1.GetDataCoverageRequest, v1.GetDataCoverageResponse](
+			httpClient,
+			baseURL+MarketDataServiceGetDataCoverageProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("GetDataCoverage")),
+			connect.WithClientOptions(opts...),
+		),
 		listAssets: connect.NewClient[v1.ListAssetsRequest, v1.ListAssetsResponse](
 			httpClient,
 			baseURL+MarketDataServiceListAssetsProcedure,
@@ -122,12 +133,13 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 
 // marketDataServiceClient implements MarketDataServiceClient.
 type marketDataServiceClient struct {
-	streamBars     *connect.Client[v1.StreamBarsRequest, v1.Bar]
-	streamQuotes   *connect.Client[v1.StreamQuotesRequest, v1.Quote]
-	getBars        *connect.Client[v1.GetBarsRequest, v1.GetBarsResponse]
-	getLatestQuote *connect.Client[v1.GetLatestQuoteRequest, v1.Quote]
-	backfillBars   *connect.Client[v1.BackfillBarsRequest, v1.BackfillBarsResponse]
-	listAssets     *connect.Client[v1.ListAssetsRequest, v1.ListAssetsResponse]
+	streamBars      *connect.Client[v1.StreamBarsRequest, v1.Bar]
+	streamQuotes    *connect.Client[v1.StreamQuotesRequest, v1.Quote]
+	getBars         *connect.Client[v1.GetBarsRequest, v1.GetBarsResponse]
+	getLatestQuote  *connect.Client[v1.GetLatestQuoteRequest, v1.Quote]
+	backfillBars    *connect.Client[v1.BackfillBarsRequest, v1.BackfillBarsResponse]
+	getDataCoverage *connect.Client[v1.GetDataCoverageRequest, v1.GetDataCoverageResponse]
+	listAssets      *connect.Client[v1.ListAssetsRequest, v1.ListAssetsResponse]
 }
 
 // StreamBars calls xstockstrat.marketdata.v1.MarketDataService.StreamBars.
@@ -155,6 +167,11 @@ func (c *marketDataServiceClient) BackfillBars(ctx context.Context, req *connect
 	return c.backfillBars.CallUnary(ctx, req)
 }
 
+// GetDataCoverage calls xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage.
+func (c *marketDataServiceClient) GetDataCoverage(ctx context.Context, req *connect.Request[v1.GetDataCoverageRequest]) (*connect.Response[v1.GetDataCoverageResponse], error) {
+	return c.getDataCoverage.CallUnary(ctx, req)
+}
+
 // ListAssets calls xstockstrat.marketdata.v1.MarketDataService.ListAssets.
 func (c *marketDataServiceClient) ListAssets(ctx context.Context, req *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error) {
 	return c.listAssets.CallUnary(ctx, req)
@@ -173,6 +190,8 @@ type MarketDataServiceHandler interface {
 	GetLatestQuote(context.Context, *connect.Request[v1.GetLatestQuoteRequest]) (*connect.Response[v1.Quote], error)
 	// Trigger historical backfill (used by xstockstrat-ingest)
 	BackfillBars(context.Context, *connect.Request[v1.BackfillBarsRequest]) (*connect.Response[v1.BackfillBarsResponse], error)
+	// Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
+	GetDataCoverage(context.Context, *connect.Request[v1.GetDataCoverageRequest]) (*connect.Response[v1.GetDataCoverageResponse], error)
 	// Get available symbols
 	ListAssets(context.Context, *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error)
 }
@@ -214,6 +233,12 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 		connect.WithSchema(marketDataServiceMethods.ByName("BackfillBars")),
 		connect.WithHandlerOptions(opts...),
 	)
+	marketDataServiceGetDataCoverageHandler := connect.NewUnaryHandler(
+		MarketDataServiceGetDataCoverageProcedure,
+		svc.GetDataCoverage,
+		connect.WithSchema(marketDataServiceMethods.ByName("GetDataCoverage")),
+		connect.WithHandlerOptions(opts...),
+	)
 	marketDataServiceListAssetsHandler := connect.NewUnaryHandler(
 		MarketDataServiceListAssetsProcedure,
 		svc.ListAssets,
@@ -232,6 +257,8 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 			marketDataServiceGetLatestQuoteHandler.ServeHTTP(w, r)
 		case MarketDataServiceBackfillBarsProcedure:
 			marketDataServiceBackfillBarsHandler.ServeHTTP(w, r)
+		case MarketDataServiceGetDataCoverageProcedure:
+			marketDataServiceGetDataCoverageHandler.ServeHTTP(w, r)
 		case MarketDataServiceListAssetsProcedure:
 			marketDataServiceListAssetsHandler.ServeHTTP(w, r)
 		default:
@@ -261,6 +288,10 @@ func (UnimplementedMarketDataServiceHandler) GetLatestQuote(context.Context, *co
 
 func (UnimplementedMarketDataServiceHandler) BackfillBars(context.Context, *connect.Request[v1.BackfillBarsRequest]) (*connect.Response[v1.BackfillBarsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.BackfillBars is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) GetDataCoverage(context.Context, *connect.Request[v1.GetDataCoverageRequest]) (*connect.Response[v1.GetDataCoverageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage is not implemented"))
 }
 
 func (UnimplementedMarketDataServiceHandler) ListAssets(context.Context, *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error) {

@@ -174,6 +174,63 @@ func (BrokerType) EnumDescriptor() ([]byte, []int) {
 	return file_common_v1_common_proto_rawDescGZIP(), []int{2}
 }
 
+// Timeframe is the canonical OHLCV bar interval, shared by marketdata + analysis + ingest.
+// Replaces the free-text "1d"/"1Day"/"1m" strings that previously mismatched across services.
+type Timeframe int32
+
+const (
+	Timeframe_TIMEFRAME_UNSPECIFIED Timeframe = 0
+	Timeframe_TIMEFRAME_1MIN        Timeframe = 1
+	Timeframe_TIMEFRAME_5MIN        Timeframe = 2
+	Timeframe_TIMEFRAME_1HOUR       Timeframe = 3
+	Timeframe_TIMEFRAME_1DAY        Timeframe = 4
+)
+
+// Enum value maps for Timeframe.
+var (
+	Timeframe_name = map[int32]string{
+		0: "TIMEFRAME_UNSPECIFIED",
+		1: "TIMEFRAME_1MIN",
+		2: "TIMEFRAME_5MIN",
+		3: "TIMEFRAME_1HOUR",
+		4: "TIMEFRAME_1DAY",
+	}
+	Timeframe_value = map[string]int32{
+		"TIMEFRAME_UNSPECIFIED": 0,
+		"TIMEFRAME_1MIN":        1,
+		"TIMEFRAME_5MIN":        2,
+		"TIMEFRAME_1HOUR":       3,
+		"TIMEFRAME_1DAY":        4,
+	}
+)
+
+func (x Timeframe) Enum() *Timeframe {
+	p := new(Timeframe)
+	*p = x
+	return p
+}
+
+func (x Timeframe) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Timeframe) Descriptor() protoreflect.EnumDescriptor {
+	return file_common_v1_common_proto_enumTypes[3].Descriptor()
+}
+
+func (Timeframe) Type() protoreflect.EnumType {
+	return &file_common_v1_common_proto_enumTypes[3]
+}
+
+func (x Timeframe) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Timeframe.Descriptor instead.
+func (Timeframe) EnumDescriptor() ([]byte, []int) {
+	return file_common_v1_common_proto_rawDescGZIP(), []int{3}
+}
+
 // Pagination
 type PageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -559,7 +616,13 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"BrokerType\x12\x1b\n" +
 	"\x17BROKER_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12BROKER_TYPE_ALPACA\x10\x01\x12\x14\n" +
-	"\x10BROKER_TYPE_IBKR\x10\x02B<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3"
+	"\x10BROKER_TYPE_IBKR\x10\x02*w\n" +
+	"\tTimeframe\x12\x19\n" +
+	"\x15TIMEFRAME_UNSPECIFIED\x10\x00\x12\x12\n" +
+	"\x0eTIMEFRAME_1MIN\x10\x01\x12\x12\n" +
+	"\x0eTIMEFRAME_5MIN\x10\x02\x12\x13\n" +
+	"\x0fTIMEFRAME_1HOUR\x10\x03\x12\x12\n" +
+	"\x0eTIMEFRAME_1DAY\x10\x04B<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3"
 
 var (
 	file_common_v1_common_proto_rawDescOnce sync.Once
@@ -573,25 +636,26 @@ func file_common_v1_common_proto_rawDescGZIP() []byte {
 	return file_common_v1_common_proto_rawDescData
 }
 
-var file_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_common_v1_common_proto_goTypes = []any{
 	(TradingMode)(0),              // 0: xstockstrat.common.v1.TradingMode
 	(Environment)(0),              // 1: xstockstrat.common.v1.Environment
 	(BrokerType)(0),               // 2: xstockstrat.common.v1.BrokerType
-	(*PageRequest)(nil),           // 3: xstockstrat.common.v1.PageRequest
-	(*PageResponse)(nil),          // 4: xstockstrat.common.v1.PageResponse
-	(*Error)(nil),                 // 5: xstockstrat.common.v1.Error
-	(*Decimal)(nil),               // 6: xstockstrat.common.v1.Decimal
-	(*Asset)(nil),                 // 7: xstockstrat.common.v1.Asset
-	(*TimeRange)(nil),             // 8: xstockstrat.common.v1.TimeRange
-	nil,                           // 9: xstockstrat.common.v1.Error.DetailsEntry
-	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
+	(Timeframe)(0),                // 3: xstockstrat.common.v1.Timeframe
+	(*PageRequest)(nil),           // 4: xstockstrat.common.v1.PageRequest
+	(*PageResponse)(nil),          // 5: xstockstrat.common.v1.PageResponse
+	(*Error)(nil),                 // 6: xstockstrat.common.v1.Error
+	(*Decimal)(nil),               // 7: xstockstrat.common.v1.Decimal
+	(*Asset)(nil),                 // 8: xstockstrat.common.v1.Asset
+	(*TimeRange)(nil),             // 9: xstockstrat.common.v1.TimeRange
+	nil,                           // 10: xstockstrat.common.v1.Error.DetailsEntry
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
 }
 var file_common_v1_common_proto_depIdxs = []int32{
-	9,  // 0: xstockstrat.common.v1.Error.details:type_name -> xstockstrat.common.v1.Error.DetailsEntry
-	10, // 1: xstockstrat.common.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
-	10, // 2: xstockstrat.common.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
+	10, // 0: xstockstrat.common.v1.Error.details:type_name -> xstockstrat.common.v1.Error.DetailsEntry
+	11, // 1: xstockstrat.common.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
+	11, // 2: xstockstrat.common.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
 	3,  // [3:3] is the sub-list for method output_type
 	3,  // [3:3] is the sub-list for method input_type
 	3,  // [3:3] is the sub-list for extension type_name
@@ -609,7 +673,7 @@ func file_common_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_v1_common_proto_rawDesc), len(file_common_v1_common_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      4,
 			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,

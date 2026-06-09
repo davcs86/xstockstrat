@@ -1,6 +1,6 @@
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import type { Asset, PageRequest, PageResponse, TimeRange } from "../../common/v1/common_pb";
+import type { Asset, PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file marketdata/v1/marketdata.proto.
@@ -47,9 +47,12 @@ export type Bar = Message<"xstockstrat.marketdata.v1.Bar"> & {
      */
     tradeCount: number;
     /**
+     * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+     *
      * "1m", "5m", "1h", "1d"
      *
-     * @generated from field: string timeframe = 10;
+     * @generated from field: string timeframe = 10 [deprecated = true];
+     * @deprecated
      */
     timeframe: string;
     /**
@@ -58,6 +61,10 @@ export type Bar = Message<"xstockstrat.marketdata.v1.Bar"> & {
      * @generated from field: string source = 11;
      */
     source: string;
+    /**
+     * @generated from field: xstockstrat.common.v1.Timeframe timeframe_enum = 12;
+     */
+    timeframeEnum: Timeframe;
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.Bar.
@@ -111,9 +118,12 @@ export type StreamBarsRequest = Message<"xstockstrat.marketdata.v1.StreamBarsReq
      */
     symbols: string[];
     /**
+     * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+     *
      * "1m", "5m", "1h", "1d"
      *
-     * @generated from field: string timeframe = 2;
+     * @generated from field: string timeframe = 2 [deprecated = true];
+     * @deprecated
      */
     timeframe: string;
     /**
@@ -124,6 +134,10 @@ export type StreamBarsRequest = Message<"xstockstrat.marketdata.v1.StreamBarsReq
      * @generated from field: bool include_afterhours = 4;
      */
     includeAfterhours: boolean;
+    /**
+     * @generated from field: xstockstrat.common.v1.Timeframe timeframe_enum = 5;
+     */
+    timeframeEnum: Timeframe;
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.StreamBarsRequest.
@@ -153,7 +167,10 @@ export type GetBarsRequest = Message<"xstockstrat.marketdata.v1.GetBarsRequest">
      */
     symbol: string;
     /**
-     * @generated from field: string timeframe = 2;
+     * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+     *
+     * @generated from field: string timeframe = 2 [deprecated = true];
+     * @deprecated
      */
     timeframe: string;
     /**
@@ -164,6 +181,10 @@ export type GetBarsRequest = Message<"xstockstrat.marketdata.v1.GetBarsRequest">
      * @generated from field: xstockstrat.common.v1.PageRequest page = 4;
      */
     page?: PageRequest | undefined;
+    /**
+     * @generated from field: xstockstrat.common.v1.Timeframe timeframe_enum = 5;
+     */
+    timeframeEnum: Timeframe;
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.GetBarsRequest.
@@ -211,7 +232,10 @@ export type BackfillBarsRequest = Message<"xstockstrat.marketdata.v1.BackfillBar
      */
     symbols: string[];
     /**
-     * @generated from field: string timeframe = 2;
+     * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+     *
+     * @generated from field: string timeframe = 2 [deprecated = true];
+     * @deprecated
      */
     timeframe: string;
     /**
@@ -222,6 +246,10 @@ export type BackfillBarsRequest = Message<"xstockstrat.marketdata.v1.BackfillBar
      * @generated from field: bool overwrite_existing = 4;
      */
     overwriteExisting: boolean;
+    /**
+     * @generated from field: xstockstrat.common.v1.Timeframe timeframe_enum = 5;
+     */
+    timeframeEnum: Timeframe;
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.BackfillBarsRequest.
@@ -240,12 +268,105 @@ export type BackfillBarsResponse = Message<"xstockstrat.marketdata.v1.BackfillBa
      * @generated from field: repeated string failed_symbols = 2;
      */
     failedSymbols: string[];
+    /**
+     * estimated total bars across requested symbols/range (FR-6)
+     *
+     * @generated from field: int64 expected_bars = 3;
+     */
+    expectedBars: bigint;
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.BackfillBarsResponse.
  * Use `create(BackfillBarsResponseSchema)` to create a new message.
  */
 export declare const BackfillBarsResponseSchema: GenMessage<BackfillBarsResponse>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetDataCoverageRequest
+ */
+export type GetDataCoverageRequest = Message<"xstockstrat.marketdata.v1.GetDataCoverageRequest"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: xstockstrat.common.v1.Timeframe timeframe = 2;
+     */
+    timeframe: Timeframe;
+    /**
+     * Optional: restrict the coverage scan to this window. Empty = full history.
+     *
+     * @generated from field: xstockstrat.common.v1.TimeRange range = 3;
+     */
+    range?: TimeRange | undefined;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetDataCoverageRequest.
+ * Use `create(GetDataCoverageRequestSchema)` to create a new message.
+ */
+export declare const GetDataCoverageRequestSchema: GenMessage<GetDataCoverageRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.CoverageRange
+ */
+export type CoverageRange = Message<"xstockstrat.marketdata.v1.CoverageRange"> & {
+    /**
+     * @generated from field: google.protobuf.Timestamp start = 1;
+     */
+    start?: Timestamp | undefined;
+    /**
+     * @generated from field: google.protobuf.Timestamp end = 2;
+     */
+    end?: Timestamp | undefined;
+    /**
+     * @generated from field: int64 bar_count = 3;
+     */
+    barCount: bigint;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.CoverageRange.
+ * Use `create(CoverageRangeSchema)` to create a new message.
+ */
+export declare const CoverageRangeSchema: GenMessage<CoverageRange>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetDataCoverageResponse
+ */
+export type GetDataCoverageResponse = Message<"xstockstrat.marketdata.v1.GetDataCoverageResponse"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: xstockstrat.common.v1.Timeframe timeframe = 2;
+     */
+    timeframe: Timeframe;
+    /**
+     * @generated from field: int64 bars_total = 3;
+     */
+    barsTotal: bigint;
+    /**
+     * Covered earliest/latest with total bar count; covered_ranges holds contiguous segments,
+     * gaps holds the missing segments within the requested range (if range was supplied).
+     *
+     * @generated from field: google.protobuf.Timestamp earliest = 4;
+     */
+    earliest?: Timestamp | undefined;
+    /**
+     * @generated from field: google.protobuf.Timestamp latest = 5;
+     */
+    latest?: Timestamp | undefined;
+    /**
+     * @generated from field: repeated xstockstrat.marketdata.v1.CoverageRange covered_ranges = 6;
+     */
+    coveredRanges: CoverageRange[];
+    /**
+     * @generated from field: repeated xstockstrat.common.v1.TimeRange gaps = 7;
+     */
+    gaps: TimeRange[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetDataCoverageResponse.
+ * Use `create(GetDataCoverageResponseSchema)` to create a new message.
+ */
+export declare const GetDataCoverageResponseSchema: GenMessage<GetDataCoverageResponse>;
 /**
  * @generated from message xstockstrat.marketdata.v1.ListAssetsRequest
  */
@@ -336,6 +457,16 @@ export declare const MarketDataService: GenService<{
         methodKind: "unary";
         input: typeof BackfillBarsRequestSchema;
         output: typeof BackfillBarsResponseSchema;
+    };
+    /**
+     * Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage
+     */
+    getDataCoverage: {
+        methodKind: "unary";
+        input: typeof GetDataCoverageRequestSchema;
+        output: typeof GetDataCoverageResponseSchema;
     };
     /**
      * Get available symbols

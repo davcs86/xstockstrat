@@ -18,6 +18,7 @@ import uuid
 import grpc
 import numpy as np
 from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc
+from gen.common.v1 import common_pb2
 from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc
 from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc
 from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
@@ -31,6 +32,20 @@ from app.repositories.strategies import StrategiesRepository
 from app.services.evaluator import StrategyEvaluator, _validate_definition
 
 log = logging.getLogger(__name__)
+
+
+class _InsufficientData(Exception):
+    """Raised by a per-symbol backtest when there are too few bars to run it.
+
+    Carries the data needed to build an ``analysis_pb2.CoverageGap`` instead of silently
+    fabricating a flat-equity "success" (feature 053, FR-2 / AC-2).
+    """
+
+    def __init__(self, symbol: str, bars_have: int, bars_need: int):
+        super().__init__(f"{symbol}: have {bars_have} bars, need {bars_need}")
+        self.symbol = symbol
+        self.bars_have = bars_have
+        self.bars_need = bars_need
 
 
 class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
@@ -190,6 +205,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         equity = float(request.initial_capital) if request.initial_capital > 0 else 100_000.0
         initial_equity = equity
         daily_equity: list[float] = [equity]
+        coverage_gaps: list[analysis_pb2.CoverageGap] = []
 
         for symbol in request.symbols:
             try:
@@ -221,6 +237,25 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     )
                 all_trades.extend(trades)
                 daily_equity.extend(daily_eq)
+            except _InsufficientData as ins:
+                # FR-2: surface a structured coverage gap instead of faking flat equity.
+                log.warning(
+                    "backtest symbol %s insufficient data: have %d, need %d",
+                    ins.symbol,
+                    ins.bars_have,
+                    ins.bars_need,
+                )
+                coverage_gaps.append(
+                    analysis_pb2.CoverageGap(
+                        symbol=ins.symbol,
+                        timeframe=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                        requested_range=request.range,
+                        bars_have=ins.bars_have,
+                        bars_need=ins.bars_need,
+                        gap=request.range,
+                    )
+                )
+                continue
             except grpc.RpcError as e:
                 log.warning("backtest symbol %s failed: %s — skipping", symbol, e)
                 continue
@@ -247,6 +282,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             completed_at=now,
             trades=all_trades,
         )
+        # FR-2: if every symbol was insufficient (no trades, no usable bars beyond the seed
+        # equity point), report INSUFFICIENT_DATA instead of a fabricated flat-equity success.
+        # A partial multi-symbol backtest stays OK but still carries the per-symbol gaps.
+        if coverage_gaps and not all_trades and len(daily_equity) <= 1:
+            result.status = analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
+        else:
+            result.status = analysis_pb2.BACKTEST_STATUS_OK
+        if coverage_gaps:
+            result.coverage_gaps.extend(coverage_gaps)
         self._backtests[backtest_id] = result
         # Index by strategy_id for ScoreStrategy lookup
         self._backtests[request.strategy_id] = result
@@ -299,7 +343,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         bars_resp = await self._marketdata.GetBars(
             marketdata_pb2.GetBarsRequest(
                 symbol=symbol,
-                timeframe="1Day",
+                timeframe="1d",  # canonical: matches the backfill path's stored "1d" bars
+                timeframe_enum=common_pb2.Timeframe.TIMEFRAME_1DAY,
                 range=range_msg,
             ),
             metadata=propagation_meta,
@@ -309,7 +354,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             log.warning(
                 "symbol %s has insufficient bars (%d < %d)", symbol, len(bars), slow_period + 2
             )
-            return [], initial_equity, [initial_equity]
+            raise _InsufficientData(symbol, len(bars), slow_period + 2)
 
         closes = [b.close for b in bars]
 
@@ -320,7 +365,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 values=closes,
                 params={"period": float(fast_period)},
                 symbol=symbol,
-                timeframe="1Day",
+                timeframe="1d",
             ),
             metadata=propagation_meta,
         )
@@ -330,7 +375,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 values=closes,
                 params={"period": float(slow_period)},
                 symbol=symbol,
-                timeframe="1Day",
+                timeframe="1d",
             ),
             metadata=propagation_meta,
         )
@@ -500,7 +545,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         bars_resp = await self._marketdata.GetBars(
             marketdata_pb2.GetBarsRequest(
                 symbol=symbol,
-                timeframe="1Day",
+                timeframe="1d",  # canonical: matches the backfill path's stored "1d" bars
+                timeframe_enum=common_pb2.Timeframe.TIMEFRAME_1DAY,
                 range=range_msg,
             ),
             metadata=propagation_meta,
@@ -508,7 +554,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         bars = list(bars_resp.bars)
         if len(bars) < 2:
             log.warning("symbol %s has insufficient bars (%d)", symbol, len(bars))
-            return [], initial_equity, [initial_equity]
+            raise _InsufficientData(symbol, len(bars), 2)
 
         evaluator = StrategyEvaluator(self._indicators, propagation_meta)
         decisions = await evaluator.evaluate(definition, bars, None)

@@ -5,7 +5,10 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.TradeRecord = exports.BacktestResult = exports.RunBacktestRequest = exports.StrategyOperation = exports.ComponentKind = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.StrategyOperation = exports.ComponentKind = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.backtestStatusFromJSON = backtestStatusFromJSON;
+exports.backtestStatusToJSON = backtestStatusToJSON;
+exports.backtestStatusToNumber = backtestStatusToNumber;
 exports.componentKindFromJSON = componentKindFromJSON;
 exports.componentKindToJSON = componentKindToJSON;
 exports.componentKindToNumber = componentKindToNumber;
@@ -19,6 +22,56 @@ const common_1 = require("../../common/v1/common");
 const struct_1 = require("../../google/protobuf/struct");
 const timestamp_1 = require("../../google/protobuf/timestamp");
 exports.protobufPackage = "xstockstrat.analysis.v1";
+var BacktestStatus;
+(function (BacktestStatus) {
+    BacktestStatus["BACKTEST_STATUS_UNSPECIFIED"] = "BACKTEST_STATUS_UNSPECIFIED";
+    BacktestStatus["BACKTEST_STATUS_OK"] = "BACKTEST_STATUS_OK";
+    BacktestStatus["BACKTEST_STATUS_INSUFFICIENT_DATA"] = "BACKTEST_STATUS_INSUFFICIENT_DATA";
+    BacktestStatus["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(BacktestStatus || (exports.BacktestStatus = BacktestStatus = {}));
+function backtestStatusFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "BACKTEST_STATUS_UNSPECIFIED":
+            return BacktestStatus.BACKTEST_STATUS_UNSPECIFIED;
+        case 1:
+        case "BACKTEST_STATUS_OK":
+            return BacktestStatus.BACKTEST_STATUS_OK;
+        case 2:
+        case "BACKTEST_STATUS_INSUFFICIENT_DATA":
+            return BacktestStatus.BACKTEST_STATUS_INSUFFICIENT_DATA;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return BacktestStatus.UNRECOGNIZED;
+    }
+}
+function backtestStatusToJSON(object) {
+    switch (object) {
+        case BacktestStatus.BACKTEST_STATUS_UNSPECIFIED:
+            return "BACKTEST_STATUS_UNSPECIFIED";
+        case BacktestStatus.BACKTEST_STATUS_OK:
+            return "BACKTEST_STATUS_OK";
+        case BacktestStatus.BACKTEST_STATUS_INSUFFICIENT_DATA:
+            return "BACKTEST_STATUS_INSUFFICIENT_DATA";
+        case BacktestStatus.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function backtestStatusToNumber(object) {
+    switch (object) {
+        case BacktestStatus.BACKTEST_STATUS_UNSPECIFIED:
+            return 0;
+        case BacktestStatus.BACKTEST_STATUS_OK:
+            return 1;
+        case BacktestStatus.BACKTEST_STATUS_INSUFFICIENT_DATA:
+            return 2;
+        case BacktestStatus.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
 var ComponentKind;
 (function (ComponentKind) {
     ComponentKind["COMPONENT_KIND_UNSPECIFIED"] = "COMPONENT_KIND_UNSPECIFIED";
@@ -302,6 +355,155 @@ exports.RunBacktestRequest = {
         return message;
     },
 };
+function createBaseCoverageGap() {
+    return {
+        symbol: "",
+        timeframe: common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
+        requestedRange: undefined,
+        barsHave: 0,
+        barsNeed: 0,
+        gap: undefined,
+    };
+}
+exports.CoverageGap = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.timeframe !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            writer.uint32(16).int32((0, common_1.timeframeToNumber)(message.timeframe));
+        }
+        if (message.requestedRange !== undefined) {
+            common_1.TimeRange.encode(message.requestedRange, writer.uint32(26).fork()).join();
+        }
+        if (message.barsHave !== 0) {
+            writer.uint32(32).int64(message.barsHave);
+        }
+        if (message.barsNeed !== 0) {
+            writer.uint32(40).int64(message.barsNeed);
+        }
+        if (message.gap !== undefined) {
+            common_1.TimeRange.encode(message.gap, writer.uint32(50).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCoverageGap();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.timeframe = (0, common_1.timeframeFromJSON)(reader.int32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.requestedRange = common_1.TimeRange.decode(reader, reader.uint32());
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.barsHave = longToNumber(reader.int64());
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.barsNeed = longToNumber(reader.int64());
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.gap = common_1.TimeRange.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            timeframe: isSet(object.timeframe) ? (0, common_1.timeframeFromJSON)(object.timeframe) : common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
+            requestedRange: isSet(object.requestedRange)
+                ? common_1.TimeRange.fromJSON(object.requestedRange)
+                : isSet(object.requested_range)
+                    ? common_1.TimeRange.fromJSON(object.requested_range)
+                    : undefined,
+            barsHave: isSet(object.barsHave)
+                ? globalThis.Number(object.barsHave)
+                : isSet(object.bars_have)
+                    ? globalThis.Number(object.bars_have)
+                    : 0,
+            barsNeed: isSet(object.barsNeed)
+                ? globalThis.Number(object.barsNeed)
+                : isSet(object.bars_need)
+                    ? globalThis.Number(object.bars_need)
+                    : 0,
+            gap: isSet(object.gap) ? common_1.TimeRange.fromJSON(object.gap) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.timeframe !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            obj.timeframe = (0, common_1.timeframeToJSON)(message.timeframe);
+        }
+        if (message.requestedRange !== undefined) {
+            obj.requestedRange = common_1.TimeRange.toJSON(message.requestedRange);
+        }
+        if (message.barsHave !== 0) {
+            obj.barsHave = Math.round(message.barsHave);
+        }
+        if (message.barsNeed !== 0) {
+            obj.barsNeed = Math.round(message.barsNeed);
+        }
+        if (message.gap !== undefined) {
+            obj.gap = common_1.TimeRange.toJSON(message.gap);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.CoverageGap.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCoverageGap();
+        message.symbol = object.symbol ?? "";
+        message.timeframe = object.timeframe ?? common_1.Timeframe.TIMEFRAME_UNSPECIFIED;
+        message.requestedRange = (object.requestedRange !== undefined && object.requestedRange !== null)
+            ? common_1.TimeRange.fromPartial(object.requestedRange)
+            : undefined;
+        message.barsHave = object.barsHave ?? 0;
+        message.barsNeed = object.barsNeed ?? 0;
+        message.gap = (object.gap !== undefined && object.gap !== null) ? common_1.TimeRange.fromPartial(object.gap) : undefined;
+        return message;
+    },
+};
 function createBaseBacktestResult() {
     return {
         backtestId: "",
@@ -315,6 +517,8 @@ function createBaseBacktestResult() {
         profitFactor: 0,
         completedAt: undefined,
         trades: [],
+        status: BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
+        coverageGaps: [],
     };
 }
 exports.BacktestResult = {
@@ -351,6 +555,12 @@ exports.BacktestResult = {
         }
         for (const v of message.trades) {
             exports.TradeRecord.encode(v, writer.uint32(90).fork()).join();
+        }
+        if (message.status !== BacktestStatus.BACKTEST_STATUS_UNSPECIFIED) {
+            writer.uint32(96).int32(backtestStatusToNumber(message.status));
+        }
+        for (const v of message.coverageGaps) {
+            exports.CoverageGap.encode(v, writer.uint32(106).fork()).join();
         }
         return writer;
     },
@@ -438,6 +648,20 @@ exports.BacktestResult = {
                     message.trades.push(exports.TradeRecord.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 12: {
+                    if (tag !== 96) {
+                        break;
+                    }
+                    message.status = backtestStatusFromJSON(reader.int32());
+                    continue;
+                }
+                case 13: {
+                    if (tag !== 106) {
+                        break;
+                    }
+                    message.coverageGaps.push(exports.CoverageGap.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -501,6 +725,12 @@ exports.BacktestResult = {
             trades: globalThis.Array.isArray(object?.trades)
                 ? object.trades.map((e) => exports.TradeRecord.fromJSON(e))
                 : [],
+            status: isSet(object.status) ? backtestStatusFromJSON(object.status) : BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
+            coverageGaps: globalThis.Array.isArray(object?.coverageGaps)
+                ? object.coverageGaps.map((e) => exports.CoverageGap.fromJSON(e))
+                : globalThis.Array.isArray(object?.coverage_gaps)
+                    ? object.coverage_gaps.map((e) => exports.CoverageGap.fromJSON(e))
+                    : [],
         };
     },
     toJSON(message) {
@@ -538,6 +768,12 @@ exports.BacktestResult = {
         if (message.trades?.length) {
             obj.trades = message.trades.map((e) => exports.TradeRecord.toJSON(e));
         }
+        if (message.status !== BacktestStatus.BACKTEST_STATUS_UNSPECIFIED) {
+            obj.status = backtestStatusToJSON(message.status);
+        }
+        if (message.coverageGaps?.length) {
+            obj.coverageGaps = message.coverageGaps.map((e) => exports.CoverageGap.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -556,6 +792,8 @@ exports.BacktestResult = {
         message.profitFactor = object.profitFactor ?? 0;
         message.completedAt = object.completedAt ?? undefined;
         message.trades = object.trades?.map((e) => exports.TradeRecord.fromPartial(e)) || [];
+        message.status = object.status ?? BacktestStatus.BACKTEST_STATUS_UNSPECIFIED;
+        message.coverageGaps = object.coverageGaps?.map((e) => exports.CoverageGap.fromPartial(e)) || [];
         return message;
     },
 };
@@ -2250,6 +2488,16 @@ function fromJsonTimestamp(o) {
     else {
         return fromTimestamp(timestamp_1.Timestamp.fromJSON(o));
     }
+}
+function longToNumber(int64) {
+    const num = globalThis.Number(int64.toString());
+    if (num > globalThis.Number.MAX_SAFE_INTEGER) {
+        throw new globalThis.Error("Value is larger than Number.MAX_SAFE_INTEGER");
+    }
+    if (num < globalThis.Number.MIN_SAFE_INTEGER) {
+        throw new globalThis.Error("Value is smaller than Number.MIN_SAFE_INTEGER");
+    }
+    return num;
 }
 function isObject(value) {
     return typeof value === "object" && value !== null;
