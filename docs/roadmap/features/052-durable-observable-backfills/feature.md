@@ -1,6 +1,8 @@
 # Feature: durable-observable-backfills
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 0b503103817c8d8d2089c057a10db12fb7a098a5
+**Launched date**: 2026-06-09
 **Development Branch**: `feature/durable-observable-backfills`
 **Created**: 2026-06-08
 **Last Updated**: 2026-06-09
@@ -19,6 +21,7 @@
 | 2026-06-09 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential stacked run started; Steps 1–2 (proto + regen) done |
 | 2026-06-09 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done; ingest pytest 108 passed (cov 69.5%), marketdata go test ok + golangci-lint 0 issues |
 
+| 2026-06-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #649; committed 0b503103817c8d8d2089c057a10db12fb7a098a5 |
 ---
 
 ## Artifacts

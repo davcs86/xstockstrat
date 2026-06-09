@@ -100,3 +100,10 @@ as 052/053 (host proto toolchain; throwaway postgres:16; per-feature integration
 
 All steps done → code-completed. merge-order: 054 merges LAST (after 052 then 053). No breaking proto
 (FillMode + chunk fields are additive); inherits 053's Platform Lead gate transitively via stacking.
+
+## Session 2026-06-09 (CI: feature status automation)
+
+- Promotion PR #649 merged to main
+- Feature promoted and committed: 0b503103817c8d8d2089c057a10db12fb7a098a5
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-09

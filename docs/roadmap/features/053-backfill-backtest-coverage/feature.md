@@ -1,6 +1,8 @@
 # Feature: backfill-backtest-coverage
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 0b503103817c8d8d2089c057a10db12fb7a098a5
+**Launched date**: 2026-06-09
 **Development Branch**: `feature/backfill-backtest-coverage`
 **Created**: 2026-06-08
 **Last Updated**: 2026-06-09
@@ -20,6 +22,7 @@
 | 2026-06-09 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential stacked run (on 052). Re-spec: Step 1 ingest `BackfillJob.timeframe_enum` 11→12 (052 took field 11) |
 | 2026-06-09 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done; marketdata go test cov 66.9%, analysis pytest 94 passed (cov 60.4%), UI tsc+lint clean. Breaking `Timeframe` enum — Platform Lead approval required before merge |
 
+| 2026-06-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #649; committed 0b503103817c8d8d2089c057a10db12fb7a098a5 |
 ---
 
 ## Artifacts

@@ -137,3 +137,10 @@ Environment notes (apply to all three features):
 - Added max_retry_attempts config row + ingest.backfill_jobs table/migration to Database section.
 
 All 12 steps done → feature code-completed. merge-order: 052 has no "must wait for" entry → integration PR can open.
+
+## Session 2026-06-09 (CI: feature status automation)
+
+- Promotion PR #649 merged to main
+- Feature promoted and committed: 0b503103817c8d8d2089c057a10db12fb7a098a5
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-09

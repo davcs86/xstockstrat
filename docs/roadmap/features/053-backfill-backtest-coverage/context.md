@@ -112,3 +112,10 @@ integration PR). Breaking `Timeframe` enum migration requires Platform Lead appr
 
 All 12 steps done → code-completed. merge-order: 053 must merge after 052 (Resolved: No) AND requires
 Platform Lead approval for the breaking Timeframe enum — user obtains both before the integration PR merges.
+
+## Session 2026-06-09 (CI: feature status automation)
+
+- Promotion PR #649 merged to main
+- Feature promoted and committed: 0b503103817c8d8d2089c057a10db12fb7a098a5
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-09
