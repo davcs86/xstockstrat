@@ -109,6 +109,16 @@ message FormulaParameter {
   optional double max = 7;               // numeric params only
 }
 
+// A declared output series a formula emits. The primary series is always "value"
+// (implicit — need not be declared). Each additional FormulaOutput names a series
+// addressable in strategy rules as "<ref_name>.<name>". Declaring outputs lets the
+// analysis service validate strategy rules and the sandbox enforce that the formula
+// actually produces every declared series.
+message FormulaOutput {
+  string name = 1;         // series key; valid Python identifier, unique per formula
+  string description = 2;  // human-readable description shown in authoring UIs
+}
+
 message ParameterValidationError {
   string name = 1;
   string reason = 2;
@@ -125,6 +135,7 @@ message FormulaDefinition {
   bool is_public = 8;
   map<string, string> input_schema = 9;  // expected input keys and types
   repeated FormulaParameter parameters = 10;
+  repeated FormulaOutput outputs = 11;    // declared output series (beyond implicit "value")
 }
 
 message ListIndicatorsRequest {}
@@ -148,6 +159,7 @@ message RegisterFormulaRequest {
   map<string, string> input_schema = 5;
   string author = 6;  // set by BFF from JWT claims; stored immutably
   repeated FormulaParameter parameters = 7;
+  repeated FormulaOutput outputs = 8;  // declared output series (beyond implicit "value")
 }
 
 message RegisterFormulaResponse {
@@ -178,6 +190,7 @@ message UpdateFormulaRequest {
   string source = 5;
   bool is_public = 6;
   repeated FormulaParameter parameters = 7;
+  repeated FormulaOutput outputs = 8;  // declared output series (beyond implicit "value")
 }
 
 message UpdateFormulaResponse {

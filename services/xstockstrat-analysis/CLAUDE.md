@@ -64,6 +64,34 @@ Signal-weighted mode (set via `strategy_params`):
 - `technical_weight`: 0.0–1.0 (complement of signal_weight)
 - `min_conviction`: 0.0–1.0 (minimum combined score to enter a position)
 
+## Composable Strategy Rules — Operands & Output Series
+
+`StrategyDefinition.entry_rule` / `exit_rule` are JSON condition trees evaluated by
+`app/services/evaluator.py`:
+
+```json
+{ "op": "AND", "conditions": [ { "fn": "crosses_below", "lhs": "close_bb", "rhs": "bb.lower" } ] }
+```
+
+A leaf `lhs` is always a component reference; `rhs` is either a reference (string) or a
+numeric threshold (JSON number). A reference resolves to one of a component's **output
+series**:
+
+- A **bare `ref_name`** resolves to the component's primary `value` series (back-compat).
+- The **dotted form `<ref_name>.<series>`** selects a specific output series of a
+  multi-output component — e.g. `bb.upper` / `bb.lower` (Bollinger Bands),
+  `macd.signal` / `macd.histogram`, `stoch.d`.
+
+Built-in indicator series are catalogued in `_INDICATOR_SERIES` (evaluator.py) and validated
+at write time (an unknown series is rejected). Custom-formula series are validated against the
+formula's **declared outputs** (`FormulaOutput`, owned by xstockstrat-indicators): at strategy
+write time the servicer calls `GetFormula` for each formula component and passes the allowed
+series (`{"value"}` ∪ declared output names) into `_validate_definition`. A formula that declares
+no outputs exposes only the implicit `value` series — any other `<ref_name>.<series>` is rejected.
+The runtime evaluate path skips this re-fetch (already validated at write time). The UI exposes
+both indicator and declared-formula series as dropdown operands via
+`services/xstockstrat-ui/src/lib/strategyCatalog.ts` (`operandRefs`).
+
 ## Config Keys Consumed
 
 Namespace: `analysis`

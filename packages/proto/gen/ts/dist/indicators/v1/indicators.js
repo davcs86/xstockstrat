@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: indicators/v1/indicators.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IndicatorsServiceClient = exports.IndicatorsServiceService = exports.DeleteFormulaResponse = exports.DeleteFormulaRequest = exports.UpdateFormulaResponse = exports.UpdateFormulaRequest = exports.ListFormulasResponse = exports.ListFormulasRequest = exports.GetFormulaRequest = exports.RegisterFormulaResponse = exports.RegisterFormulaRequest_InputSchemaEntry = exports.RegisterFormulaRequest = exports.IndicatorMeta = exports.ListIndicatorsResponse = exports.ListIndicatorsRequest = exports.FormulaDefinition_InputSchemaEntry = exports.FormulaDefinition = exports.ParameterValidationError = exports.FormulaParameter = exports.ExecuteFormulaResponse = exports.ExecuteFormulaRequest_EnvEntry = exports.ExecuteFormulaRequest = exports.IndicatorPoint_ExtraEntry = exports.IndicatorPoint = exports.ComputeIndicatorResponse_ParamsUsedEntry = exports.ComputeIndicatorResponse = exports.ComputeIndicatorRequest_ParamsEntry = exports.ComputeIndicatorRequest = exports.ParameterType = exports.SandboxExitReason = exports.protobufPackage = void 0;
+exports.IndicatorsServiceClient = exports.IndicatorsServiceService = exports.DeleteFormulaResponse = exports.DeleteFormulaRequest = exports.UpdateFormulaResponse = exports.UpdateFormulaRequest = exports.ListFormulasResponse = exports.ListFormulasRequest = exports.GetFormulaRequest = exports.RegisterFormulaResponse = exports.RegisterFormulaRequest_InputSchemaEntry = exports.RegisterFormulaRequest = exports.IndicatorMeta = exports.ListIndicatorsResponse = exports.ListIndicatorsRequest = exports.FormulaDefinition_InputSchemaEntry = exports.FormulaDefinition = exports.ParameterValidationError = exports.FormulaOutput = exports.FormulaParameter = exports.ExecuteFormulaResponse = exports.ExecuteFormulaRequest_EnvEntry = exports.ExecuteFormulaRequest = exports.IndicatorPoint_ExtraEntry = exports.IndicatorPoint = exports.ComputeIndicatorResponse_ParamsUsedEntry = exports.ComputeIndicatorResponse = exports.ComputeIndicatorRequest_ParamsEntry = exports.ComputeIndicatorRequest = exports.ParameterType = exports.SandboxExitReason = exports.protobufPackage = void 0;
 exports.sandboxExitReasonFromJSON = sandboxExitReasonFromJSON;
 exports.sandboxExitReasonToJSON = sandboxExitReasonToJSON;
 exports.sandboxExitReasonToNumber = sandboxExitReasonToNumber;
@@ -1346,6 +1346,74 @@ exports.FormulaParameter = {
         return message;
     },
 };
+function createBaseFormulaOutput() {
+    return { name: "", description: "" };
+}
+exports.FormulaOutput = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.name !== "") {
+            writer.uint32(10).string(message.name);
+        }
+        if (message.description !== "") {
+            writer.uint32(18).string(message.description);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseFormulaOutput();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.name = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.description = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            name: isSet(object.name) ? globalThis.String(object.name) : "",
+            description: isSet(object.description) ? globalThis.String(object.description) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.name !== "") {
+            obj.name = message.name;
+        }
+        if (message.description !== "") {
+            obj.description = message.description;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.FormulaOutput.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseFormulaOutput();
+        message.name = object.name ?? "";
+        message.description = object.description ?? "";
+        return message;
+    },
+};
 function createBaseParameterValidationError() {
     return { name: "", reason: "" };
 }
@@ -1426,6 +1494,7 @@ function createBaseFormulaDefinition() {
         isPublic: false,
         inputSchema: {},
         parameters: [],
+        outputs: [],
     };
 }
 exports.FormulaDefinition = {
@@ -1459,6 +1528,9 @@ exports.FormulaDefinition = {
         });
         for (const v of message.parameters) {
             exports.FormulaParameter.encode(v, writer.uint32(82).fork()).join();
+        }
+        for (const v of message.outputs) {
+            exports.FormulaOutput.encode(v, writer.uint32(90).fork()).join();
         }
         return writer;
     },
@@ -1542,6 +1614,13 @@ exports.FormulaDefinition = {
                     message.parameters.push(exports.FormulaParameter.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 11: {
+                    if (tag !== 90) {
+                        break;
+                    }
+                    message.outputs.push(exports.FormulaOutput.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1590,6 +1669,9 @@ exports.FormulaDefinition = {
             parameters: globalThis.Array.isArray(object?.parameters)
                 ? object.parameters.map((e) => exports.FormulaParameter.fromJSON(e))
                 : [],
+            outputs: globalThis.Array.isArray(object?.outputs)
+                ? object.outputs.map((e) => exports.FormulaOutput.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -1630,6 +1712,9 @@ exports.FormulaDefinition = {
         if (message.parameters?.length) {
             obj.parameters = message.parameters.map((e) => exports.FormulaParameter.toJSON(e));
         }
+        if (message.outputs?.length) {
+            obj.outputs = message.outputs.map((e) => exports.FormulaOutput.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -1652,6 +1737,7 @@ exports.FormulaDefinition = {
             return acc;
         }, {});
         message.parameters = object.parameters?.map((e) => exports.FormulaParameter.fromPartial(e)) || [];
+        message.outputs = object.outputs?.map((e) => exports.FormulaOutput.fromPartial(e)) || [];
         return message;
     },
 };
@@ -1922,7 +2008,16 @@ exports.IndicatorMeta = {
     },
 };
 function createBaseRegisterFormulaRequest() {
-    return { name: "", description: "", source: "", isPublic: false, inputSchema: {}, author: "", parameters: [] };
+    return {
+        name: "",
+        description: "",
+        source: "",
+        isPublic: false,
+        inputSchema: {},
+        author: "",
+        parameters: [],
+        outputs: [],
+    };
 }
 exports.RegisterFormulaRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -1946,6 +2041,9 @@ exports.RegisterFormulaRequest = {
         }
         for (const v of message.parameters) {
             exports.FormulaParameter.encode(v, writer.uint32(58).fork()).join();
+        }
+        for (const v of message.outputs) {
+            exports.FormulaOutput.encode(v, writer.uint32(66).fork()).join();
         }
         return writer;
     },
@@ -2008,6 +2106,13 @@ exports.RegisterFormulaRequest = {
                     message.parameters.push(exports.FormulaParameter.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.outputs.push(exports.FormulaOutput.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2041,6 +2146,9 @@ exports.RegisterFormulaRequest = {
             parameters: globalThis.Array.isArray(object?.parameters)
                 ? object.parameters.map((e) => exports.FormulaParameter.fromJSON(e))
                 : [],
+            outputs: globalThis.Array.isArray(object?.outputs)
+                ? object.outputs.map((e) => exports.FormulaOutput.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -2072,6 +2180,9 @@ exports.RegisterFormulaRequest = {
         if (message.parameters?.length) {
             obj.parameters = message.parameters.map((e) => exports.FormulaParameter.toJSON(e));
         }
+        if (message.outputs?.length) {
+            obj.outputs = message.outputs.map((e) => exports.FormulaOutput.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -2091,6 +2202,7 @@ exports.RegisterFormulaRequest = {
         }, {});
         message.author = object.author ?? "";
         message.parameters = object.parameters?.map((e) => exports.FormulaParameter.fromPartial(e)) || [];
+        message.outputs = object.outputs?.map((e) => exports.FormulaOutput.fromPartial(e)) || [];
         return message;
     },
 };
@@ -2465,7 +2577,16 @@ exports.ListFormulasResponse = {
     },
 };
 function createBaseUpdateFormulaRequest() {
-    return { formulaId: "", userId: "", name: "", description: "", source: "", isPublic: false, parameters: [] };
+    return {
+        formulaId: "",
+        userId: "",
+        name: "",
+        description: "",
+        source: "",
+        isPublic: false,
+        parameters: [],
+        outputs: [],
+    };
 }
 exports.UpdateFormulaRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -2489,6 +2610,9 @@ exports.UpdateFormulaRequest = {
         }
         for (const v of message.parameters) {
             exports.FormulaParameter.encode(v, writer.uint32(58).fork()).join();
+        }
+        for (const v of message.outputs) {
+            exports.FormulaOutput.encode(v, writer.uint32(66).fork()).join();
         }
         return writer;
     },
@@ -2548,6 +2672,13 @@ exports.UpdateFormulaRequest = {
                     message.parameters.push(exports.FormulaParameter.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.outputs.push(exports.FormulaOutput.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2579,6 +2710,9 @@ exports.UpdateFormulaRequest = {
             parameters: globalThis.Array.isArray(object?.parameters)
                 ? object.parameters.map((e) => exports.FormulaParameter.fromJSON(e))
                 : [],
+            outputs: globalThis.Array.isArray(object?.outputs)
+                ? object.outputs.map((e) => exports.FormulaOutput.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -2604,6 +2738,9 @@ exports.UpdateFormulaRequest = {
         if (message.parameters?.length) {
             obj.parameters = message.parameters.map((e) => exports.FormulaParameter.toJSON(e));
         }
+        if (message.outputs?.length) {
+            obj.outputs = message.outputs.map((e) => exports.FormulaOutput.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -2618,6 +2755,7 @@ exports.UpdateFormulaRequest = {
         message.source = object.source ?? "";
         message.isPublic = object.isPublic ?? false;
         message.parameters = object.parameters?.map((e) => exports.FormulaParameter.fromPartial(e)) || [];
+        message.outputs = object.outputs?.map((e) => exports.FormulaOutput.fromPartial(e)) || [];
         return message;
     },
 };
