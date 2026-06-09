@@ -105,7 +105,7 @@ Exit code 0 after running means stubs are fresh (no diff). Confirm `failed_symbo
 
 ### Step 3 — migration: Create `ingest.backfill_jobs` table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/003_backfill_jobs.up.sql` — create
