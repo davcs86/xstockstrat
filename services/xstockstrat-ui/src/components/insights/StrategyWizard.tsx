@@ -15,6 +15,8 @@ import {
 } from '@/components/insights/ComponentEditor';
 import { useInsightsSignalSources } from '@/hooks/useInsightsSignalSources';
 import { useManageStrategy } from '@/hooks/useStrategyDefinitions';
+import { useFormulas } from '@/hooks/useFormulas';
+import { operandRefs, type FormulaOutputsMap } from '@/lib/strategyCatalog';
 
 const STEPS = ['Identity', 'Components', 'Rules', 'Signal Params', 'Review'] as const;
 
@@ -47,6 +49,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
   const [step, setStep] = useState(1);
   const { mutate, isPending, error: errorObj } = useManageStrategy();
   const { sources } = useInsightsSignalSources();
+  const { data: formulasData } = useFormulas({ includePublic: true, pageSize: 50 });
 
   const initialSignal = initial?.signalParams as Record<string, unknown> | undefined;
 
@@ -82,7 +85,22 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
     return 5;
   }
 
-  const refNames = components.map((c) => c.refName);
+  // Declared outputs per custom-formula id, so formula components expose their
+  // series as rule operands just like multi-output built-in indicators.
+  const formulaOutputs: FormulaOutputsMap = {};
+  for (const f of formulasData?.formulas ?? []) {
+    if (f.outputs.length > 0) {
+      formulaOutputs[f.formulaId] = f.outputs.map((o) => ({
+        name: o.name,
+        description: o.description,
+      }));
+    }
+  }
+
+  // Rule operands = one entry per component, plus a `<ref>.<series>` entry for each
+  // selectable output series of multi-output indicators (e.g. bb.upper / bb.lower)
+  // and declared custom-formula outputs.
+  const operands = operandRefs(components, formulaOutputs);
 
   const idValid = STRATEGY_ID_RE.test(strategyId);
   const canAdvance =
@@ -190,9 +208,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
                 <ComponentEditor
                   key={i}
                   value={c}
-                  onChange={(next) =>
-                    setComponents((cs) => cs.map((x, j) => (j === i ? next : x)))
-                  }
+                  onChange={(next) => setComponents((cs) => cs.map((x, j) => (j === i ? next : x)))}
                   onRemove={() => setComponents((cs) => cs.filter((_, j) => j !== i))}
                 />
               ))}
@@ -216,13 +232,13 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
                 label="Entry rule"
                 value={entryRule}
                 onChange={setEntryRule}
-                refNames={refNames}
+                operands={operands}
               />
               <RuleEditor
                 label="Exit rule"
                 value={exitRule}
                 onChange={setExitRule}
-                refNames={refNames}
+                operands={operands}
               />
             </div>
           )}
@@ -258,11 +274,15 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
                   <Input
                     type="number"
                     value={signal.signalWeight}
-                    onChange={(e) => setSignal((s) => ({ ...s, signalWeight: Number(e.target.value) }))}
+                    onChange={(e) =>
+                      setSignal((s) => ({ ...s, signalWeight: Number(e.target.value) }))
+                    }
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Technical weight</label>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    Technical weight
+                  </label>
                   <Input
                     type="number"
                     value={signal.technicalWeight}
@@ -331,7 +351,12 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
 
       {/* Navigation */}
       <div className="flex items-center justify-between">
-        <Button type="button" variant="ghost" disabled={step === 1} onClick={() => setStep((s) => s - 1)}>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={step === 1}
+          onClick={() => setStep((s) => s - 1)}
+        >
           Back
         </Button>
         <div className="flex gap-2">

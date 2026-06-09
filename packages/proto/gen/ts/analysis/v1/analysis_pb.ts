@@ -6,7 +6,7 @@ import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobu
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest, PageResponse, TimeRange } from "../../common/v1/common_pb";
+import type { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import { file_common_v1_common } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 
@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file analysis/v1/analysis.proto.
  */
 export const file_analysis_v1_analysis: GenFile = /*@__PURE__*/
-  fileDesc("ChphbmFseXNpcy92MS9hbmFseXNpcy5wcm90bxIXeHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEilwIKElJ1bkJhY2t0ZXN0UmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCRIvCgVyYW5nZRgCIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USDwoHc3ltYm9scxgDIAMoCRIXCg9pbml0aWFsX2NhcGl0YWwYBCABKAESMAoPc3RyYXRlZ3lfcGFyYW1zGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIXCg9zdHJhdGVneV9pZF9yZWYYBiABKAkSRgoRaW5saW5lX2RlZmluaXRpb24YByABKAsyKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneURlZmluaXRpb24ivgIKDkJhY2t0ZXN0UmVzdWx0EhMKC2JhY2t0ZXN0X2lkGAEgASgJEhMKC3N0cmF0ZWd5X2lkGAIgASgJEhQKDHRvdGFsX3JldHVybhgDIAEoARIZChFhbm51YWxpemVkX3JldHVybhgEIAEoARIUCgxzaGFycGVfcmF0aW8YBSABKAESFAoMbWF4X2RyYXdkb3duGAYgASgBEhAKCHdpbl9yYXRlGAcgASgBEhQKDHRvdGFsX3RyYWRlcxgIIAEoBRIVCg1wcm9maXRfZmFjdG9yGAkgASgBEjAKDGNvbXBsZXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNAoGdHJhZGVzGAsgAygLMiQueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuVHJhZGVSZWNvcmQizQEKC1RyYWRlUmVjb3JkEg4KBnN5bWJvbBgBIAEoCRIMCgRzaWRlGAIgASgJEgsKA3F0eRgDIAEoARITCgtlbnRyeV9wcmljZRgEIAEoARISCgpleGl0X3ByaWNlGAUgASgBEgsKA3BubBgGIAEoARIuCgplbnRyeV90aW1lGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCglleGl0X3RpbWUYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlwKFFNjb3JlU3RyYXRlZ3lSZXF1ZXN0EhMKC3N0cmF0ZWd5X2lkGAEgASgJEi8KBXJhbmdlGAIgASgLMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVSYW5nZSLaAQoNU3RyYXRlZ3lTY29yZRITCgtzdHJhdGVneV9pZBgBIAEoCRIVCg1vdmVyYWxsX3Njb3JlGAIgASgBElUKEGNvbXBvbmVudF9zY29yZXMYAyADKAsyOy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneVNjb3JlLkNvbXBvbmVudFNjb3Jlc0VudHJ5Eg4KBnJhdGluZxgEIAEoCRo2ChRDb21wb25lbnRTY29yZXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAE6AjgBIskBCg5TdHJhdGVneVJlcG9ydBITCgtzdHJhdGVneV9pZBgBIAEoCRJACg9sYXRlc3RfYmFja3Rlc3QYAiABKAsyJy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5CYWNrdGVzdFJlc3VsdBI1CgVzY29yZRgDIAEoCzImLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5U2NvcmUSKQoIbWV0YWRhdGEYBCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IloKFUxpc3RTdHJhdGVnaWVzUmVxdWVzdBIwCgRwYWdlGAEgASgLMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg8KB3VzZXJfaWQYAiABKAkihwEKFkxpc3RTdHJhdGVnaWVzUmVzcG9uc2USOgoKc3RyYXRlZ2llcxgBIAMoCzImLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5U2NvcmUSMQoEcGFnZRgCIAEoCzIjLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiLwoYR2V0U3RyYXRlZ3lSZXBvcnRSZXF1ZXN0EhMKC3N0cmF0ZWd5X2lkGAEgASgJIvkBChFTdHJhdGVneUNvbXBvbmVudBIQCghyZWZfbmFtZRgBIAEoCRI0CgRraW5kGAIgASgOMiYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuQ29tcG9uZW50S2luZBIRCglpbmRpY2F0b3IYAyABKAkSEgoKZm9ybXVsYV9pZBgEIAEoCRJGCgZwYXJhbXMYBSADKAsyNi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneUNvbXBvbmVudC5QYXJhbXNFbnRyeRotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAE6AjgBIvwBChJTdHJhdGVneURlZmluaXRpb24SEwoLc3RyYXRlZ3lfaWQYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEj4KCmNvbXBvbmVudHMYAyADKAsyKi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneUNvbXBvbmVudBISCgplbnRyeV9ydWxlGAQgASgJEhEKCWV4aXRfcnVsZRgFIAEoCRIuCg1zaWduYWxfcGFyYW1zGAYgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIOCgZhY3RpdmUYByABKAgSFAoMbGl2ZV9lbmFibGVkGAggASgIIpcBChVNYW5hZ2VTdHJhdGVneVJlcXVlc3QSPQoJb3BlcmF0aW9uGAEgASgOMioueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lPcGVyYXRpb24SPwoKZGVmaW5pdGlvbhgCIAEoCzIrLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5RGVmaW5pdGlvbiIpChJHZXRTdHJhdGVneVJlcXVlc3QSEwoLc3RyYXRlZ3lfaWQYASABKAkiYgoeTGlzdFN0cmF0ZWd5RGVmaW5pdGlvbnNSZXF1ZXN0EhgKEGluY2x1ZGVfaW5hY3RpdmUYASABKAgSEQoJcGFnZV9zaXplGAIgASgFEhMKC3BhZ2Vfb2Zmc2V0GAMgASgFIngKH0xpc3RTdHJhdGVneURlZmluaXRpb25zUmVzcG9uc2USQAoLZGVmaW5pdGlvbnMYASADKAsyKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneURlZmluaXRpb24SEwoLdG90YWxfY291bnQYAiABKAUiQwoWU2V0U3RyYXRlZ3lMaXZlUmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCRIUCgxsaXZlX2VuYWJsZWQYAiABKAgiWgoXU2V0U3RyYXRlZ3lMaXZlUmVzcG9uc2USPwoKZGVmaW5pdGlvbhgBIAEoCzIrLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5RGVmaW5pdGlvbip4Cg1Db21wb25lbnRLaW5kEh4KGkNPTVBPTkVOVF9LSU5EX1VOU1BFQ0lGSUVEEAASJAogQ09NUE9ORU5UX0tJTkRfQlVJTFRJTl9JTkRJQ0FUT1IQARIhCh1DT01QT05FTlRfS0lORF9DVVNUT01fRk9STVVMQRACKpoBChFTdHJhdGVneU9wZXJhdGlvbhIiCh5TVFJBVEVHWV9PUEVSQVRJT05fVU5TUEVDSUZJRUQQABIfChtTVFJBVEVHWV9PUEVSQVRJT05fUkVHSVNURVIQARIdChlTVFJBVEVHWV9PUEVSQVRJT05fVVBEQVRFEAISIQodU1RSQVRFR1lfT1BFUkFUSU9OX0RFQUNUSVZBVEUQAzKfBwoPQW5hbHlzaXNTZXJ2aWNlEmMKC1J1bkJhY2t0ZXN0EisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuUnVuQmFja3Rlc3RSZXF1ZXN0GicueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuQmFja3Rlc3RSZXN1bHQSZgoNU2NvcmVTdHJhdGVneRItLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNjb3JlU3RyYXRlZ3lSZXF1ZXN0GiYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lTY29yZRJxCg5MaXN0U3RyYXRlZ2llcxIuLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RTdHJhdGVnaWVzUmVxdWVzdBovLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RTdHJhdGVnaWVzUmVzcG9uc2USbwoRR2V0U3RyYXRlZ3lSZXBvcnQSMS54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5HZXRTdHJhdGVneVJlcG9ydFJlcXVlc3QaJy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneVJlcG9ydBJtCg5NYW5hZ2VTdHJhdGVneRIuLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLk1hbmFnZVN0cmF0ZWd5UmVxdWVzdBorLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5RGVmaW5pdGlvbhJnCgtHZXRTdHJhdGVneRIrLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkdldFN0cmF0ZWd5UmVxdWVzdBorLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5RGVmaW5pdGlvbhKMAQoXTGlzdFN0cmF0ZWd5RGVmaW5pdGlvbnMSNy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5MaXN0U3RyYXRlZ3lEZWZpbml0aW9uc1JlcXVlc3QaOC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5MaXN0U3RyYXRlZ3lEZWZpbml0aW9uc1Jlc3BvbnNlEnQKD1NldFN0cmF0ZWd5TGl2ZRIvLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNldFN0cmF0ZWd5TGl2ZVJlcXVlc3QaMC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TZXRTdHJhdGVneUxpdmVSZXNwb25zZUJAWj5naXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vYW5hbHlzaXMvdjE7YW5hbHlzaXN2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
+  fileDesc("ChphbmFseXNpcy92MS9hbmFseXNpcy5wcm90bxIXeHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEilwIKElJ1bkJhY2t0ZXN0UmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCRIvCgVyYW5nZRgCIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USDwoHc3ltYm9scxgDIAMoCRIXCg9pbml0aWFsX2NhcGl0YWwYBCABKAESMAoPc3RyYXRlZ3lfcGFyYW1zGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIXCg9zdHJhdGVneV9pZF9yZWYYBiABKAkSRgoRaW5saW5lX2RlZmluaXRpb24YByABKAsyKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneURlZmluaXRpb24i4gEKC0NvdmVyYWdlR2FwEg4KBnN5bWJvbBgBIAEoCRIzCgl0aW1lZnJhbWUYAiABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEjkKD3JlcXVlc3RlZF9yYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USEQoJYmFyc19oYXZlGAQgASgDEhEKCWJhcnNfbmVlZBgFIAEoAxItCgNnYXAYBiABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlIrQDCg5CYWNrdGVzdFJlc3VsdBITCgtiYWNrdGVzdF9pZBgBIAEoCRITCgtzdHJhdGVneV9pZBgCIAEoCRIUCgx0b3RhbF9yZXR1cm4YAyABKAESGQoRYW5udWFsaXplZF9yZXR1cm4YBCABKAESFAoMc2hhcnBlX3JhdGlvGAUgASgBEhQKDG1heF9kcmF3ZG93bhgGIAEoARIQCgh3aW5fcmF0ZRgHIAEoARIUCgx0b3RhbF90cmFkZXMYCCABKAUSFQoNcHJvZml0X2ZhY3RvchgJIAEoARIwCgxjb21wbGV0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKBnRyYWRlcxgLIAMoCzIkLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlRyYWRlUmVjb3JkEjcKBnN0YXR1cxgMIAEoDjInLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhY2t0ZXN0U3RhdHVzEjsKDWNvdmVyYWdlX2dhcHMYDSADKAsyJC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5Db3ZlcmFnZUdhcCLNAQoLVHJhZGVSZWNvcmQSDgoGc3ltYm9sGAEgASgJEgwKBHNpZGUYAiABKAkSCwoDcXR5GAMgASgBEhMKC2VudHJ5X3ByaWNlGAQgASgBEhIKCmV4aXRfcHJpY2UYBSABKAESCwoDcG5sGAYgASgBEi4KCmVudHJ5X3RpbWUYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi0KCWV4aXRfdGltZRgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiXAoUU2NvcmVTdHJhdGVneVJlcXVlc3QSEwoLc3RyYXRlZ3lfaWQYASABKAkSLwoFcmFuZ2UYAiABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlItoBCg1TdHJhdGVneVNjb3JlEhMKC3N0cmF0ZWd5X2lkGAEgASgJEhUKDW92ZXJhbGxfc2NvcmUYAiABKAESVQoQY29tcG9uZW50X3Njb3JlcxgDIAMoCzI7LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5U2NvcmUuQ29tcG9uZW50U2NvcmVzRW50cnkSDgoGcmF0aW5nGAQgASgJGjYKFENvbXBvbmVudFNjb3Jlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEiyQEKDlN0cmF0ZWd5UmVwb3J0EhMKC3N0cmF0ZWd5X2lkGAEgASgJEkAKD2xhdGVzdF9iYWNrdGVzdBgCIAEoCzInLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhY2t0ZXN0UmVzdWx0EjUKBXNjb3JlGAMgASgLMiYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lTY29yZRIpCghtZXRhZGF0YRgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiWgoVTGlzdFN0cmF0ZWdpZXNSZXF1ZXN0EjAKBHBhZ2UYASABKAsyIi54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlcXVlc3QSDwoHdXNlcl9pZBgCIAEoCSKHAQoWTGlzdFN0cmF0ZWdpZXNSZXNwb25zZRI6CgpzdHJhdGVnaWVzGAEgAygLMiYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lTY29yZRIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIvChhHZXRTdHJhdGVneVJlcG9ydFJlcXVlc3QSEwoLc3RyYXRlZ3lfaWQYASABKAki+QEKEVN0cmF0ZWd5Q29tcG9uZW50EhAKCHJlZl9uYW1lGAEgASgJEjQKBGtpbmQYAiABKA4yJi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5Db21wb25lbnRLaW5kEhEKCWluZGljYXRvchgDIAEoCRISCgpmb3JtdWxhX2lkGAQgASgJEkYKBnBhcmFtcxgFIAMoCzI2LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5Q29tcG9uZW50LlBhcmFtc0VudHJ5Gi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEi/AEKElN0cmF0ZWd5RGVmaW5pdGlvbhITCgtzdHJhdGVneV9pZBgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSPgoKY29tcG9uZW50cxgDIAMoCzIqLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5Q29tcG9uZW50EhIKCmVudHJ5X3J1bGUYBCABKAkSEQoJZXhpdF9ydWxlGAUgASgJEi4KDXNpZ25hbF9wYXJhbXMYBiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Eg4KBmFjdGl2ZRgHIAEoCBIUCgxsaXZlX2VuYWJsZWQYCCABKAgilwEKFU1hbmFnZVN0cmF0ZWd5UmVxdWVzdBI9CglvcGVyYXRpb24YASABKA4yKi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneU9wZXJhdGlvbhI/CgpkZWZpbml0aW9uGAIgASgLMisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uIikKEkdldFN0cmF0ZWd5UmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCSJiCh5MaXN0U3RyYXRlZ3lEZWZpbml0aW9uc1JlcXVlc3QSGAoQaW5jbHVkZV9pbmFjdGl2ZRgBIAEoCBIRCglwYWdlX3NpemUYAiABKAUSEwoLcGFnZV9vZmZzZXQYAyABKAUieAofTGlzdFN0cmF0ZWd5RGVmaW5pdGlvbnNSZXNwb25zZRJACgtkZWZpbml0aW9ucxgBIAMoCzIrLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5RGVmaW5pdGlvbhITCgt0b3RhbF9jb3VudBgCIAEoBSJDChZTZXRTdHJhdGVneUxpdmVSZXF1ZXN0EhMKC3N0cmF0ZWd5X2lkGAEgASgJEhQKDGxpdmVfZW5hYmxlZBgCIAEoCCJaChdTZXRTdHJhdGVneUxpdmVSZXNwb25zZRI/CgpkZWZpbml0aW9uGAEgASgLMisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uKnAKDkJhY2t0ZXN0U3RhdHVzEh8KG0JBQ0tURVNUX1NUQVRVU19VTlNQRUNJRklFRBAAEhYKEkJBQ0tURVNUX1NUQVRVU19PSxABEiUKIUJBQ0tURVNUX1NUQVRVU19JTlNVRkZJQ0lFTlRfREFUQRACKngKDUNvbXBvbmVudEtpbmQSHgoaQ09NUE9ORU5UX0tJTkRfVU5TUEVDSUZJRUQQABIkCiBDT01QT05FTlRfS0lORF9CVUlMVElOX0lORElDQVRPUhABEiEKHUNPTVBPTkVOVF9LSU5EX0NVU1RPTV9GT1JNVUxBEAIqmgEKEVN0cmF0ZWd5T3BlcmF0aW9uEiIKHlNUUkFURUdZX09QRVJBVElPTl9VTlNQRUNJRklFRBAAEh8KG1NUUkFURUdZX09QRVJBVElPTl9SRUdJU1RFUhABEh0KGVNUUkFURUdZX09QRVJBVElPTl9VUERBVEUQAhIhCh1TVFJBVEVHWV9PUEVSQVRJT05fREVBQ1RJVkFURRADMp8HCg9BbmFseXNpc1NlcnZpY2USYwoLUnVuQmFja3Rlc3QSKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5SdW5CYWNrdGVzdFJlcXVlc3QaJy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5CYWNrdGVzdFJlc3VsdBJmCg1TY29yZVN0cmF0ZWd5Ei0ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU2NvcmVTdHJhdGVneVJlcXVlc3QaJi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneVNjb3JlEnEKDkxpc3RTdHJhdGVnaWVzEi4ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuTGlzdFN0cmF0ZWdpZXNSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuTGlzdFN0cmF0ZWdpZXNSZXNwb25zZRJvChFHZXRTdHJhdGVneVJlcG9ydBIxLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkdldFN0cmF0ZWd5UmVwb3J0UmVxdWVzdBonLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5UmVwb3J0Em0KDk1hbmFnZVN0cmF0ZWd5Ei4ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuTWFuYWdlU3RyYXRlZ3lSZXF1ZXN0GisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uEmcKC0dldFN0cmF0ZWd5EisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuR2V0U3RyYXRlZ3lSZXF1ZXN0GisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uEowBChdMaXN0U3RyYXRlZ3lEZWZpbml0aW9ucxI3LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RTdHJhdGVneURlZmluaXRpb25zUmVxdWVzdBo4LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RTdHJhdGVneURlZmluaXRpb25zUmVzcG9uc2USdAoPU2V0U3RyYXRlZ3lMaXZlEi8ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU2V0U3RyYXRlZ3lMaXZlUmVxdWVzdBowLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNldFN0cmF0ZWd5TGl2ZVJlc3BvbnNlQkBaPmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9hbmFseXNpcy92MTthbmFseXNpc3YxYgZwcm90bzM", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.analysis.v1.RunBacktestRequest
@@ -66,6 +66,50 @@ export type RunBacktestRequest = Message<"xstockstrat.analysis.v1.RunBacktestReq
  */
 export const RunBacktestRequestSchema: GenMessage<RunBacktestRequest> = /*@__PURE__*/
   messageDesc(file_analysis_v1_analysis, 0);
+
+/**
+ * @generated from message xstockstrat.analysis.v1.CoverageGap
+ */
+export type CoverageGap = Message<"xstockstrat.analysis.v1.CoverageGap"> & {
+  /**
+   * @generated from field: string symbol = 1;
+   */
+  symbol: string;
+
+  /**
+   * @generated from field: xstockstrat.common.v1.Timeframe timeframe = 2;
+   */
+  timeframe: Timeframe;
+
+  /**
+   * @generated from field: xstockstrat.common.v1.TimeRange requested_range = 3;
+   */
+  requestedRange?: TimeRange | undefined;
+
+  /**
+   * @generated from field: int64 bars_have = 4;
+   */
+  barsHave: bigint;
+
+  /**
+   * @generated from field: int64 bars_need = 5;
+   */
+  barsNeed: bigint;
+
+  /**
+   * The range a caller should backfill to satisfy this backtest.
+   *
+   * @generated from field: xstockstrat.common.v1.TimeRange gap = 6;
+   */
+  gap?: TimeRange | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.CoverageGap.
+ * Use `create(CoverageGapSchema)` to create a new message.
+ */
+export const CoverageGapSchema: GenMessage<CoverageGap> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 1);
 
 /**
  * @generated from message xstockstrat.analysis.v1.BacktestResult
@@ -125,6 +169,18 @@ export type BacktestResult = Message<"xstockstrat.analysis.v1.BacktestResult"> &
    * @generated from field: repeated xstockstrat.analysis.v1.TradeRecord trades = 11;
    */
   trades: TradeRecord[];
+
+  /**
+   * @generated from field: xstockstrat.analysis.v1.BacktestStatus status = 12;
+   */
+  status: BacktestStatus;
+
+  /**
+   * populated per-symbol when status == INSUFFICIENT_DATA
+   *
+   * @generated from field: repeated xstockstrat.analysis.v1.CoverageGap coverage_gaps = 13;
+   */
+  coverageGaps: CoverageGap[];
 };
 
 /**
@@ -132,7 +188,7 @@ export type BacktestResult = Message<"xstockstrat.analysis.v1.BacktestResult"> &
  * Use `create(BacktestResultSchema)` to create a new message.
  */
 export const BacktestResultSchema: GenMessage<BacktestResult> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 1);
+  messageDesc(file_analysis_v1_analysis, 2);
 
 /**
  * @generated from message xstockstrat.analysis.v1.TradeRecord
@@ -184,7 +240,7 @@ export type TradeRecord = Message<"xstockstrat.analysis.v1.TradeRecord"> & {
  * Use `create(TradeRecordSchema)` to create a new message.
  */
 export const TradeRecordSchema: GenMessage<TradeRecord> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 2);
+  messageDesc(file_analysis_v1_analysis, 3);
 
 /**
  * @generated from message xstockstrat.analysis.v1.ScoreStrategyRequest
@@ -206,7 +262,7 @@ export type ScoreStrategyRequest = Message<"xstockstrat.analysis.v1.ScoreStrateg
  * Use `create(ScoreStrategyRequestSchema)` to create a new message.
  */
 export const ScoreStrategyRequestSchema: GenMessage<ScoreStrategyRequest> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 3);
+  messageDesc(file_analysis_v1_analysis, 4);
 
 /**
  * @generated from message xstockstrat.analysis.v1.StrategyScore
@@ -242,7 +298,7 @@ export type StrategyScore = Message<"xstockstrat.analysis.v1.StrategyScore"> & {
  * Use `create(StrategyScoreSchema)` to create a new message.
  */
 export const StrategyScoreSchema: GenMessage<StrategyScore> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 4);
+  messageDesc(file_analysis_v1_analysis, 5);
 
 /**
  * @generated from message xstockstrat.analysis.v1.StrategyReport
@@ -274,7 +330,7 @@ export type StrategyReport = Message<"xstockstrat.analysis.v1.StrategyReport"> &
  * Use `create(StrategyReportSchema)` to create a new message.
  */
 export const StrategyReportSchema: GenMessage<StrategyReport> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 5);
+  messageDesc(file_analysis_v1_analysis, 6);
 
 /**
  * @generated from message xstockstrat.analysis.v1.ListStrategiesRequest
@@ -296,7 +352,7 @@ export type ListStrategiesRequest = Message<"xstockstrat.analysis.v1.ListStrateg
  * Use `create(ListStrategiesRequestSchema)` to create a new message.
  */
 export const ListStrategiesRequestSchema: GenMessage<ListStrategiesRequest> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 6);
+  messageDesc(file_analysis_v1_analysis, 7);
 
 /**
  * @generated from message xstockstrat.analysis.v1.ListStrategiesResponse
@@ -318,7 +374,7 @@ export type ListStrategiesResponse = Message<"xstockstrat.analysis.v1.ListStrate
  * Use `create(ListStrategiesResponseSchema)` to create a new message.
  */
 export const ListStrategiesResponseSchema: GenMessage<ListStrategiesResponse> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 7);
+  messageDesc(file_analysis_v1_analysis, 8);
 
 /**
  * @generated from message xstockstrat.analysis.v1.GetStrategyReportRequest
@@ -335,7 +391,7 @@ export type GetStrategyReportRequest = Message<"xstockstrat.analysis.v1.GetStrat
  * Use `create(GetStrategyReportRequestSchema)` to create a new message.
  */
 export const GetStrategyReportRequestSchema: GenMessage<GetStrategyReportRequest> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 8);
+  messageDesc(file_analysis_v1_analysis, 9);
 
 /**
  * @generated from message xstockstrat.analysis.v1.StrategyComponent
@@ -376,7 +432,7 @@ export type StrategyComponent = Message<"xstockstrat.analysis.v1.StrategyCompone
  * Use `create(StrategyComponentSchema)` to create a new message.
  */
 export const StrategyComponentSchema: GenMessage<StrategyComponent> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 9);
+  messageDesc(file_analysis_v1_analysis, 10);
 
 /**
  * @generated from message xstockstrat.analysis.v1.StrategyDefinition
@@ -432,7 +488,7 @@ export type StrategyDefinition = Message<"xstockstrat.analysis.v1.StrategyDefini
  * Use `create(StrategyDefinitionSchema)` to create a new message.
  */
 export const StrategyDefinitionSchema: GenMessage<StrategyDefinition> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 10);
+  messageDesc(file_analysis_v1_analysis, 11);
 
 /**
  * @generated from message xstockstrat.analysis.v1.ManageStrategyRequest
@@ -454,7 +510,7 @@ export type ManageStrategyRequest = Message<"xstockstrat.analysis.v1.ManageStrat
  * Use `create(ManageStrategyRequestSchema)` to create a new message.
  */
 export const ManageStrategyRequestSchema: GenMessage<ManageStrategyRequest> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 11);
+  messageDesc(file_analysis_v1_analysis, 12);
 
 /**
  * @generated from message xstockstrat.analysis.v1.GetStrategyRequest
@@ -471,7 +527,7 @@ export type GetStrategyRequest = Message<"xstockstrat.analysis.v1.GetStrategyReq
  * Use `create(GetStrategyRequestSchema)` to create a new message.
  */
 export const GetStrategyRequestSchema: GenMessage<GetStrategyRequest> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 12);
+  messageDesc(file_analysis_v1_analysis, 13);
 
 /**
  * @generated from message xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
@@ -498,7 +554,7 @@ export type ListStrategyDefinitionsRequest = Message<"xstockstrat.analysis.v1.Li
  * Use `create(ListStrategyDefinitionsRequestSchema)` to create a new message.
  */
 export const ListStrategyDefinitionsRequestSchema: GenMessage<ListStrategyDefinitionsRequest> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 13);
+  messageDesc(file_analysis_v1_analysis, 14);
 
 /**
  * @generated from message xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
@@ -520,7 +576,7 @@ export type ListStrategyDefinitionsResponse = Message<"xstockstrat.analysis.v1.L
  * Use `create(ListStrategyDefinitionsResponseSchema)` to create a new message.
  */
 export const ListStrategyDefinitionsResponseSchema: GenMessage<ListStrategyDefinitionsResponse> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 14);
+  messageDesc(file_analysis_v1_analysis, 15);
 
 /**
  * @generated from message xstockstrat.analysis.v1.SetStrategyLiveRequest
@@ -542,7 +598,7 @@ export type SetStrategyLiveRequest = Message<"xstockstrat.analysis.v1.SetStrateg
  * Use `create(SetStrategyLiveRequestSchema)` to create a new message.
  */
 export const SetStrategyLiveRequestSchema: GenMessage<SetStrategyLiveRequest> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 15);
+  messageDesc(file_analysis_v1_analysis, 16);
 
 /**
  * @generated from message xstockstrat.analysis.v1.SetStrategyLiveResponse
@@ -559,7 +615,33 @@ export type SetStrategyLiveResponse = Message<"xstockstrat.analysis.v1.SetStrate
  * Use `create(SetStrategyLiveResponseSchema)` to create a new message.
  */
 export const SetStrategyLiveResponseSchema: GenMessage<SetStrategyLiveResponse> = /*@__PURE__*/
-  messageDesc(file_analysis_v1_analysis, 16);
+  messageDesc(file_analysis_v1_analysis, 17);
+
+/**
+ * @generated from enum xstockstrat.analysis.v1.BacktestStatus
+ */
+export enum BacktestStatus {
+  /**
+   * @generated from enum value: BACKTEST_STATUS_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: BACKTEST_STATUS_OK = 1;
+   */
+  OK = 1,
+
+  /**
+   * @generated from enum value: BACKTEST_STATUS_INSUFFICIENT_DATA = 2;
+   */
+  INSUFFICIENT_DATA = 2,
+}
+
+/**
+ * Describes the enum xstockstrat.analysis.v1.BacktestStatus.
+ */
+export const BacktestStatusSchema: GenEnum<BacktestStatus> = /*@__PURE__*/
+  enumDesc(file_analysis_v1_analysis, 0);
 
 /**
  * @generated from enum xstockstrat.analysis.v1.ComponentKind
@@ -585,7 +667,7 @@ export enum ComponentKind {
  * Describes the enum xstockstrat.analysis.v1.ComponentKind.
  */
 export const ComponentKindSchema: GenEnum<ComponentKind> = /*@__PURE__*/
-  enumDesc(file_analysis_v1_analysis, 0);
+  enumDesc(file_analysis_v1_analysis, 1);
 
 /**
  * @generated from enum xstockstrat.analysis.v1.StrategyOperation
@@ -616,7 +698,7 @@ export enum StrategyOperation {
  * Describes the enum xstockstrat.analysis.v1.StrategyOperation.
  */
 export const StrategyOperationSchema: GenEnum<StrategyOperation> = /*@__PURE__*/
-  enumDesc(file_analysis_v1_analysis, 1);
+  enumDesc(file_analysis_v1_analysis, 2);
 
 /**
  * @generated from service xstockstrat.analysis.v1.AnalysisService

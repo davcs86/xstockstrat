@@ -114,8 +114,12 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         memory_bytes = request.memory_bytes_override or self._cfg.sandbox_memory_bytes
         allowed_imports = self._cfg.sandbox_allowed_imports
 
-        # Convert protobuf Struct to dict
-        input_data = dict(request.input_data)
+        # Convert protobuf Struct to a fully-native Python dict. A plain dict()
+        # only unwraps the top level — nested list/struct fields stay as protobuf
+        # ListValue/Struct objects, which are not JSON-serializable and would blow
+        # up in the sandbox's json.dumps(input_data). MessageToDict recurses to
+        # native types (lists, dicts, scalars).
+        input_data = MessageToDict(request.input_data)
 
         log.info(
             "executing formula timeout_ms=%d memory_bytes=%d",
@@ -139,6 +143,26 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             "runtime_error": indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR,
             "import_blocked": indicators_pb2.SANDBOX_EXIT_REASON_IMPORT_BLOCKED,
         }
+
+        # Enforce the declared output contract: a stored formula that declares output
+        # series must actually emit each one (the primary "value" series is implicit
+        # and checked separately by callers). Missing a declared series turns an
+        # otherwise-successful run into a failure so strategies can rely on the schema.
+        declared_outputs = list(formula.outputs) if formula is not None else []
+        if result.success and declared_outputs:
+            missing = [o.name for o in declared_outputs if o.name not in result.output]
+            if missing:
+                return indicators_pb2.ExecuteFormulaResponse(
+                    success=False,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                    execution_ms=result.execution_ms,
+                    memory_used_bytes=result.memory_used_bytes,
+                    error=(
+                        "formula did not emit declared output series: " + ", ".join(sorted(missing))
+                    ),
+                    exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR,
+                )
 
         output_struct = Struct()
         output_struct.update(result.output)
@@ -193,11 +217,13 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
 
         try:
             params_validation.validate_definitions(request.parameters)
+            params_validation.validate_outputs(request.outputs)
         except ValueError as e:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
             return
 
         param_dicts = [MessageToDict(p) for p in request.parameters]
+        output_dicts = [MessageToDict(o) for o in request.outputs]
         formula = indicators_pb2.FormulaDefinition(
             formula_id=formula_id,
             name=request.name,
@@ -209,6 +235,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             updated_at=now,
             input_schema=dict(request.input_schema),
             parameters=list(request.parameters),
+            outputs=list(request.outputs),
         )
         self._formulas[formula_id] = formula
         if self._repo is not None:
@@ -221,6 +248,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 is_public=request.is_public,
                 input_schema=dict(request.input_schema),
                 parameters=param_dicts,
+                outputs=output_dicts,
             )
         return indicators_pb2.RegisterFormulaResponse(formula_id=formula_id)
 
@@ -273,6 +301,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             return
         try:
             params_validation.validate_definitions(request.parameters)
+            params_validation.validate_outputs(request.outputs)
         except ValueError as e:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
             return
@@ -283,6 +312,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             source=request.source,
             is_public=request.is_public,
             parameters=[MessageToDict(p) for p in request.parameters],
+            outputs=[MessageToDict(o) for o in request.outputs],
         )
         self._formulas.pop(request.formula_id, None)
         return indicators_pb2.UpdateFormulaResponse(formula=_row_to_formula(updated))
@@ -332,4 +362,5 @@ def _row_to_formula(row: dict) -> "indicators_pb2.FormulaDefinition":
         parameters=[
             ParseDict(p, indicators_pb2.FormulaParameter()) for p in (row.get("parameters") or [])
         ],
+        outputs=[ParseDict(o, indicators_pb2.FormulaOutput()) for o in (row.get("outputs") or [])],
     )

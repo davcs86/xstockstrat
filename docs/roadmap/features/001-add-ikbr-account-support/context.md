@@ -142,7 +142,7 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 
 **Known deviations documented in spec**
 - `alpaca-default` seed deferred to application startup (`EnsureAlpacaDefault`) rather than migration (PRE_DEPLOY job doesn't have trading-service env vars).
-- `user_id` absent from `account.positions.synced` ledger event payload; placeholder `"default"` used in `processPositionSync`. Follow-up to add `user_id` to event payload.
+- `user_id` absent from `account.positions.synced` ledger event payload; placeholder `"default"` used in `processPositionSync`. Follow-up to add `user_id` to event payload. **RESOLVED 2026-06-09** — see session note at end of file; `user_id` now propagated from `brokerPoolEntry` through `syncPositions` into the payload and consumed by `processPositionSync`.
 - Pre-existing inconsistency in `trading_helpers_test.go`: `TestAlpacaStatusToProto` expects `"unknown_status"` → `ORDER_STATUS_UNSPECIFIED` but `alpacaStatusToProto` returns `ORDER_STATUS_NEW` for unknown inputs. Not introduced by this feature; not changed by this spec.
 
 ---
@@ -396,3 +396,18 @@ Generated `implementation-spec.md` (18 steps). Key codebase findings:
 - Added `ListPortfolios` Connect-RPC handler method on `PortfolioHandler` and matching `ListPortfolios` gRPC adapter method on `grpcPortfolioAdapter`. Added `go svc.ConsumePositionSyncs(ctx)` to `cmd/server/main.go` after `ConsumeOrderFills`. `GOWORK=off go build ./...` exits 0; compile-time assertion at L17 passes.
 - Files modified: `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`, `services/xstockstrat-portfolio/cmd/server/main.go`
 - Deviations: none
+
+---
+
+## Session 2026-06-09 — follow-up: propagate user_id through position sync
+
+**Context**: Bug report "Portfolio positions are out of sync, credentials are valid." Root cause was the known follow-up noted at L145: `account.positions.synced` events carried no `user_id`, so `processPositionSync` stored every broker-synced position under the placeholder `user_id = "default"`. Order-fill positions and per-user portfolio queries (`GetPortfolio`/`ListPositions`) use the real `user_id`, so broker reality (the source of truth) never reconciled with what users saw — positions appeared out of sync even though broker credentials were valid.
+
+**Fix**:
+- `xstockstrat-trading` — added `userID` to `brokerPoolEntry`, populated it in `LoadBrokerPool` (`rec.UserID`), `RegisterBrokerAccount` (caller `userID`), and `UpdateBrokerAccountCredentials` (`rec.UserID`). `syncPositions` now includes `"user_id"` (per account owner) in the `account.positions.synced` payload.
+- `xstockstrat-portfolio` — added `UserID` to `positionSyncPayload`; `processPositionSync` uses `sync.UserID`, falling back to `"default"` only for legacy events emitted before this change.
+- Tests: added `TestPositionSyncPayload_ParsesUserID` and `TestPositionSyncPayload_FallsBackToDefault` in `portfolio_helpers_test.go`.
+
+**Files modified**: `services/xstockstrat-trading/internal/service/trading.go`, `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go`
+
+**Verification**: `GOWORK=off go build ./...` and `go test ./...` pass for both services. Resolves the L145 follow-up.

@@ -70,6 +70,40 @@ class TestFormulasRepository:
         )
         assert result["parameters"] == [{"name": "period", "type": "PARAMETER_TYPE_INT"}]
 
+    async def test_create_round_trips_outputs(self):
+        pool = MagicMock()
+        pool.fetchrow = AsyncMock(
+            return_value={
+                "formula_id": "11111111-1111-1111-1111-111111111111",
+                "name": "BBlike",
+                "input_schema": "{}",
+                "outputs": '[{"name": "upper", "description": "upper band"}]',
+            }
+        )
+        repo = FormulasRepository(pool)
+        result = await repo.create(
+            formula_id="11111111-1111-1111-1111-111111111111",
+            name="BBlike",
+            description="",
+            source="result = {'value': 1}",
+            author="user-1",
+            is_public=False,
+            input_schema={},
+            outputs=[{"name": "upper", "description": "upper band"}],
+        )
+        assert result["outputs"] == [{"name": "upper", "description": "upper band"}]
+
+    async def test_list_decodes_outputs_default_empty(self):
+        row = {"formula_id": "a", "name": "f1", "input_schema": "{}", "outputs": None}
+        pool = MagicMock()
+        pool.fetchval = AsyncMock(return_value=1)
+        pool.fetch = AsyncMock(return_value=[row])
+        repo = FormulasRepository(pool)
+        rows, _ = await repo.list(
+            author_filter="user-1", include_public=True, page_size=0, page_offset=0
+        )
+        assert rows[0]["outputs"] == []
+
     async def test_list_decodes_parameters(self):
         row = {"formula_id": "a", "name": "f1", "input_schema": "{}", "parameters": "[]"}
         pool = MagicMock()
@@ -174,6 +208,28 @@ class TestRegisterFormulaAuthorGate:
         stored = servicer._formulas[resp.formula_id]
         assert stored.author == "user-42"
 
+    async def test_stores_declared_outputs(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = self._servicer()
+        req = indicators_pb2.RegisterFormulaRequest(name="f", source="x = 1", author="u")
+        req.outputs.append(indicators_pb2.FormulaOutput(name="upper", description="upper band"))
+        resp = await servicer.RegisterFormula(req, _ctx([("x-user-id", "u")]))
+        stored = servicer._formulas[resp.formula_id]
+        assert [o.name for o in stored.outputs] == ["upper"]
+
+    async def test_rejects_reserved_output_name(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = self._servicer()
+        req = indicators_pb2.RegisterFormulaRequest(name="f", source="x = 1", author="u")
+        req.outputs.append(indicators_pb2.FormulaOutput(name="value"))
+        ctx = _ctx([("x-user-id", "u")])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.RegisterFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+
     async def test_explicit_author_wins(self):
         from gen.indicators.v1 import indicators_pb2
 
@@ -249,6 +305,82 @@ class TestExecuteFormulaParameterErrors:
         assert resp.success is False
         assert [e.name for e in resp.parameter_errors] == ["period"]
         assert "maximum" in resp.parameter_errors[0].reason
+
+
+class TestExecuteFormulaOutputEnforcement:
+    def _cfg(self):
+        cfg = MagicMock()
+        cfg.sandbox_timeout_ms = 5000
+        cfg.sandbox_memory_bytes = 256 * 1024 * 1024
+        cfg.sandbox_allowed_imports = []
+        return cfg
+
+    def _repo_for(self, source: str, outputs: list[dict]):
+        repo = MagicMock()
+        repo.get_by_id = AsyncMock(
+            return_value={
+                "formula_id": "f-1",
+                "name": "f",
+                "description": "",
+                "source": source,
+                "author": "user-1",
+                "is_public": False,
+                "input_schema": {},
+                "parameters": [],
+                "outputs": outputs,
+            }
+        )
+        return repo
+
+    async def test_missing_declared_output_fails(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=self._cfg())
+        # Formula emits only "value"; declares "upper" → contract violation.
+        servicer._repo = self._repo_for("result = {'value': 1}", [{"name": "upper"}])
+        resp = await servicer.ExecuteFormula(
+            indicators_pb2.ExecuteFormulaRequest(formula_id="f-1"), MagicMock()
+        )
+        assert resp.success is False
+        assert "upper" in resp.error
+        assert resp.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR
+
+    async def test_all_declared_outputs_present_succeeds(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=self._cfg())
+        servicer._repo = self._repo_for("result = {'value': 1, 'upper': 2}", [{"name": "upper"}])
+        resp = await servicer.ExecuteFormula(
+            indicators_pb2.ExecuteFormulaRequest(formula_id="f-1"), MagicMock()
+        )
+        assert resp.success is True
+        assert dict(resp.output) == {"value": 1, "upper": 2}
+
+
+class TestExecuteFormulaInputData:
+    def _cfg(self):
+        cfg = MagicMock()
+        cfg.sandbox_timeout_ms = 5000
+        cfg.sandbox_memory_bytes = 256 * 1024 * 1024
+        cfg.sandbox_allowed_imports = []
+        return cfg
+
+    async def test_nested_list_input_data_serializes(self):
+        """Regression: input_data with a nested list (e.g. {"close": [...]}) must be
+        converted to native Python types before reaching the sandbox. A plain dict()
+        leaves nested lists as protobuf ListValue objects, which json.dumps rejects
+        ("Object of type ListValue is not JSON serializable")."""
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=self._cfg())
+        req = indicators_pb2.ExecuteFormulaRequest(
+            formula_source="result = {'value': sum(data['close']) / len(data['close'])}",
+        )
+        req.input_data.update({"close": [10.0, 20.0, 30.0], "period": 3})
+
+        resp = await servicer.ExecuteFormula(req, MagicMock())
+        assert resp.success is True, resp.error
+        assert dict(resp.output) == {"value": 20.0}
 
 
 class TestFormulaAdminOverride:

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"math"
 	"testing"
 )
@@ -229,5 +230,49 @@ func TestRealizedPnL_PartiallyFilledCanceled(t *testing.T) {
 	// Pass 1: sell -50@70 → short; Pass 2: buy 50@50 closes short → realized = (-50)*(50-70) = 1000
 	if got != 1000.0 {
 		t.Errorf("PartiallyFilledCanceled: got %f, want 1000.0", got)
+	}
+}
+
+// resolveSyncUserID mirrors the user_id resolution in processPositionSync: use the
+// payload's user_id when present, falling back to "default" for legacy events.
+func resolveSyncUserID(sync positionSyncPayload) string {
+	userID := sync.UserID
+	if userID == "" {
+		userID = "default"
+	}
+	return userID
+}
+
+func TestPositionSyncPayload_ParsesUserID(t *testing.T) {
+	raw := `{
+		"account_id": "acct-123",
+		"user_id": "user-abc",
+		"trading_mode": "TRADING_MODE_LIVE",
+		"positions": [{"symbol": "AAPL", "qty": 10, "avg_cost": 150.5}]
+	}`
+	var sync positionSyncPayload
+	if err := json.Unmarshal([]byte(raw), &sync); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if sync.UserID != "user-abc" {
+		t.Errorf("UserID: got %q, want %q", sync.UserID, "user-abc")
+	}
+	if got := resolveSyncUserID(sync); got != "user-abc" {
+		t.Errorf("resolveSyncUserID: got %q, want %q", got, "user-abc")
+	}
+	if len(sync.Positions) != 1 || sync.Positions[0].Symbol != "AAPL" {
+		t.Errorf("Positions: got %+v", sync.Positions)
+	}
+}
+
+func TestPositionSyncPayload_FallsBackToDefault(t *testing.T) {
+	// Legacy event without user_id (pre-propagation) must fall back to "default".
+	raw := `{"account_id": "acct-123", "trading_mode": "TRADING_MODE_PAPER", "positions": []}`
+	var sync positionSyncPayload
+	if err := json.Unmarshal([]byte(raw), &sync); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got := resolveSyncUserID(sync); got != "default" {
+		t.Errorf("resolveSyncUserID (legacy): got %q, want %q", got, "default")
 	}
 }

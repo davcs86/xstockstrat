@@ -25,6 +25,9 @@ service MarketDataService {
   // Trigger historical backfill (used by xstockstrat-ingest)
   rpc BackfillBars(BackfillBarsRequest) returns (BackfillBarsResponse);
 
+  // Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
+  rpc GetDataCoverage(GetDataCoverageRequest) returns (GetDataCoverageResponse);
+
   // Get available symbols
   rpc ListAssets(ListAssetsRequest) returns (ListAssetsResponse);
 }
@@ -39,8 +42,10 @@ message Bar {
   int64 volume = 7;
   double vwap = 8;
   int32 trade_count = 9;
-  string timeframe = 10;  // "1m", "5m", "1h", "1d"
+  // DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+  string timeframe = 10 [deprecated = true];  // "1m", "5m", "1h", "1d"
   string source = 11;     // always "alpaca" for this service
+  xstockstrat.common.v1.Timeframe timeframe_enum = 12;
 }
 
 message Quote {
@@ -55,9 +60,11 @@ message Quote {
 
 message StreamBarsRequest {
   repeated string symbols = 1;
-  string timeframe = 2;          // "1m", "5m", "1h", "1d"
+  // DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+  string timeframe = 2 [deprecated = true];   // "1m", "5m", "1h", "1d"
   bool include_premarket = 3;
   bool include_afterhours = 4;
+  xstockstrat.common.v1.Timeframe timeframe_enum = 5;
 }
 
 message StreamQuotesRequest {
@@ -66,9 +73,11 @@ message StreamQuotesRequest {
 
 message GetBarsRequest {
   string symbol = 1;
-  string timeframe = 2;
+  // DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+  string timeframe = 2 [deprecated = true];
   xstockstrat.common.v1.TimeRange range = 3;
   xstockstrat.common.v1.PageRequest page = 4;
+  xstockstrat.common.v1.Timeframe timeframe_enum = 5;
 }
 
 message GetBarsResponse {
@@ -82,14 +91,42 @@ message GetLatestQuoteRequest {
 
 message BackfillBarsRequest {
   repeated string symbols = 1;
-  string timeframe = 2;
+  // DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+  string timeframe = 2 [deprecated = true];
   xstockstrat.common.v1.TimeRange range = 3;
   bool overwrite_existing = 4;
+  xstockstrat.common.v1.Timeframe timeframe_enum = 5;
 }
 
 message BackfillBarsResponse {
   int64 bars_written = 1;
   repeated string failed_symbols = 2;
+  int64 expected_bars = 3; // estimated total bars across requested symbols/range (FR-6)
+}
+
+message GetDataCoverageRequest {
+  string symbol = 1;
+  xstockstrat.common.v1.Timeframe timeframe = 2;
+  // Optional: restrict the coverage scan to this window. Empty = full history.
+  xstockstrat.common.v1.TimeRange range = 3;
+}
+
+message CoverageRange {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+  int64 bar_count = 3;
+}
+
+message GetDataCoverageResponse {
+  string symbol = 1;
+  xstockstrat.common.v1.Timeframe timeframe = 2;
+  int64 bars_total = 3;
+  // Covered earliest/latest with total bar count; covered_ranges holds contiguous segments,
+  // gaps holds the missing segments within the requested range (if range was supplied).
+  google.protobuf.Timestamp earliest = 4;
+  google.protobuf.Timestamp latest = 5;
+  repeated CoverageRange covered_ranges = 6;
+  repeated xstockstrat.common.v1.TimeRange gaps = 7;
 }
 
 message ListAssetsRequest {

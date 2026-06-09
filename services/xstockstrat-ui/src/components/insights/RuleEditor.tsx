@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/components/ui/utils';
-import { RULE_FUNCTIONS, fnPhrase, type RuleFn } from '@/lib/strategyCatalog';
+import { RULE_FUNCTIONS, fnPhrase, type RuleFn, type OperandRef } from '@/lib/strategyCatalog';
 
 // Condition-tree schema accepted by the analysis evaluator (evaluator.py):
 //   { "op": "AND" | "OR", "conditions": [ { "fn": ">", "lhs": "sma_fast", "rhs": "sma_slow" } ] }
@@ -36,7 +36,11 @@ export function parseRuleTree(value: string): RuleTree | null {
   if (!value.trim()) return { op: 'AND', conditions: [] };
   try {
     const parsed = JSON.parse(value) as { op?: unknown; conditions?: unknown };
-    if (parsed && (normalizeOp(parsed.op) === 'AND' || normalizeOp(parsed.op) === 'OR') && Array.isArray(parsed.conditions)) {
+    if (
+      parsed &&
+      (normalizeOp(parsed.op) === 'AND' || normalizeOp(parsed.op) === 'OR') &&
+      Array.isArray(parsed.conditions)
+    ) {
       const conditions: Condition[] = parsed.conditions.map((c) => {
         const cond = c as { lhs?: unknown; fn?: unknown; cmp?: unknown; rhs?: unknown };
         return {
@@ -79,9 +83,7 @@ function serialize(tree: RuleTree, refNames: string[]): string {
 export function summarizeRule(value: string): { op: 'AND' | 'OR'; parts: string[] } | null {
   const tree = parseRuleTree(value);
   if (!tree) return null;
-  const parts = tree.conditions.map(
-    (c) => `${c.lhs || '?'} ${fnPhrase(c.fn)} ${c.rhs || '?'}`,
-  );
+  const parts = tree.conditions.map((c) => `${c.lhs || '?'} ${fnPhrase(c.fn)} ${c.rhs || '?'}`);
   return { op: tree.op, parts };
 }
 
@@ -95,11 +97,14 @@ interface RuleEditorProps {
   value: string;
   onChange: (json: string) => void;
   label: string;
-  /** Component ref_names available as operands (type-ahead options). */
-  refNames: string[];
+  /**
+   * Operands available as type-ahead options — one per component plus, for
+   * multi-output indicators, one per selectable output series (e.g. `bb.upper`).
+   */
+  operands: OperandRef[];
 }
 
-export function RuleEditor({ value, onChange, label, refNames }: RuleEditorProps) {
+export function RuleEditor({ value, onChange, label, operands }: RuleEditorProps) {
   const [mode, setMode] = useState<'visual' | 'json'>('visual');
   const [parseError, setParseError] = useState<string | null>(null);
   // The visual builder edits this local model; every edit re-serializes to onChange.
@@ -107,7 +112,11 @@ export function RuleEditor({ value, onChange, label, refNames }: RuleEditorProps
     () => parseRuleTree(value) ?? { op: 'AND', conditions: [] },
   );
 
-  const refOptions = refNames.filter((n) => n.trim() !== '').map((n) => ({ value: n }));
+  // Every operand value is a valid ref (used to decide string-vs-number for rhs).
+  const refNames = operands.map((o) => o.value);
+  const refOptions = operands
+    .filter((o) => o.value.trim() !== '')
+    .map((o) => ({ value: o.value, label: o.label, hint: o.hint }));
 
   function updateTree(next: RuleTree) {
     setTree(next);

@@ -178,6 +178,79 @@ export function brokerTypeToNumber(object: BrokerType): number {
   }
 }
 
+/**
+ * Timeframe is the canonical OHLCV bar interval, shared by marketdata + analysis + ingest.
+ * Replaces the free-text "1d"/"1Day"/"1m" strings that previously mismatched across services.
+ */
+export enum Timeframe {
+  TIMEFRAME_UNSPECIFIED = "TIMEFRAME_UNSPECIFIED",
+  TIMEFRAME_1MIN = "TIMEFRAME_1MIN",
+  TIMEFRAME_5MIN = "TIMEFRAME_5MIN",
+  TIMEFRAME_1HOUR = "TIMEFRAME_1HOUR",
+  TIMEFRAME_1DAY = "TIMEFRAME_1DAY",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function timeframeFromJSON(object: any): Timeframe {
+  switch (object) {
+    case 0:
+    case "TIMEFRAME_UNSPECIFIED":
+      return Timeframe.TIMEFRAME_UNSPECIFIED;
+    case 1:
+    case "TIMEFRAME_1MIN":
+      return Timeframe.TIMEFRAME_1MIN;
+    case 2:
+    case "TIMEFRAME_5MIN":
+      return Timeframe.TIMEFRAME_5MIN;
+    case 3:
+    case "TIMEFRAME_1HOUR":
+      return Timeframe.TIMEFRAME_1HOUR;
+    case 4:
+    case "TIMEFRAME_1DAY":
+      return Timeframe.TIMEFRAME_1DAY;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return Timeframe.UNRECOGNIZED;
+  }
+}
+
+export function timeframeToJSON(object: Timeframe): string {
+  switch (object) {
+    case Timeframe.TIMEFRAME_UNSPECIFIED:
+      return "TIMEFRAME_UNSPECIFIED";
+    case Timeframe.TIMEFRAME_1MIN:
+      return "TIMEFRAME_1MIN";
+    case Timeframe.TIMEFRAME_5MIN:
+      return "TIMEFRAME_5MIN";
+    case Timeframe.TIMEFRAME_1HOUR:
+      return "TIMEFRAME_1HOUR";
+    case Timeframe.TIMEFRAME_1DAY:
+      return "TIMEFRAME_1DAY";
+    case Timeframe.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function timeframeToNumber(object: Timeframe): number {
+  switch (object) {
+    case Timeframe.TIMEFRAME_UNSPECIFIED:
+      return 0;
+    case Timeframe.TIMEFRAME_1MIN:
+      return 1;
+    case Timeframe.TIMEFRAME_5MIN:
+      return 2;
+    case Timeframe.TIMEFRAME_1HOUR:
+      return 3;
+    case Timeframe.TIMEFRAME_1DAY:
+      return 4;
+    case Timeframe.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 /** Pagination */
 export interface PageRequest {
   pageSize: number;

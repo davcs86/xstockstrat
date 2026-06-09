@@ -6,7 +6,7 @@ import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegen
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { Asset, PageRequest, PageResponse, TimeRange } from "../../common/v1/common_pb";
+import type { Asset, PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import { file_common_v1_common } from "../../common/v1/common_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file marketdata/v1/marketdata.proto.
  */
 export const file_marketdata_v1_marketdata: GenFile = /*@__PURE__*/
-  fileDesc("Ch5tYXJrZXRkYXRhL3YxL21hcmtldGRhdGEucHJvdG8SGXhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEizQEKA0JhchIOCgZzeW1ib2wYASABKAkSKAoEdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDAoEb3BlbhgDIAEoARIMCgRoaWdoGAQgASgBEgsKA2xvdxgFIAEoARINCgVjbG9zZRgGIAEoARIOCgZ2b2x1bWUYByABKAMSDAoEdndhcBgIIAEoARITCgt0cmFkZV9jb3VudBgJIAEoBRIRCgl0aW1lZnJhbWUYCiABKAkSDgoGc291cmNlGAsgASgJIpsBCgVRdW90ZRIOCgZzeW1ib2wYASABKAkSKAoEdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEQoJYXNrX3ByaWNlGAMgASgBEhAKCGFza19zaXplGAQgASgFEhEKCWJpZF9wcmljZRgFIAEoARIQCghiaWRfc2l6ZRgGIAEoBRIOCgZzb3VyY2UYByABKAkibgoRU3RyZWFtQmFyc1JlcXVlc3QSDwoHc3ltYm9scxgBIAMoCRIRCgl0aW1lZnJhbWUYAiABKAkSGQoRaW5jbHVkZV9wcmVtYXJrZXQYAyABKAgSGgoSaW5jbHVkZV9hZnRlcmhvdXJzGAQgASgIIiYKE1N0cmVhbVF1b3Rlc1JlcXVlc3QSDwoHc3ltYm9scxgBIAMoCSKWAQoOR2V0QmFyc1JlcXVlc3QSDgoGc3ltYm9sGAEgASgJEhEKCXRpbWVmcmFtZRgCIAEoCRIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USMAoEcGFnZRgEIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdCJyCg9HZXRCYXJzUmVzcG9uc2USLAoEYmFycxgBIAMoCzIeLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuQmFyEjEKBHBhZ2UYAiABKAsyIy54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlc3BvbnNlIicKFUdldExhdGVzdFF1b3RlUmVxdWVzdBIOCgZzeW1ib2wYASABKAkihgEKE0JhY2tmaWxsQmFyc1JlcXVlc3QSDwoHc3ltYm9scxgBIAMoCRIRCgl0aW1lZnJhbWUYAiABKAkSLwoFcmFuZ2UYAyABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlEhoKEm92ZXJ3cml0ZV9leGlzdGluZxgEIAEoCCJEChRCYWNrZmlsbEJhcnNSZXNwb25zZRIUCgxiYXJzX3dyaXR0ZW4YASABKAMSFgoOZmFpbGVkX3N5bWJvbHMYAiADKAkiPwoRTGlzdEFzc2V0c1JlcXVlc3QSEwoLYXNzZXRfY2xhc3MYASABKAkSFQoNdHJhZGFibGVfb25seRgCIAEoCCJCChJMaXN0QXNzZXRzUmVzcG9uc2USLAoGYXNzZXRzGAEgAygLMhwueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkFzc2V0MvkEChFNYXJrZXREYXRhU2VydmljZRJcCgpTdHJlYW1CYXJzEiwueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5TdHJlYW1CYXJzUmVxdWVzdBoeLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuQmFyMAESYgoMU3RyZWFtUXVvdGVzEi4ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5TdHJlYW1RdW90ZXNSZXF1ZXN0GiAueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5RdW90ZTABEmAKB0dldEJhcnMSKS54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldEJhcnNSZXF1ZXN0GioueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRCYXJzUmVzcG9uc2USZAoOR2V0TGF0ZXN0UXVvdGUSMC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldExhdGVzdFF1b3RlUmVxdWVzdBogLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuUXVvdGUSbwoMQmFja2ZpbGxCYXJzEi4ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYWNrZmlsbEJhcnNSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYWNrZmlsbEJhcnNSZXNwb25zZRJpCgpMaXN0QXNzZXRzEiwueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5MaXN0QXNzZXRzUmVxdWVzdBotLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuTGlzdEFzc2V0c1Jlc3BvbnNlQkRaQmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9tYXJrZXRkYXRhL3YxO21hcmtldGRhdGF2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_common_v1_common]);
+  fileDesc("Ch5tYXJrZXRkYXRhL3YxL21hcmtldGRhdGEucHJvdG8SGXhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEiiwIKA0JhchIOCgZzeW1ib2wYASABKAkSKAoEdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDAoEb3BlbhgDIAEoARIMCgRoaWdoGAQgASgBEgsKA2xvdxgFIAEoARINCgVjbG9zZRgGIAEoARIOCgZ2b2x1bWUYByABKAMSDAoEdndhcBgIIAEoARITCgt0cmFkZV9jb3VudBgJIAEoBRIVCgl0aW1lZnJhbWUYCiABKAlCAhgBEg4KBnNvdXJjZRgLIAEoCRI4Cg50aW1lZnJhbWVfZW51bRgMIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUimwEKBVF1b3RlEg4KBnN5bWJvbBgBIAEoCRIoCgR0aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglhc2tfcHJpY2UYAyABKAESEAoIYXNrX3NpemUYBCABKAUSEQoJYmlkX3ByaWNlGAUgASgBEhAKCGJpZF9zaXplGAYgASgFEg4KBnNvdXJjZRgHIAEoCSKsAQoRU3RyZWFtQmFyc1JlcXVlc3QSDwoHc3ltYm9scxgBIAMoCRIVCgl0aW1lZnJhbWUYAiABKAlCAhgBEhkKEWluY2x1ZGVfcHJlbWFya2V0GAMgASgIEhoKEmluY2x1ZGVfYWZ0ZXJob3VycxgEIAEoCBI4Cg50aW1lZnJhbWVfZW51bRgFIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUiJgoTU3RyZWFtUXVvdGVzUmVxdWVzdBIPCgdzeW1ib2xzGAEgAygJItQBCg5HZXRCYXJzUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USMAoEcGFnZRgEIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdBI4Cg50aW1lZnJhbWVfZW51bRgFIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUicgoPR2V0QmFyc1Jlc3BvbnNlEiwKBGJhcnMYASADKAsyHi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhchIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSInChVHZXRMYXRlc3RRdW90ZVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJIsQBChNCYWNrZmlsbEJhcnNSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USGgoSb3ZlcndyaXRlX2V4aXN0aW5nGAQgASgIEjgKDnRpbWVmcmFtZV9lbnVtGAUgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZSJbChRCYWNrZmlsbEJhcnNSZXNwb25zZRIUCgxiYXJzX3dyaXR0ZW4YASABKAMSFgoOZmFpbGVkX3N5bWJvbHMYAiADKAkSFQoNZXhwZWN0ZWRfYmFycxgDIAEoAyKOAQoWR2V0RGF0YUNvdmVyYWdlUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSMwoJdGltZWZyYW1lGAIgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZRIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UidgoNQ292ZXJhZ2VSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgliYXJfY291bnQYAyABKAMivgIKF0dldERhdGFDb3ZlcmFnZVJlc3BvbnNlEg4KBnN5bWJvbBgBIAEoCRIzCgl0aW1lZnJhbWUYAiABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEhIKCmJhcnNfdG90YWwYAyABKAMSLAoIZWFybGllc3QYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBmxhdGVzdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASQAoOY292ZXJlZF9yYW5nZXMYBiADKAsyKC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkNvdmVyYWdlUmFuZ2USLgoEZ2FwcxgHIAMoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UiPwoRTGlzdEFzc2V0c1JlcXVlc3QSEwoLYXNzZXRfY2xhc3MYASABKAkSFQoNdHJhZGFibGVfb25seRgCIAEoCCJCChJMaXN0QXNzZXRzUmVzcG9uc2USLAoGYXNzZXRzGAEgAygLMhwueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkFzc2V0MvMFChFNYXJrZXREYXRhU2VydmljZRJcCgpTdHJlYW1CYXJzEiwueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5TdHJlYW1CYXJzUmVxdWVzdBoeLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuQmFyMAESYgoMU3RyZWFtUXVvdGVzEi4ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5TdHJlYW1RdW90ZXNSZXF1ZXN0GiAueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5RdW90ZTABEmAKB0dldEJhcnMSKS54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldEJhcnNSZXF1ZXN0GioueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRCYXJzUmVzcG9uc2USZAoOR2V0TGF0ZXN0UXVvdGUSMC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldExhdGVzdFF1b3RlUmVxdWVzdBogLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuUXVvdGUSbwoMQmFja2ZpbGxCYXJzEi4ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYWNrZmlsbEJhcnNSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYWNrZmlsbEJhcnNSZXNwb25zZRJ4Cg9HZXREYXRhQ292ZXJhZ2USMS54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldERhdGFDb3ZlcmFnZVJlcXVlc3QaMi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldERhdGFDb3ZlcmFnZVJlc3BvbnNlEmkKCkxpc3RBc3NldHMSLC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkxpc3RBc3NldHNSZXF1ZXN0Gi0ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5MaXN0QXNzZXRzUmVzcG9uc2VCRFpCZ2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL21hcmtldGRhdGEvdjE7bWFya2V0ZGF0YXYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.Bar
@@ -66,9 +66,12 @@ export type Bar = Message<"xstockstrat.marketdata.v1.Bar"> & {
   tradeCount: number;
 
   /**
+   * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+   *
    * "1m", "5m", "1h", "1d"
    *
-   * @generated from field: string timeframe = 10;
+   * @generated from field: string timeframe = 10 [deprecated = true];
+   * @deprecated
    */
   timeframe: string;
 
@@ -78,6 +81,11 @@ export type Bar = Message<"xstockstrat.marketdata.v1.Bar"> & {
    * @generated from field: string source = 11;
    */
   source: string;
+
+  /**
+   * @generated from field: xstockstrat.common.v1.Timeframe timeframe_enum = 12;
+   */
+  timeframeEnum: Timeframe;
 };
 
 /**
@@ -144,9 +152,12 @@ export type StreamBarsRequest = Message<"xstockstrat.marketdata.v1.StreamBarsReq
   symbols: string[];
 
   /**
+   * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+   *
    * "1m", "5m", "1h", "1d"
    *
-   * @generated from field: string timeframe = 2;
+   * @generated from field: string timeframe = 2 [deprecated = true];
+   * @deprecated
    */
   timeframe: string;
 
@@ -159,6 +170,11 @@ export type StreamBarsRequest = Message<"xstockstrat.marketdata.v1.StreamBarsReq
    * @generated from field: bool include_afterhours = 4;
    */
   includeAfterhours: boolean;
+
+  /**
+   * @generated from field: xstockstrat.common.v1.Timeframe timeframe_enum = 5;
+   */
+  timeframeEnum: Timeframe;
 };
 
 /**
@@ -195,7 +211,10 @@ export type GetBarsRequest = Message<"xstockstrat.marketdata.v1.GetBarsRequest">
   symbol: string;
 
   /**
-   * @generated from field: string timeframe = 2;
+   * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+   *
+   * @generated from field: string timeframe = 2 [deprecated = true];
+   * @deprecated
    */
   timeframe: string;
 
@@ -208,6 +227,11 @@ export type GetBarsRequest = Message<"xstockstrat.marketdata.v1.GetBarsRequest">
    * @generated from field: xstockstrat.common.v1.PageRequest page = 4;
    */
   page?: PageRequest | undefined;
+
+  /**
+   * @generated from field: xstockstrat.common.v1.Timeframe timeframe_enum = 5;
+   */
+  timeframeEnum: Timeframe;
 };
 
 /**
@@ -266,7 +290,10 @@ export type BackfillBarsRequest = Message<"xstockstrat.marketdata.v1.BackfillBar
   symbols: string[];
 
   /**
-   * @generated from field: string timeframe = 2;
+   * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+   *
+   * @generated from field: string timeframe = 2 [deprecated = true];
+   * @deprecated
    */
   timeframe: string;
 
@@ -279,6 +306,11 @@ export type BackfillBarsRequest = Message<"xstockstrat.marketdata.v1.BackfillBar
    * @generated from field: bool overwrite_existing = 4;
    */
   overwriteExisting: boolean;
+
+  /**
+   * @generated from field: xstockstrat.common.v1.Timeframe timeframe_enum = 5;
+   */
+  timeframeEnum: Timeframe;
 };
 
 /**
@@ -301,6 +333,13 @@ export type BackfillBarsResponse = Message<"xstockstrat.marketdata.v1.BackfillBa
    * @generated from field: repeated string failed_symbols = 2;
    */
   failedSymbols: string[];
+
+  /**
+   * estimated total bars across requested symbols/range (FR-6)
+   *
+   * @generated from field: int64 expected_bars = 3;
+   */
+  expectedBars: bigint;
 };
 
 /**
@@ -309,6 +348,112 @@ export type BackfillBarsResponse = Message<"xstockstrat.marketdata.v1.BackfillBa
  */
 export const BackfillBarsResponseSchema: GenMessage<BackfillBarsResponse> = /*@__PURE__*/
   messageDesc(file_marketdata_v1_marketdata, 8);
+
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetDataCoverageRequest
+ */
+export type GetDataCoverageRequest = Message<"xstockstrat.marketdata.v1.GetDataCoverageRequest"> & {
+  /**
+   * @generated from field: string symbol = 1;
+   */
+  symbol: string;
+
+  /**
+   * @generated from field: xstockstrat.common.v1.Timeframe timeframe = 2;
+   */
+  timeframe: Timeframe;
+
+  /**
+   * Optional: restrict the coverage scan to this window. Empty = full history.
+   *
+   * @generated from field: xstockstrat.common.v1.TimeRange range = 3;
+   */
+  range?: TimeRange | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetDataCoverageRequest.
+ * Use `create(GetDataCoverageRequestSchema)` to create a new message.
+ */
+export const GetDataCoverageRequestSchema: GenMessage<GetDataCoverageRequest> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 9);
+
+/**
+ * @generated from message xstockstrat.marketdata.v1.CoverageRange
+ */
+export type CoverageRange = Message<"xstockstrat.marketdata.v1.CoverageRange"> & {
+  /**
+   * @generated from field: google.protobuf.Timestamp start = 1;
+   */
+  start?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp end = 2;
+   */
+  end?: Timestamp | undefined;
+
+  /**
+   * @generated from field: int64 bar_count = 3;
+   */
+  barCount: bigint;
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.CoverageRange.
+ * Use `create(CoverageRangeSchema)` to create a new message.
+ */
+export const CoverageRangeSchema: GenMessage<CoverageRange> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 10);
+
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetDataCoverageResponse
+ */
+export type GetDataCoverageResponse = Message<"xstockstrat.marketdata.v1.GetDataCoverageResponse"> & {
+  /**
+   * @generated from field: string symbol = 1;
+   */
+  symbol: string;
+
+  /**
+   * @generated from field: xstockstrat.common.v1.Timeframe timeframe = 2;
+   */
+  timeframe: Timeframe;
+
+  /**
+   * @generated from field: int64 bars_total = 3;
+   */
+  barsTotal: bigint;
+
+  /**
+   * Covered earliest/latest with total bar count; covered_ranges holds contiguous segments,
+   * gaps holds the missing segments within the requested range (if range was supplied).
+   *
+   * @generated from field: google.protobuf.Timestamp earliest = 4;
+   */
+  earliest?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp latest = 5;
+   */
+  latest?: Timestamp | undefined;
+
+  /**
+   * @generated from field: repeated xstockstrat.marketdata.v1.CoverageRange covered_ranges = 6;
+   */
+  coveredRanges: CoverageRange[];
+
+  /**
+   * @generated from field: repeated xstockstrat.common.v1.TimeRange gaps = 7;
+   */
+  gaps: TimeRange[];
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetDataCoverageResponse.
+ * Use `create(GetDataCoverageResponseSchema)` to create a new message.
+ */
+export const GetDataCoverageResponseSchema: GenMessage<GetDataCoverageResponse> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 11);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.ListAssetsRequest
@@ -332,7 +477,7 @@ export type ListAssetsRequest = Message<"xstockstrat.marketdata.v1.ListAssetsReq
  * Use `create(ListAssetsRequestSchema)` to create a new message.
  */
 export const ListAssetsRequestSchema: GenMessage<ListAssetsRequest> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 9);
+  messageDesc(file_marketdata_v1_marketdata, 12);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.ListAssetsResponse
@@ -349,7 +494,7 @@ export type ListAssetsResponse = Message<"xstockstrat.marketdata.v1.ListAssetsRe
  * Use `create(ListAssetsResponseSchema)` to create a new message.
  */
 export const ListAssetsResponseSchema: GenMessage<ListAssetsResponse> = /*@__PURE__*/
-  messageDesc(file_marketdata_v1_marketdata, 10);
+  messageDesc(file_marketdata_v1_marketdata, 13);
 
 /**
  * MarketDataService — sole Alpaca integration point.
@@ -407,6 +552,16 @@ export const MarketDataService: GenService<{
     methodKind: "unary";
     input: typeof BackfillBarsRequestSchema;
     output: typeof BackfillBarsResponseSchema;
+  },
+  /**
+   * Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
+   *
+   * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage
+   */
+  getDataCoverage: {
+    methodKind: "unary";
+    input: typeof GetDataCoverageRequestSchema;
+    output: typeof GetDataCoverageResponseSchema;
   },
   /**
    * Get available symbols

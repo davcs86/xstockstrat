@@ -18,7 +18,15 @@ import {
   type ServiceError,
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
-import { PageRequest, PageResponse, TimeRange } from "../../common/v1/common";
+import {
+  PageRequest,
+  PageResponse,
+  Timeframe,
+  timeframeFromJSON,
+  timeframeToJSON,
+  timeframeToNumber,
+  TimeRange,
+} from "../../common/v1/common";
 import { Struct } from "../../google/protobuf/struct";
 import { Timestamp } from "../../google/protobuf/timestamp";
 
@@ -101,9 +109,71 @@ export function backfillStatusToNumber(object: BackfillStatus): number {
   }
 }
 
+/** FillMode selects how much of the requested range a backfill fetches (feature 054, FR-4). */
+export enum FillMode {
+  /** FILL_MODE_UNSPECIFIED - treated as FILL_MODE_FULL by the server */
+  FILL_MODE_UNSPECIFIED = "FILL_MODE_UNSPECIFIED",
+  /** FILL_MODE_FULL - fetch the entire requested range (current behavior) */
+  FILL_MODE_FULL = "FILL_MODE_FULL",
+  /** FILL_MODE_GAPS_ONLY - fetch only ranges missing per GetDataCoverage */
+  FILL_MODE_GAPS_ONLY = "FILL_MODE_GAPS_ONLY",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function fillModeFromJSON(object: any): FillMode {
+  switch (object) {
+    case 0:
+    case "FILL_MODE_UNSPECIFIED":
+      return FillMode.FILL_MODE_UNSPECIFIED;
+    case 1:
+    case "FILL_MODE_FULL":
+      return FillMode.FILL_MODE_FULL;
+    case 2:
+    case "FILL_MODE_GAPS_ONLY":
+      return FillMode.FILL_MODE_GAPS_ONLY;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return FillMode.UNRECOGNIZED;
+  }
+}
+
+export function fillModeToJSON(object: FillMode): string {
+  switch (object) {
+    case FillMode.FILL_MODE_UNSPECIFIED:
+      return "FILL_MODE_UNSPECIFIED";
+    case FillMode.FILL_MODE_FULL:
+      return "FILL_MODE_FULL";
+    case FillMode.FILL_MODE_GAPS_ONLY:
+      return "FILL_MODE_GAPS_ONLY";
+    case FillMode.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function fillModeToNumber(object: FillMode): number {
+  switch (object) {
+    case FillMode.FILL_MODE_UNSPECIFIED:
+      return 0;
+    case FillMode.FILL_MODE_FULL:
+      return 1;
+    case FillMode.FILL_MODE_GAPS_ONLY:
+      return 2;
+    case FillMode.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export interface BackfillJob {
   jobId: string;
   symbols: string[];
+  /**
+   * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+   *
+   * @deprecated
+   */
   timeframe: string;
   range?: TimeRange | undefined;
   status: BackfillStatus;
@@ -112,13 +182,28 @@ export interface BackfillJob {
   startedAt?: Date | undefined;
   completedAt?: Date | undefined;
   error: string;
+  /** symbols that failed in a PARTIAL/FAILED job (FR-7) */
+  failedSymbols: string[];
+  timeframeEnum: Timeframe;
+  /** planned chunk count (FR-5) */
+  chunksTotal: number;
+  /** chunks in COMPLETED state (FR-5) */
+  chunksCompleted: number;
 }
 
 export interface TriggerBackfillRequest {
   symbols: string[];
+  /**
+   * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+   *
+   * @deprecated
+   */
   timeframe: string;
   range?: TimeRange | undefined;
   overwrite: boolean;
+  timeframeEnum: Timeframe;
+  /** FR-4; UNSPECIFIED == FULL. Independent of `overwrite`. */
+  fillMode: FillMode;
 }
 
 export interface TriggerBackfillResponse {
@@ -245,6 +330,10 @@ function createBaseBackfillJob(): BackfillJob {
     startedAt: undefined,
     completedAt: undefined,
     error: "",
+    failedSymbols: [],
+    timeframeEnum: Timeframe.TIMEFRAME_UNSPECIFIED,
+    chunksTotal: 0,
+    chunksCompleted: 0,
   };
 }
 
@@ -279,6 +368,18 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     }
     if (message.error !== "") {
       writer.uint32(82).string(message.error);
+    }
+    for (const v of message.failedSymbols) {
+      writer.uint32(90).string(v!);
+    }
+    if (message.timeframeEnum !== Timeframe.TIMEFRAME_UNSPECIFIED) {
+      writer.uint32(96).int32(timeframeToNumber(message.timeframeEnum));
+    }
+    if (message.chunksTotal !== 0) {
+      writer.uint32(104).int32(message.chunksTotal);
+    }
+    if (message.chunksCompleted !== 0) {
+      writer.uint32(112).int32(message.chunksCompleted);
     }
     return writer;
   },
@@ -370,6 +471,38 @@ export const BackfillJob: MessageFns<BackfillJob> = {
           message.error = reader.string();
           continue;
         }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.failedSymbols.push(reader.string());
+          continue;
+        }
+        case 12: {
+          if (tag !== 96) {
+            break;
+          }
+
+          message.timeframeEnum = timeframeFromJSON(reader.int32());
+          continue;
+        }
+        case 13: {
+          if (tag !== 104) {
+            break;
+          }
+
+          message.chunksTotal = reader.int32();
+          continue;
+        }
+        case 14: {
+          if (tag !== 112) {
+            break;
+          }
+
+          message.chunksCompleted = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -411,6 +544,26 @@ export const BackfillJob: MessageFns<BackfillJob> = {
         ? fromJsonTimestamp(object.completed_at)
         : undefined,
       error: isSet(object.error) ? globalThis.String(object.error) : "",
+      failedSymbols: globalThis.Array.isArray(object?.failedSymbols)
+        ? object.failedSymbols.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.failed_symbols)
+        ? object.failed_symbols.map((e: any) => globalThis.String(e))
+        : [],
+      timeframeEnum: isSet(object.timeframeEnum)
+        ? timeframeFromJSON(object.timeframeEnum)
+        : isSet(object.timeframe_enum)
+        ? timeframeFromJSON(object.timeframe_enum)
+        : Timeframe.TIMEFRAME_UNSPECIFIED,
+      chunksTotal: isSet(object.chunksTotal)
+        ? globalThis.Number(object.chunksTotal)
+        : isSet(object.chunks_total)
+        ? globalThis.Number(object.chunks_total)
+        : 0,
+      chunksCompleted: isSet(object.chunksCompleted)
+        ? globalThis.Number(object.chunksCompleted)
+        : isSet(object.chunks_completed)
+        ? globalThis.Number(object.chunks_completed)
+        : 0,
     };
   },
 
@@ -446,6 +599,18 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     if (message.error !== "") {
       obj.error = message.error;
     }
+    if (message.failedSymbols?.length) {
+      obj.failedSymbols = message.failedSymbols;
+    }
+    if (message.timeframeEnum !== Timeframe.TIMEFRAME_UNSPECIFIED) {
+      obj.timeframeEnum = timeframeToJSON(message.timeframeEnum);
+    }
+    if (message.chunksTotal !== 0) {
+      obj.chunksTotal = Math.round(message.chunksTotal);
+    }
+    if (message.chunksCompleted !== 0) {
+      obj.chunksCompleted = Math.round(message.chunksCompleted);
+    }
     return obj;
   },
 
@@ -466,12 +631,23 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     message.startedAt = object.startedAt ?? undefined;
     message.completedAt = object.completedAt ?? undefined;
     message.error = object.error ?? "";
+    message.failedSymbols = object.failedSymbols?.map((e) => e) || [];
+    message.timeframeEnum = object.timeframeEnum ?? Timeframe.TIMEFRAME_UNSPECIFIED;
+    message.chunksTotal = object.chunksTotal ?? 0;
+    message.chunksCompleted = object.chunksCompleted ?? 0;
     return message;
   },
 };
 
 function createBaseTriggerBackfillRequest(): TriggerBackfillRequest {
-  return { symbols: [], timeframe: "", range: undefined, overwrite: false };
+  return {
+    symbols: [],
+    timeframe: "",
+    range: undefined,
+    overwrite: false,
+    timeframeEnum: Timeframe.TIMEFRAME_UNSPECIFIED,
+    fillMode: FillMode.FILL_MODE_UNSPECIFIED,
+  };
 }
 
 export const TriggerBackfillRequest: MessageFns<TriggerBackfillRequest> = {
@@ -487,6 +663,12 @@ export const TriggerBackfillRequest: MessageFns<TriggerBackfillRequest> = {
     }
     if (message.overwrite !== false) {
       writer.uint32(32).bool(message.overwrite);
+    }
+    if (message.timeframeEnum !== Timeframe.TIMEFRAME_UNSPECIFIED) {
+      writer.uint32(40).int32(timeframeToNumber(message.timeframeEnum));
+    }
+    if (message.fillMode !== FillMode.FILL_MODE_UNSPECIFIED) {
+      writer.uint32(48).int32(fillModeToNumber(message.fillMode));
     }
     return writer;
   },
@@ -530,6 +712,22 @@ export const TriggerBackfillRequest: MessageFns<TriggerBackfillRequest> = {
           message.overwrite = reader.bool();
           continue;
         }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.timeframeEnum = timeframeFromJSON(reader.int32());
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.fillMode = fillModeFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -545,6 +743,16 @@ export const TriggerBackfillRequest: MessageFns<TriggerBackfillRequest> = {
       timeframe: isSet(object.timeframe) ? globalThis.String(object.timeframe) : "",
       range: isSet(object.range) ? TimeRange.fromJSON(object.range) : undefined,
       overwrite: isSet(object.overwrite) ? globalThis.Boolean(object.overwrite) : false,
+      timeframeEnum: isSet(object.timeframeEnum)
+        ? timeframeFromJSON(object.timeframeEnum)
+        : isSet(object.timeframe_enum)
+        ? timeframeFromJSON(object.timeframe_enum)
+        : Timeframe.TIMEFRAME_UNSPECIFIED,
+      fillMode: isSet(object.fillMode)
+        ? fillModeFromJSON(object.fillMode)
+        : isSet(object.fill_mode)
+        ? fillModeFromJSON(object.fill_mode)
+        : FillMode.FILL_MODE_UNSPECIFIED,
     };
   },
 
@@ -562,6 +770,12 @@ export const TriggerBackfillRequest: MessageFns<TriggerBackfillRequest> = {
     if (message.overwrite !== false) {
       obj.overwrite = message.overwrite;
     }
+    if (message.timeframeEnum !== Timeframe.TIMEFRAME_UNSPECIFIED) {
+      obj.timeframeEnum = timeframeToJSON(message.timeframeEnum);
+    }
+    if (message.fillMode !== FillMode.FILL_MODE_UNSPECIFIED) {
+      obj.fillMode = fillModeToJSON(message.fillMode);
+    }
     return obj;
   },
 
@@ -576,6 +790,8 @@ export const TriggerBackfillRequest: MessageFns<TriggerBackfillRequest> = {
       ? TimeRange.fromPartial(object.range)
       : undefined;
     message.overwrite = object.overwrite ?? false;
+    message.timeframeEnum = object.timeframeEnum ?? Timeframe.TIMEFRAME_UNSPECIFIED;
+    message.fillMode = object.fillMode ?? FillMode.FILL_MODE_UNSPECIFIED;
     return message;
   },
 };

@@ -31,6 +31,22 @@ message RunBacktestRequest {
   StrategyDefinition inline_definition = 7;
 }
 
+enum BacktestStatus {
+  BACKTEST_STATUS_UNSPECIFIED = 0;
+  BACKTEST_STATUS_OK = 1;
+  BACKTEST_STATUS_INSUFFICIENT_DATA = 2;
+}
+
+message CoverageGap {
+  string symbol = 1;
+  xstockstrat.common.v1.Timeframe timeframe = 2;
+  xstockstrat.common.v1.TimeRange requested_range = 3;
+  int64 bars_have = 4;
+  int64 bars_need = 5;
+  // The range a caller should backfill to satisfy this backtest.
+  xstockstrat.common.v1.TimeRange gap = 6;
+}
+
 message BacktestResult {
   string backtest_id = 1;
   string strategy_id = 2;
@@ -43,6 +59,8 @@ message BacktestResult {
   double profit_factor = 9;
   google.protobuf.Timestamp completed_at = 10;
   repeated TradeRecord trades = 11;
+  BacktestStatus status = 12;
+  repeated CoverageGap coverage_gaps = 13; // populated per-symbol when status == INSUFFICIENT_DATA
 }
 
 message TradeRecord {

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ListFormulasRequest } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import type { FormulaParameterInit } from '@/components/insights/ParameterEditor';
+import type { FormulaOutputInit } from '@/components/insights/OutputEditor';
 import { indicatorsClient } from '@/lib/browserClients/indicatorsClient';
 
 export function useFormulas(params: Partial<ListFormulasRequest> = {}) {
@@ -35,6 +36,7 @@ export function useRegisterFormula() {
       inputSchema?: Record<string, string>;
       author?: string;
       parameters?: FormulaParameterInit[];
+      outputs?: FormulaOutputInit[];
     }) =>
       indicatorsClient.registerFormula({
         name: req.name ?? '',
@@ -44,6 +46,7 @@ export function useRegisterFormula() {
         inputSchema: req.inputSchema ?? {},
         author: req.author ?? '',
         parameters: req.parameters ?? [],
+        outputs: req.outputs ?? [],
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['indicators-formulas'] }),
   });
@@ -60,6 +63,7 @@ export function useUpdateFormula() {
       source?: string;
       isPublic?: boolean;
       parameters?: FormulaParameterInit[];
+      outputs?: FormulaOutputInit[];
     }) =>
       indicatorsClient.updateFormula({
         formulaId: req.formulaId,
@@ -69,6 +73,7 @@ export function useUpdateFormula() {
         source: req.source ?? '',
         isPublic: req.isPublic ?? false,
         parameters: req.parameters ?? [],
+        outputs: req.outputs ?? [],
       }),
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['indicators-formulas'] });

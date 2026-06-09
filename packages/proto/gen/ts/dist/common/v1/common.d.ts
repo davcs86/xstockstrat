@@ -36,6 +36,21 @@ export declare enum BrokerType {
 export declare function brokerTypeFromJSON(object: any): BrokerType;
 export declare function brokerTypeToJSON(object: BrokerType): string;
 export declare function brokerTypeToNumber(object: BrokerType): number;
+/**
+ * Timeframe is the canonical OHLCV bar interval, shared by marketdata + analysis + ingest.
+ * Replaces the free-text "1d"/"1Day"/"1m" strings that previously mismatched across services.
+ */
+export declare enum Timeframe {
+    TIMEFRAME_UNSPECIFIED = "TIMEFRAME_UNSPECIFIED",
+    TIMEFRAME_1MIN = "TIMEFRAME_1MIN",
+    TIMEFRAME_5MIN = "TIMEFRAME_5MIN",
+    TIMEFRAME_1HOUR = "TIMEFRAME_1HOUR",
+    TIMEFRAME_1DAY = "TIMEFRAME_1DAY",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function timeframeFromJSON(object: any): Timeframe;
+export declare function timeframeToJSON(object: Timeframe): string;
+export declare function timeframeToNumber(object: Timeframe): number;
 /** Pagination */
 export interface PageRequest {
     pageSize: number;

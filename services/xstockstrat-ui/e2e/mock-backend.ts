@@ -218,6 +218,31 @@ export async function startMockBackend(): Promise<void> {
         async scoreStrategy() {
           return { overallScore: 0.5, rating: 'C' };
         },
+        // Feature 053: return a structured INSUFFICIENT_DATA result with a coverage gap so
+        // the backtest view renders the gap panel + "backfill this range" action (AC-4).
+        async runBacktest(req) {
+          return {
+            backtestId: 'bt-e2e-1',
+            strategyId: req.strategyId,
+            status: 2, // BACKTEST_STATUS_INSUFFICIENT_DATA
+            totalTrades: 0,
+            trades: [],
+            coverageGaps: [
+              {
+                symbol: req.symbols[0] ?? 'AAPL',
+                timeframe: 4, // TIMEFRAME_1DAY
+                requestedRange: req.range,
+                barsHave: BigInt(3),
+                barsNeed: BigInt(52),
+                gap: req.range,
+              },
+            ],
+          };
+        },
+        async getStrategyReport(req) {
+          // No prior backtest — the page falls back to the run-backtest flow above.
+          return { strategyId: req.strategyId };
+        },
         // Feature 048: trader BFF analysisClient dials ANALYSIS_ENDPOINT (9092 in e2e),
         // so the live-strategy methods are mocked here.
         async listStrategyDefinitions() {
@@ -326,6 +351,12 @@ export async function startMockBackend(): Promise<void> {
               configJson: { sender_patterns: ['noreply@example.com'], subject_patterns: ['Signal:'] },
             }],
           };
+        },
+        // Feature 053: the insights backtest "backfill this range" action dials the insights
+        // BFF ingestClient, which (in e2e) points at INGEST_ENDPOINT=9093. Return a deterministic
+        // job id so the confirmation can be asserted (AC-4).
+        async triggerBackfill() {
+          return { jobId: 'job-e2e-1', status: 1 /* BACKFILL_STATUS_QUEUED */ };
         },
         async manageSignalSource() {
           return {

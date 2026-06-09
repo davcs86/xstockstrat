@@ -154,28 +154,35 @@ ORDER BY missing_day;
 
 > **Warning**: 1-minute bars for 5 years × 100 symbols ≈ 500M rows. Split into yearly jobs.
 
+> **Canonical timeframe vocabulary** (feature 053): the strings above (`1m`/`5m`/`1h`/`1d`) are the
+> canonical forms stored in `marketdata.ohlcv.timeframe`. A shared `common.v1.Timeframe` enum
+> (`TIMEFRAME_1MIN`/`_5MIN`/`_1HOUR`/`_1DAY`) is now the **preferred** field on the marketdata,
+> ingest, and analysis messages (`timeframe_enum`); prefer it in new code. The legacy string
+> `timeframe` fields remain for backward compatibility but are **deprecated for one release** (per
+> `proto-versioning.md`'s deprecation cycle) and will be removed in a future gated breaking change.
+> The marketdata `internal/timeframe` normalizer reconciles legacy aliases — notably `"1Day"`
+> (previously sent by the backtest path) now maps to the same stored `"1d"` bars the backfill writes.
+
 ---
 
 ## Large Backfill Strategy
 
-For large datasets, split by:
-1. **Time**: one job per year
-2. **Symbols**: batch of 20 symbols per job
-3. **Timeframe**: run 1d first, then 1h, then 1m (lowest to highest density)
+**Server-side chunking (feature 054)** — you no longer split large jobs by hand. A single
+`TriggerBackfill` over a wide range is planned by `xstockstrat-ingest` into chunks bounded by
+`ingest.backfill.chunk_window_days` (default 90) and `ingest.backfill.chunk_max_bars` (default
+200000, density-aware so 1m ranges produce more, smaller chunks than 1d). Chunks run in parallel up
+to `ingest.backfill.max_concurrent_chunks` (default 3), per-chunk progress is tracked in
+`ingest.backfill_chunks`, and the job exposes `chunks_total` / `chunks_completed`.
 
-```bash
-# Example: 4-year backfill split by year
-for year in 2020 2021 2022 2023; do
-  curl -X POST http://xstockstrat-ingest:8055/webhooks/trigger-backfill \
-    -H 'Content-Type: application/json' \
-    -d "{
-      \"symbols\": [\"AAPL\",\"MSFT\",\"NVDA\",\"TSLA\",\"GOOGL\"],
-      \"timeframe\": \"1d\",
-      \"start\": \"${year}-01-01T00:00:00Z\",
-      \"end\": \"${year}-12-31T00:00:00Z\"
-    }"
-done
-```
+- **Resumable**: if the service restarts mid-job, any incomplete chunks are re-driven on startup
+  (re-fetch is safe — marketdata upserts bars idempotently). No manual re-trigger needed.
+- **Gaps-only**: set `fill_mode = FILL_MODE_GAPS_ONLY` on `TriggerBackfill` to fetch *only* the
+  ranges `marketdata.GetDataCoverage` reports missing — ideal for topping up a partially-covered
+  symbol without re-downloading existing bars.
+- **Tuning**: lower `chunk_max_bars` for finer progress granularity / smaller Alpaca requests; raise
+  `max_concurrent_chunks` to fetch faster (watch `marketdata.backfill.rate_limit_rps`).
+
+You still choose timeframe per job (run 1d first, then 1h, then 1m if you need multiple densities).
 
 ---
 
