@@ -103,6 +103,7 @@ function createBaseBackfillJob() {
         completedAt: undefined,
         error: "",
         failedSymbols: [],
+        timeframeEnum: common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
     };
 }
 exports.BackfillJob = {
@@ -139,6 +140,9 @@ exports.BackfillJob = {
         }
         for (const v of message.failedSymbols) {
             writer.uint32(90).string(v);
+        }
+        if (message.timeframeEnum !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            writer.uint32(96).int32((0, common_1.timeframeToNumber)(message.timeframeEnum));
         }
         return writer;
     },
@@ -226,6 +230,13 @@ exports.BackfillJob = {
                     message.failedSymbols.push(reader.string());
                     continue;
                 }
+                case 12: {
+                    if (tag !== 96) {
+                        break;
+                    }
+                    message.timeframeEnum = (0, common_1.timeframeFromJSON)(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -271,6 +282,11 @@ exports.BackfillJob = {
                 : globalThis.Array.isArray(object?.failed_symbols)
                     ? object.failed_symbols.map((e) => globalThis.String(e))
                     : [],
+            timeframeEnum: isSet(object.timeframeEnum)
+                ? (0, common_1.timeframeFromJSON)(object.timeframeEnum)
+                : isSet(object.timeframe_enum)
+                    ? (0, common_1.timeframeFromJSON)(object.timeframe_enum)
+                    : common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -308,6 +324,9 @@ exports.BackfillJob = {
         if (message.failedSymbols?.length) {
             obj.failedSymbols = message.failedSymbols;
         }
+        if (message.timeframeEnum !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            obj.timeframeEnum = (0, common_1.timeframeToJSON)(message.timeframeEnum);
+        }
         return obj;
     },
     create(base) {
@@ -328,11 +347,18 @@ exports.BackfillJob = {
         message.completedAt = object.completedAt ?? undefined;
         message.error = object.error ?? "";
         message.failedSymbols = object.failedSymbols?.map((e) => e) || [];
+        message.timeframeEnum = object.timeframeEnum ?? common_1.Timeframe.TIMEFRAME_UNSPECIFIED;
         return message;
     },
 };
 function createBaseTriggerBackfillRequest() {
-    return { symbols: [], timeframe: "", range: undefined, overwrite: false };
+    return {
+        symbols: [],
+        timeframe: "",
+        range: undefined,
+        overwrite: false,
+        timeframeEnum: common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
+    };
 }
 exports.TriggerBackfillRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -347,6 +373,9 @@ exports.TriggerBackfillRequest = {
         }
         if (message.overwrite !== false) {
             writer.uint32(32).bool(message.overwrite);
+        }
+        if (message.timeframeEnum !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            writer.uint32(40).int32((0, common_1.timeframeToNumber)(message.timeframeEnum));
         }
         return writer;
     },
@@ -385,6 +414,13 @@ exports.TriggerBackfillRequest = {
                     message.overwrite = reader.bool();
                     continue;
                 }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.timeframeEnum = (0, common_1.timeframeFromJSON)(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -399,6 +435,11 @@ exports.TriggerBackfillRequest = {
             timeframe: isSet(object.timeframe) ? globalThis.String(object.timeframe) : "",
             range: isSet(object.range) ? common_1.TimeRange.fromJSON(object.range) : undefined,
             overwrite: isSet(object.overwrite) ? globalThis.Boolean(object.overwrite) : false,
+            timeframeEnum: isSet(object.timeframeEnum)
+                ? (0, common_1.timeframeFromJSON)(object.timeframeEnum)
+                : isSet(object.timeframe_enum)
+                    ? (0, common_1.timeframeFromJSON)(object.timeframe_enum)
+                    : common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -415,6 +456,9 @@ exports.TriggerBackfillRequest = {
         if (message.overwrite !== false) {
             obj.overwrite = message.overwrite;
         }
+        if (message.timeframeEnum !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            obj.timeframeEnum = (0, common_1.timeframeToJSON)(message.timeframeEnum);
+        }
         return obj;
     },
     create(base) {
@@ -428,6 +472,7 @@ exports.TriggerBackfillRequest = {
             ? common_1.TimeRange.fromPartial(object.range)
             : undefined;
         message.overwrite = object.overwrite ?? false;
+        message.timeframeEnum = object.timeframeEnum ?? common_1.Timeframe.TIMEFRAME_UNSPECIFIED;
         return message;
     },
 };

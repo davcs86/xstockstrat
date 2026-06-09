@@ -1,6 +1,6 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientUnaryCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
-import { PageRequest, PageResponse, TimeRange } from "../../common/v1/common";
+import { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common";
 export declare const protobufPackage = "xstockstrat.ingest.v1";
 export declare enum BackfillStatus {
     BACKFILL_STATUS_UNSPECIFIED = "BACKFILL_STATUS_UNSPECIFIED",
@@ -17,6 +17,11 @@ export declare function backfillStatusToNumber(object: BackfillStatus): number;
 export interface BackfillJob {
     jobId: string;
     symbols: string[];
+    /**
+     * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+     *
+     * @deprecated
+     */
     timeframe: string;
     range?: TimeRange | undefined;
     status: BackfillStatus;
@@ -27,12 +32,19 @@ export interface BackfillJob {
     error: string;
     /** symbols that failed in a PARTIAL/FAILED job (FR-7) */
     failedSymbols: string[];
+    timeframeEnum: Timeframe;
 }
 export interface TriggerBackfillRequest {
     symbols: string[];
+    /**
+     * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+     *
+     * @deprecated
+     */
     timeframe: string;
     range?: TimeRange | undefined;
     overwrite: boolean;
+    timeframeEnum: Timeframe;
 }
 export interface TriggerBackfillResponse {
     jobId: string;

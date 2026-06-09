@@ -19,12 +19,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MarketDataService_StreamBars_FullMethodName     = "/xstockstrat.marketdata.v1.MarketDataService/StreamBars"
-	MarketDataService_StreamQuotes_FullMethodName   = "/xstockstrat.marketdata.v1.MarketDataService/StreamQuotes"
-	MarketDataService_GetBars_FullMethodName        = "/xstockstrat.marketdata.v1.MarketDataService/GetBars"
-	MarketDataService_GetLatestQuote_FullMethodName = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuote"
-	MarketDataService_BackfillBars_FullMethodName   = "/xstockstrat.marketdata.v1.MarketDataService/BackfillBars"
-	MarketDataService_ListAssets_FullMethodName     = "/xstockstrat.marketdata.v1.MarketDataService/ListAssets"
+	MarketDataService_StreamBars_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/StreamBars"
+	MarketDataService_StreamQuotes_FullMethodName    = "/xstockstrat.marketdata.v1.MarketDataService/StreamQuotes"
+	MarketDataService_GetBars_FullMethodName         = "/xstockstrat.marketdata.v1.MarketDataService/GetBars"
+	MarketDataService_GetLatestQuote_FullMethodName  = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuote"
+	MarketDataService_BackfillBars_FullMethodName    = "/xstockstrat.marketdata.v1.MarketDataService/BackfillBars"
+	MarketDataService_GetDataCoverage_FullMethodName = "/xstockstrat.marketdata.v1.MarketDataService/GetDataCoverage"
+	MarketDataService_ListAssets_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/ListAssets"
 )
 
 // MarketDataServiceClient is the client API for MarketDataService service.
@@ -44,6 +45,8 @@ type MarketDataServiceClient interface {
 	GetLatestQuote(ctx context.Context, in *GetLatestQuoteRequest, opts ...grpc.CallOption) (*Quote, error)
 	// Trigger historical backfill (used by xstockstrat-ingest)
 	BackfillBars(ctx context.Context, in *BackfillBarsRequest, opts ...grpc.CallOption) (*BackfillBarsResponse, error)
+	// Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
+	GetDataCoverage(ctx context.Context, in *GetDataCoverageRequest, opts ...grpc.CallOption) (*GetDataCoverageResponse, error)
 	// Get available symbols
 	ListAssets(ctx context.Context, in *ListAssetsRequest, opts ...grpc.CallOption) (*ListAssetsResponse, error)
 }
@@ -124,6 +127,16 @@ func (c *marketDataServiceClient) BackfillBars(ctx context.Context, in *Backfill
 	return out, nil
 }
 
+func (c *marketDataServiceClient) GetDataCoverage(ctx context.Context, in *GetDataCoverageRequest, opts ...grpc.CallOption) (*GetDataCoverageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDataCoverageResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_GetDataCoverage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *marketDataServiceClient) ListAssets(ctx context.Context, in *ListAssetsRequest, opts ...grpc.CallOption) (*ListAssetsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListAssetsResponse)
@@ -151,6 +164,8 @@ type MarketDataServiceServer interface {
 	GetLatestQuote(context.Context, *GetLatestQuoteRequest) (*Quote, error)
 	// Trigger historical backfill (used by xstockstrat-ingest)
 	BackfillBars(context.Context, *BackfillBarsRequest) (*BackfillBarsResponse, error)
+	// Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
+	GetDataCoverage(context.Context, *GetDataCoverageRequest) (*GetDataCoverageResponse, error)
 	// Get available symbols
 	ListAssets(context.Context, *ListAssetsRequest) (*ListAssetsResponse, error)
 }
@@ -176,6 +191,9 @@ func (UnimplementedMarketDataServiceServer) GetLatestQuote(context.Context, *Get
 }
 func (UnimplementedMarketDataServiceServer) BackfillBars(context.Context, *BackfillBarsRequest) (*BackfillBarsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BackfillBars not implemented")
+}
+func (UnimplementedMarketDataServiceServer) GetDataCoverage(context.Context, *GetDataCoverageRequest) (*GetDataCoverageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetDataCoverage not implemented")
 }
 func (UnimplementedMarketDataServiceServer) ListAssets(context.Context, *ListAssetsRequest) (*ListAssetsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListAssets not implemented")
@@ -276,6 +294,24 @@ func _MarketDataService_BackfillBars_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MarketDataService_GetDataCoverage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDataCoverageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).GetDataCoverage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_GetDataCoverage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).GetDataCoverage(ctx, req.(*GetDataCoverageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MarketDataService_ListAssets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListAssetsRequest)
 	if err := dec(in); err != nil {
@@ -312,6 +348,10 @@ var MarketDataService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BackfillBars",
 			Handler:    _MarketDataService_BackfillBars_Handler,
+		},
+		{
+			MethodName: "GetDataCoverage",
+			Handler:    _MarketDataService_GetDataCoverage_Handler,
 		},
 		{
 			MethodName: "ListAssets",

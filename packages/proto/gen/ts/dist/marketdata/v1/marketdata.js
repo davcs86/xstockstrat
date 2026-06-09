@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: marketdata/v1/marketdata.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MarketDataServiceClient = exports.MarketDataServiceService = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
+exports.MarketDataServiceClient = exports.MarketDataServiceService = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -25,6 +25,7 @@ function createBaseBar() {
         tradeCount: 0,
         timeframe: "",
         source: "",
+        timeframeEnum: common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
     };
 }
 exports.Bar = {
@@ -61,6 +62,9 @@ exports.Bar = {
         }
         if (message.source !== "") {
             writer.uint32(90).string(message.source);
+        }
+        if (message.timeframeEnum !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            writer.uint32(96).int32((0, common_1.timeframeToNumber)(message.timeframeEnum));
         }
         return writer;
     },
@@ -148,6 +152,13 @@ exports.Bar = {
                     message.source = reader.string();
                     continue;
                 }
+                case 12: {
+                    if (tag !== 96) {
+                        break;
+                    }
+                    message.timeframeEnum = (0, common_1.timeframeFromJSON)(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -173,6 +184,11 @@ exports.Bar = {
                     : 0,
             timeframe: isSet(object.timeframe) ? globalThis.String(object.timeframe) : "",
             source: isSet(object.source) ? globalThis.String(object.source) : "",
+            timeframeEnum: isSet(object.timeframeEnum)
+                ? (0, common_1.timeframeFromJSON)(object.timeframeEnum)
+                : isSet(object.timeframe_enum)
+                    ? (0, common_1.timeframeFromJSON)(object.timeframe_enum)
+                    : common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -210,6 +226,9 @@ exports.Bar = {
         if (message.source !== "") {
             obj.source = message.source;
         }
+        if (message.timeframeEnum !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            obj.timeframeEnum = (0, common_1.timeframeToJSON)(message.timeframeEnum);
+        }
         return obj;
     },
     create(base) {
@@ -228,6 +247,7 @@ exports.Bar = {
         message.tradeCount = object.tradeCount ?? 0;
         message.timeframe = object.timeframe ?? "";
         message.source = object.source ?? "";
+        message.timeframeEnum = object.timeframeEnum ?? common_1.Timeframe.TIMEFRAME_UNSPECIFIED;
         return message;
     },
 };
@@ -391,7 +411,13 @@ exports.Quote = {
     },
 };
 function createBaseStreamBarsRequest() {
-    return { symbols: [], timeframe: "", includePremarket: false, includeAfterhours: false };
+    return {
+        symbols: [],
+        timeframe: "",
+        includePremarket: false,
+        includeAfterhours: false,
+        timeframeEnum: common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
+    };
 }
 exports.StreamBarsRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -406,6 +432,9 @@ exports.StreamBarsRequest = {
         }
         if (message.includeAfterhours !== false) {
             writer.uint32(32).bool(message.includeAfterhours);
+        }
+        if (message.timeframeEnum !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            writer.uint32(40).int32((0, common_1.timeframeToNumber)(message.timeframeEnum));
         }
         return writer;
     },
@@ -444,6 +473,13 @@ exports.StreamBarsRequest = {
                     message.includeAfterhours = reader.bool();
                     continue;
                 }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.timeframeEnum = (0, common_1.timeframeFromJSON)(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -466,6 +502,11 @@ exports.StreamBarsRequest = {
                 : isSet(object.include_afterhours)
                     ? globalThis.Boolean(object.include_afterhours)
                     : false,
+            timeframeEnum: isSet(object.timeframeEnum)
+                ? (0, common_1.timeframeFromJSON)(object.timeframeEnum)
+                : isSet(object.timeframe_enum)
+                    ? (0, common_1.timeframeFromJSON)(object.timeframe_enum)
+                    : common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -482,6 +523,9 @@ exports.StreamBarsRequest = {
         if (message.includeAfterhours !== false) {
             obj.includeAfterhours = message.includeAfterhours;
         }
+        if (message.timeframeEnum !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            obj.timeframeEnum = (0, common_1.timeframeToJSON)(message.timeframeEnum);
+        }
         return obj;
     },
     create(base) {
@@ -493,6 +537,7 @@ exports.StreamBarsRequest = {
         message.timeframe = object.timeframe ?? "";
         message.includePremarket = object.includePremarket ?? false;
         message.includeAfterhours = object.includeAfterhours ?? false;
+        message.timeframeEnum = object.timeframeEnum ?? common_1.Timeframe.TIMEFRAME_UNSPECIFIED;
         return message;
     },
 };
@@ -550,7 +595,13 @@ exports.StreamQuotesRequest = {
     },
 };
 function createBaseGetBarsRequest() {
-    return { symbol: "", timeframe: "", range: undefined, page: undefined };
+    return {
+        symbol: "",
+        timeframe: "",
+        range: undefined,
+        page: undefined,
+        timeframeEnum: common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
+    };
 }
 exports.GetBarsRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -565,6 +616,9 @@ exports.GetBarsRequest = {
         }
         if (message.page !== undefined) {
             common_1.PageRequest.encode(message.page, writer.uint32(34).fork()).join();
+        }
+        if (message.timeframeEnum !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            writer.uint32(40).int32((0, common_1.timeframeToNumber)(message.timeframeEnum));
         }
         return writer;
     },
@@ -603,6 +657,13 @@ exports.GetBarsRequest = {
                     message.page = common_1.PageRequest.decode(reader, reader.uint32());
                     continue;
                 }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.timeframeEnum = (0, common_1.timeframeFromJSON)(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -617,6 +678,11 @@ exports.GetBarsRequest = {
             timeframe: isSet(object.timeframe) ? globalThis.String(object.timeframe) : "",
             range: isSet(object.range) ? common_1.TimeRange.fromJSON(object.range) : undefined,
             page: isSet(object.page) ? common_1.PageRequest.fromJSON(object.page) : undefined,
+            timeframeEnum: isSet(object.timeframeEnum)
+                ? (0, common_1.timeframeFromJSON)(object.timeframeEnum)
+                : isSet(object.timeframe_enum)
+                    ? (0, common_1.timeframeFromJSON)(object.timeframe_enum)
+                    : common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -633,6 +699,9 @@ exports.GetBarsRequest = {
         if (message.page !== undefined) {
             obj.page = common_1.PageRequest.toJSON(message.page);
         }
+        if (message.timeframeEnum !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            obj.timeframeEnum = (0, common_1.timeframeToJSON)(message.timeframeEnum);
+        }
         return obj;
     },
     create(base) {
@@ -648,6 +717,7 @@ exports.GetBarsRequest = {
         message.page = (object.page !== undefined && object.page !== null)
             ? common_1.PageRequest.fromPartial(object.page)
             : undefined;
+        message.timeframeEnum = object.timeframeEnum ?? common_1.Timeframe.TIMEFRAME_UNSPECIFIED;
         return message;
     },
 };
@@ -773,7 +843,13 @@ exports.GetLatestQuoteRequest = {
     },
 };
 function createBaseBackfillBarsRequest() {
-    return { symbols: [], timeframe: "", range: undefined, overwriteExisting: false };
+    return {
+        symbols: [],
+        timeframe: "",
+        range: undefined,
+        overwriteExisting: false,
+        timeframeEnum: common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
+    };
 }
 exports.BackfillBarsRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -788,6 +864,9 @@ exports.BackfillBarsRequest = {
         }
         if (message.overwriteExisting !== false) {
             writer.uint32(32).bool(message.overwriteExisting);
+        }
+        if (message.timeframeEnum !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            writer.uint32(40).int32((0, common_1.timeframeToNumber)(message.timeframeEnum));
         }
         return writer;
     },
@@ -826,6 +905,13 @@ exports.BackfillBarsRequest = {
                     message.overwriteExisting = reader.bool();
                     continue;
                 }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.timeframeEnum = (0, common_1.timeframeFromJSON)(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -844,6 +930,11 @@ exports.BackfillBarsRequest = {
                 : isSet(object.overwrite_existing)
                     ? globalThis.Boolean(object.overwrite_existing)
                     : false,
+            timeframeEnum: isSet(object.timeframeEnum)
+                ? (0, common_1.timeframeFromJSON)(object.timeframeEnum)
+                : isSet(object.timeframe_enum)
+                    ? (0, common_1.timeframeFromJSON)(object.timeframe_enum)
+                    : common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -860,6 +951,9 @@ exports.BackfillBarsRequest = {
         if (message.overwriteExisting !== false) {
             obj.overwriteExisting = message.overwriteExisting;
         }
+        if (message.timeframeEnum !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            obj.timeframeEnum = (0, common_1.timeframeToJSON)(message.timeframeEnum);
+        }
         return obj;
     },
     create(base) {
@@ -873,6 +967,7 @@ exports.BackfillBarsRequest = {
             ? common_1.TimeRange.fromPartial(object.range)
             : undefined;
         message.overwriteExisting = object.overwriteExisting ?? false;
+        message.timeframeEnum = object.timeframeEnum ?? common_1.Timeframe.TIMEFRAME_UNSPECIFIED;
         return message;
     },
 };
@@ -968,6 +1063,337 @@ exports.BackfillBarsResponse = {
         message.barsWritten = object.barsWritten ?? 0;
         message.failedSymbols = object.failedSymbols?.map((e) => e) || [];
         message.expectedBars = object.expectedBars ?? 0;
+        return message;
+    },
+};
+function createBaseGetDataCoverageRequest() {
+    return { symbol: "", timeframe: common_1.Timeframe.TIMEFRAME_UNSPECIFIED, range: undefined };
+}
+exports.GetDataCoverageRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.timeframe !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            writer.uint32(16).int32((0, common_1.timeframeToNumber)(message.timeframe));
+        }
+        if (message.range !== undefined) {
+            common_1.TimeRange.encode(message.range, writer.uint32(26).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetDataCoverageRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.timeframe = (0, common_1.timeframeFromJSON)(reader.int32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.range = common_1.TimeRange.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            timeframe: isSet(object.timeframe) ? (0, common_1.timeframeFromJSON)(object.timeframe) : common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
+            range: isSet(object.range) ? common_1.TimeRange.fromJSON(object.range) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.timeframe !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            obj.timeframe = (0, common_1.timeframeToJSON)(message.timeframe);
+        }
+        if (message.range !== undefined) {
+            obj.range = common_1.TimeRange.toJSON(message.range);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetDataCoverageRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetDataCoverageRequest();
+        message.symbol = object.symbol ?? "";
+        message.timeframe = object.timeframe ?? common_1.Timeframe.TIMEFRAME_UNSPECIFIED;
+        message.range = (object.range !== undefined && object.range !== null)
+            ? common_1.TimeRange.fromPartial(object.range)
+            : undefined;
+        return message;
+    },
+};
+function createBaseCoverageRange() {
+    return { start: undefined, end: undefined, barCount: 0 };
+}
+exports.CoverageRange = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.start !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.start), writer.uint32(10).fork()).join();
+        }
+        if (message.end !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.end), writer.uint32(18).fork()).join();
+        }
+        if (message.barCount !== 0) {
+            writer.uint32(24).int64(message.barCount);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCoverageRange();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.start = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.end = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.barCount = longToNumber(reader.int64());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            start: isSet(object.start) ? fromJsonTimestamp(object.start) : undefined,
+            end: isSet(object.end) ? fromJsonTimestamp(object.end) : undefined,
+            barCount: isSet(object.barCount)
+                ? globalThis.Number(object.barCount)
+                : isSet(object.bar_count)
+                    ? globalThis.Number(object.bar_count)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.start !== undefined) {
+            obj.start = message.start.toISOString();
+        }
+        if (message.end !== undefined) {
+            obj.end = message.end.toISOString();
+        }
+        if (message.barCount !== 0) {
+            obj.barCount = Math.round(message.barCount);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.CoverageRange.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCoverageRange();
+        message.start = object.start ?? undefined;
+        message.end = object.end ?? undefined;
+        message.barCount = object.barCount ?? 0;
+        return message;
+    },
+};
+function createBaseGetDataCoverageResponse() {
+    return {
+        symbol: "",
+        timeframe: common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
+        barsTotal: 0,
+        earliest: undefined,
+        latest: undefined,
+        coveredRanges: [],
+        gaps: [],
+    };
+}
+exports.GetDataCoverageResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.timeframe !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            writer.uint32(16).int32((0, common_1.timeframeToNumber)(message.timeframe));
+        }
+        if (message.barsTotal !== 0) {
+            writer.uint32(24).int64(message.barsTotal);
+        }
+        if (message.earliest !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.earliest), writer.uint32(34).fork()).join();
+        }
+        if (message.latest !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.latest), writer.uint32(42).fork()).join();
+        }
+        for (const v of message.coveredRanges) {
+            exports.CoverageRange.encode(v, writer.uint32(50).fork()).join();
+        }
+        for (const v of message.gaps) {
+            common_1.TimeRange.encode(v, writer.uint32(58).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetDataCoverageResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.timeframe = (0, common_1.timeframeFromJSON)(reader.int32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.barsTotal = longToNumber(reader.int64());
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.earliest = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.latest = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.coveredRanges.push(exports.CoverageRange.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.gaps.push(common_1.TimeRange.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            timeframe: isSet(object.timeframe) ? (0, common_1.timeframeFromJSON)(object.timeframe) : common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
+            barsTotal: isSet(object.barsTotal)
+                ? globalThis.Number(object.barsTotal)
+                : isSet(object.bars_total)
+                    ? globalThis.Number(object.bars_total)
+                    : 0,
+            earliest: isSet(object.earliest) ? fromJsonTimestamp(object.earliest) : undefined,
+            latest: isSet(object.latest) ? fromJsonTimestamp(object.latest) : undefined,
+            coveredRanges: globalThis.Array.isArray(object?.coveredRanges)
+                ? object.coveredRanges.map((e) => exports.CoverageRange.fromJSON(e))
+                : globalThis.Array.isArray(object?.covered_ranges)
+                    ? object.covered_ranges.map((e) => exports.CoverageRange.fromJSON(e))
+                    : [],
+            gaps: globalThis.Array.isArray(object?.gaps) ? object.gaps.map((e) => common_1.TimeRange.fromJSON(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.timeframe !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            obj.timeframe = (0, common_1.timeframeToJSON)(message.timeframe);
+        }
+        if (message.barsTotal !== 0) {
+            obj.barsTotal = Math.round(message.barsTotal);
+        }
+        if (message.earliest !== undefined) {
+            obj.earliest = message.earliest.toISOString();
+        }
+        if (message.latest !== undefined) {
+            obj.latest = message.latest.toISOString();
+        }
+        if (message.coveredRanges?.length) {
+            obj.coveredRanges = message.coveredRanges.map((e) => exports.CoverageRange.toJSON(e));
+        }
+        if (message.gaps?.length) {
+            obj.gaps = message.gaps.map((e) => common_1.TimeRange.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetDataCoverageResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetDataCoverageResponse();
+        message.symbol = object.symbol ?? "";
+        message.timeframe = object.timeframe ?? common_1.Timeframe.TIMEFRAME_UNSPECIFIED;
+        message.barsTotal = object.barsTotal ?? 0;
+        message.earliest = object.earliest ?? undefined;
+        message.latest = object.latest ?? undefined;
+        message.coveredRanges = object.coveredRanges?.map((e) => exports.CoverageRange.fromPartial(e)) || [];
+        message.gaps = object.gaps?.map((e) => common_1.TimeRange.fromPartial(e)) || [];
         return message;
     },
 };
@@ -1148,6 +1574,16 @@ exports.MarketDataServiceService = {
         requestDeserialize: (value) => exports.BackfillBarsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.BackfillBarsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.BackfillBarsResponse.decode(value),
+    },
+    /** Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe */
+    getDataCoverage: {
+        path: "/xstockstrat.marketdata.v1.MarketDataService/GetDataCoverage",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetDataCoverageRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetDataCoverageRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetDataCoverageResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetDataCoverageResponse.decode(value),
     },
     /** Get available symbols */
     listAssets: {

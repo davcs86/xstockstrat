@@ -24,18 +24,22 @@ const (
 )
 
 type Bar struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
-	Time          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=time,proto3" json:"time,omitempty"`
-	Open          float64                `protobuf:"fixed64,3,opt,name=open,proto3" json:"open,omitempty"`
-	High          float64                `protobuf:"fixed64,4,opt,name=high,proto3" json:"high,omitempty"`
-	Low           float64                `protobuf:"fixed64,5,opt,name=low,proto3" json:"low,omitempty"`
-	Close         float64                `protobuf:"fixed64,6,opt,name=close,proto3" json:"close,omitempty"`
-	Volume        int64                  `protobuf:"varint,7,opt,name=volume,proto3" json:"volume,omitempty"`
-	Vwap          float64                `protobuf:"fixed64,8,opt,name=vwap,proto3" json:"vwap,omitempty"`
-	TradeCount    int32                  `protobuf:"varint,9,opt,name=trade_count,json=tradeCount,proto3" json:"trade_count,omitempty"`
-	Timeframe     string                 `protobuf:"bytes,10,opt,name=timeframe,proto3" json:"timeframe,omitempty"` // "1m", "5m", "1h", "1d"
-	Source        string                 `protobuf:"bytes,11,opt,name=source,proto3" json:"source,omitempty"`       // always "alpaca" for this service
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Symbol     string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Time       *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=time,proto3" json:"time,omitempty"`
+	Open       float64                `protobuf:"fixed64,3,opt,name=open,proto3" json:"open,omitempty"`
+	High       float64                `protobuf:"fixed64,4,opt,name=high,proto3" json:"high,omitempty"`
+	Low        float64                `protobuf:"fixed64,5,opt,name=low,proto3" json:"low,omitempty"`
+	Close      float64                `protobuf:"fixed64,6,opt,name=close,proto3" json:"close,omitempty"`
+	Volume     int64                  `protobuf:"varint,7,opt,name=volume,proto3" json:"volume,omitempty"`
+	Vwap       float64                `protobuf:"fixed64,8,opt,name=vwap,proto3" json:"vwap,omitempty"`
+	TradeCount int32                  `protobuf:"varint,9,opt,name=trade_count,json=tradeCount,proto3" json:"trade_count,omitempty"`
+	// DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+	//
+	// Deprecated: Marked as deprecated in marketdata/v1/marketdata.proto.
+	Timeframe     string       `protobuf:"bytes,10,opt,name=timeframe,proto3" json:"timeframe,omitempty"` // "1m", "5m", "1h", "1d"
+	Source        string       `protobuf:"bytes,11,opt,name=source,proto3" json:"source,omitempty"`       // always "alpaca" for this service
+	TimeframeEnum v1.Timeframe `protobuf:"varint,12,opt,name=timeframe_enum,json=timeframeEnum,proto3,enum=xstockstrat.common.v1.Timeframe" json:"timeframe_enum,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -133,6 +137,7 @@ func (x *Bar) GetTradeCount() int32 {
 	return 0
 }
 
+// Deprecated: Marked as deprecated in marketdata/v1/marketdata.proto.
 func (x *Bar) GetTimeframe() string {
 	if x != nil {
 		return x.Timeframe
@@ -145,6 +150,13 @@ func (x *Bar) GetSource() string {
 		return x.Source
 	}
 	return ""
+}
+
+func (x *Bar) GetTimeframeEnum() v1.Timeframe {
+	if x != nil {
+		return x.TimeframeEnum
+	}
+	return v1.Timeframe(0)
 }
 
 type Quote struct {
@@ -240,11 +252,15 @@ func (x *Quote) GetSource() string {
 }
 
 type StreamBarsRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Symbols           []string               `protobuf:"bytes,1,rep,name=symbols,proto3" json:"symbols,omitempty"`
-	Timeframe         string                 `protobuf:"bytes,2,opt,name=timeframe,proto3" json:"timeframe,omitempty"` // "1m", "5m", "1h", "1d"
-	IncludePremarket  bool                   `protobuf:"varint,3,opt,name=include_premarket,json=includePremarket,proto3" json:"include_premarket,omitempty"`
-	IncludeAfterhours bool                   `protobuf:"varint,4,opt,name=include_afterhours,json=includeAfterhours,proto3" json:"include_afterhours,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Symbols []string               `protobuf:"bytes,1,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	// DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+	//
+	// Deprecated: Marked as deprecated in marketdata/v1/marketdata.proto.
+	Timeframe         string       `protobuf:"bytes,2,opt,name=timeframe,proto3" json:"timeframe,omitempty"` // "1m", "5m", "1h", "1d"
+	IncludePremarket  bool         `protobuf:"varint,3,opt,name=include_premarket,json=includePremarket,proto3" json:"include_premarket,omitempty"`
+	IncludeAfterhours bool         `protobuf:"varint,4,opt,name=include_afterhours,json=includeAfterhours,proto3" json:"include_afterhours,omitempty"`
+	TimeframeEnum     v1.Timeframe `protobuf:"varint,5,opt,name=timeframe_enum,json=timeframeEnum,proto3,enum=xstockstrat.common.v1.Timeframe" json:"timeframe_enum,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -286,6 +302,7 @@ func (x *StreamBarsRequest) GetSymbols() []string {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in marketdata/v1/marketdata.proto.
 func (x *StreamBarsRequest) GetTimeframe() string {
 	if x != nil {
 		return x.Timeframe
@@ -305,6 +322,13 @@ func (x *StreamBarsRequest) GetIncludeAfterhours() bool {
 		return x.IncludeAfterhours
 	}
 	return false
+}
+
+func (x *StreamBarsRequest) GetTimeframeEnum() v1.Timeframe {
+	if x != nil {
+		return x.TimeframeEnum
+	}
+	return v1.Timeframe(0)
 }
 
 type StreamQuotesRequest struct {
@@ -352,11 +376,15 @@ func (x *StreamQuotesRequest) GetSymbols() []string {
 }
 
 type GetBarsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
-	Timeframe     string                 `protobuf:"bytes,2,opt,name=timeframe,proto3" json:"timeframe,omitempty"`
-	Range         *v1.TimeRange          `protobuf:"bytes,3,opt,name=range,proto3" json:"range,omitempty"`
-	Page          *v1.PageRequest        `protobuf:"bytes,4,opt,name=page,proto3" json:"page,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Symbol string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	// DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+	//
+	// Deprecated: Marked as deprecated in marketdata/v1/marketdata.proto.
+	Timeframe     string          `protobuf:"bytes,2,opt,name=timeframe,proto3" json:"timeframe,omitempty"`
+	Range         *v1.TimeRange   `protobuf:"bytes,3,opt,name=range,proto3" json:"range,omitempty"`
+	Page          *v1.PageRequest `protobuf:"bytes,4,opt,name=page,proto3" json:"page,omitempty"`
+	TimeframeEnum v1.Timeframe    `protobuf:"varint,5,opt,name=timeframe_enum,json=timeframeEnum,proto3,enum=xstockstrat.common.v1.Timeframe" json:"timeframe_enum,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -398,6 +426,7 @@ func (x *GetBarsRequest) GetSymbol() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in marketdata/v1/marketdata.proto.
 func (x *GetBarsRequest) GetTimeframe() string {
 	if x != nil {
 		return x.Timeframe
@@ -417,6 +446,13 @@ func (x *GetBarsRequest) GetPage() *v1.PageRequest {
 		return x.Page
 	}
 	return nil
+}
+
+func (x *GetBarsRequest) GetTimeframeEnum() v1.Timeframe {
+	if x != nil {
+		return x.TimeframeEnum
+	}
+	return v1.Timeframe(0)
 }
 
 type GetBarsResponse struct {
@@ -516,11 +552,15 @@ func (x *GetLatestQuoteRequest) GetSymbol() string {
 }
 
 type BackfillBarsRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Symbols           []string               `protobuf:"bytes,1,rep,name=symbols,proto3" json:"symbols,omitempty"`
-	Timeframe         string                 `protobuf:"bytes,2,opt,name=timeframe,proto3" json:"timeframe,omitempty"`
-	Range             *v1.TimeRange          `protobuf:"bytes,3,opt,name=range,proto3" json:"range,omitempty"`
-	OverwriteExisting bool                   `protobuf:"varint,4,opt,name=overwrite_existing,json=overwriteExisting,proto3" json:"overwrite_existing,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Symbols []string               `protobuf:"bytes,1,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	// DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+	//
+	// Deprecated: Marked as deprecated in marketdata/v1/marketdata.proto.
+	Timeframe         string        `protobuf:"bytes,2,opt,name=timeframe,proto3" json:"timeframe,omitempty"`
+	Range             *v1.TimeRange `protobuf:"bytes,3,opt,name=range,proto3" json:"range,omitempty"`
+	OverwriteExisting bool          `protobuf:"varint,4,opt,name=overwrite_existing,json=overwriteExisting,proto3" json:"overwrite_existing,omitempty"`
+	TimeframeEnum     v1.Timeframe  `protobuf:"varint,5,opt,name=timeframe_enum,json=timeframeEnum,proto3,enum=xstockstrat.common.v1.Timeframe" json:"timeframe_enum,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -562,6 +602,7 @@ func (x *BackfillBarsRequest) GetSymbols() []string {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in marketdata/v1/marketdata.proto.
 func (x *BackfillBarsRequest) GetTimeframe() string {
 	if x != nil {
 		return x.Timeframe
@@ -581,6 +622,13 @@ func (x *BackfillBarsRequest) GetOverwriteExisting() bool {
 		return x.OverwriteExisting
 	}
 	return false
+}
+
+func (x *BackfillBarsRequest) GetTimeframeEnum() v1.Timeframe {
+	if x != nil {
+		return x.TimeframeEnum
+	}
+	return v1.Timeframe(0)
 }
 
 type BackfillBarsResponse struct {
@@ -643,6 +691,221 @@ func (x *BackfillBarsResponse) GetExpectedBars() int64 {
 	return 0
 }
 
+type GetDataCoverageRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Symbol    string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Timeframe v1.Timeframe           `protobuf:"varint,2,opt,name=timeframe,proto3,enum=xstockstrat.common.v1.Timeframe" json:"timeframe,omitempty"`
+	// Optional: restrict the coverage scan to this window. Empty = full history.
+	Range         *v1.TimeRange `protobuf:"bytes,3,opt,name=range,proto3" json:"range,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDataCoverageRequest) Reset() {
+	*x = GetDataCoverageRequest{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDataCoverageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDataCoverageRequest) ProtoMessage() {}
+
+func (x *GetDataCoverageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDataCoverageRequest.ProtoReflect.Descriptor instead.
+func (*GetDataCoverageRequest) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GetDataCoverageRequest) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *GetDataCoverageRequest) GetTimeframe() v1.Timeframe {
+	if x != nil {
+		return x.Timeframe
+	}
+	return v1.Timeframe(0)
+}
+
+func (x *GetDataCoverageRequest) GetRange() *v1.TimeRange {
+	if x != nil {
+		return x.Range
+	}
+	return nil
+}
+
+type CoverageRange struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Start         *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
+	End           *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=end,proto3" json:"end,omitempty"`
+	BarCount      int64                  `protobuf:"varint,3,opt,name=bar_count,json=barCount,proto3" json:"bar_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CoverageRange) Reset() {
+	*x = CoverageRange{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CoverageRange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CoverageRange) ProtoMessage() {}
+
+func (x *CoverageRange) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CoverageRange.ProtoReflect.Descriptor instead.
+func (*CoverageRange) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *CoverageRange) GetStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Start
+	}
+	return nil
+}
+
+func (x *CoverageRange) GetEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.End
+	}
+	return nil
+}
+
+func (x *CoverageRange) GetBarCount() int64 {
+	if x != nil {
+		return x.BarCount
+	}
+	return 0
+}
+
+type GetDataCoverageResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Symbol    string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Timeframe v1.Timeframe           `protobuf:"varint,2,opt,name=timeframe,proto3,enum=xstockstrat.common.v1.Timeframe" json:"timeframe,omitempty"`
+	BarsTotal int64                  `protobuf:"varint,3,opt,name=bars_total,json=barsTotal,proto3" json:"bars_total,omitempty"`
+	// Covered earliest/latest with total bar count; covered_ranges holds contiguous segments,
+	// gaps holds the missing segments within the requested range (if range was supplied).
+	Earliest      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=earliest,proto3" json:"earliest,omitempty"`
+	Latest        *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=latest,proto3" json:"latest,omitempty"`
+	CoveredRanges []*CoverageRange       `protobuf:"bytes,6,rep,name=covered_ranges,json=coveredRanges,proto3" json:"covered_ranges,omitempty"`
+	Gaps          []*v1.TimeRange        `protobuf:"bytes,7,rep,name=gaps,proto3" json:"gaps,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDataCoverageResponse) Reset() {
+	*x = GetDataCoverageResponse{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDataCoverageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDataCoverageResponse) ProtoMessage() {}
+
+func (x *GetDataCoverageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDataCoverageResponse.ProtoReflect.Descriptor instead.
+func (*GetDataCoverageResponse) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GetDataCoverageResponse) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *GetDataCoverageResponse) GetTimeframe() v1.Timeframe {
+	if x != nil {
+		return x.Timeframe
+	}
+	return v1.Timeframe(0)
+}
+
+func (x *GetDataCoverageResponse) GetBarsTotal() int64 {
+	if x != nil {
+		return x.BarsTotal
+	}
+	return 0
+}
+
+func (x *GetDataCoverageResponse) GetEarliest() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Earliest
+	}
+	return nil
+}
+
+func (x *GetDataCoverageResponse) GetLatest() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Latest
+	}
+	return nil
+}
+
+func (x *GetDataCoverageResponse) GetCoveredRanges() []*CoverageRange {
+	if x != nil {
+		return x.CoveredRanges
+	}
+	return nil
+}
+
+func (x *GetDataCoverageResponse) GetGaps() []*v1.TimeRange {
+	if x != nil {
+		return x.Gaps
+	}
+	return nil
+}
+
 type ListAssetsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AssetClass    string                 `protobuf:"bytes,1,opt,name=asset_class,json=assetClass,proto3" json:"asset_class,omitempty"` // optional: "us_equity", "crypto"
@@ -653,7 +916,7 @@ type ListAssetsRequest struct {
 
 func (x *ListAssetsRequest) Reset() {
 	*x = ListAssetsRequest{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[9]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -665,7 +928,7 @@ func (x *ListAssetsRequest) String() string {
 func (*ListAssetsRequest) ProtoMessage() {}
 
 func (x *ListAssetsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[9]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -678,7 +941,7 @@ func (x *ListAssetsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAssetsRequest.ProtoReflect.Descriptor instead.
 func (*ListAssetsRequest) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{9}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ListAssetsRequest) GetAssetClass() string {
@@ -704,7 +967,7 @@ type ListAssetsResponse struct {
 
 func (x *ListAssetsResponse) Reset() {
 	*x = ListAssetsResponse{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[10]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -716,7 +979,7 @@ func (x *ListAssetsResponse) String() string {
 func (*ListAssetsResponse) ProtoMessage() {}
 
 func (x *ListAssetsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[10]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -729,7 +992,7 @@ func (x *ListAssetsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAssetsResponse.ProtoReflect.Descriptor instead.
 func (*ListAssetsResponse) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{10}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ListAssetsResponse) GetAssets() []*v1.Asset {
@@ -743,7 +1006,7 @@ var File_marketdata_v1_marketdata_proto protoreflect.FileDescriptor
 
 const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\n" +
-	"\x1emarketdata/v1/marketdata.proto\x12\x19xstockstrat.marketdata.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16common/v1/common.proto\"\xa0\x02\n" +
+	"\x1emarketdata/v1/marketdata.proto\x12\x19xstockstrat.marketdata.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16common/v1/common.proto\"\xed\x02\n" +
 	"\x03Bar\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12.\n" +
 	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x12\n" +
@@ -754,10 +1017,11 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\x06volume\x18\a \x01(\x03R\x06volume\x12\x12\n" +
 	"\x04vwap\x18\b \x01(\x01R\x04vwap\x12\x1f\n" +
 	"\vtrade_count\x18\t \x01(\x05R\n" +
-	"tradeCount\x12\x1c\n" +
+	"tradeCount\x12 \n" +
 	"\ttimeframe\x18\n" +
-	" \x01(\tR\ttimeframe\x12\x16\n" +
-	"\x06source\x18\v \x01(\tR\x06source\"\xd7\x01\n" +
+	" \x01(\tB\x02\x18\x01R\ttimeframe\x12\x16\n" +
+	"\x06source\x18\v \x01(\tR\x06source\x12G\n" +
+	"\x0etimeframe_enum\x18\f \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\rtimeframeEnum\"\xd7\x01\n" +
 	"\x05Quote\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12.\n" +
 	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x1b\n" +
@@ -765,46 +1029,67 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\bask_size\x18\x04 \x01(\x05R\aaskSize\x12\x1b\n" +
 	"\tbid_price\x18\x05 \x01(\x01R\bbidPrice\x12\x19\n" +
 	"\bbid_size\x18\x06 \x01(\x05R\abidSize\x12\x16\n" +
-	"\x06source\x18\a \x01(\tR\x06source\"\xa7\x01\n" +
+	"\x06source\x18\a \x01(\tR\x06source\"\xf4\x01\n" +
 	"\x11StreamBarsRequest\x12\x18\n" +
-	"\asymbols\x18\x01 \x03(\tR\asymbols\x12\x1c\n" +
-	"\ttimeframe\x18\x02 \x01(\tR\ttimeframe\x12+\n" +
+	"\asymbols\x18\x01 \x03(\tR\asymbols\x12 \n" +
+	"\ttimeframe\x18\x02 \x01(\tB\x02\x18\x01R\ttimeframe\x12+\n" +
 	"\x11include_premarket\x18\x03 \x01(\bR\x10includePremarket\x12-\n" +
-	"\x12include_afterhours\x18\x04 \x01(\bR\x11includeAfterhours\"/\n" +
+	"\x12include_afterhours\x18\x04 \x01(\bR\x11includeAfterhours\x12G\n" +
+	"\x0etimeframe_enum\x18\x05 \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\rtimeframeEnum\"/\n" +
 	"\x13StreamQuotesRequest\x12\x18\n" +
-	"\asymbols\x18\x01 \x03(\tR\asymbols\"\xb6\x01\n" +
+	"\asymbols\x18\x01 \x03(\tR\asymbols\"\x83\x02\n" +
 	"\x0eGetBarsRequest\x12\x16\n" +
-	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x1c\n" +
-	"\ttimeframe\x18\x02 \x01(\tR\ttimeframe\x126\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12 \n" +
+	"\ttimeframe\x18\x02 \x01(\tB\x02\x18\x01R\ttimeframe\x126\n" +
 	"\x05range\x18\x03 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x05range\x126\n" +
-	"\x04page\x18\x04 \x01(\v2\".xstockstrat.common.v1.PageRequestR\x04page\"~\n" +
+	"\x04page\x18\x04 \x01(\v2\".xstockstrat.common.v1.PageRequestR\x04page\x12G\n" +
+	"\x0etimeframe_enum\x18\x05 \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\rtimeframeEnum\"~\n" +
 	"\x0fGetBarsResponse\x122\n" +
 	"\x04bars\x18\x01 \x03(\v2\x1e.xstockstrat.marketdata.v1.BarR\x04bars\x127\n" +
 	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"/\n" +
 	"\x15GetLatestQuoteRequest\x12\x16\n" +
-	"\x06symbol\x18\x01 \x01(\tR\x06symbol\"\xb4\x01\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\"\x81\x02\n" +
 	"\x13BackfillBarsRequest\x12\x18\n" +
-	"\asymbols\x18\x01 \x03(\tR\asymbols\x12\x1c\n" +
-	"\ttimeframe\x18\x02 \x01(\tR\ttimeframe\x126\n" +
+	"\asymbols\x18\x01 \x03(\tR\asymbols\x12 \n" +
+	"\ttimeframe\x18\x02 \x01(\tB\x02\x18\x01R\ttimeframe\x126\n" +
 	"\x05range\x18\x03 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x05range\x12-\n" +
-	"\x12overwrite_existing\x18\x04 \x01(\bR\x11overwriteExisting\"\x85\x01\n" +
+	"\x12overwrite_existing\x18\x04 \x01(\bR\x11overwriteExisting\x12G\n" +
+	"\x0etimeframe_enum\x18\x05 \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\rtimeframeEnum\"\x85\x01\n" +
 	"\x14BackfillBarsResponse\x12!\n" +
 	"\fbars_written\x18\x01 \x01(\x03R\vbarsWritten\x12%\n" +
 	"\x0efailed_symbols\x18\x02 \x03(\tR\rfailedSymbols\x12#\n" +
-	"\rexpected_bars\x18\x03 \x01(\x03R\fexpectedBars\"Y\n" +
+	"\rexpected_bars\x18\x03 \x01(\x03R\fexpectedBars\"\xa8\x01\n" +
+	"\x16GetDataCoverageRequest\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12>\n" +
+	"\ttimeframe\x18\x02 \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\ttimeframe\x126\n" +
+	"\x05range\x18\x03 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x05range\"\x8c\x01\n" +
+	"\rCoverageRange\x120\n" +
+	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\x12\x1b\n" +
+	"\tbar_count\x18\x03 \x01(\x03R\bbarCount\"\x83\x03\n" +
+	"\x17GetDataCoverageResponse\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12>\n" +
+	"\ttimeframe\x18\x02 \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\ttimeframe\x12\x1d\n" +
+	"\n" +
+	"bars_total\x18\x03 \x01(\x03R\tbarsTotal\x126\n" +
+	"\bearliest\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bearliest\x122\n" +
+	"\x06latest\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x06latest\x12O\n" +
+	"\x0ecovered_ranges\x18\x06 \x03(\v2(.xstockstrat.marketdata.v1.CoverageRangeR\rcoveredRanges\x124\n" +
+	"\x04gaps\x18\a \x03(\v2 .xstockstrat.common.v1.TimeRangeR\x04gaps\"Y\n" +
 	"\x11ListAssetsRequest\x12\x1f\n" +
 	"\vasset_class\x18\x01 \x01(\tR\n" +
 	"assetClass\x12#\n" +
 	"\rtradable_only\x18\x02 \x01(\bR\ftradableOnly\"J\n" +
 	"\x12ListAssetsResponse\x124\n" +
-	"\x06assets\x18\x01 \x03(\v2\x1c.xstockstrat.common.v1.AssetR\x06assets2\xf9\x04\n" +
+	"\x06assets\x18\x01 \x03(\v2\x1c.xstockstrat.common.v1.AssetR\x06assets2\xf3\x05\n" +
 	"\x11MarketDataService\x12\\\n" +
 	"\n" +
 	"StreamBars\x12,.xstockstrat.marketdata.v1.StreamBarsRequest\x1a\x1e.xstockstrat.marketdata.v1.Bar0\x01\x12b\n" +
 	"\fStreamQuotes\x12..xstockstrat.marketdata.v1.StreamQuotesRequest\x1a .xstockstrat.marketdata.v1.Quote0\x01\x12`\n" +
 	"\aGetBars\x12).xstockstrat.marketdata.v1.GetBarsRequest\x1a*.xstockstrat.marketdata.v1.GetBarsResponse\x12d\n" +
 	"\x0eGetLatestQuote\x120.xstockstrat.marketdata.v1.GetLatestQuoteRequest\x1a .xstockstrat.marketdata.v1.Quote\x12o\n" +
-	"\fBackfillBars\x12..xstockstrat.marketdata.v1.BackfillBarsRequest\x1a/.xstockstrat.marketdata.v1.BackfillBarsResponse\x12i\n" +
+	"\fBackfillBars\x12..xstockstrat.marketdata.v1.BackfillBarsRequest\x1a/.xstockstrat.marketdata.v1.BackfillBarsResponse\x12x\n" +
+	"\x0fGetDataCoverage\x121.xstockstrat.marketdata.v1.GetDataCoverageRequest\x1a2.xstockstrat.marketdata.v1.GetDataCoverageResponse\x12i\n" +
 	"\n" +
 	"ListAssets\x12,.xstockstrat.marketdata.v1.ListAssetsRequest\x1a-.xstockstrat.marketdata.v1.ListAssetsResponseBDZBgithub.com/xstockstrat/contracts/gen/go/marketdata/v1;marketdatav1b\x06proto3"
 
@@ -820,51 +1105,70 @@ func file_marketdata_v1_marketdata_proto_rawDescGZIP() []byte {
 	return file_marketdata_v1_marketdata_proto_rawDescData
 }
 
-var file_marketdata_v1_marketdata_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_marketdata_v1_marketdata_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_marketdata_v1_marketdata_proto_goTypes = []any{
-	(*Bar)(nil),                   // 0: xstockstrat.marketdata.v1.Bar
-	(*Quote)(nil),                 // 1: xstockstrat.marketdata.v1.Quote
-	(*StreamBarsRequest)(nil),     // 2: xstockstrat.marketdata.v1.StreamBarsRequest
-	(*StreamQuotesRequest)(nil),   // 3: xstockstrat.marketdata.v1.StreamQuotesRequest
-	(*GetBarsRequest)(nil),        // 4: xstockstrat.marketdata.v1.GetBarsRequest
-	(*GetBarsResponse)(nil),       // 5: xstockstrat.marketdata.v1.GetBarsResponse
-	(*GetLatestQuoteRequest)(nil), // 6: xstockstrat.marketdata.v1.GetLatestQuoteRequest
-	(*BackfillBarsRequest)(nil),   // 7: xstockstrat.marketdata.v1.BackfillBarsRequest
-	(*BackfillBarsResponse)(nil),  // 8: xstockstrat.marketdata.v1.BackfillBarsResponse
-	(*ListAssetsRequest)(nil),     // 9: xstockstrat.marketdata.v1.ListAssetsRequest
-	(*ListAssetsResponse)(nil),    // 10: xstockstrat.marketdata.v1.ListAssetsResponse
-	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
-	(*v1.TimeRange)(nil),          // 12: xstockstrat.common.v1.TimeRange
-	(*v1.PageRequest)(nil),        // 13: xstockstrat.common.v1.PageRequest
-	(*v1.PageResponse)(nil),       // 14: xstockstrat.common.v1.PageResponse
-	(*v1.Asset)(nil),              // 15: xstockstrat.common.v1.Asset
+	(*Bar)(nil),                     // 0: xstockstrat.marketdata.v1.Bar
+	(*Quote)(nil),                   // 1: xstockstrat.marketdata.v1.Quote
+	(*StreamBarsRequest)(nil),       // 2: xstockstrat.marketdata.v1.StreamBarsRequest
+	(*StreamQuotesRequest)(nil),     // 3: xstockstrat.marketdata.v1.StreamQuotesRequest
+	(*GetBarsRequest)(nil),          // 4: xstockstrat.marketdata.v1.GetBarsRequest
+	(*GetBarsResponse)(nil),         // 5: xstockstrat.marketdata.v1.GetBarsResponse
+	(*GetLatestQuoteRequest)(nil),   // 6: xstockstrat.marketdata.v1.GetLatestQuoteRequest
+	(*BackfillBarsRequest)(nil),     // 7: xstockstrat.marketdata.v1.BackfillBarsRequest
+	(*BackfillBarsResponse)(nil),    // 8: xstockstrat.marketdata.v1.BackfillBarsResponse
+	(*GetDataCoverageRequest)(nil),  // 9: xstockstrat.marketdata.v1.GetDataCoverageRequest
+	(*CoverageRange)(nil),           // 10: xstockstrat.marketdata.v1.CoverageRange
+	(*GetDataCoverageResponse)(nil), // 11: xstockstrat.marketdata.v1.GetDataCoverageResponse
+	(*ListAssetsRequest)(nil),       // 12: xstockstrat.marketdata.v1.ListAssetsRequest
+	(*ListAssetsResponse)(nil),      // 13: xstockstrat.marketdata.v1.ListAssetsResponse
+	(*timestamppb.Timestamp)(nil),   // 14: google.protobuf.Timestamp
+	(v1.Timeframe)(0),               // 15: xstockstrat.common.v1.Timeframe
+	(*v1.TimeRange)(nil),            // 16: xstockstrat.common.v1.TimeRange
+	(*v1.PageRequest)(nil),          // 17: xstockstrat.common.v1.PageRequest
+	(*v1.PageResponse)(nil),         // 18: xstockstrat.common.v1.PageResponse
+	(*v1.Asset)(nil),                // 19: xstockstrat.common.v1.Asset
 }
 var file_marketdata_v1_marketdata_proto_depIdxs = []int32{
-	11, // 0: xstockstrat.marketdata.v1.Bar.time:type_name -> google.protobuf.Timestamp
-	11, // 1: xstockstrat.marketdata.v1.Quote.time:type_name -> google.protobuf.Timestamp
-	12, // 2: xstockstrat.marketdata.v1.GetBarsRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	13, // 3: xstockstrat.marketdata.v1.GetBarsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	0,  // 4: xstockstrat.marketdata.v1.GetBarsResponse.bars:type_name -> xstockstrat.marketdata.v1.Bar
-	14, // 5: xstockstrat.marketdata.v1.GetBarsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	12, // 6: xstockstrat.marketdata.v1.BackfillBarsRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	15, // 7: xstockstrat.marketdata.v1.ListAssetsResponse.assets:type_name -> xstockstrat.common.v1.Asset
-	2,  // 8: xstockstrat.marketdata.v1.MarketDataService.StreamBars:input_type -> xstockstrat.marketdata.v1.StreamBarsRequest
-	3,  // 9: xstockstrat.marketdata.v1.MarketDataService.StreamQuotes:input_type -> xstockstrat.marketdata.v1.StreamQuotesRequest
-	4,  // 10: xstockstrat.marketdata.v1.MarketDataService.GetBars:input_type -> xstockstrat.marketdata.v1.GetBarsRequest
-	6,  // 11: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuote:input_type -> xstockstrat.marketdata.v1.GetLatestQuoteRequest
-	7,  // 12: xstockstrat.marketdata.v1.MarketDataService.BackfillBars:input_type -> xstockstrat.marketdata.v1.BackfillBarsRequest
-	9,  // 13: xstockstrat.marketdata.v1.MarketDataService.ListAssets:input_type -> xstockstrat.marketdata.v1.ListAssetsRequest
-	0,  // 14: xstockstrat.marketdata.v1.MarketDataService.StreamBars:output_type -> xstockstrat.marketdata.v1.Bar
-	1,  // 15: xstockstrat.marketdata.v1.MarketDataService.StreamQuotes:output_type -> xstockstrat.marketdata.v1.Quote
-	5,  // 16: xstockstrat.marketdata.v1.MarketDataService.GetBars:output_type -> xstockstrat.marketdata.v1.GetBarsResponse
-	1,  // 17: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuote:output_type -> xstockstrat.marketdata.v1.Quote
-	8,  // 18: xstockstrat.marketdata.v1.MarketDataService.BackfillBars:output_type -> xstockstrat.marketdata.v1.BackfillBarsResponse
-	10, // 19: xstockstrat.marketdata.v1.MarketDataService.ListAssets:output_type -> xstockstrat.marketdata.v1.ListAssetsResponse
-	14, // [14:20] is the sub-list for method output_type
-	8,  // [8:14] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	14, // 0: xstockstrat.marketdata.v1.Bar.time:type_name -> google.protobuf.Timestamp
+	15, // 1: xstockstrat.marketdata.v1.Bar.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	14, // 2: xstockstrat.marketdata.v1.Quote.time:type_name -> google.protobuf.Timestamp
+	15, // 3: xstockstrat.marketdata.v1.StreamBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	16, // 4: xstockstrat.marketdata.v1.GetBarsRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	17, // 5: xstockstrat.marketdata.v1.GetBarsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	15, // 6: xstockstrat.marketdata.v1.GetBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	0,  // 7: xstockstrat.marketdata.v1.GetBarsResponse.bars:type_name -> xstockstrat.marketdata.v1.Bar
+	18, // 8: xstockstrat.marketdata.v1.GetBarsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	16, // 9: xstockstrat.marketdata.v1.BackfillBarsRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	15, // 10: xstockstrat.marketdata.v1.BackfillBarsRequest.timeframe_enum:type_name -> xstockstrat.common.v1.Timeframe
+	15, // 11: xstockstrat.marketdata.v1.GetDataCoverageRequest.timeframe:type_name -> xstockstrat.common.v1.Timeframe
+	16, // 12: xstockstrat.marketdata.v1.GetDataCoverageRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	14, // 13: xstockstrat.marketdata.v1.CoverageRange.start:type_name -> google.protobuf.Timestamp
+	14, // 14: xstockstrat.marketdata.v1.CoverageRange.end:type_name -> google.protobuf.Timestamp
+	15, // 15: xstockstrat.marketdata.v1.GetDataCoverageResponse.timeframe:type_name -> xstockstrat.common.v1.Timeframe
+	14, // 16: xstockstrat.marketdata.v1.GetDataCoverageResponse.earliest:type_name -> google.protobuf.Timestamp
+	14, // 17: xstockstrat.marketdata.v1.GetDataCoverageResponse.latest:type_name -> google.protobuf.Timestamp
+	10, // 18: xstockstrat.marketdata.v1.GetDataCoverageResponse.covered_ranges:type_name -> xstockstrat.marketdata.v1.CoverageRange
+	16, // 19: xstockstrat.marketdata.v1.GetDataCoverageResponse.gaps:type_name -> xstockstrat.common.v1.TimeRange
+	19, // 20: xstockstrat.marketdata.v1.ListAssetsResponse.assets:type_name -> xstockstrat.common.v1.Asset
+	2,  // 21: xstockstrat.marketdata.v1.MarketDataService.StreamBars:input_type -> xstockstrat.marketdata.v1.StreamBarsRequest
+	3,  // 22: xstockstrat.marketdata.v1.MarketDataService.StreamQuotes:input_type -> xstockstrat.marketdata.v1.StreamQuotesRequest
+	4,  // 23: xstockstrat.marketdata.v1.MarketDataService.GetBars:input_type -> xstockstrat.marketdata.v1.GetBarsRequest
+	6,  // 24: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuote:input_type -> xstockstrat.marketdata.v1.GetLatestQuoteRequest
+	7,  // 25: xstockstrat.marketdata.v1.MarketDataService.BackfillBars:input_type -> xstockstrat.marketdata.v1.BackfillBarsRequest
+	9,  // 26: xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage:input_type -> xstockstrat.marketdata.v1.GetDataCoverageRequest
+	12, // 27: xstockstrat.marketdata.v1.MarketDataService.ListAssets:input_type -> xstockstrat.marketdata.v1.ListAssetsRequest
+	0,  // 28: xstockstrat.marketdata.v1.MarketDataService.StreamBars:output_type -> xstockstrat.marketdata.v1.Bar
+	1,  // 29: xstockstrat.marketdata.v1.MarketDataService.StreamQuotes:output_type -> xstockstrat.marketdata.v1.Quote
+	5,  // 30: xstockstrat.marketdata.v1.MarketDataService.GetBars:output_type -> xstockstrat.marketdata.v1.GetBarsResponse
+	1,  // 31: xstockstrat.marketdata.v1.MarketDataService.GetLatestQuote:output_type -> xstockstrat.marketdata.v1.Quote
+	8,  // 32: xstockstrat.marketdata.v1.MarketDataService.BackfillBars:output_type -> xstockstrat.marketdata.v1.BackfillBarsResponse
+	11, // 33: xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage:output_type -> xstockstrat.marketdata.v1.GetDataCoverageResponse
+	13, // 34: xstockstrat.marketdata.v1.MarketDataService.ListAssets:output_type -> xstockstrat.marketdata.v1.ListAssetsResponse
+	28, // [28:35] is the sub-list for method output_type
+	21, // [21:28] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_marketdata_v1_marketdata_proto_init() }
@@ -878,7 +1182,7 @@ func file_marketdata_v1_marketdata_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_marketdata_v1_marketdata_proto_rawDesc), len(file_marketdata_v1_marketdata_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

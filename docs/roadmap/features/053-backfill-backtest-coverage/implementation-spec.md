@@ -1,6 +1,6 @@
 # Implementation Spec: backfill-backtest-coverage
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-06-09
 **Feature**: `docs/roadmap/features/053-backfill-backtest-coverage/feature.md`
 **Total Steps**: 12
@@ -42,7 +42,7 @@ The timeframe normalization is the load-bearing correctness fix: today `services
 
 ### Step 1 — proto: Add `GetDataCoverage` RPC, structured insufficient-data fields, and shared `Timeframe` enum
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/common/v1/common.proto` — modify (add `Timeframe` enum)
@@ -144,7 +144,7 @@ The timeframe normalization is the load-bearing correctness fix: today `services
 
 ### Step 2 — proto-gen: Regenerate Go, Python, and TypeScript stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/**` — modify (regenerated)
