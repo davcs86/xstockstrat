@@ -165,7 +165,7 @@ by 053.
 > Numbered Step 4 (not 3) to keep `service`/`test`/`config`/`docs` step numbers stable; there is no
 > Step 3. (Ordering in the file is logical, not by integer gaps.)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/004_add_backfill_chunks.up.sql` — create

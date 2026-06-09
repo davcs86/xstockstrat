@@ -117,3 +117,16 @@ class ConfigWatcher:
     @property
     def backfill_max_retry_attempts(self) -> int:
         return self.get_int("ingest.backfill.max_retry_attempts", default=3)
+
+    # Chunked-backfill config helpers — ingest.backfill.* (feature 054)
+    @property
+    def backfill_chunk_max_bars(self) -> int:
+        return self.get_int("ingest.backfill.chunk_max_bars", default=200000)
+
+    @property
+    def backfill_chunk_window_days(self) -> int:
+        return self.get_int("ingest.backfill.chunk_window_days", default=90)
+
+    @property
+    def backfill_max_concurrent_chunks(self) -> int:
+        return self.get_int("ingest.backfill.max_concurrent_chunks", default=3)
