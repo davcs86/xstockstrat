@@ -1,6 +1,6 @@
 # Implementation Spec: durable-observable-backfills
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-06-08
 **Feature**: `docs/roadmap/features/052-durable-observable-backfills/feature.md`
 **Total Steps**: 12
@@ -38,7 +38,7 @@ reconciles `xstockstrat-ingest/CLAUDE.md`.
 
 ### Step 1 — proto: Add `failed_symbols` to `BackfillJob` and `expected_bars` to `BackfillBarsResponse`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
@@ -72,7 +72,7 @@ Both must pass (additive change is non-breaking).
 
 ### Step 2 — proto-gen: Regenerate stubs (Go, Python, TS)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/**` — modify (regenerated)
@@ -601,4 +601,8 @@ Ledger Events table matches the events emitted in Step 7. (Docs-only — no buil
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 2 — proto codegen toolchain
+**Spec said**: Run `./scripts/buf-gen.sh` (normally run inside the `Dockerfile.codegen` container via `scripts/localenv-setup.sh`).
+**Actual**: Docker daemon is unavailable in this execution sandbox. Installed the codegen toolchain directly on the host, pinned to the CI `proto-freshness` job versions (buf v1.50.0; protoc-gen-go@v1.36.11; protoc-gen-go-grpc@v1.6.2; protoc-gen-connect-go@v1.19.2; grpcio-tools==1.80.0; TS plugins from the committed pnpm lockfile), then ran `./scripts/buf-gen.sh`. `git diff` of `packages/proto/gen/` is limited to the intended ingest/marketdata files (mirrors CI's stale-stub check).
+**Reason**: Docker unavailable; host toolchain pinned to CI versions is the sanctioned sequential-mode CI-equivalent fallback.
+**Disposition**: CI-equivalent fallback

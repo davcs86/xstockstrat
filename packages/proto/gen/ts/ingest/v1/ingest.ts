@@ -112,6 +112,8 @@ export interface BackfillJob {
   startedAt?: Date | undefined;
   completedAt?: Date | undefined;
   error: string;
+  /** symbols that failed in a PARTIAL/FAILED job (FR-7) */
+  failedSymbols: string[];
 }
 
 export interface TriggerBackfillRequest {
@@ -245,6 +247,7 @@ function createBaseBackfillJob(): BackfillJob {
     startedAt: undefined,
     completedAt: undefined,
     error: "",
+    failedSymbols: [],
   };
 }
 
@@ -279,6 +282,9 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     }
     if (message.error !== "") {
       writer.uint32(82).string(message.error);
+    }
+    for (const v of message.failedSymbols) {
+      writer.uint32(90).string(v!);
     }
     return writer;
   },
@@ -370,6 +376,14 @@ export const BackfillJob: MessageFns<BackfillJob> = {
           message.error = reader.string();
           continue;
         }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.failedSymbols.push(reader.string());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -411,6 +425,11 @@ export const BackfillJob: MessageFns<BackfillJob> = {
         ? fromJsonTimestamp(object.completed_at)
         : undefined,
       error: isSet(object.error) ? globalThis.String(object.error) : "",
+      failedSymbols: globalThis.Array.isArray(object?.failedSymbols)
+        ? object.failedSymbols.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.failed_symbols)
+        ? object.failed_symbols.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -446,6 +465,9 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     if (message.error !== "") {
       obj.error = message.error;
     }
+    if (message.failedSymbols?.length) {
+      obj.failedSymbols = message.failedSymbols;
+    }
     return obj;
   },
 
@@ -466,6 +488,7 @@ export const BackfillJob: MessageFns<BackfillJob> = {
     message.startedAt = object.startedAt ?? undefined;
     message.completedAt = object.completedAt ?? undefined;
     message.error = object.error ?? "";
+    message.failedSymbols = object.failedSymbols?.map((e) => e) || [];
     return message;
   },
 };

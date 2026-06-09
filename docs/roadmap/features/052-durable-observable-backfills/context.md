@@ -69,3 +69,31 @@
     gRPC call, no header-propagation change for marketdata.
   - **Not trading-domain-relevant**: only TRADING_MODE ref in ingest is telemetry tagging
     (telemetry.py L29) — Step 5b trading constraints do not apply.
+
+## Session 2026-06-09 — sdd-execute (sequential, stacked 052>053>054)
+
+Running all three backfill-hardening features as a stacked sequential run (user-confirmed
+strategy: 052 off main-dev, 053 off 052, 054 off 053; per-feature integration PRs; build now,
+user obtains Platform Lead approval for 053's breaking enum + merge-order overrides).
+
+Environment notes (apply to all three features):
+- Docker daemon unavailable in this sandbox → codegen Docker image path is dead. Installed the
+  proto toolchain on the host pinned to the CI `proto-freshness` versions instead:
+  buf v1.50.0, protoc-gen-go@v1.36.11, protoc-gen-go-grpc@v1.6.2, protoc-gen-connect-go@v1.19.2,
+  grpcio-tools==1.80.0, TS plugins from the committed pnpm lockfile. (CI-equivalent fallback per
+  the skill's sequential-mode verification fallbacks.)
+- `migrate` binary absent → migrations verified against a throwaway postgres:16 (psql 16 present).
+- PR granularity: user chose ONE integration PR per feature (not ~36 per-step stacked PRs),
+  because proto source+stubs must commit together (proto-versioning PR1 / proto-freshness CI) and
+  36 PRs is impractical. Per-step commits land on the feature branch; the integration PR is the gate.
+
+### Step 1 — proto: add BackfillJob.failed_symbols=11 + BackfillBarsResponse.expected_bars=3 [done]
+- Additive fields only. buf lint + buf breaking (against feature branch) both pass → non-breaking.
+- Files modified: `packages/proto/ingest/v1/ingest.proto`, `packages/proto/marketdata/v1/marketdata.proto`
+- Deviations: none
+
+### Step 2 — proto-gen: regenerate Go/Python/TS stubs [done]
+- Ran ./scripts/buf-gen.sh with host toolchain. Diff scoped to 18 ingest/marketdata gen files.
+  Runtime descriptor confirms BackfillJob.failed_symbols=11, BackfillBarsResponse.expected_bars=3.
+- Files modified: `packages/proto/gen/{go,python,ts}/**`
+- Deviations: codegen via host toolchain instead of Docker image (logged above; CI-equivalent).

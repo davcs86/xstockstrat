@@ -240,6 +240,12 @@ export type BackfillBarsResponse = Message<"xstockstrat.marketdata.v1.BackfillBa
      * @generated from field: repeated string failed_symbols = 2;
      */
     failedSymbols: string[];
+    /**
+     * estimated total bars across requested symbols/range (FR-6)
+     *
+     * @generated from field: int64 expected_bars = 3;
+     */
+    expectedBars: bigint;
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.BackfillBarsResponse.

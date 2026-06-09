@@ -1,9 +1,9 @@
 # Feature: durable-observable-backfills
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/durable-observable-backfills`
 **Created**: 2026-06-08
-**Last Updated**: 2026-06-08
+**Last Updated**: 2026-06-09
 
 **Priority Bucket**: P0 — Make backfills trustworthy (1 of 3 in the backfill-hardening initiative)
 
@@ -16,6 +16,7 @@
 | 2026-06-08 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-06-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved; 4 open questions resolved (retry impl, marketdata bars_total, drop in-memory dict, retain jobs) |
 | 2026-06-08 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
+| 2026-06-09 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential stacked run started; Steps 1–2 (proto + regen) done |
 
 ---
 

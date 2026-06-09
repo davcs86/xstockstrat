@@ -94,6 +94,7 @@ type BackfillJob struct {
 	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
 	CompletedAt   *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
 	Error         string                 `protobuf:"bytes,10,opt,name=error,proto3" json:"error,omitempty"`
+	FailedSymbols []string               `protobuf:"bytes,11,rep,name=failed_symbols,json=failedSymbols,proto3" json:"failed_symbols,omitempty"` // symbols that failed in a PARTIAL/FAILED job (FR-7)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -196,6 +197,13 @@ func (x *BackfillJob) GetError() string {
 		return x.Error
 	}
 	return ""
+}
+
+func (x *BackfillJob) GetFailedSymbols() []string {
+	if x != nil {
+		return x.FailedSymbols
+	}
+	return nil
 }
 
 type TriggerBackfillRequest struct {
@@ -1195,7 +1203,7 @@ var File_ingest_v1_ingest_proto protoreflect.FileDescriptor
 
 const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\n" +
-	"\x16ingest/v1/ingest.proto\x12\x15xstockstrat.ingest.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16common/v1/common.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xa9\x03\n" +
+	"\x16ingest/v1/ingest.proto\x12\x15xstockstrat.ingest.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16common/v1/common.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xd0\x03\n" +
 	"\vBackfillJob\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x18\n" +
 	"\asymbols\x18\x02 \x03(\tR\asymbols\x12\x1c\n" +
@@ -1209,7 +1217,8 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"started_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12=\n" +
 	"\fcompleted_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\vcompletedAt\x12\x14\n" +
 	"\x05error\x18\n" +
-	" \x01(\tR\x05error\"\xa6\x01\n" +
+	" \x01(\tR\x05error\x12%\n" +
+	"\x0efailed_symbols\x18\v \x03(\tR\rfailedSymbols\"\xa6\x01\n" +
 	"\x16TriggerBackfillRequest\x12\x18\n" +
 	"\asymbols\x18\x01 \x03(\tR\asymbols\x12\x1c\n" +
 	"\ttimeframe\x18\x02 \x01(\tR\ttimeframe\x126\n" +
