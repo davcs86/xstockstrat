@@ -57,7 +57,7 @@ The timeframe normalization is the load-bearing correctness fix: today `services
 - `marketdata/v1` string timeframe fields confirmed at `packages/proto/marketdata/v1/marketdata.proto:42` (`Bar.timeframe`), `:58` (`StreamBarsRequest.timeframe`), `:69` (`GetBarsRequest.timeframe`), `:85` (`BackfillBarsRequest.timeframe`). Highest field number in `GetBarsRequest` is 4; in `BackfillBarsRequest` is 4; in `Bar` is 11.
 - `GetBarsResponse`/`GetBarsRequest` use `xstockstrat.common.v1.TimeRange range` (`:70`, `:86`) and `PageRequest`/`PageResponse` (`:71`, `:76`) — reuse `TimeRange` for the coverage request/gap.
 - `analysis/v1` `BacktestResult` highest field number is 11 (`trades`): `packages/proto/analysis/v1/analysis.proto:45`. New fields start at 12. Existing enum precedent with `_UNSPECIFIED = 0` at `:92-96` (`ComponentKind`).
-- `ingest/v1` string `timeframe` confirmed at `packages/proto/ingest/v1/ingest.proto:27` (`BackfillJob.timeframe`, highest field 10) and `:48` (`TriggerBackfillRequest.timeframe`, highest field 4).
+- `ingest/v1` string `timeframe` confirmed at `packages/proto/ingest/v1/ingest.proto:27` (`BackfillJob.timeframe`). **Re-spec (sequential stack on 052):** `BackfillJob`'s highest field is now **11** — feature 052 (`durable-observable-backfills`, this stack's base) added `failed_symbols = 11`. So `timeframe_enum` here must use **12**, not 11 (matches `merge-order.md`). `TriggerBackfillRequest.timeframe` at `:48` (highest field 4) is unaffected by 052.
 - `buf-gen.sh` runs `buf lint`, `buf breaking --against "$REPO_ROOT/.git#branch=$AGAINST_BRANCH,subdir=packages/proto"`, then `buf generate`: `scripts/buf-gen.sh:34-48`.
 
 **Instructions**:
@@ -135,7 +135,7 @@ The timeframe normalization is the load-bearing correctness fix: today `services
    repeated CoverageGap coverage_gaps = 13;  // populated per-symbol when status == INSUFFICIENT_DATA
    ```
    (Soft structured result per Resolved Decision — status + `coverage_gaps`, not a gRPC error.)
-4. In `ingest/v1/ingest.proto`, mirror the deprecation pair on `BackfillJob` (highest field 10 → use 11) and `TriggerBackfillRequest` (highest field 4 → use 5): mark the existing `string timeframe` `[deprecated = true]`, add `xstockstrat.common.v1.Timeframe timeframe_enum = N;`.
+4. In `ingest/v1/ingest.proto`, mirror the deprecation pair on `BackfillJob` (**highest field 11 after 052 → use 12**) and `TriggerBackfillRequest` (highest field 4 → use 5): mark the existing `string timeframe` `[deprecated = true]`, add `xstockstrat.common.v1.Timeframe timeframe_enum = N;`.
 
 **Verification**:
 - From `packages/proto/`: `buf lint && buf breaking --against "../../.git#branch=feature/backfill-backtest-coverage,subdir=packages/proto"` — both pass (all changes additive; deprecating a field is not a breaking change). Equivalent to the gate in `scripts/buf-gen.sh:34-41`.

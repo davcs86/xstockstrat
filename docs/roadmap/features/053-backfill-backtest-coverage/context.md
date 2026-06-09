@@ -76,3 +76,18 @@
     + `coverage_gaps`.
 - Reviewers snapshot in feature.md already matched the per-step reviewer set (Proto Reviewer,
   Platform Lead, marketdata owner, analysis owner, ui owner) — left as the canonical snapshot.
+
+## Session 2026-06-09 — sdd-execute (sequential, stacked on 052)
+
+Branch `feature/backfill-backtest-coverage` cut from `feature/durable-observable-backfills` (052),
+not main-dev, per the user-confirmed stacked strategy. Same environment fallbacks as 052
+(host proto toolchain pinned to CI versions; throwaway postgres:16 for migrations; per-feature
+integration PR). Breaking `Timeframe` enum migration requires Platform Lead approval — user obtains it.
+
+### Re-spec gate (§5.3) — applied before the step loop
+- Validated proto field numbers against the stacked base (052 merged in). Only drift: ingest
+  `BackfillJob` highest field is now 11 (052 added `failed_symbols=11`), so Step 1's `timeframe_enum`
+  was re-spec'd from field 11 → **12** (matches merge-order.md). marketdata GetBars/BackfillBars/
+  StreamBars requests (timeframe_enum=5) and `Bar` (timeframe_enum=12) are unaffected by 052.
+  analysis `BacktestResult` (status=12, coverage_gaps=13) and common `Timeframe` enum unaffected.
+- Committed as respec(backfill-backtest-coverage).
