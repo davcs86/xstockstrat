@@ -94,6 +94,51 @@ result = {
 }
 ```
 
+### Typed Parameters
+
+Beyond the `data` series input, a formula can declare **typed parameters** — named scalar
+knobs with defaults, validation, and descriptions. Parameter *values* arrive separately from
+the OHLCV series and are exposed to the formula as a dedicated `params` dict (never merged into
+`data`):
+
+```python
+# data:   series input from ExecuteFormulaRequest.input_data  (e.g. data["close"])
+# params: validated scalar values from ExecuteFormulaRequest.input_params
+import numpy as np
+
+prices = np.array(data["close"], dtype=float)   # series stays in `data`
+period = params["period"]                        # typed scalar from `params`
+
+result = {"sma": np.convolve(prices, np.ones(period) / period, mode="valid").tolist()}
+```
+
+Declare parameters when registering/updating a formula (UI **Parameters** cell, the
+`manage_formula` MCP tool's `parameters` argument, or `RegisterFormulaRequest.parameters`). Each
+parameter has:
+
+| Field | Meaning |
+|---|---|
+| `name` | Python identifier; the key in `params["<name>"]` |
+| `type` | `PARAMETER_TYPE_INT` / `_FLOAT` / `_BOOL` / `_STRING` |
+| `default_value` | applied when the value is omitted at execution |
+| `required` | reject execution if omitted and no value supplied |
+| `min` / `max` | inclusive bounds, **numeric params only** |
+| `description` | human-readable doc |
+
+The engine validates supplied `input_params` **before** running the sandbox: unknown keys,
+missing-required, type mismatches, and out-of-range values are returned as a structured
+`parameter_errors` list (`{name, reason}`) on the response with `success=false`, and the formula
+body never runs. Omitted optional parameters fall back to their declared `default_value`.
+
+**Engine-enforced soft cap**: a formula may declare at most **32 parameters** (hardcoded in the
+indicators engine — `app/services/parameters.py`). This cap is **not** a config key; there is no
+new `indicators.*` key for it. Parameter names must be valid Python identifiers and unique within
+a formula.
+
+Strategy components (`COMPONENT_KIND_CUSTOM_FORMULA`) may set the **numeric** (int/float)
+parameters per component via `StrategyComponent.params`; bool/string parameters are usable only in
+standalone formula runs, not per strategy component.
+
 ### Sandbox Constraints
 
 All values are sourced from `xstockstrat-config` namespace `indicators`:

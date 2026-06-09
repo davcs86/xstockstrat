@@ -5,10 +5,13 @@
 //   protoc               unknown
 // source: indicators/v1/indicators.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IndicatorsServiceClient = exports.IndicatorsServiceService = exports.DeleteFormulaResponse = exports.DeleteFormulaRequest = exports.UpdateFormulaResponse = exports.UpdateFormulaRequest = exports.ListFormulasResponse = exports.ListFormulasRequest = exports.GetFormulaRequest = exports.RegisterFormulaResponse = exports.RegisterFormulaRequest_InputSchemaEntry = exports.RegisterFormulaRequest = exports.IndicatorMeta = exports.ListIndicatorsResponse = exports.ListIndicatorsRequest = exports.FormulaDefinition_InputSchemaEntry = exports.FormulaDefinition = exports.ExecuteFormulaResponse = exports.ExecuteFormulaRequest_EnvEntry = exports.ExecuteFormulaRequest = exports.IndicatorPoint_ExtraEntry = exports.IndicatorPoint = exports.ComputeIndicatorResponse_ParamsUsedEntry = exports.ComputeIndicatorResponse = exports.ComputeIndicatorRequest_ParamsEntry = exports.ComputeIndicatorRequest = exports.SandboxExitReason = exports.protobufPackage = void 0;
+exports.IndicatorsServiceClient = exports.IndicatorsServiceService = exports.DeleteFormulaResponse = exports.DeleteFormulaRequest = exports.UpdateFormulaResponse = exports.UpdateFormulaRequest = exports.ListFormulasResponse = exports.ListFormulasRequest = exports.GetFormulaRequest = exports.RegisterFormulaResponse = exports.RegisterFormulaRequest_InputSchemaEntry = exports.RegisterFormulaRequest = exports.IndicatorMeta = exports.ListIndicatorsResponse = exports.ListIndicatorsRequest = exports.FormulaDefinition_InputSchemaEntry = exports.FormulaDefinition = exports.ParameterValidationError = exports.FormulaParameter = exports.ExecuteFormulaResponse = exports.ExecuteFormulaRequest_EnvEntry = exports.ExecuteFormulaRequest = exports.IndicatorPoint_ExtraEntry = exports.IndicatorPoint = exports.ComputeIndicatorResponse_ParamsUsedEntry = exports.ComputeIndicatorResponse = exports.ComputeIndicatorRequest_ParamsEntry = exports.ComputeIndicatorRequest = exports.ParameterType = exports.SandboxExitReason = exports.protobufPackage = void 0;
 exports.sandboxExitReasonFromJSON = sandboxExitReasonFromJSON;
 exports.sandboxExitReasonToJSON = sandboxExitReasonToJSON;
 exports.sandboxExitReasonToNumber = sandboxExitReasonToNumber;
+exports.parameterTypeFromJSON = parameterTypeFromJSON;
+exports.parameterTypeToJSON = parameterTypeToJSON;
+exports.parameterTypeToNumber = parameterTypeToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -86,6 +89,72 @@ function sandboxExitReasonToNumber(object) {
         case SandboxExitReason.SANDBOX_EXIT_REASON_IMPORT_BLOCKED:
             return 5;
         case SandboxExitReason.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+var ParameterType;
+(function (ParameterType) {
+    ParameterType["PARAMETER_TYPE_UNSPECIFIED"] = "PARAMETER_TYPE_UNSPECIFIED";
+    ParameterType["PARAMETER_TYPE_INT"] = "PARAMETER_TYPE_INT";
+    ParameterType["PARAMETER_TYPE_FLOAT"] = "PARAMETER_TYPE_FLOAT";
+    ParameterType["PARAMETER_TYPE_BOOL"] = "PARAMETER_TYPE_BOOL";
+    ParameterType["PARAMETER_TYPE_STRING"] = "PARAMETER_TYPE_STRING";
+    ParameterType["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(ParameterType || (exports.ParameterType = ParameterType = {}));
+function parameterTypeFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "PARAMETER_TYPE_UNSPECIFIED":
+            return ParameterType.PARAMETER_TYPE_UNSPECIFIED;
+        case 1:
+        case "PARAMETER_TYPE_INT":
+            return ParameterType.PARAMETER_TYPE_INT;
+        case 2:
+        case "PARAMETER_TYPE_FLOAT":
+            return ParameterType.PARAMETER_TYPE_FLOAT;
+        case 3:
+        case "PARAMETER_TYPE_BOOL":
+            return ParameterType.PARAMETER_TYPE_BOOL;
+        case 4:
+        case "PARAMETER_TYPE_STRING":
+            return ParameterType.PARAMETER_TYPE_STRING;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return ParameterType.UNRECOGNIZED;
+    }
+}
+function parameterTypeToJSON(object) {
+    switch (object) {
+        case ParameterType.PARAMETER_TYPE_UNSPECIFIED:
+            return "PARAMETER_TYPE_UNSPECIFIED";
+        case ParameterType.PARAMETER_TYPE_INT:
+            return "PARAMETER_TYPE_INT";
+        case ParameterType.PARAMETER_TYPE_FLOAT:
+            return "PARAMETER_TYPE_FLOAT";
+        case ParameterType.PARAMETER_TYPE_BOOL:
+            return "PARAMETER_TYPE_BOOL";
+        case ParameterType.PARAMETER_TYPE_STRING:
+            return "PARAMETER_TYPE_STRING";
+        case ParameterType.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function parameterTypeToNumber(object) {
+    switch (object) {
+        case ParameterType.PARAMETER_TYPE_UNSPECIFIED:
+            return 0;
+        case ParameterType.PARAMETER_TYPE_INT:
+            return 1;
+        case ParameterType.PARAMETER_TYPE_FLOAT:
+            return 2;
+        case ParameterType.PARAMETER_TYPE_BOOL:
+            return 3;
+        case ParameterType.PARAMETER_TYPE_STRING:
+            return 4;
+        case ParameterType.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -669,6 +738,7 @@ function createBaseExecuteFormulaRequest() {
         env: {},
         timeoutMsOverride: 0,
         memoryBytesOverride: 0,
+        inputParams: undefined,
     };
 }
 exports.ExecuteFormulaRequest = {
@@ -690,6 +760,9 @@ exports.ExecuteFormulaRequest = {
         }
         if (message.memoryBytesOverride !== 0) {
             writer.uint32(48).int64(message.memoryBytesOverride);
+        }
+        if (message.inputParams !== undefined) {
+            struct_1.Struct.encode(struct_1.Struct.wrap(message.inputParams), writer.uint32(58).fork()).join();
         }
         return writer;
     },
@@ -745,6 +818,13 @@ exports.ExecuteFormulaRequest = {
                     message.memoryBytesOverride = longToNumber(reader.int64());
                     continue;
                 }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.inputParams = struct_1.Struct.unwrap(struct_1.Struct.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -786,6 +866,11 @@ exports.ExecuteFormulaRequest = {
                 : isSet(object.memory_bytes_override)
                     ? globalThis.Number(object.memory_bytes_override)
                     : 0,
+            inputParams: isObject(object.inputParams)
+                ? object.inputParams
+                : isObject(object.input_params)
+                    ? object.input_params
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -814,6 +899,9 @@ exports.ExecuteFormulaRequest = {
         if (message.memoryBytesOverride !== 0) {
             obj.memoryBytesOverride = Math.round(message.memoryBytesOverride);
         }
+        if (message.inputParams !== undefined) {
+            obj.inputParams = message.inputParams;
+        }
         return obj;
     },
     create(base) {
@@ -832,6 +920,7 @@ exports.ExecuteFormulaRequest = {
         }, {});
         message.timeoutMsOverride = object.timeoutMsOverride ?? 0;
         message.memoryBytesOverride = object.memoryBytesOverride ?? 0;
+        message.inputParams = object.inputParams ?? undefined;
         return message;
     },
 };
@@ -913,6 +1002,7 @@ function createBaseExecuteFormulaResponse() {
         memoryUsedBytes: 0,
         error: "",
         exitReason: SandboxExitReason.SANDBOX_EXIT_REASON_UNSPECIFIED,
+        parameterErrors: [],
     };
 }
 exports.ExecuteFormulaResponse = {
@@ -940,6 +1030,9 @@ exports.ExecuteFormulaResponse = {
         }
         if (message.exitReason !== SandboxExitReason.SANDBOX_EXIT_REASON_UNSPECIFIED) {
             writer.uint32(64).int32(sandboxExitReasonToNumber(message.exitReason));
+        }
+        for (const v of message.parameterErrors) {
+            exports.ParameterValidationError.encode(v, writer.uint32(74).fork()).join();
         }
         return writer;
     },
@@ -1006,6 +1099,13 @@ exports.ExecuteFormulaResponse = {
                     message.exitReason = sandboxExitReasonFromJSON(reader.int32());
                     continue;
                 }
+                case 9: {
+                    if (tag !== 74) {
+                        break;
+                    }
+                    message.parameterErrors.push(exports.ParameterValidationError.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1036,6 +1136,11 @@ exports.ExecuteFormulaResponse = {
                 : isSet(object.exit_reason)
                     ? sandboxExitReasonFromJSON(object.exit_reason)
                     : SandboxExitReason.SANDBOX_EXIT_REASON_UNSPECIFIED,
+            parameterErrors: globalThis.Array.isArray(object?.parameterErrors)
+                ? object.parameterErrors.map((e) => exports.ParameterValidationError.fromJSON(e))
+                : globalThis.Array.isArray(object?.parameter_errors)
+                    ? object.parameter_errors.map((e) => exports.ParameterValidationError.fromJSON(e))
+                    : [],
         };
     },
     toJSON(message) {
@@ -1064,6 +1169,9 @@ exports.ExecuteFormulaResponse = {
         if (message.exitReason !== SandboxExitReason.SANDBOX_EXIT_REASON_UNSPECIFIED) {
             obj.exitReason = sandboxExitReasonToJSON(message.exitReason);
         }
+        if (message.parameterErrors?.length) {
+            obj.parameterErrors = message.parameterErrors.map((e) => exports.ParameterValidationError.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -1079,6 +1187,230 @@ exports.ExecuteFormulaResponse = {
         message.memoryUsedBytes = object.memoryUsedBytes ?? 0;
         message.error = object.error ?? "";
         message.exitReason = object.exitReason ?? SandboxExitReason.SANDBOX_EXIT_REASON_UNSPECIFIED;
+        message.parameterErrors = object.parameterErrors?.map((e) => exports.ParameterValidationError.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseFormulaParameter() {
+    return {
+        name: "",
+        type: ParameterType.PARAMETER_TYPE_UNSPECIFIED,
+        defaultValue: undefined,
+        description: "",
+        required: false,
+        min: undefined,
+        max: undefined,
+    };
+}
+exports.FormulaParameter = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.name !== "") {
+            writer.uint32(10).string(message.name);
+        }
+        if (message.type !== ParameterType.PARAMETER_TYPE_UNSPECIFIED) {
+            writer.uint32(16).int32(parameterTypeToNumber(message.type));
+        }
+        if (message.defaultValue !== undefined) {
+            struct_1.Value.encode(struct_1.Value.wrap(message.defaultValue), writer.uint32(26).fork()).join();
+        }
+        if (message.description !== "") {
+            writer.uint32(34).string(message.description);
+        }
+        if (message.required !== false) {
+            writer.uint32(40).bool(message.required);
+        }
+        if (message.min !== undefined) {
+            writer.uint32(49).double(message.min);
+        }
+        if (message.max !== undefined) {
+            writer.uint32(57).double(message.max);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseFormulaParameter();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.name = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.type = parameterTypeFromJSON(reader.int32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.defaultValue = struct_1.Value.unwrap(struct_1.Value.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.description = reader.string();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.required = reader.bool();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 49) {
+                        break;
+                    }
+                    message.min = reader.double();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 57) {
+                        break;
+                    }
+                    message.max = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            name: isSet(object.name) ? globalThis.String(object.name) : "",
+            type: isSet(object.type) ? parameterTypeFromJSON(object.type) : ParameterType.PARAMETER_TYPE_UNSPECIFIED,
+            defaultValue: isSet(object?.defaultValue)
+                ? object.defaultValue
+                : isSet(object?.default_value)
+                    ? object.default_value
+                    : undefined,
+            description: isSet(object.description) ? globalThis.String(object.description) : "",
+            required: isSet(object.required) ? globalThis.Boolean(object.required) : false,
+            min: isSet(object.min) ? globalThis.Number(object.min) : undefined,
+            max: isSet(object.max) ? globalThis.Number(object.max) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.name !== "") {
+            obj.name = message.name;
+        }
+        if (message.type !== ParameterType.PARAMETER_TYPE_UNSPECIFIED) {
+            obj.type = parameterTypeToJSON(message.type);
+        }
+        if (message.defaultValue !== undefined) {
+            obj.defaultValue = message.defaultValue;
+        }
+        if (message.description !== "") {
+            obj.description = message.description;
+        }
+        if (message.required !== false) {
+            obj.required = message.required;
+        }
+        if (message.min !== undefined) {
+            obj.min = message.min;
+        }
+        if (message.max !== undefined) {
+            obj.max = message.max;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.FormulaParameter.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseFormulaParameter();
+        message.name = object.name ?? "";
+        message.type = object.type ?? ParameterType.PARAMETER_TYPE_UNSPECIFIED;
+        message.defaultValue = object.defaultValue ?? undefined;
+        message.description = object.description ?? "";
+        message.required = object.required ?? false;
+        message.min = object.min ?? undefined;
+        message.max = object.max ?? undefined;
+        return message;
+    },
+};
+function createBaseParameterValidationError() {
+    return { name: "", reason: "" };
+}
+exports.ParameterValidationError = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.name !== "") {
+            writer.uint32(10).string(message.name);
+        }
+        if (message.reason !== "") {
+            writer.uint32(18).string(message.reason);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseParameterValidationError();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.name = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.reason = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            name: isSet(object.name) ? globalThis.String(object.name) : "",
+            reason: isSet(object.reason) ? globalThis.String(object.reason) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.name !== "") {
+            obj.name = message.name;
+        }
+        if (message.reason !== "") {
+            obj.reason = message.reason;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ParameterValidationError.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseParameterValidationError();
+        message.name = object.name ?? "";
+        message.reason = object.reason ?? "";
         return message;
     },
 };
@@ -1093,6 +1425,7 @@ function createBaseFormulaDefinition() {
         updatedAt: undefined,
         isPublic: false,
         inputSchema: {},
+        parameters: [],
     };
 }
 exports.FormulaDefinition = {
@@ -1124,6 +1457,9 @@ exports.FormulaDefinition = {
         globalThis.Object.entries(message.inputSchema).forEach(([key, value]) => {
             exports.FormulaDefinition_InputSchemaEntry.encode({ key: key, value }, writer.uint32(74).fork()).join();
         });
+        for (const v of message.parameters) {
+            exports.FormulaParameter.encode(v, writer.uint32(82).fork()).join();
+        }
         return writer;
     },
     decode(input, length) {
@@ -1199,6 +1535,13 @@ exports.FormulaDefinition = {
                     }
                     continue;
                 }
+                case 10: {
+                    if (tag !== 82) {
+                        break;
+                    }
+                    message.parameters.push(exports.FormulaParameter.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1244,6 +1587,9 @@ exports.FormulaDefinition = {
                         return acc;
                     }, {})
                     : {},
+            parameters: globalThis.Array.isArray(object?.parameters)
+                ? object.parameters.map((e) => exports.FormulaParameter.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -1281,6 +1627,9 @@ exports.FormulaDefinition = {
                 });
             }
         }
+        if (message.parameters?.length) {
+            obj.parameters = message.parameters.map((e) => exports.FormulaParameter.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -1302,6 +1651,7 @@ exports.FormulaDefinition = {
             }
             return acc;
         }, {});
+        message.parameters = object.parameters?.map((e) => exports.FormulaParameter.fromPartial(e)) || [];
         return message;
     },
 };
@@ -1572,7 +1922,7 @@ exports.IndicatorMeta = {
     },
 };
 function createBaseRegisterFormulaRequest() {
-    return { name: "", description: "", source: "", isPublic: false, inputSchema: {}, author: "" };
+    return { name: "", description: "", source: "", isPublic: false, inputSchema: {}, author: "", parameters: [] };
 }
 exports.RegisterFormulaRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -1593,6 +1943,9 @@ exports.RegisterFormulaRequest = {
         });
         if (message.author !== "") {
             writer.uint32(50).string(message.author);
+        }
+        for (const v of message.parameters) {
+            exports.FormulaParameter.encode(v, writer.uint32(58).fork()).join();
         }
         return writer;
     },
@@ -1648,6 +2001,13 @@ exports.RegisterFormulaRequest = {
                     message.author = reader.string();
                     continue;
                 }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.parameters.push(exports.FormulaParameter.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1678,6 +2038,9 @@ exports.RegisterFormulaRequest = {
                     }, {})
                     : {},
             author: isSet(object.author) ? globalThis.String(object.author) : "",
+            parameters: globalThis.Array.isArray(object?.parameters)
+                ? object.parameters.map((e) => exports.FormulaParameter.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -1706,6 +2069,9 @@ exports.RegisterFormulaRequest = {
         if (message.author !== "") {
             obj.author = message.author;
         }
+        if (message.parameters?.length) {
+            obj.parameters = message.parameters.map((e) => exports.FormulaParameter.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -1724,6 +2090,7 @@ exports.RegisterFormulaRequest = {
             return acc;
         }, {});
         message.author = object.author ?? "";
+        message.parameters = object.parameters?.map((e) => exports.FormulaParameter.fromPartial(e)) || [];
         return message;
     },
 };
@@ -2098,7 +2465,7 @@ exports.ListFormulasResponse = {
     },
 };
 function createBaseUpdateFormulaRequest() {
-    return { formulaId: "", userId: "", name: "", description: "", source: "", isPublic: false };
+    return { formulaId: "", userId: "", name: "", description: "", source: "", isPublic: false, parameters: [] };
 }
 exports.UpdateFormulaRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -2119,6 +2486,9 @@ exports.UpdateFormulaRequest = {
         }
         if (message.isPublic !== false) {
             writer.uint32(48).bool(message.isPublic);
+        }
+        for (const v of message.parameters) {
+            exports.FormulaParameter.encode(v, writer.uint32(58).fork()).join();
         }
         return writer;
     },
@@ -2171,6 +2541,13 @@ exports.UpdateFormulaRequest = {
                     message.isPublic = reader.bool();
                     continue;
                 }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.parameters.push(exports.FormulaParameter.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2199,6 +2576,9 @@ exports.UpdateFormulaRequest = {
                 : isSet(object.is_public)
                     ? globalThis.Boolean(object.is_public)
                     : false,
+            parameters: globalThis.Array.isArray(object?.parameters)
+                ? object.parameters.map((e) => exports.FormulaParameter.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -2221,6 +2601,9 @@ exports.UpdateFormulaRequest = {
         if (message.isPublic !== false) {
             obj.isPublic = message.isPublic;
         }
+        if (message.parameters?.length) {
+            obj.parameters = message.parameters.map((e) => exports.FormulaParameter.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -2234,6 +2617,7 @@ exports.UpdateFormulaRequest = {
         message.description = object.description ?? "";
         message.source = object.source ?? "";
         message.isPublic = object.isPublic ?? false;
+        message.parameters = object.parameters?.map((e) => exports.FormulaParameter.fromPartial(e)) || [];
         return message;
     },
 };

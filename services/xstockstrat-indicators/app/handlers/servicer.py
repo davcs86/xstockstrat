@@ -6,10 +6,12 @@ import logging
 
 import grpc
 from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc
+from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.struct_pb2 import Struct
 
 from app.config.watcher import ConfigWatcher
 from app.services import indicators_engine, sandbox
+from app.services import parameters as params_validation
 from app.services.formulas_repository import FormulasRepository
 
 log = logging.getLogger(__name__)
@@ -69,6 +71,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
 
     async def ExecuteFormula(self, request, context):
         # Resolve source
+        formula = None
         if request.formula_id:
             formula = self._formulas.get(request.formula_id)
             if formula is None and self._repo is not None:
@@ -90,6 +93,22 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             )
             return
 
+        # Validate parameter VALUES (input_params) against declared definitions
+        # before invoking the sandbox. Inline formula_source runs have no stored
+        # definition, so no declared parameters apply.
+        declared_params = list(formula.parameters) if formula is not None else []
+        resolved_params, param_errors = params_validation.resolve_and_validate(
+            declared_params, request.input_params
+        )
+        if param_errors:
+            return indicators_pb2.ExecuteFormulaResponse(
+                success=False,
+                parameter_errors=[
+                    indicators_pb2.ParameterValidationError(name=n, reason=r)
+                    for n, r in param_errors
+                ],
+            )
+
         # Resolve sandbox limits from config (override if specified in request)
         timeout_ms = request.timeout_ms_override or self._cfg.sandbox_timeout_ms
         memory_bytes = request.memory_bytes_override or self._cfg.sandbox_memory_bytes
@@ -110,6 +129,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             allowed_imports=allowed_imports,
             timeout_ms=timeout_ms,
             memory_bytes=memory_bytes,
+            params=resolved_params,
         )
 
         exit_reason_map = {
@@ -170,6 +190,14 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 )
                 return
             author = x_user_id
+
+        try:
+            params_validation.validate_definitions(request.parameters)
+        except ValueError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+            return
+
+        param_dicts = [MessageToDict(p) for p in request.parameters]
         formula = indicators_pb2.FormulaDefinition(
             formula_id=formula_id,
             name=request.name,
@@ -180,6 +208,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             created_at=now,
             updated_at=now,
             input_schema=dict(request.input_schema),
+            parameters=list(request.parameters),
         )
         self._formulas[formula_id] = formula
         if self._repo is not None:
@@ -191,6 +220,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 author=author,
                 is_public=request.is_public,
                 input_schema=dict(request.input_schema),
+                parameters=param_dicts,
             )
         return indicators_pb2.RegisterFormulaResponse(formula_id=formula_id)
 
@@ -241,12 +271,18 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 grpc.StatusCode.PERMISSION_DENIED, "user_id does not match formula author"
             )
             return
+        try:
+            params_validation.validate_definitions(request.parameters)
+        except ValueError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+            return
         updated = await self._repo.update(
             formula_id=request.formula_id,
             name=request.name,
             description=request.description,
             source=request.source,
             is_public=request.is_public,
+            parameters=[MessageToDict(p) for p in request.parameters],
         )
         self._formulas.pop(request.formula_id, None)
         return indicators_pb2.UpdateFormulaResponse(formula=_row_to_formula(updated))
@@ -293,4 +329,7 @@ def _row_to_formula(row: dict) -> "indicators_pb2.FormulaDefinition":
         created_at=dt_to_ts(row.get("created_at")),
         updated_at=dt_to_ts(row.get("updated_at")),
         input_schema=dict(row["input_schema"]) if row.get("input_schema") else {},
+        parameters=[
+            ParseDict(p, indicators_pb2.FormulaParameter()) for p in (row.get("parameters") or [])
+        ],
     )

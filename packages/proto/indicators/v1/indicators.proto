@@ -67,6 +67,7 @@ message ExecuteFormulaRequest {
   map<string, string> env = 4;     // extra env vars (non-secret)
   int32 timeout_ms_override = 5;   // 0 = use config value
   int64 memory_bytes_override = 6; // 0 = use config value
+  google.protobuf.Struct input_params = 7; // parameter VALUES, separate from input_data
 }
 
 message ExecuteFormulaResponse {
@@ -78,6 +79,7 @@ message ExecuteFormulaResponse {
   int64 memory_used_bytes = 6;
   string error = 7;
   SandboxExitReason exit_reason = 8;
+  repeated ParameterValidationError parameter_errors = 9;
 }
 
 enum SandboxExitReason {
@@ -87,6 +89,29 @@ enum SandboxExitReason {
   SANDBOX_EXIT_REASON_MEMORY_EXCEEDED = 3;
   SANDBOX_EXIT_REASON_RUNTIME_ERROR = 4;
   SANDBOX_EXIT_REASON_IMPORT_BLOCKED = 5;
+}
+
+enum ParameterType {
+  PARAMETER_TYPE_UNSPECIFIED = 0;
+  PARAMETER_TYPE_INT = 1;
+  PARAMETER_TYPE_FLOAT = 2;
+  PARAMETER_TYPE_BOOL = 3;
+  PARAMETER_TYPE_STRING = 4;
+}
+
+message FormulaParameter {
+  string name = 1;                       // Python identifier; key in `params`
+  ParameterType type = 2;
+  google.protobuf.Value default_value = 3;
+  string description = 4;
+  bool required = 5;
+  optional double min = 6;               // numeric params only
+  optional double max = 7;               // numeric params only
+}
+
+message ParameterValidationError {
+  string name = 1;
+  string reason = 2;
 }
 
 message FormulaDefinition {
@@ -99,6 +124,7 @@ message FormulaDefinition {
   google.protobuf.Timestamp updated_at = 7;
   bool is_public = 8;
   map<string, string> input_schema = 9;  // expected input keys and types
+  repeated FormulaParameter parameters = 10;
 }
 
 message ListIndicatorsRequest {}
@@ -121,6 +147,7 @@ message RegisterFormulaRequest {
   bool is_public = 4;
   map<string, string> input_schema = 5;
   string author = 6;  // set by BFF from JWT claims; stored immutably
+  repeated FormulaParameter parameters = 7;
 }
 
 message RegisterFormulaResponse {
@@ -150,6 +177,7 @@ message UpdateFormulaRequest {
   string description = 4;
   string source = 5;
   bool is_public = 6;
+  repeated FormulaParameter parameters = 7;
 }
 
 message UpdateFormulaResponse {

@@ -3,13 +3,13 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart2, TrendingUp, Settings, Menu, Activity } from 'lucide-react';
+import { BarChart2, TrendingUp, Settings, Menu, Activity, KeyRound } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { Button } from '../ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
 import { Separator } from '../ui/separator';
 
-export type PlatformSegment = 'trader' | 'insights' | 'config';
+export type PlatformSegment = 'trader' | 'insights' | 'config' | 'accounts';
 
 /** A secondary, in-segment navigation link rendered after the platform nav. */
 export interface SubNavItem {
@@ -30,12 +30,14 @@ const PLATFORM_NAV: PlatformNavItem[] = [
   { segment: 'trader', label: 'Trader', href: '/trader', icon: <TrendingUp className="h-4 w-4" /> },
   { segment: 'insights', label: 'Insights', href: '/insights', icon: <BarChart2 className="h-4 w-4" /> },
   { segment: 'config', label: 'Config', href: '/config-ui', icon: <Settings className="h-4 w-4" /> },
+  { segment: 'accounts', label: 'Accounts', href: '/accounts/authorized-apps', icon: <KeyRound className="h-4 w-4" /> },
 ];
 
 const SEGMENT_HOME: Record<PlatformSegment, string> = {
   trader: '/trader',
   insights: '/insights',
   config: '/config-ui',
+  accounts: '/accounts/authorized-apps',
 };
 
 interface PlatformHeaderProps {

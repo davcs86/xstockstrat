@@ -57,6 +57,7 @@ export default function FormulaDetailPage({ params }: { params: Promise<{ id: st
           initialDescription={formula.description}
           initialSource={formula.source}
           initialIsPublic={formula.isPublic}
+          initialParameters={formula.parameters}
           author={formula.author}
           saving={updateMut.isPending}
           saveError={updateError}
