@@ -39,7 +39,7 @@ func (h *MarketDataHandler) StreamBars(ctx context.Context, req *connect.Request
 	ch := h.svc.SubscribeBars(subID)
 	defer h.svc.UnsubscribeBars(subID)
 
-	go h.svc.StartBarStream(ctx, req.Msg.Symbols, req.Msg.Timeframe)
+	go h.svc.StartBarStream(ctx, req.Msg.Symbols, req.Msg.Timeframe) //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
 
 	for {
 		select {
@@ -118,6 +118,18 @@ func (h *MarketDataHandler) BackfillBars(ctx context.Context, req *connect.Reque
 	return connect.NewResponse(resp), nil
 }
 
+// GetDataCoverage reports stored OHLCV coverage for a symbol+timeframe.
+func (h *MarketDataHandler) GetDataCoverage(ctx context.Context, req *connect.Request[marketdatav1.GetDataCoverageRequest]) (*connect.Response[marketdatav1.GetDataCoverageResponse], error) {
+	if req.Msg.Symbol == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errorf("symbol required"))
+	}
+	resp, err := h.svc.GetDataCoverage(ctx, req.Msg)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
 // ListAssets returns all tradable assets from Alpaca.
 func (h *MarketDataHandler) ListAssets(ctx context.Context, req *connect.Request[marketdatav1.ListAssetsRequest]) (*connect.Response[marketdatav1.ListAssetsResponse], error) {
 	resp, err := h.svc.ListAssets(ctx, req.Msg)
@@ -171,11 +183,19 @@ func (a *grpcMarketDataAdapter) ListAssets(ctx context.Context, req *marketdatav
 	return resp.Msg, nil
 }
 
+func (a *grpcMarketDataAdapter) GetDataCoverage(ctx context.Context, req *marketdatav1.GetDataCoverageRequest) (*marketdatav1.GetDataCoverageResponse, error) {
+	resp, err := a.h.GetDataCoverage(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
 func (a *grpcMarketDataAdapter) StreamBars(req *marketdatav1.StreamBarsRequest, grpcStream marketdatav1.MarketDataService_StreamBarsServer) error {
 	subID := keyFor(grpcStream)
 	ch := a.h.svc.SubscribeBars(subID)
 	defer a.h.svc.UnsubscribeBars(subID)
-	go a.h.svc.StartBarStream(grpcStream.Context(), req.Symbols, req.Timeframe)
+	go a.h.svc.StartBarStream(grpcStream.Context(), req.Symbols, req.Timeframe) //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
 	for {
 		select {
 		case bar, ok := <-ch:

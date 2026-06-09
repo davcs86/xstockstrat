@@ -13,6 +13,13 @@ As of Phase 3, RunBacktest executes a real SMA crossover engine (no more synthet
 3. Optionally calls `IngestService.QuerySignals` for newsletter signal weighting
 4. Simulates trades bar-by-bar and computes Sharpe, drawdown, win rate, profit factor
 
+**Data-coverage awareness** (feature 053): when a symbol has too few bars, `RunBacktest` no longer
+fabricates a flat-equity "success". It returns a structured result with
+`status = BACKTEST_STATUS_INSUFFICIENT_DATA` and per-symbol `coverage_gaps` (symbol, bars_have,
+bars_need, the range to backfill) so the caller can surface a gap message and trigger a backfill.
+`GetBars` is queried with the canonical `"1d"` timeframe (+ `timeframe_enum`), fixing the prior
+`"1Day"` vs `"1d"` mismatch that made backfilled bars invisible to backtests.
+
 ## Language
 
 Python 3.12 (asyncio, grpc.aio)

@@ -92,6 +92,10 @@ router.service(IngestService, {
     const claims = await requireSession(ctx);
     return ingestClient.listSignalSources(req, { headers: backendHeaders(claims, ctx) });
   },
+  async triggerBackfill(req, ctx) {
+    const claims = await requireSession(ctx);
+    return ingestClient.triggerBackfill(req, { headers: backendHeaders(claims, ctx) });
+  },
 });
 
 router.service(MarketDataService, {

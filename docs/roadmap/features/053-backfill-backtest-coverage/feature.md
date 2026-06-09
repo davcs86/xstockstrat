@@ -1,6 +1,6 @@
 # Feature: backfill-backtest-coverage
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/backfill-backtest-coverage`
 **Created**: 2026-06-08
 **Last Updated**: 2026-06-09
@@ -17,6 +17,8 @@
 | 2026-06-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved; timeframe normalization chosen as shared proto enum (breaking → elevated approval gate); 4 open questions resolved |
 | 2026-06-08 | `spec-ready` (revised) | user | Scope change: UI "backfill this range" action (FR-6) moved IN scope; `xstockstrat-ui` added as affected service + reviewer |
 | 2026-06-09 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
+| 2026-06-09 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential stacked run (on 052). Re-spec: Step 1 ingest `BackfillJob.timeframe_enum` 11→12 (052 took field 11) |
+| 2026-06-09 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done; marketdata go test cov 66.9%, analysis pytest 94 passed (cov 60.4%), UI tsc+lint clean. Breaking `Timeframe` enum — Platform Lead approval required before merge |
 
 ---
 

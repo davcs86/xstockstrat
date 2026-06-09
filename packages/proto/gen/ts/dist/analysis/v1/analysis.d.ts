@@ -1,7 +1,16 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientUnaryCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
-import { PageRequest, PageResponse, TimeRange } from "../../common/v1/common";
+import { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common";
 export declare const protobufPackage = "xstockstrat.analysis.v1";
+export declare enum BacktestStatus {
+    BACKTEST_STATUS_UNSPECIFIED = "BACKTEST_STATUS_UNSPECIFIED",
+    BACKTEST_STATUS_OK = "BACKTEST_STATUS_OK",
+    BACKTEST_STATUS_INSUFFICIENT_DATA = "BACKTEST_STATUS_INSUFFICIENT_DATA",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function backtestStatusFromJSON(object: any): BacktestStatus;
+export declare function backtestStatusToJSON(object: BacktestStatus): string;
+export declare function backtestStatusToNumber(object: BacktestStatus): number;
 export declare enum ComponentKind {
     COMPONENT_KIND_UNSPECIFIED = "COMPONENT_KIND_UNSPECIFIED",
     COMPONENT_KIND_BUILTIN_INDICATOR = "COMPONENT_KIND_BUILTIN_INDICATOR",
@@ -34,6 +43,15 @@ export interface RunBacktestRequest {
     /** field 7 — inline definition; takes precedence over strategy_id_ref if both supplied */
     inlineDefinition?: StrategyDefinition | undefined;
 }
+export interface CoverageGap {
+    symbol: string;
+    timeframe: Timeframe;
+    requestedRange?: TimeRange | undefined;
+    barsHave: number;
+    barsNeed: number;
+    /** The range a caller should backfill to satisfy this backtest. */
+    gap?: TimeRange | undefined;
+}
 export interface BacktestResult {
     backtestId: string;
     strategyId: string;
@@ -46,6 +64,9 @@ export interface BacktestResult {
     profitFactor: number;
     completedAt?: Date | undefined;
     trades: TradeRecord[];
+    status: BacktestStatus;
+    /** populated per-symbol when status == INSUFFICIENT_DATA */
+    coverageGaps: CoverageGap[];
 }
 export interface TradeRecord {
     symbol: string;
@@ -147,6 +168,7 @@ export interface SetStrategyLiveResponse {
     definition?: StrategyDefinition | undefined;
 }
 export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
+export declare const CoverageGap: MessageFns<CoverageGap>;
 export declare const BacktestResult: MessageFns<BacktestResult>;
 export declare const TradeRecord: MessageFns<TradeRecord>;
 export declare const ScoreStrategyRequest: MessageFns<ScoreStrategyRequest>;

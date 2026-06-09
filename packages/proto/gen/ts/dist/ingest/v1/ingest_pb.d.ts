@@ -1,6 +1,6 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest, PageResponse, TimeRange } from "../../common/v1/common_pb";
+import type { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
  * Describes the file ingest/v1/ingest.proto.
@@ -19,7 +19,10 @@ export type BackfillJob = Message<"xstockstrat.ingest.v1.BackfillJob"> & {
      */
     symbols: string[];
     /**
-     * @generated from field: string timeframe = 3;
+     * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+     *
+     * @generated from field: string timeframe = 3 [deprecated = true];
+     * @deprecated
      */
     timeframe: string;
     /**
@@ -56,6 +59,10 @@ export type BackfillJob = Message<"xstockstrat.ingest.v1.BackfillJob"> & {
      * @generated from field: repeated string failed_symbols = 11;
      */
     failedSymbols: string[];
+    /**
+     * @generated from field: xstockstrat.common.v1.Timeframe timeframe_enum = 12;
+     */
+    timeframeEnum: Timeframe;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.BackfillJob.
@@ -71,7 +78,10 @@ export type TriggerBackfillRequest = Message<"xstockstrat.ingest.v1.TriggerBackf
      */
     symbols: string[];
     /**
-     * @generated from field: string timeframe = 2;
+     * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
+     *
+     * @generated from field: string timeframe = 2 [deprecated = true];
+     * @deprecated
      */
     timeframe: string;
     /**
@@ -82,6 +92,10 @@ export type TriggerBackfillRequest = Message<"xstockstrat.ingest.v1.TriggerBackf
      * @generated from field: bool overwrite = 4;
      */
     overwrite: boolean;
+    /**
+     * @generated from field: xstockstrat.common.v1.Timeframe timeframe_enum = 5;
+     */
+    timeframeEnum: Timeframe;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.TriggerBackfillRequest.

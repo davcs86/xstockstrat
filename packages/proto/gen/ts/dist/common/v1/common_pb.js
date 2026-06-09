@@ -3,13 +3,13 @@
 // @generated from file common/v1/common.proto (package xstockstrat.common.v1, syntax proto3)
 /* eslint-disable */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.BrokerTypeSchema = exports.BrokerType = exports.EnvironmentSchema = exports.Environment = exports.TradingModeSchema = exports.TradingMode = exports.TimeRangeSchema = exports.AssetSchema = exports.DecimalSchema = exports.ErrorSchema = exports.PageResponseSchema = exports.PageRequestSchema = exports.file_common_v1_common = void 0;
+exports.TimeframeSchema = exports.Timeframe = exports.BrokerTypeSchema = exports.BrokerType = exports.EnvironmentSchema = exports.Environment = exports.TradingModeSchema = exports.TradingMode = exports.TimeRangeSchema = exports.AssetSchema = exports.DecimalSchema = exports.ErrorSchema = exports.PageResponseSchema = exports.PageRequestSchema = exports.file_common_v1_common = void 0;
 const codegenv2_1 = require("@bufbuild/protobuf/codegenv2");
 const wkt_1 = require("@bufbuild/protobuf/wkt");
 /**
  * Describes the file common/v1/common.proto.
  */
-exports.file_common_v1_common = (0, codegenv2_1.fileDesc)("ChZjb21tb24vdjEvY29tbW9uLnByb3RvEhV4c3RvY2tzdHJhdC5jb21tb24udjEiNAoLUGFnZVJlcXVlc3QSEQoJcGFnZV9zaXplGAEgASgFEhIKCnBhZ2VfdG9rZW4YAiABKAkiPAoMUGFnZVJlc3BvbnNlEhcKD25leHRfcGFnZV90b2tlbhgBIAEoCRITCgt0b3RhbF9jb3VudBgCIAEoBSKSAQoFRXJyb3ISDAoEY29kZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEjoKB2RldGFpbHMYAyADKAsyKS54c3RvY2tzdHJhdC5jb21tb24udjEuRXJyb3IuRGV0YWlsc0VudHJ5Gi4KDERldGFpbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjkKB0RlY2ltYWwSDQoFdW5pdHMYASABKAMSDQoFbmFub3MYAiABKAUSEAoIY3VycmVuY3kYAyABKAkiPgoFQXNzZXQSDgoGc3ltYm9sGAEgASgJEhAKCGV4Y2hhbmdlGAIgASgJEhMKC2Fzc2V0X2NsYXNzGAMgASgJIl8KCVRpbWVSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCpaCgtUcmFkaW5nTW9kZRIcChhUUkFESU5HX01PREVfVU5TUEVDSUZJRUQQABIWChJUUkFESU5HX01PREVfUEFQRVIQARIVChFUUkFESU5HX01PREVfTElWRRACKlsKC0Vudmlyb25tZW50EhsKF0VOVklST05NRU5UX1VOU1BFQ0lGSUVEEAASEwoPRU5WSVJPTk1FTlRfREVWEAESGgoWRU5WSVJPTk1FTlRfUFJPRFVDVElPThACKlcKCkJyb2tlclR5cGUSGwoXQlJPS0VSX1RZUEVfVU5TUEVDSUZJRUQQABIWChJCUk9LRVJfVFlQRV9BTFBBQ0EQARIUChBCUk9LRVJfVFlQRV9JQktSEAJCPFo6Z2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL2NvbW1vbi92MTtjb21tb252MWIGcHJvdG8z", [wkt_1.file_google_protobuf_timestamp]);
+exports.file_common_v1_common = (0, codegenv2_1.fileDesc)("ChZjb21tb24vdjEvY29tbW9uLnByb3RvEhV4c3RvY2tzdHJhdC5jb21tb24udjEiNAoLUGFnZVJlcXVlc3QSEQoJcGFnZV9zaXplGAEgASgFEhIKCnBhZ2VfdG9rZW4YAiABKAkiPAoMUGFnZVJlc3BvbnNlEhcKD25leHRfcGFnZV90b2tlbhgBIAEoCRITCgt0b3RhbF9jb3VudBgCIAEoBSKSAQoFRXJyb3ISDAoEY29kZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEjoKB2RldGFpbHMYAyADKAsyKS54c3RvY2tzdHJhdC5jb21tb24udjEuRXJyb3IuRGV0YWlsc0VudHJ5Gi4KDERldGFpbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjkKB0RlY2ltYWwSDQoFdW5pdHMYASABKAMSDQoFbmFub3MYAiABKAUSEAoIY3VycmVuY3kYAyABKAkiPgoFQXNzZXQSDgoGc3ltYm9sGAEgASgJEhAKCGV4Y2hhbmdlGAIgASgJEhMKC2Fzc2V0X2NsYXNzGAMgASgJIl8KCVRpbWVSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCpaCgtUcmFkaW5nTW9kZRIcChhUUkFESU5HX01PREVfVU5TUEVDSUZJRUQQABIWChJUUkFESU5HX01PREVfUEFQRVIQARIVChFUUkFESU5HX01PREVfTElWRRACKlsKC0Vudmlyb25tZW50EhsKF0VOVklST05NRU5UX1VOU1BFQ0lGSUVEEAASEwoPRU5WSVJPTk1FTlRfREVWEAESGgoWRU5WSVJPTk1FTlRfUFJPRFVDVElPThACKlcKCkJyb2tlclR5cGUSGwoXQlJPS0VSX1RZUEVfVU5TUEVDSUZJRUQQABIWChJCUk9LRVJfVFlQRV9BTFBBQ0EQARIUChBCUk9LRVJfVFlQRV9JQktSEAIqdwoJVGltZWZyYW1lEhkKFVRJTUVGUkFNRV9VTlNQRUNJRklFRBAAEhIKDlRJTUVGUkFNRV8xTUlOEAESEgoOVElNRUZSQU1FXzVNSU4QAhITCg9USU1FRlJBTUVfMUhPVVIQAxISCg5USU1FRlJBTUVfMURBWRAEQjxaOmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9jb21tb24vdjE7Y29tbW9udjFiBnByb3RvMw", [wkt_1.file_google_protobuf_timestamp]);
 /**
  * Describes the message xstockstrat.common.v1.PageRequest.
  * Use `create(PageRequestSchema)` to create a new message.
@@ -114,3 +114,36 @@ var BrokerType;
  * Describes the enum xstockstrat.common.v1.BrokerType.
  */
 exports.BrokerTypeSchema = (0, codegenv2_1.enumDesc)(exports.file_common_v1_common, 2);
+/**
+ * Timeframe is the canonical OHLCV bar interval, shared by marketdata + analysis + ingest.
+ * Replaces the free-text "1d"/"1Day"/"1m" strings that previously mismatched across services.
+ *
+ * @generated from enum xstockstrat.common.v1.Timeframe
+ */
+var Timeframe;
+(function (Timeframe) {
+    /**
+     * @generated from enum value: TIMEFRAME_UNSPECIFIED = 0;
+     */
+    Timeframe[Timeframe["TIMEFRAME_UNSPECIFIED"] = 0] = "TIMEFRAME_UNSPECIFIED";
+    /**
+     * @generated from enum value: TIMEFRAME_1MIN = 1;
+     */
+    Timeframe[Timeframe["TIMEFRAME_1MIN"] = 1] = "TIMEFRAME_1MIN";
+    /**
+     * @generated from enum value: TIMEFRAME_5MIN = 2;
+     */
+    Timeframe[Timeframe["TIMEFRAME_5MIN"] = 2] = "TIMEFRAME_5MIN";
+    /**
+     * @generated from enum value: TIMEFRAME_1HOUR = 3;
+     */
+    Timeframe[Timeframe["TIMEFRAME_1HOUR"] = 3] = "TIMEFRAME_1HOUR";
+    /**
+     * @generated from enum value: TIMEFRAME_1DAY = 4;
+     */
+    Timeframe[Timeframe["TIMEFRAME_1DAY"] = 4] = "TIMEFRAME_1DAY";
+})(Timeframe || (exports.Timeframe = Timeframe = {}));
+/**
+ * Describes the enum xstockstrat.common.v1.Timeframe.
+ */
+exports.TimeframeSchema = (0, codegenv2_1.enumDesc)(exports.file_common_v1_common, 3);

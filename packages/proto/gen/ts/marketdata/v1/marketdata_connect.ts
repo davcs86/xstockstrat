@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BackfillBarsRequest, BackfillBarsResponse, Bar, GetBarsRequest, GetBarsResponse, GetLatestQuoteRequest, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
+import { BackfillBarsRequest, BackfillBarsResponse, Bar, GetBarsRequest, GetBarsResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetLatestQuoteRequest, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -68,6 +68,17 @@ export const MarketDataService = {
       name: "BackfillBars",
       I: BackfillBarsRequest,
       O: BackfillBarsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage
+     */
+    getDataCoverage: {
+      name: "GetDataCoverage",
+      I: GetDataCoverageRequest,
+      O: GetDataCoverageResponse,
       kind: MethodKind.Unary,
     },
     /**
