@@ -153,6 +153,7 @@ func TestGetOrder_AlpacaFilledAvgPrice(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(broker.AlpacaOrder{
 			ID:             "order-abc",
 			Status:         "filled",
+			FilledQty:      "10",
 			FilledAvgPrice: "75.50",
 		})
 	})
@@ -168,6 +169,9 @@ func TestGetOrder_AlpacaFilledAvgPrice(t *testing.T) {
 	}
 	if o.FilledAvgPrice != 75.50 {
 		t.Errorf("expected FilledAvgPrice 75.50, got %f", o.FilledAvgPrice)
+	}
+	if o.FilledQty != 10 {
+		t.Errorf("expected FilledQty 10, got %f", o.FilledQty)
 	}
 	if o.Status != "filled" {
 		t.Errorf("expected status filled, got %s", o.Status)

@@ -96,7 +96,7 @@ func TestGetOrder_IBKRAvgPrice(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"orders": []map[string]interface{}{
-				{"orderId": "ibkr-ord-1", "status": "Filled", "avgPrice": 82.25},
+				{"orderId": "ibkr-ord-1", "status": "Filled", "avgPrice": 82.25, "filledQuantity": 5.0},
 			},
 		})
 	}))
@@ -112,6 +112,9 @@ func TestGetOrder_IBKRAvgPrice(t *testing.T) {
 	}
 	if o.FilledAvgPrice != 82.25 {
 		t.Errorf("expected FilledAvgPrice 82.25, got %f", o.FilledAvgPrice)
+	}
+	if o.FilledQty != 5.0 {
+		t.Errorf("expected FilledQty 5.0, got %f", o.FilledQty)
 	}
 	if o.Status != "Filled" {
 		t.Errorf("expected status Filled, got %s", o.Status)
