@@ -1,6 +1,6 @@
 # Feature: orders-management-ui
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/orders-management-ui`
 **Created**: 2026-06-10
 **Last Updated**: 2026-06-10
@@ -13,6 +13,7 @@
 |---|---|---|---|
 | 2026-06-10 | — → `idea` | backlog capture | Feature captured in backlog |
 | 2026-06-10 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-06-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved; 5 open questions resolved (replace=Alpaca+IBKR, all 5 order types, StreamOrderUpdates, server-side filters, account_id filter); C-2/C-4/C-5 trading-domain gaps closed |
 
 ---
 
@@ -45,4 +46,4 @@ the registry changes.)_
 
 ## Next Action
 
-`/sdd-review orders-management-ui product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec orders-management-ui` — generate implementation spec from the approved product spec

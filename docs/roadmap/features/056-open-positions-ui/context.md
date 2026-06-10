@@ -26,6 +26,20 @@
   order lineage is read from (trading orders vs ledger fill events). FR-4 may be split into
   a follow-up so the pagination/filter upgrade can ship independently.
 
+## Session 2026-06-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Open questions resolved (user decisions):
+  - "Position slot" → **no new entity**; FR-4 is a **read-only join**.
+  - Lineage source → **`xstockstrat-ledger` `trade.filled` events** via existing
+    `QueryEvents` (verified: `QueryEventsRequest` filters by `event_type`/`stream_key`/
+    time/page; `LedgerEvent.payload` is a Struct). No ledger.proto change.
+  - FR-4 in this cut (read-only drill-in); filters server-side.
+- Net effect: only proto change is additive `ListPositionsRequest` filter fields; portfolio
+  gets no order reference. Ledger is a read-only dependency.
+- Deferred to /sdd-spec: confirm the `trade.filled` payload carries account_id + trading_mode
+  so the position↔fill join is unambiguous.
+
 ## Next action
 
-`/sdd-review open-positions-ui product-spec`, then `/sdd-spec open-positions-ui`.
+`/sdd-spec open-positions-ui`.

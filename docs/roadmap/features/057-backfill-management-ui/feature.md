@@ -1,6 +1,6 @@
 # Feature: backfill-management-ui
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/backfill-management-ui`
 **Created**: 2026-06-10
 **Last Updated**: 2026-06-10
@@ -13,6 +13,7 @@
 |---|---|---|---|
 | 2026-06-10 | — → `idea` | backlog capture | Feature captured in backlog |
 | 2026-06-10 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-06-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved; open questions resolved (cancel=stop+keep bars, delete=symbol+range+timeframe bounded w/ 2nd confirm, poll progress, admin-only access FR-7) |
 
 ---
 
@@ -42,9 +43,10 @@ the registry changes.)_
 | Proto Reviewer | Field number uniqueness, additive-only changes (new `CancelBackfill` / `DeleteBackfilledData` RPCs + ticker filter), `buf lint`/`buf breaking` pass |
 | `xstockstrat-ingest` (service owner) | Backfill job control correctness, idempotent ingestion, job-state durability, cancel without orphaned jobs |
 | `xstockstrat-marketdata` (service owner) | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, safe scoped deletion of backfilled bars |
-| `xstockstrat-ui` (service owner) | UI correctness, Connect-RPC call safety, confirmation UX for destructive delete |
+| `xstockstrat-ui` (service owner) | UI correctness, Connect-RPC call safety, confirmation UX for destructive delete, admin-scope gating (per 049) so non-admins cannot reach the page |
 | DBA | Scoped delete safety on the OHLCV hypertable (no full-table deletes), index/partition correctness |
+| Security | Admin/operator access-scope enforcement on the page + mutating RPCs (FR-7), reusing `049-unify-admin-auth-gates` |
 
 ## Next Action
 
-`/sdd-review backfill-management-ui product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec backfill-management-ui` — generate implementation spec from the approved product spec

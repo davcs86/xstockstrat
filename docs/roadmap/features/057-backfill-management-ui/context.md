@@ -33,6 +33,22 @@
     bounded deletes (no full-table wipes); UI needs typed confirmation.
   - All proto changes intended additive (single-owner gate, `buf breaking` green).
 
+## Session 2026-06-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Trading-domain checks skipped
+  (non-order-execution feature).
+- Open questions resolved (user decisions):
+  - Cancel → mark `CANCELED`, stop scheduling chunks, **retain** completed-chunk bars (no
+    rollback); purge is the separate FR-5 path.
+  - Delete scope → **symbol + optional range + optional timeframe**, bounded; whole-symbol
+    delete needs a 2nd typed confirmation; server rejects unbounded requests.
+  - Live progress → **poll `GetBackfillStatus`** (no new streaming RPC).
+  - Access → **admin/operator only** (new FR-7), reusing `049-unify-admin-auth-gates`;
+    added Security reviewer.
+- Ledger verified earlier: not needed here. DBA gate retained for the scoped OHLCV delete.
+- Deferred to /sdd-spec: ingest derived-state invalidation check; optional
+  `marketdata.backfill.max_delete_days` guard config key.
+
 ## Next action
 
-`/sdd-review backfill-management-ui product-spec`, then `/sdd-spec backfill-management-ui`.
+`/sdd-spec backfill-management-ui`.

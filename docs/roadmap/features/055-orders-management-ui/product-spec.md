@@ -24,21 +24,35 @@ FR-1. **Order list** — Paginated table of orders for the selected account/trad
   by `created_at` descending.
 FR-2. **Filters** — Filter the list by symbol, side (buy/sell), order type, status, date
   range, and account/broker. `ListOrders` already supports `status`, `range`, `strategy_id`,
-  and `trading_mode`; **symbol, side, and order_type filters require additive fields** on
-  `ListOrdersRequest`.
+  and `trading_mode`; **symbol, side, order_type, and account_id filters require additive
+  fields** on `ListOrdersRequest`. Filtering is applied **server-side** so it composes
+  correctly with pagination.
 FR-3. **Create order** — Form to place an order (symbol, side, type, qty, limit/stop price,
-  time-in-force, account) via `TradingService.PlaceOrder`. Respect the `requires_approval`
-  path and surface `ORDER_STATUS_PENDING_APPROVAL`.
+  time-in-force, account) via `TradingService.PlaceOrder`. The create form supports **all
+  five `OrderType` values**: `MARKET`, `LIMIT`, `STOP`, `STOP_LIMIT`, `TRAILING_STOP`, with
+  the price fields (`limit_price`/`stop_price`) shown/required per type. Respect the
+  `requires_approval` path and surface `ORDER_STATUS_PENDING_APPROVAL`.
 FR-4. **Edit (replace) order** — Modify a working order's qty / limit price / stop price /
-  TIF for orders in a replaceable state (`NEW`, `PARTIALLY_FILLED`). No replace RPC exists
-  today → **requires a new additive `ReplaceOrder` RPC** on `TradingService` (maps to
-  Alpaca's PATCH /orders/{id} replace).
+  TIF for orders in a replaceable state (`ORDER_STATUS_NEW`, `ORDER_STATUS_PARTIALLY_FILLED`).
+  No replace RPC exists today → **requires a new additive `ReplaceOrder` RPC** on
+  `TradingService`. Replace is supported for **both broker types** (`BROKER_TYPE_ALPACA` and
+  `BROKER_TYPE_IBKR`); the service routes per the order's `broker_type`. Alpaca maps to PATCH
+  /orders/{id}; IBKR replace semantics differ and are handled in the broker-specific adapter
+  (the proto surface is broker-agnostic).
 FR-5. **Cancel order** — Cancel an open order via `TradingService.CancelOrder`, with a
   confirmation step and optimistic status update.
-FR-6. **Live status** — Reflect order status transitions (optionally via
-  `StreamOrderUpdates`, or polling consistent with the existing positions page 10s refresh).
+FR-6. **Live status** — Reflect order status transitions in the list via the existing
+  `TradingService.StreamOrderUpdates` server-streaming RPC (push updates), filtered by the
+  selected user/account. The BFF bridges the gRPC stream to the browser (SSE/long-lived
+  fetch) consistent with the trader segment's Connect-RPC call chain.
 FR-7. **Mode / account scoping** — All reads and writes honor the selected trading mode
-  (paper/live) and account, consistent with the existing trader segment.
+  (paper/live) and account, consistent with the existing trader segment. The feature is
+  **paper-safe**: all create/replace/cancel paths are exercisable under `TRADING_MODE=paper`
+  in compose/dev without live-market access (replace/cancel hit the Alpaca paper endpoint).
+FR-8. **Fill-state handling** — Replace and cancel correctly handle both
+  `ORDER_STATUS_PARTIALLY_FILLED` (replace adjusts the remaining qty; cancel cancels the
+  unfilled remainder) and `ORDER_STATUS_FILLED` (terminal — replace/cancel disabled in the
+  UI). Existing fill-detection behavior in `xstockstrat-trading` is unchanged.
 
 ## Out of Scope
 
@@ -63,9 +77,9 @@ Exact service names from CLAUDE.md Service Registry:
 - **`trading/v1/trading.proto`** (additive, non-breaking):
   - New RPC `ReplaceOrder(ReplaceOrderRequest) returns (Order)`.
   - New message `ReplaceOrderRequest` (order_id, optional qty/limit_price/stop_price/TIF,
-    user_id).
+    user_id). Broker-agnostic — the service routes by the order's `broker_type`.
   - New filter fields on `ListOrdersRequest`: `string symbol`, `OrderSide side`,
-    `OrderType order_type` (next free field numbers ≥ 7).
+    `OrderType order_type`, `string account_id` (next free field numbers ≥ 7).
 - Run `./scripts/buf-gen.sh`; `buf breaking` must stay green (additive only).
 
 ## Config Key Changes
@@ -89,21 +103,37 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 ## Acceptance Criteria
 
 1. `trader/orders` renders a paginated order list with working symbol/side/type/status/
-   date-range/account filters.
-2. A trader can place a market and a limit order from the UI and see it appear in the list.
-3. A trader can replace a working limit order's price/qty and see the updated values.
-4. A trader can cancel an open order and see it transition to `CANCELED`.
-5. Orders pending approval are clearly surfaced as `PENDING_APPROVAL`.
-6. `buf lint` and `buf breaking` pass; all changes are additive.
-7. All actions scope correctly to the selected trading mode and account.
+   date-range/account filters (server-side).
+2. A trader can place an order of **each** of the five order types (MARKET, LIMIT, STOP,
+   STOP_LIMIT, TRAILING_STOP) from the UI and see it appear in the list.
+3. A trader can replace a working limit order's price/qty for an **Alpaca** account and an
+   **IBKR** account and see the updated values.
+4. Replacing a `PARTIALLY_FILLED` order adjusts the remaining qty; a `FILLED` order shows
+   replace/cancel disabled.
+5. A trader can cancel an open order and see it transition to `CANCELED` (via the live
+   `StreamOrderUpdates` feed, no manual refresh).
+6. Orders pending approval are clearly surfaced as `PENDING_APPROVAL`.
+7. `buf lint` and `buf breaking` pass; all changes are additive.
+8. All actions are exercisable under `TRADING_MODE=paper` and scope correctly to the
+   selected trading mode and account.
 
 ## Open Questions
 
-- [ ] Confirm Alpaca replace semantics the trading service should support (which fields are
-  replaceable for paper vs live) and how partial fills interact with replace.
-- [ ] Live updates: adopt `StreamOrderUpdates` for the list, or reuse the positions page's
-  polling pattern for consistency?
-- [ ] Should the symbol/side/type filters be applied server-side (new proto fields) or
-  client-side over a page? (Spec assumes server-side for correctness with pagination.)
-- [ ] Account/broker filter — does `ListOrders` need an `account_id` filter field too
-  (relates to `002-broker-accounts-ui`)?
+_All resolved during /sdd-review 2026-06-10:_
+
+- [x] **Replace broker scope** → **Alpaca + IBKR** (resolved). Proto surface is
+  broker-agnostic; the trading service routes by `broker_type`. Alpaca uses PATCH; IBKR
+  replace handled in its adapter. Per-broker replace-field support to be confirmed against
+  each adapter in /sdd-spec.
+- [x] **Order types** → **all five** `OrderType` values supported in the create form
+  (resolved). Price-field visibility/validation is per type.
+- [x] **Live updates** → **`StreamOrderUpdates`** server-streaming RPC, bridged by the BFF
+  (resolved).
+- [x] **Filter placement** → **server-side** via additive `ListOrdersRequest` fields
+  (resolved).
+- [x] **Account/broker filter** → add an additive `account_id` filter field to
+  `ListOrdersRequest` (resolved; complements `002-broker-accounts-ui`).
+
+_Deferred to /sdd-spec (implementation detail, not a product blocker):_
+
+- Exact per-broker replaceable-field matrix (Alpaca vs IBKR adapter capabilities).
