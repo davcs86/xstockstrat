@@ -513,6 +513,12 @@ func (s *TradingService) pollFills(ctx context.Context) {
 		order.Status = newStatus
 		order.UpdatedAt = timestamppb.New(time.Now())
 		order.FilledAvgPrice = brokerOrder.FilledAvgPrice
+		order.FilledQty = brokerOrder.FilledQty
+		// A fully-filled order always has filled qty == order qty, even if the
+		// broker omitted the figure from its response.
+		if newStatus == tradingv1.OrderStatus_ORDER_STATUS_FILLED && order.FilledQty == 0 {
+			order.FilledQty = order.Qty
+		}
 
 		if err := s.repo.UpsertOrder(ctx, order); err != nil {
 			slog.Warn("fill poll: db upsert failed", "order_id", order.OrderId, "error", err)
@@ -526,6 +532,7 @@ func (s *TradingService) pollFills(ctx context.Context) {
 				"order_id": order.OrderId, "symbol": order.Symbol,
 				"qty": order.Qty, "fill_price": order.FilledAvgPrice,
 				"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
+				"account_id": order.AccountId,
 			})
 			go s.emitFillAlert(context.Background(), order)
 			slog.Info("order filled", "order_id", order.OrderId, "symbol", order.Symbol,
@@ -536,6 +543,7 @@ func (s *TradingService) pollFills(ctx context.Context) {
 				"order_id": order.OrderId, "symbol": order.Symbol,
 				"filled_qty": order.FilledQty, "fill_price": order.FilledAvgPrice,
 				"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
+				"account_id": order.AccountId,
 			})
 
 		case tradingv1.OrderStatus_ORDER_STATUS_CANCELED:
@@ -615,6 +623,24 @@ func (s *TradingService) syncPositions(ctx context.Context) {
 			"positions":    posEntries,
 		}
 		s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), payload)
+
+		// Sync the account balance snapshot (cash, buying power, equity) alongside
+		// positions. Best-effort: a balance fetch failure must not block position sync.
+		bal, err := acct.client.GetAccount(ctx)
+		if err != nil {
+			slog.Warn("syncPositions: GetAccount failed", "account_id", accountID, "error", err)
+			continue
+		}
+		balPayload := map[string]interface{}{
+			"account_id":   accountID,
+			"user_id":      acct.userID,
+			"trading_mode": tradingMode,
+			"cash":         bal.Cash,
+			"buying_power": bal.BuyingPower,
+			"equity":       bal.Equity,
+			"last_equity":  bal.LastEquity,
+		}
+		s.emitLedgerEvent(ctx, "account.balance.synced", fmt.Sprintf("account:%s", accountID), balPayload)
 	}
 }
 

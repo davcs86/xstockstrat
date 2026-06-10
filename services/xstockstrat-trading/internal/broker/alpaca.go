@@ -207,7 +207,11 @@ func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrd
 	if alpacaResp.FilledAvgPrice != "" {
 		filledAvgPrice, _ = strconv.ParseFloat(alpacaResp.FilledAvgPrice, 64)
 	}
-	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status, FilledAvgPrice: filledAvgPrice}, nil
+	var filledQty float64
+	if alpacaResp.FilledQty != "" {
+		filledQty, _ = strconv.ParseFloat(alpacaResp.FilledQty, 64)
+	}
+	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status, FilledQty: filledQty, FilledAvgPrice: filledAvgPrice}, nil
 }
 
 // GetPositions fetches all open positions via GET /v2/positions.
@@ -241,6 +245,48 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 		positions = append(positions, BrokerPosition{Symbol: r.Symbol, Quantity: qty, AvgCost: avg})
 	}
 	return positions, nil
+}
+
+// GetAccount fetches the account balance snapshot via GET /v2/account.
+// Alpaca returns monetary fields as decimal strings; `last_equity` is the
+// equity at the previous trading day's close, used to derive day P&L.
+func (c *Client) GetAccount(ctx context.Context) (*BrokerBalance, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL()+"/v2/account", nil)
+	if err != nil {
+		return nil, fmt.Errorf("alpaca GetAccount: build request: %w", err)
+	}
+	c.setAuthHeaders(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("alpaca GetAccount: http: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("alpaca GetAccount: status %d: %s", resp.StatusCode, body)
+	}
+	var raw struct {
+		Cash        string `json:"cash"`
+		BuyingPower string `json:"buying_power"`
+		Equity      string `json:"equity"`
+		LastEquity  string `json:"last_equity"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("alpaca GetAccount: unmarshal: %w", err)
+	}
+	cash, _ := strconv.ParseFloat(raw.Cash, 64)
+	buyingPower, _ := strconv.ParseFloat(raw.BuyingPower, 64)
+	equity, _ := strconv.ParseFloat(raw.Equity, 64)
+	lastEquity, _ := strconv.ParseFloat(raw.LastEquity, 64)
+	if lastEquity == 0 {
+		lastEquity = equity
+	}
+	return &BrokerBalance{
+		Cash:        cash,
+		BuyingPower: buyingPower,
+		Equity:      equity,
+		LastEquity:  lastEquity,
+	}, nil
 }
 
 // ValidateCredentials confirms the API key/secret still authenticate by calling

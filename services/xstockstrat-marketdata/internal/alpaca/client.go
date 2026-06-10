@@ -23,7 +23,12 @@ type ClientConfig struct {
 	APISecret string
 	BaseURL   string // e.g. https://paper-api.alpaca.markets
 	DataURL   string // e.g. https://data.alpaca.markets
-	Paper     bool
+	// Feed selects the Alpaca market-data feed for bar/quote requests
+	// ("iex" | "sip" | "otc"). The free/basic (paper) data plan only permits
+	// "iex"; omitting feed defaults Alpaca to SIP, which those plans reject
+	// with HTTP 403. Empty falls back to "iex" via feedParam().
+	Feed string
+	Paper bool
 }
 
 // Client wraps Alpaca REST and streaming APIs.
@@ -38,6 +43,15 @@ func NewClient(cfg ClientConfig) *Client {
 		cfg:        cfg,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+// feedParam returns the configured market-data feed, defaulting to "iex" so the
+// free/basic data plan works without explicit configuration.
+func (c *Client) feedParam() string {
+	if c.cfg.Feed == "" {
+		return "iex"
+	}
+	return c.cfg.Feed
 }
 
 // alpacaBar is the JSON shape returned by Alpaca v2 bars endpoint.
@@ -60,8 +74,8 @@ type alpacaBarsResponse struct {
 
 // GetBars fetches historical OHLCV bars from Alpaca v2 REST API.
 func (c *Client) GetBars(ctx context.Context, symbol, timeframe string, start, end time.Time) ([]*marketdatav1.Bar, error) {
-	baseURL := fmt.Sprintf("%s/v2/stocks/%s/bars?timeframe=%s&start=%s&end=%s&limit=1000",
-		c.cfg.DataURL, symbol, timeframe,
+	baseURL := fmt.Sprintf("%s/v2/stocks/%s/bars?timeframe=%s&feed=%s&start=%s&end=%s&limit=1000",
+		c.cfg.DataURL, symbol, timeframe, c.feedParam(),
 		start.UTC().Format(time.RFC3339),
 		end.UTC().Format(time.RFC3339),
 	)
@@ -125,7 +139,7 @@ type alpacaLatestQuoteResponse struct {
 
 // GetLatestQuote fetches the most recent NBBO quote from Alpaca.
 func (c *Client) GetLatestQuote(ctx context.Context, symbol string) (*marketdatav1.Quote, error) {
-	url := fmt.Sprintf("%s/v2/stocks/%s/quotes/latest", c.cfg.DataURL, symbol)
+	url := fmt.Sprintf("%s/v2/stocks/%s/quotes/latest?feed=%s", c.cfg.DataURL, symbol, c.feedParam())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err

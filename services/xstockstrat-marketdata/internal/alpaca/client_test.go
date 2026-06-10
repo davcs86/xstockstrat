@@ -275,3 +275,62 @@ func TestListAssets_HTTPError(t *testing.T) {
 		t.Fatal("expected error for 403 response, got nil")
 	}
 }
+
+func TestGetLatestQuote_DefaultFeedIEX(t *testing.T) {
+	var gotFeed string
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotFeed = r.URL.Query().Get("feed")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"quote": map[string]interface{}{"t": "2024-01-02T10:00:00Z", "ap": 1.0, "bp": 1.0},
+		})
+	})
+	defer srv.Close()
+
+	// No Feed configured → defaults to "iex" (free/paper data plan).
+	c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", DataURL: srv.URL})
+	if _, err := c.GetLatestQuote(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("GetLatestQuote failed: %v", err)
+	}
+	if gotFeed != "iex" {
+		t.Errorf("expected feed=iex by default, got %q", gotFeed)
+	}
+}
+
+func TestGetLatestQuote_ConfiguredFeed(t *testing.T) {
+	var gotFeed string
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotFeed = r.URL.Query().Get("feed")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"quote": map[string]interface{}{"t": "2024-01-02T10:00:00Z", "ap": 1.0, "bp": 1.0},
+		})
+	})
+	defer srv.Close()
+
+	c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", DataURL: srv.URL, Feed: "sip"})
+	if _, err := c.GetLatestQuote(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("GetLatestQuote failed: %v", err)
+	}
+	if gotFeed != "sip" {
+		t.Errorf("expected feed=sip, got %q", gotFeed)
+	}
+}
+
+func TestGetBars_SendsFeed(t *testing.T) {
+	var gotFeed string
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotFeed = r.URL.Query().Get("feed")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"bars": []interface{}{}, "next_page_token": ""})
+	})
+	defer srv.Close()
+
+	c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", DataURL: srv.URL})
+	if _, err := c.GetBars(context.Background(), "AAPL", "1Day", time.Now().Add(-24*time.Hour), time.Now()); err != nil {
+		t.Fatalf("GetBars failed: %v", err)
+	}
+	if gotFeed != "iex" {
+		t.Errorf("expected feed=iex on bars request, got %q", gotFeed)
+	}
+}

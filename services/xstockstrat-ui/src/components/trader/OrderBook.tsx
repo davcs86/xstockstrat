@@ -51,7 +51,7 @@ export function OrderBook({ mode }: { mode: TradingMode }) {
                   return (
                     <TableRow key={order.orderId} className="cursor-pointer hover:bg-accent/40">
                       <TableCell className="font-mono font-semibold">
-                        <Link href={`/orders/${order.orderId}`} className="hover:underline">
+                        <Link href={`/trader/orders/${order.orderId}`} className="hover:underline">
                           {order.symbol}
                         </Link>
                       </TableCell>
@@ -130,7 +130,7 @@ export function PortfolioSummary({ mode }: { mode: TradingMode }) {
           <div>
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Positions</p>
-              <Link href="/positions" className="text-xs text-primary hover:underline">
+              <Link href="/trader/positions" className="text-xs text-primary hover:underline">
                 View all →
               </Link>
             </div>

@@ -9,7 +9,7 @@ on:
       - main-dev
       - main
     paths:
-      - 'grafana/**'
+      - 'packages/otel/dashboards/**'
       - 'scripts/grafana-deploy-dashboards.sh'
       - '.github/workflows/grafana-dashboards.yml'
   workflow_dispatch:

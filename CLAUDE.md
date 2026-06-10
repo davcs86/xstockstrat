@@ -340,9 +340,9 @@ Active phases and their current status. See `docs/roadmap/implementation-roadmap
 | Phase 4 | Trading core | **DONE** |
 | Phase 5 | UI layer: trader, insights, config-ui → consolidated as `xstockstrat-ui` (feature 045) | **DONE** |
 | Phase 6 | Integration & webhook wiring | **DONE** |
-| Phase 7 | Observability: OTel + Grafana Cloud | Pending |
+| Phase 7 | Observability: OTel + Grafana Cloud | **DONE** |
 
-Deviation notes for completed phases: `docs/roadmap/phase[3-6]-deviations.md`.
+Deviation notes for completed phases: `docs/roadmap/phase[3-7]-deviations.md`.
 
 ---
 
@@ -388,7 +388,7 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sd
 | Next.js UI | `services/xstockstrat-ui/` |
 | Docker Compose | `docker-compose.yml` |
 | OTel Collector config | `packages/otel/otel-collector-config.yaml` |
-| Grafana dashboards (as code) | `grafana/dashboards/` (synced by `scripts/grafana-deploy-dashboards.sh` via `.github/workflows/grafana-dashboards.yml`) |
+| Grafana dashboards (as code) | `packages/otel/dashboards/` (synced by `scripts/grafana-deploy-dashboards.sh` via `.github/workflows/grafana-dashboards.yml`) |
 | DO prod app spec | `.do/app.yaml` |
 | DO dev app spec | `.do/app.dev.yaml` |
 | Frontend auth pattern | `docs/patterns/frontend-auth.md` — required for all Next.js services |
@@ -411,7 +411,7 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sd
 | Reviewer registry | `docs/runbooks/reviewer-registry.md` |
 | Feature merge order | `docs/roadmap/features/merge-order.md` |
 | Implementation roadmap | `docs/roadmap/implementation-roadmap.md` |
-| Phase deviation notes | `docs/roadmap/phase[3-6]-deviations.md` |
+| Phase deviation notes | `docs/roadmap/phase[3-7]-deviations.md` |
 
 ---
 

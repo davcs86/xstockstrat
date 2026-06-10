@@ -639,8 +639,78 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 		}
 		presentSymbols = append(presentSymbols, p.Symbol)
 	}
-	if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, presentSymbols); err != nil {
+	if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, userID, presentSymbols); err != nil {
 		slog.Warn("delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
+	}
+}
+
+// balanceSyncPayload is the expected shape of the account.balance.synced event payload.
+type balanceSyncPayload struct {
+	AccountID   string  `json:"account_id"`
+	UserID      string  `json:"user_id"`
+	TradingMode string  `json:"trading_mode"`
+	Cash        float64 `json:"cash"`
+	BuyingPower float64 `json:"buying_power"`
+	Equity      float64 `json:"equity"`
+	LastEquity  float64 `json:"last_equity"`
+}
+
+// ConsumeBalanceSyncs subscribes to ledger StreamEvents filtered on "account.balance.synced"
+// and stores the latest broker balance snapshot per account.
+func (s *PortfolioService) ConsumeBalanceSyncs(ctx context.Context) {
+	for {
+		if err := s.streamBalanceSyncs(ctx); err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			slog.Error("balance sync stream error, retrying", "error", err)
+			time.Sleep(2 * time.Second)
+		}
+	}
+}
+
+func (s *PortfolioService) streamBalanceSyncs(ctx context.Context) error {
+	stream, err := s.ledger.StreamEvents(ctx, &ledgerv1.StreamEventsRequest{
+		EventType:    "account.balance.synced",
+		FromSequence: 0,
+	})
+	if err != nil {
+		return fmt.Errorf("StreamEvents: %w", err)
+	}
+	for {
+		event, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("recv: %w", err)
+		}
+		s.processBalanceSync(ctx, event)
+	}
+}
+
+func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledgerv1.LedgerEvent) {
+	if event.Payload == nil {
+		return
+	}
+	raw, err := event.Payload.MarshalJSON()
+	if err != nil {
+		return
+	}
+	var bal balanceSyncPayload
+	if err := json.Unmarshal(raw, &bal); err != nil {
+		slog.Warn("parse balance sync payload", "error", err)
+		return
+	}
+	if bal.AccountID == "" {
+		return
+	}
+	userID := bal.UserID
+	if userID == "" {
+		userID = "default"
+	}
+	if err := s.repo.UpsertAccountBalance(ctx, bal.AccountID, userID, bal.TradingMode, bal.Cash, bal.BuyingPower, bal.Equity, bal.LastEquity); err != nil {
+		slog.Warn("upsert account balance failed", "account_id", bal.AccountID, "error", err)
 	}
 }
 
@@ -657,7 +727,7 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		return nil, err
 	}
 
-	var equity float64
+	var positionsValue, unrealizedPnl float64
 	for _, p := range positions {
 		quote, err := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
 		if err == nil {
@@ -668,17 +738,37 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 			if p.CostBasis > 0 {
 				p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
 			}
-			equity += p.MarketValue
+			positionsValue += p.MarketValue
+			unrealizedPnl += p.UnrealizedPnl
+		}
+	}
+
+	portfolio := &portfoliov1.Portfolio{
+		PortfolioId: accountID,
+		AccountId:   accountID,
+		Equity:      positionsValue,
+		TotalPnl:    unrealizedPnl,
+		UpdatedAt:   timestamppb.Now(),
+		Positions:   positions,
+	}
+
+	// Overlay the broker-synced balance snapshot when available. The broker is
+	// authoritative for cash, buying power, and total equity (cash + positions);
+	// day P&L is derived from equity vs. previous-close equity.
+	bal, err := s.repo.GetAccountBalance(ctx, accountID)
+	if err != nil {
+		slog.Warn("ListPortfolios: GetAccountBalance failed", "account_id", accountID, "error", err)
+	} else if bal != nil {
+		portfolio.Cash = bal.Cash
+		portfolio.BuyingPower = bal.BuyingPower
+		portfolio.Equity = bal.Equity
+		portfolio.DayPnl = bal.Equity - bal.LastEquity
+		if bal.LastEquity > 0 {
+			portfolio.DayPnlPct = portfolio.DayPnl / bal.LastEquity
 		}
 	}
 
 	return &portfoliov1.ListPortfoliosResponse{
-		Portfolios: []*portfoliov1.Portfolio{{
-			PortfolioId: accountID,
-			AccountId:   accountID,
-			Equity:      equity,
-			UpdatedAt:   timestamppb.Now(),
-			Positions:   positions,
-		}},
+		Portfolios: []*portfoliov1.Portfolio{portfolio},
 	}, nil
 }

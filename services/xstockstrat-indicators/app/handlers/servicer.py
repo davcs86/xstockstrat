@@ -114,8 +114,12 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         memory_bytes = request.memory_bytes_override or self._cfg.sandbox_memory_bytes
         allowed_imports = self._cfg.sandbox_allowed_imports
 
-        # Convert protobuf Struct to dict
-        input_data = dict(request.input_data)
+        # Convert protobuf Struct to a fully-native Python dict. A plain dict()
+        # only unwraps the top level — nested list/struct fields stay as protobuf
+        # ListValue/Struct objects, which are not JSON-serializable and would blow
+        # up in the sandbox's json.dumps(input_data). MessageToDict recurses to
+        # native types (lists, dicts, scalars).
+        input_data = MessageToDict(request.input_data)
 
         log.info(
             "executing formula timeout_ms=%d memory_bytes=%d",

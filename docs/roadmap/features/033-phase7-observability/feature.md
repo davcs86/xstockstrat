@@ -1,9 +1,9 @@
 # Feature: phase7-observability
 
-**Lifecycle Status**: `draft`
-**Development Branch**: `feature/phase7-observability`
+**Lifecycle Status**: `code-completed`
+**Development Branch**: `claude/phase-7-jnruyq` (harness-assigned; PR into `main-dev`)
 **Created**: 2026-05-26
-**Last Updated**: 2026-05-30
+**Last Updated**: 2026-06-09
 
 ---
 
@@ -13,13 +13,14 @@
 |---|---|---|---|
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-05-30 | `draft` → `draft` | /sdd-story | Product spec regenerated fresh; open questions left for review |
+| 2026-06-09 | `draft` → `code-completed` | harness (`implement phase 7`) | Activation verified; agent telemetry gap filled; dashboards + alerts + docs delivered. Open questions resolved with documented defaults (see implementation-spec.md / phase7-deviations.md). |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec phase7-observability`_
+- [Implementation Spec](implementation-spec.md) — delivered steps + evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -40,4 +41,6 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review phase7-observability product-spec` — AI review of product spec before running /sdd-spec
+Review + merge the integration PR into `main-dev` (branch `claude/phase-7-jnruyq`). After merge,
+operators perform the one-time Grafana Cloud steps (import `packages/otel/dashboards/`, provision
+`packages/otel/alerts/`, set `OTEL_ENABLED=true` + endpoint/headers per `docs/setup/grafana-cloud.md`).

@@ -2,18 +2,23 @@
 #
 # grafana-deploy-dashboards.sh — deploy dashboards-as-code to Grafana Cloud.
 #
-# Uploads every dashboard JSON file under grafana/dashboards/ to Grafana via the
-# HTTP API, into a managed folder. Idempotent: each dashboard is keyed by its
-# `uid`, and existing dashboards are overwritten in place.
+# Uploads every dashboard JSON file under packages/otel/dashboards/ to Grafana
+# via the HTTP API, into a managed folder. The dashboards are authored in the
+# Grafana "export" format with `__inputs` datasource placeholders
+# (${DS_PROMETHEUS} / ${DS_LOKI}); this script resolves those to your stack's
+# real datasource UIDs (auto-discovered, or overridden via env) and upserts each
+# dashboard keyed by its `uid`, so re-runs are idempotent.
 #
 # Required env vars:
 #   GRAFANA_URL                    Stack URL, e.g. https://xstockstrat.grafana.net
 #   GRAFANA_SERVICE_ACCOUNT_TOKEN  Service account token (glsa_...) with Editor role
 #
 # Optional env vars:
-#   GRAFANA_FOLDER_UID             Target folder uid   (default: xstockstrat)
-#   GRAFANA_FOLDER_TITLE           Target folder title (default: xstockstrat)
-#   DASHBOARDS_DIR                 Source directory    (default: grafana/dashboards)
+#   GRAFANA_PROMETHEUS_DS_UID      Prometheus/Mimir datasource uid (default: auto-discover)
+#   GRAFANA_LOKI_DS_UID            Loki datasource uid             (default: auto-discover)
+#   GRAFANA_FOLDER_UID             Target folder uid               (default: xstockstrat)
+#   GRAFANA_FOLDER_TITLE           Target folder title             (default: xstockstrat)
+#   DASHBOARDS_DIR                 Source directory (default: packages/otel/dashboards)
 #
 # Usage:
 #   GRAFANA_URL=... GRAFANA_SERVICE_ACCOUNT_TOKEN=... ./scripts/grafana-deploy-dashboards.sh
@@ -26,7 +31,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-DASHBOARDS_DIR="${DASHBOARDS_DIR:-$REPO_ROOT/grafana/dashboards}"
+DASHBOARDS_DIR="${DASHBOARDS_DIR:-$REPO_ROOT/packages/otel/dashboards}"
 FOLDER_UID="${GRAFANA_FOLDER_UID:-xstockstrat}"
 FOLDER_TITLE="${GRAFANA_FOLDER_TITLE:-xstockstrat}"
 
@@ -82,8 +87,37 @@ api_call() {
   rm -f "$tmp_body"
 }
 
+# ── Resolve datasource UIDs (env override, else auto-discover) ──────────────
+PROM_UID="${GRAFANA_PROMETHEUS_DS_UID:-}"
+LOKI_UID="${GRAFANA_LOKI_DS_UID:-}"
+
+if [ -z "$PROM_UID" ] || [ -z "$LOKI_UID" ]; then
+  echo "==> Discovering datasource UIDs from $BASE_URL"
+  ds_json="$(api_call GET "/api/datasources")"
+  if [ "$HTTP_STATUS" != "200" ]; then
+    echo "error: failed to list datasources (HTTP $HTTP_STATUS): $ds_json" >&2
+    exit 1
+  fi
+  if [ -z "$PROM_UID" ]; then
+    PROM_UID="$(printf '%s' "$ds_json" | jq -r 'map(select(.type=="prometheus")) | (.[0].uid // empty)')"
+  fi
+  if [ -z "$LOKI_UID" ]; then
+    LOKI_UID="$(printf '%s' "$ds_json" | jq -r 'map(select(.type=="loki")) | (.[0].uid // empty)')"
+  fi
+fi
+
+if [ -z "$PROM_UID" ]; then
+  echo "error: no Prometheus datasource found (set GRAFANA_PROMETHEUS_DS_UID to override)" >&2
+  exit 1
+fi
+if [ -z "$LOKI_UID" ]; then
+  echo "error: no Loki datasource found (set GRAFANA_LOKI_DS_UID to override)" >&2
+  exit 1
+fi
+echo "    Prometheus uid=$PROM_UID  Loki uid=$LOKI_UID"
+
 # ── Ensure the target folder exists ─────────────────────────────────────────
-echo "==> Ensuring folder '$FOLDER_TITLE' (uid=$FOLDER_UID) exists on $BASE_URL"
+echo "==> Ensuring folder '$FOLDER_TITLE' (uid=$FOLDER_UID) exists"
 api_call GET "/api/folders/$FOLDER_UID" >/dev/null
 
 if [ "$HTTP_STATUS" = "404" ]; then
@@ -125,13 +159,18 @@ for file in "${dashboards[@]}"; do
 
   echo "==> Deploying $name"
 
-  # Wrap the raw dashboard model in the /api/dashboards/db payload.
-  # Force id:null so the API treats it as create-or-update keyed by uid, and
-  # always overwrite so re-runs are idempotent.
+  # 1. Substitute the ${DS_*} datasource placeholders with the resolved UIDs.
+  # 2. Strip the import-only __inputs / __requires keys (the API rejects them).
+  # 3. Force id:null so the API upserts keyed by uid, and overwrite so re-runs
+  #    are idempotent. Wrap in the /api/dashboards/db envelope.
+  resolved="$(sed -e "s/\${DS_PROMETHEUS}/$PROM_UID/g" \
+                  -e "s/\${DS_LOKI}/$LOKI_UID/g" "$file")"
+
   payload="$(mktemp)"
-  jq --arg uid "$FOLDER_UID" \
-    '{dashboard: (. + {id: null}), folderUid: $uid, overwrite: true, message: "Synced from repo via CI"}' \
-    "$file" >"$payload"
+  printf '%s' "$resolved" | jq \
+    --arg uid "$FOLDER_UID" \
+    '{dashboard: (del(.__inputs, .__requires) + {id: null}), folderUid: $uid, overwrite: true, message: "Synced from repo via CI"}' \
+    >"$payload"
 
   resp="$(api_call POST "/api/dashboards/db" "$payload")"
   rm -f "$payload"
