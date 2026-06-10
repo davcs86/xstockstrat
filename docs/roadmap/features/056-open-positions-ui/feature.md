@@ -1,6 +1,6 @@
 # Feature: open-positions-ui
 
-**Lifecycle Status**: `idea`
+**Lifecycle Status**: `draft`
 **Development Branch**: `feature/open-positions-ui`
 **Created**: 2026-06-10
 **Last Updated**: 2026-06-10
@@ -11,43 +11,39 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-06-10 | — → `idea` | backlog capture | Feature captured in backlog; no spec yet |
+| 2026-06-10 | — → `idea` | backlog capture | Feature captured in backlog |
+| 2026-06-10 | `idea` → `draft` | /sdd-story | Product spec generated |
 
 ---
 
 ## Artifacts
 
-_None yet — run `/sdd-story open-positions-ui` to generate the product spec._
+- [Product Spec](product-spec.md) — requirements and governance
+- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec open-positions-ui`_
+- [Context Log](context.md) — session history, decisions, deviations
 
 ---
 
 ## Summary
 
-A dedicated `xstockstrat-ui` (trader segment) page for viewing open positions:
+Upgrade the trader-segment Positions page to a paginated, filterable open-positions view
+backed by `xstockstrat-portfolio.ListPositions`, and explore associating each position with
+the orders that built it ("position slots ↔ orders" lineage), which requires a new linkage
+RPC since `Position` carries no order reference today.
 
-- **Open positions list** with pagination and filters (by ticker/symbol, side
-  long/short, account/broker, and P&L sign).
-- Per-position detail: quantity, avg entry price, current price, market value,
-  unrealized P&L (%/$), cost basis.
-- **Position slots ↔ orders exploration**: investigate the ability to associate position
-  "slots" with the orders that opened/added to them — i.e. trace a position back to its
-  constituent fills/orders. Determine whether this lineage already exists in
-  `xstockstrat-portfolio` / `xstockstrat-ledger` or requires new modeling.
+## Reviewers
 
-Backend: consumes `xstockstrat-portfolio` (gRPC 50052) for position tracking and P&L, and
-potentially `xstockstrat-trading` / `xstockstrat-ledger` for order lineage. Reuses the UI
-BFF/connect-web call chain and header propagation.
+_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
+change types. Override as needed. Snapshot finalized at /sdd-spec time — re-run /sdd-spec if
+the registry changes.)_
 
-## Open Questions (for /sdd-story)
-
-- Does `xstockstrat-portfolio` expose a paginated/filterable list-positions RPC today, or
-  is a proto change needed?
-- "Position slots" — is this an existing concept anywhere in the platform, or a new
-  abstraction to design? Define what a slot is and its order linkage before specing.
-- Order-lineage join: portfolio positions vs. ledger fill events — confirm the source of
-  truth for mapping fills to a position.
+| Role | Review Focus |
+|---|---|
+| Proto Reviewer | Field number uniqueness, additive-only changes (position filters + order-lineage RPC), `buf lint`/`buf breaking` pass |
+| `xstockstrat-portfolio` (service owner) | P&L calculation accuracy, position snapshot consistency, concurrent write safety |
+| `xstockstrat-ui` (service owner) | Trading UI correctness, Connect-RPC call safety, environment/trading-mode scope correctness |
+| `xstockstrat-ledger` (service owner) | Append-only invariant, event ordering — _only if fill-event lineage is read from ledger_ |
 
 ## Next Action
 
-Run `/sdd-story open-positions-ui` to generate a product spec, then
-`/sdd-review open-positions-ui product-spec`.
+`/sdd-review open-positions-ui product-spec` — AI review of product spec before running /sdd-spec

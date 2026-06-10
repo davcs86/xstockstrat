@@ -1,6 +1,6 @@
 # Feature: backfill-management-ui
 
-**Lifecycle Status**: `idea`
+**Lifecycle Status**: `draft`
 **Development Branch**: `feature/backfill-management-ui`
 **Created**: 2026-06-10
 **Last Updated**: 2026-06-10
@@ -11,48 +11,40 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-06-10 | — → `idea` | backlog capture | Feature captured in backlog; no spec yet |
+| 2026-06-10 | — → `idea` | backlog capture | Feature captured in backlog |
+| 2026-06-10 | `idea` → `draft` | /sdd-story | Product spec generated |
 
 ---
 
 ## Artifacts
 
-_None yet — run `/sdd-story backfill-management-ui` to generate the product spec._
+- [Product Spec](product-spec.md) — requirements and governance
+- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec backfill-management-ui`_
+- [Context Log](context.md) — session history, decisions, deviations
 
 ---
 
 ## Summary
 
-A dedicated `xstockstrat-ui` page for managing historical-data backfills per ticker:
+A dedicated UI page to manage per-ticker historical backfills — create, monitor live
+progress, cancel in-flight jobs, and delete backfilled data — built on the durable backfill
+job state from features 052–054, requiring new additive `CancelBackfill` and
+`DeleteBackfilledData` RPCs (the latter a destructive marketdata op with a DBA gate).
 
-- **Create** a backfill job for a ticker (symbol, timeframe, date range).
-- **Monitor** job progress — status (queued/running/completed/failed) and real
-  `bars_total` / progress, surfacing the durable job state added by feature
-  `052-durable-observable-backfills`.
-- **Cancel** an in-flight backfill job.
-- **Delete** previously backfilled data for a ticker.
+## Reviewers
 
-This is the **UI layer** on top of the launched backfill-hardening backend initiative:
+_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
+change types. Override as needed. Snapshot finalized at /sdd-spec time — re-run /sdd-spec if
+the registry changes.)_
 
-- `052-durable-observable-backfills` (launched) — durable `ingest.backfill_jobs` state +
-  lifecycle ledger events + real progress.
-- `053-backfill-backtest-coverage` (launched).
-- `054-resumable-chunked-backfills` (launched).
-
-Backend: consumes `xstockstrat-ingest` / `xstockstrat-marketdata` gRPC APIs for backfill
-job control and data deletion. Reuses the UI BFF/connect-web call chain and header
-propagation.
-
-## Open Questions (for /sdd-story)
-
-- Which backfill control RPCs exist today (create/list/cancel)? Is there a
-  delete-backfilled-data RPC, or does that need a new proto + governance gate?
-- Live progress: poll the job-status RPC or stream? Confirm what `052` exposes.
-- "Delete backfilled data for a ticker" — scope (full symbol vs. date range) and which
-  service owns the destructive op (`xstockstrat-marketdata` OHLCV store vs.
-  `xstockstrat-ingest`). Destructive data op → needs DBA/service-owner approval.
+| Role | Review Focus |
+|---|---|
+| Proto Reviewer | Field number uniqueness, additive-only changes (new `CancelBackfill` / `DeleteBackfilledData` RPCs + ticker filter), `buf lint`/`buf breaking` pass |
+| `xstockstrat-ingest` (service owner) | Backfill job control correctness, idempotent ingestion, job-state durability, cancel without orphaned jobs |
+| `xstockstrat-marketdata` (service owner) | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, safe scoped deletion of backfilled bars |
+| `xstockstrat-ui` (service owner) | UI correctness, Connect-RPC call safety, confirmation UX for destructive delete |
+| DBA | Scoped delete safety on the OHLCV hypertable (no full-table deletes), index/partition correctness |
 
 ## Next Action
 
-Run `/sdd-story backfill-management-ui` to generate a product spec, then
-`/sdd-review backfill-management-ui product-spec`.
+`/sdd-review backfill-management-ui product-spec` — AI review of product spec before running /sdd-spec

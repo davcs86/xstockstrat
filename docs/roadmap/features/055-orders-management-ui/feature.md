@@ -1,6 +1,6 @@
 # Feature: orders-management-ui
 
-**Lifecycle Status**: `idea`
+**Lifecycle Status**: `draft`
 **Development Branch**: `feature/orders-management-ui`
 **Created**: 2026-06-10
 **Last Updated**: 2026-06-10
@@ -11,42 +11,38 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-06-10 | — → `idea` | backlog capture | Feature captured in backlog; no spec yet |
+| 2026-06-10 | — → `idea` | backlog capture | Feature captured in backlog |
+| 2026-06-10 | `idea` → `draft` | /sdd-story | Product spec generated |
 
 ---
 
 ## Artifacts
 
-_None yet — run `/sdd-story orders-management-ui` to generate the product spec._
+- [Product Spec](product-spec.md) — requirements and governance
+- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec orders-management-ui`_
+- [Context Log](context.md) — session history, decisions, deviations
 
 ---
 
 ## Summary
 
-A dedicated `xstockstrat-ui` (trader segment) page for managing orders end-to-end:
+A dedicated trader-segment UI page for full order lifecycle management — create, edit
+(replace), and cancel orders, plus a paginated, filterable historical order view — backed
+by the existing `xstockstrat-trading` gRPC service (with an additive `ReplaceOrder` RPC and
+extra `ListOrders` filter fields).
 
-- **Create** new orders (market/limit, buy/sell, qty/notional, time-in-force) via the
-  `xstockstrat-trading` gRPC API.
-- **Edit** working/open orders (e.g. replace price/qty) where the broker and order state
-  allow it.
-- **Cancel** open orders.
-- **Historical view**: paginated order history with filters (by ticker/symbol, side,
-  order type, status, date range, and account/broker).
+## Reviewers
 
-Backend: consumes `xstockstrat-trading` (gRPC 50051) for order lifecycle and history; uses
-the existing UI BFF/connect-web call chain and header propagation (`x-user-id`,
-`x-access-scope`, `x-trace-id`). Pagination should follow the platform's existing
-list/pagination conventions (cf. ingest `QuerySignals` pagination).
+_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
+change types. Override as needed. Snapshot finalized at /sdd-spec time — re-run /sdd-spec if
+the registry changes.)_
 
-## Open Questions (for /sdd-story)
-
-- Which order mutations does the current `xstockstrat-trading` proto already expose
-  (create/replace/cancel/list)? Identify gaps that need proto changes (PR to `packages/proto`
-  first, governance gate).
-- Does order history live in trading's DB or must it be read from `xstockstrat-ledger`?
-- Account/broker filter scope — relates to `002-broker-accounts-ui` (launched).
+| Role | Review Focus |
+|---|---|
+| Proto Reviewer | Field number uniqueness, additive-only changes (new `ReplaceOrder` RPC + `ListOrders` filter fields), `buf lint`/`buf breaking` pass |
+| `xstockstrat-trading` (service owner) | Order execution correctness, broker API safety (replace/cancel), fill detection, paper-only dev invariant, position-limit enforcement |
+| `xstockstrat-ui` (service owner) | Trading UI correctness, Connect-RPC call safety, environment/trading-mode scope correctness, no secret values rendered |
 
 ## Next Action
 
-Run `/sdd-story orders-management-ui` to generate a product spec, then
-`/sdd-review orders-management-ui product-spec`.
+`/sdd-review orders-management-ui product-spec` — AI review of product spec before running /sdd-spec
