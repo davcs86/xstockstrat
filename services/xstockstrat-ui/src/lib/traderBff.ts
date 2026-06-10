@@ -79,11 +79,11 @@ router.service(TradingService, {
 router.service(PortfolioService, {
   async getPortfolio(req, ctx) {
     const claims = await requireSession(ctx);
-    return portfolioClient.getPortfolio(req, { headers: backendHeaders(claims, ctx) });
+    return portfolioClient.getPortfolio({ ...req, userId: claims.user_id }, { headers: backendHeaders(claims, ctx) });
   },
   async listPortfolios(req, ctx) {
     const claims = await requireSession(ctx);
-    return portfolioClient.listPortfolios(req, { headers: backendHeaders(claims, ctx) });
+    return portfolioClient.listPortfolios({ ...req, userId: claims.user_id }, { headers: backendHeaders(claims, ctx) });
   },
 });
 
