@@ -1,6 +1,6 @@
 # Spec ↔ Implementation Gap Analysis
 
-**Date:** 2026-06-09 · **Audited against:** `main-dev` (`067c2aa`)
+**Date:** 2026-06-09 · **Audited against:** `main-dev` (`067c2aa`) · **Owner verdicts applied:** 2026-06-10
 
 ## Scope and method
 
@@ -18,21 +18,27 @@ Classification used throughout:
 
 ## Genuine functional gaps (code does not satisfy the spec)
 
-### GAP-1 — `alpaca-default` backward-compat account is never seeded (feature 001, FR-6) — MISSING, HIGH
+### GAP-1 — `alpaca-default` backward-compat account is never seeded (feature 001, FR-6) — RESOLVED: NOT A GAP (obsolete requirement)
+
+> **Owner verdict (2026-06-10):** `alpaca-default` was never used by any deployment — no live system ever depended on the FR-6 backward-compat path, so there is nothing to seed. FR-6 is an obsolete requirement, not an implementation gap. No code change; feature 001's spec should be amended to drop FR-6 (the `account_id` column defaults of `'alpaca-default'` in trading/portfolio migrations are inert).
 
 - **Spec:** `001-add-ikbr-account-support/product-spec.md` FR-6 — existing single-Alpaca deployments must keep working with zero changes: a real `broker_accounts` row named `alpaca-default` is inserted (from `ALPACA_API_KEY`/`ALPACA_API_SECRET`, encrypted) "at migration time". `context.md:144` then re-planned this as a startup-time seed via an `EnsureAlpacaDefault` function.
 - **Reality:** Neither happened. `services/xstockstrat-trading/migrations/002_broker_accounts.up.sql` creates the table but seeds nothing; `git log -S EnsureAlpacaDefault` is empty — the function never existed in committed history. `cmd/server/main.go:99` only calls `LoadBrokerPool`, which tolerates an empty table.
 - **Impact:** An upgraded single-Alpaca deployment starts cleanly with **zero broker accounts**; the first `PlaceOrder` fails. Meanwhile `003_orders_account_id.up.sql` and portfolio `003_positions_account_id.up.sql` backfill existing rows with `account_id = 'alpaca-default'` — referencing an account row that does not exist.
 - **Fix options:** (a) implement the startup seed described in `context.md:144` (insert `alpaca-default` from env vars when `broker_accounts` is empty), or (b) document the manual `RegisterBrokerAccount` upgrade step in a runbook and amend FR-6.
 
-### GAP-2 — `agent.oauth.*` config keys documented but never seeded — MISSING, HIGH
+### GAP-2 — `agent.oauth.*` config keys documented but never seeded — CONFIRMED, FIXED
+
+> **Resolution (2026-06-10):** Confirmed valid by owner. Fixed by `services/xstockstrat-config/migrations/006_agent_oauth_config.up.sql`, which seeds both keys for `dev` and `production` (trading_mode `all`) with the documented defaults. Verified on a throwaway Postgres 16: full chain 000→006 up, down removes exactly the 4 rows, re-up idempotent.
 
 - **Spec:** Root `CLAUDE.md` §Config Governance lists `agent.oauth.registration_enabled` (bool, default `true`) and `agent.oauth.allowed_redirect_uris` (string, default `""`) as registered keys (feature 049 Part B); 049's product-spec documents the same. Config governance requires keys to exist in the config service.
 - **Reality:** No migration inserts them — `grep -r "agent.oauth" services/*/migrations/` returns nothing. `services/xstockstrat-config/migrations/004_agent_config.up.sql` seeds only `agent.signal.alert_threshold`. The agent reads them via one-shot `GetConfig` (`app/oauth_server.py:70,85`) and falls back to in-code defaults when absent.
 - **Impact:** On a fresh deploy the keys don't exist in `config.config_values`, so they are invisible in the config UI, cannot be audited via `config.config_audit`, and operators cannot disable Dynamic Client Registration or pin redirect URIs without first creating the keys out-of-band. Code defaults are safe (registration on, https-only redirects), so this is a governance/operability gap, not an outage.
 - **Fix:** Add a config migration (e.g. `006_agent_oauth_config.up.sql`) seeding both keys for dev + production.
 
-### GAP-3 — `OTEL_SERVICE_NAME` not wired in DO app specs (feature 015, FR-4/AC-4) — PARTIAL, LOW
+### GAP-3 — `OTEL_SERVICE_NAME` not wired in DO app specs (feature 015, FR-4/AC-4) — RESOLVED: SPEC TO BE AMENDED
+
+> **Owner verdict (2026-06-10):** `OTEL_SERVICE_NAME` should not be used on this platform — `SERVICE_NAME` is the convention, and telemetry init derives `service.name` from it. The current wiring is the intended state; feature 015's FR-4/AC-4 should be amended to require `SERVICE_NAME` instead of `OTEL_SERVICE_NAME`. No code change.
 
 - **Spec:** `015-fix-grafana-otel-variables` FR-4/AC-4 — every service entry in `.do/app.yaml` and `.do/app.dev.yaml` must set `OTEL_SERVICE_NAME` to its canonical `xstockstrat-<name>`.
 - **Reality:** `grep -c OTEL_SERVICE_NAME .do/app.yaml .do/app.dev.yaml` → 0 and 0.
@@ -89,9 +95,8 @@ Platform conventions verified compliant: gRPC-only backends (no 80xx ports, no w
 
 ## Recommended actions (priority order)
 
-1. **GAP-1 (HIGH):** Implement the `alpaca-default` startup seed in trading (or document the manual upgrade step and amend FR-6).
-2. **GAP-2 (HIGH):** Seed `agent.oauth.registration_enabled` / `agent.oauth.allowed_redirect_uris` via a new config migration.
-3. **S-1/S-2/S-3 (MEDIUM):** Update root `CLAUDE.md` — mark Phases 0 and 2 DONE; correct the ledger/notify dependency edges; note the agent's on-demand config pattern.
-4. **GAP-3 (LOW):** Add `OTEL_SERVICE_NAME` to both DO app specs or amend 015's AC-4.
-5. **S-4/S-5/S-6 (LOW):** Sync stale spec text (009 transport, 038 registry/workflow, 033 lifecycle status).
-6. **Hygiene (LOW):** Renumber one of each duplicated feature pair or note the collision in `merge-order.md`.
+1. ~~**GAP-2 (HIGH):** Seed `agent.oauth.*` keys via a new config migration.~~ **Done** — migration `006_agent_oauth_config` (this PR).
+2. **S-1/S-2/S-3 (MEDIUM):** Update root `CLAUDE.md` — mark Phases 0 and 2 DONE; correct the ledger/notify dependency edges; note the agent's on-demand config pattern.
+3. **GAP-1 / GAP-3 spec amendments (LOW):** Drop FR-6 from feature 001 (`alpaca-default` never used); amend feature 015 FR-4/AC-4 to require `SERVICE_NAME` instead of `OTEL_SERVICE_NAME`.
+4. **S-4/S-5/S-6 (LOW):** Sync stale spec text (009 transport, 038 registry/workflow, 033 lifecycle status).
+5. **Hygiene (LOW):** Renumber one of each duplicated feature pair or note the collision in `merge-order.md`.
