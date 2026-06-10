@@ -83,7 +83,7 @@ router.service(PortfolioService, {
   },
   async listPortfolios(req, ctx) {
     const claims = await requireSession(ctx);
-    return portfolioClient.listPortfolios({ ...req, userId: claims.user_id }, { headers: backendHeaders(claims, ctx) });
+    return portfolioClient.listPortfolios(req, { headers: backendHeaders(claims, ctx) });
   },
 });
 
