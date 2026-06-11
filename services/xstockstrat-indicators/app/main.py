@@ -45,7 +45,9 @@ async def serve():
     await config_watcher.wait_for_snapshot(timeout_seconds=90)
     log.info("config snapshot received")
 
-    db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
+    db_pool = await asyncpg.create_pool(
+        DATABASE_URL, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "2"))
+    )
     log.info("database pool established")
 
     servicer = IndicatorsServicer(config_watcher=config_watcher, db_pool=db_pool)

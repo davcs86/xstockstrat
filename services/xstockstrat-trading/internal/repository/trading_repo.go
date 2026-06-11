@@ -19,11 +19,17 @@ type TradingRepo struct {
 
 // NewTradingRepo opens a pgxpool connection to the given DSN.
 func NewTradingRepo(connStr string) (*TradingRepo, error) {
-	pool, err := pgxpool.New(context.Background(), connStr)
+	pool, err := newPool(context.Background(), connStr)
 	if err != nil {
-		return nil, fmt.Errorf("pgxpool.New: %w", err)
+		return nil, fmt.Errorf("newPool: %w", err)
 	}
 	return &TradingRepo{pool: pool}, nil
+}
+
+// Pool exposes the underlying connection pool so sibling repositories
+// (e.g. AccountRepo) can share it instead of opening a second pool.
+func (r *TradingRepo) Pool() *pgxpool.Pool {
+	return r.pool
 }
 
 // UpsertOrder inserts a new order or updates an existing one.
