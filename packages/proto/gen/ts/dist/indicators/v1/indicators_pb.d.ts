@@ -146,6 +146,14 @@ export type ExecuteFormulaRequest = Message<"xstockstrat.indicators.v1.ExecuteFo
      * @generated from field: google.protobuf.Struct input_params = 7;
      */
     inputParams?: JsonObject | undefined;
+    /**
+     * Declared parameter DEFINITIONS used to validate input_params and apply defaults
+     * for inline formula_source runs (authoring "Run" with an unsaved buffer). Ignored
+     * when formula_id is set — saved formulas use their stored definitions instead.
+     *
+     * @generated from field: repeated xstockstrat.indicators.v1.FormulaParameter parameters = 8;
+     */
+    parameters: FormulaParameter[];
 };
 /**
  * Describes the message xstockstrat.indicators.v1.ExecuteFormulaRequest.

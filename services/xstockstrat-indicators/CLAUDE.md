@@ -79,6 +79,10 @@ descriptions. Distinct from the OHLCV/series `data` input:
   values (int/float/bool/string), and enforces `min`/`max` (numeric only). Failures return a
   structured `ExecuteFormulaResponse.parameter_errors` (`{name, reason}`) with `success=false`, and the
   sandbox is never invoked.
+- **Definition source per run**: a saved formula (`formula_id`) validates `input_params` against its
+  stored definitions. An inline `formula_source` run (the authoring "Run" with an unsaved buffer) has
+  no stored formula, so it validates against the definitions supplied on
+  `ExecuteFormulaRequest.parameters` — letting authors test typed params before registering.
 - **Definition validation**: at Register/Update, names must be valid, unique Python identifiers; type
   must not be `UNSPECIFIED`; `min`/`max` apply to numeric params only.
 - **Soft cap**: at most **32 parameters** per formula, hardcoded in `app/services/parameters.py`

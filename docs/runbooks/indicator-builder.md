@@ -71,26 +71,27 @@ JWT, server-side). The gRPC path below remains available for automation.
 
 ### Formula Interface Contract
 
-Your Python formula receives a `data` dict and must assign its output to a `result` variable.
+Your Python formula receives two dicts already in scope — `data` (the series input) and
+`params` (typed scalar parameters) — and must assign its output to a `result` variable. The
+primary series is `result["value"]`; any additional keys are **declared outputs** (see below).
 
 ```python
-# data: dict passed from ExecuteFormulaRequest.input_data
-# result: must be set before formula ends
+# data:   series input from ExecuteFormulaRequest.input_data   (e.g. data["close"])
+# params: validated scalar parameters from ExecuteFormulaRequest.input_params
+# result: must be set before the formula ends; result["value"] is the primary series
 
 import numpy as np
 
-prices = data["close"]       # list of closing prices
-period = int(data.get("period", 20))
+arr = np.array(data["close"], dtype=float)   # series stay in `data`
+period = int(params["period"])               # scalars come from `params`, never `data`
 
-arr = np.array(prices, dtype=float)
-sma = np.convolve(arr, np.ones(period) / period, mode='valid')
-stdev = [np.std(arr[i:i+period]) for i in range(len(arr) - period + 1)]
+mid = np.convolve(arr, np.ones(period) / period, mode="valid")
+stdev = np.array([np.std(arr[i:i + period]) for i in range(len(arr) - period + 1)])
 
 result = {
-    "sma": sma.tolist(),
-    "std": stdev,
-    "upper_2std": (sma + 2 * np.array(stdev)).tolist(),
-    "lower_2std": (sma - 2 * np.array(stdev)).tolist(),
+    "value": mid.tolist(),                   # primary series (implicit "value")
+    "upper": (mid + 2 * stdev).tolist(),     # declared output series
+    "lower": (mid - 2 * stdev).tolist(),     # declared output series
 }
 ```
 
@@ -129,6 +130,11 @@ The engine validates supplied `input_params` **before** running the sandbox: unk
 missing-required, type mismatches, and out-of-range values are returned as a structured
 `parameter_errors` list (`{name, reason}`) on the response with `success=false`, and the formula
 body never runs. Omitted optional parameters fall back to their declared `default_value`.
+
+A saved formula (`formula_id`) validates against its stored definitions. An **inline**
+`ExecuteFormula` run (`formula_source`, e.g. the authoring **Run** with an unsaved buffer) has no
+stored formula, so it validates against the definitions passed on
+`ExecuteFormulaRequest.parameters` — letting authors test typed parameters before registering.
 
 **Engine-enforced soft cap**: a formula may declare at most **32 parameters** (hardcoded in the
 indicators engine — `app/services/parameters.py`). This cap is **not** a config key; there is no
