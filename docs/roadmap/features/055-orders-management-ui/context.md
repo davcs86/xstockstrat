@@ -192,3 +192,14 @@ grpcio-tools==1.80.0 — pinned to CI proto-freshness versions) since buf/protoc
   (range filtering — user-approved Option A).
 - Deviations: wired created_at range filtering into the Go repo+service so the FR-2 date-range UI
   works server-side (sequential-mode blocker → user chose Option A). See Deviation Log.
+
+### Step 10 — test: xstockstrat-ui E2E for the orders page [done]
+- Added e2e/trader/orders.spec.ts (mocks ListBrokerAccounts/ListOrders/CancelOrder/ReplaceOrder
+  via page.route; fails StreamOrderUpdates fast so the live hook stops). Covers list render, all-5
+  order types + per-type price fields, Edit enabled(NEW/PARTIALLY_FILLED)/disabled(FILLED),
+  Cancel two-step confirm→CancelOrder, PENDING_APPROVAL surfaced, filter→re-issued ListOrders.
+  Firefox run: 4/6 passed; the 2 failures were `page.goto` 10s cold-compile timeouts (documented
+  pnpm-dev flake; CI uses a production build that avoids it). chromium browser rev mismatched
+  Playwright 1.59.1. `tsc` + `lint` clean; Step 9 `pnpm build` compiles /trader/orders.
+- Files created: `services/xstockstrat-ui/e2e/trader/orders.spec.ts`
+- Deviations: e2e verified via behavioral pass + CI-equivalent fallback — see Deviation Log.

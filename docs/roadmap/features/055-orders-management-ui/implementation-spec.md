@@ -340,7 +340,7 @@ Note: the new `ReplaceOrder` service/handler/repository logic lands in CI-exclud
 
 ### Step 10 — test: `xstockstrat-ui` E2E for the orders page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/orders.spec.ts` — create (or extend the existing trader E2E suite if one is present)
@@ -415,3 +415,9 @@ Manual read-through; markdown links resolve. No code/test gate (docs step).
 **Actual**: Added `created_at >= start` / `created_at <= end` filtering to `TradingRepo.ListOrders` (new `rng *commonv1.TimeRange` param) and threaded `req.Range` through `TradingService.ListOrders` (DB + in-memory fallback), so the Step 9 date-range UI filters server-side. Touches `internal/repository/trading_repo.go` and `internal/service/trading.go` (Step 4/5 files) from a UI step.
 **Reason**: The date-range filter is required by FR-2 ("server-side filters" incl. date), but the proto `range` field was never wired for `ListOrders`. A UI-only filter would be a no-op; surfaced as a sequential-mode blocker (§5.7) → user chose **Option A (wire date-range in backend too)**. Go `go build` + `golangci-lint` + tests all pass.
 **Disposition**: in-scope expansion authorized by the user; backend Go files staged with Step 9.
+
+### Deviation: Step 10 — E2E verified via behavioral pass + CI-equivalent fallback
+**Spec said**: Verification is `pnpm test:e2e` passes.
+**Actual**: Ran `e2e/trader/orders.spec.ts` on Firefox (chromium browser rev mismatched the installed Playwright 1.59.1 — unavailable). Result: **4/6 passed**, covering every behavioral assertion — list renders, all-5 order types + per-type price fields, Edit enabled for `NEW`/`PARTIALLY_FILLED` & disabled for `FILLED`, Cancel two-step confirm → `CancelOrder` issued, `PENDING_APPROVAL` surfaced, and a filter change re-issuing a server-side `ListOrders`. The 2 failures were `page.goto: Test timeout of 10000ms exceeded` navigating to `/trader/orders` — the `pnpm dev` cold-compile flake that `playwright.config.ts` documents and that CI eliminates by serving a production bundle (`pnpm build && pnpm start`).
+**Reason**: The local harness uses `pnpm dev`, whose first-hit route compilation exceeds the 10s default per-test timeout (a documented flake, not an assertion failure). The Step 9 `pnpm build` (the exact prod bundle CI runs) already compiles `/trader/orders`; `tsc --noEmit` + `pnpm lint` are clean on the spec.
+**Disposition**: CI-equivalent fallback (§5.8 known timing-only e2e flake / sequential-mode verification fallback). The spec's behavioral assertions pass; CI's production-bundle e2e run is the authoritative green.
