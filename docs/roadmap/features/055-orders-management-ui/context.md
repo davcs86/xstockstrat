@@ -126,3 +126,11 @@ grpcio-tools==1.80.0 — pinned to CI proto-freshness versions) since buf/protoc
   `var _ Broker = ...` assertions confirm both adapters conform. `GOWORK=off go build ./...` OK.
 - Files modified: `services/xstockstrat-trading/internal/broker/{broker.go,alpaca.go,ibkr.go}`
 - Deviations: none
+
+### Step 4 — service: Thread ListOrders filters through the repository [done]
+- Widened `TradingRepo.ListOrders` to accept symbol/side/orderType/accountID and appended four
+  guarded WHERE clauses (symbol/account_id raw; side via sideStr; order_type via typeStr), and
+  added the missing `i++` to the strategy_id branch so positional args stay aligned.
+- Files modified: `internal/repository/trading_repo.go`, `internal/service/trading.go` (call-site one-liner)
+- Deviations: updated the single caller (service/trading.go:387) to pass the new filter args so
+  `go build ./...` stays green — see Deviation Log (sequential-mode blocker resolved with user, Option A).

@@ -161,7 +161,7 @@ three deployment files.
 
 ### Step 4 — service: Thread `ListOrders` filters through the repository
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/trading_repo.go` — modify
@@ -386,4 +386,8 @@ Manual read-through; markdown links resolve. No code/test gate (docs step).
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 4 — Thread `ListOrders` filters through the repository
+**Spec said**: Step 4 `**Files**` lists only `internal/repository/trading_repo.go`; verification is `GOWORK=off go build ./...` compiles.
+**Actual**: Also updated the single caller `internal/service/trading.go:387` to pass the four new filter args (`req.Symbol`/`req.Side`/`req.OrderType`/`req.AccountId`) through to the widened `repo.ListOrders` signature.
+**Reason**: Widening the repository signature breaks `go build ./...` at the only call site (a Step 5 file), so Step 4 could not satisfy its own build verification standalone. This is exactly the pass-through described by Step 5 Instruction #1; Step 5 still owns the in-memory fallback filters, pagination, `ReplaceOrder`, and the handler. Confirmed with the user (sequential-mode blocker → Option A "fix now").
+**Disposition**: in-scope expansion (build-green prerequisite); the `internal/service/trading.go` call-site one-liner is staged with Step 4.
