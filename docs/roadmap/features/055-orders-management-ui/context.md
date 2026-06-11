@@ -168,3 +168,13 @@ grpcio-tools==1.80.0 — pinned to CI proto-freshness versions) since buf/protoc
   --noEmit` clean (client exposes both methods from the regenerated stubs).
 - Files modified: `services/xstockstrat-ui/src/lib/traderBff.ts`
 - Deviations: none
+
+### Step 8 — service: Browser hooks for replace, cancel, filtered list, live updates [done]
+- Extended useOrders with an optional OrderFilters object (symbol/side/orderType/accountId +
+  status/range/pageSize/pageToken) forwarded to listOrders and added to the queryKey. Created
+  useReplaceOrder + useCancelOrder (mutations mirroring usePlaceOrder, invalidating ['orders'] and
+  ['order', id]) and useOrderUpdates (AbortController stream consumer merging pushed Order updates
+  keyed by orderId, mirroring AlertStream). `pnpm run lint` + `tsc --noEmit` clean.
+- Files modified: `src/hooks/useOrders.ts`; created `useReplaceOrder.ts`, `useCancelOrder.ts`, `useOrderUpdates.ts`
+- Deviations: OrderFilters also carries status+range (existing request fields) so Step 9's FR-2
+  filters are unblocked — see Deviation Log.

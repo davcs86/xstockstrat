@@ -278,7 +278,7 @@ Note: the new `ReplaceOrder` service/handler/repository logic lands in CI-exclud
 
 ### Step 8 — service: Browser hooks for replace, cancel, filtered list, and live updates
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useOrders.ts` — modify
@@ -403,3 +403,9 @@ Manual read-through; markdown links resolve. No code/test gate (docs step).
 **Actual**: Also removed the trailing `i++` in the `account_id` branch of `internal/repository/trading_repo.go` (Step 4's code) — golangci-lint's `ineffassign` flagged it because `account_id` is the last optional `WHERE` clause, so the increment is dead.
 **Reason**: Step 6 is the first step whose verification runs the lint gate (Steps 3–5 verified with `go build` only), so the gate surfaced a Step-4-introduced ineffectual assignment. The fix is unambiguous (dead increment) and required for the lint gate to pass; staged with Step 6.
 **Disposition**: in-scope lint-gate fix (analogous to the Step 4 build-green resolution).
+
+### Deviation: Step 8 — `OrderFilters` also carries `status` + `range`
+**Spec said**: "extend `useOrders` to accept an optional `filters` object (`symbol?`, `side?`, `orderType?`, `accountId?`)".
+**Actual**: `OrderFilters` also includes `status` and `range` (plus `pageSize`/`pageToken`), all existing `ListOrdersRequest` fields.
+**Reason**: Step 9's `OrderFilters` component (FR-2) filters by symbol/side/type/**status/date**/account server-side; the hook must forward `status` + `range` for Step 9 to function. Including them in Step 8 avoids a Step 9 blocker; they map to pre-existing request fields (no contract change).
+**Disposition**: accepted refinement (forward-compatible with Step 9 / FR-2).
