@@ -129,3 +129,11 @@
 - Verification: `buf lint` OK; `buf breaking --against feature/open-positions-ui` OK (additive only).
 - Files modified: `packages/proto/portfolio/v1/portfolio.proto`
 - Deviations: none.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran ./scripts/buf-gen.sh on host (Docker daemon down). Regen limited to portfolio/v1 (Go/Python/TS+dist).
+  Reverted unrelated google/protobuf/timestamp.ts doc-comment drift from host buf's bundled descriptors
+  so committed stubs match CI's baseline.
+- Verified: Go `PositionSide` + `Symbol`(5)/`Side`(6) on ListPositionsRequest; TS enum+fields; Python descriptor.
+- Files modified: `packages/proto/gen/{go,python,ts}/portfolio/v1/*` (+ ts/dist)
+- Deviations: host-toolchain codegen (CI-equivalent fallback) — see Deviation Log.

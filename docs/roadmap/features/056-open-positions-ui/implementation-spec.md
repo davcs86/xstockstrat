@@ -83,7 +83,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/portfolio/v1/` — modify (regenerated)
@@ -454,6 +454,10 @@ read-only join over existing `order.filled` ledger events.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 2 — codegen via host toolchain (Docker unavailable)
+**Spec said**: Run `./scripts/buf-gen.sh` (normally the `Dockerfile.codegen` container per `localenv-setup.sh`).
+**Actual**: The runner's Docker daemon is not running, so the codegen toolchain was installed on the host pinned to the CI `proto-freshness` job versions (`.github/workflows/ci.yml`): `buf` v1.47.2, `protoc-gen-go` v1.36.11, `protoc-gen-go-grpc` v1.6.2, `protoc-gen-connect-go` v1.19.2, `grpcio-tools` 1.80.0; the TS plugins (`protoc-gen-es`/`protoc-gen-connect-es`/`protoc-gen-ts_proto`) came from the committed pnpm lockfile. Ran `./scripts/buf-gen.sh` on the host.
+**Reason**: No Docker; host toolchain is the sanctioned sequential-mode fallback.
+**Disposition**: CI-equivalent fallback. The regen diff was confirmed **limited to `portfolio/v1`** (Go/Python/TS + dist). Host `buf`'s bundled `google/protobuf` descriptors produced an unrelated doc-comment change in `gen/ts/google/protobuf/timestamp.ts`; that drift was reverted so the committed stubs match CI's baseline (which keeps `main-dev`'s `proto-freshness` green).
 </content>
 </invoke>

@@ -5,13 +5,74 @@
 //   protoc               unknown
 // source: portfolio/v1/portfolio.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.protobufPackage = void 0;
+exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.PositionSide = exports.protobufPackage = void 0;
+exports.positionSideFromJSON = positionSideFromJSON;
+exports.positionSideToJSON = positionSideToJSON;
+exports.positionSideToNumber = positionSideToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
 const common_1 = require("../../common/v1/common");
 const timestamp_1 = require("../../google/protobuf/timestamp");
 exports.protobufPackage = "xstockstrat.portfolio.v1";
+/**
+ * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
+ * Used only as an additive filter on ListPositionsRequest; the Position message itself
+ * continues to carry signed qty.
+ */
+var PositionSide;
+(function (PositionSide) {
+    /** POSITION_SIDE_UNSPECIFIED - no side filter — return both long and short */
+    PositionSide["POSITION_SIDE_UNSPECIFIED"] = "POSITION_SIDE_UNSPECIFIED";
+    /** POSITION_SIDE_LONG - qty > 0 */
+    PositionSide["POSITION_SIDE_LONG"] = "POSITION_SIDE_LONG";
+    /** POSITION_SIDE_SHORT - qty < 0 */
+    PositionSide["POSITION_SIDE_SHORT"] = "POSITION_SIDE_SHORT";
+    PositionSide["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(PositionSide || (exports.PositionSide = PositionSide = {}));
+function positionSideFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "POSITION_SIDE_UNSPECIFIED":
+            return PositionSide.POSITION_SIDE_UNSPECIFIED;
+        case 1:
+        case "POSITION_SIDE_LONG":
+            return PositionSide.POSITION_SIDE_LONG;
+        case 2:
+        case "POSITION_SIDE_SHORT":
+            return PositionSide.POSITION_SIDE_SHORT;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return PositionSide.UNRECOGNIZED;
+    }
+}
+function positionSideToJSON(object) {
+    switch (object) {
+        case PositionSide.POSITION_SIDE_UNSPECIFIED:
+            return "POSITION_SIDE_UNSPECIFIED";
+        case PositionSide.POSITION_SIDE_LONG:
+            return "POSITION_SIDE_LONG";
+        case PositionSide.POSITION_SIDE_SHORT:
+            return "POSITION_SIDE_SHORT";
+        case PositionSide.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function positionSideToNumber(object) {
+    switch (object) {
+        case PositionSide.POSITION_SIDE_UNSPECIFIED:
+            return 0;
+        case PositionSide.POSITION_SIDE_LONG:
+            return 1;
+        case PositionSide.POSITION_SIDE_SHORT:
+            return 2;
+        case PositionSide.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
 function createBasePortfolio() {
     return {
         portfolioId: "",
@@ -1040,7 +1101,14 @@ exports.GetPositionRequest = {
     },
 };
 function createBaseListPositionsRequest() {
-    return { userId: "", page: undefined, tradingMode: common_1.TradingMode.TRADING_MODE_UNSPECIFIED, accountId: undefined };
+    return {
+        userId: "",
+        page: undefined,
+        tradingMode: common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
+        accountId: undefined,
+        symbol: "",
+        side: PositionSide.POSITION_SIDE_UNSPECIFIED,
+    };
 }
 exports.ListPositionsRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -1055,6 +1123,12 @@ exports.ListPositionsRequest = {
         }
         if (message.accountId !== undefined) {
             writer.uint32(34).string(message.accountId);
+        }
+        if (message.symbol !== "") {
+            writer.uint32(42).string(message.symbol);
+        }
+        if (message.side !== PositionSide.POSITION_SIDE_UNSPECIFIED) {
+            writer.uint32(48).int32(positionSideToNumber(message.side));
         }
         return writer;
     },
@@ -1093,6 +1167,20 @@ exports.ListPositionsRequest = {
                     message.accountId = reader.string();
                     continue;
                 }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 48) {
+                        break;
+                    }
+                    message.side = positionSideFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1119,6 +1207,8 @@ exports.ListPositionsRequest = {
                 : isSet(object.account_id)
                     ? globalThis.String(object.account_id)
                     : undefined,
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            side: isSet(object.side) ? positionSideFromJSON(object.side) : PositionSide.POSITION_SIDE_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -1135,6 +1225,12 @@ exports.ListPositionsRequest = {
         if (message.accountId !== undefined) {
             obj.accountId = message.accountId;
         }
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.side !== PositionSide.POSITION_SIDE_UNSPECIFIED) {
+            obj.side = positionSideToJSON(message.side);
+        }
         return obj;
     },
     create(base) {
@@ -1148,6 +1244,8 @@ exports.ListPositionsRequest = {
             : undefined;
         message.tradingMode = object.tradingMode ?? common_1.TradingMode.TRADING_MODE_UNSPECIFIED;
         message.accountId = object.accountId ?? undefined;
+        message.symbol = object.symbol ?? "";
+        message.side = object.side ?? PositionSide.POSITION_SIDE_UNSPECIFIED;
         return message;
     },
 };
