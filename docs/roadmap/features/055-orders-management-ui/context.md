@@ -178,3 +178,17 @@ grpcio-tools==1.80.0 — pinned to CI proto-freshness versions) since buf/protoc
 - Files modified: `src/hooks/useOrders.ts`; created `useReplaceOrder.ts`, `useCancelOrder.ts`, `useOrderUpdates.ts`
 - Deviations: OrderFilters also carries status+range (existing request fields) so Step 9's FR-2
   filters are unblocked — see Deviation Log.
+
+### Step 9 — service: trader/orders page with edit, cancel, live feed [done]
+- Extended OrderForm with the 5th order type (trailing_stop) + a stop-price input
+  (shown/required for stop/stop_limit/trailing_stop). Created OrderFilters (symbol/side/type/
+  status/date-range, server-side), OrdersTable (paginated, per-row Edit/Cancel disabled on
+  terminal status, two-step cancel confirm, merges useOrderUpdates live feed), EditOrderDialog
+  (Sheet → useReplaceOrder; partial-fill note), and the AppShell-wrapped trader/orders page
+  composing OrderForm + filters + table, scoped to selectedAccountId + environment mode (FR-7).
+  `pnpm lint` + `tsc --noEmit` + `pnpm build` all pass (/trader/orders built).
+- Files modified/created: OrderForm.tsx (mod); OrderFilters.tsx, OrdersTable.tsx,
+  EditOrderDialog.tsx, app/trader/orders/page.tsx (new); + backend trading_repo.go & trading.go
+  (range filtering — user-approved Option A).
+- Deviations: wired created_at range filtering into the Go repo+service so the FR-2 date-range UI
+  works server-side (sequential-mode blocker → user chose Option A). See Deviation Log.

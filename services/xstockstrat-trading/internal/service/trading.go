@@ -461,7 +461,7 @@ func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRe
 }
 
 func (s *TradingService) ListOrders(ctx context.Context, req *tradingv1.ListOrdersRequest) (*tradingv1.ListOrdersResponse, error) {
-	orders, err := s.repo.ListOrders(ctx, req.UserId, req.Status, req.TradingMode, req.StrategyId, req.Symbol, req.Side, req.OrderType, req.AccountId)
+	orders, err := s.repo.ListOrders(ctx, req.UserId, req.Status, req.TradingMode, req.StrategyId, req.Symbol, req.Side, req.OrderType, req.AccountId, req.Range)
 	if err != nil {
 		slog.Warn("db list orders failed, falling back to in-memory", "error", err)
 		var mem []*tradingv1.Order
@@ -487,6 +487,15 @@ func (s *TradingService) ListOrders(ctx context.Context, req *tradingv1.ListOrde
 			}
 			if req.AccountId != "" && o.AccountId != req.AccountId {
 				continue
+			}
+			if req.Range != nil && o.CreatedAt != nil {
+				ct := o.CreatedAt.AsTime()
+				if req.Range.Start != nil && ct.Before(req.Range.Start.AsTime()) {
+					continue
+				}
+				if req.Range.End != nil && ct.After(req.Range.End.AsTime()) {
+					continue
+				}
 			}
 			mem = append(mem, o)
 		}

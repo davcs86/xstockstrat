@@ -99,6 +99,7 @@ func (r *TradingRepo) ListOrders(
 	side tradingv1.OrderSide,
 	orderType tradingv1.OrderType,
 	accountID string,
+	rng *commonv1.TimeRange,
 ) ([]*tradingv1.Order, error) {
 	query := `
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
@@ -148,7 +149,19 @@ func (r *TradingRepo) ListOrders(
 	if accountID != "" {
 		query += fmt.Sprintf(" AND account_id = $%d", i)
 		args = append(args, accountID)
-		// account_id is the last optional clause; no further i++ needed (ineffassign).
+		i++
+	}
+	if rng != nil {
+		if rng.Start != nil {
+			query += fmt.Sprintf(" AND created_at >= $%d", i)
+			args = append(args, rng.Start.AsTime())
+			i++
+		}
+		if rng.End != nil {
+			query += fmt.Sprintf(" AND created_at <= $%d", i)
+			args = append(args, rng.End.AsTime())
+			// created_at <= is the last optional clause; no further i++ needed (ineffassign).
+		}
 	}
 	query += " ORDER BY created_at DESC LIMIT 500"
 

@@ -307,7 +307,7 @@ Note: the new `ReplaceOrder` service/handler/repository logic lands in CI-exclud
 
 ### Step 9 — service: Build the `trader/orders` list/create page with edit, cancel, and live feed
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/orders/page.tsx` — create
@@ -409,3 +409,9 @@ Manual read-through; markdown links resolve. No code/test gate (docs step).
 **Actual**: `OrderFilters` also includes `status` and `range` (plus `pageSize`/`pageToken`), all existing `ListOrdersRequest` fields.
 **Reason**: Step 9's `OrderFilters` component (FR-2) filters by symbol/side/type/**status/date**/account server-side; the hook must forward `status` + `range` for Step 9 to function. Including them in Step 8 avoids a Step 9 blocker; they map to pre-existing request fields (no contract change).
 **Disposition**: accepted refinement (forward-compatible with Step 9 / FR-2).
+
+### Deviation: Step 9 — wire `created_at` range filtering into the backend (FR-2 date range)
+**Spec said**: Step 9 `**Files**` are UI-only; `OrderFilters.tsx` includes a "date range" filter. Steps 1–5 only added `symbol`/`side`/`order_type`/`account_id` filters to `ListOrders` — `req.Range` was never applied to orders.
+**Actual**: Added `created_at >= start` / `created_at <= end` filtering to `TradingRepo.ListOrders` (new `rng *commonv1.TimeRange` param) and threaded `req.Range` through `TradingService.ListOrders` (DB + in-memory fallback), so the Step 9 date-range UI filters server-side. Touches `internal/repository/trading_repo.go` and `internal/service/trading.go` (Step 4/5 files) from a UI step.
+**Reason**: The date-range filter is required by FR-2 ("server-side filters" incl. date), but the proto `range` field was never wired for `ListOrders`. A UI-only filter would be a no-op; surfaced as a sequential-mode blocker (§5.7) → user chose **Option A (wire date-range in backend too)**. Go `go build` + `golangci-lint` + tests all pass.
+**Disposition**: in-scope expansion authorized by the user; backend Go files staged with Step 9.
