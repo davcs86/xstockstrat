@@ -116,3 +116,13 @@ grpcio-tools==1.80.0 — pinned to CI proto-freshness versions) since buf/protoc
   languages; git diff scoped to trading/v1 only (mirrors CI proto-freshness stale-stub check).
 - Files modified: regenerated stubs under `packages/proto/gen/{go,python,ts}/trading/v1/`
 - Deviations: none (codegen toolchain installed on host per sequential-mode fallback; see session header)
+
+### Step 3 — service: Add ReplaceOrder to broker interface + Alpaca/IBKR adapters [done]
+- Added `ReplaceOrder(ctx, brokerOrderID, OrderRequest) (*BrokerOrder, error)` to the `Broker`
+  interface. Alpaca impl: `PATCH /v2/orders/{id}` with omit-when-zero qty/limit_price/stop_price
+  and omit-when-empty time_in_force (mirrors SubmitOrder). IBKR impl: modify `POST
+  /iserver/account/{acct}/order/{id}` with quantity/price/auxPrice/tif set only when changed,
+  signed Authorization (mirrors SubmitOrder/CancelOrder); netting-mode caveat documented in-code.
+  `var _ Broker = ...` assertions confirm both adapters conform. `GOWORK=off go build ./...` OK.
+- Files modified: `services/xstockstrat-trading/internal/broker/{broker.go,alpaca.go,ibkr.go}`
+- Deviations: none

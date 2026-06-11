@@ -123,7 +123,7 @@ three deployment files.
 
 ### Step 3 — service: Add `ReplaceOrder` to the broker interface + Alpaca/IBKR adapters
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/broker.go` — modify
