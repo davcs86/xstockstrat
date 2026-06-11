@@ -70,6 +70,11 @@ Body: { "approved_by": "user@example.com", "reason": "reviewed and approved" }
 
 ### 3. xstockstrat-ui Trader segment
 - Pending approvals appear in the Orders tab with status `PENDING_APPROVAL`
+- The dedicated `/trader/orders` page (feature `055-orders-management-ui`) also surfaces
+  `PENDING_APPROVAL` distinctly. Its row Edit/Cancel actions are disabled for **terminal** orders
+  (`FILLED`/`CANCELED`/`EXPIRED`/`REJECTED`); a **replace** attempt on a `PENDING_APPROVAL` order is
+  rejected server-side with `FailedPrecondition`, since `ReplaceOrder` only allows
+  `NEW`/`PARTIALLY_FILLED` and requires a `broker_order_id` that an unapproved order does not yet have.
 - Approvers with the `orders:approve` scope see an **Approve / Reject** button
 - Action calls `POST /api/orders/{id}/approve` Route Handler
 

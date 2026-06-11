@@ -54,6 +54,21 @@ router.service(TradingService, {
     const claims = await requireSession(ctx);
     return tradingClient.cancelOrder(req, { headers: backendHeaders(claims, ctx) });
   },
+  async replaceOrder(req, ctx) {
+    const claims = await requireSession(ctx);
+    // Inject the verified session user so a client cannot replace another user's order.
+    return tradingClient.replaceOrder(
+      { ...req, userId: claims.user_id },
+      { headers: backendHeaders(claims, ctx) },
+    );
+  },
+  async *streamOrderUpdates(req, ctx) {
+    const claims = await requireSession(ctx);
+    yield* tradingClient.streamOrderUpdates(
+      { ...req, userId: claims.user_id },
+      { headers: backendHeaders(claims, ctx), signal: ctx.signal },
+    );
+  },
   async listBrokerAccounts(req, ctx) {
     const claims = await requireSession(ctx);
     return tradingClient.listBrokerAccounts(req, { headers: backendHeaders(claims, ctx) });
