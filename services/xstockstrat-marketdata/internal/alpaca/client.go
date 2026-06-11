@@ -27,7 +27,7 @@ type ClientConfig struct {
 	// ("iex" | "sip" | "otc"). The free/basic (paper) data plan only permits
 	// "iex"; omitting feed defaults Alpaca to SIP, which those plans reject
 	// with HTTP 403. Empty falls back to "iex" via feedParam().
-	Feed string
+	Feed  string
 	Paper bool
 }
 

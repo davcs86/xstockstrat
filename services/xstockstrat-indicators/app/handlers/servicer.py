@@ -94,9 +94,12 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             return
 
         # Validate parameter VALUES (input_params) against declared definitions
-        # before invoking the sandbox. Inline formula_source runs have no stored
-        # definition, so no declared parameters apply.
-        declared_params = list(formula.parameters) if formula is not None else []
+        # before invoking the sandbox. A saved formula uses its stored definitions;
+        # an inline formula_source run (authoring "Run" with an unsaved buffer)
+        # validates against the definitions supplied on the request instead.
+        declared_params = (
+            list(formula.parameters) if formula is not None else list(request.parameters)
+        )
         resolved_params, param_errors = params_validation.resolve_and_validate(
             declared_params, request.input_params
         )

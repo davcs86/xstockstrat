@@ -13,6 +13,11 @@ service TradingService {
   rpc GetOrder(GetOrderRequest) returns (Order);
   rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
   rpc StreamOrderUpdates(StreamOrderUpdatesRequest) returns (stream Order);
+  // ReplaceOrder modifies a working order's qty/price/TIF. It is broker-agnostic at
+  // this surface and routes by the persisted order's broker_type
+  // (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
+  // while the order is NEW or PARTIALLY_FILLED.
+  rpc ReplaceOrder(ReplaceOrderRequest) returns (Order);
   rpc RegisterBrokerAccount (RegisterBrokerAccountRequest) returns (RegisterBrokerAccountResponse);
   rpc ListBrokerAccounts (ListBrokerAccountsRequest) returns (ListBrokerAccountsResponse);
   rpc DeregisterBrokerAccount (DeregisterBrokerAccountRequest) returns (DeregisterBrokerAccountResponse);
@@ -114,6 +119,12 @@ message ListOrdersRequest {
   xstockstrat.common.v1.PageRequest page = 5;
   // Filter by trading mode; UNSPECIFIED returns orders for all modes.
   xstockstrat.common.v1.TradingMode trading_mode = 6;
+  // Additive filters: an UNSPECIFIED enum value or empty string means
+  // "no filter on this dimension" (matches the status/trading_mode semantics above).
+  string symbol = 7;
+  OrderSide side = 8;
+  OrderType order_type = 9;
+  string account_id = 10;
 }
 
 message ListOrdersResponse {
@@ -124,6 +135,16 @@ message ListOrdersResponse {
 message StreamOrderUpdatesRequest {
   string user_id = 1;
   repeated OrderStatus status_filter = 2;
+}
+
+message ReplaceOrderRequest {
+  string order_id = 1;
+  // Optional replacement fields; a zero/empty value means "leave unchanged".
+  double qty = 2;
+  double limit_price = 3;
+  double stop_price = 4;
+  string time_in_force = 5;
+  string user_id = 6;
 }
 
 // CredentialStatus reflects the last known health of a broker account's stored

@@ -226,7 +226,15 @@ export interface ExecuteFormulaRequest {
   /** 0 = use config value */
   memoryBytesOverride: number;
   /** parameter VALUES, separate from input_data */
-  inputParams?: { [key: string]: any } | undefined;
+  inputParams?:
+    | { [key: string]: any }
+    | undefined;
+  /**
+   * Declared parameter DEFINITIONS used to validate input_params and apply defaults
+   * for inline formula_source runs (authoring "Run" with an unsaved buffer). Ignored
+   * when formula_id is set — saved formulas use their stored definitions instead.
+   */
+  parameters: FormulaParameter[];
 }
 
 export interface ExecuteFormulaRequest_EnvEntry {
@@ -1050,6 +1058,7 @@ function createBaseExecuteFormulaRequest(): ExecuteFormulaRequest {
     timeoutMsOverride: 0,
     memoryBytesOverride: 0,
     inputParams: undefined,
+    parameters: [],
   };
 }
 
@@ -1075,6 +1084,9 @@ export const ExecuteFormulaRequest: MessageFns<ExecuteFormulaRequest> = {
     }
     if (message.inputParams !== undefined) {
       Struct.encode(Struct.wrap(message.inputParams), writer.uint32(58).fork()).join();
+    }
+    for (const v of message.parameters) {
+      FormulaParameter.encode(v!, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -1145,6 +1157,14 @@ export const ExecuteFormulaRequest: MessageFns<ExecuteFormulaRequest> = {
           message.inputParams = Struct.unwrap(Struct.decode(reader, reader.uint32()));
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.parameters.push(FormulaParameter.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1195,6 +1215,9 @@ export const ExecuteFormulaRequest: MessageFns<ExecuteFormulaRequest> = {
         : isObject(object.input_params)
         ? object.input_params
         : undefined,
+      parameters: globalThis.Array.isArray(object?.parameters)
+        ? object.parameters.map((e: any) => FormulaParameter.fromJSON(e))
+        : [],
     };
   },
 
@@ -1227,6 +1250,9 @@ export const ExecuteFormulaRequest: MessageFns<ExecuteFormulaRequest> = {
     if (message.inputParams !== undefined) {
       obj.inputParams = message.inputParams;
     }
+    if (message.parameters?.length) {
+      obj.parameters = message.parameters.map((e) => FormulaParameter.toJSON(e));
+    }
     return obj;
   },
 
@@ -1250,6 +1276,7 @@ export const ExecuteFormulaRequest: MessageFns<ExecuteFormulaRequest> = {
     message.timeoutMsOverride = object.timeoutMsOverride ?? 0;
     message.memoryBytesOverride = object.memoryBytesOverride ?? 0;
     message.inputParams = object.inputParams ?? undefined;
+    message.parameters = object.parameters?.map((e) => FormulaParameter.fromPartial(e)) || [];
     return message;
   },
 };

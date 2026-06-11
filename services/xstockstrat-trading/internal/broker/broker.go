@@ -41,6 +41,11 @@ type BrokerBalance struct {
 type Broker interface {
 	SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrder, error)
 	CancelOrder(ctx context.Context, brokerOrderID string) error
+	// ReplaceOrder modifies a working order at the broker. req carries only the
+	// fields to change; a zero Qty/LimitPrice/StopPrice or empty TimeInForce means
+	// "leave unchanged". Routing to the correct broker is the caller's job (per the
+	// persisted order's broker_type).
+	ReplaceOrder(ctx context.Context, brokerOrderID string, req OrderRequest) (*BrokerOrder, error)
 	GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrder, error)
 	GetPositions(ctx context.Context) ([]BrokerPosition, error)
 	// GetAccount returns a normalized account-balance snapshot (cash, buying
