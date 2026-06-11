@@ -159,3 +159,12 @@ grpcio-tools==1.80.0 — pinned to CI proto-freshness versions) since buf/protoc
   `internal/service/trading_helpers_test.go`, `internal/repository/trading_repo.go` (lint fix)
 - Deviations: dropped a dead `i++` in trading_repo.go (Step 4 code) flagged by the Step 6 lint
   gate — see Deviation Log.
+
+### Step 7 — service: Register replaceOrder + streamOrderUpdates in the trader BFF [done]
+- Added `replaceOrder` (mirrors cancelOrder; injects verified session userId so a client cannot
+  replace another user's order) and `streamOrderUpdates` async generator (mirrors streamAlerts;
+  forwards backendHeaders + ctx.signal) to the TradingService block in traderBff.ts. No handlerMap
+  change needed (router.service registration is auto-picked up). `pnpm run lint` clean; `tsc
+  --noEmit` clean (client exposes both methods from the regenerated stubs).
+- Files modified: `services/xstockstrat-ui/src/lib/traderBff.ts`
+- Deviations: none

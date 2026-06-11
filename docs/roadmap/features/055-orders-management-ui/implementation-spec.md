@@ -252,7 +252,7 @@ Note: the new `ReplaceOrder` service/handler/repository logic lands in CI-exclud
 
 ### Step 7 — service: Register `replaceOrder` + `streamOrderUpdates` in the trader BFF
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/traderBff.ts` — modify
