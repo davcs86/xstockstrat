@@ -64,6 +64,8 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}
+      - key: DB_POOL_MAX
+        value: "2"
       - key: SERVICE_NAME
         value: trading
       - key: BROKER_ACCOUNTS_ENCRYPTION_KEY
@@ -93,6 +95,8 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}
+      - key: DB_POOL_MAX
+        value: "2"
       - key: SERVICE_NAME
         value: portfolio
 
@@ -124,6 +128,8 @@ services:
       - key: ALPACA_API_SECRET
         scope: RUN_TIME
         type: SECRET
+      - key: DB_POOL_MAX
+        value: "2"
       - key: SERVICE_NAME
         value: marketdata
 
@@ -150,6 +156,8 @@ services:
         value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: WAIT_FOR
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
+      - key: DB_POOL_MAX
+        value: "2"
       - key: SERVICE_NAME
         value: indicators
       - key: DATABASE_URL
@@ -184,6 +192,8 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}
+      - key: DB_POOL_MAX
+        value: "2"
       - key: SERVICE_NAME
         value: ingest
       - key: MCP_AGENT_SECRET
@@ -220,6 +230,8 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}
+      - key: DB_POOL_MAX
+        value: "2"
       - key: SERVICE_NAME
         value: analysis
       - key: MCP_AGENT_SECRET
@@ -291,6 +303,8 @@ services:
       - key: DATABASE_CA_CERT
         scope: RUN_TIME
         value: ${xstockstrat.CA_CERT}
+      - key: DB_POOL_MAX
+        value: "2"
       - key: SERVICE_NAME
         value: ledger
 
@@ -325,6 +339,8 @@ services:
         scope: RUN_TIME
         value: YOUR_DEV_JWT_SECRET
         type: SECRET
+      - key: DB_POOL_MAX
+        value: "2"
       - key: SERVICE_NAME
         value: identity
 
@@ -353,6 +369,8 @@ services:
       - key: DATABASE_CA_CERT
         scope: RUN_TIME
         value: ${xstockstrat.CA_CERT}
+      - key: DB_POOL_MAX
+        value: "1"
       - key: SERVICE_NAME
         value: notify
       - key: MCP_AGENT_SECRET
@@ -379,6 +397,8 @@ services:
       - key: DATABASE_CA_CERT
         scope: RUN_TIME
         value: ${xstockstrat.CA_CERT}
+      - key: DB_POOL_MAX
+        value: "2"
       - key: SERVICE_NAME
         value: config
 
@@ -420,6 +440,8 @@ services:
         scope: RUN_TIME
         value: YOUR_DEV_JWT_SECRET
         type: SECRET
+      - key: DB_POOL_MAX
+        value: "1"
       - key: SERVICE_NAME
         value: xstockstrat-ui
       - key: DATABASE_URL

@@ -12,7 +12,6 @@ import (
 
 	"encoding/hex"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
@@ -79,13 +78,9 @@ func main() {
 	}
 	slog.Info("db repository initialized")
 
-	// Account repository — backed by its own pool (TradingRepo pool is private).
-	pool, err := pgxpool.New(ctx, cfg.DBConnStr)
-	if err != nil {
-		slog.Error("account repo pool init failed", "error", err)
-		os.Exit(1)
-	}
-	accountRepo := repository.NewAccountRepo(pool)
+	// Account repository — shares the TradingRepo pool to avoid a second
+	// connection pool (keeps the service within the shared DB connection budget).
+	accountRepo := repository.NewAccountRepo(repo.Pool())
 	slog.Info("account repository initialized")
 
 	// Wire service layer.
