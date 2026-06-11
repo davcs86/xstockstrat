@@ -180,7 +180,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 4 — test: portfolio filter + enrichment unit tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go` — modify
@@ -465,5 +465,11 @@ read-only join over existing `order.filled` ledger events.
 **Actual**: (a) Replaced the four hardcoded `ListPositions` SQL variants with one equivalent **dynamic predicate builder** (optional `trading_mode`/`account_id`/`symbol` params + static `qty`-sign side filter + the keyset `symbol > pageToken` predicate, `ORDER BY symbol` + `pageSize+1` probe preserved). (b) Service `ListPositions` now forwards `req.AccountId` (the pre-existing drop — **user-approved fix** at execute time) plus `req.Symbol`/`req.Side`, and enriches each position via the new `enrichPosition` helper. The four other `repo.ListPositions` call sites (`GetPortfolio`, `GetPnL`, +2, all in `portfolio_service.go`) were updated to the widened signature with no-filter defaults to keep `go build` green. (c) The `sideOf` helper is added in **Step 4** (with its test) instead of here, so Step 3's stacked PR has no unused-function lint window.
 **Reason**: Conditional `symbol`/`side` filters across four positional-param variants combinatorially explode; a builder is correct and maintainable. `sideOf` has no Step-3 production caller (side-filtering is in SQL), so adding it here would fail `golangci-lint unused` until Step 4's test references it.
 **Disposition**: in-scope (all edits within Step 3's two `**Files**`; the extra call-site updates are in `portfolio_service.go`). Verified: `go build` + `golangci-lint run` clean.
+
+### Deviation: Step 4 — `sideOf` helper added to `portfolio_service.go` (not just the test file)
+**Spec said**: Step 4 `**Files**` is `portfolio_helpers_test.go` only; "Add a pure helper (e.g. `sideOf` …) and table-driven tests".
+**Actual**: The `sideOf` helper was added to `services/xstockstrat-portfolio/internal/service/portfolio_service.go` (production), together with its `TestSideOf` + `TestEnrichPosition` tests in `portfolio_helpers_test.go`, in this one step.
+**Reason**: A Go helper can't live only in a `_test.go` file and be a "production helper"; and adding it in Step 3 (with no caller yet) failed `golangci-lint unused`. Adding it here, in the same commit as its test, gives every stacked PR an independently lint-green tree.
+**Disposition**: in-scope (the paired test step naturally co-locates the tested helper). Verified: `go test` passes (coverage 47.8% ≥ 40%); `golangci-lint run` clean.
 </content>
 </invoke>

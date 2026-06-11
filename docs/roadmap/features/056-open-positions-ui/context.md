@@ -149,3 +149,11 @@
 - Verification: GOWORK=off go build ./... OK; golangci-lint run 0 issues; greps confirm predicates+forwarding.
 - Files modified: `internal/repository/portfolio_repo.go`, `internal/service/portfolio_service.go`
 - Deviations: dynamic SQL builder; account_id fix; sideOf→Step4 — see Deviation Log.
+
+### Step 4 — test: portfolio filter + enrichment unit tests [done]
+- Added `sideOf` helper to portfolio_service.go (per Step 3 deviation) + TestSideOf (qty→side:
+  long/short/flat) and TestEnrichPosition (winner/loser/zero-cost-basis guard) in portfolio_helpers_test.go.
+- Verification: new tests pass; total coverage 47.8% ≥ 40% (measured pkgs, repo/service excluded per
+  ci.yml); golangci-lint 0 issues (gofmt-fixed the test struct alignment).
+- Files modified: `internal/service/portfolio_helpers_test.go`, `internal/service/portfolio_service.go`
+- Deviations: sideOf added to production file alongside its test — see Deviation Log.

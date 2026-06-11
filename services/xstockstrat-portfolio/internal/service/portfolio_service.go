@@ -194,6 +194,18 @@ func enrichPosition(p *portfoliov1.Position, askPrice, bidPrice float64) {
 	}
 }
 
+// sideOf derives a PositionSide from a signed quantity (qty > 0 long, qty < 0 short).
+func sideOf(qty float64) portfoliov1.PositionSide {
+	switch {
+	case qty > 0:
+		return portfoliov1.PositionSide_POSITION_SIDE_LONG
+	case qty < 0:
+		return portfoliov1.PositionSide_POSITION_SIDE_SHORT
+	default:
+		return portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED
+	}
+}
+
 // GetPortfolio aggregates all open positions with live prices.
 func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.GetPortfolioRequest) (*portfoliov1.Portfolio, error) {
 	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", req.GetAccountId(), "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
