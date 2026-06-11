@@ -116,7 +116,7 @@ the new total/remaining per its adapter. A successful replace persists the order
 | `stop_price` | `stop_price` | `auxPrice` |
 | `time_in_force` | `time_in_force` | `tif` |
 
-The IBKR **netting-mode** assumption documented in *Known Limitations* applies to replace as
+The IBKR **netting-mode** assumption documented in _Known Limitations_ applies to replace as
 well: a replaced quantity is the new total order quantity (no hedged-mode lot semantics).
 
 ## Environment Variables
