@@ -49,6 +49,39 @@
 - Deferred to /sdd-spec: ingest derived-state invalidation check; optional
   `marketdata.backfill.max_delete_days` guard config key.
 
+## Session 2026-06-11 — sdd-spec
+
+- Generated implementation-spec.md with 14 steps. Status → implementation-ready.
+- Key codebase findings (all grep/Read-confirmed):
+  - **Proto**: `ingest/v1/ingest.proto` `enum BackfillStatus` last value `BACKFILL_STATUS_PARTIAL = 5`
+    → CANCELED = 6 next free. `ListBackfillJobsRequest` next free field = 3 (add `string symbol`).
+    `marketdata/v1/marketdata.proto` `MarketDataService` has no delete RPC. Both protos import
+    `common/v1/common.proto` (TimeRange, Timeframe enum confirmed).
+  - **Ingest cancel**: `IngestServicer` (servicer.py L95) already has `_has_admin_scope` (L113, `&0x04`)
+    and `_propagation_meta` (L128). Chunk scheduling is `_run_chunks`/`run_one` (L408/L422) under
+    `asyncio.gather` — cancel must set an in-process flag checked in `run_one` before issuing the
+    marketdata `BackfillBars` call (retain completed-chunk bars per FR-4). `backfill_jobs.update_job`
+    already allows `status`+`completed_at` (`_UPDATABLE_COLUMNS` L13). `list_jobs` (L79) needs a
+    `symbol_filter` using `$N = ANY(symbols)` (symbols is a text[] array).
+  - **Marketdata delete**: table `marketdata.ohlcv`, PK `(symbol, timeframe, time)` (repo L42–47).
+    `GetCoverage` (L139) is the scoped-predicate analog. Admin scope server-side via
+    `middleware.FromContext(ctx).AccessScope` (propagation.go); `timeframe.Resolve(enum, "")`
+    (timeframe.go:55); `s.cfg.GetInt(key, default)` (config.go:108). Handler needs Connect method +
+    `grpcMarketDataAdapter` method + `toGRPCError` PermissionDenied mapping.
+  - **Config**: registered `marketdata.backfill.max_delete_days` (int, default 0 = no cap) as the
+    deferred delete-window guard — fits existing `marketdata.backfill.*` namespace; safe default,
+    no rollout needed to ship.
+  - **UI**: BFF `insightsBff.ts` already wires `IngestService.triggerBackfill` + `MarketDataService.getBars`
+    with `backendHeaders` + `ADMIN_BIT=0x04` gate (L62/L82). Browser clients `insightsIngestClient`
+    (`/insights/api`) exist; need a parallel `insightsMarketDataClient` (`/trader/api` marketDataClient
+    is wrong segment). Hook pattern in `useBacktest.ts` (`useTriggerBackfill` L24). Admin-gated page
+    pattern via `useIsAdmin()` + `/api/auth/me` (strategies/page.tsx L31). New page at
+    `src/app/insights/backfills/page.tsx`. **No new env var/port**: ui docker-compose block (L433)
+    already has `MARKETDATA_ENDPOINT` (L448) + `INGEST_ENDPOINT` (L452); app specs likewise.
+- Deferred open questions resolved here: (1) ingest holds no derived state needing invalidation on
+  marketdata delete — ingest owns jobs, marketdata owns bars (cancel only flips job state). (2)
+  max-delete-window guard registered as `marketdata.backfill.max_delete_days` (Step 7).
+
 ## Next action
 
-`/sdd-spec backfill-management-ui`.
+`/sdd-review backfill-management-ui impl-spec`, then `/sdd-execute backfill-management-ui`.

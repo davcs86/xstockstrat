@@ -1,9 +1,9 @@
 # Feature: orders-management-ui
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/orders-management-ui`
 **Created**: 2026-06-10
-**Last Updated**: 2026-06-10
+**Last Updated**: 2026-06-11
 
 ---
 
@@ -14,13 +14,14 @@
 | 2026-06-10 | — → `idea` | backlog capture | Feature captured in backlog |
 | 2026-06-10 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-06-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved; 5 open questions resolved (replace=Alpaca+IBKR, all 5 order types, StreamOrderUpdates, server-side filters, account_id filter); C-2/C-4/C-5 trading-domain gaps closed |
+| 2026-06-11 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec orders-management-ui`_
+- [Implementation Spec](implementation-spec.md) — 11 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -46,4 +47,4 @@ the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec orders-management-ui` — generate implementation spec from the approved product spec
+`/sdd-review orders-management-ui impl-spec` — validate implementation spec, then `/sdd-execute orders-management-ui`
