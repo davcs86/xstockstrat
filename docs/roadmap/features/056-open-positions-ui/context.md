@@ -157,3 +157,13 @@
   ci.yml); golangci-lint 0 issues (gofmt-fixed the test struct alignment).
 - Files modified: `internal/service/portfolio_helpers_test.go`, `internal/service/portfolio_service.go`
 - Deviations: sideOf added to production file alongside its test — see Deviation Log.
+
+### Step 5 — service: expose ListPositions + LedgerService.QueryEvents via trader BFF [done]
+- connectClients.ts: added LedgerService import, LEDGER_ENDPOINT const (default xstockstrat-ledger:50057),
+  exported ledgerClient. traderBff.ts: added listPositions to PortfolioService block (injects
+  claims.user_id) + new LedgerService block with queryEvents (read-only, forwards backendHeaders).
+- Wired LEDGER_ENDPOINT into all 3 deploy files' xstockstrat-ui blocks (docker-compose plain host:port;
+  .do specs use ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057).
+- Verification: pnpm run lint clean; tsc --noEmit clean (typed-client calls resolve); greps confirm wiring.
+- Files modified: connectClients.ts, traderBff.ts, docker-compose.yml, .do/app.dev.yaml, .do/app.yaml
+- Deviations: none.

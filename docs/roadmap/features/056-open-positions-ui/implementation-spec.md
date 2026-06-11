@@ -221,7 +221,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 5 — service: Expose `ListPositions` + `LedgerService.QueryEvents` via trader BFF (add ledger client)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/connectClients.ts` — modify (add ledger client + `LEDGER_ENDPOINT`)
