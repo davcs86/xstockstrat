@@ -1,6 +1,6 @@
 # Implementation Spec: orders-management-ui
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-11
 **Feature**: `docs/roadmap/features/055-orders-management-ui/feature.md`
 **Total Steps**: 11
@@ -362,7 +362,7 @@ Note: the new `ReplaceOrder` service/handler/repository logic lands in CI-exclud
 
 ### Step 11 — docs: Record `ReplaceOrder` RPC and the per-broker replaceable-field matrix
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify

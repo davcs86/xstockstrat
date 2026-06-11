@@ -203,3 +203,21 @@ grpcio-tools==1.80.0 — pinned to CI proto-freshness versions) since buf/protoc
   Playwright 1.59.1. `tsc` + `lint` clean; Step 9 `pnpm build` compiles /trader/orders.
 - Files created: `services/xstockstrat-ui/e2e/trader/orders.spec.ts`
 - Deviations: e2e verified via behavioral pass + CI-equivalent fallback — see Deviation Log.
+
+### Step 11 — docs: Record ReplaceOrder RPC + per-broker replaceable-field matrix [done]
+- Added an `order.replaced` row to the trading CLAUDE.md "Ledger Events Emitted" table, an
+  "Order Replace (ReplaceOrder)" section (broker-agnostic routing, NEW/PARTIALLY_FILLED gate,
+  netting-mode note) + the per-broker field matrix (Alpaca qty/limit_price/stop_price/time_in_force
+  vs IBKR quantity/price/auxPrice/tif). Updated approval-flow.md to note the /trader/orders page
+  surfaces PENDING_APPROVAL and that replace is rejected server-side (FailedPrecondition) until a
+  broker order exists. Corrected the doc to match the actual UI (terminal-only Edit/Cancel disable).
+- Files modified: `services/xstockstrat-trading/CLAUDE.md`, `docs/runbooks/approval-flow.md`
+- Deviations: reworded the PENDING_APPROVAL doc line to reflect actual behavior (Step 9 disables
+  Edit/Cancel only for terminal states; replace on PENDING_APPROVAL is server-rejected, not UI-disabled).
+
+## Session 2026-06-11 — sdd-execute (sequential) — feature 055 code-completed
+**Steps this session**: 1–11 (all)
+**Progress**: 11 done / 11 total
+**Stopped at**: all complete — feature 055 at code-completed. Per user's "one feature at a time"
+choice, stopping before 056/057 for review.
+**Next**: review/merge the 055 stacked PRs (#668–#678), then run /sdd-execute for 056.
