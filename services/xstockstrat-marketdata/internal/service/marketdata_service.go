@@ -60,11 +60,11 @@ func NewMarketDataService(
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
 	return &MarketDataService{
-		registry:  registry,
-		repo:      repo,
-		cfg:       cfgWatcher,
-		ledger:    ledgerv1.NewLedgerServiceClient(ledgerConn),
-		notify:    notifyv1.NewNotifyServiceClient(notifyConn),
+		registry:    registry,
+		repo:        repo,
+		cfg:         cfgWatcher,
+		ledger:      ledgerv1.NewLedgerServiceClient(ledgerConn),
+		notify:      notifyv1.NewNotifyServiceClient(notifyConn),
 		barSubs:     make(map[string]chan *marketdatav1.Bar),
 		quoteSubs:   make(map[string]chan *marketdatav1.Quote),
 		warmSymbols: make(map[string]struct{}),
