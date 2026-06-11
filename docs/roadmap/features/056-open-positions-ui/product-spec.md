@@ -27,11 +27,14 @@ FR-2. **Filters** — Filter by symbol, side (long/short, derived from `qty` sig
   `ListPositionsRequest` (or are applied client-side per page — see Open Questions).
 FR-3. **Position detail** — Per-position view: qty, avg entry, current price, market value,
   unrealized P&L ($/%), cost basis, opened-at (all already on `Position`).
-FR-4. **Position slots ↔ orders (exploration)** — From a position, view the orders/fills
-  that built it. `Position` has no order linkage today, so this requires a new additive
-  RPC (e.g. `ListPositionOrders(symbol, account, mode)`) sourced from trading orders or
-  ledger fill events. **This FR is exploratory** — /sdd-spec must confirm the source of
-  truth and whether "slot" is a per-fill row or a higher-level grouping before committing.
+FR-4. **Position → order/fill lineage (read-only join)** — From a position, view the
+  fills that built it. Implemented as a **read-only join**, no new "slot" entity: query
+  `LedgerService.QueryEvents` filtered to the fill events `order.filled` and
+  `order.partially_filled` (source_service `trading`), scoped by the position's
+  symbol/account/trading_mode (the fill payload carries `account_id` + `trading_mode` +
+  `symbol`, confirmed during /sdd-spec), and render the matching events. No write path, no
+  new storage. The trading service / portfolio is **not** modified for this; lineage reads
+  come from `xstockstrat-ledger`.
 FR-5. **Mode / account scoping** — Honor selected trading mode and account, consistent with
   the existing positions page.
 
@@ -46,21 +49,21 @@ FR-5. **Mode / account scoping** — Honor selected trading mode and account, co
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-ui` — paginate + filter the `trader/positions` page; add position-detail /
-  order-lineage drill-in.
-- `xstockstrat-portfolio` — additive `ListPositions` filter fields; new position→orders
-  linkage RPC (or proxy to trading/ledger).
-- `packages/proto` — additive position filter fields + lineage RPC/messages.
-- `xstockstrat-trading` / `xstockstrat-ledger` — **read-only dependency** for order/fill
-  lineage (confirm source of truth in /sdd-spec).
+- `xstockstrat-ui` — paginate + filter the `trader/positions` page; add a position-detail /
+  fill-lineage drill-in; BFF routes to portfolio and ledger.
+- `xstockstrat-portfolio` — additive `ListPositions` filter fields (symbol, side).
+- `packages/proto` — additive position filter fields only.
+- `xstockstrat-ledger` — **read-only dependency** for fill lineage via existing
+  `QueryEvents` (`event_type` in `order.filled` / `order.partially_filled`). No ledger
+  changes required.
 
 ## Proto Contract Changes
 
 - [ ] ~~No proto changes required~~
 - **`portfolio/v1/portfolio.proto`** (additive, non-breaking):
   - Additive filter fields on `ListPositionsRequest` (e.g. `string symbol`, side enum).
-  - New RPC for order lineage, e.g. `ListPositionOrders(ListPositionOrdersRequest) returns
-    (ListPositionOrdersResponse)` — **shape pending source-of-truth decision**.
+- **No lineage RPC needed** — FR-4 reuses the existing `LedgerService.QueryEvents` RPC
+  (filter `event_type` = `order.filled` / `order.partially_filled`). No `ledger.proto` change.
 - Run `./scripts/buf-gen.sh`; `buf breaking` must stay green.
 
 ## Config Key Changes
@@ -69,9 +72,8 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Database Changes
 
-- [x] No schema changes expected — positions and fills already persist in portfolio/ledger.
-  The lineage RPC reads existing data. (If a "slot" abstraction needs its own storage,
-  /sdd-spec will flag a migration + DBA gate.)
+- [x] No schema changes — positions and fills already persist in portfolio/ledger. FR-4 is
+  a read-only join over existing ledger events; no new "slot" storage is introduced.
 
 ## Feature Workflow Notes
 
@@ -87,18 +89,29 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 1. `trader/positions` renders a paginated list driven by `ListPositions` page tokens.
 2. Symbol, side, account, and P&L-sign filters narrow the list correctly.
 3. A position detail view shows all `Position` fields.
-4. Selecting a position shows the orders/fills that built it (or, if lineage is deferred,
-   a clearly-scoped follow-up is recorded — see Open Questions).
-5. `buf lint`/`buf breaking` pass; changes additive.
+4. Selecting a position shows its `order.filled` / `order.partially_filled` events for that
+   symbol/account, read from the ledger via `QueryEvents` (read-only, no new storage).
+5. `buf lint`/`buf breaking` pass; the only proto change is additive `ListPositionsRequest`
+   filter fields.
 6. All views scope to the selected trading mode and account.
 
 ## Open Questions
 
-- [ ] **Define "position slot."** Is a slot one fill/order, or a logical grouping (e.g. a
-  tranche)? This determines whether FR-4 is a simple join or a new modeled entity.
-- [ ] **Source of truth for lineage:** trading `ListOrders` filtered by symbol/account, or
-  `xstockstrat-ledger` fill events? Portfolio currently has no order reference.
-- [ ] Should symbol/side filtering be server-side (new proto fields) or client-side per
-  page? Server-side is correct with pagination but adds proto surface.
-- [ ] Is FR-4 (order lineage) in-scope for the first cut, or split into a follow-up feature
-  so the pagination/filter upgrade can ship independently?
+_All resolved during /sdd-review 2026-06-10:_
+
+- [x] **"Position slot" definition** → **no new entity**. FR-4 ships as a read-only join, not
+  a modeled slot. (A first-class "slot" abstraction, if ever wanted, is a separate future
+  feature.)
+- [x] **Source of truth for lineage** → **`xstockstrat-ledger` fill events** (`event_type` =
+  `order.filled` / `order.partially_filled`) via existing `QueryEvents`. Portfolio is not
+  given an order reference.
+- [x] **FR-4 scope** → **in this cut**, as a read-only drill-in (resolved).
+- [x] **Filter placement** → **server-side** additive `ListPositionsRequest` fields.
+
+_Resolved during /sdd-spec (no longer open):_
+
+- Match key between a ledger fill event and a position → `order.filled` /
+  `order.partially_filled` payloads carry `symbol` + `account_id` + `trading_mode` (verified
+  at `trading.go:531`), so the position↔fill join is unambiguous. (Note: the earlier draft
+  said `trade.filled`, which does not exist — corrected here during the formal product-spec
+  re-review.)
