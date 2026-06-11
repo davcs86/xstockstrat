@@ -77,8 +77,10 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Config Key Changes
 
-- [ ] None expected. (If a delete safety guard needs a tunable, e.g. max delete window,
-  /sdd-spec will register a `marketdata.backfill.*` key with the config team.)
+- One key registered during /sdd-spec: **`marketdata.backfill.max_delete_days`** (int,
+  default `0` = no cap) — optional safety guard bounding the FR-5 delete window. Follows the
+  `<service>.<category>.<key>` convention within the existing `marketdata.backfill.*`
+  namespace; safe disabled-by-default value means no rollout is required to ship.
 
 ## Database Changes
 
@@ -123,9 +125,9 @@ _Resolved during /sdd-review 2026-06-10:_
   with other trader pages (no new streaming RPC).
 - [x] **Access scope** → **admin/operator only**, reusing `049-unify-admin-auth-gates` (FR-7).
 
-_Deferred to /sdd-spec (implementation detail, not a product blocker):_
+_Resolved during /sdd-spec (no longer open):_
 
-- Confirm `xstockstrat-ingest` holds no derived state that must be invalidated when
-  marketdata bars are deleted (assumed none — ingest tracks jobs, marketdata owns bars).
-- Whether a max-window guard config key (e.g. `marketdata.backfill.max_delete_days`) is
-  warranted; if so, register it with the config team in /sdd-spec.
+- `xstockstrat-ingest` holds **no derived state** to invalidate on a marketdata bar delete —
+  ingest owns the job records, marketdata owns the bars; cancel only flips job state.
+- The max-window guard **was** registered as `marketdata.backfill.max_delete_days` (int,
+  default `0` = no cap) — see Config Key Changes above.

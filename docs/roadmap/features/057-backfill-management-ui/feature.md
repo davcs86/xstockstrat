@@ -15,6 +15,7 @@
 | 2026-06-10 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-06-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved; open questions resolved (cancel=stop+keep bars, delete=symbol+range+timeframe bounded w/ 2nd confirm, poll progress, admin-only access FR-7) |
 | 2026-06-11 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 14 steps |
+| 2026-06-11 | re-review (status retained at `implementation-ready`) | /sdd-review | Formal product-spec re-run (skill-invoked) confirming the earlier inline review. PASS, no blocking failures; trading-domain checks skipped (non-trading). Synced Config Key section to the registered `marketdata.backfill.max_delete_days`. Overlap WARN: 055 + 056 also touch `xstockstrat-ui` (coordinate merge order) |
 
 ---
 

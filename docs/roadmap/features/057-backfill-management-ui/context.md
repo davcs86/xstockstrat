@@ -82,6 +82,24 @@
   marketdata delete — ingest owns jobs, marketdata owns bars (cancel only flips job state). (2)
   max-delete-window guard registered as `marketdata.backfill.max_delete_days` (Step 7).
 
+## Session 2026-06-11 — sdd-review product-spec (formal skill re-run)
+
+- Re-ran `/sdd-review backfill-management-ui product-spec` via the actual skill (the earlier
+  spec-ready advancement was done by hand-applying the rubric inline). A1 guard hit
+  (status `implementation-ready`); user authorized the re-run.
+- Result: **PASS**, no blocking failures. Spec criteria 1–9 pass; config key
+  `marketdata.backfill.max_delete_days` follows `<service>.<category>.<key>`.
+- Trading-domain checks: **skipped** (detection grep exit 1 — non-trading feature).
+- **Consistency fix applied during review**: the product spec's Config Key section still
+  said "None expected / deferred", but /sdd-spec registered
+  `marketdata.backfill.max_delete_days`. Synced the Config Key Changes + Open Questions
+  sections to reflect the registered key and the resolved ingest-derived-state question.
+- Overlap (A4): `055-orders-management-ui` and `056-open-positions-ui` also modify
+  `xstockstrat-ui` → ⚠ WARN (coordinate merge order). Different proto files
+  (ingest/marketdata vs trading/portfolio) → no proto collision. No duplicate config keys
+  (055/056 have none). No migration collisions. No FAIL-level overlap.
+- Status retained at `implementation-ready`.
+
 ## Next action
 
 `/sdd-review backfill-management-ui impl-spec`, then `/sdd-execute backfill-management-ui`.

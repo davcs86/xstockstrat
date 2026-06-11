@@ -67,6 +67,29 @@
     `symbol=5`, `side=6` + new `PositionSide` enum (LONG/SHORT). Existing `OrderSide` is
     order-execution semantics, not position long/short — not reused.
 
+## Session 2026-06-11 — sdd-review product-spec (formal skill re-run)
+
+- Re-ran `/sdd-review open-positions-ui product-spec` via the actual skill (the earlier
+  spec-ready advancement was done by hand-applying the rubric inline). A1 guard hit
+  (status `implementation-ready`); user authorized the re-run.
+- Result: **PASS**, no blocking failures. Spec criteria 1–9 all pass; open questions all
+  resolved; no config keys; additive proto only.
+- Trading-domain checks (detection matched, but read-only positions feature): C-1–C-4 n/a
+  (no env vars, no broker behavior, no order-execution, no order types). C-5 fill-state →
+  closed by including **both** `order.filled` and `order.partially_filled`.
+- **Correctness fix applied during review**: product spec still said `event_type =
+  "trade.filled"` (a non-existent event) in FR-4/AC-4/Affected Services/Proto/Open Questions.
+  Corrected to `order.filled` / `order.partially_filled` (verified `trading.go:531`,
+  payload carries symbol+account_id+trading_mode). This aligns the product spec with the
+  already-correct implementation-spec.
+- Overlap (A4): `055-orders-management-ui` and `057-backfill-management-ui` also modify
+  `xstockstrat-ui` → ⚠ WARN (coordinate merge order). Different proto files (portfolio vs
+  trading/ingest/marketdata) → no proto/field collision. No identical config keys (056 has
+  none). No FAIL-level overlap. Shared trader/insights BFF files (`traderBff.ts`/
+  `connectClients.ts`) are a real merge-conflict risk — to be recorded in merge-order.md at
+  the impl-spec review.
+- Status retained at `implementation-ready` (not downgraded).
+
 ## Next action
 
 `/sdd-review open-positions-ui impl-spec`, then `/sdd-execute open-positions-ui`.

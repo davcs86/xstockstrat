@@ -15,6 +15,7 @@
 | 2026-06-10 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-06-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved; open questions resolved (FR-4 = read-only ledger join, no slot entity; source = ledger `trade.filled`; server-side filters); proto change reduced to additive `ListPositionsRequest` filters only |
 | 2026-06-11 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps. Codebase correction: lineage event type is `order.filled` (not `trade.filled`); BFF lacks a ledger client (must add); service `ListPositions` does not currently enrich price/P&L |
+| 2026-06-11 | re-review (status retained at `implementation-ready`) | /sdd-review | Formal product-spec re-run (skill-invoked) confirming the earlier inline review. PASS, no blocking failures. Corrected the product spec's stale `trade.filled` → `order.filled`/`order.partially_filled` to match verified codebase. Overlap WARN: 055 + 057 also touch `xstockstrat-ui` (coordinate merge order; recorded at impl-spec review) |
 
 ---
 
