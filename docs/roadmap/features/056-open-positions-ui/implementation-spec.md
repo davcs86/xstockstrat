@@ -294,7 +294,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 6 — service: Browser typed clients + hooks (positions pagination, ledger lineage)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/browserClients/ledgerClient.ts` — create

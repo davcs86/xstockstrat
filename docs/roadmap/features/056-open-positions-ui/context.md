@@ -167,3 +167,15 @@
 - Verification: pnpm run lint clean; tsc --noEmit clean (typed-client calls resolve); greps confirm wiring.
 - Files modified: connectClients.ts, traderBff.ts, docker-compose.yml, .do/app.dev.yaml, .do/app.yaml
 - Deviations: none.
+
+### Step 6 — service: browser typed clients + hooks [done]
+- Created browserClients/ledgerClient.ts (mirrors portfolioClient: createConnectTransport baseUrl /trader/api).
+- usePortfolio.ts: replaced getPortfolio-based usePositions with listPositions-backed paginated hook
+  (PositionFilters: symbol/side/pageToken/pageSize; PositionSide.UNSPECIFIED default; refetch 10s).
+- Created usePositionLineage(symbol, accountId, mode): queryEvents(eventType order.filled, sourceService
+  trading), filters client-side by payload.symbol/account_id/trading_mode (proto String() form
+  TRADING_MODE_PAPER/LIVE); enabled only when symbol set.
+- Verification: lint clean; tsc --noEmit clean (existing page caller still type-checks — ListPositionsResponse
+  also has .positions). PositionSide members are prefix-stripped (UNSPECIFIED/LONG/SHORT) in _pb.
+- Files: created ledgerClient.ts, usePositionLineage.ts; modified usePortfolio.ts
+- Deviations: none.
