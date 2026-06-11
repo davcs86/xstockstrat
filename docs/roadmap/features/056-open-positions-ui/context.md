@@ -112,3 +112,20 @@
 
 `/sdd-execute open-positions-ui` — but per merge-order.md, land 055 first (shared
 `traderBff.ts`).
+
+## Session 2026-06-11 — sdd-execute (sequential, after 055 merged)
+- Up-front confirm: proceed sequential (9 steps). Step-3 decision: **forward req.AccountId** (fix the
+  pre-existing account_id drop) alongside symbol/side filters.
+- Re-spec gate (directive none): read-only validation — all 9 steps' evidence holds against current
+  main-dev; only line-number drift from 055 (traderBff.ts replaceOrder/streamOrderUpdates; trading.go
+  order.filled now :659/:670). No re-spec needed.
+- merge-order.md: 056→055 flipped Resolved No→Yes (055 merged to main-dev), committed on the feature branch.
+- Codegen tooling: Docker daemon unavailable here; installed host buf v1.47.2 + CI-pinned plugins
+  (protoc-gen-go v1.36.11, protoc-gen-go-grpc v1.6.2, protoc-gen-connect-go v1.19.2, grpcio-tools 1.80.0).
+
+### Step 1 — proto: symbol/side filters + PositionSide enum [done]
+- portfolio.proto: added `enum PositionSide { UNSPECIFIED/LONG/SHORT }` after Position; added additive
+  `string symbol = 5` + `PositionSide side = 6` to ListPositionsRequest (highest field was 4).
+- Verification: `buf lint` OK; `buf breaking --against feature/open-positions-ui` OK (additive only).
+- Files modified: `packages/proto/portfolio/v1/portfolio.proto`
+- Deviations: none.

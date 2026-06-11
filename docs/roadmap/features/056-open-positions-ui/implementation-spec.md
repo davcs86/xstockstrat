@@ -35,7 +35,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 1 — proto: Add `symbol`/`side` filters + `PositionSide` enum to `portfolio.proto`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/portfolio/v1/portfolio.proto` — modify

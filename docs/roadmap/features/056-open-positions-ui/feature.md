@@ -1,6 +1,6 @@
 # Feature: open-positions-ui
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/open-positions-ui`
 **Created**: 2026-06-10
 **Last Updated**: 2026-06-11
@@ -16,6 +16,7 @@
 | 2026-06-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved; open questions resolved (FR-4 = read-only ledger join, no slot entity; source = ledger `trade.filled`; server-side filters); proto change reduced to additive `ListPositionsRequest` filters only |
 | 2026-06-11 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps. Codebase correction: lineage event type is `order.filled` (not `trade.filled`); BFF lacks a ledger client (must add); service `ListPositions` does not currently enrich price/P&L |
 | 2026-06-11 | re-review (status retained at `implementation-ready`) | /sdd-review | Formal product-spec re-run (skill-invoked) confirming the earlier inline review. PASS, no blocking failures. Corrected the product spec's stale `trade.filled` → `order.filled`/`order.partially_filled` to match verified codebase. Overlap WARN: 055 + 057 also touch `xstockstrat-ui` (coordinate merge order; recorded at impl-spec review) |
+| 2026-06-11 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode (after 055 merged). merge-order 056→055 flipped to Resolved:Yes. Up-front confirm + Step-3 decision: forward `req.AccountId`. Step 1 (proto `symbol`/`side` + `PositionSide` enum) done |
 
 ---
 
