@@ -114,7 +114,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 3 — service: Apply `symbol`/`side` filters in portfolio `ListPositions`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -459,5 +459,11 @@ read-only join over existing `order.filled` ledger events.
 **Actual**: The runner's Docker daemon is not running, so the codegen toolchain was installed on the host pinned to the CI `proto-freshness` job versions (`.github/workflows/ci.yml`): `buf` v1.47.2, `protoc-gen-go` v1.36.11, `protoc-gen-go-grpc` v1.6.2, `protoc-gen-connect-go` v1.19.2, `grpcio-tools` 1.80.0; the TS plugins (`protoc-gen-es`/`protoc-gen-connect-es`/`protoc-gen-ts_proto`) came from the committed pnpm lockfile. Ran `./scripts/buf-gen.sh` on the host.
 **Reason**: No Docker; host toolchain is the sanctioned sequential-mode fallback.
 **Disposition**: CI-equivalent fallback. The regen diff was confirmed **limited to `portfolio/v1`** (Go/Python/TS + dist). Host `buf`'s bundled `google/protobuf` descriptors produced an unrelated doc-comment change in `gen/ts/google/protobuf/timestamp.ts`; that drift was reverted so the committed stubs match CI's baseline (which keeps `main-dev`'s `proto-freshness` green).
+
+### Deviation: Step 3 — dynamic SQL predicate builder + account_id fix + sideOf moved to Step 4
+**Spec said**: "Add the predicates to each of the four SQL variants"; extract enrichment + (Step 4) a `sideOf` helper.
+**Actual**: (a) Replaced the four hardcoded `ListPositions` SQL variants with one equivalent **dynamic predicate builder** (optional `trading_mode`/`account_id`/`symbol` params + static `qty`-sign side filter + the keyset `symbol > pageToken` predicate, `ORDER BY symbol` + `pageSize+1` probe preserved). (b) Service `ListPositions` now forwards `req.AccountId` (the pre-existing drop — **user-approved fix** at execute time) plus `req.Symbol`/`req.Side`, and enriches each position via the new `enrichPosition` helper. The four other `repo.ListPositions` call sites (`GetPortfolio`, `GetPnL`, +2, all in `portfolio_service.go`) were updated to the widened signature with no-filter defaults to keep `go build` green. (c) The `sideOf` helper is added in **Step 4** (with its test) instead of here, so Step 3's stacked PR has no unused-function lint window.
+**Reason**: Conditional `symbol`/`side` filters across four positional-param variants combinatorially explode; a builder is correct and maintainable. `sideOf` has no Step-3 production caller (side-filtering is in SQL), so adding it here would fail `golangci-lint unused` until Step 4's test references it.
+**Disposition**: in-scope (all edits within Step 3's two `**Files**`; the extra call-site updates are in `portfolio_service.go`). Verified: `go build` + `golangci-lint run` clean.
 </content>
 </invoke>

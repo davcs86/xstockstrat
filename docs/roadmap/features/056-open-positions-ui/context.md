@@ -137,3 +137,15 @@
 - Verified: Go `PositionSide` + `Symbol`(5)/`Side`(6) on ListPositionsRequest; TS enum+fields; Python descriptor.
 - Files modified: `packages/proto/gen/{go,python,ts}/portfolio/v1/*` (+ ts/dist)
 - Deviations: host-toolchain codegen (CI-equivalent fallback) — see Deviation Log.
+
+### Step 3 — service: symbol/side filters in portfolio ListPositions [done]
+- repo ListPositions: refactored 4 hardcoded SQL variants → 1 dynamic predicate builder
+  (mode/account_id/symbol params + static qty-sign side filter + keyset symbol>token; ORDER BY
+  symbol + pageSize+1 probe preserved). New signature adds `symbolFilter string, side PositionSide`.
+- service ListPositions: forwards req.AccountId (user-approved fix) + req.Symbol + req.Side, and
+  enriches each position via new `enrichPosition(p, ask, bid)` helper. 4 other repo.ListPositions
+  callers (GetPortfolio/GetPnL/+2) updated to widened signature w/ no-filter defaults (build-green).
+- `sideOf` helper deferred to Step 4 (added with its test there — avoids unused-func lint in this PR).
+- Verification: GOWORK=off go build ./... OK; golangci-lint run 0 issues; greps confirm predicates+forwarding.
+- Files modified: `internal/repository/portfolio_repo.go`, `internal/service/portfolio_service.go`
+- Deviations: dynamic SQL builder; account_id fix; sideOf→Step4 — see Deviation Log.
