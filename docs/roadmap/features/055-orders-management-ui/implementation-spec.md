@@ -191,7 +191,7 @@ three deployment files.
 
 ### Step 5 — service: Implement `ReplaceOrder` + wire `ListOrders` filters and handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -391,3 +391,9 @@ Manual read-through; markdown links resolve. No code/test gate (docs step).
 **Actual**: Also updated the single caller `internal/service/trading.go:387` to pass the four new filter args (`req.Symbol`/`req.Side`/`req.OrderType`/`req.AccountId`) through to the widened `repo.ListOrders` signature.
 **Reason**: Widening the repository signature breaks `go build ./...` at the only call site (a Step 5 file), so Step 4 could not satisfy its own build verification standalone. This is exactly the pass-through described by Step 5 Instruction #1; Step 5 still owns the in-memory fallback filters, pagination, `ReplaceOrder`, and the handler. Confirmed with the user (sequential-mode blocker → Option A "fix now").
 **Disposition**: in-scope expansion (build-green prerequisite); the `internal/service/trading.go` call-site one-liner is staged with Step 4.
+
+### Deviation: Step 5 — handler error-code preservation + pagination token model
+**Spec said**: Handler "mirror `CancelOrder` L45–48"; "Apply `req.Page` pagination (offset/limit from `PageRequest`)".
+**Actual**: (1) The `ReplaceOrder` Connect handler maps the service's gRPC status code via a new `connectCodeFromErr` helper (and a new `FailedPrecondition` case in `toGRPCError`) instead of always wrapping in `CodeInternal` like `CancelOrder` does. (2) `PageRequest` exposes only `page_size` + `page_token` (no offset field), so pagination is implemented as service-layer windowing with `page_token` as an opaque numeric offset (mirroring `xstockstrat-portfolio`'s `ListPositions` token convention), populating `PageResponse.total_count`/`next_page_token`.
+**Reason**: (1) FR-8's fill-state gate returns `FailedPrecondition`; collapsing it to `Internal` would hide the "not replaceable" reason from the UI. (2) The proto pagination type is token-based, not offset-based, so "offset/limit" is realized via the established page-token convention.
+**Disposition**: accepted refinement — both keep behavior consistent with the proto contract and existing service conventions; no contract change.

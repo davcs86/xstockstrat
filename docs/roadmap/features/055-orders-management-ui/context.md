@@ -134,3 +134,16 @@ grpcio-tools==1.80.0 — pinned to CI proto-freshness versions) since buf/protoc
 - Files modified: `internal/repository/trading_repo.go`, `internal/service/trading.go` (call-site one-liner)
 - Deviations: updated the single caller (service/trading.go:387) to pass the new filter args so
   `go build ./...` stays green — see Deviation Log (sequential-mode blocker resolved with user, Option A).
+
+### Step 5 — service: Implement ReplaceOrder + wire ListOrders filters and handler [done]
+- `TradingService.ReplaceOrder` modeled on CancelOrder: in-mem→DB lookup (NotFound), FR-8
+  fill-state gate (NEW/PARTIALLY_FILLED only → else FailedPrecondition), requires broker_order_id,
+  resolveAccount routing (Alpaca+IBKR), broker ReplaceOrder with only-changed fields, local field
+  update, UpsertOrder, `order.replaced` ledger event, broadcastOrder. ListOrders now applies the
+  four new filters in the in-memory fallback and paginates both branches via a new
+  `paginateOrders` helper (page_token = numeric offset; sets PageResponse total_count/next_page_token).
+  Handler + gRPC adapter ReplaceOrder added; error codes preserved (connectCodeFromErr + new
+  FailedPrecondition case in toGRPCError). `GOWORK=off go build ./...` OK.
+- Files modified: `internal/service/trading.go`, `internal/handler/trading.go`
+- Deviations: handler preserves NotFound/FailedPrecondition codes (vs CancelOrder's CodeInternal);
+  pagination uses the proto's token model (no offset field). See Deviation Log.
