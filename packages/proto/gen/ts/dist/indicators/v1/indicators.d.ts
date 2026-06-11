@@ -86,6 +86,12 @@ export interface ExecuteFormulaRequest {
     inputParams?: {
         [key: string]: any;
     } | undefined;
+    /**
+     * Declared parameter DEFINITIONS used to validate input_params and apply defaults
+     * for inline formula_source runs (authoring "Run" with an unsaved buffer). Ignored
+     * when formula_id is set — saved formulas use their stored definitions instead.
+     */
+    parameters: FormulaParameter[];
 }
 export interface ExecuteFormulaRequest_EnvEntry {
     key: string;

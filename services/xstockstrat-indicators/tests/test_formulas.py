@@ -383,6 +383,71 @@ class TestExecuteFormulaInputData:
         assert dict(resp.output) == {"value": 20.0}
 
 
+class TestExecuteFormulaInlineParameters:
+    """Inline formula_source runs validate input_params against the parameter
+    DEFINITIONS supplied on the request (the authoring "Run" with an unsaved
+    buffer), since there is no stored formula to read definitions from."""
+
+    def _cfg(self):
+        cfg = MagicMock()
+        cfg.sandbox_timeout_ms = 5000
+        cfg.sandbox_memory_bytes = 256 * 1024 * 1024
+        cfg.sandbox_allowed_imports = []
+        return cfg
+
+    async def test_inline_request_parameters_inject_into_params(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=self._cfg())
+        req = indicators_pb2.ExecuteFormulaRequest(
+            formula_source="result = {'value': params['period'] * 2}",
+            parameters=[
+                indicators_pb2.FormulaParameter(
+                    name="period", type=indicators_pb2.PARAMETER_TYPE_INT
+                )
+            ],
+        )
+        req.input_params.update({"period": 21})
+
+        resp = await servicer.ExecuteFormula(req, MagicMock())
+        assert resp.success is True, resp.error
+        assert dict(resp.output) == {"value": 42}
+
+    async def test_inline_request_parameter_default_applies_when_omitted(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=self._cfg())
+        param = indicators_pb2.FormulaParameter(
+            name="period", type=indicators_pb2.PARAMETER_TYPE_INT
+        )
+        param.default_value.number_value = 14
+        req = indicators_pb2.ExecuteFormulaRequest(
+            formula_source="result = {'value': params['period']}",
+            parameters=[param],
+        )
+        # input_params omitted → declared default (14) is applied.
+        resp = await servicer.ExecuteFormula(req, MagicMock())
+        assert resp.success is True, resp.error
+        assert dict(resp.output) == {"value": 14}
+
+    async def test_inline_out_of_range_value_returns_parameter_errors(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=self._cfg())
+        param = indicators_pb2.FormulaParameter(
+            name="period", type=indicators_pb2.PARAMETER_TYPE_INT, max=200
+        )
+        req = indicators_pb2.ExecuteFormulaRequest(
+            formula_source="result = {'value': params['period']}",
+            parameters=[param],
+        )
+        req.input_params.update({"period": 500})  # above max → validation fails
+
+        resp = await servicer.ExecuteFormula(req, MagicMock())
+        assert resp.success is False
+        assert [e.name for e in resp.parameter_errors] == ["period"]
+
+
 class TestFormulaAdminOverride:
     async def test_owner_updates_without_admin_scope(self):
         from gen.indicators.v1 import indicators_pb2
