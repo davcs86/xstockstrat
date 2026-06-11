@@ -100,6 +100,25 @@
   (055/056 have none). No migration collisions. No FAIL-level overlap.
 - Status retained at `implementation-ready`.
 
+## Session 2026-06-11 — sdd-review impl-spec (Mode B, advisory)
+
+- Ran `/sdd-review backfill-management-ui impl-spec`. **PASS** — no FAIL findings across all
+  14 steps. Per-step: line-number evidence, exact paths, runnable verification. Step 1 proto
+  buf lint+breaking + stated additive numbers (`BACKFILL_STATUS_CANCELED=6`, symbol filter
+  field 3, DeleteBackfilledDataRequest 1/2/3). Backend steps 3 (ingest) and 5 (marketdata)
+  each paired with a test step (4, 6) with explicit thresholds (Python `--cov-fail-under=40`;
+  Go ≥40% + golangci-lint), honest about CI package exclusions. Admin gate (`0x04`) enforced
+  at both BFF (Step 8) and marketdata server (Step 5); header propagation via existing
+  `_propagation_meta` / interceptor. Step 7 registers `marketdata.backfill.max_delete_days`
+  in service + root CLAUDE.md. Frontend steps paired with E2E (Step 13).
+- Cross-feature overlap (B4): **none** — 057 shares no modified files with 055 or 056 (it
+  lives in the insights segment + ingest/marketdata; the `connectClients.ts`/`.do/*` matches
+  are reference-only Codebase Evidence, not modifications). Disjoint proto files; the only new
+  config key has no duplicate.
+- No merge-order entry needed for 057.
+- Mode B makes no lifecycle change; status stays `implementation-ready`.
+
 ## Next action
 
-`/sdd-review backfill-management-ui impl-spec`, then `/sdd-execute backfill-management-ui`.
+`/sdd-execute backfill-management-ui` — independent of 055/056 (no shared files); can proceed
+in parallel.

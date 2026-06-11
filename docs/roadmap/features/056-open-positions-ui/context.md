@@ -90,6 +90,25 @@
   the impl-spec review.
 - Status retained at `implementation-ready` (not downgraded).
 
+## Session 2026-06-11 — sdd-review impl-spec (Mode B, advisory)
+
+- Ran `/sdd-review open-positions-ui impl-spec`. **PASS** — no FAIL findings across all 9
+  steps. Per-step: real line-number evidence, exact paths, runnable verification. Step 1
+  proto buf lint+breaking + field numbers (symbol=5, side=6, PositionSide enum). Step 5
+  introduces `LEDGER_ENDPOINT` and correctly lists all three deployment files + addresses
+  header propagation (new ledger client via backendHeaders). Backend step 3 paired with test
+  step 4 (≥40% + golangci-lint, honest about repo/service CI exclusion). Frontend step 7
+  paired with E2E smoke.
+- Note: Step 3 flags a pre-existing latent bug (service `ListPositions` drops `req.AccountId`)
+  and asks the portfolio owner to confirm fixing it here at execute time — carry this decision.
+- Cross-feature overlap (B4): ⚠ WARN — shares `traderBff.ts` with 055. No shared files with
+  057 (the `.do/*`/`connectClients.ts` matches against 057 are reference-only in 057, not
+  modified). No proto/migration/config collisions.
+- Merge order recorded in `merge-order.md`: **056 waits for 055** (rebase the traderBff.ts
+  conflict after 055 merges).
+- Mode B makes no lifecycle change; status stays `implementation-ready`.
+
 ## Next action
 
-`/sdd-review open-positions-ui impl-spec`, then `/sdd-execute open-positions-ui`.
+`/sdd-execute open-positions-ui` — but per merge-order.md, land 055 first (shared
+`traderBff.ts`).

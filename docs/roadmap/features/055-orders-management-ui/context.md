@@ -75,4 +75,19 @@
 
 ## Next action
 
-`/sdd-review orders-management-ui impl-spec`.
+`/sdd-execute orders-management-ui` (or `/sdd-execute orders-management-ui all`).
+
+## Session 2026-06-11 — sdd-review impl-spec (Mode B, advisory)
+
+- Ran `/sdd-review orders-management-ui impl-spec`. **PASS** — no FAIL findings across all 11
+  steps. Per-step: codebase evidence populated w/ line numbers, exact paths, runnable
+  verification, proto step has buf lint+breaking + stated field numbers (7–10), backend
+  steps (3,4,5) paired with test step 6 (Go ≥40% + golangci-lint), UI step 9 paired with
+  E2E step 10, header propagation addressed (Step 7 backendHeaders). Trading-domain per-step
+  all satisfied (5 order types, both broker paths tested, fill-state partial+full, paper-safe).
+- Cross-feature overlap (B4): ⚠ WARN — 055 and 056 both modify
+  `services/xstockstrat-ui/src/lib/traderBff.ts`. No FAIL-level overlap (proto files disjoint:
+  trading vs portfolio; no migration/config collisions).
+- Merge order recorded in `merge-order.md`: **056 (open-positions-ui) waits for 055** — 055
+  merges first, 056 rebases the traderBff.ts conflict. Soft/rebase dependency.
+- Mode B makes no lifecycle change; status stays `implementation-ready`.
