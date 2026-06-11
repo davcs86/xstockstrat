@@ -92,7 +92,7 @@ three deployment files.
 
 ### Step 2 — proto-gen: Regenerate Go / Python / TS stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/trading/v1/trading.pb.go` — regenerate (modify)

@@ -107,3 +107,12 @@ grpcio-tools==1.80.0 — pinned to CI proto-freshness versions) since buf/protoc
   feature/orders-management-ui baseline) both pass.
 - Files modified: `packages/proto/trading/v1/trading.proto`
 - Deviations: none
+
+### Step 2 — proto-gen: Regenerate Go / Python / TS stubs [done]
+- Ran `./scripts/buf-gen.sh` (after `pnpm --filter @xstockstrat/proto install` to provide the
+  TS protoc plugins). Regenerated Go (trading.pb.go, trading_grpc.pb.go, tradingv1connect),
+  Python (trading_pb2.py, trading_pb2_grpc.py), and TS (trading.ts/_pb.ts/_connect.ts + dist)
+  stubs. `ReplaceOrder` + `symbol`/`side`/`orderType`/`accountId` filters present in all three
+  languages; git diff scoped to trading/v1 only (mirrors CI proto-freshness stale-stub check).
+- Files modified: regenerated stubs under `packages/proto/gen/{go,python,ts}/trading/v1/`
+- Deviations: none (codegen toolchain installed on host per sequential-mode fallback; see session header)

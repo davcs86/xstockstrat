@@ -117,6 +117,14 @@ export interface ListOrdersRequest {
     page?: PageRequest | undefined;
     /** Filter by trading mode; UNSPECIFIED returns orders for all modes. */
     tradingMode: TradingMode;
+    /**
+     * Additive filters: an UNSPECIFIED enum value or empty string means
+     * "no filter on this dimension" (matches the status/trading_mode semantics above).
+     */
+    symbol: string;
+    side: OrderSide;
+    orderType: OrderType;
+    accountId: string;
 }
 export interface ListOrdersResponse {
     orders: Order[];
@@ -125,6 +133,15 @@ export interface ListOrdersResponse {
 export interface StreamOrderUpdatesRequest {
     userId: string;
     statusFilter: OrderStatus[];
+}
+export interface ReplaceOrderRequest {
+    orderId: string;
+    /** Optional replacement fields; a zero/empty value means "leave unchanged". */
+    qty: number;
+    limitPrice: number;
+    stopPrice: number;
+    timeInForce: string;
+    userId: string;
 }
 /** BrokerAccount is a registered broker account (credentials never returned). */
 export interface BrokerAccount {
@@ -198,6 +215,7 @@ export declare const GetOrderRequest: MessageFns<GetOrderRequest>;
 export declare const ListOrdersRequest: MessageFns<ListOrdersRequest>;
 export declare const ListOrdersResponse: MessageFns<ListOrdersResponse>;
 export declare const StreamOrderUpdatesRequest: MessageFns<StreamOrderUpdatesRequest>;
+export declare const ReplaceOrderRequest: MessageFns<ReplaceOrderRequest>;
 export declare const BrokerAccount: MessageFns<BrokerAccount>;
 export declare const RegisterBrokerAccountRequest: MessageFns<RegisterBrokerAccountRequest>;
 export declare const RegisterBrokerAccountResponse: MessageFns<RegisterBrokerAccountResponse>;
@@ -253,6 +271,21 @@ export declare const TradingServiceService: {
         readonly responseStream: true;
         readonly requestSerialize: (value: StreamOrderUpdatesRequest) => Buffer;
         readonly requestDeserialize: (value: Buffer) => StreamOrderUpdatesRequest;
+        readonly responseSerialize: (value: Order) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => Order;
+    };
+    /**
+     * ReplaceOrder modifies a working order's qty/price/TIF. It is broker-agnostic at
+     * this surface and routes by the persisted order's broker_type
+     * (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
+     * while the order is NEW or PARTIALLY_FILLED.
+     */
+    readonly replaceOrder: {
+        readonly path: "/xstockstrat.trading.v1.TradingService/ReplaceOrder";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ReplaceOrderRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ReplaceOrderRequest;
         readonly responseSerialize: (value: Order) => Buffer;
         readonly responseDeserialize: (value: Buffer) => Order;
     };
@@ -316,6 +349,13 @@ export interface TradingServiceServer extends UntypedServiceImplementation {
     getOrder: handleUnaryCall<GetOrderRequest, Order>;
     listOrders: handleUnaryCall<ListOrdersRequest, ListOrdersResponse>;
     streamOrderUpdates: handleServerStreamingCall<StreamOrderUpdatesRequest, Order>;
+    /**
+     * ReplaceOrder modifies a working order's qty/price/TIF. It is broker-agnostic at
+     * this surface and routes by the persisted order's broker_type
+     * (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
+     * while the order is NEW or PARTIALLY_FILLED.
+     */
+    replaceOrder: handleUnaryCall<ReplaceOrderRequest, Order>;
     registerBrokerAccount: handleUnaryCall<RegisterBrokerAccountRequest, RegisterBrokerAccountResponse>;
     listBrokerAccounts: handleUnaryCall<ListBrokerAccountsRequest, ListBrokerAccountsResponse>;
     deregisterBrokerAccount: handleUnaryCall<DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse>;
@@ -345,6 +385,15 @@ export interface TradingServiceClient extends Client {
     listOrders(request: ListOrdersRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListOrdersResponse) => void): ClientUnaryCall;
     streamOrderUpdates(request: StreamOrderUpdatesRequest, options?: Partial<CallOptions>): ClientReadableStream<Order>;
     streamOrderUpdates(request: StreamOrderUpdatesRequest, metadata?: Metadata, options?: Partial<CallOptions>): ClientReadableStream<Order>;
+    /**
+     * ReplaceOrder modifies a working order's qty/price/TIF. It is broker-agnostic at
+     * this surface and routes by the persisted order's broker_type
+     * (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
+     * while the order is NEW or PARTIALLY_FILLED.
+     */
+    replaceOrder(request: ReplaceOrderRequest, callback: (error: ServiceError | null, response: Order) => void): ClientUnaryCall;
+    replaceOrder(request: ReplaceOrderRequest, metadata: Metadata, callback: (error: ServiceError | null, response: Order) => void): ClientUnaryCall;
+    replaceOrder(request: ReplaceOrderRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: Order) => void): ClientUnaryCall;
     registerBrokerAccount(request: RegisterBrokerAccountRequest, callback: (error: ServiceError | null, response: RegisterBrokerAccountResponse) => void): ClientUnaryCall;
     registerBrokerAccount(request: RegisterBrokerAccountRequest, metadata: Metadata, callback: (error: ServiceError | null, response: RegisterBrokerAccountResponse) => void): ClientUnaryCall;
     registerBrokerAccount(request: RegisterBrokerAccountRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: RegisterBrokerAccountResponse) => void): ClientUnaryCall;
