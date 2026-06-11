@@ -226,7 +226,7 @@ three deployment files.
 
 ### Step 6 — test: `xstockstrat-trading` replace, filters, and fill-state coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/alpaca_test.go` — modify
@@ -397,3 +397,9 @@ Manual read-through; markdown links resolve. No code/test gate (docs step).
 **Actual**: (1) The `ReplaceOrder` Connect handler maps the service's gRPC status code via a new `connectCodeFromErr` helper (and a new `FailedPrecondition` case in `toGRPCError`) instead of always wrapping in `CodeInternal` like `CancelOrder` does. (2) `PageRequest` exposes only `page_size` + `page_token` (no offset field), so pagination is implemented as service-layer windowing with `page_token` as an opaque numeric offset (mirroring `xstockstrat-portfolio`'s `ListPositions` token convention), populating `PageResponse.total_count`/`next_page_token`.
 **Reason**: (1) FR-8's fill-state gate returns `FailedPrecondition`; collapsing it to `Internal` would hide the "not replaceable" reason from the UI. (2) The proto pagination type is token-based, not offset-based, so "offset/limit" is realized via the established page-token convention.
 **Disposition**: accepted refinement — both keep behavior consistent with the proto contract and existing service conventions; no contract change.
+
+### Deviation: Step 6 — lint-gate fix on Step 4's repository code
+**Spec said**: Step 6 `**Files**` lists only the three test files; verification ends with `golangci-lint run` passing.
+**Actual**: Also removed the trailing `i++` in the `account_id` branch of `internal/repository/trading_repo.go` (Step 4's code) — golangci-lint's `ineffassign` flagged it because `account_id` is the last optional `WHERE` clause, so the increment is dead.
+**Reason**: Step 6 is the first step whose verification runs the lint gate (Steps 3–5 verified with `go build` only), so the gate surfaced a Step-4-introduced ineffectual assignment. The fix is unambiguous (dead increment) and required for the lint gate to pass; staged with Step 6.
+**Disposition**: in-scope lint-gate fix (analogous to the Step 4 build-green resolution).

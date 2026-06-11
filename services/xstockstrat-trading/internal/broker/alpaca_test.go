@@ -259,3 +259,58 @@ func TestGetOrder_AlpacaFilledQty(t *testing.T) {
 		t.Errorf("expected FilledQty 10, got %f", o.FilledQty)
 	}
 }
+
+func TestReplaceOrder_Alpaca(t *testing.T) {
+	var gotMethod, gotURL string
+	var gotBody map[string]interface{}
+
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotURL = r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(broker.AlpacaOrder{ID: "alpaca-order-123", Status: "new"})
+	})
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{
+		APIKey:    "test-key",
+		APISecret: "test-secret",
+		PaperURL:  srv.URL,
+		LiveURL:   "http://should-not-be-called",
+		Paper:     true,
+	})
+
+	order, err := c.ReplaceOrder(context.Background(), "alpaca-order-123", broker.OrderRequest{
+		Qty:        5,
+		LimitPrice: 101,
+	})
+	if err != nil {
+		t.Fatalf("ReplaceOrder failed: %v", err)
+	}
+	if gotMethod != http.MethodPatch {
+		t.Errorf("expected PATCH, got %s", gotMethod)
+	}
+	if gotURL != "/v2/orders/alpaca-order-123" {
+		t.Errorf("expected path /v2/orders/alpaca-order-123, got %s", gotURL)
+	}
+	// Only the changed fields should be present.
+	if gotBody["qty"] != "5" {
+		t.Errorf("expected qty \"5\", got %v", gotBody["qty"])
+	}
+	if gotBody["limit_price"] != "101" {
+		t.Errorf("expected limit_price \"101\", got %v", gotBody["limit_price"])
+	}
+	if _, ok := gotBody["stop_price"]; ok {
+		t.Errorf("stop_price should be omitted when zero, got %v", gotBody["stop_price"])
+	}
+	if _, ok := gotBody["time_in_force"]; ok {
+		t.Errorf("time_in_force should be omitted when empty, got %v", gotBody["time_in_force"])
+	}
+	if order.BrokerOrderID != "alpaca-order-123" {
+		t.Errorf("expected broker order ID alpaca-order-123, got %s", order.BrokerOrderID)
+	}
+	if order.Status != "new" {
+		t.Errorf("expected status new, got %s", order.Status)
+	}
+}

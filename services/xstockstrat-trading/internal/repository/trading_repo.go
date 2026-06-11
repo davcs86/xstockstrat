@@ -148,7 +148,7 @@ func (r *TradingRepo) ListOrders(
 	if accountID != "" {
 		query += fmt.Sprintf(" AND account_id = $%d", i)
 		args = append(args, accountID)
-		i++
+		// account_id is the last optional clause; no further i++ needed (ineffassign).
 	}
 	query += " ORDER BY created_at DESC LIMIT 500"
 

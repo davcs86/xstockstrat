@@ -147,3 +147,15 @@ grpcio-tools==1.80.0 — pinned to CI proto-freshness versions) since buf/protoc
 - Files modified: `internal/service/trading.go`, `internal/handler/trading.go`
 - Deviations: handler preserves NotFound/FailedPrecondition codes (vs CancelOrder's CodeInternal);
   pagination uses the proto's token model (no offset field). See Deviation Log.
+
+### Step 6 — test: trading replace, filters, and fill-state coverage [done]
+- Added TestReplaceOrder_Alpaca (PATCH /v2/orders/{id}, only-changed fields, parsed response),
+  TestReplaceOrder_IBKR (modify POST .../order/{id}, signed Authorization, second-broker path),
+  TestReplaceableStateGate (FR-8: NEW/PARTIALLY_FILLED allowed, FILLED/terminal rejected),
+  TestListOrdersInMemoryFilters (each dimension narrows + composes), and TestPaginateOrders
+  (exercises the real service paginateOrders helper). All pass; total coverage 48.3% (≥40%);
+  golangci-lint 0 issues.
+- Files modified: `internal/broker/{alpaca_test.go,ibkr_test.go}`,
+  `internal/service/trading_helpers_test.go`, `internal/repository/trading_repo.go` (lint fix)
+- Deviations: dropped a dead `i++` in trading_repo.go (Step 4 code) flagged by the Step 6 lint
+  gate — see Deviation Log.
