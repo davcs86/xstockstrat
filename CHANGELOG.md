@@ -19,6 +19,16 @@ Each entry corresponds to one `main-dev → main` PR merge.
 - phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
 
 ### Summary
+-6 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-06-11
+
+### Features
+- phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
+
+### Summary
 7 commits, 0 feature merges since last promotion.
 
 ---
