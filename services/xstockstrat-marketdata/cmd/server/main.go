@@ -63,7 +63,10 @@ func main() {
 		APISecret: cfg.AlpacaAPISecret,
 		BaseURL:   cfg.AlpacaBaseURL,
 		DataURL:   cfg.AlpacaDataURL,
-		Paper:     cfg.TradingMode == "paper",
+		// Data feed (iex/sip/otc). Default "iex" so the free/basic paper data
+		// plan works; deployments on a paid SIP plan can override.
+		Feed:  cfgWatcher.GetString("marketdata.alpaca.feed", "iex"),
+		Paper: cfg.TradingMode == "paper",
 	})
 
 	// TimescaleDB repository
@@ -82,6 +85,10 @@ func main() {
 		os.Exit(1)
 	}
 	hdl := handler.NewMarketDataHandler(svc)
+
+	// Keep latest quotes for queried symbols warm in the DB so per-position P&L
+	// reads hit the cache instead of a live Alpaca call on every request.
+	go svc.StartWarmQuotePoller(ctx)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.GRPCPort))
 	if err != nil {

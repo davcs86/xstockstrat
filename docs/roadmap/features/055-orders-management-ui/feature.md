@@ -1,0 +1,48 @@
+# Feature: orders-management-ui
+
+**Lifecycle Status**: `draft`
+**Development Branch**: `feature/orders-management-ui`
+**Created**: 2026-06-10
+**Last Updated**: 2026-06-10
+
+---
+
+## Status History
+
+| Date | Status | Updated by | Note |
+|---|---|---|---|
+| 2026-06-10 | — → `idea` | backlog capture | Feature captured in backlog |
+| 2026-06-10 | `idea` → `draft` | /sdd-story | Product spec generated |
+
+---
+
+## Artifacts
+
+- [Product Spec](product-spec.md) — requirements and governance
+- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec orders-management-ui`_
+- [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Summary
+
+A dedicated trader-segment UI page for full order lifecycle management — create, edit
+(replace), and cancel orders, plus a paginated, filterable historical order view — backed
+by the existing `xstockstrat-trading` gRPC service (with an additive `ReplaceOrder` RPC and
+extra `ListOrders` filter fields).
+
+## Reviewers
+
+_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
+change types. Override as needed. Snapshot finalized at /sdd-spec time — re-run /sdd-spec if
+the registry changes.)_
+
+| Role | Review Focus |
+|---|---|
+| Proto Reviewer | Field number uniqueness, additive-only changes (new `ReplaceOrder` RPC + `ListOrders` filter fields), `buf lint`/`buf breaking` pass |
+| `xstockstrat-trading` (service owner) | Order execution correctness, broker API safety (replace/cancel), fill detection, paper-only dev invariant, position-limit enforcement |
+| `xstockstrat-ui` (service owner) | Trading UI correctness, Connect-RPC call safety, environment/trading-mode scope correctness, no secret values rendered |
+
+## Next Action
+
+`/sdd-review orders-management-ui product-spec` — AI review of product spec before running /sdd-spec

@@ -44,10 +44,19 @@ Namespace: `portfolio`
 | `portfolio.risk.concentration_limit_pct` | float | `0.20` | Alert if single position > 20% of portfolio |
 | `platform.ledger_endpoint` | string | — | Ledger address |
 
+## Ledger Events Consumed
+
+| Event Type | Effect |
+|---|---|
+| `order.filled` / `order.partially_filled` | Update positions from order fills (`user_id` + `account_id` from payload) |
+| `account.positions.synced` | Reconcile positions against a broker snapshot (`user_id` + `account_id`) |
+| `account.balance.synced` | Upsert the latest broker balance (cash, buying power, equity, last_equity) per account; surfaced by `ListPortfolios` |
+
 ## Database
 
 - Schema: `portfolio`
 - Table: `portfolio.positions` — current open positions
+- Table: `portfolio.account_balances` — latest broker balance snapshot per account (cash, buying power, equity, last_equity); upserted from `account.balance.synced`
 - Hypertable: `portfolio.snapshots` — point-in-time portfolio state (partition by `time`, chunk = 1 day)
 - Migration tool: `golang-migrate`
 

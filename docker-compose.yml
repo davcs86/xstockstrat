@@ -496,6 +496,8 @@ services:
       IDENTITY_ENDPOINT: xstockstrat-identity:50058
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       CONFIG_ENDPOINT: xstockstrat-config:50060
+      SERVICE_NAME: agent
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-identity:50058"
       MCP_TRANSPORT: sse
       MCP_SSE_PORT: "9000"

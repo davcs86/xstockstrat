@@ -1,0 +1,33 @@
+# Grafana mute-timings provisioning file (apiVersion 1).
+#
+# Defines an "outside US market hours" mute timing so the analysis no-scoring
+# alert (xstk-analysis-no-scoring) does not page overnight or on weekends, when
+# the absence of scoring events is expected rather than a degradation.
+#
+# Regular US equities session: 09:30–16:00 America/New_York, Mon–Fri.
+# This mute timing covers everything OUTSIDE that window. Attach it to the
+# notification policy that matches `mute_outside_market_hours = "true"`.
+#
+# Provision via file-based provisioning, or recreate in Grafana →
+# Alerting → Notification policies → Mute timings.
+
+apiVersion: 1
+
+muteTimes:
+  - orgId: 1
+    name: outside-us-market-hours
+    time_intervals:
+      # Overnight / pre-open / post-close on weekdays (00:00–09:30 and 16:00–24:00 ET)
+      - times:
+          - start_time: "00:00"
+            end_time: "09:30"
+        weekdays: ["monday:friday"]
+        location: America/New_York
+      - times:
+          - start_time: "16:00"
+            end_time: "24:00"
+        weekdays: ["monday:friday"]
+        location: America/New_York
+      # All day Saturday and Sunday
+      - weekdays: ["saturday", "sunday"]
+        location: America/New_York

@@ -539,8 +539,15 @@ curl -X POST http://localhost:8060/webhooks/n8n/config-update \
 
 ---
 
-## Phase 7 — Observability
+## Phase 7 — Observability ✅ DONE
 
+> Delivered by feature `033-phase7-observability`. Implementation notes and deviations from the
+> 7A–7G prose below: see `docs/roadmap/phase7-deviations.md`. The OTel SDK stubs, collector, and
+> DO/compose env wiring were activated; the four V1 dashboards live in `packages/otel/dashboards/`
+> and the alert rules in `packages/otel/alerts/`. Note: the `platform.otel.*` config-key table
+> further down was **not** implemented — OTLP endpoint/credentials are infrastructure env/secrets,
+> not config-service keys (see deviation note 6).
+>
 > Can be applied incrementally alongside any phase. Recommended to wire Phase 7A–7B during
 > Phase 0, and instrument each service as it is built in Phases 1–5.
 
