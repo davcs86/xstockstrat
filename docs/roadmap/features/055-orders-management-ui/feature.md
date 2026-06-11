@@ -1,6 +1,6 @@
 # Feature: orders-management-ui
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/orders-management-ui`
 **Created**: 2026-06-10
 **Last Updated**: 2026-06-11
@@ -15,6 +15,7 @@
 | 2026-06-10 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-06-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved; 5 open questions resolved (replace=Alpaca+IBKR, all 5 order types, StreamOrderUpdates, server-side filters, account_id filter); C-2/C-4/C-5 trading-domain gaps closed |
 | 2026-06-11 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
+| 2026-06-11 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode (055→056→057, one-feature-at-a-time); Step 1 (proto ReplaceOrder + ListOrders filters) complete |
 
 ---
 

@@ -44,7 +44,7 @@ three deployment files.
 
 ### Step 1 — proto: Add `ReplaceOrder` RPC and additive `ListOrdersRequest` filters
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify

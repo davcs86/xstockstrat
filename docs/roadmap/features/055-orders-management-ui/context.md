@@ -91,3 +91,19 @@
 - Merge order recorded in `merge-order.md`: **056 (open-positions-ui) waits for 055** — 055
   merges first, 056 rebases the traderBff.ts conflict. Soft/rebase dependency.
 - Mode B makes no lifecycle change; status stays `implementation-ready`.
+
+## Session 2026-06-11 — sdd-execute (sequential mode)
+
+Running `/sdd-execute "055, 056, 057" sequential`. User chose "one feature at a time":
+authorized SDD branch model (feature/* + feature-steps/*), execute 055 only this session,
+then stop for review before 056/057. Codegen toolchain installed on host (buf 1.70.0,
+protoc-gen-go@v1.36.11, protoc-gen-go-grpc@v1.6.2, protoc-gen-connect-go@v1.19.2,
+grpcio-tools==1.80.0 — pinned to CI proto-freshness versions) since buf/protoc absent on PATH.
+
+### Step 1 — proto: Add ReplaceOrder RPC and additive ListOrdersRequest filters [done]
+- Added `rpc ReplaceOrder(ReplaceOrderRequest) returns (Order)` to TradingService, four
+  additive `ListOrdersRequest` filter fields (symbol=7, side=8, order_type=9, account_id=10),
+  and the `ReplaceOrderRequest` message. All additive — `buf lint` + `buf breaking` (against
+  feature/orders-management-ui baseline) both pass.
+- Files modified: `packages/proto/trading/v1/trading.proto`
+- Deviations: none
