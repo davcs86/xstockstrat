@@ -261,3 +261,10 @@ in parallel.
   grep confirms list/cancel/delete/isAdmin/barsTotal.
 - Files: services/xstockstrat-ui/src/app/insights/backfills/page.tsx (new)
 - Deviations: none (native <select> is a reasonable substitution within the ui-component set).
+
+### Step 12 — service: UI nav entry (admin-gated) [done]
+- AppShell.tsx: added useIsAdmin; subNav now conditionally appends { label: 'Backfills', href:
+  '/insights/backfills' } only when isAdmin (FR-7 — hidden from non-admins; BFF+backend re-enforce).
+- Verification: npx tsc --noEmit exit 0; prettier clean; grep confirms backfills link + useIsAdmin.
+- Files: services/xstockstrat-ui/src/components/insights/AppShell.tsx
+- Deviations: none.

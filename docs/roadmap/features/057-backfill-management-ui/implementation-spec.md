@@ -551,7 +551,7 @@ established by feature 049. Docs last.
 
 ### Step 12 — service: UI nav entry to the Backfills page (admin-gated)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/AppShell.tsx` — modify (add an admin-gated nav link to `/insights/backfills`)
