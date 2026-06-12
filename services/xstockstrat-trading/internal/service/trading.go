@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
 	"time"
 
@@ -309,7 +310,14 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	order.BrokerOrderId = brokerOrder.BrokerOrderID
 	order.Status = alpacaStatusToProto(brokerOrder.Status)
 	order.UpdatedAt = timestamppb.New(time.Now())
-	// BrokerOrder does not carry fill qty/price; those are updated by the fill poller.
+	// Carry any fill the broker already reported on submit (market orders fill
+	// immediately). Without this the fill poller — which skips orders already in
+	// FILLED state — would never backfill the quantity, leaving FILLED orders at 0.
+	order.FilledQty = brokerOrder.FilledQty
+	order.FilledAvgPrice = brokerOrder.FilledAvgPrice
+	if order.Status == tradingv1.OrderStatus_ORDER_STATUS_FILLED && order.FilledQty == 0 {
+		order.FilledQty = order.Qty
+	}
 
 	// Persist updated order with broker fields.
 	if err := s.repo.UpsertOrder(context.Background(), order); err != nil {
@@ -368,6 +376,82 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 	return &tradingv1.CancelOrderResponse{Success: true, Order: order}, nil
 }
 
+// ReplaceOrder modifies a working order's qty/price/TIF at the broker. It is
+// broker-agnostic: resolveAccount routes by the order's account/broker_type so both
+// Alpaca and IBKR are covered. Only NEW / PARTIALLY_FILLED orders may be replaced (FR-8);
+// the per-account broker client's IsPaper()/baseURL() preserves the paper-only dev invariant.
+func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.ReplaceOrderRequest) (*tradingv1.Order, error) {
+	s.mu.Lock()
+	order, ok := s.orders[req.OrderId]
+	s.mu.Unlock()
+	if !ok {
+		// Fall back to DB lookup.
+		var err error
+		order, err = s.repo.GetOrder(ctx, req.OrderId)
+		if err != nil || order == nil {
+			return nil, grpcstatus.Errorf(codes.NotFound, "order %s not found", req.OrderId)
+		}
+		s.mu.Lock()
+		s.orders[order.OrderId] = order
+		s.mu.Unlock()
+	}
+
+	// Fill-state gate (FR-8): only NEW / PARTIALLY_FILLED may be replaced. A
+	// PARTIALLY_FILLED replace adjusts the remaining qty — req.Qty is passed straight
+	// through; Alpaca/IBKR interpret it as the new total per their adapter.
+	switch order.Status {
+	case tradingv1.OrderStatus_ORDER_STATUS_NEW, tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:
+		// replaceable
+	default:
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+			"order %s is not replaceable in status %s", req.OrderId, order.Status)
+	}
+
+	if order.BrokerOrderId == "" {
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+			"order %s has no broker order id yet; cannot replace", req.OrderId)
+	}
+
+	entry, err := s.resolveAccount(order.AccountId)
+	if err != nil {
+		return nil, err
+	}
+
+	// Only the changed fields are sent to the broker (zero/empty = leave unchanged).
+	brokerReq := broker.OrderRequest{
+		Qty:         req.Qty,
+		LimitPrice:  req.LimitPrice,
+		StopPrice:   req.StopPrice,
+		TimeInForce: req.TimeInForce,
+	}
+	if _, replaceErr := entry.client.ReplaceOrder(ctx, order.BrokerOrderId, brokerReq); replaceErr != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "broker replace failed: %v", replaceErr)
+	}
+
+	if req.Qty != 0 {
+		order.Qty = req.Qty
+	}
+	if req.LimitPrice != 0 {
+		order.LimitPrice = req.LimitPrice
+	}
+	if req.StopPrice != 0 {
+		order.StopPrice = req.StopPrice
+	}
+	if req.TimeInForce != "" {
+		order.TimeInForce = req.TimeInForce
+	}
+	order.UpdatedAt = timestamppb.New(time.Now())
+
+	_ = s.repo.UpsertOrder(ctx, order)
+
+	go s.emitLedgerEvent(context.Background(), "order.replaced", req.OrderId, map[string]interface{}{
+		"order_id": req.OrderId, "user_id": req.UserId,
+	})
+	s.broadcastOrder(order)
+
+	return order, nil
+}
+
 func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRequest) (*tradingv1.Order, error) {
 	s.mu.Lock()
 	order, ok := s.orders[req.OrderId]
@@ -384,7 +468,7 @@ func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRe
 }
 
 func (s *TradingService) ListOrders(ctx context.Context, req *tradingv1.ListOrdersRequest) (*tradingv1.ListOrdersResponse, error) {
-	orders, err := s.repo.ListOrders(ctx, req.UserId, req.Status, req.TradingMode, req.StrategyId)
+	orders, err := s.repo.ListOrders(ctx, req.UserId, req.Status, req.TradingMode, req.StrategyId, req.Symbol, req.Side, req.OrderType, req.AccountId, req.Range)
 	if err != nil {
 		slog.Warn("db list orders failed, falling back to in-memory", "error", err)
 		var mem []*tradingv1.Order
@@ -399,12 +483,63 @@ func (s *TradingService) ListOrders(ctx context.Context, req *tradingv1.ListOrde
 			if req.TradingMode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED && o.TradingMode != req.TradingMode {
 				continue
 			}
+			if req.Symbol != "" && o.Symbol != req.Symbol {
+				continue
+			}
+			if req.Side != tradingv1.OrderSide_ORDER_SIDE_UNSPECIFIED && o.Side != req.Side {
+				continue
+			}
+			if req.OrderType != tradingv1.OrderType_ORDER_TYPE_UNSPECIFIED && o.OrderType != req.OrderType {
+				continue
+			}
+			if req.AccountId != "" && o.AccountId != req.AccountId {
+				continue
+			}
+			if req.Range != nil && o.CreatedAt != nil {
+				ct := o.CreatedAt.AsTime()
+				if req.Range.Start != nil && ct.Before(req.Range.Start.AsTime()) {
+					continue
+				}
+				if req.Range.End != nil && ct.After(req.Range.End.AsTime()) {
+					continue
+				}
+			}
 			mem = append(mem, o)
 		}
 		s.mu.Unlock()
-		return &tradingv1.ListOrdersResponse{Orders: mem}, nil
+		page, pageResp := paginateOrders(mem, req.Page)
+		return &tradingv1.ListOrdersResponse{Orders: page, Page: pageResp}, nil
 	}
-	return &tradingv1.ListOrdersResponse{Orders: orders}, nil
+	page, pageResp := paginateOrders(orders, req.Page)
+	return &tradingv1.ListOrdersResponse{Orders: page, Page: pageResp}, nil
+}
+
+// paginateOrders applies PageRequest windowing to an already-sorted order slice.
+// PageToken is an opaque numeric offset (empty = first page); the response carries
+// the total match count and the next offset token when more rows remain. A zero/absent
+// PageSize disables windowing and returns the full slice.
+func paginateOrders(all []*tradingv1.Order, page *commonv1.PageRequest) ([]*tradingv1.Order, *commonv1.PageResponse) {
+	total := int32(len(all))
+	if page == nil || page.PageSize <= 0 {
+		return all, &commonv1.PageResponse{TotalCount: total}
+	}
+	offset := 0
+	if page.PageToken != "" {
+		if n, convErr := strconv.Atoi(page.PageToken); convErr == nil && n > 0 {
+			offset = n
+		}
+	}
+	if offset >= len(all) {
+		return []*tradingv1.Order{}, &commonv1.PageResponse{TotalCount: total}
+	}
+	end := offset + int(page.PageSize)
+	nextToken := ""
+	if end < len(all) {
+		nextToken = strconv.Itoa(end)
+	} else {
+		end = len(all)
+	}
+	return all[offset:end], &commonv1.PageResponse{TotalCount: total, NextPageToken: nextToken}
 }
 
 func (s *TradingService) StreamOrderUpdates(req *tradingv1.StreamOrderUpdatesRequest, stream tradingv1.TradingService_StreamOrderUpdatesServer) error {

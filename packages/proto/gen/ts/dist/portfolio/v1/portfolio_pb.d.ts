@@ -1,4 +1,4 @@
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse, TimeRange, TradingMode } from "../../common/v1/common_pb";
 import type { Message } from "@bufbuild/protobuf";
@@ -258,6 +258,20 @@ export type ListPositionsRequest = Message<"xstockstrat.portfolio.v1.ListPositio
      * @generated from field: optional string account_id = 4;
      */
     accountId?: string | undefined;
+    /**
+     * Additive filters (feature 056). Empty symbol / UNSPECIFIED side = no narrowing.
+     *
+     * exact-match symbol filter; "" = all symbols
+     *
+     * @generated from field: string symbol = 5;
+     */
+    symbol: string;
+    /**
+     * long/short filter derived from qty sign
+     *
+     * @generated from field: xstockstrat.portfolio.v1.PositionSide side = 6;
+     */
+    side: PositionSide;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.ListPositionsRequest.
@@ -384,6 +398,37 @@ export type ListPortfoliosResponse = Message<"xstockstrat.portfolio.v1.ListPortf
  * Use `create(ListPortfoliosResponseSchema)` to create a new message.
  */
 export declare const ListPortfoliosResponseSchema: GenMessage<ListPortfoliosResponse>;
+/**
+ * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
+ * Used only as an additive filter on ListPositionsRequest; the Position message itself
+ * continues to carry signed qty.
+ *
+ * @generated from enum xstockstrat.portfolio.v1.PositionSide
+ */
+export declare enum PositionSide {
+    /**
+     * no side filter — return both long and short
+     *
+     * @generated from enum value: POSITION_SIDE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * qty > 0
+     *
+     * @generated from enum value: POSITION_SIDE_LONG = 1;
+     */
+    LONG = 1,
+    /**
+     * qty < 0
+     *
+     * @generated from enum value: POSITION_SIDE_SHORT = 2;
+     */
+    SHORT = 2
+}
+/**
+ * Describes the enum xstockstrat.portfolio.v1.PositionSide.
+ */
+export declare const PositionSideSchema: GenEnum<PositionSide>;
 /**
  * @generated from service xstockstrat.portfolio.v1.PortfolioService
  */

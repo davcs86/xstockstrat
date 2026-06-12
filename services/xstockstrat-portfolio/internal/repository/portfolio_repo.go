@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -21,9 +22,9 @@ type PortfolioRepo struct {
 
 // NewPortfolioRepo opens a pgx connection pool.
 func NewPortfolioRepo(connStr string) (*PortfolioRepo, error) {
-	pool, err := pgxpool.New(context.Background(), connStr)
+	pool, err := newPool(context.Background(), connStr)
 	if err != nil {
-		return nil, fmt.Errorf("pgxpool.New: %w", err)
+		return nil, fmt.Errorf("newPool: %w", err)
 	}
 	if err := pool.Ping(context.Background()); err != nil {
 		return nil, fmt.Errorf("db ping: %w", err)
@@ -61,52 +62,48 @@ func (r *PortfolioRepo) GetPosition(ctx context.Context, userID, symbol string, 
 }
 
 // ListPositions returns paginated positions for a user, optionally filtered by mode and accountID.
-func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode commonv1.TradingMode, pageSize int, pageToken string, accountID string) ([]*portfoliov1.Position, string, error) {
+func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode commonv1.TradingMode, pageSize int, pageToken string, accountID string, symbolFilter string, side portfoliov1.PositionSide) ([]*portfoliov1.Position, string, error) {
 	if pageSize <= 0 || pageSize > 500 {
 		pageSize = 100
 	}
 
-	var rows interface {
-		Next() bool
-		Scan(dest ...any) error
-		Close()
-		Err() error
+	// Build the WHERE clause dynamically: optional trading_mode / account_id / symbol
+	// filters (each a placeholder param), a static qty-sign side filter, and the keyset
+	// pagination predicate (symbol > pageToken). ORDER BY symbol + pageSize+1 overflow probe
+	// are preserved so keyset pagination still works.
+	conds := []string{"user_id = $1"}
+	args := []any{userID}
+	add := func(condFmt string, val any) {
+		args = append(args, val)
+		conds = append(conds, fmt.Sprintf(condFmt, len(args)))
 	}
-	var err error
+	if mode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
+		add("trading_mode = $%d", mode.String())
+	}
+	if accountID != "" {
+		add("account_id = $%d", accountID)
+	}
+	if symbolFilter != "" {
+		add("symbol = $%d", symbolFilter)
+	}
+	switch side {
+	case portfoliov1.PositionSide_POSITION_SIDE_LONG:
+		conds = append(conds, "qty > 0")
+	case portfoliov1.PositionSide_POSITION_SIDE_SHORT:
+		conds = append(conds, "qty < 0")
+	}
+	args = append(args, pageToken)
+	conds = append(conds, fmt.Sprintf("($%d = '' OR symbol > $%d)", len(args), len(args)))
+	args = append(args, pageSize+1)
+	limitIdx := len(args)
 
-	if mode == commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
-		if accountID == "" {
-			const q = `
-				SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
-				FROM portfolio.positions
-				WHERE user_id=$1 AND ($2='' OR symbol > $2)
-				ORDER BY symbol ASC LIMIT $3`
-			rows, err = r.pool.Query(ctx, q, userID, pageToken, pageSize+1)
-		} else {
-			const q = `
-				SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
-				FROM portfolio.positions
-				WHERE user_id=$1 AND account_id=$2 AND ($3='' OR symbol > $3)
-				ORDER BY symbol ASC LIMIT $4`
-			rows, err = r.pool.Query(ctx, q, userID, accountID, pageToken, pageSize+1)
-		}
-	} else {
-		if accountID == "" {
-			const q = `
-				SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
-				FROM portfolio.positions
-				WHERE user_id=$1 AND trading_mode=$2 AND ($3='' OR symbol > $3)
-				ORDER BY symbol ASC LIMIT $4`
-			rows, err = r.pool.Query(ctx, q, userID, mode.String(), pageToken, pageSize+1)
-		} else {
-			const q = `
-				SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
-				FROM portfolio.positions
-				WHERE user_id=$1 AND trading_mode=$2 AND account_id=$3 AND ($4='' OR symbol > $4)
-				ORDER BY symbol ASC LIMIT $5`
-			rows, err = r.pool.Query(ctx, q, userID, mode.String(), accountID, pageToken, pageSize+1)
-		}
-	}
+	q := fmt.Sprintf(`
+		SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
+		FROM portfolio.positions
+		WHERE %s
+		ORDER BY symbol ASC LIMIT $%d`, strings.Join(conds, " AND "), limitIdx)
+
+	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("list positions: %w", err)
 	}
@@ -298,6 +295,38 @@ func (r *PortfolioRepo) GetAccountBalance(ctx context.Context, accountID string)
 		return nil, fmt.Errorf("get account balance: %w", err)
 	}
 	return &b, nil
+}
+
+// UserAccountBalance pairs an account_id with its latest balance snapshot.
+type UserAccountBalance struct {
+	AccountID string
+	Balance   AccountBalance
+}
+
+// ListAccountBalancesByUser returns the latest balance snapshot for every account
+// owned by a user, ordered by account_id. Used to aggregate the "all accounts"
+// portfolio view, where no single account_id is supplied.
+func (r *PortfolioRepo) ListAccountBalancesByUser(ctx context.Context, userID string) ([]UserAccountBalance, error) {
+	const q = `
+		SELECT account_id, cash, buying_power, equity, last_equity
+		FROM portfolio.account_balances
+		WHERE user_id=$1
+		ORDER BY account_id ASC`
+	rows, err := r.pool.Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list account balances by user: %w", err)
+	}
+	defer rows.Close()
+
+	var result []UserAccountBalance
+	for rows.Next() {
+		var ab UserAccountBalance
+		if err := rows.Scan(&ab.AccountID, &ab.Balance.Cash, &ab.Balance.BuyingPower, &ab.Balance.Equity, &ab.Balance.LastEquity); err != nil {
+			return nil, fmt.Errorf("scan account balance: %w", err)
+		}
+		result = append(result, ab)
+	}
+	return result, rows.Err()
 }
 
 // ListPositionsByAccount returns all positions for a given account, optionally filtered by tradingMode.

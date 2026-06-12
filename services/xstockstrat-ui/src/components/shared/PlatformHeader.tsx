@@ -3,10 +3,10 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart2, TrendingUp, Settings, Menu, Activity, KeyRound } from 'lucide-react';
+import { BarChart2, TrendingUp, Settings, Menu, Activity, KeyRound, ChevronDown } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { Button } from '../ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
 import { Separator } from '../ui/separator';
 
 export type PlatformSegment = 'trader' | 'insights' | 'config' | 'accounts';
@@ -40,6 +40,36 @@ const SEGMENT_HOME: Record<PlatformSegment, string> = {
   accounts: '/accounts/authorized-apps',
 };
 
+/**
+ * Canonical submodule lists for every segment — the single source of truth shared by
+ * the desktop sub-nav (each shell passes `PLATFORM_SUBNAV[segment]`) and the mobile
+ * accordion drawer, which renders every module's submodules so any destination is
+ * reachable without first switching modules.
+ */
+export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
+  trader: [
+    { label: 'Dashboard', href: '/trader', match: 'exact' },
+    { label: 'Positions', href: '/trader/positions' },
+    { label: 'Accounts', href: '/trader/accounts' },
+  ],
+  insights: [
+    { label: 'Dashboard', href: '/insights', match: 'exact' },
+    { label: 'Strategies', href: '/insights/strategies' },
+    { label: 'Formulas', href: '/insights/formulas' },
+  ],
+  config: [
+    { label: 'Namespaces', href: '/config-ui', match: 'exact' },
+    { label: 'Audit Log', href: '/config-ui/audit' },
+    { label: 'Sources', href: '/config-ui/sources' },
+  ],
+  accounts: [{ label: 'Authorized Apps', href: '/accounts/authorized-apps', match: 'exact' }],
+};
+
+function isItemActive(pathname: string | null, item: SubNavItem): boolean {
+  if (!pathname) return false;
+  return item.match === 'exact' ? pathname === item.href : pathname.startsWith(item.href);
+}
+
 interface PlatformHeaderProps {
   /** Which top-level segment is active — drives nav highlighting and the logo link. */
   segment: PlatformSegment;
@@ -53,15 +83,12 @@ interface PlatformHeaderProps {
  * PlatformHeader is the single header shared across every UI segment
  * (trader, insights, config). It renders the logo, platform-level navigation,
  * an optional in-segment sub-nav, and a slot for right-aligned actions, with a
- * mobile sheet that mirrors the same links.
+ * mobile sheet that exposes every module and its submodules as an accordion.
  */
 export function PlatformHeader({ segment, subNav, actions }: PlatformHeaderProps) {
   const pathname = usePathname();
-
-  const isSubNavActive = (item: SubNavItem): boolean => {
-    if (!pathname) return false;
-    return item.match === 'exact' ? pathname === item.href : pathname.startsWith(item.href);
-  };
+  // Accordion: the active module starts expanded; others collapse until tapped.
+  const [expanded, setExpanded] = React.useState<PlatformSegment>(segment);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
@@ -104,7 +131,7 @@ export function PlatformHeader({ segment, subNav, actions }: PlatformHeaderProps
                   href={item.href}
                   className={cn(
                     'px-3 py-1.5 rounded-md text-sm transition-colors',
-                    isSubNavActive(item)
+                    isItemActive(pathname, item)
                       ? 'text-foreground font-medium'
                       : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
                   )}
@@ -127,48 +154,60 @@ export function PlatformHeader({ segment, subNav, actions }: PlatformHeaderProps
                 <span className="sr-only">Open menu</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left">
+            <SheetContent side="left" className="overflow-y-auto">
               <SheetHeader>
                 <SheetTitle className="flex items-center gap-2 text-primary">
                   <Activity className="h-5 w-5" />
                   xstockstrat
                 </SheetTitle>
               </SheetHeader>
+              {/* Two-level accordion: every module, each expandable to its submodules. */}
               <nav className="mt-6 flex flex-col gap-1">
-                {PLATFORM_NAV.map((item) => (
-                  <a
-                    key={item.segment}
-                    href={item.href}
-                    className={cn(
-                      'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors',
-                      item.segment === segment
-                        ? 'bg-accent text-foreground font-medium'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-                    )}
-                  >
-                    {item.icon}
-                    {item.label}
-                  </a>
-                ))}
-                {subNav && subNav.length > 0 && (
-                  <>
-                    <Separator className="my-2" />
-                    {subNav.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
+                {PLATFORM_NAV.map((item) => {
+                  const isActiveSegment = item.segment === segment;
+                  const isOpen = expanded === item.segment;
+                  const items = PLATFORM_SUBNAV[item.segment];
+                  return (
+                    <div key={item.segment} className="flex flex-col">
+                      <button
+                        type="button"
+                        aria-expanded={isOpen}
+                        onClick={() => setExpanded((prev) => (prev === item.segment ? ('' as PlatformSegment) : item.segment))}
                         className={cn(
-                          'px-3 py-2.5 rounded-md text-sm transition-colors',
-                          isSubNavActive(item)
+                          'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors text-left',
+                          isActiveSegment
                             ? 'bg-accent text-foreground font-medium'
                             : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
                         )}
                       >
-                        {item.label}
-                      </Link>
-                    ))}
-                  </>
-                )}
+                        {item.icon}
+                        <span className="flex-1">{item.label}</span>
+                        <ChevronDown
+                          className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
+                        />
+                      </button>
+                      {isOpen && (
+                        <div className="ml-4 mt-1 flex flex-col gap-1 border-l border-border pl-3">
+                          {items.map((sub) => (
+                            <SheetClose asChild key={sub.href}>
+                              <Link
+                                href={sub.href}
+                                className={cn(
+                                  'px-3 py-2 rounded-md text-sm transition-colors',
+                                  isItemActive(pathname, sub)
+                                    ? 'bg-accent text-foreground font-medium'
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
+                                )}
+                              >
+                                {sub.label}
+                              </Link>
+                            </SheetClose>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </nav>
             </SheetContent>
           </Sheet>

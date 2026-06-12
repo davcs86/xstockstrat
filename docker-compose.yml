@@ -115,6 +115,7 @@ services:
       <<: [*common-env, *db-url]
       GRPC_PORT: "50060"
       SERVICE_NAME: config
+      DB_POOL_MAX: "2"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50060:50060"
@@ -143,6 +144,7 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       WAIT_FOR: "xstockstrat-config:50060"
       SERVICE_NAME: ledger
+      DB_POOL_MAX: "2"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50057:50057"
@@ -174,6 +176,7 @@ services:
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required - copy .env.example to .env (run: openssl rand -hex 32)}"
       SERVICE_NAME: identity
+      DB_POOL_MAX: "2"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50058:50058"
@@ -206,6 +209,7 @@ services:
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       SERVICE_NAME: notify
+      DB_POOL_MAX: "1"
       MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
@@ -243,6 +247,7 @@ services:
       ALPACA_BASE_URL: https://paper-api.alpaca.markets
       ALPACA_DATA_URL: https://data.alpaca.markets
       SERVICE_NAME: marketdata
+      DB_POOL_MAX: "2"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50053:50053"
@@ -273,6 +278,7 @@ services:
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       SERVICE_NAME: indicators
+      DB_POOL_MAX: "2"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50054:50054"
@@ -308,6 +314,7 @@ services:
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-identity:50058"
       SERVICE_NAME: ingest
+      DB_POOL_MAX: "2"
       MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
@@ -345,6 +352,7 @@ services:
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-indicators:50054"
       SERVICE_NAME: analysis
+      DB_POOL_MAX: "2"
       MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
@@ -381,6 +389,7 @@ services:
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       SERVICE_NAME: portfolio
+      DB_POOL_MAX: "2"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50052:50052"
@@ -412,6 +421,7 @@ services:
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       SERVICE_NAME: trading
+      DB_POOL_MAX: "2"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50051:50051"
@@ -443,6 +453,7 @@ services:
       # gRPC endpoints (host:port, no protocol) — server-side only
       TRADING_ENDPOINT: xstockstrat-trading:50051
       PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       IDENTITY_ENDPOINT: xstockstrat-identity:50058
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
@@ -452,6 +463,7 @@ services:
       INGEST_ENDPOINT: xstockstrat-ingest:50055
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SERVICE_NAME: xstockstrat-ui
+      DB_POOL_MAX: "1"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       # Public base URL of the MCP agent — the /accounts page shows it as the connector URL and
       # probes its OAuth discovery endpoint (feature 051). Use the compose service name so the UI

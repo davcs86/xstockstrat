@@ -31,6 +31,10 @@ async function main() {
   const caCert = process.env.DATABASE_CA_CERT;
   const pool = new Pool({
     connectionString: dbUrl,
+    // Cap pool size to stay within DigitalOcean's shared 20-connection budget
+    // (see root CLAUDE.md). notify makes light DB use (alert history only), so
+    // it defaults to 1. Override with DB_POOL_MAX.
+    max: parseInt(process.env.DB_POOL_MAX ?? '1', 10),
     ssl: sslDisabled ? false : {
       rejectUnauthorized: !!caCert,
       ...(caCert ? { ca: caCert } : {}),

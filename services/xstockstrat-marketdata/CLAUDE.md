@@ -52,8 +52,12 @@ Namespace: `marketdata`
 | `marketdata.stream.reconnect_delay_ms` | int | `2000` | Reconnect delay on stream drop |
 | `marketdata.stream.max_reconnects` | int | `10` | Max reconnect attempts before alert |
 | `marketdata.stream.warm_interval_ms` | int | `30000` | Interval for the warm-quote poller that refreshes the latest quote of every queried symbol into the DB cache. Read live each cycle; `0`/negative pauses it. |
+| `marketdata.stream.bar_ingest_interval_ms` | int | `60000` | Interval for the always-on bar ingester that upserts recent bars for every queried symbol into `marketdata.ohlcv`. Read live each cycle; `0`/negative pauses it. |
+| `marketdata.stream.bar_ingest_timeframe` | string | `1m` | Bar timeframe the always-on ingester fetches each cycle. |
+| `marketdata.stream.bar_ingest_lookback_ms` | int | `900000` | Lookback window the always-on ingester re-fetches each cycle (default 15m); overlap is harmless because inserts upsert, and a window wider than the interval lets the feed self-heal after a pause/restart. |
 | `marketdata.backfill.batch_size` | int | `1000` | Bars per Alpaca API request |
 | `marketdata.backfill.rate_limit_rps` | int | `200` | Alpaca API rate limit |
+| `marketdata.backfill.max_delete_days` | int | `0` | Max date-range span (days) a single scoped backfill delete may cover; `0` = no window cap. A whole-symbol delete (no range) is exempt and double-confirmed in the UI (feature 057, FR-5). |
 | `marketdata.retention.quotes_days` | int | `90` | Quote data retention |
 | `marketdata.retention.ohlcv_years` | int | `5` | OHLCV data retention |
 | `platform.ledger_endpoint` | string | — | xstockstrat-ledger address |
@@ -73,6 +77,8 @@ Namespace: `marketdata`
 - Credentials sourced from env vars (never from config service — these are secrets)
 - Bar/quote requests send `feed=<marketdata.alpaca.feed>` (default `iex`) — required by the free/basic data plan, which 403s the SIP default
 - `GetLatestQuote` serves from the `marketdata.quotes` cache, falling back to a live Alpaca call (and caching the result). A background warm poller (`StartWarmQuotePoller`) keeps every queried symbol's latest quote fresh in the DB so per-position P&L reads avoid repeated live calls
+- `GetBars` serves from the `marketdata.ohlcv` table, and on a first-page DB miss falls back to a live Alpaca historical fetch (`fetchAndCacheBars`), persists the bars, and re-reads — so a chart for a never-backfilled symbol populates on demand instead of rendering empty. A live-fetch/credential/feed failure is logged and yields an empty (but valid) response rather than an error. Querying a symbol also marks it "warm"
+- `StartBarIngestPoller` is an **always-on** bar ingester started at boot. Each cycle it upserts recent bars (the `bar_ingest_lookback_ms` window) for every warm symbol — the demand-driven set populated by `GetLatestQuote`/`GetBars` — so ingestion runs continuously without a client holding a `StreamBars` RPC open. The legacy `StreamBars`/`StartBarStream` path (a 60s poll that only runs for the duration of a client stream) remains for explicit subscribers
 
 ## Environment Variables
 

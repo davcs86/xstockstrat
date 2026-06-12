@@ -49,6 +49,11 @@ class IngestServiceStub(object):
                 request_serializer=ingest_dot_v1_dot_ingest__pb2.ListBackfillJobsRequest.SerializeToString,
                 response_deserializer=ingest_dot_v1_dot_ingest__pb2.ListBackfillJobsResponse.FromString,
                 _registered_method=True)
+        self.CancelBackfill = channel.unary_unary(
+                '/xstockstrat.ingest.v1.IngestService/CancelBackfill',
+                request_serializer=ingest_dot_v1_dot_ingest__pb2.CancelBackfillRequest.SerializeToString,
+                response_deserializer=ingest_dot_v1_dot_ingest__pb2.BackfillJob.FromString,
+                _registered_method=True)
         self.NormalizeRawData = channel.unary_unary(
                 '/xstockstrat.ingest.v1.IngestService/NormalizeRawData',
                 request_serializer=ingest_dot_v1_dot_ingest__pb2.NormalizeRawDataRequest.SerializeToString,
@@ -93,6 +98,13 @@ class IngestServiceServicer(object):
 
     def ListBackfillJobs(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CancelBackfill(self, request, context):
+        """Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4).
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -146,6 +158,11 @@ def add_IngestServiceServicer_to_server(servicer, server):
                     servicer.ListBackfillJobs,
                     request_deserializer=ingest_dot_v1_dot_ingest__pb2.ListBackfillJobsRequest.FromString,
                     response_serializer=ingest_dot_v1_dot_ingest__pb2.ListBackfillJobsResponse.SerializeToString,
+            ),
+            'CancelBackfill': grpc.unary_unary_rpc_method_handler(
+                    servicer.CancelBackfill,
+                    request_deserializer=ingest_dot_v1_dot_ingest__pb2.CancelBackfillRequest.FromString,
+                    response_serializer=ingest_dot_v1_dot_ingest__pb2.BackfillJob.SerializeToString,
             ),
             'NormalizeRawData': grpc.unary_unary_rpc_method_handler(
                     servicer.NormalizeRawData,
@@ -254,6 +271,33 @@ class IngestService(object):
             '/xstockstrat.ingest.v1.IngestService/ListBackfillJobs',
             ingest_dot_v1_dot_ingest__pb2.ListBackfillJobsRequest.SerializeToString,
             ingest_dot_v1_dot_ingest__pb2.ListBackfillJobsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CancelBackfill(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.ingest.v1.IngestService/CancelBackfill',
+            ingest_dot_v1_dot_ingest__pb2.CancelBackfillRequest.SerializeToString,
+            ingest_dot_v1_dot_ingest__pb2.BackfillJob.FromString,
             options,
             channel_credentials,
             insecure,

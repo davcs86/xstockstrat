@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: trading/v1/trading.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TradingServiceClient = exports.TradingServiceService = exports.DeregisterBrokerAccountResponse = exports.DeregisterBrokerAccountRequest = exports.ListBrokerAccountsResponse = exports.ListBrokerAccountsRequest = exports.GetTradingEnvironmentResponse = exports.GetTradingEnvironmentRequest = exports.UpdateBrokerAccountCredentialsResponse = exports.UpdateBrokerAccountCredentialsRequest = exports.RegisterBrokerAccountResponse = exports.RegisterBrokerAccountRequest = exports.BrokerAccount = exports.StreamOrderUpdatesRequest = exports.ListOrdersResponse = exports.ListOrdersRequest = exports.GetOrderRequest = exports.CancelOrderResponse = exports.CancelOrderRequest = exports.PlaceOrderRequest = exports.Order = exports.CredentialStatus = exports.OrderStatus = exports.OrderType = exports.OrderSide = exports.protobufPackage = void 0;
+exports.TradingServiceClient = exports.TradingServiceService = exports.DeregisterBrokerAccountResponse = exports.DeregisterBrokerAccountRequest = exports.ListBrokerAccountsResponse = exports.ListBrokerAccountsRequest = exports.GetTradingEnvironmentResponse = exports.GetTradingEnvironmentRequest = exports.UpdateBrokerAccountCredentialsResponse = exports.UpdateBrokerAccountCredentialsRequest = exports.RegisterBrokerAccountResponse = exports.RegisterBrokerAccountRequest = exports.BrokerAccount = exports.ReplaceOrderRequest = exports.StreamOrderUpdatesRequest = exports.ListOrdersResponse = exports.ListOrdersRequest = exports.GetOrderRequest = exports.CancelOrderResponse = exports.CancelOrderRequest = exports.PlaceOrderRequest = exports.Order = exports.CredentialStatus = exports.OrderStatus = exports.OrderType = exports.OrderSide = exports.protobufPackage = void 0;
 exports.orderSideFromJSON = orderSideFromJSON;
 exports.orderSideToJSON = orderSideToJSON;
 exports.orderSideToNumber = orderSideToNumber;
@@ -1223,6 +1223,10 @@ function createBaseListOrdersRequest() {
         range: undefined,
         page: undefined,
         tradingMode: common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
+        symbol: "",
+        side: OrderSide.ORDER_SIDE_UNSPECIFIED,
+        orderType: OrderType.ORDER_TYPE_UNSPECIFIED,
+        accountId: "",
     };
 }
 exports.ListOrdersRequest = {
@@ -1244,6 +1248,18 @@ exports.ListOrdersRequest = {
         }
         if (message.tradingMode !== common_1.TradingMode.TRADING_MODE_UNSPECIFIED) {
             writer.uint32(48).int32((0, common_1.tradingModeToNumber)(message.tradingMode));
+        }
+        if (message.symbol !== "") {
+            writer.uint32(58).string(message.symbol);
+        }
+        if (message.side !== OrderSide.ORDER_SIDE_UNSPECIFIED) {
+            writer.uint32(64).int32(orderSideToNumber(message.side));
+        }
+        if (message.orderType !== OrderType.ORDER_TYPE_UNSPECIFIED) {
+            writer.uint32(72).int32(orderTypeToNumber(message.orderType));
+        }
+        if (message.accountId !== "") {
+            writer.uint32(82).string(message.accountId);
         }
         return writer;
     },
@@ -1296,6 +1312,34 @@ exports.ListOrdersRequest = {
                     message.tradingMode = (0, common_1.tradingModeFromJSON)(reader.int32());
                     continue;
                 }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 64) {
+                        break;
+                    }
+                    message.side = orderSideFromJSON(reader.int32());
+                    continue;
+                }
+                case 9: {
+                    if (tag !== 72) {
+                        break;
+                    }
+                    message.orderType = orderTypeFromJSON(reader.int32());
+                    continue;
+                }
+                case 10: {
+                    if (tag !== 82) {
+                        break;
+                    }
+                    message.accountId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1324,6 +1368,18 @@ exports.ListOrdersRequest = {
                 : isSet(object.trading_mode)
                     ? (0, common_1.tradingModeFromJSON)(object.trading_mode)
                     : common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            side: isSet(object.side) ? orderSideFromJSON(object.side) : OrderSide.ORDER_SIDE_UNSPECIFIED,
+            orderType: isSet(object.orderType)
+                ? orderTypeFromJSON(object.orderType)
+                : isSet(object.order_type)
+                    ? orderTypeFromJSON(object.order_type)
+                    : OrderType.ORDER_TYPE_UNSPECIFIED,
+            accountId: isSet(object.accountId)
+                ? globalThis.String(object.accountId)
+                : isSet(object.account_id)
+                    ? globalThis.String(object.account_id)
+                    : "",
         };
     },
     toJSON(message) {
@@ -1346,6 +1402,18 @@ exports.ListOrdersRequest = {
         if (message.tradingMode !== common_1.TradingMode.TRADING_MODE_UNSPECIFIED) {
             obj.tradingMode = (0, common_1.tradingModeToJSON)(message.tradingMode);
         }
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.side !== OrderSide.ORDER_SIDE_UNSPECIFIED) {
+            obj.side = orderSideToJSON(message.side);
+        }
+        if (message.orderType !== OrderType.ORDER_TYPE_UNSPECIFIED) {
+            obj.orderType = orderTypeToJSON(message.orderType);
+        }
+        if (message.accountId !== "") {
+            obj.accountId = message.accountId;
+        }
         return obj;
     },
     create(base) {
@@ -1363,6 +1431,10 @@ exports.ListOrdersRequest = {
             ? common_1.PageRequest.fromPartial(object.page)
             : undefined;
         message.tradingMode = object.tradingMode ?? common_1.TradingMode.TRADING_MODE_UNSPECIFIED;
+        message.symbol = object.symbol ?? "";
+        message.side = object.side ?? OrderSide.ORDER_SIDE_UNSPECIFIED;
+        message.orderType = object.orderType ?? OrderType.ORDER_TYPE_UNSPECIFIED;
+        message.accountId = object.accountId ?? "";
         return message;
     },
 };
@@ -1518,6 +1590,154 @@ exports.StreamOrderUpdatesRequest = {
         const message = createBaseStreamOrderUpdatesRequest();
         message.userId = object.userId ?? "";
         message.statusFilter = object.statusFilter?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseReplaceOrderRequest() {
+    return { orderId: "", qty: 0, limitPrice: 0, stopPrice: 0, timeInForce: "", userId: "" };
+}
+exports.ReplaceOrderRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.orderId !== "") {
+            writer.uint32(10).string(message.orderId);
+        }
+        if (message.qty !== 0) {
+            writer.uint32(17).double(message.qty);
+        }
+        if (message.limitPrice !== 0) {
+            writer.uint32(25).double(message.limitPrice);
+        }
+        if (message.stopPrice !== 0) {
+            writer.uint32(33).double(message.stopPrice);
+        }
+        if (message.timeInForce !== "") {
+            writer.uint32(42).string(message.timeInForce);
+        }
+        if (message.userId !== "") {
+            writer.uint32(50).string(message.userId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseReplaceOrderRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.orderId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.qty = reader.double();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 25) {
+                        break;
+                    }
+                    message.limitPrice = reader.double();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 33) {
+                        break;
+                    }
+                    message.stopPrice = reader.double();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.timeInForce = reader.string();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            orderId: isSet(object.orderId)
+                ? globalThis.String(object.orderId)
+                : isSet(object.order_id)
+                    ? globalThis.String(object.order_id)
+                    : "",
+            qty: isSet(object.qty) ? globalThis.Number(object.qty) : 0,
+            limitPrice: isSet(object.limitPrice)
+                ? globalThis.Number(object.limitPrice)
+                : isSet(object.limit_price)
+                    ? globalThis.Number(object.limit_price)
+                    : 0,
+            stopPrice: isSet(object.stopPrice)
+                ? globalThis.Number(object.stopPrice)
+                : isSet(object.stop_price)
+                    ? globalThis.Number(object.stop_price)
+                    : 0,
+            timeInForce: isSet(object.timeInForce)
+                ? globalThis.String(object.timeInForce)
+                : isSet(object.time_in_force)
+                    ? globalThis.String(object.time_in_force)
+                    : "",
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.orderId !== "") {
+            obj.orderId = message.orderId;
+        }
+        if (message.qty !== 0) {
+            obj.qty = message.qty;
+        }
+        if (message.limitPrice !== 0) {
+            obj.limitPrice = message.limitPrice;
+        }
+        if (message.stopPrice !== 0) {
+            obj.stopPrice = message.stopPrice;
+        }
+        if (message.timeInForce !== "") {
+            obj.timeInForce = message.timeInForce;
+        }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ReplaceOrderRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseReplaceOrderRequest();
+        message.orderId = object.orderId ?? "";
+        message.qty = object.qty ?? 0;
+        message.limitPrice = object.limitPrice ?? 0;
+        message.stopPrice = object.stopPrice ?? 0;
+        message.timeInForce = object.timeInForce ?? "";
+        message.userId = object.userId ?? "";
         return message;
     },
 };
@@ -2354,6 +2574,21 @@ exports.TradingServiceService = {
         responseStream: true,
         requestSerialize: (value) => Buffer.from(exports.StreamOrderUpdatesRequest.encode(value).finish()),
         requestDeserialize: (value) => exports.StreamOrderUpdatesRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.Order.encode(value).finish()),
+        responseDeserialize: (value) => exports.Order.decode(value),
+    },
+    /**
+     * ReplaceOrder modifies a working order's qty/price/TIF. It is broker-agnostic at
+     * this surface and routes by the persisted order's broker_type
+     * (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
+     * while the order is NEW or PARTIALLY_FILLED.
+     */
+    replaceOrder: {
+        path: "/xstockstrat.trading.v1.TradingService/ReplaceOrder",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ReplaceOrderRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ReplaceOrderRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.Order.encode(value).finish()),
         responseDeserialize: (value) => exports.Order.decode(value),
     },

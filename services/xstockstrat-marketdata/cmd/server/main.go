@@ -90,6 +90,10 @@ func main() {
 	// reads hit the cache instead of a live Alpaca call on every request.
 	go svc.StartWarmQuotePoller(ctx)
 
+	// Always-on bar ingestion: continuously upsert recent bars for queried symbols so
+	// the feed runs without a client holding a StreamBars RPC open.
+	go svc.StartBarIngestPoller(ctx)
+
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.GRPCPort))
 	if err != nil {
 		slog.Error("listen failed", "error", err)

@@ -94,17 +94,22 @@ export function useExecuteFormula() {
   return useMutation({
     // Either formulaId (run a saved formula) or formulaSource (run the current,
     // possibly unsaved, editor buffer — the notebook-style "Run" behavior).
+    // For inline formula_source runs, `parameters` carries the in-editor parameter
+    // DEFINITIONS so the engine can validate input_params and apply defaults
+    // (saved formulas use their stored definitions and ignore this).
     mutationFn: (req: {
       formulaId?: string;
       formulaSource?: string;
       inputData: Record<string, unknown>;
       inputParams?: Record<string, unknown>;
+      parameters?: FormulaParameterInit[];
     }) =>
       indicatorsClient.executeFormula({
         formulaId: req.formulaId ?? '',
         formulaSource: req.formulaSource ?? '',
         inputData: req.inputData as Record<string, never>,
         inputParams: (req.inputParams ?? {}) as Record<string, never>,
+        parameters: req.parameters ?? [],
       }),
   });
 }

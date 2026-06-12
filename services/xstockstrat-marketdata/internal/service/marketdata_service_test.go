@@ -3,6 +3,11 @@ package service
 import (
 	"testing"
 	"time"
+
+	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 )
 
 func TestEstimateExpectedBars(t *testing.T) {
@@ -40,4 +45,81 @@ func TestEstimateExpectedBars(t *testing.T) {
 			}
 		})
 	}
+}
+
+// rng builds a common.v1.TimeRange from two times (nil-safe via zero check).
+func rng(start, end time.Time) *commonv1.TimeRange {
+	return &commonv1.TimeRange{Start: timestamppb.New(start), End: timestamppb.New(end)}
+}
+
+// TestResolveDeletePlan exercises the FR-5 server-side guards for DeleteBackfilledData without a
+// DB or config server: symbol required (unbounded reject), admin-only (0x04), the delete-window
+// cap, and timeframe/range resolution.
+func TestResolveDeletePlan(t *testing.T) {
+	day := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	t.Run("empty symbol is rejected as InvalidArgument", func(t *testing.T) {
+		_, _, _, err := resolveDeletePlan("", "4", commonv1.Timeframe_TIMEFRAME_UNSPECIFIED, nil, 0)
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatalf("want InvalidArgument, got %v (err=%v)", connect.CodeOf(err), err)
+		}
+	})
+
+	t.Run("missing admin bit is rejected as PermissionDenied", func(t *testing.T) {
+		_, _, _, err := resolveDeletePlan("AAPL", "0", commonv1.Timeframe_TIMEFRAME_UNSPECIFIED, nil, 0)
+		if connect.CodeOf(err) != connect.CodePermissionDenied {
+			t.Fatalf("want PermissionDenied, got %v (err=%v)", connect.CodeOf(err), err)
+		}
+	})
+
+	t.Run("empty access scope is rejected as PermissionDenied", func(t *testing.T) {
+		_, _, _, err := resolveDeletePlan("AAPL", "", commonv1.Timeframe_TIMEFRAME_UNSPECIFIED, nil, 0)
+		if connect.CodeOf(err) != connect.CodePermissionDenied {
+			t.Fatalf("want PermissionDenied, got %v", connect.CodeOf(err))
+		}
+	})
+
+	t.Run("admin whole-symbol (no range, all timeframes) is accepted", func(t *testing.T) {
+		canonical, start, end, err := resolveDeletePlan("AAPL", "4", commonv1.Timeframe_TIMEFRAME_UNSPECIFIED, nil, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if canonical != "" || !start.IsZero() || !end.IsZero() {
+			t.Fatalf("want empty plan, got canonical=%q start=%v end=%v", canonical, start, end)
+		}
+	})
+
+	t.Run("timeframe is resolved to canonical string", func(t *testing.T) {
+		canonical, _, _, err := resolveDeletePlan("AAPL", "4", commonv1.Timeframe_TIMEFRAME_1DAY, nil, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if canonical != "1d" {
+			t.Fatalf("want canonical 1d, got %q", canonical)
+		}
+	})
+
+	t.Run("range within max_delete_days is accepted", func(t *testing.T) {
+		_, start, end, err := resolveDeletePlan("AAPL", "4", commonv1.Timeframe_TIMEFRAME_UNSPECIFIED, rng(day, day.AddDate(0, 0, 5)), 30)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if start.IsZero() || end.IsZero() {
+			t.Fatalf("want parsed range, got start=%v end=%v", start, end)
+		}
+	})
+
+	t.Run("range exceeding max_delete_days is rejected as InvalidArgument", func(t *testing.T) {
+		_, _, _, err := resolveDeletePlan("AAPL", "4", commonv1.Timeframe_TIMEFRAME_UNSPECIFIED, rng(day, day.AddDate(0, 0, 30)), 7)
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatalf("want InvalidArgument, got %v (err=%v)", connect.CodeOf(err), err)
+		}
+	})
+
+	t.Run("max_delete_days=0 disables the window guard", func(t *testing.T) {
+		_, _, _, err := resolveDeletePlan("AAPL", "4", commonv1.Timeframe_TIMEFRAME_UNSPECIFIED, rng(day, day.AddDate(5, 0, 0)), 0)
+		if err != nil {
+			t.Fatalf("window guard should be off, got %v", err)
+		}
+	})
 }

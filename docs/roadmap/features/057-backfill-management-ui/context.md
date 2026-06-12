@@ -122,3 +122,181 @@
 
 `/sdd-execute backfill-management-ui` — independent of 055/056 (no shared files); can proceed
 in parallel.
+
+## Session 2026-06-12 — sdd-execute (sequential, single-PR variant)
+- 055 + 056 merged to main-dev; 057 shares no files with them. Feature branch
+  feature/backfill-management-ui created from main-dev + pushed.
+- Re-spec gate (directive none): read-only validation — all 14 steps' Files paths exist and every
+  cited symbol present (ingest/marketdata protos, servicer.py, backfill_jobs.py, marketdata Go
+  handler/service/repo, insightsBff.ts, browser clients, useBacktest/useIsAdmin, AppShell, e2e). Only
+  trivial line-number drift (reference evidence). No re-spec needed.
+- **User directive**: proceed all 14 steps but **only one final PR** — so each step is committed to
+  feature/backfill-management-ui directly (pushed for backup), no per-step stacked PRs; single
+  integration PR → main-dev at the end.
+- Codegen tooling: reusing host buf v1.47.2 + CI-pinned plugins installed earlier this session.
+
+### Step 1 — proto: CancelBackfill + DeleteBackfilledData + CANCELED + symbol filter [done]
+- ingest.proto: rpc CancelBackfill(CancelBackfillRequest) returns BackfillJob; BACKFILL_STATUS_CANCELED=6;
+  ListBackfillJobsRequest.symbol=3; new CancelBackfillRequest{job_id=1}.
+- marketdata.proto: rpc DeleteBackfilledData; DeleteBackfilledDataRequest{symbol=1,range=2,timeframe=3};
+  DeleteBackfilledDataResponse{rows_deleted=1}.
+- Verification: buf lint OK; buf breaking vs feature branch OK (additive only).
+- Files modified: packages/proto/ingest/v1/ingest.proto, packages/proto/marketdata/v1/marketdata.proto
+- Deviations: none.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran ./scripts/buf-gen.sh on host (Docker down). Regen limited to ingest/v1 + marketdata/v1
+  (Go/Python/TS+dist). Reverted unrelated google/protobuf/timestamp.ts doc-comment drift.
+- Verified new symbols: Go IngestService_CancelBackfill + BACKFILL_STATUS_CANCELED=6 +
+  MarketDataService_DeleteBackfilledData; TS CancelBackfillRequest; Python CancelBackfill stub.
+- Files: packages/proto/gen/{go,python,ts}/{ingest,marketdata}/v1/* (+ ts/dist)
+- Deviations: host-toolchain codegen (CI-equivalent) — see Deviation Log.
+
+### Step 3 — service: ingest CancelBackfill + ListBackfillJobs symbol filter [done]
+- servicer.py: added `self._canceled_jobs: set[str]` registry; `run_one` returns early if job
+  canceled (before semaphore/BackfillBars) so completed-chunk bars are retained; `_finalize_backfill`
+  re-reads the row and skips the terminal overwrite if status==CANCELED (race guard). New
+  CancelBackfill RPC: UNAVAILABLE/admin-gate(0x04)/NOT_FOUND/FAILED_PRECONDITION (non-QUEUED/RUNNING),
+  sets CANCELED+completed_at, emits ingest.backfill.canceled w/ _propagation_meta, returns updated job.
+  ListBackfillJobs forwards request.symbol → list_jobs(symbol_filter=...).
+- backfill_jobs.py: list_jobs gained symbol_filter kwarg; refactored to a dynamic WHERE builder
+  ($N = ANY(symbols) for symbol, combined with optional status). job_row_to_proto passes status int
+  through so CANCELED=6 renders.
+- Verification: ruff check + format clean; cancel event forwards x-user-id/x-access-scope/x-trace-id
+  (propagation). Behavioral coverage in Step 4.
+- Files: app/handlers/servicer.py, app/repositories/backfill_jobs.py
+- Deviations: none (list_jobs dynamic-builder is the spec's "$N = ANY(symbols)" predicate combined
+  with status, just assembled dynamically).
+
+### Step 4 — test: ingest cancel + symbol filter coverage [done]
+- New tests/test_cancel_backfill.py (9 tests): cancel running→CANCELED + registry set; admin-gate
+  PERMISSION_DENIED; terminal→FAILED_PRECONDITION; unknown→NOT_FOUND; no-db→UNAVAILABLE;
+  list_jobs symbol-filter ANY(symbols) predicate, status+symbol combine, no-filter omits WHERE;
+  ListBackfillJobs forwards symbol_filter. Self-contained fake servicer/context (no cross-test import).
+- Step-3 follow-up fix (in servicer.py): _finalize_backfill cancel guard switched from a DB re-read
+  to the in-process registry check — the DB re-read broke 2 existing TestRunBackfill tests (their db
+  mock makes await get_job fail). Registry is authoritative for the live run. See Deviation Log.
+- Verification: ruff check + format clean; full suite 130 passed; coverage 74.6% ≥ 40%; uv.lock unchanged.
+- Files: tests/test_cancel_backfill.py (+ servicer.py finalize fix)
+- Deviations: finalize cancel guard uses registry not DB re-read — see Deviation Log.
+
+### Step 5 — service: marketdata DeleteBackfilledData scoped delete RPC [done]
+- repo: DeleteBars(symbol, timeframe, start, end) — always-present symbol predicate (no full-table
+  delete possible), timeframe/time bounds appended only when supplied; returns tag.RowsAffected().
+- service: DeleteBackfilledData — empty symbol→InvalidArgument (unbounded reject); admin gate via
+  strconv.Atoi(middleware.FromContext(ctx).AccessScope)&0x04→PermissionDenied; timeframe.Resolve
+  (UNSPECIFIED→"" all timeframes); delete-window guard reads marketdata.backfill.max_delete_days (0=off,
+  rejects bounded range > cap); emits marketdata.backfill.data_deleted audit event via s.ledger.
+  Returns connect-coded errors (service now imports connect + strconv).
+- handler: Connect DeleteBackfilledData (early empty-symbol guard, forwards connect-coded svc errors,
+  wraps rest as Internal) + grpcMarketDataAdapter.DeleteBackfilledData + toGRPCError CodePermissionDenied
+  → codes.PermissionDenied case.
+- Fix: enum constant is commonv1.Timeframe_TIMEFRAME_UNSPECIFIED (protoc-gen-go type prefix).
+- Verification: GOWORK=off go build ./... OK; golangci-lint 0 issues; greps confirm methods + admin gate.
+- Files: internal/repository/marketdata_repo.go, internal/service/marketdata_service.go,
+  internal/handler/marketdata_handler.go
+- Deviations: none.
+
+### Step 6 — test: marketdata scoped-delete coverage [done]
+- BLOCKER raised (un-mockable concrete repo/cfg + unexported middleware key) → AskUserQuestion →
+  user chose Option A (refactor for testability). See Deviation Log.
+- Refactor (edits Step-5 files): extracted service.resolveDeletePlan(symbol, accessScope, tf, range,
+  maxDays) pure guard (DeleteBackfilledData calls it) + repository.buildDeleteBarsQuery(...) pure
+  SQL builder (DeleteBars calls it).
+- Tests: internal/service/marketdata_service_test.go TestResolveDeletePlan (8 sub-cases: empty-symbol→
+  InvalidArgument, no-admin/empty-scope→PermissionDenied, whole-symbol accepted, tf→"1d",
+  range-within/exceeds max_delete_days, maxDays=0 disables guard). New
+  internal/repository/marketdata_repo_test.go TestBuildDeleteBarsQuery (4 variants) asserting symbol
+  predicate ALWAYS present + always $1 + first arg (DBA full-table-delete safety).
+- Verification: GOWORK=off go build OK; golangci-lint 0 issues; go test ./... exit 0 (7 pkgs ok).
+- Files: internal/service/marketdata_service.go, internal/repository/marketdata_repo.go,
+  internal/service/marketdata_service_test.go, internal/repository/marketdata_repo_test.go (new)
+- Deviations: Option A scope expansion (user-approved) — see Deviation Log.
+
+### Step 7 — config: register marketdata.backfill.max_delete_days [done]
+- Doc-only (default 0 = guard off, no SetConfig rollout). Added the key to marketdata CLAUDE.md
+  Config Keys Consumed table + a new "feature 057" recently-added-keys block in root CLAUDE.md.
+- Verification: grep confirms present in both files.
+- Files: services/xstockstrat-marketdata/CLAUDE.md, CLAUDE.md
+- Deviations: none.
+
+### Step 8 — service: UI insights-BFF wiring [done]
+- insightsBff.ts IngestService block += getBackfillStatus (read-only, no gate), listBackfillJobs
+  (read-only, forwards symbol filter), cancelBackfill (ADMIN_BIT 0x04 gate). MarketDataService block
+  += deleteBackfilledData (ADMIN_BIT 0x04 gate). All forward x-user-id/x-access-scope/x-trace-id via
+  backendHeaders. Auto-registered under /insights/api via existing router.service handlerMap.
+- Verification: npx tsc --noEmit exit 0 (new BFF methods typecheck vs regenerated proto types);
+  prettier clean. Behavioral coverage in Step 13.
+- Files: services/xstockstrat-ui/src/lib/insightsBff.ts
+- Deviations: none.
+
+### Step 9 — service: UI insights-scoped marketdata browser client [done]
+- Created src/lib/browserClients/insightsMarketDataClient.ts — createConnectTransport baseUrl
+  '/insights/api' for MarketDataService (mirrors insightsIngestClient). Reuses existing
+  insightsIngestClient for ingest calls. No new env/port.
+- Verification: grep confirms /insights/api baseUrl; prettier clean. (typecheck via Step 10.)
+- Files: services/xstockstrat-ui/src/lib/browserClients/insightsMarketDataClient.ts (new)
+- Deviations: none.
+
+### Step 10 — service: UI React-Query hooks [done]
+- Created src/hooks/useBackfills.ts: useBackfillJobs(filter) (useQuery, refetchInterval 4000,
+  forwards statusFilter/symbol/page), useBackfillStatus(jobId) (poll 4000ms until terminal via
+  isTerminal()), useCancelBackfill() (mutation + invalidate jobs), useDeleteBackfilledData()
+  (mutation via insightsMarketDataClient + invalidate jobs). Re-exports useTriggerBackfill from
+  useBacktest.ts. BackfillStatus enum members (COMPLETED/FAILED/PARTIAL/CANCELED) confirmed in gen TS.
+- Verification: npx tsc --noEmit exit 0; prettier clean; grep finds all 4 ops + refetchInterval.
+- Files: services/xstockstrat-ui/src/hooks/useBackfills.ts (new)
+- Deviations: none.
+
+### Step 11 — service: UI Backfills page [done]
+- Created src/app/insights/backfills/page.tsx ('use client' in <AppShell>): create form (symbols/
+  timeframe→common Timeframe/range/overwrite, useTriggerBackfill, isAdmin-gated); filters (status
+  dropdown→statusFilter + symbol text→symbol); job list w/ status badge + truthful barsProcessed/
+  barsTotal + chunksCompleted/chunksTotal + failedSymbols + error (no fabricated progress, FR-6),
+  live via hook refetchInterval; per-row Cancel on QUEUED/RUNNING (isAdmin, window.confirm); delete
+  panel scoped by symbol+optional range+optional timeframe requiring typed symbol confirm + second
+  "DELETE ALL" confirm for whole-symbol deletes (FR-5), shows rowsDeleted. Native <select> for
+  dropdowns (avoids Radix Select API risk). bigint fields rendered via .toString().
+- Verification: npx tsc --noEmit exit 0; next lint "No ESLint warnings or errors"; prettier clean;
+  grep confirms list/cancel/delete/isAdmin/barsTotal.
+- Files: services/xstockstrat-ui/src/app/insights/backfills/page.tsx (new)
+- Deviations: none (native <select> is a reasonable substitution within the ui-component set).
+
+### Step 12 — service: UI nav entry (admin-gated) [done]
+- AppShell.tsx: added useIsAdmin; subNav now conditionally appends { label: 'Backfills', href:
+  '/insights/backfills' } only when isAdmin (FR-7 — hidden from non-admins; BFF+backend re-enforce).
+- Verification: npx tsc --noEmit exit 0; prettier clean; grep confirms backfills link + useIsAdmin.
+- Files: services/xstockstrat-ui/src/components/insights/AppShell.tsx
+- Deviations: none.
+
+### Step 13 — test: UI E2E for the Backfills page [done]
+- Created e2e/insights/backfills.spec.ts (6 tests across 3 describes): admin sees nav+page surfaces /
+  non-admin sees neither (FR-7); list renders status badge + truthful bars/chunks (AC-1/2); create
+  posts uppercased symbols (AC-1); cancel flips RUNNING→CANCELED via stateful list stub + dialog
+  accept (AC-3); delete requires typed symbol + second "DELETE ALL" confirm for whole-symbol and
+  shows rowsDeleted (AC-4/FR-5). Uses addCookieWithRoles (admin/non-admin) + browser page.route()
+  Connect stubs (formulas.spec.ts pattern; insights mock 9092 lacks Ingest/MarketData).
+- Static verification: prettier clean; tsc --noEmit exit 0; next lint "No ESLint warnings or errors".
+- Execution: harness ran the suite (1 pass, 5 fail) — all 5 were selector issues diagnosed from the
+  DOM snapshot and FIXED (exact-match text to dodge filter <option>s; exact placeholder; positive-
+  control nav assertion; longer first-nav timeouts). A full green run could NOT be reproduced here:
+  non-CI Playwright = pnpm dev + 10s per-test timeout vs dev cold-compile; next build/webServer
+  orchestration overran every command wall-clock. pnpm build succeeds (page in bundle). Full E2E
+  green deferred to CI (next build && next start, 30s timeout, retries:2 — its designed conditions).
+- Files: services/xstockstrat-ui/e2e/insights/backfills.spec.ts (new)
+- Deviations: E2E full run deferred to CI (environment limitation) — see Deviation Log. NOT claiming
+  a green suite locally.
+
+### Step 14 — docs: backfill-management UI section [done]
+- docs/runbooks/historical-backfill.md: added "Manage backfills from the UI (operator-facing)" section
+  after Architecture — admin-only /insights/backfills page; create/monitor/filter/cancel/delete table
+  mapping to TriggerBackfill/GetBackfillStatus/ListBackfillJobs/CancelBackfill/DeleteBackfilledData;
+  destructive-delete guardrails (symbol-scoped server reject, typed symbol + second "DELETE ALL"
+  confirm, marketdata.backfill.max_delete_days cap, data_deleted audit event). No shell commands added.
+- Verification: grep confirms backfills/CancelBackfill/DeleteBackfilledData/max_delete_days present.
+- Files: docs/runbooks/historical-backfill.md
+- Deviations: none.
+
+### Feature 057 — code-completed
+All 14 steps committed to feature/backfill-management-ui. Single integration PR → main-dev next
+(per user's one-PR directive). E2E (Step 13) full green deferred to CI.

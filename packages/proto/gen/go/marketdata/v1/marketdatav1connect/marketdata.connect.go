@@ -51,6 +51,9 @@ const (
 	// MarketDataServiceGetDataCoverageProcedure is the fully-qualified name of the MarketDataService's
 	// GetDataCoverage RPC.
 	MarketDataServiceGetDataCoverageProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetDataCoverage"
+	// MarketDataServiceDeleteBackfilledDataProcedure is the fully-qualified name of the
+	// MarketDataService's DeleteBackfilledData RPC.
+	MarketDataServiceDeleteBackfilledDataProcedure = "/xstockstrat.marketdata.v1.MarketDataService/DeleteBackfilledData"
 	// MarketDataServiceListAssetsProcedure is the fully-qualified name of the MarketDataService's
 	// ListAssets RPC.
 	MarketDataServiceListAssetsProcedure = "/xstockstrat.marketdata.v1.MarketDataService/ListAssets"
@@ -70,6 +73,8 @@ type MarketDataServiceClient interface {
 	BackfillBars(context.Context, *connect.Request[v1.BackfillBarsRequest]) (*connect.Response[v1.BackfillBarsResponse], error)
 	// Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
 	GetDataCoverage(context.Context, *connect.Request[v1.GetDataCoverageRequest]) (*connect.Response[v1.GetDataCoverageResponse], error)
+	// Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5)
+	DeleteBackfilledData(context.Context, *connect.Request[v1.DeleteBackfilledDataRequest]) (*connect.Response[v1.DeleteBackfilledDataResponse], error)
 	// Get available symbols
 	ListAssets(context.Context, *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error)
 }
@@ -122,6 +127,12 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(marketDataServiceMethods.ByName("GetDataCoverage")),
 			connect.WithClientOptions(opts...),
 		),
+		deleteBackfilledData: connect.NewClient[v1.DeleteBackfilledDataRequest, v1.DeleteBackfilledDataResponse](
+			httpClient,
+			baseURL+MarketDataServiceDeleteBackfilledDataProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("DeleteBackfilledData")),
+			connect.WithClientOptions(opts...),
+		),
 		listAssets: connect.NewClient[v1.ListAssetsRequest, v1.ListAssetsResponse](
 			httpClient,
 			baseURL+MarketDataServiceListAssetsProcedure,
@@ -133,13 +144,14 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 
 // marketDataServiceClient implements MarketDataServiceClient.
 type marketDataServiceClient struct {
-	streamBars      *connect.Client[v1.StreamBarsRequest, v1.Bar]
-	streamQuotes    *connect.Client[v1.StreamQuotesRequest, v1.Quote]
-	getBars         *connect.Client[v1.GetBarsRequest, v1.GetBarsResponse]
-	getLatestQuote  *connect.Client[v1.GetLatestQuoteRequest, v1.Quote]
-	backfillBars    *connect.Client[v1.BackfillBarsRequest, v1.BackfillBarsResponse]
-	getDataCoverage *connect.Client[v1.GetDataCoverageRequest, v1.GetDataCoverageResponse]
-	listAssets      *connect.Client[v1.ListAssetsRequest, v1.ListAssetsResponse]
+	streamBars           *connect.Client[v1.StreamBarsRequest, v1.Bar]
+	streamQuotes         *connect.Client[v1.StreamQuotesRequest, v1.Quote]
+	getBars              *connect.Client[v1.GetBarsRequest, v1.GetBarsResponse]
+	getLatestQuote       *connect.Client[v1.GetLatestQuoteRequest, v1.Quote]
+	backfillBars         *connect.Client[v1.BackfillBarsRequest, v1.BackfillBarsResponse]
+	getDataCoverage      *connect.Client[v1.GetDataCoverageRequest, v1.GetDataCoverageResponse]
+	deleteBackfilledData *connect.Client[v1.DeleteBackfilledDataRequest, v1.DeleteBackfilledDataResponse]
+	listAssets           *connect.Client[v1.ListAssetsRequest, v1.ListAssetsResponse]
 }
 
 // StreamBars calls xstockstrat.marketdata.v1.MarketDataService.StreamBars.
@@ -172,6 +184,11 @@ func (c *marketDataServiceClient) GetDataCoverage(ctx context.Context, req *conn
 	return c.getDataCoverage.CallUnary(ctx, req)
 }
 
+// DeleteBackfilledData calls xstockstrat.marketdata.v1.MarketDataService.DeleteBackfilledData.
+func (c *marketDataServiceClient) DeleteBackfilledData(ctx context.Context, req *connect.Request[v1.DeleteBackfilledDataRequest]) (*connect.Response[v1.DeleteBackfilledDataResponse], error) {
+	return c.deleteBackfilledData.CallUnary(ctx, req)
+}
+
 // ListAssets calls xstockstrat.marketdata.v1.MarketDataService.ListAssets.
 func (c *marketDataServiceClient) ListAssets(ctx context.Context, req *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error) {
 	return c.listAssets.CallUnary(ctx, req)
@@ -192,6 +209,8 @@ type MarketDataServiceHandler interface {
 	BackfillBars(context.Context, *connect.Request[v1.BackfillBarsRequest]) (*connect.Response[v1.BackfillBarsResponse], error)
 	// Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
 	GetDataCoverage(context.Context, *connect.Request[v1.GetDataCoverageRequest]) (*connect.Response[v1.GetDataCoverageResponse], error)
+	// Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5)
+	DeleteBackfilledData(context.Context, *connect.Request[v1.DeleteBackfilledDataRequest]) (*connect.Response[v1.DeleteBackfilledDataResponse], error)
 	// Get available symbols
 	ListAssets(context.Context, *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error)
 }
@@ -239,6 +258,12 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 		connect.WithSchema(marketDataServiceMethods.ByName("GetDataCoverage")),
 		connect.WithHandlerOptions(opts...),
 	)
+	marketDataServiceDeleteBackfilledDataHandler := connect.NewUnaryHandler(
+		MarketDataServiceDeleteBackfilledDataProcedure,
+		svc.DeleteBackfilledData,
+		connect.WithSchema(marketDataServiceMethods.ByName("DeleteBackfilledData")),
+		connect.WithHandlerOptions(opts...),
+	)
 	marketDataServiceListAssetsHandler := connect.NewUnaryHandler(
 		MarketDataServiceListAssetsProcedure,
 		svc.ListAssets,
@@ -259,6 +284,8 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 			marketDataServiceBackfillBarsHandler.ServeHTTP(w, r)
 		case MarketDataServiceGetDataCoverageProcedure:
 			marketDataServiceGetDataCoverageHandler.ServeHTTP(w, r)
+		case MarketDataServiceDeleteBackfilledDataProcedure:
+			marketDataServiceDeleteBackfilledDataHandler.ServeHTTP(w, r)
 		case MarketDataServiceListAssetsProcedure:
 			marketDataServiceListAssetsHandler.ServeHTTP(w, r)
 		default:
@@ -292,6 +319,10 @@ func (UnimplementedMarketDataServiceHandler) BackfillBars(context.Context, *conn
 
 func (UnimplementedMarketDataServiceHandler) GetDataCoverage(context.Context, *connect.Request[v1.GetDataCoverageRequest]) (*connect.Response[v1.GetDataCoverageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetDataCoverage is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) DeleteBackfilledData(context.Context, *connect.Request[v1.DeleteBackfilledDataRequest]) (*connect.Response[v1.DeleteBackfilledDataResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.DeleteBackfilledData is not implemented"))
 }
 
 func (UnimplementedMarketDataServiceHandler) ListAssets(context.Context, *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error) {

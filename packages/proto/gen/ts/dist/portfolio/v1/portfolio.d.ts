@@ -2,6 +2,23 @@ import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientReadableStream, type ClientUnaryCall, type handleServerStreamingCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
 import { PageRequest, PageResponse, TimeRange, TradingMode } from "../../common/v1/common";
 export declare const protobufPackage = "xstockstrat.portfolio.v1";
+/**
+ * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
+ * Used only as an additive filter on ListPositionsRequest; the Position message itself
+ * continues to carry signed qty.
+ */
+export declare enum PositionSide {
+    /** POSITION_SIDE_UNSPECIFIED - no side filter — return both long and short */
+    POSITION_SIDE_UNSPECIFIED = "POSITION_SIDE_UNSPECIFIED",
+    /** POSITION_SIDE_LONG - qty > 0 */
+    POSITION_SIDE_LONG = "POSITION_SIDE_LONG",
+    /** POSITION_SIDE_SHORT - qty < 0 */
+    POSITION_SIDE_SHORT = "POSITION_SIDE_SHORT",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function positionSideFromJSON(object: any): PositionSide;
+export declare function positionSideToJSON(object: PositionSide): string;
+export declare function positionSideToNumber(object: PositionSide): number;
 export interface Portfolio {
     portfolioId: string;
     userId: string;
@@ -63,6 +80,10 @@ export interface ListPositionsRequest {
     /** Filter by trading mode; UNSPECIFIED returns all positions. */
     tradingMode: TradingMode;
     accountId?: string | undefined;
+    /** Additive filters (feature 056). Empty symbol / UNSPECIFIED side = no narrowing. */
+    symbol: string;
+    /** long/short filter derived from qty sign */
+    side: PositionSide;
 }
 export interface ListPositionsResponse {
     positions: Position[];

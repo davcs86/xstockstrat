@@ -53,6 +53,19 @@ func (h *TradingHandler) CancelOrder(ctx context.Context, req *connect.Request[t
 	return connect.NewResponse(resp), nil
 }
 
+func (h *TradingHandler) ReplaceOrder(ctx context.Context, req *connect.Request[tradingv1.ReplaceOrderRequest]) (*connect.Response[tradingv1.Order], error) {
+	if req.Msg.OrderId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("order_id is required"))
+	}
+	order, err := h.svc.ReplaceOrder(ctx, req.Msg)
+	if err != nil {
+		// Preserve the service's gRPC status code (NotFound / FailedPrecondition) so the
+		// UI can distinguish "missing order" from "not replaceable in this state" (FR-8).
+		return nil, connect.NewError(connectCodeFromErr(err), err)
+	}
+	return connect.NewResponse(order), nil
+}
+
 func (h *TradingHandler) GetOrder(ctx context.Context, req *connect.Request[tradingv1.GetOrderRequest]) (*connect.Response[tradingv1.Order], error) {
 	if req.Msg.OrderId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("order_id is required"))
@@ -119,6 +132,14 @@ func (a *grpcTradingAdapter) CancelOrder(ctx context.Context, req *tradingv1.Can
 	return resp.Msg, nil
 }
 
+func (a *grpcTradingAdapter) ReplaceOrder(ctx context.Context, req *tradingv1.ReplaceOrderRequest) (*tradingv1.Order, error) {
+	resp, err := a.h.ReplaceOrder(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
 func (a *grpcTradingAdapter) GetOrder(ctx context.Context, req *tradingv1.GetOrderRequest) (*tradingv1.Order, error) {
 	resp, err := a.h.GetOrder(ctx, connect.NewRequest(req))
 	if err != nil {
@@ -162,11 +183,29 @@ func toGRPCError(err error) error {
 			return status.Error(codes.InvalidArgument, connectErr.Message())
 		case connect.CodeNotFound:
 			return status.Error(codes.NotFound, connectErr.Message())
+		case connect.CodeFailedPrecondition:
+			return status.Error(codes.FailedPrecondition, connectErr.Message())
 		case connect.CodePermissionDenied:
 			return status.Error(codes.PermissionDenied, connectErr.Message())
 		}
 	}
 	return status.Error(codes.Internal, err.Error())
+}
+
+// connectCodeFromErr maps a gRPC status error (as returned by the service layer) to the
+// equivalent Connect error code, defaulting to Internal for unrecognized errors.
+func connectCodeFromErr(err error) connect.Code {
+	if st, ok := status.FromError(err); ok {
+		switch st.Code() {
+		case codes.NotFound:
+			return connect.CodeNotFound
+		case codes.FailedPrecondition:
+			return connect.CodeFailedPrecondition
+		case codes.InvalidArgument:
+			return connect.CodeInvalidArgument
+		}
+	}
+	return connect.CodeInternal
 }
 
 func extractUserID(ctx context.Context) string {

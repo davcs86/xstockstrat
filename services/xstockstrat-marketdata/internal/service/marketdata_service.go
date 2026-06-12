@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
 	"time"
 
+	"connectrpc.com/connect"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -60,11 +62,11 @@ func NewMarketDataService(
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
 	return &MarketDataService{
-		registry:  registry,
-		repo:      repo,
-		cfg:       cfgWatcher,
-		ledger:    ledgerv1.NewLedgerServiceClient(ledgerConn),
-		notify:    notifyv1.NewNotifyServiceClient(notifyConn),
+		registry:    registry,
+		repo:        repo,
+		cfg:         cfgWatcher,
+		ledger:      ledgerv1.NewLedgerServiceClient(ledgerConn),
+		notify:      notifyv1.NewNotifyServiceClient(notifyConn),
 		barSubs:     make(map[string]chan *marketdatav1.Bar),
 		quoteSubs:   make(map[string]chan *marketdatav1.Quote),
 		warmSymbols: make(map[string]struct{}),
@@ -73,6 +75,9 @@ func NewMarketDataService(
 
 // GetBars retrieves historical OHLCV bars, querying from TimescaleDB.
 func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBarsRequest) (*marketdatav1.GetBarsResponse, error) {
+	// A charted symbol becomes "warm" so the always-on bar ingester keeps it fresh.
+	s.markWarm(req.Symbol)
+
 	var start, end time.Time
 	if req.Range != nil {
 		if req.Range.Start != nil {
@@ -102,10 +107,58 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 	if err != nil {
 		return nil, fmt.Errorf("query bars: %w", err)
 	}
+
+	// DB miss on the first page — fall back to a live Alpaca fetch, cache the result,
+	// and re-read so pagination stays consistent. Without this the chart stays empty
+	// until an explicit backfill runs, even though the data is one REST call away.
+	// (Mirrors GetLatestQuote's live fallback.) Only on the first page: an empty later
+	// page means end-of-data, not a miss.
+	if len(bars) == 0 && pageToken == "" {
+		bars, nextToken = s.fetchAndCacheBars(ctx, req.Symbol, req.Timeframe, start, end, pageSize) //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+	}
+
 	return &marketdatav1.GetBarsResponse{
 		Bars: bars,
 		Page: &commonv1.PageResponse{NextPageToken: nextToken},
 	}, nil
+}
+
+// fetchAndCacheBars fetches bars for a symbol from the live source, persists them, and
+// returns the first page from the DB (so the next_page_token is consistent with a normal
+// cached read). On any failure it logs and returns no bars — GetBars then yields an empty
+// (but valid) response rather than erroring. If caching fails the freshly fetched bars are
+// still served, truncated to pageSize.
+func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf string, start, end time.Time, pageSize int) ([]*marketdatav1.Bar, string) {
+	src, err := s.registry.Get("")
+	if err != nil {
+		slog.Warn("GetBars: resolve source failed", "symbol", symbol, "error", err)
+		return nil, ""
+	}
+	live, err := src.GetBars(ctx, symbol, tf, start, end)
+	if err != nil {
+		slog.Warn("GetBars: live fetch failed", "symbol", symbol, "timeframe", tf, "error", err)
+		return nil, ""
+	}
+	if len(live) == 0 {
+		return nil, ""
+	}
+	if err := s.repo.InsertBars(ctx, live); err != nil {
+		slog.Warn("GetBars: cache insert failed", "symbol", symbol, "error", err)
+		// Serve what we fetched even if caching failed.
+		if len(live) > pageSize {
+			return live[:pageSize], ""
+		}
+		return live, ""
+	}
+	bars, nextToken, err := s.repo.QueryBars(ctx, symbol, tf, start, end, pageSize, "")
+	if err != nil {
+		slog.Warn("GetBars: re-read after cache failed", "symbol", symbol, "error", err)
+		if len(live) > pageSize {
+			return live[:pageSize], ""
+		}
+		return live, ""
+	}
+	return bars, nextToken
 }
 
 // GetDataCoverage reports stored OHLCV coverage (earliest/latest/count + gaps) for a
@@ -162,6 +215,73 @@ func (s *MarketDataService) GetDataCoverage(ctx context.Context, req *marketdata
 		})
 	}
 	return resp, nil
+}
+
+// resolveDeletePlan validates a delete request and computes the scoped (timeframe, start, end)
+// to hand to the repo. Pure: it takes the propagated access scope and the configured
+// max-delete-days directly (not a ctx or config.Watcher) so the FR-5 guards — symbol required,
+// admin-only (0x04), and the optional delete-window cap — are unit-testable without a DB or
+// config server. Returns connect-coded errors that the handler forwards.
+func resolveDeletePlan(symbol, accessScope string, tf commonv1.Timeframe, rng *commonv1.TimeRange, maxDays int64) (canonical string, start, end time.Time, err error) {
+	if symbol == "" {
+		return "", time.Time{}, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("symbol required; refusing unbounded delete"))
+	}
+	// Admin gate (0x04): destructive op, admin/operator only (FR-7).
+	scope, _ := strconv.Atoi(accessScope)
+	if scope&0x04 == 0 {
+		return "", time.Time{}, time.Time{}, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("admin scope required"))
+	}
+	// Resolve timeframe: UNSPECIFIED → "" = delete across all timeframes for the symbol/range.
+	if tf != commonv1.Timeframe_TIMEFRAME_UNSPECIFIED {
+		canonical, err = timeframe.Resolve(tf, "")
+		if err != nil {
+			return "", time.Time{}, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("resolve timeframe: %w", err))
+		}
+	}
+	if rng != nil {
+		if rng.Start != nil {
+			start = rng.Start.AsTime()
+		}
+		if rng.End != nil {
+			end = rng.End.AsTime()
+		}
+	}
+	// Delete-window guard: when maxDays > 0 and a bounded range exceeds it, reject. A whole-symbol
+	// delete (no range) is exempt.
+	if maxDays > 0 && !start.IsZero() && !end.IsZero() && end.Sub(start) > time.Duration(maxDays)*24*time.Hour {
+		return "", time.Time{}, time.Time{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("delete range %d days exceeds marketdata.backfill.max_delete_days=%d",
+				int(end.Sub(start).Hours()/24), maxDays))
+	}
+	return canonical, start, end, nil
+}
+
+// DeleteBackfilledData performs a scoped, admin-only delete of backfilled OHLCV bars (FR-5).
+// The symbol is required (server-side guard against an unbounded delete); range and timeframe
+// are optional. A whole-symbol delete (no range) is allowed at the server — the UI double-confirms
+// it — but is still bounded by the symbol predicate. Emits an audit ledger event.
+func (s *MarketDataService) DeleteBackfilledData(ctx context.Context, req *marketdatav1.DeleteBackfilledDataRequest) (*marketdatav1.DeleteBackfilledDataResponse, error) {
+	canonical, start, end, err := resolveDeletePlan(
+		req.Symbol,
+		middleware.FromContext(ctx).AccessScope,
+		req.Timeframe,
+		req.Range,
+		s.cfg.GetInt("marketdata.backfill.max_delete_days", 0),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	n, err := s.repo.DeleteBars(ctx, req.Symbol, canonical, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("delete bars: %w", err)
+	}
+	s.emitEvent(ctx, "marketdata.backfill.data_deleted", "backfill:delete:"+req.Symbol, map[string]interface{}{
+		"symbol":       req.Symbol,
+		"timeframe":    canonical,
+		"rows_deleted": n,
+	})
+	return &marketdatav1.DeleteBackfilledDataResponse{RowsDeleted: n}, nil
 }
 
 // GetLatestQuote returns the most recent quote for a symbol from the DB.
@@ -246,6 +366,77 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 					slog.Warn("warm poller: cache insert failed", "symbol", sym, "error", err)
 				}
 			}
+		}
+	}
+}
+
+// StartBarIngestPoller continuously ingests recent bars for every symbol that has been
+// queried (the same warm set StartWarmQuotePoller tracks — populated by GetLatestQuote and
+// GetBars), upserting them into marketdata.ohlcv. This gives the platform an always-on feed
+// instead of one that only runs while a client holds a StreamBars RPC open. Interval is
+// configurable via marketdata.stream.bar_ingest_interval_ms (default 60s); set to 0 to pause.
+func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
+	const defaultIntervalMs = 60000
+	interval := time.Duration(s.cfg.GetInt("marketdata.stream.bar_ingest_interval_ms", defaultIntervalMs)) * time.Millisecond
+	if interval <= 0 {
+		interval = defaultIntervalMs * time.Millisecond
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ms := s.cfg.GetInt("marketdata.stream.bar_ingest_interval_ms", defaultIntervalMs)
+			if ms <= 0 {
+				continue // paused via config
+			}
+			if newInterval := time.Duration(ms) * time.Millisecond; newInterval != interval {
+				interval = newInterval
+				ticker.Reset(interval)
+			}
+			s.ingestRecentBars(ctx)
+		}
+	}
+}
+
+// ingestRecentBars fetches the recent bar window for every warm symbol and upserts it.
+// The lookback (marketdata.stream.bar_ingest_lookback_ms, default 15m) is re-fetched each
+// cycle; overlap is harmless because InsertBars upserts, and a window wider than the poll
+// interval lets the feed self-heal after a brief pause or restart.
+func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
+	s.warmMu.Lock()
+	symbols := make([]string, 0, len(s.warmSymbols))
+	for sym := range s.warmSymbols {
+		symbols = append(symbols, sym)
+	}
+	s.warmMu.Unlock()
+	if len(symbols) == 0 {
+		return
+	}
+	src, err := s.registry.Get("")
+	if err != nil {
+		return
+	}
+	tf := s.cfg.GetString("marketdata.stream.bar_ingest_timeframe", "1m")
+	lookbackMs := s.cfg.GetInt("marketdata.stream.bar_ingest_lookback_ms", 900000)
+	if lookbackMs <= 0 {
+		lookbackMs = 900000
+	}
+	end := time.Now().UTC()
+	start := end.Add(-time.Duration(lookbackMs) * time.Millisecond)
+	for _, sym := range symbols {
+		bars, err := src.GetBars(ctx, sym, tf, start, end)
+		if err != nil {
+			slog.Warn("bar ingest: live fetch failed", "symbol", sym, "timeframe", tf, "error", err)
+			continue
+		}
+		if len(bars) == 0 {
+			continue
+		}
+		if err := s.repo.InsertBars(ctx, bars); err != nil {
+			slog.Warn("bar ingest: insert failed", "symbol", sym, "error", err)
 		}
 	}
 }

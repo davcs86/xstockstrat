@@ -182,24 +182,57 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 	s.broadcastSnapshot(ctx, fill.UserID, mode)
 }
 
+// enrichPositions fills CurrentPrice / MarketValue / UnrealizedPnl on each position
+// from the latest market-data quote. A failed lookup or an empty (zero) quote leaves
+// the position's price fields at zero, but is logged so the gap is diagnosable rather
+// than silently masked (otherwise positions render at $0.00 with no explanation).
+func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*portfoliov1.Position) {
+	for _, p := range positions {
+		quote, err := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
+		if err != nil {
+			slog.Warn("latest quote unavailable for position", "symbol", p.Symbol, "error", err)
+			continue
+		}
+		price := (quote.AskPrice + quote.BidPrice) / 2
+		if price <= 0 {
+			slog.Warn("latest quote has no usable price", "symbol", p.Symbol, "ask", quote.AskPrice, "bid", quote.BidPrice)
+			continue
+		}
+		enrichPosition(p, quote.AskPrice, quote.BidPrice)
+	}
+}
+
+// enrichPosition fills current price / market value / unrealized P&L on p from a quote's
+// ask/bid, using the mid price (Ask+Bid)/2. UnrealizedPnlPct is guarded against zero cost basis.
+func enrichPosition(p *portfoliov1.Position, askPrice, bidPrice float64) {
+	price := (askPrice + bidPrice) / 2
+	p.CurrentPrice = price
+	p.MarketValue = price * p.Qty
+	p.UnrealizedPnl = p.MarketValue - p.CostBasis
+	if p.CostBasis > 0 {
+		p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
+	}
+}
+
+// sideOf derives a PositionSide from a signed quantity (qty > 0 long, qty < 0 short).
+func sideOf(qty float64) portfoliov1.PositionSide {
+	switch {
+	case qty > 0:
+		return portfoliov1.PositionSide_POSITION_SIDE_LONG
+	case qty < 0:
+		return portfoliov1.PositionSide_POSITION_SIDE_SHORT
+	default:
+		return portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED
+	}
+}
+
 // GetPortfolio aggregates all open positions with live prices.
 func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.GetPortfolioRequest) (*portfoliov1.Portfolio, error) {
-	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", req.GetAccountId())
+	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", req.GetAccountId(), "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
-	for _, p := range positions {
-		quote, err := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
-		if err == nil {
-			price := (quote.AskPrice + quote.BidPrice) / 2
-			p.CurrentPrice = price
-			p.MarketValue = price * p.Qty
-			p.UnrealizedPnl = p.MarketValue - p.CostBasis
-			if p.CostBasis > 0 {
-				p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
-			}
-		}
-	}
+	s.enrichPositions(ctx, positions)
 
 	var totalValue float64
 	for _, p := range positions {
@@ -221,16 +254,7 @@ func (s *PortfolioService) GetPosition(ctx context.Context, req *portfoliov1.Get
 	if err != nil {
 		return nil, err
 	}
-	quote, err := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
-	if err == nil {
-		price := (quote.AskPrice + quote.BidPrice) / 2
-		p.CurrentPrice = price
-		p.MarketValue = price * p.Qty
-		p.UnrealizedPnl = p.MarketValue - p.CostBasis
-		if p.CostBasis > 0 {
-			p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
-		}
-	}
+	s.enrichPositions(ctx, []*portfoliov1.Position{p})
 	return p, nil
 }
 
@@ -244,9 +268,17 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 		}
 		pageToken = req.Page.PageToken
 	}
-	positions, nextToken, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, pageSize, pageToken, "")
+	positions, nextToken, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, pageSize, pageToken, req.GetAccountId(), req.Symbol, req.Side)
 	if err != nil {
 		return nil, err
+	}
+	// Enrich each position with live price / market value / unrealized P&L (repo ListPositions
+	// returns these unset; the UI winners/losers P&L filter and detail view need them).
+	for _, p := range positions {
+		quote, qErr := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
+		if qErr == nil {
+			enrichPosition(p, quote.AskPrice, quote.BidPrice)
+		}
 	}
 	return &portfoliov1.ListPositionsResponse{
 		Positions: positions,
@@ -256,7 +288,7 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 
 // GetPnL computes realized + unrealized P&L for a user over a time range.
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
-	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", "")
+	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
@@ -456,7 +488,7 @@ func (s *PortfolioService) StartSnapshotWriter(ctx context.Context, userID strin
 }
 
 func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string, mode commonv1.TradingMode) {
-	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "")
+	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
 		return
 	}
@@ -494,7 +526,7 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	maxDrawdownPct := s.cfg.GetFloat("portfolio.risk.max_drawdown_pct", 0.10)
 	concentrationLimitPct := s.cfg.GetFloat("portfolio.risk.concentration_limit_pct", 0.20)
 
-	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "")
+	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
 		return
 	}
@@ -714,33 +746,22 @@ func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledger
 	}
 }
 
-// ListPortfolios returns a Portfolio for the requested broker account (or an empty list if no
-// account_id is specified, since cross-account aggregation requires a separate query).
-func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.ListPortfoliosRequest) (*portfoliov1.ListPortfoliosResponse, error) {
-	accountID := req.GetAccountId()
-	if accountID == "" {
-		return &portfoliov1.ListPortfoliosResponse{}, nil
-	}
-
+// buildAccountPortfolio assembles a Portfolio for a single broker account: its
+// positions (enriched with live prices) overlaid with the broker-synced balance
+// snapshot. The broker is authoritative for cash, buying power, and total equity
+// (cash + positions); day P&L is derived from equity vs. previous-close equity.
+// When bal is nil, equity falls back to the summed position market value.
+func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID string, bal *repository.AccountBalance) (*portfoliov1.Portfolio, error) {
 	positions, err := s.repo.ListPositionsByAccount(ctx, accountID, "")
 	if err != nil {
 		return nil, err
 	}
+	s.enrichPositions(ctx, positions)
 
 	var positionsValue, unrealizedPnl float64
 	for _, p := range positions {
-		quote, err := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
-		if err == nil {
-			price := (quote.AskPrice + quote.BidPrice) / 2
-			p.CurrentPrice = price
-			p.MarketValue = price * p.Qty
-			p.UnrealizedPnl = p.MarketValue - p.CostBasis
-			if p.CostBasis > 0 {
-				p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
-			}
-			positionsValue += p.MarketValue
-			unrealizedPnl += p.UnrealizedPnl
-		}
+		positionsValue += p.MarketValue
+		unrealizedPnl += p.UnrealizedPnl
 	}
 
 	portfolio := &portfoliov1.Portfolio{
@@ -751,14 +772,7 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		UpdatedAt:   timestamppb.Now(),
 		Positions:   positions,
 	}
-
-	// Overlay the broker-synced balance snapshot when available. The broker is
-	// authoritative for cash, buying power, and total equity (cash + positions);
-	// day P&L is derived from equity vs. previous-close equity.
-	bal, err := s.repo.GetAccountBalance(ctx, accountID)
-	if err != nil {
-		slog.Warn("ListPortfolios: GetAccountBalance failed", "account_id", accountID, "error", err)
-	} else if bal != nil {
+	if bal != nil {
 		portfolio.Cash = bal.Cash
 		portfolio.BuyingPower = bal.BuyingPower
 		portfolio.Equity = bal.Equity
@@ -767,8 +781,47 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 			portfolio.DayPnlPct = portfolio.DayPnl / bal.LastEquity
 		}
 	}
+	return portfolio, nil
+}
 
-	return &portfoliov1.ListPortfoliosResponse{
-		Portfolios: []*portfoliov1.Portfolio{portfolio},
-	}, nil
+// ListPortfolios returns a Portfolio per broker account. With a specific account_id
+// it returns just that account; without one it aggregates every account owned by the
+// requesting user (resolved from the propagated x-user-id header), so the "All
+// Accounts" view sums real per-account equity instead of showing $0.00.
+func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.ListPortfoliosRequest) (*portfoliov1.ListPortfoliosResponse, error) {
+	accountID := req.GetAccountId()
+	if accountID != "" {
+		bal, err := s.repo.GetAccountBalance(ctx, accountID)
+		if err != nil {
+			slog.Warn("ListPortfolios: GetAccountBalance failed", "account_id", accountID, "error", err)
+		}
+		portfolio, err := s.buildAccountPortfolio(ctx, accountID, bal)
+		if err != nil {
+			return nil, err
+		}
+		return &portfoliov1.ListPortfoliosResponse{
+			Portfolios: []*portfoliov1.Portfolio{portfolio},
+		}, nil
+	}
+
+	// All-accounts view: discover every account owned by the requesting user.
+	userID := middleware.FromContext(ctx).UserID
+	if userID == "" {
+		return &portfoliov1.ListPortfoliosResponse{}, nil
+	}
+	accounts, err := s.repo.ListAccountBalancesByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	portfolios := make([]*portfoliov1.Portfolio, 0, len(accounts))
+	for _, acct := range accounts {
+		bal := acct.Balance
+		portfolio, err := s.buildAccountPortfolio(ctx, acct.AccountID, &bal)
+		if err != nil {
+			slog.Warn("ListPortfolios: build account portfolio failed", "account_id", acct.AccountID, "error", err)
+			continue
+		}
+		portfolios = append(portfolios, portfolio)
+	}
+	return &portfoliov1.ListPortfoliosResponse{Portfolios: portfolios}, nil
 }

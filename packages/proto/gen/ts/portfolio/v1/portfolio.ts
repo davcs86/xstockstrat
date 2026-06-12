@@ -33,6 +33,67 @@ import { Timestamp } from "../../google/protobuf/timestamp";
 
 export const protobufPackage = "xstockstrat.portfolio.v1";
 
+/**
+ * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
+ * Used only as an additive filter on ListPositionsRequest; the Position message itself
+ * continues to carry signed qty.
+ */
+export enum PositionSide {
+  /** POSITION_SIDE_UNSPECIFIED - no side filter — return both long and short */
+  POSITION_SIDE_UNSPECIFIED = "POSITION_SIDE_UNSPECIFIED",
+  /** POSITION_SIDE_LONG - qty > 0 */
+  POSITION_SIDE_LONG = "POSITION_SIDE_LONG",
+  /** POSITION_SIDE_SHORT - qty < 0 */
+  POSITION_SIDE_SHORT = "POSITION_SIDE_SHORT",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function positionSideFromJSON(object: any): PositionSide {
+  switch (object) {
+    case 0:
+    case "POSITION_SIDE_UNSPECIFIED":
+      return PositionSide.POSITION_SIDE_UNSPECIFIED;
+    case 1:
+    case "POSITION_SIDE_LONG":
+      return PositionSide.POSITION_SIDE_LONG;
+    case 2:
+    case "POSITION_SIDE_SHORT":
+      return PositionSide.POSITION_SIDE_SHORT;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return PositionSide.UNRECOGNIZED;
+  }
+}
+
+export function positionSideToJSON(object: PositionSide): string {
+  switch (object) {
+    case PositionSide.POSITION_SIDE_UNSPECIFIED:
+      return "POSITION_SIDE_UNSPECIFIED";
+    case PositionSide.POSITION_SIDE_LONG:
+      return "POSITION_SIDE_LONG";
+    case PositionSide.POSITION_SIDE_SHORT:
+      return "POSITION_SIDE_SHORT";
+    case PositionSide.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function positionSideToNumber(object: PositionSide): number {
+  switch (object) {
+    case PositionSide.POSITION_SIDE_UNSPECIFIED:
+      return 0;
+    case PositionSide.POSITION_SIDE_LONG:
+      return 1;
+    case PositionSide.POSITION_SIDE_SHORT:
+      return 2;
+    case PositionSide.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export interface Portfolio {
   portfolioId: string;
   userId: string;
@@ -101,7 +162,13 @@ export interface ListPositionsRequest {
     | undefined;
   /** Filter by trading mode; UNSPECIFIED returns all positions. */
   tradingMode: TradingMode;
-  accountId?: string | undefined;
+  accountId?:
+    | string
+    | undefined;
+  /** Additive filters (feature 056). Empty symbol / UNSPECIFIED side = no narrowing. */
+  symbol: string;
+  /** long/short filter derived from qty sign */
+  side: PositionSide;
 }
 
 export interface ListPositionsResponse {
@@ -1246,7 +1313,14 @@ export const GetPositionRequest: MessageFns<GetPositionRequest> = {
 };
 
 function createBaseListPositionsRequest(): ListPositionsRequest {
-  return { userId: "", page: undefined, tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED, accountId: undefined };
+  return {
+    userId: "",
+    page: undefined,
+    tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED,
+    accountId: undefined,
+    symbol: "",
+    side: PositionSide.POSITION_SIDE_UNSPECIFIED,
+  };
 }
 
 export const ListPositionsRequest: MessageFns<ListPositionsRequest> = {
@@ -1262,6 +1336,12 @@ export const ListPositionsRequest: MessageFns<ListPositionsRequest> = {
     }
     if (message.accountId !== undefined) {
       writer.uint32(34).string(message.accountId);
+    }
+    if (message.symbol !== "") {
+      writer.uint32(42).string(message.symbol);
+    }
+    if (message.side !== PositionSide.POSITION_SIDE_UNSPECIFIED) {
+      writer.uint32(48).int32(positionSideToNumber(message.side));
     }
     return writer;
   },
@@ -1305,6 +1385,22 @@ export const ListPositionsRequest: MessageFns<ListPositionsRequest> = {
           message.accountId = reader.string();
           continue;
         }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.side = positionSideFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1332,6 +1428,8 @@ export const ListPositionsRequest: MessageFns<ListPositionsRequest> = {
         : isSet(object.account_id)
         ? globalThis.String(object.account_id)
         : undefined,
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      side: isSet(object.side) ? positionSideFromJSON(object.side) : PositionSide.POSITION_SIDE_UNSPECIFIED,
     };
   },
 
@@ -1349,6 +1447,12 @@ export const ListPositionsRequest: MessageFns<ListPositionsRequest> = {
     if (message.accountId !== undefined) {
       obj.accountId = message.accountId;
     }
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.side !== PositionSide.POSITION_SIDE_UNSPECIFIED) {
+      obj.side = positionSideToJSON(message.side);
+    }
     return obj;
   },
 
@@ -1363,6 +1467,8 @@ export const ListPositionsRequest: MessageFns<ListPositionsRequest> = {
       : undefined;
     message.tradingMode = object.tradingMode ?? TradingMode.TRADING_MODE_UNSPECIFIED;
     message.accountId = object.accountId ?? undefined;
+    message.symbol = object.symbol ?? "";
+    message.side = object.side ?? PositionSide.POSITION_SIDE_UNSPECIFIED;
     return message;
   },
 };

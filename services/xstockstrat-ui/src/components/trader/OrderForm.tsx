@@ -13,13 +13,14 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 type OrderSide = 'buy' | 'sell';
-type OrderType = 'market' | 'limit' | 'stop' | 'stop_limit';
+type OrderType = 'market' | 'limit' | 'stop' | 'stop_limit' | 'trailing_stop';
 
 const ORDER_TYPE_LABEL: Record<OrderType, string> = {
   market: 'Market',
   limit: 'Limit',
   stop: 'Stop',
   stop_limit: 'Stop Limit',
+  trailing_stop: 'Trailing Stop',
 };
 
 const ORDER_TYPE_ENUM: Record<OrderType, PbOrderType> = {
@@ -27,6 +28,7 @@ const ORDER_TYPE_ENUM: Record<OrderType, PbOrderType> = {
   limit: PbOrderType.LIMIT,
   stop: PbOrderType.STOP,
   stop_limit: PbOrderType.STOP_LIMIT,
+  trailing_stop: PbOrderType.TRAILING_STOP,
 };
 
 interface OrderFormProps {
@@ -40,6 +42,7 @@ export function OrderForm({ mode }: OrderFormProps) {
   const [orderType, setOrderType] = useState<OrderType>('market');
   const [qty, setQty] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
+  const [stopPrice, setStopPrice] = useState('');
   const [message, setMessage] = useState('');
   const [isErrorMsg, setIsErrorMsg] = useState(false);
   const { mutate: placeOrder, isPending } = usePlaceOrder();
@@ -54,6 +57,7 @@ export function OrderForm({ mode }: OrderFormProps) {
         orderType: ORDER_TYPE_ENUM[orderType],
         qty: parseFloat(qty),
         limitPrice: limitPrice ? parseFloat(limitPrice) : 0,
+        stopPrice: stopPrice ? parseFloat(stopPrice) : 0,
         tradingMode: mode === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER,
         accountId: selectedAccountId ?? '',
       },
@@ -61,7 +65,7 @@ export function OrderForm({ mode }: OrderFormProps) {
         onSuccess: (order) => {
           setIsErrorMsg(false);
           setMessage(`Order placed: ${order.orderId} (${OrderStatus[order.status] ?? 'UNKNOWN'})`);
-          setSymbol(''); setQty(''); setLimitPrice('');
+          setSymbol(''); setQty(''); setLimitPrice(''); setStopPrice('');
         },
         onError: (err) => {
           setIsErrorMsg(true);
@@ -72,6 +76,7 @@ export function OrderForm({ mode }: OrderFormProps) {
   };
 
   const needsLimitPrice = orderType === 'limit' || orderType === 'stop_limit';
+  const needsStopPrice = orderType === 'stop' || orderType === 'stop_limit' || orderType === 'trailing_stop';
 
   return (
     <Card>
@@ -112,6 +117,7 @@ export function OrderForm({ mode }: OrderFormProps) {
               <SelectItem value="limit">Limit</SelectItem>
               <SelectItem value="stop">Stop</SelectItem>
               <SelectItem value="stop_limit">Stop Limit</SelectItem>
+              <SelectItem value="trailing_stop">Trailing Stop</SelectItem>
             </SelectContent>
           </Select>
 
@@ -134,6 +140,18 @@ export function OrderForm({ mode }: OrderFormProps) {
               value={limitPrice}
               onChange={(e) => setLimitPrice(e.target.value)}
               required={needsLimitPrice}
+            />
+          )}
+
+          {needsStopPrice && (
+            <Input
+              type="number"
+              min="0"
+              step="any"
+              placeholder={orderType === 'trailing_stop' ? 'Trail amount' : 'Stop price'}
+              value={stopPrice}
+              onChange={(e) => setStopPrice(e.target.value)}
+              required={needsStopPrice}
             />
           )}
 
