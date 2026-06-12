@@ -1,6 +1,8 @@
 # Feature: open-positions-ui
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: f516e7aee1d11461d78a4540a94463a7a101df2f
+**Launched date**: 2026-06-12
 **Development Branch**: `feature/open-positions-ui`
 **Created**: 2026-06-10
 **Last Updated**: 2026-06-11
@@ -19,6 +21,7 @@
 | 2026-06-11 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode (after 055 merged). merge-order 056→055 flipped to Resolved:Yes. Up-front confirm + Step-3 decision: forward `req.AccountId`. Step 1 (proto `symbol`/`side` + `PositionSide` enum) done |
 | 2026-06-12 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done (stacked PRs #681–#689). Deviations: host codegen fallback (Step 2), dynamic SQL builder + account_id fix (Step 3), sideOf co-located with test (Step 4), e2e mock-infra + CI-equivalent verification (Step 7) |
 
+| 2026-06-12 | `code-completed` → `launched` | CI workflow | Promoted via PR #694; committed f516e7aee1d11461d78a4540a94463a7a101df2f |
 ---
 
 ## Artifacts

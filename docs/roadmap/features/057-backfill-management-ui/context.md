@@ -300,3 +300,10 @@ in parallel.
 ### Feature 057 — code-completed
 All 14 steps committed to feature/backfill-management-ui. Single integration PR → main-dev next
 (per user's one-PR directive). E2E (Step 13) full green deferred to CI.
+
+## Session 2026-06-12 (CI: feature status automation)
+
+- Promotion PR #694 merged to main
+- Feature promoted and committed: f516e7aee1d11461d78a4540a94463a7a101df2f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-12

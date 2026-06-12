@@ -1,6 +1,8 @@
 # Feature: orders-management-ui
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: f516e7aee1d11461d78a4540a94463a7a101df2f
+**Launched date**: 2026-06-12
 **Development Branch**: `feature/orders-management-ui`
 **Created**: 2026-06-10
 **Last Updated**: 2026-06-11
@@ -18,6 +20,7 @@
 | 2026-06-11 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode (055→056→057, one-feature-at-a-time); Step 1 (proto ReplaceOrder + ListOrders filters) complete |
 | 2026-06-11 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps done (stacked PRs #668–#678). Deviations: Step 4 build-green call-site, Step 5 error-code/pagination refinements, Step 6 lint fix, Step 8 OrderFilters scope, Step 9 backend created_at range filter (user Option A), Step 10 e2e CI-equivalent fallback |
 
+| 2026-06-12 | `code-completed` → `launched` | CI workflow | Promoted via PR #694; committed f516e7aee1d11461d78a4540a94463a7a101df2f |
 ---
 
 ## Artifacts
