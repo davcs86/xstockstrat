@@ -229,7 +229,7 @@ established by feature 049. Docs last.
 
 ### Step 5 — service: marketdata `DeleteBackfilledData` scoped delete RPC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go` — modify

@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
 	"time"
 
+	"connectrpc.com/connect"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -162,6 +164,59 @@ func (s *MarketDataService) GetDataCoverage(ctx context.Context, req *marketdata
 		})
 	}
 	return resp, nil
+}
+
+// DeleteBackfilledData performs a scoped, admin-only delete of backfilled OHLCV bars (FR-5).
+// The symbol is required (server-side guard against an unbounded delete); range and timeframe
+// are optional. A whole-symbol delete (no range) is allowed at the server — the UI double-confirms
+// it — but is still bounded by the symbol predicate. Emits an audit ledger event.
+func (s *MarketDataService) DeleteBackfilledData(ctx context.Context, req *marketdatav1.DeleteBackfilledDataRequest) (*marketdatav1.DeleteBackfilledDataResponse, error) {
+	if req.Symbol == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("symbol required; refusing unbounded delete"))
+	}
+	// Admin gate (0x04): destructive op, admin/operator only (FR-7). Scope arrives as the
+	// propagated x-access-scope (populated by the server interceptor into middleware context).
+	scope, _ := strconv.Atoi(middleware.FromContext(ctx).AccessScope)
+	if scope&0x04 == 0 {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("admin scope required"))
+	}
+	// Resolve timeframe: UNSPECIFIED → "" = delete across all timeframes for the symbol/range.
+	canonical := ""
+	if req.Timeframe != commonv1.Timeframe_TIMEFRAME_UNSPECIFIED {
+		var err error
+		canonical, err = timeframe.Resolve(req.Timeframe, "")
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("resolve timeframe: %w", err))
+		}
+	}
+	var start, end time.Time
+	if req.Range != nil {
+		if req.Range.Start != nil {
+			start = req.Range.Start.AsTime()
+		}
+		if req.Range.End != nil {
+			end = req.Range.End.AsTime()
+		}
+	}
+	// Delete-window guard: when marketdata.backfill.max_delete_days > 0 and a bounded range is
+	// supplied whose span exceeds the cap, reject. A whole-symbol delete (no range) is exempt.
+	maxDays := s.cfg.GetInt("marketdata.backfill.max_delete_days", 0)
+	if maxDays > 0 && !start.IsZero() && !end.IsZero() && end.Sub(start) > time.Duration(maxDays)*24*time.Hour {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("delete range %d days exceeds marketdata.backfill.max_delete_days=%d",
+				int(end.Sub(start).Hours()/24), maxDays))
+	}
+
+	n, err := s.repo.DeleteBars(ctx, req.Symbol, canonical, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("delete bars: %w", err)
+	}
+	s.emitEvent(ctx, "marketdata.backfill.data_deleted", "backfill:delete:"+req.Symbol, map[string]interface{}{
+		"symbol":       req.Symbol,
+		"timeframe":    canonical,
+		"rows_deleted": n,
+	})
+	return &marketdatav1.DeleteBackfilledDataResponse{RowsDeleted: n}, nil
 }
 
 // GetLatestQuote returns the most recent quote for a symbol from the DB.

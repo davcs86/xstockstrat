@@ -179,3 +179,20 @@ in parallel.
 - Verification: ruff check + format clean; full suite 130 passed; coverage 74.6% ≥ 40%; uv.lock unchanged.
 - Files: tests/test_cancel_backfill.py (+ servicer.py finalize fix)
 - Deviations: finalize cancel guard uses registry not DB re-read — see Deviation Log.
+
+### Step 5 — service: marketdata DeleteBackfilledData scoped delete RPC [done]
+- repo: DeleteBars(symbol, timeframe, start, end) — always-present symbol predicate (no full-table
+  delete possible), timeframe/time bounds appended only when supplied; returns tag.RowsAffected().
+- service: DeleteBackfilledData — empty symbol→InvalidArgument (unbounded reject); admin gate via
+  strconv.Atoi(middleware.FromContext(ctx).AccessScope)&0x04→PermissionDenied; timeframe.Resolve
+  (UNSPECIFIED→"" all timeframes); delete-window guard reads marketdata.backfill.max_delete_days (0=off,
+  rejects bounded range > cap); emits marketdata.backfill.data_deleted audit event via s.ledger.
+  Returns connect-coded errors (service now imports connect + strconv).
+- handler: Connect DeleteBackfilledData (early empty-symbol guard, forwards connect-coded svc errors,
+  wraps rest as Internal) + grpcMarketDataAdapter.DeleteBackfilledData + toGRPCError CodePermissionDenied
+  → codes.PermissionDenied case.
+- Fix: enum constant is commonv1.Timeframe_TIMEFRAME_UNSPECIFIED (protoc-gen-go type prefix).
+- Verification: GOWORK=off go build ./... OK; golangci-lint 0 issues; greps confirm methods + admin gate.
+- Files: internal/repository/marketdata_repo.go, internal/service/marketdata_service.go,
+  internal/handler/marketdata_handler.go
+- Deviations: none.
