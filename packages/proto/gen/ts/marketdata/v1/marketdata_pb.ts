@@ -68,7 +68,7 @@ export type Bar = Message<"xstockstrat.marketdata.v1.Bar"> & {
   /**
    * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
    *
-   * "1m", "5m", "1h", "1d"
+   * "15m", "1h", "1d"
    *
    * @generated from field: string timeframe = 10 [deprecated = true];
    * @deprecated
@@ -154,7 +154,7 @@ export type StreamBarsRequest = Message<"xstockstrat.marketdata.v1.StreamBarsReq
   /**
    * DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
    *
-   * "1m", "5m", "1h", "1d"
+   * "15m", "1h", "1d"
    *
    * @generated from field: string timeframe = 2 [deprecated = true];
    * @deprecated

@@ -29,13 +29,13 @@ from app.repositories.signal_sources import (
 log = logging.getLogger(__name__)
 
 # Canonical timeframe <-> Timeframe enum int (mirrors marketdata internal/timeframe + 053).
-_STR_TO_ENUM = {"1m": 1, "5m": 2, "1h": 3, "1d": 4}
+# 15m is the smallest supported interval; the deprecated 1m/5m enums (1/2) are intentionally
+# omitted so sub-15m intervals no longer resolve. 15MIN is enum value 5.
+_STR_TO_ENUM = {"15m": 5, "1h": 3, "1d": 4}
 _ENUM_TO_STR = {v: k for k, v in _STR_TO_ENUM.items()}
 _TF_ALIASES = {
-    "1m": "1m",
-    "1Min": "1m",
-    "5m": "5m",
-    "5Min": "5m",
+    "15m": "15m",
+    "15Min": "15m",
     "1h": "1h",
     "1Hour": "1h",
     "1d": "1d",

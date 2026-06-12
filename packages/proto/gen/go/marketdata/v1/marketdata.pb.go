@@ -37,7 +37,7 @@ type Bar struct {
 	// DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
 	//
 	// Deprecated: Marked as deprecated in marketdata/v1/marketdata.proto.
-	Timeframe     string       `protobuf:"bytes,10,opt,name=timeframe,proto3" json:"timeframe,omitempty"` // "1m", "5m", "1h", "1d"
+	Timeframe     string       `protobuf:"bytes,10,opt,name=timeframe,proto3" json:"timeframe,omitempty"` // "15m", "1h", "1d"
 	Source        string       `protobuf:"bytes,11,opt,name=source,proto3" json:"source,omitempty"`       // always "alpaca" for this service
 	TimeframeEnum v1.Timeframe `protobuf:"varint,12,opt,name=timeframe_enum,json=timeframeEnum,proto3,enum=xstockstrat.common.v1.Timeframe" json:"timeframe_enum,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -257,7 +257,7 @@ type StreamBarsRequest struct {
 	// DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
 	//
 	// Deprecated: Marked as deprecated in marketdata/v1/marketdata.proto.
-	Timeframe         string       `protobuf:"bytes,2,opt,name=timeframe,proto3" json:"timeframe,omitempty"` // "1m", "5m", "1h", "1d"
+	Timeframe         string       `protobuf:"bytes,2,opt,name=timeframe,proto3" json:"timeframe,omitempty"` // "15m", "1h", "1d"
 	IncludePremarket  bool         `protobuf:"varint,3,opt,name=include_premarket,json=includePremarket,proto3" json:"include_premarket,omitempty"`
 	IncludeAfterhours bool         `protobuf:"varint,4,opt,name=include_afterhours,json=includeAfterhours,proto3" json:"include_afterhours,omitempty"`
 	TimeframeEnum     v1.Timeframe `protobuf:"varint,5,opt,name=timeframe_enum,json=timeframeEnum,proto3,enum=xstockstrat.common.v1.Timeframe" json:"timeframe_enum,omitempty"`

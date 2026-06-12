@@ -46,7 +46,7 @@ message Bar {
   double vwap = 8;
   int32 trade_count = 9;
   // DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
-  string timeframe = 10 [deprecated = true];  // "1m", "5m", "1h", "1d"
+  string timeframe = 10 [deprecated = true];  // "15m", "1h", "1d"
   string source = 11;     // always "alpaca" for this service
   xstockstrat.common.v1.Timeframe timeframe_enum = 12;
 }
@@ -64,7 +64,7 @@ message Quote {
 message StreamBarsRequest {
   repeated string symbols = 1;
   // DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
-  string timeframe = 2 [deprecated = true];   // "1m", "5m", "1h", "1d"
+  string timeframe = 2 [deprecated = true];   // "15m", "1h", "1d"
   bool include_premarket = 3;
   bool include_afterhours = 4;
   xstockstrat.common.v1.Timeframe timeframe_enum = 5;

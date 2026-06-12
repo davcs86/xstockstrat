@@ -29,8 +29,10 @@ func TestEstimateExpectedBars(t *testing.T) {
 		{"1d two symbols", []string{"AAPL", "TSLA"}, "1d", monStart, friEnd, 10},
 		{"weekend excluded", []string{"AAPL"}, "1d", monStart, weekEnd, 5},
 		{"1h factor 7", []string{"AAPL"}, "1h", monStart, friEnd, 35},
-		{"5m factor 78", []string{"AAPL"}, "5m", monStart, friEnd, 390},
-		{"1m factor 390", []string{"AAPL"}, "1m", monStart, friEnd, 1950},
+		{"15m factor 26", []string{"AAPL"}, "15m", monStart, friEnd, 130},
+		// Removed sub-15m timeframes are unrecognized → default factor 1.
+		{"5m removed defaults to 1", []string{"AAPL"}, "5m", monStart, friEnd, 5},
+		{"1m removed defaults to 1", []string{"AAPL"}, "1m", monStart, friEnd, 5},
 		{"1Day alias", []string{"AAPL"}, "1Day", monStart, friEnd, 5},
 		{"unknown timeframe defaults to 1", []string{"AAPL"}, "monthly", monStart, friEnd, 5},
 		{"no symbols", []string{}, "1d", monStart, friEnd, 0},
