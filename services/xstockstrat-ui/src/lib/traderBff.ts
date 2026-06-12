@@ -5,7 +5,8 @@ import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 import { NotifyService } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-import { tradingClient, portfolioClient, marketDataClient, notifyClient, analysisClient } from '@/lib/connectClients';
+import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
+import { tradingClient, portfolioClient, marketDataClient, notifyClient, analysisClient, ledgerClient } from '@/lib/connectClients';
 import { verifyAccessToken, rolesToAccessScope, generateTraceId, type JwtClaims } from '@/lib/auth';
 
 function parseCookieValue(cookieHeader: string, name: string): string | undefined {
@@ -100,6 +101,14 @@ router.service(PortfolioService, {
     const claims = await requireSession(ctx);
     return portfolioClient.listPortfolios(req, { headers: backendHeaders(claims, ctx) });
   },
+  async listPositions(req, ctx) {
+    const claims = await requireSession(ctx);
+    // Inject the verified session user so positions are always scoped to the caller.
+    return portfolioClient.listPositions(
+      { ...req, userId: claims.user_id },
+      { headers: backendHeaders(claims, ctx) },
+    );
+  },
 });
 
 router.service(MarketDataService, {
@@ -140,6 +149,14 @@ router.service(AnalysisService, {
       throw new ConnectError('Admin scope required', Code.PermissionDenied);
     }
     return analysisClient.setStrategyLive(req, { headers: backendHeaders(claims, ctx) });
+  },
+});
+
+router.service(LedgerService, {
+  // Read-only event query — used for position↔order fill lineage (order.filled events).
+  async queryEvents(req, ctx) {
+    const claims = await requireSession(ctx);
+    return ledgerClient.queryEvents(req, { headers: backendHeaders(claims, ctx) });
   },
 });
 

@@ -453,6 +453,7 @@ services:
       # gRPC endpoints (host:port, no protocol) — server-side only
       TRADING_ENDPOINT: xstockstrat-trading:50051
       PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       IDENTITY_ENDPOINT: xstockstrat-identity:50058
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"math"
 	"testing"
+
+	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 )
 
 // TestPositionMath replicates the core position calculation logic from
@@ -322,5 +324,56 @@ func TestBalanceSyncPayload_ZeroLastEquityGuardsPct(t *testing.T) {
 	}
 	if pct != 0 {
 		t.Errorf("dayPnLPct guard: got %v, want 0", pct)
+	}
+}
+
+// TestSideOf verifies qty-sign → PositionSide derivation (Step 4 / feature 056).
+func TestSideOf(t *testing.T) {
+	cases := []struct {
+		name string
+		qty  float64
+		want portfoliov1.PositionSide
+	}{
+		{"long", 10, portfoliov1.PositionSide_POSITION_SIDE_LONG},
+		{"short", -10, portfoliov1.PositionSide_POSITION_SIDE_SHORT},
+		{"flat", 0, portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sideOf(tc.qty); got != tc.want {
+				t.Errorf("sideOf(%v) = %v, want %v", tc.qty, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestEnrichPosition verifies the price-enrichment math for a winner, a loser, and the
+// zero-cost-basis divide-by-zero guard (the P&L-sign data the UI winners/losers filter relies on).
+func TestEnrichPosition(t *testing.T) {
+	cases := []struct {
+		name                                   string
+		qty, costBasis, ask, bid               float64
+		wantPrice, wantMV, wantPnL, wantPnLPct float64
+	}{
+		{"winner", 10, 1000, 120, 120, 120, 1200, 200, 0.2},
+		{"loser", 10, 1000, 80, 80, 80, 800, -200, -0.2},
+		{"zero_cost_basis", 10, 0, 50, 50, 50, 500, 500, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &portfoliov1.Position{Qty: tc.qty, CostBasis: tc.costBasis}
+			enrichPosition(p, tc.ask, tc.bid)
+			nearlyEqualPos(t, "current_price", p.CurrentPrice, tc.wantPrice)
+			nearlyEqualPos(t, "market_value", p.MarketValue, tc.wantMV)
+			nearlyEqualPos(t, "unrealized_pnl", p.UnrealizedPnl, tc.wantPnL)
+			nearlyEqualPos(t, "unrealized_pnl_pct", p.UnrealizedPnlPct, tc.wantPnLPct)
+		})
+	}
+}
+
+func nearlyEqualPos(t *testing.T, field string, got, want float64) {
+	t.Helper()
+	if math.Abs(got-want) > 1e-9 {
+		t.Errorf("%s: got %v, want %v", field, got, want)
 	}
 }

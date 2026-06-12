@@ -418,6 +418,8 @@ services:
         value: ${xstockstrat-trading.PRIVATE_DOMAIN}:50051
       - key: PORTFOLIO_ENDPOINT
         value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
+      - key: LEDGER_ENDPOINT
+        value: ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
       - key: NOTIFY_ENDPOINT
         value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: IDENTITY_ENDPOINT

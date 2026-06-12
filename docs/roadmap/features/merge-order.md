@@ -26,7 +26,7 @@ cannot open its final integration PR to `main-dev` until the feature in the
 | `resumable-chunked-backfills` | `durable-observable-backfills` | Builds directly on the `ingest.backfill_jobs` table and `max_concurrent_jobs` gate (FR-2/FR-6); the `ingest.backfill_chunks` migration must run-order after feature 052's migration | No |
 | `resumable-chunked-backfills` | `backfill-backtest-coverage` | `GAPS_ONLY` fill mode (FR-4) consumes the `GetDataCoverage` RPC introduced by feature 053 | No |
 | `backfill-backtest-coverage` | `durable-observable-backfills` | Both add a field to `BackfillJob` in `packages/proto/ingest/v1/ingest.proto`; 052 takes field `11` (`failed_symbols`), so 053 must re-spec against merged 052 and use field `12` for its `timeframe_enum`. Field-number collision if 053 merges first | No |
-| `open-positions-ui` | `orders-management-ui` | Both modify `services/xstockstrat-ui/src/lib/traderBff.ts` (055 adds `replaceOrder`/`streamOrderUpdates`; 056 adds `listPositions`/`queryEvents`) in the same router block — soft/rebase dependency (textual conflict, no shared proto/migration/config). 056 rebases after 055 merges | No |
+| `open-positions-ui` | `orders-management-ui` | Both modify `services/xstockstrat-ui/src/lib/traderBff.ts` (055 adds `replaceOrder`/`streamOrderUpdates`; 056 adds `listPositions`/`queryEvents`) in the same router block — soft/rebase dependency (textual conflict, no shared proto/migration/config). 056 rebases after 055 merges | Yes |
 
 ---
 
