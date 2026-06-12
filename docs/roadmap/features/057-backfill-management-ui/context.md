@@ -229,3 +229,11 @@ in parallel.
   prettier clean. Behavioral coverage in Step 13.
 - Files: services/xstockstrat-ui/src/lib/insightsBff.ts
 - Deviations: none.
+
+### Step 9 — service: UI insights-scoped marketdata browser client [done]
+- Created src/lib/browserClients/insightsMarketDataClient.ts — createConnectTransport baseUrl
+  '/insights/api' for MarketDataService (mirrors insightsIngestClient). Reuses existing
+  insightsIngestClient for ingest calls. No new env/port.
+- Verification: grep confirms /insights/api baseUrl; prettier clean. (typecheck via Step 10.)
+- Files: services/xstockstrat-ui/src/lib/browserClients/insightsMarketDataClient.ts (new)
+- Deviations: none.

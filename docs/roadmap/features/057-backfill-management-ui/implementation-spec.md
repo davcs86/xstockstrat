@@ -418,7 +418,7 @@ established by feature 049. Docs last.
 
 ### Step 9 — service: UI browser client for the Backfills page (marketdata via insights BFF)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/browserClients/insightsMarketDataClient.ts` — create
