@@ -1,6 +1,6 @@
 # Implementation Spec: open-positions-ui
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-11
 **Feature**: `docs/roadmap/features/056-open-positions-ui/feature.md`
 **Total Steps**: 9
@@ -415,7 +415,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 9 — docs: Record `trade.filled` → `order.filled` correction + deviations
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs`
 **Files**:
 - `docs/roadmap/features/056-open-positions-ui/context.md` — modify (append deviation note)

@@ -199,3 +199,33 @@
 - Verification: grep confirms note; markdownlint-cli2 0 errors on the CLAUDE.md.
 - Files modified: services/xstockstrat-portfolio/CLAUDE.md
 - Deviations: none (UI CLAUDE.md absent — the spec's "verify and update if present" → no-op).
+
+### Step 9 — docs: record trade.filled → order.filled correction + deviations [done]
+
+**FR-4 lineage event-type correction (product-spec was wrong):**
+- The product spec's `event_type = "trade.filled"` does **not** exist anywhere as an emitted event.
+  The real emitted types are `order.filled` (full fill) and `order.partially_filled` (partial),
+  emitted by `xstockstrat-trading` with `source_service = "trading"` —
+  `services/xstockstrat-trading/internal/service/trading.go:659` (`order.filled`) and `:670`
+  (`order.partially_filled`). FR-4 lineage filters on `order.filled` (this cut).
+- The `order.filled` payload **carries the join keys**: `order_id`, `symbol`, `qty`, `fill_price`,
+  `user_id`, `trading_mode` (proto `String()` form, e.g. `TRADING_MODE_PAPER`), `account_id`
+  (trading.go:659-664). This resolves the product spec's deferred open question ("confirm the fill
+  payload carries account/mode") — **it does**, so the position↔fill join is unambiguous.
+
+**Other implementation notes / deviations (full detail in implementation-spec.md Deviation Log):**
+- Portfolio CI coverage excludes `repository`/`service` packages (`ci.yml`), so the new SQL filter +
+  service forwarding are validated via extracted pure helpers (`sideOf`, `enrichPosition` — Step 4,
+  total coverage 47.8% ≥ 40%) and the Step 7 UI E2E smoke, not direct repo/service coverage.
+- Service `ListPositions` now **enriches** each position (current price / market value / unrealized
+  P&L) — previously only `GetPortfolio`/`GetPosition` did (Step 3).
+- Service `ListPositions` now forwards `req.AccountId` (fixing the pre-existing drop — user-approved).
+- repo `ListPositions` four hardcoded SQL variants → one dynamic predicate builder (Step 3).
+- Codegen ran on the host (Docker unavailable) pinned to CI versions; e2e mock-backend extended for
+  ListPositions/QueryEvents; behavioral e2e fell back to tsc+lint (dev-server cold-compile flake).
+
+## Session 2026-06-12 — sdd-execute (sequential) — feature 056 code-completed
+**Steps this session**: 1–9 (all)
+**Progress**: 9 done / 9 total
+**Stopped at**: all complete — feature 056 at code-completed.
+**Next**: review/merge the 056 stacked PRs (#681–#689), then /sdd-execute 057 (backfill-management-ui).
