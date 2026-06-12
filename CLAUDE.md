@@ -177,6 +177,29 @@ TimescaleDB (PostgreSQL). Each service owns its schema; migrations run via `scri
 
 **Schema map, migration run order, and step-by-step guide** → `docs/patterns/database.md`.
 
+### Connection Pool Budget
+
+The managed DigitalOcean PostgreSQL plan allows **20 connections shared across all services**. Each
+service caps its pool small so the sum of all pool maxes stays at or below 20. Pool size is set per
+service in code and overridable with the **`DB_POOL_MAX`** env var (Go `pgxpool.MaxConns`, Python
+`asyncpg.create_pool(max_size=…)`, Node `pg.Pool({ max })`). **When adding a new DB-backed service or
+raising any service's pool, re-check this table so the total never exceeds 20.**
+
+| Service | Lang | Pool max | Notes |
+|---|---|---|---|
+| xstockstrat-trading | Go | 2 | Single shared `pgxpool` — `AccountRepo` reuses `TradingRepo.Pool()` (no second pool) |
+| xstockstrat-portfolio | Go | 2 | |
+| xstockstrat-marketdata | Go | 2 | |
+| xstockstrat-indicators | Python | 2 | |
+| xstockstrat-ingest | Python | 2 | |
+| xstockstrat-analysis | Python | 2 | |
+| xstockstrat-ledger | Node | 2 | |
+| xstockstrat-identity | Node | 2 | |
+| xstockstrat-config | Node | 2 | |
+| xstockstrat-notify | Node | 1 | Light DB use (alert history only) |
+| xstockstrat-ui | Next.js | 1 | config-ui audit route only |
+| **Total** | | **20** | At the DigitalOcean shared limit |
+
 ---
 
 ## Service-to-Service Calls

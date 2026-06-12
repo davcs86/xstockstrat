@@ -22,9 +22,9 @@ type PortfolioRepo struct {
 
 // NewPortfolioRepo opens a pgx connection pool.
 func NewPortfolioRepo(connStr string) (*PortfolioRepo, error) {
-	pool, err := pgxpool.New(context.Background(), connStr)
+	pool, err := newPool(context.Background(), connStr)
 	if err != nil {
-		return nil, fmt.Errorf("pgxpool.New: %w", err)
+		return nil, fmt.Errorf("newPool: %w", err)
 	}
 	if err := pool.Ping(context.Background()); err != nil {
 		return nil, fmt.Errorf("db ping: %w", err)

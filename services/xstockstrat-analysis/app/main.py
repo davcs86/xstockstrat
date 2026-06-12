@@ -42,7 +42,9 @@ async def serve():
 
     db_pool = None
     if DATABASE_URL:
-        db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
+        db_pool = await asyncpg.create_pool(
+            DATABASE_URL, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "2"))
+        )
         log.info("analysis DB pool created")
 
     servicer = AnalysisServicer(
