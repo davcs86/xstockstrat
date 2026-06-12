@@ -102,10 +102,58 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 	if err != nil {
 		return nil, fmt.Errorf("query bars: %w", err)
 	}
+
+	// DB miss on the first page — fall back to a live Alpaca fetch, cache the result,
+	// and re-read so pagination stays consistent. Without this the chart stays empty
+	// until an explicit backfill runs, even though the data is one REST call away.
+	// (Mirrors GetLatestQuote's live fallback.) Only on the first page: an empty later
+	// page means end-of-data, not a miss.
+	if len(bars) == 0 && pageToken == "" {
+		bars, nextToken = s.fetchAndCacheBars(ctx, req.Symbol, req.Timeframe, start, end, pageSize) //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+	}
+
 	return &marketdatav1.GetBarsResponse{
 		Bars: bars,
 		Page: &commonv1.PageResponse{NextPageToken: nextToken},
 	}, nil
+}
+
+// fetchAndCacheBars fetches bars for a symbol from the live source, persists them, and
+// returns the first page from the DB (so the next_page_token is consistent with a normal
+// cached read). On any failure it logs and returns no bars — GetBars then yields an empty
+// (but valid) response rather than erroring. If caching fails the freshly fetched bars are
+// still served, truncated to pageSize.
+func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf string, start, end time.Time, pageSize int) ([]*marketdatav1.Bar, string) {
+	src, err := s.registry.Get("")
+	if err != nil {
+		slog.Warn("GetBars: resolve source failed", "symbol", symbol, "error", err)
+		return nil, ""
+	}
+	live, err := src.GetBars(ctx, symbol, tf, start, end)
+	if err != nil {
+		slog.Warn("GetBars: live fetch failed", "symbol", symbol, "timeframe", tf, "error", err)
+		return nil, ""
+	}
+	if len(live) == 0 {
+		return nil, ""
+	}
+	if err := s.repo.InsertBars(ctx, live); err != nil {
+		slog.Warn("GetBars: cache insert failed", "symbol", symbol, "error", err)
+		// Serve what we fetched even if caching failed.
+		if len(live) > pageSize {
+			return live[:pageSize], ""
+		}
+		return live, ""
+	}
+	bars, nextToken, err := s.repo.QueryBars(ctx, symbol, tf, start, end, pageSize, "")
+	if err != nil {
+		slog.Warn("GetBars: re-read after cache failed", "symbol", symbol, "error", err)
+		if len(live) > pageSize {
+			return live[:pageSize], ""
+		}
+		return live, ""
+	}
+	return bars, nextToken
 }
 
 // GetDataCoverage reports stored OHLCV coverage (earliest/latest/count + gaps) for a

@@ -73,6 +73,7 @@ Namespace: `marketdata`
 - Credentials sourced from env vars (never from config service — these are secrets)
 - Bar/quote requests send `feed=<marketdata.alpaca.feed>` (default `iex`) — required by the free/basic data plan, which 403s the SIP default
 - `GetLatestQuote` serves from the `marketdata.quotes` cache, falling back to a live Alpaca call (and caching the result). A background warm poller (`StartWarmQuotePoller`) keeps every queried symbol's latest quote fresh in the DB so per-position P&L reads avoid repeated live calls
+- `GetBars` serves from the `marketdata.ohlcv` table, and on a first-page DB miss falls back to a live Alpaca historical fetch (`fetchAndCacheBars`), persists the bars, and re-reads — so a chart for a never-backfilled symbol populates on demand instead of rendering empty. A live-fetch/credential/feed failure is logged and yields an empty (but valid) response rather than an error
 
 ## Environment Variables
 
