@@ -237,3 +237,13 @@ in parallel.
 - Verification: grep confirms /insights/api baseUrl; prettier clean. (typecheck via Step 10.)
 - Files: services/xstockstrat-ui/src/lib/browserClients/insightsMarketDataClient.ts (new)
 - Deviations: none.
+
+### Step 10 — service: UI React-Query hooks [done]
+- Created src/hooks/useBackfills.ts: useBackfillJobs(filter) (useQuery, refetchInterval 4000,
+  forwards statusFilter/symbol/page), useBackfillStatus(jobId) (poll 4000ms until terminal via
+  isTerminal()), useCancelBackfill() (mutation + invalidate jobs), useDeleteBackfilledData()
+  (mutation via insightsMarketDataClient + invalidate jobs). Re-exports useTriggerBackfill from
+  useBacktest.ts. BackfillStatus enum members (COMPLETED/FAILED/PARTIAL/CANCELED) confirmed in gen TS.
+- Verification: npx tsc --noEmit exit 0; prettier clean; grep finds all 4 ops + refetchInterval.
+- Files: services/xstockstrat-ui/src/hooks/useBackfills.ts (new)
+- Deviations: none.

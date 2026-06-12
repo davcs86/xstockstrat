@@ -462,7 +462,7 @@ established by feature 049. Docs last.
 
 ### Step 10 — service: UI React-Query hooks for backfill management
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useBackfills.ts` — create
