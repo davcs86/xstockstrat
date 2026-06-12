@@ -219,3 +219,13 @@ in parallel.
 - Verification: grep confirms present in both files.
 - Files: services/xstockstrat-marketdata/CLAUDE.md, CLAUDE.md
 - Deviations: none.
+
+### Step 8 — service: UI insights-BFF wiring [done]
+- insightsBff.ts IngestService block += getBackfillStatus (read-only, no gate), listBackfillJobs
+  (read-only, forwards symbol filter), cancelBackfill (ADMIN_BIT 0x04 gate). MarketDataService block
+  += deleteBackfilledData (ADMIN_BIT 0x04 gate). All forward x-user-id/x-access-scope/x-trace-id via
+  backendHeaders. Auto-registered under /insights/api via existing router.service handlerMap.
+- Verification: npx tsc --noEmit exit 0 (new BFF methods typecheck vs regenerated proto types);
+  prettier clean. Behavioral coverage in Step 13.
+- Files: services/xstockstrat-ui/src/lib/insightsBff.ts
+- Deviations: none.

@@ -372,7 +372,7 @@ established by feature 049. Docs last.
 
 ### Step 8 — service: UI insights-BFF wiring for cancel / list-jobs / status / delete
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify
