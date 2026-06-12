@@ -1,6 +1,6 @@
 # Feature: backfill-management-ui
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/backfill-management-ui`
 **Created**: 2026-06-10
 **Last Updated**: 2026-06-11
@@ -16,6 +16,7 @@
 | 2026-06-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved; open questions resolved (cancel=stop+keep bars, delete=symbol+range+timeframe bounded w/ 2nd confirm, poll progress, admin-only access FR-7) |
 | 2026-06-11 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 14 steps |
 | 2026-06-11 | re-review (status retained at `implementation-ready`) | /sdd-review | Formal product-spec re-run (skill-invoked) confirming the earlier inline review. PASS, no blocking failures; trading-domain checks skipped (non-trading). Synced Config Key section to the registered `marketdata.backfill.max_delete_days`. Overlap WARN: 055 + 056 also touch `xstockstrat-ui` (coordinate merge order) |
+| 2026-06-12 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode (055 + 056 merged; 057 shares no files with them). Re-spec gate: all 14 steps' evidence validates against current main-dev — no re-spec. User directive: run all steps but **one final PR** (commit per step to the feature branch, no per-step PRs). Step 1 (proto) done |
 
 ---
 

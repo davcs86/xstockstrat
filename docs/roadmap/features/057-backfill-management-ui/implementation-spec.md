@@ -37,7 +37,7 @@ established by feature 049. Docs last.
 
 ### Step 1 — proto: additive `CancelBackfill` + `DeleteBackfilledData` + `BACKFILL_STATUS_CANCELED` + symbol filter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify

@@ -122,3 +122,24 @@
 
 `/sdd-execute backfill-management-ui` — independent of 055/056 (no shared files); can proceed
 in parallel.
+
+## Session 2026-06-12 — sdd-execute (sequential, single-PR variant)
+- 055 + 056 merged to main-dev; 057 shares no files with them. Feature branch
+  feature/backfill-management-ui created from main-dev + pushed.
+- Re-spec gate (directive none): read-only validation — all 14 steps' Files paths exist and every
+  cited symbol present (ingest/marketdata protos, servicer.py, backfill_jobs.py, marketdata Go
+  handler/service/repo, insightsBff.ts, browser clients, useBacktest/useIsAdmin, AppShell, e2e). Only
+  trivial line-number drift (reference evidence). No re-spec needed.
+- **User directive**: proceed all 14 steps but **only one final PR** — so each step is committed to
+  feature/backfill-management-ui directly (pushed for backup), no per-step stacked PRs; single
+  integration PR → main-dev at the end.
+- Codegen tooling: reusing host buf v1.47.2 + CI-pinned plugins installed earlier this session.
+
+### Step 1 — proto: CancelBackfill + DeleteBackfilledData + CANCELED + symbol filter [done]
+- ingest.proto: rpc CancelBackfill(CancelBackfillRequest) returns BackfillJob; BACKFILL_STATUS_CANCELED=6;
+  ListBackfillJobsRequest.symbol=3; new CancelBackfillRequest{job_id=1}.
+- marketdata.proto: rpc DeleteBackfilledData; DeleteBackfilledDataRequest{symbol=1,range=2,timeframe=3};
+  DeleteBackfilledDataResponse{rows_deleted=1}.
+- Verification: buf lint OK; buf breaking vs feature branch OK (additive only).
+- Files modified: packages/proto/ingest/v1/ingest.proto, packages/proto/marketdata/v1/marketdata.proto
+- Deviations: none.
