@@ -500,7 +500,7 @@ established by feature 049. Docs last.
 
 ### Step 11 — service: UI Backfills page (create / list / monitor / cancel / delete)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/backfills/page.tsx` — create

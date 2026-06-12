@@ -247,3 +247,17 @@ in parallel.
 - Verification: npx tsc --noEmit exit 0; prettier clean; grep finds all 4 ops + refetchInterval.
 - Files: services/xstockstrat-ui/src/hooks/useBackfills.ts (new)
 - Deviations: none.
+
+### Step 11 — service: UI Backfills page [done]
+- Created src/app/insights/backfills/page.tsx ('use client' in <AppShell>): create form (symbols/
+  timeframe→common Timeframe/range/overwrite, useTriggerBackfill, isAdmin-gated); filters (status
+  dropdown→statusFilter + symbol text→symbol); job list w/ status badge + truthful barsProcessed/
+  barsTotal + chunksCompleted/chunksTotal + failedSymbols + error (no fabricated progress, FR-6),
+  live via hook refetchInterval; per-row Cancel on QUEUED/RUNNING (isAdmin, window.confirm); delete
+  panel scoped by symbol+optional range+optional timeframe requiring typed symbol confirm + second
+  "DELETE ALL" confirm for whole-symbol deletes (FR-5), shows rowsDeleted. Native <select> for
+  dropdowns (avoids Radix Select API risk). bigint fields rendered via .toString().
+- Verification: npx tsc --noEmit exit 0; next lint "No ESLint warnings or errors"; prettier clean;
+  grep confirms list/cancel/delete/isAdmin/barsTotal.
+- Files: services/xstockstrat-ui/src/app/insights/backfills/page.tsx (new)
+- Deviations: none (native <select> is a reasonable substitution within the ui-component set).
