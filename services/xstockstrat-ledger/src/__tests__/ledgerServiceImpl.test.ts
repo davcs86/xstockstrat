@@ -82,7 +82,9 @@ describe('rowToEvent', () => {
     assert.strictEqual(evt.eventId, 'evt-x');
     assert.strictEqual(evt.eventType, 'order.filled');
     assert.strictEqual(evt.sequence, 42);
-    assert.strictEqual(evt.occurredAt.seconds, Math.floor(now.getTime() / 1000));
+    // ts-proto (useDate) represents Timestamp fields as JS Date, not { seconds }.
+    assert.ok(evt.occurredAt instanceof Date);
+    assert.strictEqual(evt.occurredAt.getTime(), now.getTime());
   });
 
   it('uses empty string for missing correlation_id', () => {
@@ -251,6 +253,68 @@ describe('appendEvent', () => {
         resolve();
       });
     });
+  });
+
+  // Regression: occurredAt arrives as a ts-proto Date (useDate codegen), NOT a
+  // protobuf `{ seconds }` object. Reading `.seconds` off it yielded
+  // `new Date(undefined * 1000)` → Invalid Date, which Postgres rejected with
+  // `invalid input syntax for type timestamp with time zone: "0NaN-NaN-NaN…"`.
+  it('binds the provided occurredAt Date as occurred_at, not an Invalid Date', async () => {
+    if (!LedgerServiceImpl) return;
+    let capturedParams: any[] = [];
+    const pool = {
+      async query(_sql: string, params?: any[]) {
+        capturedParams = params ?? [];
+        return { rows: [{ sequence: 1, recorded_at: new Date() }] };
+      },
+    };
+    const impl = new LedgerServiceImpl(pool, {});
+    const occurredAt = new Date('2026-06-12T11:51:55.000Z');
+    const call = makeCall({
+      eventType: 'marketdata.backfill.failed',
+      sourceService: 'marketdata',
+      streamKey: 'marketdata:backfill',
+      payload: {},
+      occurredAt,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      impl.appendEvent(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+
+    // occurred_at is the 8th bound param (index 7).
+    const boundOccurredAt = capturedParams[7];
+    assert.ok(boundOccurredAt instanceof Date, 'occurred_at must be a Date');
+    assert.ok(!Number.isNaN(boundOccurredAt.getTime()), 'occurred_at must not be an Invalid Date');
+    assert.strictEqual(boundOccurredAt.getTime(), occurredAt.getTime());
+  });
+
+  // Regression: when occurredAt is absent, occurred_at falls back to `recorded_at`
+  // (a valid Date), never an Invalid Date.
+  it('falls back to a valid Date when occurredAt is omitted', async () => {
+    if (!LedgerServiceImpl) return;
+    let capturedParams: any[] = [];
+    const pool = {
+      async query(_sql: string, params?: any[]) {
+        capturedParams = params ?? [];
+        return { rows: [{ sequence: 1, recorded_at: new Date() }] };
+      },
+    };
+    const impl = new LedgerServiceImpl(pool, {});
+    const call = makeCall({
+      eventType: 'order.filled',
+      sourceService: 'trading',
+      streamKey: 'order:1',
+      payload: {},
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      impl.appendEvent(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+
+    const boundOccurredAt = capturedParams[7];
+    assert.ok(boundOccurredAt instanceof Date, 'occurred_at must be a Date');
+    assert.ok(!Number.isNaN(boundOccurredAt.getTime()), 'occurred_at must not be an Invalid Date');
   });
 
   // Regression: appendEvent must let `sequence` fall to its column DEFAULT
