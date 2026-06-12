@@ -95,7 +95,7 @@ established by feature 049. Docs last.
 
 ### Step 2 — proto-gen: regenerate Go / Python / TS stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/ingest/v1/**`, `packages/proto/gen/go/marketdata/v1/**` — regenerated
@@ -642,4 +642,14 @@ established by feature 049. Docs last.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: process — single integration PR (no per-step PRs)
+**Spec/skill default**: sequential mode opens a stacked PR per step.
+**Actual**: per the user's execute-time directive, each step is committed directly to `feature/backfill-management-ui` (pushed for backup) with **no per-step PRs**; a single integration PR → `main-dev` is opened after Step 14.
+**Reason**: user preference to avoid 14 stacked PRs.
+**Disposition**: process-only; every step still has its own commit + verification record.
+
+### Deviation: Step 2 — codegen via host toolchain (Docker unavailable)
+**Spec said**: Run `./scripts/buf-gen.sh` (normally the `Dockerfile.codegen` container).
+**Actual**: The runner's Docker daemon is not running, so codegen ran on the host with the toolchain pinned to the CI `proto-freshness` versions (buf v1.47.2; protoc-gen-go v1.36.11 / -go-grpc v1.6.2 / -connect-go v1.19.2; grpcio-tools 1.80.0; TS plugins from the committed lockfile).
+**Reason**: No Docker; host toolchain is the sanctioned sequential-mode fallback.
+**Disposition**: CI-equivalent fallback. Regen diff confirmed **limited to `ingest/v1` + `marketdata/v1`** (Go/Python/TS + dist). Host `buf`'s bundled `google/protobuf` descriptors produced an unrelated doc-comment change in `gen/ts/google/protobuf/timestamp.ts`; reverted so committed stubs match CI's baseline.

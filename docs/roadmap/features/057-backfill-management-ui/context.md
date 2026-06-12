@@ -143,3 +143,11 @@ in parallel.
 - Verification: buf lint OK; buf breaking vs feature branch OK (additive only).
 - Files modified: packages/proto/ingest/v1/ingest.proto, packages/proto/marketdata/v1/marketdata.proto
 - Deviations: none.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran ./scripts/buf-gen.sh on host (Docker down). Regen limited to ingest/v1 + marketdata/v1
+  (Go/Python/TS+dist). Reverted unrelated google/protobuf/timestamp.ts doc-comment drift.
+- Verified new symbols: Go IngestService_CancelBackfill + BACKFILL_STATUS_CANCELED=6 +
+  MarketDataService_DeleteBackfilledData; TS CancelBackfillRequest; Python CancelBackfill stub.
+- Files: packages/proto/gen/{go,python,ts}/{ingest,marketdata}/v1/* (+ ts/dist)
+- Deviations: host-toolchain codegen (CI-equivalent) — see Deviation Log.

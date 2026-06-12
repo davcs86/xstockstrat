@@ -39,6 +39,8 @@ export enum BackfillStatus {
   BACKFILL_STATUS_COMPLETED = "BACKFILL_STATUS_COMPLETED",
   BACKFILL_STATUS_FAILED = "BACKFILL_STATUS_FAILED",
   BACKFILL_STATUS_PARTIAL = "BACKFILL_STATUS_PARTIAL",
+  /** BACKFILL_STATUS_CANCELED - operator-canceled (FR-4); completed-chunk bars retained */
+  BACKFILL_STATUS_CANCELED = "BACKFILL_STATUS_CANCELED",
   UNRECOGNIZED = "UNRECOGNIZED",
 }
 
@@ -62,6 +64,9 @@ export function backfillStatusFromJSON(object: any): BackfillStatus {
     case 5:
     case "BACKFILL_STATUS_PARTIAL":
       return BackfillStatus.BACKFILL_STATUS_PARTIAL;
+    case 6:
+    case "BACKFILL_STATUS_CANCELED":
+      return BackfillStatus.BACKFILL_STATUS_CANCELED;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -83,6 +88,8 @@ export function backfillStatusToJSON(object: BackfillStatus): string {
       return "BACKFILL_STATUS_FAILED";
     case BackfillStatus.BACKFILL_STATUS_PARTIAL:
       return "BACKFILL_STATUS_PARTIAL";
+    case BackfillStatus.BACKFILL_STATUS_CANCELED:
+      return "BACKFILL_STATUS_CANCELED";
     case BackfillStatus.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -103,6 +110,8 @@ export function backfillStatusToNumber(object: BackfillStatus): number {
       return 4;
     case BackfillStatus.BACKFILL_STATUS_PARTIAL:
       return 5;
+    case BackfillStatus.BACKFILL_STATUS_CANCELED:
+      return 6;
     case BackfillStatus.UNRECOGNIZED:
     default:
       return -1;
@@ -217,7 +226,15 @@ export interface GetBackfillStatusRequest {
 
 export interface ListBackfillJobsRequest {
   statusFilter: BackfillStatus;
-  page?: PageRequest | undefined;
+  page?:
+    | PageRequest
+    | undefined;
+  /** optional ticker filter (FR-3); empty = no narrowing */
+  symbol: string;
+}
+
+export interface CancelBackfillRequest {
+  jobId: string;
 }
 
 export interface ListBackfillJobsResponse {
@@ -941,7 +958,7 @@ export const GetBackfillStatusRequest: MessageFns<GetBackfillStatusRequest> = {
 };
 
 function createBaseListBackfillJobsRequest(): ListBackfillJobsRequest {
-  return { statusFilter: BackfillStatus.BACKFILL_STATUS_UNSPECIFIED, page: undefined };
+  return { statusFilter: BackfillStatus.BACKFILL_STATUS_UNSPECIFIED, page: undefined, symbol: "" };
 }
 
 export const ListBackfillJobsRequest: MessageFns<ListBackfillJobsRequest> = {
@@ -951,6 +968,9 @@ export const ListBackfillJobsRequest: MessageFns<ListBackfillJobsRequest> = {
     }
     if (message.page !== undefined) {
       PageRequest.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    if (message.symbol !== "") {
+      writer.uint32(26).string(message.symbol);
     }
     return writer;
   },
@@ -978,6 +998,14 @@ export const ListBackfillJobsRequest: MessageFns<ListBackfillJobsRequest> = {
           message.page = PageRequest.decode(reader, reader.uint32());
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -995,6 +1023,7 @@ export const ListBackfillJobsRequest: MessageFns<ListBackfillJobsRequest> = {
         ? backfillStatusFromJSON(object.status_filter)
         : BackfillStatus.BACKFILL_STATUS_UNSPECIFIED,
       page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined,
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
     };
   },
 
@@ -1005,6 +1034,9 @@ export const ListBackfillJobsRequest: MessageFns<ListBackfillJobsRequest> = {
     }
     if (message.page !== undefined) {
       obj.page = PageRequest.toJSON(message.page);
+    }
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
     }
     return obj;
   },
@@ -1018,6 +1050,71 @@ export const ListBackfillJobsRequest: MessageFns<ListBackfillJobsRequest> = {
     message.page = (object.page !== undefined && object.page !== null)
       ? PageRequest.fromPartial(object.page)
       : undefined;
+    message.symbol = object.symbol ?? "";
+    return message;
+  },
+};
+
+function createBaseCancelBackfillRequest(): CancelBackfillRequest {
+  return { jobId: "" };
+}
+
+export const CancelBackfillRequest: MessageFns<CancelBackfillRequest> = {
+  encode(message: CancelBackfillRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.jobId !== "") {
+      writer.uint32(10).string(message.jobId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelBackfillRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCancelBackfillRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.jobId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CancelBackfillRequest {
+    return {
+      jobId: isSet(object.jobId)
+        ? globalThis.String(object.jobId)
+        : isSet(object.job_id)
+        ? globalThis.String(object.job_id)
+        : "",
+    };
+  },
+
+  toJSON(message: CancelBackfillRequest): unknown {
+    const obj: any = {};
+    if (message.jobId !== "") {
+      obj.jobId = message.jobId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<CancelBackfillRequest>, I>>(base?: I): CancelBackfillRequest {
+    return CancelBackfillRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CancelBackfillRequest>, I>>(object: I): CancelBackfillRequest {
+    const message = createBaseCancelBackfillRequest();
+    message.jobId = object.jobId ?? "";
     return message;
   },
 };
@@ -2324,6 +2421,17 @@ export const IngestServiceService = {
       Buffer.from(ListBackfillJobsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListBackfillJobsResponse => ListBackfillJobsResponse.decode(value),
   },
+  /** Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4). */
+  cancelBackfill: {
+    path: "/xstockstrat.ingest.v1.IngestService/CancelBackfill" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CancelBackfillRequest): Buffer =>
+      Buffer.from(CancelBackfillRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CancelBackfillRequest => CancelBackfillRequest.decode(value),
+    responseSerialize: (value: BackfillJob): Buffer => Buffer.from(BackfillJob.encode(value).finish()),
+    responseDeserialize: (value: Buffer): BackfillJob => BackfillJob.decode(value),
+  },
   normalizeRawData: {
     path: "/xstockstrat.ingest.v1.IngestService/NormalizeRawData" as const,
     requestStream: false as const,
@@ -2385,6 +2493,8 @@ export interface IngestServiceServer extends UntypedServiceImplementation {
   triggerBackfill: handleUnaryCall<TriggerBackfillRequest, TriggerBackfillResponse>;
   getBackfillStatus: handleUnaryCall<GetBackfillStatusRequest, BackfillJob>;
   listBackfillJobs: handleUnaryCall<ListBackfillJobsRequest, ListBackfillJobsResponse>;
+  /** Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4). */
+  cancelBackfill: handleUnaryCall<CancelBackfillRequest, BackfillJob>;
   normalizeRawData: handleUnaryCall<NormalizeRawDataRequest, NormalizeRawDataResponse>;
   /** Signal ingestion — persists newsletter/external signals to ingest.newsletter_signals hypertable */
   ingestSignal: handleUnaryCall<IngestSignalRequest, IngestSignalResponse>;
@@ -2439,6 +2549,22 @@ export interface IngestServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListBackfillJobsResponse) => void,
+  ): ClientUnaryCall;
+  /** Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4). */
+  cancelBackfill(
+    request: CancelBackfillRequest,
+    callback: (error: ServiceError | null, response: BackfillJob) => void,
+  ): ClientUnaryCall;
+  cancelBackfill(
+    request: CancelBackfillRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: BackfillJob) => void,
+  ): ClientUnaryCall;
+  cancelBackfill(
+    request: CancelBackfillRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: BackfillJob) => void,
   ): ClientUnaryCall;
   normalizeRawData(
     request: NormalizeRawDataRequest,

@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: marketdata/v1/marketdata.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MarketDataServiceClient = exports.MarketDataServiceService = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
+exports.MarketDataServiceClient = exports.MarketDataServiceService = exports.DeleteBackfilledDataResponse = exports.DeleteBackfilledDataRequest = exports.ListAssetsResponse = exports.ListAssetsRequest = exports.GetDataCoverageResponse = exports.CoverageRange = exports.GetDataCoverageRequest = exports.BackfillBarsResponse = exports.BackfillBarsRequest = exports.GetLatestQuoteRequest = exports.GetBarsResponse = exports.GetBarsRequest = exports.StreamQuotesRequest = exports.StreamBarsRequest = exports.Quote = exports.Bar = exports.protobufPackage = void 0;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -1524,6 +1524,148 @@ exports.ListAssetsResponse = {
         return message;
     },
 };
+function createBaseDeleteBackfilledDataRequest() {
+    return { symbol: "", range: undefined, timeframe: common_1.Timeframe.TIMEFRAME_UNSPECIFIED };
+}
+exports.DeleteBackfilledDataRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.range !== undefined) {
+            common_1.TimeRange.encode(message.range, writer.uint32(18).fork()).join();
+        }
+        if (message.timeframe !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            writer.uint32(24).int32((0, common_1.timeframeToNumber)(message.timeframe));
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseDeleteBackfilledDataRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.range = common_1.TimeRange.decode(reader, reader.uint32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.timeframe = (0, common_1.timeframeFromJSON)(reader.int32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            range: isSet(object.range) ? common_1.TimeRange.fromJSON(object.range) : undefined,
+            timeframe: isSet(object.timeframe) ? (0, common_1.timeframeFromJSON)(object.timeframe) : common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.range !== undefined) {
+            obj.range = common_1.TimeRange.toJSON(message.range);
+        }
+        if (message.timeframe !== common_1.Timeframe.TIMEFRAME_UNSPECIFIED) {
+            obj.timeframe = (0, common_1.timeframeToJSON)(message.timeframe);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.DeleteBackfilledDataRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseDeleteBackfilledDataRequest();
+        message.symbol = object.symbol ?? "";
+        message.range = (object.range !== undefined && object.range !== null)
+            ? common_1.TimeRange.fromPartial(object.range)
+            : undefined;
+        message.timeframe = object.timeframe ?? common_1.Timeframe.TIMEFRAME_UNSPECIFIED;
+        return message;
+    },
+};
+function createBaseDeleteBackfilledDataResponse() {
+    return { rowsDeleted: 0 };
+}
+exports.DeleteBackfilledDataResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.rowsDeleted !== 0) {
+            writer.uint32(8).int64(message.rowsDeleted);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseDeleteBackfilledDataResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.rowsDeleted = longToNumber(reader.int64());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            rowsDeleted: isSet(object.rowsDeleted)
+                ? globalThis.Number(object.rowsDeleted)
+                : isSet(object.rows_deleted)
+                    ? globalThis.Number(object.rows_deleted)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.rowsDeleted !== 0) {
+            obj.rowsDeleted = Math.round(message.rowsDeleted);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.DeleteBackfilledDataResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseDeleteBackfilledDataResponse();
+        message.rowsDeleted = object.rowsDeleted ?? 0;
+        return message;
+    },
+};
 exports.MarketDataServiceService = {
     /** Stream live bar data for symbols */
     streamBars: {
@@ -1584,6 +1726,16 @@ exports.MarketDataServiceService = {
         requestDeserialize: (value) => exports.GetDataCoverageRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.GetDataCoverageResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.GetDataCoverageResponse.decode(value),
+    },
+    /** Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5) */
+    deleteBackfilledData: {
+        path: "/xstockstrat.marketdata.v1.MarketDataService/DeleteBackfilledData",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.DeleteBackfilledDataRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.DeleteBackfilledDataRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.DeleteBackfilledDataResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.DeleteBackfilledDataResponse.decode(value),
     },
     /** Get available symbols */
     listAssets: {
