@@ -341,7 +341,7 @@ established by feature 049. Docs last.
 
 ### Step 7 — config: register `marketdata.backfill.max_delete_days` delete-window guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify (add the key to the Config Keys Consumed table)

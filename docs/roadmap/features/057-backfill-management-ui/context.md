@@ -212,3 +212,10 @@ in parallel.
 - Files: internal/service/marketdata_service.go, internal/repository/marketdata_repo.go,
   internal/service/marketdata_service_test.go, internal/repository/marketdata_repo_test.go (new)
 - Deviations: Option A scope expansion (user-approved) — see Deviation Log.
+
+### Step 7 — config: register marketdata.backfill.max_delete_days [done]
+- Doc-only (default 0 = guard off, no SetConfig rollout). Added the key to marketdata CLAUDE.md
+  Config Keys Consumed table + a new "feature 057" recently-added-keys block in root CLAUDE.md.
+- Verification: grep confirms present in both files.
+- Files: services/xstockstrat-marketdata/CLAUDE.md, CLAUDE.md
+- Deviations: none.
