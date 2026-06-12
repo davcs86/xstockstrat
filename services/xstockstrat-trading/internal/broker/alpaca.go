@@ -184,6 +184,66 @@ func (c *Client) CancelOrder(ctx context.Context, brokerOrderID string) error {
 	return nil
 }
 
+// ReplaceOrder modifies a working order via PATCH /v2/orders/{order_id}.
+// Only the changed fields are sent; a zero Qty/LimitPrice/StopPrice or empty
+// TimeInForce is omitted so the broker leaves that field unchanged.
+func (c *Client) ReplaceOrder(ctx context.Context, brokerOrderID string, req OrderRequest) (*BrokerOrder, error) {
+	alpacaReq := struct {
+		Qty         string `json:"qty,omitempty"`
+		LimitPrice  string `json:"limit_price,omitempty"`
+		StopPrice   string `json:"stop_price,omitempty"`
+		TimeInForce string `json:"time_in_force,omitempty"`
+	}{}
+	if req.Qty != 0 {
+		alpacaReq.Qty = strconv.FormatFloat(req.Qty, 'f', -1, 64)
+	}
+	if req.LimitPrice != 0 {
+		alpacaReq.LimitPrice = strconv.FormatFloat(req.LimitPrice, 'f', -1, 64)
+	}
+	if req.StopPrice != 0 {
+		alpacaReq.StopPrice = strconv.FormatFloat(req.StopPrice, 'f', -1, 64)
+	}
+	if req.TimeInForce != "" {
+		alpacaReq.TimeInForce = req.TimeInForce
+	}
+
+	body, err := json.Marshal(alpacaReq)
+	if err != nil {
+		return nil, fmt.Errorf("marshal replace request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPatch,
+		fmt.Sprintf("%s/v2/orders/%s", c.baseURL(), brokerOrderID),
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	c.setAuthHeaders(httpReq)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("replace order: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("alpaca replace error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var alpacaResp AlpacaOrder
+	if err := json.Unmarshal(respBody, &alpacaResp); err != nil {
+		return nil, fmt.Errorf("decode replace response: %w", err)
+	}
+	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status}, nil
+}
+
 // GetOrder fetches a broker order's current state via GET /v2/orders/{order_id}.
 func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrder, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet,

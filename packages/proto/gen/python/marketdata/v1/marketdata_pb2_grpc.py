@@ -66,6 +66,11 @@ class MarketDataServiceStub(object):
                 request_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetDataCoverageRequest.SerializeToString,
                 response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetDataCoverageResponse.FromString,
                 _registered_method=True)
+        self.DeleteBackfilledData = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/DeleteBackfilledData',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.DeleteBackfilledDataRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.DeleteBackfilledDataResponse.FromString,
+                _registered_method=True)
         self.ListAssets = channel.unary_unary(
                 '/xstockstrat.marketdata.v1.MarketDataService/ListAssets',
                 request_serializer=marketdata_dot_v1_dot_marketdata__pb2.ListAssetsRequest.SerializeToString,
@@ -120,6 +125,13 @@ class MarketDataServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def DeleteBackfilledData(self, request, context):
+        """Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ListAssets(self, request, context):
         """Get available symbols
         """
@@ -159,6 +171,11 @@ def add_MarketDataServiceServicer_to_server(servicer, server):
                     servicer.GetDataCoverage,
                     request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetDataCoverageRequest.FromString,
                     response_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetDataCoverageResponse.SerializeToString,
+            ),
+            'DeleteBackfilledData': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteBackfilledData,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.DeleteBackfilledDataRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.DeleteBackfilledDataResponse.SerializeToString,
             ),
             'ListAssets': grpc.unary_unary_rpc_method_handler(
                     servicer.ListAssets,
@@ -330,6 +347,33 @@ class MarketDataService(object):
             '/xstockstrat.marketdata.v1.MarketDataService/GetDataCoverage',
             marketdata_dot_v1_dot_marketdata__pb2.GetDataCoverageRequest.SerializeToString,
             marketdata_dot_v1_dot_marketdata__pb2.GetDataCoverageResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteBackfilledData(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/DeleteBackfilledData',
+            marketdata_dot_v1_dot_marketdata__pb2.DeleteBackfilledDataRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.DeleteBackfilledDataResponse.FromString,
             options,
             channel_credentials,
             insecure,

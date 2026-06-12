@@ -61,7 +61,12 @@ Namespace: `indicators`
 ## Sandbox Security Model
 
 - **Subprocess isolation**: formula runs in a fresh Python subprocess
-- **Memory cap**: enforced via `resource.setrlimit(RLIMIT_AS)` in the child
+- **Memory cap**: enforced via `resource.setrlimit(RLIMIT_DATA)` in the child (heap +
+  anonymous mmap; `RLIMIT_AS` would reject numpy/pandas over their large virtual-memory
+  reservations before any real memory is used)
+- **BLAS/OMP threads pinned to 1**: numeric libs spawn one buffer-reserving thread per core
+  on import, which overflows the cap (`OpenBLAS error: Memory allocation still failed after
+  10 retries`); the subprocess env pins `OPENBLAS/OMP/MKL/NUMEXPR/VECLIB` thread counts to 1
 - **Timeout**: enforced via `subprocess.run(timeout=...)` + SIGKILL
 - **Import whitelist**: only `allowed_imports` config keys may be `import`ed
 - **Builtin filter**: dangerous builtins (`open`, `exec`, `eval`, `__import__` override, etc.) removed
@@ -79,6 +84,10 @@ descriptions. Distinct from the OHLCV/series `data` input:
   values (int/float/bool/string), and enforces `min`/`max` (numeric only). Failures return a
   structured `ExecuteFormulaResponse.parameter_errors` (`{name, reason}`) with `success=false`, and the
   sandbox is never invoked.
+- **Definition source per run**: a saved formula (`formula_id`) validates `input_params` against its
+  stored definitions. An inline `formula_source` run (the authoring "Run" with an unsaved buffer) has
+  no stored formula, so it validates against the definitions supplied on
+  `ExecuteFormulaRequest.parameters` — letting authors test typed params before registering.
 - **Definition validation**: at Register/Update, names must be valid, unique Python identifiers; type
   must not be `UNSPECIFIED`; `min`/`max` apply to numeric params only.
 - **Soft cap**: at most **32 parameters** per formula, hardcoded in `app/services/parameters.py`

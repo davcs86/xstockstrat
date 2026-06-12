@@ -161,6 +161,21 @@ export interface ListAssetsResponse {
   assets: Asset[];
 }
 
+export interface DeleteBackfilledDataRequest {
+  /** REQUIRED — server rejects empty (FR-5) */
+  symbol: string;
+  /** optional; empty = whole symbol */
+  range?:
+    | TimeRange
+    | undefined;
+  /** optional; UNSPECIFIED = all timeframes */
+  timeframe: Timeframe;
+}
+
+export interface DeleteBackfilledDataResponse {
+  rowsDeleted: number;
+}
+
 function createBaseBar(): Bar {
   return {
     symbol: "",
@@ -1814,6 +1829,164 @@ export const ListAssetsResponse: MessageFns<ListAssetsResponse> = {
   },
 };
 
+function createBaseDeleteBackfilledDataRequest(): DeleteBackfilledDataRequest {
+  return { symbol: "", range: undefined, timeframe: Timeframe.TIMEFRAME_UNSPECIFIED };
+}
+
+export const DeleteBackfilledDataRequest: MessageFns<DeleteBackfilledDataRequest> = {
+  encode(message: DeleteBackfilledDataRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.range !== undefined) {
+      TimeRange.encode(message.range, writer.uint32(18).fork()).join();
+    }
+    if (message.timeframe !== Timeframe.TIMEFRAME_UNSPECIFIED) {
+      writer.uint32(24).int32(timeframeToNumber(message.timeframe));
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteBackfilledDataRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDeleteBackfilledDataRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.range = TimeRange.decode(reader, reader.uint32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.timeframe = timeframeFromJSON(reader.int32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DeleteBackfilledDataRequest {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      range: isSet(object.range) ? TimeRange.fromJSON(object.range) : undefined,
+      timeframe: isSet(object.timeframe) ? timeframeFromJSON(object.timeframe) : Timeframe.TIMEFRAME_UNSPECIFIED,
+    };
+  },
+
+  toJSON(message: DeleteBackfilledDataRequest): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.range !== undefined) {
+      obj.range = TimeRange.toJSON(message.range);
+    }
+    if (message.timeframe !== Timeframe.TIMEFRAME_UNSPECIFIED) {
+      obj.timeframe = timeframeToJSON(message.timeframe);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DeleteBackfilledDataRequest>, I>>(base?: I): DeleteBackfilledDataRequest {
+    return DeleteBackfilledDataRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteBackfilledDataRequest>, I>>(object: I): DeleteBackfilledDataRequest {
+    const message = createBaseDeleteBackfilledDataRequest();
+    message.symbol = object.symbol ?? "";
+    message.range = (object.range !== undefined && object.range !== null)
+      ? TimeRange.fromPartial(object.range)
+      : undefined;
+    message.timeframe = object.timeframe ?? Timeframe.TIMEFRAME_UNSPECIFIED;
+    return message;
+  },
+};
+
+function createBaseDeleteBackfilledDataResponse(): DeleteBackfilledDataResponse {
+  return { rowsDeleted: 0 };
+}
+
+export const DeleteBackfilledDataResponse: MessageFns<DeleteBackfilledDataResponse> = {
+  encode(message: DeleteBackfilledDataResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.rowsDeleted !== 0) {
+      writer.uint32(8).int64(message.rowsDeleted);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteBackfilledDataResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDeleteBackfilledDataResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.rowsDeleted = longToNumber(reader.int64());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DeleteBackfilledDataResponse {
+    return {
+      rowsDeleted: isSet(object.rowsDeleted)
+        ? globalThis.Number(object.rowsDeleted)
+        : isSet(object.rows_deleted)
+        ? globalThis.Number(object.rows_deleted)
+        : 0,
+    };
+  },
+
+  toJSON(message: DeleteBackfilledDataResponse): unknown {
+    const obj: any = {};
+    if (message.rowsDeleted !== 0) {
+      obj.rowsDeleted = Math.round(message.rowsDeleted);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DeleteBackfilledDataResponse>, I>>(base?: I): DeleteBackfilledDataResponse {
+    return DeleteBackfilledDataResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteBackfilledDataResponse>, I>>(object: I): DeleteBackfilledDataResponse {
+    const message = createBaseDeleteBackfilledDataResponse();
+    message.rowsDeleted = object.rowsDeleted ?? 0;
+    return message;
+  },
+};
+
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -1884,6 +2057,18 @@ export const MarketDataServiceService = {
       Buffer.from(GetDataCoverageResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetDataCoverageResponse => GetDataCoverageResponse.decode(value),
   },
+  /** Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5) */
+  deleteBackfilledData: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/DeleteBackfilledData" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: DeleteBackfilledDataRequest): Buffer =>
+      Buffer.from(DeleteBackfilledDataRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DeleteBackfilledDataRequest => DeleteBackfilledDataRequest.decode(value),
+    responseSerialize: (value: DeleteBackfilledDataResponse): Buffer =>
+      Buffer.from(DeleteBackfilledDataResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DeleteBackfilledDataResponse => DeleteBackfilledDataResponse.decode(value),
+  },
   /** Get available symbols */
   listAssets: {
     path: "/xstockstrat.marketdata.v1.MarketDataService/ListAssets" as const,
@@ -1909,6 +2094,8 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
   backfillBars: handleUnaryCall<BackfillBarsRequest, BackfillBarsResponse>;
   /** Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe */
   getDataCoverage: handleUnaryCall<GetDataCoverageRequest, GetDataCoverageResponse>;
+  /** Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5) */
+  deleteBackfilledData: handleUnaryCall<DeleteBackfilledDataRequest, DeleteBackfilledDataResponse>;
   /** Get available symbols */
   listAssets: handleUnaryCall<ListAssetsRequest, ListAssetsResponse>;
 }
@@ -1991,6 +2178,22 @@ export interface MarketDataServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetDataCoverageResponse) => void,
+  ): ClientUnaryCall;
+  /** Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5) */
+  deleteBackfilledData(
+    request: DeleteBackfilledDataRequest,
+    callback: (error: ServiceError | null, response: DeleteBackfilledDataResponse) => void,
+  ): ClientUnaryCall;
+  deleteBackfilledData(
+    request: DeleteBackfilledDataRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DeleteBackfilledDataResponse) => void,
+  ): ClientUnaryCall;
+  deleteBackfilledData(
+    request: DeleteBackfilledDataRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DeleteBackfilledDataResponse) => void,
   ): ClientUnaryCall;
   /** Get available symbols */
   listAssets(

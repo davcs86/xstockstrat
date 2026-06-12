@@ -150,6 +150,12 @@ Recently added keys (feature 049 Part B — MCP OAuth 2.1 edge auth, owned by `x
 | `agent.oauth.registration_enabled` | bool | `true` | Allow RFC 7591 Dynamic Client Registration at `/oauth/register` |
 | `agent.oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only (no allow-any) |
 
+Recently added keys (feature 057 — backfill management UI, owned by `xstockstrat-marketdata`):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `marketdata.backfill.max_delete_days` | int | `0` | Max date-range span (days) a single scoped `DeleteBackfilledData` may cover; `0` = no window cap (current behavior). Whole-symbol deletes (no range) are exempt and double-confirmed in the UI (FR-5). |
+
 ---
 
 ## Environment Variable Naming Convention
@@ -176,6 +182,29 @@ All inter-service connection env vars follow these patterns. **Never invent new 
 TimescaleDB (PostgreSQL). Each service owns its schema; migrations run via `scripts/db-migrate.sh` (golang-migrate). Convention: `NNN_description.up.sql` + `.down.sql` in `services/<service>/migrations/`. Never edit an applied migration — add a new numbered one instead.
 
 **Schema map, migration run order, and step-by-step guide** → `docs/patterns/database.md`.
+
+### Connection Pool Budget
+
+The managed DigitalOcean PostgreSQL plan allows **20 connections shared across all services**. Each
+service caps its pool small so the sum of all pool maxes stays at or below 20. Pool size is set per
+service in code and overridable with the **`DB_POOL_MAX`** env var (Go `pgxpool.MaxConns`, Python
+`asyncpg.create_pool(max_size=…)`, Node `pg.Pool({ max })`). **When adding a new DB-backed service or
+raising any service's pool, re-check this table so the total never exceeds 20.**
+
+| Service | Lang | Pool max | Notes |
+|---|---|---|---|
+| xstockstrat-trading | Go | 2 | Single shared `pgxpool` — `AccountRepo` reuses `TradingRepo.Pool()` (no second pool) |
+| xstockstrat-portfolio | Go | 2 | |
+| xstockstrat-marketdata | Go | 2 | |
+| xstockstrat-indicators | Python | 2 | |
+| xstockstrat-ingest | Python | 2 | |
+| xstockstrat-analysis | Python | 2 | |
+| xstockstrat-ledger | Node | 2 | |
+| xstockstrat-identity | Node | 2 | |
+| xstockstrat-config | Node | 2 | |
+| xstockstrat-notify | Node | 1 | Light DB use (alert history only) |
+| xstockstrat-ui | Next.js | 1 | config-ui audit route only |
+| **Total** | | **20** | At the DigitalOcean shared limit |
 
 ---
 

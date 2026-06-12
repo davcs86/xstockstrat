@@ -83,6 +83,7 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 | `order.filled` | `order:{order_id}` | Order fully filled |
 | `order.partially_filled` | `order:{order_id}` | Partial fill received |
 | `order.canceled` | `order:{order_id}` | Order canceled |
+| `order.replaced` | `order:{order_id}` | Working order modified via `ReplaceOrder` (qty/price/TIF) |
 | `order.rejected` | `order:{order_id}` | Broker rejected order |
 | `order.approval_requested` | `approval:{order_id}` | Approval required |
 | `order.approved` | `approval:{order_id}` | Manual approval granted |
@@ -90,6 +91,33 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 | `order.broker_rejected` | `order:{order_id}` | Alpaca broker rejected the order |
 | `account.positions.synced` | `account:{account_id}` | Periodic broker position snapshot (poller); carries `user_id` + `account_id` |
 | `account.balance.synced` | `account:{account_id}` | Periodic broker balance snapshot (poller): cash, buying power, equity, last_equity |
+
+## Order Replace (`ReplaceOrder`)
+
+`ReplaceOrder` (feature `055-orders-management-ui`) modifies a working order's quantity,
+limit price, stop price, and/or time-in-force. It is **broker-agnostic at the proto surface**:
+the service routes by the persisted order's `broker_type` via `resolveAccount`, so the same RPC
+covers both Alpaca and IBKR with no broker-specific branch in the caller. A zero/empty field in
+`ReplaceOrderRequest` means "leave unchanged".
+
+Replace is allowed **only** while the order is `ORDER_STATUS_NEW` or
+`ORDER_STATUS_PARTIALLY_FILLED` — terminal states (`FILLED`/`CANCELED`/`EXPIRED`/`REJECTED`) and
+an order with no `broker_order_id` yet are rejected with `FailedPrecondition`. For a
+`PARTIALLY_FILLED` order the new `qty` is passed straight through; each broker interprets it as
+the new total/remaining per its adapter. A successful replace persists the order, emits the
+`order.replaced` ledger event, and broadcasts to `StreamOrderUpdates` subscribers.
+
+### Per-broker replaceable-field matrix
+
+| Field (proto) | Alpaca — `PATCH /v2/orders/{id}` | IBKR — modify `POST /iserver/account/{acct}/order/{id}` |
+|---|---|---|
+| `qty` | `qty` | `quantity` |
+| `limit_price` | `limit_price` | `price` |
+| `stop_price` | `stop_price` | `auxPrice` |
+| `time_in_force` | `time_in_force` | `tif` |
+
+The IBKR **netting-mode** assumption documented in _Known Limitations_ applies to replace as
+well: a replaced quantity is the new total order quantity (no hedged-mode lot semantics).
 
 ## Environment Variables
 

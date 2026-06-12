@@ -115,6 +115,17 @@ export interface ListAssetsRequest {
 export interface ListAssetsResponse {
     assets: Asset[];
 }
+export interface DeleteBackfilledDataRequest {
+    /** REQUIRED — server rejects empty (FR-5) */
+    symbol: string;
+    /** optional; empty = whole symbol */
+    range?: TimeRange | undefined;
+    /** optional; UNSPECIFIED = all timeframes */
+    timeframe: Timeframe;
+}
+export interface DeleteBackfilledDataResponse {
+    rowsDeleted: number;
+}
 export declare const Bar: MessageFns<Bar>;
 export declare const Quote: MessageFns<Quote>;
 export declare const StreamBarsRequest: MessageFns<StreamBarsRequest>;
@@ -129,6 +140,8 @@ export declare const CoverageRange: MessageFns<CoverageRange>;
 export declare const GetDataCoverageResponse: MessageFns<GetDataCoverageResponse>;
 export declare const ListAssetsRequest: MessageFns<ListAssetsRequest>;
 export declare const ListAssetsResponse: MessageFns<ListAssetsResponse>;
+export declare const DeleteBackfilledDataRequest: MessageFns<DeleteBackfilledDataRequest>;
+export declare const DeleteBackfilledDataResponse: MessageFns<DeleteBackfilledDataResponse>;
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -195,6 +208,16 @@ export declare const MarketDataServiceService: {
         readonly responseSerialize: (value: GetDataCoverageResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => GetDataCoverageResponse;
     };
+    /** Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5) */
+    readonly deleteBackfilledData: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/DeleteBackfilledData";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: DeleteBackfilledDataRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => DeleteBackfilledDataRequest;
+        readonly responseSerialize: (value: DeleteBackfilledDataResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => DeleteBackfilledDataResponse;
+    };
     /** Get available symbols */
     readonly listAssets: {
         readonly path: "/xstockstrat.marketdata.v1.MarketDataService/ListAssets";
@@ -219,6 +242,8 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
     backfillBars: handleUnaryCall<BackfillBarsRequest, BackfillBarsResponse>;
     /** Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe */
     getDataCoverage: handleUnaryCall<GetDataCoverageRequest, GetDataCoverageResponse>;
+    /** Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5) */
+    deleteBackfilledData: handleUnaryCall<DeleteBackfilledDataRequest, DeleteBackfilledDataResponse>;
     /** Get available symbols */
     listAssets: handleUnaryCall<ListAssetsRequest, ListAssetsResponse>;
 }
@@ -245,6 +270,10 @@ export interface MarketDataServiceClient extends Client {
     getDataCoverage(request: GetDataCoverageRequest, callback: (error: ServiceError | null, response: GetDataCoverageResponse) => void): ClientUnaryCall;
     getDataCoverage(request: GetDataCoverageRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetDataCoverageResponse) => void): ClientUnaryCall;
     getDataCoverage(request: GetDataCoverageRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetDataCoverageResponse) => void): ClientUnaryCall;
+    /** Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5) */
+    deleteBackfilledData(request: DeleteBackfilledDataRequest, callback: (error: ServiceError | null, response: DeleteBackfilledDataResponse) => void): ClientUnaryCall;
+    deleteBackfilledData(request: DeleteBackfilledDataRequest, metadata: Metadata, callback: (error: ServiceError | null, response: DeleteBackfilledDataResponse) => void): ClientUnaryCall;
+    deleteBackfilledData(request: DeleteBackfilledDataRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: DeleteBackfilledDataResponse) => void): ClientUnaryCall;
     /** Get available symbols */
     listAssets(request: ListAssetsRequest, callback: (error: ServiceError | null, response: ListAssetsResponse) => void): ClientUnaryCall;
     listAssets(request: ListAssetsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListAssetsResponse) => void): ClientUnaryCall;

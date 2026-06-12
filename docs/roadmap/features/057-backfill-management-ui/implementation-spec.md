@@ -37,7 +37,7 @@ established by feature 049. Docs last.
 
 ### Step 1 — proto: additive `CancelBackfill` + `DeleteBackfilledData` + `BACKFILL_STATUS_CANCELED` + symbol filter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
@@ -95,7 +95,7 @@ established by feature 049. Docs last.
 
 ### Step 2 — proto-gen: regenerate Go / Python / TS stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/ingest/v1/**`, `packages/proto/gen/go/marketdata/v1/**` — regenerated
@@ -122,7 +122,7 @@ established by feature 049. Docs last.
 
 ### Step 3 — service: ingest `CancelBackfill` RPC + `ListBackfillJobs` symbol filter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -198,7 +198,7 @@ established by feature 049. Docs last.
 
 ### Step 4 — test: ingest cancel + symbol filter coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_backfill_jobs.py` — modify (or add `tests/test_cancel_backfill.py`)
@@ -229,7 +229,7 @@ established by feature 049. Docs last.
 
 ### Step 5 — service: marketdata `DeleteBackfilledData` scoped delete RPC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go` — modify
@@ -307,7 +307,7 @@ established by feature 049. Docs last.
 
 ### Step 6 — test: marketdata scoped-delete coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — create or modify
@@ -341,7 +341,7 @@ established by feature 049. Docs last.
 
 ### Step 7 — config: register `marketdata.backfill.max_delete_days` delete-window guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify (add the key to the Config Keys Consumed table)
@@ -372,7 +372,7 @@ established by feature 049. Docs last.
 
 ### Step 8 — service: UI insights-BFF wiring for cancel / list-jobs / status / delete
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify
@@ -418,7 +418,7 @@ established by feature 049. Docs last.
 
 ### Step 9 — service: UI browser client for the Backfills page (marketdata via insights BFF)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/browserClients/insightsMarketDataClient.ts` — create
@@ -462,7 +462,7 @@ established by feature 049. Docs last.
 
 ### Step 10 — service: UI React-Query hooks for backfill management
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useBackfills.ts` — create
@@ -500,7 +500,7 @@ established by feature 049. Docs last.
 
 ### Step 11 — service: UI Backfills page (create / list / monitor / cancel / delete)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/backfills/page.tsx` — create
@@ -551,7 +551,7 @@ established by feature 049. Docs last.
 
 ### Step 12 — service: UI nav entry to the Backfills page (admin-gated)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/AppShell.tsx` — modify (add an admin-gated nav link to `/insights/backfills`)
@@ -583,7 +583,7 @@ established by feature 049. Docs last.
 
 ### Step 13 — test: UI E2E for the Backfills page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/backfills.spec.ts` — create
@@ -614,7 +614,7 @@ established by feature 049. Docs last.
 
 ### Step 14 — docs: backfill-management UI + new RPCs + config key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/runbooks/historical-backfill.md` — modify (add a "Manage backfills from the UI" section: trigger/monitor/cancel/delete, admin-only)
@@ -642,4 +642,35 @@ established by feature 049. Docs last.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: process — single integration PR (no per-step PRs)
+**Spec/skill default**: sequential mode opens a stacked PR per step.
+**Actual**: per the user's execute-time directive, each step is committed directly to `feature/backfill-management-ui` (pushed for backup) with **no per-step PRs**; a single integration PR → `main-dev` is opened after Step 14.
+**Reason**: user preference to avoid 14 stacked PRs.
+**Disposition**: process-only; every step still has its own commit + verification record.
+
+### Deviation: Step 2 — codegen via host toolchain (Docker unavailable)
+**Spec said**: Run `./scripts/buf-gen.sh` (normally the `Dockerfile.codegen` container).
+**Actual**: The runner's Docker daemon is not running, so codegen ran on the host with the toolchain pinned to the CI `proto-freshness` versions (buf v1.47.2; protoc-gen-go v1.36.11 / -go-grpc v1.6.2 / -connect-go v1.19.2; grpcio-tools 1.80.0; TS plugins from the committed lockfile).
+**Reason**: No Docker; host toolchain is the sanctioned sequential-mode fallback.
+**Disposition**: CI-equivalent fallback. Regen diff confirmed **limited to `ingest/v1` + `marketdata/v1`** (Go/Python/TS + dist). Host `buf`'s bundled `google/protobuf` descriptors produced an unrelated doc-comment change in `gen/ts/google/protobuf/timestamp.ts`; reverted so committed stubs match CI's baseline.
+
+### Deviation: Step 3/4 — `_finalize_backfill` cancel guard uses the in-process registry (not a DB re-read)
+**Spec said (Step 3)**: "Also short-circuit `_finalize_backfill` so a canceled job is not overwritten back to COMPLETED/PARTIAL (check the registry / re-read the row status before the final `update_job`)."
+**Actual**: Implemented as `if job_id in self._canceled_jobs: discard + return` (the registry branch the spec offered), **not** a DB re-read. The initial DB-re-read implementation broke two existing `TestRunBackfill` tests whose `db` mock makes `await get_job(...)` fail; the registry check is authoritative for the live run (CancelBackfill adds to the registry before writing CANCELED) and adds no DB round-trip.
+**Reason**: Avoids an extra DB read on every finalize and the test-mock incompatibility; the spec explicitly allowed "check the registry."
+**Disposition**: in-scope (one of the two spec-offered options). Verified: full ingest suite 130 passed, coverage 74.6% ≥ 40%.
+
+### Deviation: Step 6 — refactored Step-5 code for unit-testability (user-approved Option A)
+**Problem**: The new delete logic landed in `service/` + `repository/`, but those types aren't unit-mockable without a DB: `MarketDataService.repo` is a concrete `*MarketDataRepo` (un-stubbable), `config.Watcher` has no exported setter (so the `max_delete_days` window-guard couldn't be driven from `package service`), and `middleware`'s context key is unexported. The existing service test suite never constructs the service with a repo — so only the empty-symbol/missing-admin guards were testable as-written.
+**Decision (asked via AskUserQuestion, user chose A)**: refactor for testability rather than lean on the Step-13 E2E.
+**Actual**: Extracted two pure helpers (edits two Step-5 files + adds a repo test file, beyond Step 6's declared `marketdata_service_test.go`):
+- `service.resolveDeletePlan(symbol, accessScope, tf, range, maxDays)` — the FR-5 guards (symbol-required→InvalidArgument, admin-0x04→PermissionDenied, window-cap→InvalidArgument) + timeframe/range resolution, taking scope+maxDays as plain params (no ctx/Watcher). `DeleteBackfilledData` now calls it.
+- `repository.buildDeleteBarsQuery(symbol, timeframe, start, end)` — pure SQL+args builder; `DeleteBars` calls it + `Exec`.
+**Tests**: `TestResolveDeletePlan` (8 sub-cases) + `TestBuildDeleteBarsQuery` (4 variants) asserting the DBA-critical invariant — the symbol predicate is ALWAYS present and always `$1`, so a full-table delete can never be issued.
+**Disposition**: user-approved scope expansion. Verified: `go build` OK, `golangci-lint` 0 issues, all 7 tested packages pass.
+
+### Deviation: Step 13 — E2E full green run deferred to CI (container can't complete dev-mode E2E)
+**Spec verification said**: `pnpm run lint && pnpm test:e2e` — suite passes.
+**Actual**: The spec is authored to the established pattern (`addCookieWithRoles` admin/non-admin, browser-level `page.route()` Connect stubs like `formulas.spec.ts`, `dialog` accept for the cancel confirm, a stateful list stub for the cancel→CANCELED flip) and is **statically green**: prettier clean, `tsc --noEmit` exit 0, `next lint` "No ESLint warnings or errors". The harness **did execute** the suite (first run: 1 test passed, 5 failed) and the 5 failures were diagnosed from the captured DOM snapshot and fixed — all selector issues, not logic: `getByText('running'|'canceled')` matched the filter `<option>`s → switched to `{ exact: true }`; `getByPlaceholder('Symbol')` matched 5 inputs → `{ exact: true }`; added a positive-control (`Strategies` link) before the gated-`Backfills` assertion; longer first-navigation timeouts.
+**Reason**: A full green run could not be reproduced in this container. Non-CI Playwright uses `pnpm dev` with a **10s per-test timeout** + on-demand route compilation; the dev server's cold-compile of `/insights/*` + `/api/auth/me` exceeds 10s on the first hit, and repeated `next build`/webServer orchestration overran every single-command wall-clock. A production `pnpm build` **succeeds** (exit 0, the page is in the bundle).
+**Disposition**: CI runs this spec under its designed conditions — `next build && next start` (precompiled pages, no compile lag), **30s** test timeout, `retries: 2` — where it is expected to pass. Full E2E execution is therefore deferred to CI. No production code depends on this step; it is test-only.

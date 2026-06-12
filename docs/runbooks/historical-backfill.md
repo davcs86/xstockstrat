@@ -26,6 +26,39 @@ Ledger event: ingest.backfill.completed
 
 ---
 
+## Manage backfills from the UI (operator-facing)
+
+The `/insights/backfills` page (in `xstockstrat-ui`) is the operator-facing complement to the RPCs
+below — create, monitor, cancel, and delete backfills without a `grpcurl` shell. **The page and all
+its mutating actions are admin-only** (the access-scope `0x04` ADMIN bit, feature 049): non-admins do
+not see the nav entry, and the insights BFF + each backend re-enforce the scope on every mutating
+call. Reach it from the insights sub-nav ("Backfills").
+
+| Action | What it does | RPC | Notes |
+|---|---|---|---|
+| **Create** | Trigger a backfill for one or more symbols over a timeframe + optional date range | `TriggerBackfill` | Same job the gRPC path below creates; `overwrite` re-fetches existing bars |
+| **Monitor** | Live status + truthful progress (`bars_processed/bars_total`, `chunks_completed/chunks_total`, `failed_symbols`, `error`) | `GetBackfillStatus` / `ListBackfillJobs` | The page polls on an interval; progress is the real stored count, never fabricated |
+| **Filter** | Narrow the job list by status and/or by symbol | `ListBackfillJobs` (`status_filter`, `symbol`) | — |
+| **Cancel** | Stop a `QUEUED`/`RUNNING` job; it transitions to `CANCELED` | `CancelBackfill` | **Completed-chunk bars are retained** (no rollback); admin-only |
+| **Delete** | Scoped destructive delete of stored bars for a symbol (+ optional range + optional timeframe) | `DeleteBackfilledData` | See the guardrails below |
+
+### Destructive delete — guardrails (FR-5)
+
+`DeleteBackfilledData` is **symbol-scoped on the server**: an empty symbol is rejected, so it can
+never become a full-table delete. The UI adds two confirmations:
+
+1. The operator must **type the exact symbol** to enable the Delete button.
+2. A **whole-symbol delete** (no date range supplied) requires a **second** typed confirmation
+   (`DELETE ALL`).
+
+An optional **delete-window cap** is enforced server-side by the `marketdata.backfill.max_delete_days`
+config key (default `0` = no cap; current behavior). When set `> 0`, a single scoped delete whose
+date range exceeds that many days is rejected with `InvalidArgument`. A whole-symbol delete (no range)
+is exempt from the cap — that is why the UI double-confirms it. The op emits a
+`marketdata.backfill.data_deleted` ledger event for audit.
+
+---
+
 ## Pre-Backfill Checklist
 
 - [ ] Confirm target symbols are valid (`ListAssets` RPC on xstockstrat-marketdata)

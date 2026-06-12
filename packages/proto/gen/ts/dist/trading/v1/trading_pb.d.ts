@@ -245,6 +245,25 @@ export type ListOrdersRequest = Message<"xstockstrat.trading.v1.ListOrdersReques
      * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 6;
      */
     tradingMode: TradingMode;
+    /**
+     * Additive filters: an UNSPECIFIED enum value or empty string means
+     * "no filter on this dimension" (matches the status/trading_mode semantics above).
+     *
+     * @generated from field: string symbol = 7;
+     */
+    symbol: string;
+    /**
+     * @generated from field: xstockstrat.trading.v1.OrderSide side = 8;
+     */
+    side: OrderSide;
+    /**
+     * @generated from field: xstockstrat.trading.v1.OrderType order_type = 9;
+     */
+    orderType: OrderType;
+    /**
+     * @generated from field: string account_id = 10;
+     */
+    accountId: string;
 };
 /**
  * Describes the message xstockstrat.trading.v1.ListOrdersRequest.
@@ -287,6 +306,42 @@ export type StreamOrderUpdatesRequest = Message<"xstockstrat.trading.v1.StreamOr
  * Use `create(StreamOrderUpdatesRequestSchema)` to create a new message.
  */
 export declare const StreamOrderUpdatesRequestSchema: GenMessage<StreamOrderUpdatesRequest>;
+/**
+ * @generated from message xstockstrat.trading.v1.ReplaceOrderRequest
+ */
+export type ReplaceOrderRequest = Message<"xstockstrat.trading.v1.ReplaceOrderRequest"> & {
+    /**
+     * @generated from field: string order_id = 1;
+     */
+    orderId: string;
+    /**
+     * Optional replacement fields; a zero/empty value means "leave unchanged".
+     *
+     * @generated from field: double qty = 2;
+     */
+    qty: number;
+    /**
+     * @generated from field: double limit_price = 3;
+     */
+    limitPrice: number;
+    /**
+     * @generated from field: double stop_price = 4;
+     */
+    stopPrice: number;
+    /**
+     * @generated from field: string time_in_force = 5;
+     */
+    timeInForce: string;
+    /**
+     * @generated from field: string user_id = 6;
+     */
+    userId: string;
+};
+/**
+ * Describes the message xstockstrat.trading.v1.ReplaceOrderRequest.
+ * Use `create(ReplaceOrderRequestSchema)` to create a new message.
+ */
+export declare const ReplaceOrderRequestSchema: GenMessage<ReplaceOrderRequest>;
 /**
  * BrokerAccount is a registered broker account (credentials never returned).
  *
@@ -671,6 +726,19 @@ export declare const TradingService: GenService<{
     streamOrderUpdates: {
         methodKind: "server_streaming";
         input: typeof StreamOrderUpdatesRequestSchema;
+        output: typeof OrderSchema;
+    };
+    /**
+     * ReplaceOrder modifies a working order's qty/price/TIF. It is broker-agnostic at
+     * this surface and routes by the persisted order's broker_type
+     * (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
+     * while the order is NEW or PARTIALLY_FILLED.
+     *
+     * @generated from rpc xstockstrat.trading.v1.TradingService.ReplaceOrder
+     */
+    replaceOrder: {
+        methodKind: "unary";
+        input: typeof ReplaceOrderRequestSchema;
         output: typeof OrderSchema;
     };
     /**

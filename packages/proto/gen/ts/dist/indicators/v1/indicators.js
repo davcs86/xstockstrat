@@ -739,6 +739,7 @@ function createBaseExecuteFormulaRequest() {
         timeoutMsOverride: 0,
         memoryBytesOverride: 0,
         inputParams: undefined,
+        parameters: [],
     };
 }
 exports.ExecuteFormulaRequest = {
@@ -763,6 +764,9 @@ exports.ExecuteFormulaRequest = {
         }
         if (message.inputParams !== undefined) {
             struct_1.Struct.encode(struct_1.Struct.wrap(message.inputParams), writer.uint32(58).fork()).join();
+        }
+        for (const v of message.parameters) {
+            exports.FormulaParameter.encode(v, writer.uint32(66).fork()).join();
         }
         return writer;
     },
@@ -825,6 +829,13 @@ exports.ExecuteFormulaRequest = {
                     message.inputParams = struct_1.Struct.unwrap(struct_1.Struct.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.parameters.push(exports.FormulaParameter.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -871,6 +882,9 @@ exports.ExecuteFormulaRequest = {
                 : isObject(object.input_params)
                     ? object.input_params
                     : undefined,
+            parameters: globalThis.Array.isArray(object?.parameters)
+                ? object.parameters.map((e) => exports.FormulaParameter.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -902,6 +916,9 @@ exports.ExecuteFormulaRequest = {
         if (message.inputParams !== undefined) {
             obj.inputParams = message.inputParams;
         }
+        if (message.parameters?.length) {
+            obj.parameters = message.parameters.map((e) => exports.FormulaParameter.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -921,6 +938,7 @@ exports.ExecuteFormulaRequest = {
         message.timeoutMsOverride = object.timeoutMsOverride ?? 0;
         message.memoryBytesOverride = object.memoryBytesOverride ?? 0;
         message.inputParams = object.inputParams ?? undefined;
+        message.parameters = object.parameters?.map((e) => exports.FormulaParameter.fromPartial(e)) || [];
         return message;
     },
 };

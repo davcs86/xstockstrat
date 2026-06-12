@@ -45,6 +45,15 @@ message Position {
   string account_id = 11;
 }
 
+// PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
+// Used only as an additive filter on ListPositionsRequest; the Position message itself
+// continues to carry signed qty.
+enum PositionSide {
+  POSITION_SIDE_UNSPECIFIED = 0; // no side filter — return both long and short
+  POSITION_SIDE_LONG = 1;        // qty > 0
+  POSITION_SIDE_SHORT = 2;       // qty < 0
+}
+
 message PortfolioSnapshot {
   string portfolio_id = 1;
   google.protobuf.Timestamp snapshot_time = 2;
@@ -82,6 +91,9 @@ message ListPositionsRequest {
   // Filter by trading mode; UNSPECIFIED returns all positions.
   xstockstrat.common.v1.TradingMode trading_mode = 3;
   optional string account_id = 4;
+  // Additive filters (feature 056). Empty symbol / UNSPECIFIED side = no narrowing.
+  string symbol = 5;       // exact-match symbol filter; "" = all symbols
+  PositionSide side = 6;   // long/short filter derived from qty sign
 }
 message ListPositionsResponse {
   repeated Position positions = 1;

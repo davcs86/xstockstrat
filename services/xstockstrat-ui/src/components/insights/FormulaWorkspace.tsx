@@ -120,9 +120,9 @@ export function FormulaWorkspace({
     }
     // Build typed parameter VALUES from the generated form; omitted/blank values
     // are left out so the engine applies the declared defaults.
+    const named = parameters.filter((p) => p.name.trim());
     const inputParams: Record<string, unknown> = {};
-    for (const p of parameters) {
-      if (!p.name) continue;
+    for (const p of named) {
       const raw = paramValues[p.name] ?? p.default;
       if (raw === '') continue;
       if (p.type === ParameterType.BOOL) inputParams[p.name] = raw === 'true';
@@ -132,11 +132,23 @@ export function FormulaWorkspace({
         if (Number.isFinite(n)) inputParams[p.name] = n;
       }
     }
-    executeMut.mutate({ formulaSource: source, inputData: parsed, inputParams });
+    // Inline runs have no stored definition, so the engine validates the supplied
+    // values against the in-editor parameter DEFINITIONS passed alongside them.
+    executeMut.mutate({
+      formulaSource: source,
+      inputData: parsed,
+      inputParams,
+      parameters: named.map(toParameterInit),
+    });
   }
 
   function loadTemplate(t: FormulaTemplate) {
     setSource(t.source);
+    // Fill the Parameters and Outputs cells from the template's typed declarations.
+    setParameters(t.parameters.map((p) => ({ ...p })));
+    setOutputs(t.outputs.map((o) => ({ ...o })));
+    // Clear any prior run-cell overrides so each param seeds from its declared default.
+    setParamValues({});
     setJsonInput(JSON.stringify(t.sampleInput, null, 2));
     setJsonError(null);
     executeMut.reset();

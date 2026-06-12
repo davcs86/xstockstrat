@@ -52,7 +52,12 @@ async def serve():
         _ssl_ctx = _ssl.create_default_context()
         _ssl_ctx.check_hostname = False
         _ssl_ctx.verify_mode = _ssl.CERT_NONE
-    db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10, ssl=_ssl_ctx)
+    db_pool = await asyncpg.create_pool(
+        DATABASE_URL,
+        min_size=1,
+        max_size=int(os.environ.get("DB_POOL_MAX", "2")),
+        ssl=_ssl_ctx,
+    )
     log.info("database pool established")
 
     # FR-3: reconcile backfill jobs left RUNNING/QUEUED by a previous process. Enum ints are

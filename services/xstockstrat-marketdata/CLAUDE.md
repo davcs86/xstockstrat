@@ -54,6 +54,7 @@ Namespace: `marketdata`
 | `marketdata.stream.warm_interval_ms` | int | `30000` | Interval for the warm-quote poller that refreshes the latest quote of every queried symbol into the DB cache. Read live each cycle; `0`/negative pauses it. |
 | `marketdata.backfill.batch_size` | int | `1000` | Bars per Alpaca API request |
 | `marketdata.backfill.rate_limit_rps` | int | `200` | Alpaca API rate limit |
+| `marketdata.backfill.max_delete_days` | int | `0` | Max date-range span (days) a single scoped backfill delete may cover; `0` = no window cap. A whole-symbol delete (no range) is exempt and double-confirmed in the UI (feature 057, FR-5). |
 | `marketdata.retention.quotes_days` | int | `90` | Quote data retention |
 | `marketdata.retention.ohlcv_years` | int | `5` | OHLCV data retention |
 | `platform.ledger_endpoint` | string | — | xstockstrat-ledger address |

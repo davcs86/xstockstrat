@@ -164,12 +164,32 @@ export type ListBackfillJobsRequest = Message<"xstockstrat.ingest.v1.ListBackfil
      * @generated from field: xstockstrat.common.v1.PageRequest page = 2;
      */
     page?: PageRequest | undefined;
+    /**
+     * optional ticker filter (FR-3); empty = no narrowing
+     *
+     * @generated from field: string symbol = 3;
+     */
+    symbol: string;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.ListBackfillJobsRequest.
  * Use `create(ListBackfillJobsRequestSchema)` to create a new message.
  */
 export declare const ListBackfillJobsRequestSchema: GenMessage<ListBackfillJobsRequest>;
+/**
+ * @generated from message xstockstrat.ingest.v1.CancelBackfillRequest
+ */
+export type CancelBackfillRequest = Message<"xstockstrat.ingest.v1.CancelBackfillRequest"> & {
+    /**
+     * @generated from field: string job_id = 1;
+     */
+    jobId: string;
+};
+/**
+ * Describes the message xstockstrat.ingest.v1.CancelBackfillRequest.
+ * Use `create(CancelBackfillRequestSchema)` to create a new message.
+ */
+export declare const CancelBackfillRequestSchema: GenMessage<CancelBackfillRequest>;
 /**
  * @generated from message xstockstrat.ingest.v1.ListBackfillJobsResponse
  */
@@ -507,7 +527,13 @@ export declare enum BackfillStatus {
     /**
      * @generated from enum value: BACKFILL_STATUS_PARTIAL = 5;
      */
-    PARTIAL = 5
+    PARTIAL = 5,
+    /**
+     * operator-canceled (FR-4); completed-chunk bars retained
+     *
+     * @generated from enum value: BACKFILL_STATUS_CANCELED = 6;
+     */
+    CANCELED = 6
 }
 /**
  * Describes the enum xstockstrat.ingest.v1.BackfillStatus.
@@ -569,6 +595,16 @@ export declare const IngestService: GenService<{
         methodKind: "unary";
         input: typeof ListBackfillJobsRequestSchema;
         output: typeof ListBackfillJobsResponseSchema;
+    };
+    /**
+     * Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4).
+     *
+     * @generated from rpc xstockstrat.ingest.v1.IngestService.CancelBackfill
+     */
+    cancelBackfill: {
+        methodKind: "unary";
+        input: typeof CancelBackfillRequestSchema;
+        output: typeof BackfillJobSchema;
     };
     /**
      * @generated from rpc xstockstrat.ingest.v1.IngestService.NormalizeRawData

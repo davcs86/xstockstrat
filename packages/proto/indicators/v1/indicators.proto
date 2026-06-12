@@ -68,6 +68,10 @@ message ExecuteFormulaRequest {
   int32 timeout_ms_override = 5;   // 0 = use config value
   int64 memory_bytes_override = 6; // 0 = use config value
   google.protobuf.Struct input_params = 7; // parameter VALUES, separate from input_data
+  // Declared parameter DEFINITIONS used to validate input_params and apply defaults
+  // for inline formula_source runs (authoring "Run" with an unsaved buffer). Ignored
+  // when formula_id is set — saved formulas use their stored definitions instead.
+  repeated FormulaParameter parameters = 8;
 }
 
 message ExecuteFormulaResponse {

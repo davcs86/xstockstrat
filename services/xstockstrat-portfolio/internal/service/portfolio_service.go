@@ -198,18 +198,37 @@ func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*por
 			slog.Warn("latest quote has no usable price", "symbol", p.Symbol, "ask", quote.AskPrice, "bid", quote.BidPrice)
 			continue
 		}
-		p.CurrentPrice = price
-		p.MarketValue = price * p.Qty
-		p.UnrealizedPnl = p.MarketValue - p.CostBasis
-		if p.CostBasis > 0 {
-			p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
-		}
+		enrichPosition(p, quote.AskPrice, quote.BidPrice)
+	}
+}
+
+// enrichPosition fills current price / market value / unrealized P&L on p from a quote's
+// ask/bid, using the mid price (Ask+Bid)/2. UnrealizedPnlPct is guarded against zero cost basis.
+func enrichPosition(p *portfoliov1.Position, askPrice, bidPrice float64) {
+	price := (askPrice + bidPrice) / 2
+	p.CurrentPrice = price
+	p.MarketValue = price * p.Qty
+	p.UnrealizedPnl = p.MarketValue - p.CostBasis
+	if p.CostBasis > 0 {
+		p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
+	}
+}
+
+// sideOf derives a PositionSide from a signed quantity (qty > 0 long, qty < 0 short).
+func sideOf(qty float64) portfoliov1.PositionSide {
+	switch {
+	case qty > 0:
+		return portfoliov1.PositionSide_POSITION_SIDE_LONG
+	case qty < 0:
+		return portfoliov1.PositionSide_POSITION_SIDE_SHORT
+	default:
+		return portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED
 	}
 }
 
 // GetPortfolio aggregates all open positions with live prices.
 func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.GetPortfolioRequest) (*portfoliov1.Portfolio, error) {
-	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", req.GetAccountId())
+	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", req.GetAccountId(), "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
@@ -249,9 +268,17 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 		}
 		pageToken = req.Page.PageToken
 	}
-	positions, nextToken, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, pageSize, pageToken, "")
+	positions, nextToken, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, pageSize, pageToken, req.GetAccountId(), req.Symbol, req.Side)
 	if err != nil {
 		return nil, err
+	}
+	// Enrich each position with live price / market value / unrealized P&L (repo ListPositions
+	// returns these unset; the UI winners/losers P&L filter and detail view need them).
+	for _, p := range positions {
+		quote, qErr := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
+		if qErr == nil {
+			enrichPosition(p, quote.AskPrice, quote.BidPrice)
+		}
 	}
 	return &portfoliov1.ListPositionsResponse{
 		Positions: positions,
@@ -261,7 +288,7 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 
 // GetPnL computes realized + unrealized P&L for a user over a time range.
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
-	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", "")
+	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
@@ -461,7 +488,7 @@ func (s *PortfolioService) StartSnapshotWriter(ctx context.Context, userID strin
 }
 
 func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string, mode commonv1.TradingMode) {
-	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "")
+	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
 		return
 	}
@@ -499,7 +526,7 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	maxDrawdownPct := s.cfg.GetFloat("portfolio.risk.max_drawdown_pct", 0.10)
 	concentrationLimitPct := s.cfg.GetFloat("portfolio.risk.concentration_limit_pct", 0.20)
 
-	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "")
+	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
 		return
 	}

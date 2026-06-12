@@ -402,6 +402,48 @@ export type ListAssetsResponse = Message<"xstockstrat.marketdata.v1.ListAssetsRe
  */
 export declare const ListAssetsResponseSchema: GenMessage<ListAssetsResponse>;
 /**
+ * @generated from message xstockstrat.marketdata.v1.DeleteBackfilledDataRequest
+ */
+export type DeleteBackfilledDataRequest = Message<"xstockstrat.marketdata.v1.DeleteBackfilledDataRequest"> & {
+    /**
+     * REQUIRED — server rejects empty (FR-5)
+     *
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * optional; empty = whole symbol
+     *
+     * @generated from field: xstockstrat.common.v1.TimeRange range = 2;
+     */
+    range?: TimeRange | undefined;
+    /**
+     * optional; UNSPECIFIED = all timeframes
+     *
+     * @generated from field: xstockstrat.common.v1.Timeframe timeframe = 3;
+     */
+    timeframe: Timeframe;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.DeleteBackfilledDataRequest.
+ * Use `create(DeleteBackfilledDataRequestSchema)` to create a new message.
+ */
+export declare const DeleteBackfilledDataRequestSchema: GenMessage<DeleteBackfilledDataRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.DeleteBackfilledDataResponse
+ */
+export type DeleteBackfilledDataResponse = Message<"xstockstrat.marketdata.v1.DeleteBackfilledDataResponse"> & {
+    /**
+     * @generated from field: int64 rows_deleted = 1;
+     */
+    rowsDeleted: bigint;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.DeleteBackfilledDataResponse.
+ * Use `create(DeleteBackfilledDataResponseSchema)` to create a new message.
+ */
+export declare const DeleteBackfilledDataResponseSchema: GenMessage<DeleteBackfilledDataResponse>;
+/**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
  *
@@ -467,6 +509,16 @@ export declare const MarketDataService: GenService<{
         methodKind: "unary";
         input: typeof GetDataCoverageRequestSchema;
         output: typeof GetDataCoverageResponseSchema;
+    };
+    /**
+     * Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5)
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.DeleteBackfilledData
+     */
+    deleteBackfilledData: {
+        methodKind: "unary";
+        input: typeof DeleteBackfilledDataRequestSchema;
+        output: typeof DeleteBackfilledDataResponseSchema;
     };
     /**
      * Get available symbols
