@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BackfillBarsRequest, BackfillBarsResponse, Bar, GetBarsRequest, GetBarsResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetLatestQuoteRequest, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
+import { BackfillBarsRequest, BackfillBarsResponse, Bar, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetLatestQuoteRequest, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -79,6 +79,17 @@ export const MarketDataService = {
       name: "GetDataCoverage",
       I: GetDataCoverageRequest,
       O: GetDataCoverageResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5)
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.DeleteBackfilledData
+     */
+    deleteBackfilledData: {
+      name: "DeleteBackfilledData",
+      I: DeleteBackfilledDataRequest,
+      O: DeleteBackfilledDataResponse,
       kind: MethodKind.Unary,
     },
     /**

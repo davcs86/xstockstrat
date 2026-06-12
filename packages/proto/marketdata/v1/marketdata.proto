@@ -28,6 +28,9 @@ service MarketDataService {
   // Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
   rpc GetDataCoverage(GetDataCoverageRequest) returns (GetDataCoverageResponse);
 
+  // Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5)
+  rpc DeleteBackfilledData(DeleteBackfilledDataRequest) returns (DeleteBackfilledDataResponse);
+
   // Get available symbols
   rpc ListAssets(ListAssetsRequest) returns (ListAssetsResponse);
 }
@@ -136,4 +139,14 @@ message ListAssetsRequest {
 
 message ListAssetsResponse {
   repeated xstockstrat.common.v1.Asset assets = 1;
+}
+
+message DeleteBackfilledDataRequest {
+  string symbol = 1;                              // REQUIRED — server rejects empty (FR-5)
+  xstockstrat.common.v1.TimeRange range = 2;      // optional; empty = whole symbol
+  xstockstrat.common.v1.Timeframe timeframe = 3;  // optional; UNSPECIFIED = all timeframes
+}
+
+message DeleteBackfilledDataResponse {
+  int64 rows_deleted = 1;
 }

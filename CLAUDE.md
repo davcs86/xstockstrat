@@ -150,6 +150,12 @@ Recently added keys (feature 049 Part B — MCP OAuth 2.1 edge auth, owned by `x
 | `agent.oauth.registration_enabled` | bool | `true` | Allow RFC 7591 Dynamic Client Registration at `/oauth/register` |
 | `agent.oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only (no allow-any) |
 
+Recently added keys (feature 057 — backfill management UI, owned by `xstockstrat-marketdata`):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `marketdata.backfill.max_delete_days` | int | `0` | Max date-range span (days) a single scoped `DeleteBackfilledData` may cover; `0` = no window cap (current behavior). Whole-symbol deletes (no range) are exempt and double-confirmed in the UI (FR-5). |
+
 ---
 
 ## Environment Variable Naming Convention

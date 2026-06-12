@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file ingest/v1/ingest.proto.
  */
 export const file_ingest_v1_ingest: GenFile = /*@__PURE__*/
-  fileDesc("ChZpbmdlc3QvdjEvaW5nZXN0LnByb3RvEhV4c3RvY2tzdHJhdC5pbmdlc3QudjEizAMKC0JhY2tmaWxsSm9iEg4KBmpvYl9pZBgBIAEoCRIPCgdzeW1ib2xzGAIgAygJEhUKCXRpbWVmcmFtZRgDIAEoCUICGAESLwoFcmFuZ2UYBCABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlEjUKBnN0YXR1cxgFIAEoDjIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5CYWNrZmlsbFN0YXR1cxIWCg5iYXJzX3Byb2Nlc3NlZBgGIAEoAxISCgpiYXJzX3RvdGFsGAcgASgDEi4KCnN0YXJ0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGNvbXBsZXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFZXJyb3IYCiABKAkSFgoOZmFpbGVkX3N5bWJvbHMYCyADKAkSOAoOdGltZWZyYW1lX2VudW0YDCABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEhQKDGNodW5rc190b3RhbBgNIAEoBRIYChBjaHVua3NfY29tcGxldGVkGA4gASgFIvIBChZUcmlnZ2VyQmFja2ZpbGxSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USEQoJb3ZlcndyaXRlGAQgASgIEjgKDnRpbWVmcmFtZV9lbnVtGAUgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZRIyCglmaWxsX21vZGUYBiABKA4yHy54c3RvY2tzdHJhdC5pbmdlc3QudjEuRmlsbE1vZGUiYAoXVHJpZ2dlckJhY2tmaWxsUmVzcG9uc2USDgoGam9iX2lkGAEgASgJEjUKBnN0YXR1cxgCIAEoDjIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5CYWNrZmlsbFN0YXR1cyIqChhHZXRCYWNrZmlsbFN0YXR1c1JlcXVlc3QSDgoGam9iX2lkGAEgASgJIokBChdMaXN0QmFja2ZpbGxKb2JzUmVxdWVzdBI8Cg1zdGF0dXNfZmlsdGVyGAEgASgOMiUueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkJhY2tmaWxsU3RhdHVzEjAKBHBhZ2UYAiABKAsyIi54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlcXVlc3QifwoYTGlzdEJhY2tmaWxsSm9ic1Jlc3BvbnNlEjAKBGpvYnMYASADKAsyIi54c3RvY2tzdHJhdC5pbmdlc3QudjEuQmFja2ZpbGxKb2ISMQoEcGFnZRgCIAEoCzIjLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiSwoXTm9ybWFsaXplUmF3RGF0YVJlcXVlc3QSDgoGc291cmNlGAEgASgJEhAKCHJhd19kYXRhGAIgASgMEg4KBmZvcm1hdBgDIAEoCSJDChhOb3JtYWxpemVSYXdEYXRhUmVzcG9uc2USFwoPcm93c19ub3JtYWxpemVkGAEgASgDEg4KBmVycm9ycxgCIAMoCSLpAQoORXh0ZXJuYWxTaWduYWwSDgoGc291cmNlGAEgASgJEg4KBnN5bWJvbBgCIAEoCRIRCglkaXJlY3Rpb24YAyABKAkSEgoKY29udmljdGlvbhgEIAEoARIuCgp2YWxpZF9mcm9tGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgt2YWxpZF91bnRpbBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEAoIaGVhZGxpbmUYByABKAkSDwoHcmF3X3VybBgIIAEoCRIMCgR0YWdzGAkgAygJIkwKE0luZ2VzdFNpZ25hbFJlcXVlc3QSNQoGc2lnbmFsGAEgASgLMiUueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkV4dGVybmFsU2lnbmFsIikKFEluZ2VzdFNpZ25hbFJlc3BvbnNlEhEKCXNpZ25hbF9pZBgBIAEoAyKzAQoTUXVlcnlTaWduYWxzUmVxdWVzdBIOCgZzb3VyY2UYASABKAkSDgoGc3ltYm9sGAIgASgJEhEKCWRpcmVjdGlvbhgDIAEoCRI3Cg1hY3RpdmVfd2luZG93GAQgASgLMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVSYW5nZRIwCgRwYWdlGAUgASgLMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0IoEBChRRdWVyeVNpZ25hbHNSZXNwb25zZRI2CgdzaWduYWxzGAEgAygLMiUueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkV4dGVybmFsU2lnbmFsEjEKBHBhZ2UYAiABKAsyIy54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlc3BvbnNlIrgBCgxTaWduYWxTb3VyY2USDAoEc2x1ZxgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLc291cmNlX3R5cGUYAyABKAkSGAoQZXh0cmFjdG9yX21vZHVsZRgEIAEoCRIOCgZhY3RpdmUYBSABKAgSFwoPaGFzX2NyZWRlbnRpYWxzGAYgASgIEiwKC2NvbmZpZ19qc29uGAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCI0ChhMaXN0U2lnbmFsU291cmNlc1JlcXVlc3QSGAoQaW5jbHVkZV9pbmFjdGl2ZRgBIAEoCCJRChlMaXN0U2lnbmFsU291cmNlc1Jlc3BvbnNlEjQKB3NvdXJjZXMYASADKAsyIy54c3RvY2tzdHJhdC5pbmdlc3QudjEuU2lnbmFsU291cmNlInwKGU1hbmFnZVNpZ25hbFNvdXJjZVJlcXVlc3QSMwoGc291cmNlGAEgASgLMiMueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlNpZ25hbFNvdXJjZRIXCg9jcmVkZW50aWFsc19yZWYYAiABKAkSEQoJb3BlcmF0aW9uGAMgASgJIlEKGk1hbmFnZVNpZ25hbFNvdXJjZVJlc3BvbnNlEjMKBnNvdXJjZRgBIAEoCzIjLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5TaWduYWxTb3VyY2UqwgEKDkJhY2tmaWxsU3RhdHVzEh8KG0JBQ0tGSUxMX1NUQVRVU19VTlNQRUNJRklFRBAAEhoKFkJBQ0tGSUxMX1NUQVRVU19RVUVVRUQQARIbChdCQUNLRklMTF9TVEFUVVNfUlVOTklORxACEh0KGUJBQ0tGSUxMX1NUQVRVU19DT01QTEVURUQQAxIaChZCQUNLRklMTF9TVEFUVVNfRkFJTEVEEAQSGwoXQkFDS0ZJTExfU1RBVFVTX1BBUlRJQUwQBSpSCghGaWxsTW9kZRIZChVGSUxMX01PREVfVU5TUEVDSUZJRUQQABISCg5GSUxMX01PREVfRlVMTBABEhcKE0ZJTExfTU9ERV9HQVBTX09OTFkQAjKaBwoNSW5nZXN0U2VydmljZRJwCg9UcmlnZ2VyQmFja2ZpbGwSLS54c3RvY2tzdHJhdC5pbmdlc3QudjEuVHJpZ2dlckJhY2tmaWxsUmVxdWVzdBouLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5UcmlnZ2VyQmFja2ZpbGxSZXNwb25zZRJoChFHZXRCYWNrZmlsbFN0YXR1cxIvLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5HZXRCYWNrZmlsbFN0YXR1c1JlcXVlc3QaIi54c3RvY2tzdHJhdC5pbmdlc3QudjEuQmFja2ZpbGxKb2IScwoQTGlzdEJhY2tmaWxsSm9icxIuLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5MaXN0QmFja2ZpbGxKb2JzUmVxdWVzdBovLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5MaXN0QmFja2ZpbGxKb2JzUmVzcG9uc2UScwoQTm9ybWFsaXplUmF3RGF0YRIuLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5Ob3JtYWxpemVSYXdEYXRhUmVxdWVzdBovLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5Ob3JtYWxpemVSYXdEYXRhUmVzcG9uc2USZwoMSW5nZXN0U2lnbmFsEioueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkluZ2VzdFNpZ25hbFJlcXVlc3QaKy54c3RvY2tzdHJhdC5pbmdlc3QudjEuSW5nZXN0U2lnbmFsUmVzcG9uc2USZwoMUXVlcnlTaWduYWxzEioueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlF1ZXJ5U2lnbmFsc1JlcXVlc3QaKy54c3RvY2tzdHJhdC5pbmdlc3QudjEuUXVlcnlTaWduYWxzUmVzcG9uc2USdgoRTGlzdFNpZ25hbFNvdXJjZXMSLy54c3RvY2tzdHJhdC5pbmdlc3QudjEuTGlzdFNpZ25hbFNvdXJjZXNSZXF1ZXN0GjAueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkxpc3RTaWduYWxTb3VyY2VzUmVzcG9uc2USeQoSTWFuYWdlU2lnbmFsU291cmNlEjAueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLk1hbmFnZVNpZ25hbFNvdXJjZVJlcXVlc3QaMS54c3RvY2tzdHJhdC5pbmdlc3QudjEuTWFuYWdlU2lnbmFsU291cmNlUmVzcG9uc2VCPFo6Z2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL2luZ2VzdC92MTtpbmdlc3R2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_common_v1_common, file_google_protobuf_struct]);
+  fileDesc("ChZpbmdlc3QvdjEvaW5nZXN0LnByb3RvEhV4c3RvY2tzdHJhdC5pbmdlc3QudjEizAMKC0JhY2tmaWxsSm9iEg4KBmpvYl9pZBgBIAEoCRIPCgdzeW1ib2xzGAIgAygJEhUKCXRpbWVmcmFtZRgDIAEoCUICGAESLwoFcmFuZ2UYBCABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlEjUKBnN0YXR1cxgFIAEoDjIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5CYWNrZmlsbFN0YXR1cxIWCg5iYXJzX3Byb2Nlc3NlZBgGIAEoAxISCgpiYXJzX3RvdGFsGAcgASgDEi4KCnN0YXJ0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGNvbXBsZXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFZXJyb3IYCiABKAkSFgoOZmFpbGVkX3N5bWJvbHMYCyADKAkSOAoOdGltZWZyYW1lX2VudW0YDCABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEhQKDGNodW5rc190b3RhbBgNIAEoBRIYChBjaHVua3NfY29tcGxldGVkGA4gASgFIvIBChZUcmlnZ2VyQmFja2ZpbGxSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USEQoJb3ZlcndyaXRlGAQgASgIEjgKDnRpbWVmcmFtZV9lbnVtGAUgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZRIyCglmaWxsX21vZGUYBiABKA4yHy54c3RvY2tzdHJhdC5pbmdlc3QudjEuRmlsbE1vZGUiYAoXVHJpZ2dlckJhY2tmaWxsUmVzcG9uc2USDgoGam9iX2lkGAEgASgJEjUKBnN0YXR1cxgCIAEoDjIlLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5CYWNrZmlsbFN0YXR1cyIqChhHZXRCYWNrZmlsbFN0YXR1c1JlcXVlc3QSDgoGam9iX2lkGAEgASgJIpkBChdMaXN0QmFja2ZpbGxKb2JzUmVxdWVzdBI8Cg1zdGF0dXNfZmlsdGVyGAEgASgOMiUueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkJhY2tmaWxsU3RhdHVzEjAKBHBhZ2UYAiABKAsyIi54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGc3ltYm9sGAMgASgJIicKFUNhbmNlbEJhY2tmaWxsUmVxdWVzdBIOCgZqb2JfaWQYASABKAkifwoYTGlzdEJhY2tmaWxsSm9ic1Jlc3BvbnNlEjAKBGpvYnMYASADKAsyIi54c3RvY2tzdHJhdC5pbmdlc3QudjEuQmFja2ZpbGxKb2ISMQoEcGFnZRgCIAEoCzIjLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiSwoXTm9ybWFsaXplUmF3RGF0YVJlcXVlc3QSDgoGc291cmNlGAEgASgJEhAKCHJhd19kYXRhGAIgASgMEg4KBmZvcm1hdBgDIAEoCSJDChhOb3JtYWxpemVSYXdEYXRhUmVzcG9uc2USFwoPcm93c19ub3JtYWxpemVkGAEgASgDEg4KBmVycm9ycxgCIAMoCSLpAQoORXh0ZXJuYWxTaWduYWwSDgoGc291cmNlGAEgASgJEg4KBnN5bWJvbBgCIAEoCRIRCglkaXJlY3Rpb24YAyABKAkSEgoKY29udmljdGlvbhgEIAEoARIuCgp2YWxpZF9mcm9tGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgt2YWxpZF91bnRpbBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEAoIaGVhZGxpbmUYByABKAkSDwoHcmF3X3VybBgIIAEoCRIMCgR0YWdzGAkgAygJIkwKE0luZ2VzdFNpZ25hbFJlcXVlc3QSNQoGc2lnbmFsGAEgASgLMiUueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkV4dGVybmFsU2lnbmFsIikKFEluZ2VzdFNpZ25hbFJlc3BvbnNlEhEKCXNpZ25hbF9pZBgBIAEoAyKzAQoTUXVlcnlTaWduYWxzUmVxdWVzdBIOCgZzb3VyY2UYASABKAkSDgoGc3ltYm9sGAIgASgJEhEKCWRpcmVjdGlvbhgDIAEoCRI3Cg1hY3RpdmVfd2luZG93GAQgASgLMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVSYW5nZRIwCgRwYWdlGAUgASgLMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0IoEBChRRdWVyeVNpZ25hbHNSZXNwb25zZRI2CgdzaWduYWxzGAEgAygLMiUueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkV4dGVybmFsU2lnbmFsEjEKBHBhZ2UYAiABKAsyIy54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlc3BvbnNlIrgBCgxTaWduYWxTb3VyY2USDAoEc2x1ZxgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLc291cmNlX3R5cGUYAyABKAkSGAoQZXh0cmFjdG9yX21vZHVsZRgEIAEoCRIOCgZhY3RpdmUYBSABKAgSFwoPaGFzX2NyZWRlbnRpYWxzGAYgASgIEiwKC2NvbmZpZ19qc29uGAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCI0ChhMaXN0U2lnbmFsU291cmNlc1JlcXVlc3QSGAoQaW5jbHVkZV9pbmFjdGl2ZRgBIAEoCCJRChlMaXN0U2lnbmFsU291cmNlc1Jlc3BvbnNlEjQKB3NvdXJjZXMYASADKAsyIy54c3RvY2tzdHJhdC5pbmdlc3QudjEuU2lnbmFsU291cmNlInwKGU1hbmFnZVNpZ25hbFNvdXJjZVJlcXVlc3QSMwoGc291cmNlGAEgASgLMiMueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlNpZ25hbFNvdXJjZRIXCg9jcmVkZW50aWFsc19yZWYYAiABKAkSEQoJb3BlcmF0aW9uGAMgASgJIlEKGk1hbmFnZVNpZ25hbFNvdXJjZVJlc3BvbnNlEjMKBnNvdXJjZRgBIAEoCzIjLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5TaWduYWxTb3VyY2Uq4AEKDkJhY2tmaWxsU3RhdHVzEh8KG0JBQ0tGSUxMX1NUQVRVU19VTlNQRUNJRklFRBAAEhoKFkJBQ0tGSUxMX1NUQVRVU19RVUVVRUQQARIbChdCQUNLRklMTF9TVEFUVVNfUlVOTklORxACEh0KGUJBQ0tGSUxMX1NUQVRVU19DT01QTEVURUQQAxIaChZCQUNLRklMTF9TVEFUVVNfRkFJTEVEEAQSGwoXQkFDS0ZJTExfU1RBVFVTX1BBUlRJQUwQBRIcChhCQUNLRklMTF9TVEFUVVNfQ0FOQ0VMRUQQBipSCghGaWxsTW9kZRIZChVGSUxMX01PREVfVU5TUEVDSUZJRUQQABISCg5GSUxMX01PREVfRlVMTBABEhcKE0ZJTExfTU9ERV9HQVBTX09OTFkQAjL+BwoNSW5nZXN0U2VydmljZRJwCg9UcmlnZ2VyQmFja2ZpbGwSLS54c3RvY2tzdHJhdC5pbmdlc3QudjEuVHJpZ2dlckJhY2tmaWxsUmVxdWVzdBouLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5UcmlnZ2VyQmFja2ZpbGxSZXNwb25zZRJoChFHZXRCYWNrZmlsbFN0YXR1cxIvLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5HZXRCYWNrZmlsbFN0YXR1c1JlcXVlc3QaIi54c3RvY2tzdHJhdC5pbmdlc3QudjEuQmFja2ZpbGxKb2IScwoQTGlzdEJhY2tmaWxsSm9icxIuLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5MaXN0QmFja2ZpbGxKb2JzUmVxdWVzdBovLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5MaXN0QmFja2ZpbGxKb2JzUmVzcG9uc2USYgoOQ2FuY2VsQmFja2ZpbGwSLC54c3RvY2tzdHJhdC5pbmdlc3QudjEuQ2FuY2VsQmFja2ZpbGxSZXF1ZXN0GiIueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkJhY2tmaWxsSm9iEnMKEE5vcm1hbGl6ZVJhd0RhdGESLi54c3RvY2tzdHJhdC5pbmdlc3QudjEuTm9ybWFsaXplUmF3RGF0YVJlcXVlc3QaLy54c3RvY2tzdHJhdC5pbmdlc3QudjEuTm9ybWFsaXplUmF3RGF0YVJlc3BvbnNlEmcKDEluZ2VzdFNpZ25hbBIqLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5Jbmdlc3RTaWduYWxSZXF1ZXN0GisueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkluZ2VzdFNpZ25hbFJlc3BvbnNlEmcKDFF1ZXJ5U2lnbmFscxIqLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5RdWVyeVNpZ25hbHNSZXF1ZXN0GisueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLlF1ZXJ5U2lnbmFsc1Jlc3BvbnNlEnYKEUxpc3RTaWduYWxTb3VyY2VzEi8ueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLkxpc3RTaWduYWxTb3VyY2VzUmVxdWVzdBowLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5MaXN0U2lnbmFsU291cmNlc1Jlc3BvbnNlEnkKEk1hbmFnZVNpZ25hbFNvdXJjZRIwLnhzdG9ja3N0cmF0LmluZ2VzdC52MS5NYW5hZ2VTaWduYWxTb3VyY2VSZXF1ZXN0GjEueHN0b2Nrc3RyYXQuaW5nZXN0LnYxLk1hbmFnZVNpZ25hbFNvdXJjZVJlc3BvbnNlQjxaOmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9pbmdlc3QvdjE7aW5nZXN0djFiBnByb3RvMw", [file_google_protobuf_timestamp, file_common_v1_common, file_google_protobuf_struct]);
 
 /**
  * @generated from message xstockstrat.ingest.v1.BackfillJob
@@ -206,6 +206,13 @@ export type ListBackfillJobsRequest = Message<"xstockstrat.ingest.v1.ListBackfil
    * @generated from field: xstockstrat.common.v1.PageRequest page = 2;
    */
   page?: PageRequest | undefined;
+
+  /**
+   * optional ticker filter (FR-3); empty = no narrowing
+   *
+   * @generated from field: string symbol = 3;
+   */
+  symbol: string;
 };
 
 /**
@@ -214,6 +221,23 @@ export type ListBackfillJobsRequest = Message<"xstockstrat.ingest.v1.ListBackfil
  */
 export const ListBackfillJobsRequestSchema: GenMessage<ListBackfillJobsRequest> = /*@__PURE__*/
   messageDesc(file_ingest_v1_ingest, 4);
+
+/**
+ * @generated from message xstockstrat.ingest.v1.CancelBackfillRequest
+ */
+export type CancelBackfillRequest = Message<"xstockstrat.ingest.v1.CancelBackfillRequest"> & {
+  /**
+   * @generated from field: string job_id = 1;
+   */
+  jobId: string;
+};
+
+/**
+ * Describes the message xstockstrat.ingest.v1.CancelBackfillRequest.
+ * Use `create(CancelBackfillRequestSchema)` to create a new message.
+ */
+export const CancelBackfillRequestSchema: GenMessage<CancelBackfillRequest> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 5);
 
 /**
  * @generated from message xstockstrat.ingest.v1.ListBackfillJobsResponse
@@ -235,7 +259,7 @@ export type ListBackfillJobsResponse = Message<"xstockstrat.ingest.v1.ListBackfi
  * Use `create(ListBackfillJobsResponseSchema)` to create a new message.
  */
 export const ListBackfillJobsResponseSchema: GenMessage<ListBackfillJobsResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 5);
+  messageDesc(file_ingest_v1_ingest, 6);
 
 /**
  * @generated from message xstockstrat.ingest.v1.NormalizeRawDataRequest
@@ -264,7 +288,7 @@ export type NormalizeRawDataRequest = Message<"xstockstrat.ingest.v1.NormalizeRa
  * Use `create(NormalizeRawDataRequestSchema)` to create a new message.
  */
 export const NormalizeRawDataRequestSchema: GenMessage<NormalizeRawDataRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 6);
+  messageDesc(file_ingest_v1_ingest, 7);
 
 /**
  * @generated from message xstockstrat.ingest.v1.NormalizeRawDataResponse
@@ -286,7 +310,7 @@ export type NormalizeRawDataResponse = Message<"xstockstrat.ingest.v1.NormalizeR
  * Use `create(NormalizeRawDataResponseSchema)` to create a new message.
  */
 export const NormalizeRawDataResponseSchema: GenMessage<NormalizeRawDataResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 7);
+  messageDesc(file_ingest_v1_ingest, 8);
 
 /**
  * ExternalSignal represents a newsletter or signal-source trade recommendation.
@@ -355,7 +379,7 @@ export type ExternalSignal = Message<"xstockstrat.ingest.v1.ExternalSignal"> & {
  * Use `create(ExternalSignalSchema)` to create a new message.
  */
 export const ExternalSignalSchema: GenMessage<ExternalSignal> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 8);
+  messageDesc(file_ingest_v1_ingest, 9);
 
 /**
  * @generated from message xstockstrat.ingest.v1.IngestSignalRequest
@@ -372,7 +396,7 @@ export type IngestSignalRequest = Message<"xstockstrat.ingest.v1.IngestSignalReq
  * Use `create(IngestSignalRequestSchema)` to create a new message.
  */
 export const IngestSignalRequestSchema: GenMessage<IngestSignalRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 9);
+  messageDesc(file_ingest_v1_ingest, 10);
 
 /**
  * @generated from message xstockstrat.ingest.v1.IngestSignalResponse
@@ -389,7 +413,7 @@ export type IngestSignalResponse = Message<"xstockstrat.ingest.v1.IngestSignalRe
  * Use `create(IngestSignalResponseSchema)` to create a new message.
  */
 export const IngestSignalResponseSchema: GenMessage<IngestSignalResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 10);
+  messageDesc(file_ingest_v1_ingest, 11);
 
 /**
  * @generated from message xstockstrat.ingest.v1.QuerySignalsRequest
@@ -434,7 +458,7 @@ export type QuerySignalsRequest = Message<"xstockstrat.ingest.v1.QuerySignalsReq
  * Use `create(QuerySignalsRequestSchema)` to create a new message.
  */
 export const QuerySignalsRequestSchema: GenMessage<QuerySignalsRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 11);
+  messageDesc(file_ingest_v1_ingest, 12);
 
 /**
  * @generated from message xstockstrat.ingest.v1.QuerySignalsResponse
@@ -456,7 +480,7 @@ export type QuerySignalsResponse = Message<"xstockstrat.ingest.v1.QuerySignalsRe
  * Use `create(QuerySignalsResponseSchema)` to create a new message.
  */
 export const QuerySignalsResponseSchema: GenMessage<QuerySignalsResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 12);
+  messageDesc(file_ingest_v1_ingest, 13);
 
 /**
  * SignalSource represents a registered signal source entry.
@@ -506,7 +530,7 @@ export type SignalSource = Message<"xstockstrat.ingest.v1.SignalSource"> & {
  * Use `create(SignalSourceSchema)` to create a new message.
  */
 export const SignalSourceSchema: GenMessage<SignalSource> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 13);
+  messageDesc(file_ingest_v1_ingest, 14);
 
 /**
  * @generated from message xstockstrat.ingest.v1.ListSignalSourcesRequest
@@ -523,7 +547,7 @@ export type ListSignalSourcesRequest = Message<"xstockstrat.ingest.v1.ListSignal
  * Use `create(ListSignalSourcesRequestSchema)` to create a new message.
  */
 export const ListSignalSourcesRequestSchema: GenMessage<ListSignalSourcesRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 14);
+  messageDesc(file_ingest_v1_ingest, 15);
 
 /**
  * @generated from message xstockstrat.ingest.v1.ListSignalSourcesResponse
@@ -540,7 +564,7 @@ export type ListSignalSourcesResponse = Message<"xstockstrat.ingest.v1.ListSigna
  * Use `create(ListSignalSourcesResponseSchema)` to create a new message.
  */
 export const ListSignalSourcesResponseSchema: GenMessage<ListSignalSourcesResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 15);
+  messageDesc(file_ingest_v1_ingest, 16);
 
 /**
  * ManageSignalSourceRequest: operation is "register" | "update" | "deactivate".
@@ -570,7 +594,7 @@ export type ManageSignalSourceRequest = Message<"xstockstrat.ingest.v1.ManageSig
  * Use `create(ManageSignalSourceRequestSchema)` to create a new message.
  */
 export const ManageSignalSourceRequestSchema: GenMessage<ManageSignalSourceRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 16);
+  messageDesc(file_ingest_v1_ingest, 17);
 
 /**
  * @generated from message xstockstrat.ingest.v1.ManageSignalSourceResponse
@@ -587,7 +611,7 @@ export type ManageSignalSourceResponse = Message<"xstockstrat.ingest.v1.ManageSi
  * Use `create(ManageSignalSourceResponseSchema)` to create a new message.
  */
 export const ManageSignalSourceResponseSchema: GenMessage<ManageSignalSourceResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 17);
+  messageDesc(file_ingest_v1_ingest, 18);
 
 /**
  * @generated from enum xstockstrat.ingest.v1.BackfillStatus
@@ -622,6 +646,13 @@ export enum BackfillStatus {
    * @generated from enum value: BACKFILL_STATUS_PARTIAL = 5;
    */
   PARTIAL = 5,
+
+  /**
+   * operator-canceled (FR-4); completed-chunk bars retained
+   *
+   * @generated from enum value: BACKFILL_STATUS_CANCELED = 6;
+   */
+  CANCELED = 6,
 }
 
 /**
@@ -691,6 +722,16 @@ export const IngestService: GenService<{
     methodKind: "unary";
     input: typeof ListBackfillJobsRequestSchema;
     output: typeof ListBackfillJobsResponseSchema;
+  },
+  /**
+   * Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4).
+   *
+   * @generated from rpc xstockstrat.ingest.v1.IngestService.CancelBackfill
+   */
+  cancelBackfill: {
+    methodKind: "unary";
+    input: typeof CancelBackfillRequestSchema;
+    output: typeof BackfillJobSchema;
   },
   /**
    * @generated from rpc xstockstrat.ingest.v1.IngestService.NormalizeRawData

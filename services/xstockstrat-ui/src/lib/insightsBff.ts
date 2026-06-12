@@ -6,7 +6,14 @@ import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
-import { analysisClient, indicatorsClient, ingestClient, marketDataClient, portfolioClient, tradingClient } from '@/lib/connectClients';
+import {
+  analysisClient,
+  indicatorsClient,
+  ingestClient,
+  marketDataClient,
+  portfolioClient,
+  tradingClient,
+} from '@/lib/connectClients';
 import { verifyAccessToken, rolesToAccessScope, generateTraceId, type JwtClaims } from '@/lib/auth';
 
 function parseCookieValue(cookieHeader: string, name: string): string | undefined {
@@ -96,12 +103,40 @@ router.service(IngestService, {
     const claims = await requireSession(ctx);
     return ingestClient.triggerBackfill(req, { headers: backendHeaders(claims, ctx) });
   },
+  async getBackfillStatus(req, ctx) {
+    // Read-only progress poll — operators monitor jobs, so no admin gate (FR-2/FR-3).
+    const claims = await requireSession(ctx);
+    return ingestClient.getBackfillStatus(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async listBackfillJobs(req, ctx) {
+    // Read-only listing; forwards the optional `symbol` filter transparently (FR-3).
+    const claims = await requireSession(ctx);
+    return ingestClient.listBackfillJobs(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async cancelBackfill(req, ctx) {
+    const claims = await requireSession(ctx);
+    // Mutating — admin only (FR-7); the ingest server re-checks the scope (Step 3).
+    const ADMIN_BIT = 0x04;
+    if ((rolesToAccessScope(claims.roles) & ADMIN_BIT) === 0) {
+      throw new ConnectError('Admin scope required', Code.PermissionDenied);
+    }
+    return ingestClient.cancelBackfill(req, { headers: backendHeaders(claims, ctx) });
+  },
 });
 
 router.service(MarketDataService, {
   async getBars(req, ctx) {
     const claims = await requireSession(ctx);
     return marketDataClient.getBars(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async deleteBackfilledData(req, ctx) {
+    const claims = await requireSession(ctx);
+    // Destructive — admin only (FR-7); the marketdata server enforces it again (Step 5).
+    const ADMIN_BIT = 0x04;
+    if ((rolesToAccessScope(claims.roles) & ADMIN_BIT) === 0) {
+      throw new ConnectError('Admin scope required', Code.PermissionDenied);
+    }
+    return marketDataClient.deleteBackfilledData(req, { headers: backendHeaders(claims, ctx) });
   },
 });
 

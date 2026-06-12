@@ -109,6 +109,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         # Concurrency gate (FR-9): read once at init. Jobs above the limit stay QUEUED in
         # the table until the semaphore is acquired. Live re-read of the key is out of scope.
         self._backfill_sem = asyncio.Semaphore(self._cfg.backfill_max_concurrent_jobs)
+        # In-process cancellation registry (FR-4): job_ids canceled via CancelBackfill. Checked
+        # by run_one before launching further chunks so completed-chunk bars are retained.
+        self._canceled_jobs: set[str] = set()
 
     @staticmethod
     def _has_admin_scope(context) -> bool:
@@ -324,6 +327,12 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         Shared by a fresh run and resume-on-startup. COMPLETED (clean) / PARTIAL (progress made
         but some symbols/chunks failed) / FAILED (no chunk made progress).
         """
+        # If a cancel landed while in-flight chunks were draining, do not overwrite CANCELED
+        # back to a terminal completed/partial status (FR-4). The in-process registry is set by
+        # CancelBackfill before it writes CANCELED, so it is authoritative for the live run.
+        if job_id in self._canceled_jobs:
+            self._canceled_jobs.discard(job_id)
+            return
         now = datetime.now(UTC)
         failed_symbols = sorted(state["failed_symbols"])
         if state["chunks_failed"] > 0 and state["chunks_done"] == 0:
@@ -421,6 +430,11 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
 
         async def run_one(chunk):
             chunk_id = str(chunk["chunk_id"])
+            # Cancellation gate (FR-4): if the job was canceled, stop scheduling further chunks
+            # before acquiring the semaphore / issuing the marketdata BackfillBars call.
+            # Already-completed chunks keep their bars; this chunk is simply not fetched.
+            if job_id in self._canceled_jobs:
+                return
             chunk_range = common_pb2.TimeRange(
                 start=_dt_to_ts(chunk["range_start"]), end=_dt_to_ts(chunk["range_end"])
             )
@@ -508,14 +522,61 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             offset = int(request.page.page_token) if request.page.page_token else 0
         except ValueError:
             offset = 0
+        symbol_filter = request.symbol or None  # FR-3: optional ticker filter
         rows = await backfill_jobs.list_jobs(
-            self._db, status_filter=status_filter, limit=limit, offset=offset
+            self._db,
+            status_filter=status_filter,
+            symbol_filter=symbol_filter,
+            limit=limit,
+            offset=offset,
         )
         next_token = str(offset + len(rows)) if len(rows) == limit else ""
         return ingest_pb2.ListBackfillJobsResponse(
             jobs=[job_row_to_proto(r) for r in rows],
             page=common_pb2.PageResponse(next_page_token=next_token, total_count=len(rows)),
         )
+
+    async def CancelBackfill(self, request, context):
+        """Cancel a QUEUED/RUNNING backfill job (admin-only, FR-4).
+
+        Sets the job to CANCELED and registers it so the in-flight runner stops scheduling
+        further chunks; completed-chunk bars are retained (no rollback). Returns the updated job.
+        """
+        if self._db is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
+            return
+        if not self._has_admin_scope(context):
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
+            return
+        row = await backfill_jobs.get_job(self._db, request.job_id)
+        if row is None:
+            await context.abort(grpc.StatusCode.NOT_FOUND, f"job {request.job_id} not found")
+            return
+        if row["status"] not in (
+            ingest_pb2.BACKFILL_STATUS_QUEUED,
+            ingest_pb2.BACKFILL_STATUS_RUNNING,
+        ):
+            state_name = ingest_pb2.BackfillStatus.Name(row["status"])
+            await context.abort(
+                grpc.StatusCode.FAILED_PRECONDITION,
+                f"job not cancelable in state {state_name}",
+            )
+            return
+        # Register the cancellation first so any chunk that checks the flag after this point stops.
+        self._canceled_jobs.add(request.job_id)
+        await backfill_jobs.update_job(
+            self._db,
+            request.job_id,
+            status=ingest_pb2.BACKFILL_STATUS_CANCELED,
+            completed_at=datetime.now(UTC),
+        )
+        await self._emit_backfill_event(
+            "ingest.backfill.canceled",
+            request.job_id,
+            {"canceled": True},
+            self._propagation_meta(context),
+        )
+        return job_row_to_proto(await backfill_jobs.get_job(self._db, request.job_id))
 
     async def NormalizeRawData(self, request, context):
         # Normalise CSV/JSON/alpaca_v2 payloads into ledger events

@@ -130,6 +130,23 @@ func (h *MarketDataHandler) GetDataCoverage(ctx context.Context, req *connect.Re
 	return connect.NewResponse(resp), nil
 }
 
+// DeleteBackfilledData performs a scoped, admin-only delete of backfilled OHLCV bars (FR-5).
+func (h *MarketDataHandler) DeleteBackfilledData(ctx context.Context, req *connect.Request[marketdatav1.DeleteBackfilledDataRequest]) (*connect.Response[marketdatav1.DeleteBackfilledDataResponse], error) {
+	if req.Msg.Symbol == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errorf("symbol required; refusing unbounded delete"))
+	}
+	resp, err := h.svc.DeleteBackfilledData(ctx, req.Msg)
+	if err != nil {
+		// Forward connect-coded errors (InvalidArgument/PermissionDenied) from the service; wrap the rest.
+		var cErr *connect.Error
+		if errors.As(err, &cErr) {
+			return nil, err
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
 // ListAssets returns all tradable assets from Alpaca.
 func (h *MarketDataHandler) ListAssets(ctx context.Context, req *connect.Request[marketdatav1.ListAssetsRequest]) (*connect.Response[marketdatav1.ListAssetsResponse], error) {
 	resp, err := h.svc.ListAssets(ctx, req.Msg)
@@ -185,6 +202,14 @@ func (a *grpcMarketDataAdapter) ListAssets(ctx context.Context, req *marketdatav
 
 func (a *grpcMarketDataAdapter) GetDataCoverage(ctx context.Context, req *marketdatav1.GetDataCoverageRequest) (*marketdatav1.GetDataCoverageResponse, error) {
 	resp, err := a.h.GetDataCoverage(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcMarketDataAdapter) DeleteBackfilledData(ctx context.Context, req *marketdatav1.DeleteBackfilledDataRequest) (*marketdatav1.DeleteBackfilledDataResponse, error) {
+	resp, err := a.h.DeleteBackfilledData(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}
@@ -247,6 +272,8 @@ func toGRPCError(err error) error {
 			return status.Error(codes.InvalidArgument, connectErr.Message())
 		case connect.CodeNotFound:
 			return status.Error(codes.NotFound, connectErr.Message())
+		case connect.CodePermissionDenied:
+			return status.Error(codes.PermissionDenied, connectErr.Message())
 		}
 	}
 	return status.Error(codes.Internal, err.Error())

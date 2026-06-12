@@ -155,6 +155,40 @@ func (r *MarketDataRepo) GetCoverage(ctx context.Context, symbol, timeframe stri
 	return earliest, latest, barCount, nil
 }
 
+// buildDeleteBarsQuery assembles the scoped DELETE statement and its args. Extracted as a pure
+// function (no pool) so the predicate scoping — crucially that the symbol predicate is ALWAYS
+// present and is always $1 — is unit-testable without a database (FR-5, DBA gate). timeframe and
+// the time bounds are appended only when supplied.
+func buildDeleteBarsQuery(symbol, timeframe string, start, end time.Time) (string, []any) {
+	sql := "DELETE FROM marketdata.ohlcv WHERE symbol=$1"
+	args := []any{symbol}
+	if timeframe != "" {
+		args = append(args, timeframe)
+		sql += fmt.Sprintf(" AND timeframe=$%d", len(args))
+	}
+	if !start.IsZero() {
+		args = append(args, start)
+		sql += fmt.Sprintf(" AND time >= $%d", len(args))
+	}
+	if !end.IsZero() {
+		args = append(args, end)
+		sql += fmt.Sprintf(" AND time <= $%d", len(args))
+	}
+	return sql, args
+}
+
+// DeleteBars performs a bounded, symbol-scoped delete of OHLCV bars (FR-5). The symbol
+// predicate is ALWAYS present — callers must never pass an empty symbol — so this can never
+// issue a full-table delete. Returns the number of rows deleted.
+func (r *MarketDataRepo) DeleteBars(ctx context.Context, symbol, timeframe string, start, end time.Time) (int64, error) {
+	sql, args := buildDeleteBarsQuery(symbol, timeframe, start, end)
+	tag, err := r.pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return 0, fmt.Errorf("delete bars: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 // InsertQuote upserts a single quote into the marketdata.quotes hypertable.
 func (r *MarketDataRepo) InsertQuote(ctx context.Context, q *marketdatav1.Quote) error {
 	var ts time.Time

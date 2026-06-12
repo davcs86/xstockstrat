@@ -27,7 +27,7 @@ from common.v1 import common_pb2 as common_dot_v1_dot_common__pb2
 from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16ingest/v1/ingest.proto\x12\x15xstockstrat.ingest.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16\x63ommon/v1/common.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xcc\x03\n\x0b\x42\x61\x63kfillJob\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12\x0f\n\x07symbols\x18\x02 \x03(\t\x12\x15\n\ttimeframe\x18\x03 \x01(\tB\x02\x18\x01\x12/\n\x05range\x18\x04 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x35\n\x06status\x18\x05 \x01(\x0e\x32%.xstockstrat.ingest.v1.BackfillStatus\x12\x16\n\x0e\x62\x61rs_processed\x18\x06 \x01(\x03\x12\x12\n\nbars_total\x18\x07 \x01(\x03\x12.\n\nstarted_at\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x30\n\x0c\x63ompleted_at\x18\t \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05\x65rror\x18\n \x01(\t\x12\x16\n\x0e\x66\x61iled_symbols\x18\x0b \x03(\t\x12\x38\n\x0etimeframe_enum\x18\x0c \x01(\x0e\x32 .xstockstrat.common.v1.Timeframe\x12\x14\n\x0c\x63hunks_total\x18\r \x01(\x05\x12\x18\n\x10\x63hunks_completed\x18\x0e \x01(\x05\"\xf2\x01\n\x16TriggerBackfillRequest\x12\x0f\n\x07symbols\x18\x01 \x03(\t\x12\x15\n\ttimeframe\x18\x02 \x01(\tB\x02\x18\x01\x12/\n\x05range\x18\x03 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x11\n\toverwrite\x18\x04 \x01(\x08\x12\x38\n\x0etimeframe_enum\x18\x05 \x01(\x0e\x32 .xstockstrat.common.v1.Timeframe\x12\x32\n\tfill_mode\x18\x06 \x01(\x0e\x32\x1f.xstockstrat.ingest.v1.FillMode\"`\n\x17TriggerBackfillResponse\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12\x35\n\x06status\x18\x02 \x01(\x0e\x32%.xstockstrat.ingest.v1.BackfillStatus\"*\n\x18GetBackfillStatusRequest\x12\x0e\n\x06job_id\x18\x01 \x01(\t\"\x89\x01\n\x17ListBackfillJobsRequest\x12<\n\rstatus_filter\x18\x01 \x01(\x0e\x32%.xstockstrat.ingest.v1.BackfillStatus\x12\x30\n\x04page\x18\x02 \x01(\x0b\x32\".xstockstrat.common.v1.PageRequest\"\x7f\n\x18ListBackfillJobsResponse\x12\x30\n\x04jobs\x18\x01 \x03(\x0b\x32\".xstockstrat.ingest.v1.BackfillJob\x12\x31\n\x04page\x18\x02 \x01(\x0b\x32#.xstockstrat.common.v1.PageResponse\"K\n\x17NormalizeRawDataRequest\x12\x0e\n\x06source\x18\x01 \x01(\t\x12\x10\n\x08raw_data\x18\x02 \x01(\x0c\x12\x0e\n\x06\x66ormat\x18\x03 \x01(\t\"C\n\x18NormalizeRawDataResponse\x12\x17\n\x0frows_normalized\x18\x01 \x01(\x03\x12\x0e\n\x06\x65rrors\x18\x02 \x03(\t\"\xe9\x01\n\x0e\x45xternalSignal\x12\x0e\n\x06source\x18\x01 \x01(\t\x12\x0e\n\x06symbol\x18\x02 \x01(\t\x12\x11\n\tdirection\x18\x03 \x01(\t\x12\x12\n\nconviction\x18\x04 \x01(\x01\x12.\n\nvalid_from\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12/\n\x0bvalid_until\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x10\n\x08headline\x18\x07 \x01(\t\x12\x0f\n\x07raw_url\x18\x08 \x01(\t\x12\x0c\n\x04tags\x18\t \x03(\t\"L\n\x13IngestSignalRequest\x12\x35\n\x06signal\x18\x01 \x01(\x0b\x32%.xstockstrat.ingest.v1.ExternalSignal\")\n\x14IngestSignalResponse\x12\x11\n\tsignal_id\x18\x01 \x01(\x03\"\xb3\x01\n\x13QuerySignalsRequest\x12\x0e\n\x06source\x18\x01 \x01(\t\x12\x0e\n\x06symbol\x18\x02 \x01(\t\x12\x11\n\tdirection\x18\x03 \x01(\t\x12\x37\n\ractive_window\x18\x04 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x30\n\x04page\x18\x05 \x01(\x0b\x32\".xstockstrat.common.v1.PageRequest\"\x81\x01\n\x14QuerySignalsResponse\x12\x36\n\x07signals\x18\x01 \x03(\x0b\x32%.xstockstrat.ingest.v1.ExternalSignal\x12\x31\n\x04page\x18\x02 \x01(\x0b\x32#.xstockstrat.common.v1.PageResponse\"\xb8\x01\n\x0cSignalSource\x12\x0c\n\x04slug\x18\x01 \x01(\t\x12\x14\n\x0c\x64isplay_name\x18\x02 \x01(\t\x12\x13\n\x0bsource_type\x18\x03 \x01(\t\x12\x18\n\x10\x65xtractor_module\x18\x04 \x01(\t\x12\x0e\n\x06\x61\x63tive\x18\x05 \x01(\x08\x12\x17\n\x0fhas_credentials\x18\x06 \x01(\x08\x12,\n\x0b\x63onfig_json\x18\x07 \x01(\x0b\x32\x17.google.protobuf.Struct\"4\n\x18ListSignalSourcesRequest\x12\x18\n\x10include_inactive\x18\x01 \x01(\x08\"Q\n\x19ListSignalSourcesResponse\x12\x34\n\x07sources\x18\x01 \x03(\x0b\x32#.xstockstrat.ingest.v1.SignalSource\"|\n\x19ManageSignalSourceRequest\x12\x33\n\x06source\x18\x01 \x01(\x0b\x32#.xstockstrat.ingest.v1.SignalSource\x12\x17\n\x0f\x63redentials_ref\x18\x02 \x01(\t\x12\x11\n\toperation\x18\x03 \x01(\t\"Q\n\x1aManageSignalSourceResponse\x12\x33\n\x06source\x18\x01 \x01(\x0b\x32#.xstockstrat.ingest.v1.SignalSource*\xc2\x01\n\x0e\x42\x61\x63kfillStatus\x12\x1f\n\x1b\x42\x41\x43KFILL_STATUS_UNSPECIFIED\x10\x00\x12\x1a\n\x16\x42\x41\x43KFILL_STATUS_QUEUED\x10\x01\x12\x1b\n\x17\x42\x41\x43KFILL_STATUS_RUNNING\x10\x02\x12\x1d\n\x19\x42\x41\x43KFILL_STATUS_COMPLETED\x10\x03\x12\x1a\n\x16\x42\x41\x43KFILL_STATUS_FAILED\x10\x04\x12\x1b\n\x17\x42\x41\x43KFILL_STATUS_PARTIAL\x10\x05*R\n\x08\x46illMode\x12\x19\n\x15\x46ILL_MODE_UNSPECIFIED\x10\x00\x12\x12\n\x0e\x46ILL_MODE_FULL\x10\x01\x12\x17\n\x13\x46ILL_MODE_GAPS_ONLY\x10\x02\x32\x9a\x07\n\rIngestService\x12p\n\x0fTriggerBackfill\x12-.xstockstrat.ingest.v1.TriggerBackfillRequest\x1a..xstockstrat.ingest.v1.TriggerBackfillResponse\x12h\n\x11GetBackfillStatus\x12/.xstockstrat.ingest.v1.GetBackfillStatusRequest\x1a\".xstockstrat.ingest.v1.BackfillJob\x12s\n\x10ListBackfillJobs\x12..xstockstrat.ingest.v1.ListBackfillJobsRequest\x1a/.xstockstrat.ingest.v1.ListBackfillJobsResponse\x12s\n\x10NormalizeRawData\x12..xstockstrat.ingest.v1.NormalizeRawDataRequest\x1a/.xstockstrat.ingest.v1.NormalizeRawDataResponse\x12g\n\x0cIngestSignal\x12*.xstockstrat.ingest.v1.IngestSignalRequest\x1a+.xstockstrat.ingest.v1.IngestSignalResponse\x12g\n\x0cQuerySignals\x12*.xstockstrat.ingest.v1.QuerySignalsRequest\x1a+.xstockstrat.ingest.v1.QuerySignalsResponse\x12v\n\x11ListSignalSources\x12/.xstockstrat.ingest.v1.ListSignalSourcesRequest\x1a\x30.xstockstrat.ingest.v1.ListSignalSourcesResponse\x12y\n\x12ManageSignalSource\x12\x30.xstockstrat.ingest.v1.ManageSignalSourceRequest\x1a\x31.xstockstrat.ingest.v1.ManageSignalSourceResponseB<Z:github.com/xstockstrat/contracts/gen/go/ingest/v1;ingestv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16ingest/v1/ingest.proto\x12\x15xstockstrat.ingest.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16\x63ommon/v1/common.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xcc\x03\n\x0b\x42\x61\x63kfillJob\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12\x0f\n\x07symbols\x18\x02 \x03(\t\x12\x15\n\ttimeframe\x18\x03 \x01(\tB\x02\x18\x01\x12/\n\x05range\x18\x04 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x35\n\x06status\x18\x05 \x01(\x0e\x32%.xstockstrat.ingest.v1.BackfillStatus\x12\x16\n\x0e\x62\x61rs_processed\x18\x06 \x01(\x03\x12\x12\n\nbars_total\x18\x07 \x01(\x03\x12.\n\nstarted_at\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x30\n\x0c\x63ompleted_at\x18\t \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05\x65rror\x18\n \x01(\t\x12\x16\n\x0e\x66\x61iled_symbols\x18\x0b \x03(\t\x12\x38\n\x0etimeframe_enum\x18\x0c \x01(\x0e\x32 .xstockstrat.common.v1.Timeframe\x12\x14\n\x0c\x63hunks_total\x18\r \x01(\x05\x12\x18\n\x10\x63hunks_completed\x18\x0e \x01(\x05\"\xf2\x01\n\x16TriggerBackfillRequest\x12\x0f\n\x07symbols\x18\x01 \x03(\t\x12\x15\n\ttimeframe\x18\x02 \x01(\tB\x02\x18\x01\x12/\n\x05range\x18\x03 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x11\n\toverwrite\x18\x04 \x01(\x08\x12\x38\n\x0etimeframe_enum\x18\x05 \x01(\x0e\x32 .xstockstrat.common.v1.Timeframe\x12\x32\n\tfill_mode\x18\x06 \x01(\x0e\x32\x1f.xstockstrat.ingest.v1.FillMode\"`\n\x17TriggerBackfillResponse\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12\x35\n\x06status\x18\x02 \x01(\x0e\x32%.xstockstrat.ingest.v1.BackfillStatus\"*\n\x18GetBackfillStatusRequest\x12\x0e\n\x06job_id\x18\x01 \x01(\t\"\x99\x01\n\x17ListBackfillJobsRequest\x12<\n\rstatus_filter\x18\x01 \x01(\x0e\x32%.xstockstrat.ingest.v1.BackfillStatus\x12\x30\n\x04page\x18\x02 \x01(\x0b\x32\".xstockstrat.common.v1.PageRequest\x12\x0e\n\x06symbol\x18\x03 \x01(\t\"\'\n\x15\x43\x61ncelBackfillRequest\x12\x0e\n\x06job_id\x18\x01 \x01(\t\"\x7f\n\x18ListBackfillJobsResponse\x12\x30\n\x04jobs\x18\x01 \x03(\x0b\x32\".xstockstrat.ingest.v1.BackfillJob\x12\x31\n\x04page\x18\x02 \x01(\x0b\x32#.xstockstrat.common.v1.PageResponse\"K\n\x17NormalizeRawDataRequest\x12\x0e\n\x06source\x18\x01 \x01(\t\x12\x10\n\x08raw_data\x18\x02 \x01(\x0c\x12\x0e\n\x06\x66ormat\x18\x03 \x01(\t\"C\n\x18NormalizeRawDataResponse\x12\x17\n\x0frows_normalized\x18\x01 \x01(\x03\x12\x0e\n\x06\x65rrors\x18\x02 \x03(\t\"\xe9\x01\n\x0e\x45xternalSignal\x12\x0e\n\x06source\x18\x01 \x01(\t\x12\x0e\n\x06symbol\x18\x02 \x01(\t\x12\x11\n\tdirection\x18\x03 \x01(\t\x12\x12\n\nconviction\x18\x04 \x01(\x01\x12.\n\nvalid_from\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12/\n\x0bvalid_until\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x10\n\x08headline\x18\x07 \x01(\t\x12\x0f\n\x07raw_url\x18\x08 \x01(\t\x12\x0c\n\x04tags\x18\t \x03(\t\"L\n\x13IngestSignalRequest\x12\x35\n\x06signal\x18\x01 \x01(\x0b\x32%.xstockstrat.ingest.v1.ExternalSignal\")\n\x14IngestSignalResponse\x12\x11\n\tsignal_id\x18\x01 \x01(\x03\"\xb3\x01\n\x13QuerySignalsRequest\x12\x0e\n\x06source\x18\x01 \x01(\t\x12\x0e\n\x06symbol\x18\x02 \x01(\t\x12\x11\n\tdirection\x18\x03 \x01(\t\x12\x37\n\ractive_window\x18\x04 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x30\n\x04page\x18\x05 \x01(\x0b\x32\".xstockstrat.common.v1.PageRequest\"\x81\x01\n\x14QuerySignalsResponse\x12\x36\n\x07signals\x18\x01 \x03(\x0b\x32%.xstockstrat.ingest.v1.ExternalSignal\x12\x31\n\x04page\x18\x02 \x01(\x0b\x32#.xstockstrat.common.v1.PageResponse\"\xb8\x01\n\x0cSignalSource\x12\x0c\n\x04slug\x18\x01 \x01(\t\x12\x14\n\x0c\x64isplay_name\x18\x02 \x01(\t\x12\x13\n\x0bsource_type\x18\x03 \x01(\t\x12\x18\n\x10\x65xtractor_module\x18\x04 \x01(\t\x12\x0e\n\x06\x61\x63tive\x18\x05 \x01(\x08\x12\x17\n\x0fhas_credentials\x18\x06 \x01(\x08\x12,\n\x0b\x63onfig_json\x18\x07 \x01(\x0b\x32\x17.google.protobuf.Struct\"4\n\x18ListSignalSourcesRequest\x12\x18\n\x10include_inactive\x18\x01 \x01(\x08\"Q\n\x19ListSignalSourcesResponse\x12\x34\n\x07sources\x18\x01 \x03(\x0b\x32#.xstockstrat.ingest.v1.SignalSource\"|\n\x19ManageSignalSourceRequest\x12\x33\n\x06source\x18\x01 \x01(\x0b\x32#.xstockstrat.ingest.v1.SignalSource\x12\x17\n\x0f\x63redentials_ref\x18\x02 \x01(\t\x12\x11\n\toperation\x18\x03 \x01(\t\"Q\n\x1aManageSignalSourceResponse\x12\x33\n\x06source\x18\x01 \x01(\x0b\x32#.xstockstrat.ingest.v1.SignalSource*\xe0\x01\n\x0e\x42\x61\x63kfillStatus\x12\x1f\n\x1b\x42\x41\x43KFILL_STATUS_UNSPECIFIED\x10\x00\x12\x1a\n\x16\x42\x41\x43KFILL_STATUS_QUEUED\x10\x01\x12\x1b\n\x17\x42\x41\x43KFILL_STATUS_RUNNING\x10\x02\x12\x1d\n\x19\x42\x41\x43KFILL_STATUS_COMPLETED\x10\x03\x12\x1a\n\x16\x42\x41\x43KFILL_STATUS_FAILED\x10\x04\x12\x1b\n\x17\x42\x41\x43KFILL_STATUS_PARTIAL\x10\x05\x12\x1c\n\x18\x42\x41\x43KFILL_STATUS_CANCELED\x10\x06*R\n\x08\x46illMode\x12\x19\n\x15\x46ILL_MODE_UNSPECIFIED\x10\x00\x12\x12\n\x0e\x46ILL_MODE_FULL\x10\x01\x12\x17\n\x13\x46ILL_MODE_GAPS_ONLY\x10\x02\x32\xfe\x07\n\rIngestService\x12p\n\x0fTriggerBackfill\x12-.xstockstrat.ingest.v1.TriggerBackfillRequest\x1a..xstockstrat.ingest.v1.TriggerBackfillResponse\x12h\n\x11GetBackfillStatus\x12/.xstockstrat.ingest.v1.GetBackfillStatusRequest\x1a\".xstockstrat.ingest.v1.BackfillJob\x12s\n\x10ListBackfillJobs\x12..xstockstrat.ingest.v1.ListBackfillJobsRequest\x1a/.xstockstrat.ingest.v1.ListBackfillJobsResponse\x12\x62\n\x0e\x43\x61ncelBackfill\x12,.xstockstrat.ingest.v1.CancelBackfillRequest\x1a\".xstockstrat.ingest.v1.BackfillJob\x12s\n\x10NormalizeRawData\x12..xstockstrat.ingest.v1.NormalizeRawDataRequest\x1a/.xstockstrat.ingest.v1.NormalizeRawDataResponse\x12g\n\x0cIngestSignal\x12*.xstockstrat.ingest.v1.IngestSignalRequest\x1a+.xstockstrat.ingest.v1.IngestSignalResponse\x12g\n\x0cQuerySignals\x12*.xstockstrat.ingest.v1.QuerySignalsRequest\x1a+.xstockstrat.ingest.v1.QuerySignalsResponse\x12v\n\x11ListSignalSources\x12/.xstockstrat.ingest.v1.ListSignalSourcesRequest\x1a\x30.xstockstrat.ingest.v1.ListSignalSourcesResponse\x12y\n\x12ManageSignalSource\x12\x30.xstockstrat.ingest.v1.ManageSignalSourceRequest\x1a\x31.xstockstrat.ingest.v1.ManageSignalSourceResponseB<Z:github.com/xstockstrat/contracts/gen/go/ingest/v1;ingestv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -39,10 +39,10 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_BACKFILLJOB'].fields_by_name['timeframe']._serialized_options = b'\030\001'
   _globals['_TRIGGERBACKFILLREQUEST'].fields_by_name['timeframe']._loaded_options = None
   _globals['_TRIGGERBACKFILLREQUEST'].fields_by_name['timeframe']._serialized_options = b'\030\001'
-  _globals['_BACKFILLSTATUS']._serialized_start=2606
-  _globals['_BACKFILLSTATUS']._serialized_end=2800
-  _globals['_FILLMODE']._serialized_start=2802
-  _globals['_FILLMODE']._serialized_end=2884
+  _globals['_BACKFILLSTATUS']._serialized_start=2663
+  _globals['_BACKFILLSTATUS']._serialized_end=2887
+  _globals['_FILLMODE']._serialized_start=2889
+  _globals['_FILLMODE']._serialized_end=2971
   _globals['_BACKFILLJOB']._serialized_start=137
   _globals['_BACKFILLJOB']._serialized_end=597
   _globals['_TRIGGERBACKFILLREQUEST']._serialized_start=600
@@ -52,33 +52,35 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETBACKFILLSTATUSREQUEST']._serialized_start=942
   _globals['_GETBACKFILLSTATUSREQUEST']._serialized_end=984
   _globals['_LISTBACKFILLJOBSREQUEST']._serialized_start=987
-  _globals['_LISTBACKFILLJOBSREQUEST']._serialized_end=1124
-  _globals['_LISTBACKFILLJOBSRESPONSE']._serialized_start=1126
-  _globals['_LISTBACKFILLJOBSRESPONSE']._serialized_end=1253
-  _globals['_NORMALIZERAWDATAREQUEST']._serialized_start=1255
-  _globals['_NORMALIZERAWDATAREQUEST']._serialized_end=1330
-  _globals['_NORMALIZERAWDATARESPONSE']._serialized_start=1332
-  _globals['_NORMALIZERAWDATARESPONSE']._serialized_end=1399
-  _globals['_EXTERNALSIGNAL']._serialized_start=1402
-  _globals['_EXTERNALSIGNAL']._serialized_end=1635
-  _globals['_INGESTSIGNALREQUEST']._serialized_start=1637
-  _globals['_INGESTSIGNALREQUEST']._serialized_end=1713
-  _globals['_INGESTSIGNALRESPONSE']._serialized_start=1715
-  _globals['_INGESTSIGNALRESPONSE']._serialized_end=1756
-  _globals['_QUERYSIGNALSREQUEST']._serialized_start=1759
-  _globals['_QUERYSIGNALSREQUEST']._serialized_end=1938
-  _globals['_QUERYSIGNALSRESPONSE']._serialized_start=1941
-  _globals['_QUERYSIGNALSRESPONSE']._serialized_end=2070
-  _globals['_SIGNALSOURCE']._serialized_start=2073
-  _globals['_SIGNALSOURCE']._serialized_end=2257
-  _globals['_LISTSIGNALSOURCESREQUEST']._serialized_start=2259
-  _globals['_LISTSIGNALSOURCESREQUEST']._serialized_end=2311
-  _globals['_LISTSIGNALSOURCESRESPONSE']._serialized_start=2313
-  _globals['_LISTSIGNALSOURCESRESPONSE']._serialized_end=2394
-  _globals['_MANAGESIGNALSOURCEREQUEST']._serialized_start=2396
-  _globals['_MANAGESIGNALSOURCEREQUEST']._serialized_end=2520
-  _globals['_MANAGESIGNALSOURCERESPONSE']._serialized_start=2522
-  _globals['_MANAGESIGNALSOURCERESPONSE']._serialized_end=2603
-  _globals['_INGESTSERVICE']._serialized_start=2887
-  _globals['_INGESTSERVICE']._serialized_end=3809
+  _globals['_LISTBACKFILLJOBSREQUEST']._serialized_end=1140
+  _globals['_CANCELBACKFILLREQUEST']._serialized_start=1142
+  _globals['_CANCELBACKFILLREQUEST']._serialized_end=1181
+  _globals['_LISTBACKFILLJOBSRESPONSE']._serialized_start=1183
+  _globals['_LISTBACKFILLJOBSRESPONSE']._serialized_end=1310
+  _globals['_NORMALIZERAWDATAREQUEST']._serialized_start=1312
+  _globals['_NORMALIZERAWDATAREQUEST']._serialized_end=1387
+  _globals['_NORMALIZERAWDATARESPONSE']._serialized_start=1389
+  _globals['_NORMALIZERAWDATARESPONSE']._serialized_end=1456
+  _globals['_EXTERNALSIGNAL']._serialized_start=1459
+  _globals['_EXTERNALSIGNAL']._serialized_end=1692
+  _globals['_INGESTSIGNALREQUEST']._serialized_start=1694
+  _globals['_INGESTSIGNALREQUEST']._serialized_end=1770
+  _globals['_INGESTSIGNALRESPONSE']._serialized_start=1772
+  _globals['_INGESTSIGNALRESPONSE']._serialized_end=1813
+  _globals['_QUERYSIGNALSREQUEST']._serialized_start=1816
+  _globals['_QUERYSIGNALSREQUEST']._serialized_end=1995
+  _globals['_QUERYSIGNALSRESPONSE']._serialized_start=1998
+  _globals['_QUERYSIGNALSRESPONSE']._serialized_end=2127
+  _globals['_SIGNALSOURCE']._serialized_start=2130
+  _globals['_SIGNALSOURCE']._serialized_end=2314
+  _globals['_LISTSIGNALSOURCESREQUEST']._serialized_start=2316
+  _globals['_LISTSIGNALSOURCESREQUEST']._serialized_end=2368
+  _globals['_LISTSIGNALSOURCESRESPONSE']._serialized_start=2370
+  _globals['_LISTSIGNALSOURCESRESPONSE']._serialized_end=2451
+  _globals['_MANAGESIGNALSOURCEREQUEST']._serialized_start=2453
+  _globals['_MANAGESIGNALSOURCEREQUEST']._serialized_end=2577
+  _globals['_MANAGESIGNALSOURCERESPONSE']._serialized_start=2579
+  _globals['_MANAGESIGNALSOURCERESPONSE']._serialized_end=2660
+  _globals['_INGESTSERVICE']._serialized_start=2974
+  _globals['_INGESTSERVICE']._serialized_end=3996
 # @@protoc_insertion_point(module_scope)
