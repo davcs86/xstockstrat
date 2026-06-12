@@ -732,7 +732,23 @@ func (s *TradingService) syncPositions(ctx context.Context) {
 	}
 	s.brokersMu.RUnlock()
 
+	// Snapshot the last-known credential health so we can skip accounts whose secrets
+	// already failed validation. Calling GetPositions on a known-INVALID account just
+	// returns an unrecoverable 401 every cycle, hammering the broker and spamming logs.
+	// The credential-health poller (StartCredentialHealthPoller) keeps re-checking and
+	// flips the status back to OK once the secrets are fixed, at which point sync resumes.
+	s.credStatusMu.Lock()
+	credStatus := make(map[string]int32, len(s.credStatus))
+	for id, st := range s.credStatus {
+		credStatus[id] = st
+	}
+	s.credStatusMu.Unlock()
+
 	for accountID, acct := range accounts {
+		if credentialsKnownInvalid(credStatus[accountID]) {
+			slog.Debug("syncPositions: skipping account with invalid credentials", "account_id", accountID)
+			continue
+		}
 		positions, err := acct.client.GetPositions(ctx)
 		if err != nil {
 			slog.Warn("syncPositions: GetPositions failed", "account_id", accountID, "error", err)
@@ -1022,6 +1038,16 @@ func credentialStatusFromError(err error) int32 {
 	default:
 		return int32(tradingv1.CredentialStatus_CREDENTIAL_STATUS_UNKNOWN)
 	}
+}
+
+// credentialsKnownInvalid reports whether an account's last-validated credential
+// status is INVALID. syncPositions skips such accounts: calling GetPositions on
+// them just returns an unrecoverable 401 every cycle, hammering the broker and
+// spamming logs. UNKNOWN/UNSPECIFIED/OK are not skipped — only a confirmed
+// failure is, and the credential-health poller re-enables the account once the
+// secrets are fixed (status flips back to OK).
+func credentialsKnownInvalid(status int32) bool {
+	return status == int32(tradingv1.CredentialStatus_CREDENTIAL_STATUS_INVALID)
 }
 
 // DeregisterBrokerAccountSvc deactivates a broker account and removes it from the pool.

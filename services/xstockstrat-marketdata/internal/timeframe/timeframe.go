@@ -1,11 +1,16 @@
 // Package timeframe reconciles the OHLCV bar-interval vocabulary across services.
 //
-// The DB stores literal canonical strings ("1m","5m","1h","1d"). Different callers
+// The DB stores literal canonical strings ("15m","1h","1d"). Different callers
 // historically sent different spellings — analysis used "1Day" while the backfill path
 // used "1d" — so bars written by one were invisible to the other. This package maps
 // the shared common.v1.Timeframe enum and all known legacy aliases to the single
 // canonical DB string, and computes coverage gaps. It is pure (no DB/gRPC deps) so it
 // is unit-testable and counts toward coverage.
+//
+// 15 minutes is the smallest supported interval — the free Alpaca data plan serves
+// 15-minute-delayed data and the platform is not a real-time trader. The deprecated
+// TIMEFRAME_1MIN/5MIN enum values and their "1m"/"5m" string spellings are no longer
+// resolvable; callers sending them get an unresolvable-timeframe error.
 package timeframe
 
 import (
@@ -19,15 +24,15 @@ import (
 // TIMEFRAME_UNSPECIFIED / unknown values.
 func ToCanonical(tf commonv1.Timeframe) (string, bool) {
 	switch tf {
-	case commonv1.Timeframe_TIMEFRAME_1MIN:
-		return "1m", true
-	case commonv1.Timeframe_TIMEFRAME_5MIN:
-		return "5m", true
+	case commonv1.Timeframe_TIMEFRAME_15MIN:
+		return "15m", true
 	case commonv1.Timeframe_TIMEFRAME_1HOUR:
 		return "1h", true
 	case commonv1.Timeframe_TIMEFRAME_1DAY:
 		return "1d", true
 	default:
+		// TIMEFRAME_UNSPECIFIED and the deprecated TIMEFRAME_1MIN/5MIN
+		// (sub-15m intervals are no longer supported) are unresolvable.
 		return "", false
 	}
 }
@@ -37,15 +42,15 @@ func ToCanonical(tf commonv1.Timeframe) (string, bool) {
 // Returns TIMEFRAME_UNSPECIFIED for unrecognized input.
 func FromString(s string) commonv1.Timeframe {
 	switch s {
-	case "1m", "1Min":
-		return commonv1.Timeframe_TIMEFRAME_1MIN
-	case "5m", "5Min":
-		return commonv1.Timeframe_TIMEFRAME_5MIN
+	case "15m", "15Min":
+		return commonv1.Timeframe_TIMEFRAME_15MIN
 	case "1h", "1Hour":
 		return commonv1.Timeframe_TIMEFRAME_1HOUR
 	case "1d", "1Day":
 		return commonv1.Timeframe_TIMEFRAME_1DAY
 	default:
+		// "1m"/"1Min"/"5m"/"5Min" are intentionally unrecognized — sub-15m
+		// intervals were removed from the product.
 		return commonv1.Timeframe_TIMEFRAME_UNSPECIFIED
 	}
 }

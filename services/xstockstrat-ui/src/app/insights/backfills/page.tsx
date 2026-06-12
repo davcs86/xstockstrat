@@ -20,8 +20,7 @@ import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
 const TIMEFRAMES: { label: string; value: Timeframe }[] = [
   { label: '1 day', value: Timeframe.TIMEFRAME_1DAY },
   { label: '1 hour', value: Timeframe.TIMEFRAME_1HOUR },
-  { label: '5 min', value: Timeframe.TIMEFRAME_5MIN },
-  { label: '1 min', value: Timeframe.TIMEFRAME_1MIN },
+  { label: '15 min', value: Timeframe.TIMEFRAME_15MIN },
 ];
 
 const STATUS_FILTERS: { label: string; value: BackfillStatus }[] = [

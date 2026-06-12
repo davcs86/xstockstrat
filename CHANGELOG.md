@@ -17,6 +17,20 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ### Features
 - phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
+
+### Proto Changes
+- common/v1/common.proto
+- marketdata/v1/marketdata.proto
+
+### Summary
+-6 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-06-12
+
+### Features
+- phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
 - orders-management-ui: A dedicated trader-segment UI page for full order lifecycle management — create, edit
 - open-positions-ui: Upgrade the trader-segment Positions page to a paginated, filterable open-positions view
 - backfill-management-ui: A dedicated UI page to manage per-ticker historical backfills — create, monitor live

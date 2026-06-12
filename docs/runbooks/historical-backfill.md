@@ -180,16 +180,18 @@ ORDER BY missing_day;
 
 | Timeframe | Typical use | Data density |
 |---|---|---|
-| `1m` | Intraday strategies, scalping | ~390 bars/day per symbol |
-| `5m` | Short-term momentum | ~78 bars/day |
+| `15m` | Short-term momentum (smallest supported interval) | ~26 bars/day per symbol |
 | `1h` | Swing trading | ~7 bars/day |
 | `1d` | Position trading, backtesting | 1 bar/day |
 
-> **Warning**: 1-minute bars for 5 years × 100 symbols ≈ 500M rows. Split into yearly jobs.
+> **Smallest interval is 15m**: the free Alpaca data plan serves 15-minute-delayed data and the
+> platform is not a real-time trader, so sub-15m timeframes (`1m`/`5m`) were removed. The
+> `TIMEFRAME_1MIN`/`TIMEFRAME_5MIN` enum values remain in the proto for wire compatibility but are
+> deprecated and no longer resolvable — `TriggerBackfill` with them will not produce bars.
 
-> **Canonical timeframe vocabulary** (feature 053): the strings above (`1m`/`5m`/`1h`/`1d`) are the
+> **Canonical timeframe vocabulary** (feature 053): the strings above (`15m`/`1h`/`1d`) are the
 > canonical forms stored in `marketdata.ohlcv.timeframe`. A shared `common.v1.Timeframe` enum
-> (`TIMEFRAME_1MIN`/`_5MIN`/`_1HOUR`/`_1DAY`) is now the **preferred** field on the marketdata,
+> (`TIMEFRAME_15MIN`/`_1HOUR`/`_1DAY`) is the **preferred** field on the marketdata,
 > ingest, and analysis messages (`timeframe_enum`); prefer it in new code. The legacy string
 > `timeframe` fields remain for backward compatibility but are **deprecated for one release** (per
 > `proto-versioning.md`'s deprecation cycle) and will be removed in a future gated breaking change.
@@ -203,7 +205,7 @@ ORDER BY missing_day;
 **Server-side chunking (feature 054)** — you no longer split large jobs by hand. A single
 `TriggerBackfill` over a wide range is planned by `xstockstrat-ingest` into chunks bounded by
 `ingest.backfill.chunk_window_days` (default 90) and `ingest.backfill.chunk_max_bars` (default
-200000, density-aware so 1m ranges produce more, smaller chunks than 1d). Chunks run in parallel up
+200000, density-aware so 15m ranges produce more, smaller chunks than 1d). Chunks run in parallel up
 to `ingest.backfill.max_concurrent_chunks` (default 3), per-chunk progress is tracked in
 `ingest.backfill_chunks`, and the job exposes `chunks_total` / `chunks_completed`.
 
@@ -215,7 +217,7 @@ to `ingest.backfill.max_concurrent_chunks` (default 3), per-chunk progress is tr
 - **Tuning**: lower `chunk_max_bars` for finer progress granularity / smaller Alpaca requests; raise
   `max_concurrent_chunks` to fetch faster (watch `marketdata.backfill.rate_limit_rps`).
 
-You still choose timeframe per job (run 1d first, then 1h, then 1m if you need multiple densities).
+You still choose timeframe per job (run 1d first, then 1h, then 15m if you need multiple densities).
 
 ---
 

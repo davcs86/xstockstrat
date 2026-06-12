@@ -10,7 +10,7 @@ Go gRPC service that is the **sole integration point for Alpaca's market data AP
 - Triggering historical backfills (initiated by xstockstrat-ingest)
 - Reporting stored OHLCV coverage via the `GetDataCoverage` RPC (earliest/latest/count + gaps for a symbol+timeframe), consumed by the analysis backtest path and the insights "backfill this range" action (feature 053)
 
-**Timeframe vocabulary** (feature 053): bar intervals are stored as the canonical strings `1m`/`5m`/`1h`/`1d` in `marketdata.ohlcv.timeframe`. The shared `common.v1.Timeframe` enum is the preferred field (`timeframe_enum`) on the request messages; the legacy string `timeframe` fields are deprecated for one release. `internal/timeframe` normalizes all known aliases (e.g. `"1Day"` → `"1d"`) so callers that historically disagreed now hit the same stored bars.
+**Timeframe vocabulary** (feature 053): bar intervals are stored as the canonical strings `15m`/`1h`/`1d` in `marketdata.ohlcv.timeframe`. The shared `common.v1.Timeframe` enum is the preferred field (`timeframe_enum`) on the request messages; the legacy string `timeframe` fields are deprecated for one release. `internal/timeframe` normalizes all known aliases (e.g. `"1Day"` → `"1d"`) so callers that historically disagreed now hit the same stored bars. **15 minutes is the smallest supported interval** — the free Alpaca data plan serves 15-minute-delayed data and the platform is not a real-time trader. `TIMEFRAME_1MIN`/`TIMEFRAME_5MIN` (and the `1m`/`5m` strings) are deprecated and no longer resolvable; the enum values remain in the proto for wire compatibility but are unused.
 
 **API boundary**: This service owns Alpaca's **market data APIs** (`data.alpaca.markets` — bars, quotes, streaming). No other service may call these. `xstockstrat-trading` separately owns Alpaca's **broker/order APIs** (`paper-api.alpaca.markets` / `api.alpaca.markets` — order submission and cancellation). Both services use the same `ALPACA_API_KEY` / `ALPACA_API_SECRET` credentials.
 
@@ -53,7 +53,7 @@ Namespace: `marketdata`
 | `marketdata.stream.max_reconnects` | int | `10` | Max reconnect attempts before alert |
 | `marketdata.stream.warm_interval_ms` | int | `30000` | Interval for the warm-quote poller that refreshes the latest quote of every queried symbol into the DB cache. Read live each cycle; `0`/negative pauses it. |
 | `marketdata.stream.bar_ingest_interval_ms` | int | `60000` | Interval for the always-on bar ingester that upserts recent bars for every queried symbol into `marketdata.ohlcv`. Read live each cycle; `0`/negative pauses it. |
-| `marketdata.stream.bar_ingest_timeframe` | string | `1m` | Bar timeframe the always-on ingester fetches each cycle. |
+| `marketdata.stream.bar_ingest_timeframe` | string | `15m` | Bar timeframe the always-on ingester fetches each cycle. 15m is the smallest supported interval. |
 | `marketdata.stream.bar_ingest_lookback_ms` | int | `900000` | Lookback window the always-on ingester re-fetches each cycle (default 15m); overlap is harmless because inserts upsert, and a window wider than the interval lets the feed self-heal after a pause/restart. |
 | `marketdata.backfill.batch_size` | int | `1000` | Bars per Alpaca API request |
 | `marketdata.backfill.rate_limit_rps` | int | `200` | Alpaca API rate limit |
@@ -67,7 +67,7 @@ Namespace: `marketdata`
 - Schema: `marketdata`
 - Hypertable `marketdata.ohlcv`: partition by `time`, chunk = 1 day, compress after 7 days
 - Hypertable `marketdata.quotes`: partition by `time`, chunk = 1 hour, compress after 24 hours
-- Continuous aggregate: `marketdata.ohlcv_1h` (auto-computed 1-hour OHLCV from 1-min bars)
+- Continuous aggregate: `marketdata.ohlcv_1h` (auto-computed 1-hour OHLCV from 15-min bars)
 - Migration tool: `golang-migrate`
 
 ## Alpaca Integration
