@@ -307,7 +307,7 @@ established by feature 049. Docs last.
 
 ### Step 6 — test: marketdata scoped-delete coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — create or modify
@@ -659,3 +659,12 @@ established by feature 049. Docs last.
 **Actual**: Implemented as `if job_id in self._canceled_jobs: discard + return` (the registry branch the spec offered), **not** a DB re-read. The initial DB-re-read implementation broke two existing `TestRunBackfill` tests whose `db` mock makes `await get_job(...)` fail; the registry check is authoritative for the live run (CancelBackfill adds to the registry before writing CANCELED) and adds no DB round-trip.
 **Reason**: Avoids an extra DB read on every finalize and the test-mock incompatibility; the spec explicitly allowed "check the registry."
 **Disposition**: in-scope (one of the two spec-offered options). Verified: full ingest suite 130 passed, coverage 74.6% ≥ 40%.
+
+### Deviation: Step 6 — refactored Step-5 code for unit-testability (user-approved Option A)
+**Problem**: The new delete logic landed in `service/` + `repository/`, but those types aren't unit-mockable without a DB: `MarketDataService.repo` is a concrete `*MarketDataRepo` (un-stubbable), `config.Watcher` has no exported setter (so the `max_delete_days` window-guard couldn't be driven from `package service`), and `middleware`'s context key is unexported. The existing service test suite never constructs the service with a repo — so only the empty-symbol/missing-admin guards were testable as-written.
+**Decision (asked via AskUserQuestion, user chose A)**: refactor for testability rather than lean on the Step-13 E2E.
+**Actual**: Extracted two pure helpers (edits two Step-5 files + adds a repo test file, beyond Step 6's declared `marketdata_service_test.go`):
+- `service.resolveDeletePlan(symbol, accessScope, tf, range, maxDays)` — the FR-5 guards (symbol-required→InvalidArgument, admin-0x04→PermissionDenied, window-cap→InvalidArgument) + timeframe/range resolution, taking scope+maxDays as plain params (no ctx/Watcher). `DeleteBackfilledData` now calls it.
+- `repository.buildDeleteBarsQuery(symbol, timeframe, start, end)` — pure SQL+args builder; `DeleteBars` calls it + `Exec`.
+**Tests**: `TestResolveDeletePlan` (8 sub-cases) + `TestBuildDeleteBarsQuery` (4 variants) asserting the DBA-critical invariant — the symbol predicate is ALWAYS present and always `$1`, so a full-table delete can never be issued.
+**Disposition**: user-approved scope expansion. Verified: `go build` OK, `golangci-lint` 0 issues, all 7 tested packages pass.

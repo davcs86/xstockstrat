@@ -196,3 +196,19 @@ in parallel.
 - Files: internal/repository/marketdata_repo.go, internal/service/marketdata_service.go,
   internal/handler/marketdata_handler.go
 - Deviations: none.
+
+### Step 6 — test: marketdata scoped-delete coverage [done]
+- BLOCKER raised (un-mockable concrete repo/cfg + unexported middleware key) → AskUserQuestion →
+  user chose Option A (refactor for testability). See Deviation Log.
+- Refactor (edits Step-5 files): extracted service.resolveDeletePlan(symbol, accessScope, tf, range,
+  maxDays) pure guard (DeleteBackfilledData calls it) + repository.buildDeleteBarsQuery(...) pure
+  SQL builder (DeleteBars calls it).
+- Tests: internal/service/marketdata_service_test.go TestResolveDeletePlan (8 sub-cases: empty-symbol→
+  InvalidArgument, no-admin/empty-scope→PermissionDenied, whole-symbol accepted, tf→"1d",
+  range-within/exceeds max_delete_days, maxDays=0 disables guard). New
+  internal/repository/marketdata_repo_test.go TestBuildDeleteBarsQuery (4 variants) asserting symbol
+  predicate ALWAYS present + always $1 + first arg (DBA full-table-delete safety).
+- Verification: GOWORK=off go build OK; golangci-lint 0 issues; go test ./... exit 0 (7 pkgs ok).
+- Files: internal/service/marketdata_service.go, internal/repository/marketdata_repo.go,
+  internal/service/marketdata_service_test.go, internal/repository/marketdata_repo_test.go (new)
+- Deviations: Option A scope expansion (user-approved) — see Deviation Log.
