@@ -85,8 +85,9 @@ describe('rowToAlert', () => {
     };
     const alert = rowToAlert(row);
     assert.strictEqual(alert.alertId, 'a1');
-    assert.strictEqual(alert.severity, 2);
-    assert.strictEqual(alert.createdAt.seconds, Math.floor(now.getTime() / 1000));
+    // DB integer severity is mapped back to the ts-proto string enum.
+    assert.strictEqual(alert.severity, 'ALERT_SEVERITY_WARNING');
+    assert.ok(alert.createdAt instanceof Date);
     assert.deepStrictEqual(alert.tags, ['risk']);
   });
 
@@ -109,6 +110,60 @@ describe('rowToAlert', () => {
     assert.strictEqual(alert.targetUserId, '');
     assert.strictEqual(alert.correlationId, '');
     assert.deepStrictEqual(alert.tags, []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// emitAlert — write path
+// ---------------------------------------------------------------------------
+
+describe('emitAlert', () => {
+  // Regression: severity arrives as a ts-proto string enum (stringEnums codegen),
+  // but notify.alerts.severity is INTEGER. Binding the raw string raised
+  // `invalid input syntax for type integer: "ALERT_SEVERITY_WARNING"`.
+  it('binds severity as the numeric enum value, not the string enum', async () => {
+    if (!NotifyServiceImpl) return;
+    let capturedParams: any[] = [];
+    const pool = {
+      async query(_sql: string, params?: any[]) {
+        capturedParams = params ?? [];
+        return { rows: [] };
+      },
+    };
+    const impl = new NotifyServiceImpl(pool, {});
+    const call = {
+      request: {
+        severity: 'ALERT_SEVERITY_WARNING',
+        category: 'portfolio',
+        title: 'Drawdown',
+        body: 'limit breached',
+        sourceService: 'portfolio',
+      },
+    };
+
+    await new Promise<void>((resolve, reject) => {
+      impl.emitAlert(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+
+    // severity is the 2nd bound param (index 1).
+    assert.strictEqual(capturedParams[1], 2);
+    assert.strictEqual(typeof capturedParams[1], 'number');
+  });
+
+  it('calls back with error code 13 on DB failure', async () => {
+    const impl = makeImpl([], new Error('insert failed'));
+    if (!impl) return;
+    const call = {
+      request: { severity: 'ALERT_SEVERITY_INFO', category: 'c', title: 't', body: 'b', sourceService: 's' },
+    };
+
+    await new Promise<void>((resolve) => {
+      impl.emitAlert(call, (err: any) => {
+        assert.ok(err);
+        assert.strictEqual(err.code, 13);
+        resolve();
+      });
+    });
   });
 });
 
