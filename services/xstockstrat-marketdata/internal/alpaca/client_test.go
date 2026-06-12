@@ -326,11 +326,10 @@ func TestGetBars_TranslatesCanonicalTimeframe(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"1m", "1Min"},
-		{"5m", "5Min"},
+		{"15m", "15Min"},
 		{"1h", "1Hour"},
 		{"1d", "1Day"},
-		{"1Min", "1Min"},   // already-Alpaca form passes through
+		{"15Min", "15Min"}, // already-Alpaca form passes through
 		{"1Hour", "1Hour"}, // already-Alpaca form passes through
 	}
 	for _, tc := range cases {

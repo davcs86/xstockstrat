@@ -54,17 +54,16 @@ func (c *Client) feedParam() string {
 	return c.cfg.Feed
 }
 
-// alpacaTimeframe maps the platform's canonical bar-interval strings (1m/5m/1h/1d —
+// alpacaTimeframe maps the platform's canonical bar-interval strings (15m/1h/1d —
 // the values stored in marketdata.ohlcv and passed by every caller, see internal/timeframe)
-// to the spellings Alpaca's v2 bars endpoint accepts (1Min/5Min/1Hour/1Day). Alpaca rejects
-// the canonical forms with HTTP 400 "invalid timeframe: 1m". Inputs already in Alpaca form,
+// to the spellings Alpaca's v2 bars endpoint accepts (15Min/1Hour/1Day). Alpaca rejects
+// the canonical forms with HTTP 400 "invalid timeframe: 15m". Inputs already in Alpaca form,
 // and any unrecognized value, pass through unchanged so future intervals aren't silently dropped.
+// (Sub-15m intervals were removed from the product — see internal/timeframe.)
 func alpacaTimeframe(tf string) string {
 	switch tf {
-	case "1m", "1Min":
-		return "1Min"
-	case "5m", "5Min":
-		return "5Min"
+	case "15m", "15Min":
+		return "15Min"
 	case "1h", "1Hour":
 		return "1Hour"
 	case "1d", "1Day":

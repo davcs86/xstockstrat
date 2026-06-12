@@ -419,7 +419,7 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	tf := s.cfg.GetString("marketdata.stream.bar_ingest_timeframe", "1m")
+	tf := s.cfg.GetString("marketdata.stream.bar_ingest_timeframe", "15m")
 	lookbackMs := s.cfg.GetInt("marketdata.stream.bar_ingest_lookback_ms", 900000)
 	if lookbackMs <= 0 {
 		lookbackMs = 900000
@@ -549,10 +549,8 @@ func estimateExpectedBars(symbols []string, timeframe string, start, end time.Ti
 		perDay = 1
 	case "1h", "1Hour":
 		perDay = 7 // ~6.5 RTH hours, rounded up
-	case "5m", "5Min":
-		perDay = 78
-	case "1m", "1Min":
-		perDay = 390
+	case "15m", "15Min":
+		perDay = 26 // ~6.5 RTH hours × 4 fifteen-min bars
 	default:
 		perDay = 1
 	}
