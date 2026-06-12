@@ -286,3 +286,17 @@ in parallel.
 - Files: services/xstockstrat-ui/e2e/insights/backfills.spec.ts (new)
 - Deviations: E2E full run deferred to CI (environment limitation) — see Deviation Log. NOT claiming
   a green suite locally.
+
+### Step 14 — docs: backfill-management UI section [done]
+- docs/runbooks/historical-backfill.md: added "Manage backfills from the UI (operator-facing)" section
+  after Architecture — admin-only /insights/backfills page; create/monitor/filter/cancel/delete table
+  mapping to TriggerBackfill/GetBackfillStatus/ListBackfillJobs/CancelBackfill/DeleteBackfilledData;
+  destructive-delete guardrails (symbol-scoped server reject, typed symbol + second "DELETE ALL"
+  confirm, marketdata.backfill.max_delete_days cap, data_deleted audit event). No shell commands added.
+- Verification: grep confirms backfills/CancelBackfill/DeleteBackfilledData/max_delete_days present.
+- Files: docs/runbooks/historical-backfill.md
+- Deviations: none.
+
+### Feature 057 — code-completed
+All 14 steps committed to feature/backfill-management-ui. Single integration PR → main-dev next
+(per user's one-PR directive). E2E (Step 13) full green deferred to CI.

@@ -614,7 +614,7 @@ established by feature 049. Docs last.
 
 ### Step 14 — docs: backfill-management UI + new RPCs + config key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/runbooks/historical-backfill.md` — modify (add a "Manage backfills from the UI" section: trigger/monitor/cancel/delete, admin-only)
