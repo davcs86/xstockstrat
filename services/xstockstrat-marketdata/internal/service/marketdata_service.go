@@ -75,6 +75,9 @@ func NewMarketDataService(
 
 // GetBars retrieves historical OHLCV bars, querying from TimescaleDB.
 func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBarsRequest) (*marketdatav1.GetBarsResponse, error) {
+	// A charted symbol becomes "warm" so the always-on bar ingester keeps it fresh.
+	s.markWarm(req.Symbol)
+
 	var start, end time.Time
 	if req.Range != nil {
 		if req.Range.Start != nil {
@@ -363,6 +366,77 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 					slog.Warn("warm poller: cache insert failed", "symbol", sym, "error", err)
 				}
 			}
+		}
+	}
+}
+
+// StartBarIngestPoller continuously ingests recent bars for every symbol that has been
+// queried (the same warm set StartWarmQuotePoller tracks — populated by GetLatestQuote and
+// GetBars), upserting them into marketdata.ohlcv. This gives the platform an always-on feed
+// instead of one that only runs while a client holds a StreamBars RPC open. Interval is
+// configurable via marketdata.stream.bar_ingest_interval_ms (default 60s); set to 0 to pause.
+func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
+	const defaultIntervalMs = 60000
+	interval := time.Duration(s.cfg.GetInt("marketdata.stream.bar_ingest_interval_ms", defaultIntervalMs)) * time.Millisecond
+	if interval <= 0 {
+		interval = defaultIntervalMs * time.Millisecond
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ms := s.cfg.GetInt("marketdata.stream.bar_ingest_interval_ms", defaultIntervalMs)
+			if ms <= 0 {
+				continue // paused via config
+			}
+			if newInterval := time.Duration(ms) * time.Millisecond; newInterval != interval {
+				interval = newInterval
+				ticker.Reset(interval)
+			}
+			s.ingestRecentBars(ctx)
+		}
+	}
+}
+
+// ingestRecentBars fetches the recent bar window for every warm symbol and upserts it.
+// The lookback (marketdata.stream.bar_ingest_lookback_ms, default 15m) is re-fetched each
+// cycle; overlap is harmless because InsertBars upserts, and a window wider than the poll
+// interval lets the feed self-heal after a brief pause or restart.
+func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
+	s.warmMu.Lock()
+	symbols := make([]string, 0, len(s.warmSymbols))
+	for sym := range s.warmSymbols {
+		symbols = append(symbols, sym)
+	}
+	s.warmMu.Unlock()
+	if len(symbols) == 0 {
+		return
+	}
+	src, err := s.registry.Get("")
+	if err != nil {
+		return
+	}
+	tf := s.cfg.GetString("marketdata.stream.bar_ingest_timeframe", "1m")
+	lookbackMs := s.cfg.GetInt("marketdata.stream.bar_ingest_lookback_ms", 900000)
+	if lookbackMs <= 0 {
+		lookbackMs = 900000
+	}
+	end := time.Now().UTC()
+	start := end.Add(-time.Duration(lookbackMs) * time.Millisecond)
+	for _, sym := range symbols {
+		bars, err := src.GetBars(ctx, sym, tf, start, end)
+		if err != nil {
+			slog.Warn("bar ingest: live fetch failed", "symbol", sym, "timeframe", tf, "error", err)
+			continue
+		}
+		if len(bars) == 0 {
+			continue
+		}
+		if err := s.repo.InsertBars(ctx, bars); err != nil {
+			slog.Warn("bar ingest: insert failed", "symbol", sym, "error", err)
 		}
 	}
 }
