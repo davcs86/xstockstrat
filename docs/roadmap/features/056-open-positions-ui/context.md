@@ -191,3 +191,11 @@
   type-checked). Behavioral e2e run timed out (dev-server cold-compile flake) → CI-equivalent fallback.
 - Files: page.tsx, e2e/trader/api-smoke.spec.ts, e2e/mock-backend.ts, playwright.config.ts
 - Deviations: e2e mock-infra expansion + CI-equivalent verification — see Deviation Log.
+
+### Step 8 — docs: update service CLAUDE.md files [done]
+- portfolio CLAUDE.md (paper/live filter sentence): noted ListPositions now accepts additive symbol
+  (exact) + side (long/short by qty sign) filters (feature 056) and enriches each position.
+- services/xstockstrat-ui has no CLAUDE.md / env table → nothing to update there (verified absent).
+- Verification: grep confirms note; markdownlint-cli2 0 errors on the CLAUDE.md.
+- Files modified: services/xstockstrat-portfolio/CLAUDE.md
+- Deviations: none (UI CLAUDE.md absent — the spec's "verify and update if present" → no-op).

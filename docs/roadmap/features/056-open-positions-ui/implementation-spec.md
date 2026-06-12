@@ -385,7 +385,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 8 — docs: Update service CLAUDE.md files for new wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (service CLAUDE.md updates)
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify (note additive `symbol`/`side`
