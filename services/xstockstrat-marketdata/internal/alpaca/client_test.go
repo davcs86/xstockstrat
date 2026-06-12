@@ -356,7 +356,7 @@ func TestGetBars_TranslatesCanonicalTimeframe(t *testing.T) {
 				t.Errorf("timeframe %q: expected outbound timeframe=%q, got %q", tc.in, tc.want, gotTF)
 			}
 			// Stored bars keep the caller's (canonical) timeframe, not the Alpaca spelling.
-			if len(bars) != 1 || bars[0].Timeframe != tc.in {
+			if len(bars) != 1 || bars[0].Timeframe != tc.in { //nolint:staticcheck // SA1019: asserting the deprecated string timeframe field is preserved on the stored bar
 				t.Errorf("timeframe %q: expected stored bar timeframe=%q, got %+v", tc.in, tc.in, bars)
 			}
 		})

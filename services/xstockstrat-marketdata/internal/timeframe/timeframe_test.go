@@ -43,8 +43,8 @@ func TestToCanonical(t *testing.T) {
 		{commonv1.Timeframe_TIMEFRAME_1DAY, "1d", true},
 		{commonv1.Timeframe_TIMEFRAME_UNSPECIFIED, "", false},
 		// Deprecated sub-15m enums no longer map to a canonical string.
-		{commonv1.Timeframe_TIMEFRAME_1MIN, "", false},
-		{commonv1.Timeframe_TIMEFRAME_5MIN, "", false},
+		{commonv1.Timeframe_TIMEFRAME_1MIN, "", false}, //nolint:staticcheck // SA1019: asserting the deprecated sub-15m enum no longer resolves
+		{commonv1.Timeframe_TIMEFRAME_5MIN, "", false}, //nolint:staticcheck // SA1019: asserting the deprecated sub-15m enum no longer resolves
 	}
 	for _, tt := range tests {
 		got, ok := ToCanonical(tt.in)
