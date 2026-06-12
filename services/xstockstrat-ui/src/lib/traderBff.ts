@@ -79,10 +79,15 @@ router.service(TradingService, {
 router.service(PortfolioService, {
   async getPortfolio(req, ctx) {
     const claims = await requireSession(ctx);
-    return portfolioClient.getPortfolio(req, { headers: backendHeaders(claims, ctx) });
+    return portfolioClient.getPortfolio(
+      { ...req, userId: claims.user_id },
+      { headers: backendHeaders(claims, ctx) },
+    );
   },
   async listPortfolios(req, ctx) {
     const claims = await requireSession(ctx);
+    // No user_id field on the request — the service resolves the user from the
+    // propagated x-user-id header to aggregate the all-accounts view.
     return portfolioClient.listPortfolios(req, { headers: backendHeaders(claims, ctx) });
   },
 });

@@ -74,6 +74,8 @@ def _job_row(job_id: str, status: int, **over) -> dict:
         "status": status,
         "bars_processed": 0,
         "bars_total": 0,
+        "chunks_total": 0,
+        "chunks_completed": 0,
         "failed_symbols": [],
         "error": "",
         "started_at": None,

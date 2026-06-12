@@ -309,7 +309,14 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	order.BrokerOrderId = brokerOrder.BrokerOrderID
 	order.Status = alpacaStatusToProto(brokerOrder.Status)
 	order.UpdatedAt = timestamppb.New(time.Now())
-	// BrokerOrder does not carry fill qty/price; those are updated by the fill poller.
+	// Carry any fill the broker already reported on submit (market orders fill
+	// immediately). Without this the fill poller — which skips orders already in
+	// FILLED state — would never backfill the quantity, leaving FILLED orders at 0.
+	order.FilledQty = brokerOrder.FilledQty
+	order.FilledAvgPrice = brokerOrder.FilledAvgPrice
+	if order.Status == tradingv1.OrderStatus_ORDER_STATUS_FILLED && order.FilledQty == 0 {
+		order.FilledQty = order.Qty
+	}
 
 	// Persist updated order with broker fields.
 	if err := s.repo.UpsertOrder(context.Background(), order); err != nil {

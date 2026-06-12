@@ -145,7 +145,18 @@ func (c *Client) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrde
 	if err := json.Unmarshal(respBody, &alpacaResp); err != nil {
 		return nil, fmt.Errorf("decode order response: %w", err)
 	}
-	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status}, nil
+	// Market orders can fill immediately, so the submit response may already carry
+	// filled_qty / filled_avg_price. Parse them so an order that fills on submit is
+	// not left at filled_qty=0 (the fill poller skips orders already in FILLED state).
+	var filledAvgPrice float64
+	if alpacaResp.FilledAvgPrice != "" {
+		filledAvgPrice, _ = strconv.ParseFloat(alpacaResp.FilledAvgPrice, 64)
+	}
+	var filledQty float64
+	if alpacaResp.FilledQty != "" {
+		filledQty, _ = strconv.ParseFloat(alpacaResp.FilledQty, 64)
+	}
+	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status, FilledQty: filledQty, FilledAvgPrice: filledAvgPrice}, nil
 }
 
 // CancelOrder cancels a broker order via DELETE /v2/orders/{order_id}.

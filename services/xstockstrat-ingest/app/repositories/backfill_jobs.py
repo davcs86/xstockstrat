@@ -15,6 +15,8 @@ _UPDATABLE_COLUMNS = frozenset(
         "status",
         "bars_processed",
         "bars_total",
+        "chunks_total",
+        "chunks_completed",
         "failed_symbols",
         "error",
         "started_at",
