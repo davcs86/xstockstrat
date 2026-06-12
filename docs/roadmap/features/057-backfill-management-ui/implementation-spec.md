@@ -198,7 +198,7 @@ established by feature 049. Docs last.
 
 ### Step 4 — test: ingest cancel + symbol filter coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_backfill_jobs.py` — modify (or add `tests/test_cancel_backfill.py`)
@@ -653,3 +653,9 @@ established by feature 049. Docs last.
 **Actual**: The runner's Docker daemon is not running, so codegen ran on the host with the toolchain pinned to the CI `proto-freshness` versions (buf v1.47.2; protoc-gen-go v1.36.11 / -go-grpc v1.6.2 / -connect-go v1.19.2; grpcio-tools 1.80.0; TS plugins from the committed lockfile).
 **Reason**: No Docker; host toolchain is the sanctioned sequential-mode fallback.
 **Disposition**: CI-equivalent fallback. Regen diff confirmed **limited to `ingest/v1` + `marketdata/v1`** (Go/Python/TS + dist). Host `buf`'s bundled `google/protobuf` descriptors produced an unrelated doc-comment change in `gen/ts/google/protobuf/timestamp.ts`; reverted so committed stubs match CI's baseline.
+
+### Deviation: Step 3/4 — `_finalize_backfill` cancel guard uses the in-process registry (not a DB re-read)
+**Spec said (Step 3)**: "Also short-circuit `_finalize_backfill` so a canceled job is not overwritten back to COMPLETED/PARTIAL (check the registry / re-read the row status before the final `update_job`)."
+**Actual**: Implemented as `if job_id in self._canceled_jobs: discard + return` (the registry branch the spec offered), **not** a DB re-read. The initial DB-re-read implementation broke two existing `TestRunBackfill` tests whose `db` mock makes `await get_job(...)` fail; the registry check is authoritative for the live run (CancelBackfill adds to the registry before writing CANCELED) and adds no DB round-trip.
+**Reason**: Avoids an extra DB read on every finalize and the test-mock incompatibility; the spec explicitly allowed "check the registry."
+**Disposition**: in-scope (one of the two spec-offered options). Verified: full ingest suite 130 passed, coverage 74.6% ≥ 40%.

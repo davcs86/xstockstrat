@@ -328,9 +328,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         but some symbols/chunks failed) / FAILED (no chunk made progress).
         """
         # If a cancel landed while in-flight chunks were draining, do not overwrite CANCELED
-        # back to a terminal completed/partial status (FR-4).
-        existing = await backfill_jobs.get_job(self._db, job_id)
-        if existing is not None and existing["status"] == ingest_pb2.BACKFILL_STATUS_CANCELED:
+        # back to a terminal completed/partial status (FR-4). The in-process registry is set by
+        # CancelBackfill before it writes CANCELED, so it is authoritative for the live run.
+        if job_id in self._canceled_jobs:
             self._canceled_jobs.discard(job_id)
             return
         now = datetime.now(UTC)

@@ -167,3 +167,15 @@ in parallel.
 - Files: app/handlers/servicer.py, app/repositories/backfill_jobs.py
 - Deviations: none (list_jobs dynamic-builder is the spec's "$N = ANY(symbols)" predicate combined
   with status, just assembled dynamically).
+
+### Step 4 — test: ingest cancel + symbol filter coverage [done]
+- New tests/test_cancel_backfill.py (9 tests): cancel running→CANCELED + registry set; admin-gate
+  PERMISSION_DENIED; terminal→FAILED_PRECONDITION; unknown→NOT_FOUND; no-db→UNAVAILABLE;
+  list_jobs symbol-filter ANY(symbols) predicate, status+symbol combine, no-filter omits WHERE;
+  ListBackfillJobs forwards symbol_filter. Self-contained fake servicer/context (no cross-test import).
+- Step-3 follow-up fix (in servicer.py): _finalize_backfill cancel guard switched from a DB re-read
+  to the in-process registry check — the DB re-read broke 2 existing TestRunBackfill tests (their db
+  mock makes await get_job fail). Registry is authoritative for the live run. See Deviation Log.
+- Verification: ruff check + format clean; full suite 130 passed; coverage 74.6% ≥ 40%; uv.lock unchanged.
+- Files: tests/test_cancel_backfill.py (+ servicer.py finalize fix)
+- Deviations: finalize cancel guard uses registry not DB re-read — see Deviation Log.
