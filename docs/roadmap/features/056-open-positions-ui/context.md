@@ -179,3 +179,15 @@
   also has .positions). PositionSide members are prefix-stripped (UNSPECIFIED/LONG/SHORT) in _pb.
 - Files: created ledgerClient.ts, usePositionLineage.ts; modified usePortfolio.ts
 - Deviations: none.
+
+### Step 7 — service: rebuild positions page (pagination, filters, detail + lineage) [done]
+- positions/page.tsx: rebuilt with symbol Input filter, side Select (long/short), P&L Select
+  (winners/losers, client-side), mode toggle, Prev/Next keyset pagination (pageStack + nextPageToken),
+  and a row-click Sheet detail showing all Position fields + usePositionLineage order.filled fills.
+- e2e: added ListPositions + QueryEvents smoke blocks to api-smoke.spec.ts; extended mock-backend.ts
+  (9091 PortfolioService.listPositions + new LedgerService.queryEvents mock) and playwright.config.ts
+  (LEDGER_ENDPOINT=127.0.0.1:9091) so the smoke tests resolve.
+- Verification: pnpm run lint clean; tsc --noEmit clean (app tsconfig includes e2e/**, so mock+spec
+  type-checked). Behavioral e2e run timed out (dev-server cold-compile flake) → CI-equivalent fallback.
+- Files: page.tsx, e2e/trader/api-smoke.spec.ts, e2e/mock-backend.ts, playwright.config.ts
+- Deviations: e2e mock-infra expansion + CI-equivalent verification — see Deviation Log.

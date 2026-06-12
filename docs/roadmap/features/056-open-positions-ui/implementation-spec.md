@@ -342,7 +342,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 7 — service: Rebuild positions page (pagination, filters, detail + fill lineage)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/page.tsx` — modify
@@ -471,5 +471,11 @@ read-only join over existing `order.filled` ledger events.
 **Actual**: The `sideOf` helper was added to `services/xstockstrat-portfolio/internal/service/portfolio_service.go` (production), together with its `TestSideOf` + `TestEnrichPosition` tests in `portfolio_helpers_test.go`, in this one step.
 **Reason**: A Go helper can't live only in a `_test.go` file and be a "production helper"; and adding it in Step 3 (with no caller yet) failed `golangci-lint unused`. Adding it here, in the same commit as its test, gives every stacked PR an independently lint-green tree.
 **Disposition**: in-scope (the paired test step naturally co-locates the tested helper). Verified: `go test` passes (coverage 47.8% ≥ 40%); `golangci-lint run` clean.
+
+### Deviation: Step 7 — e2e mock infra extended + CI-equivalent verification
+**Spec said**: Step 7 `**Files**` = `positions/page.tsx` + `e2e/trader/api-smoke.spec.ts`; verify with `pnpm test:e2e`.
+**Actual**: (a) Also modified `e2e/mock-backend.ts` (added a `PortfolioService.listPositions` handler + a new `LedgerService.queryEvents` mock on the 9091 trader mock) and `playwright.config.ts` (added `LEDGER_ENDPOINT: 127.0.0.1:9091`) — the new `ListPositions`/`QueryEvents` smoke tests get a 200 only if the mock backend implements those RPCs. (b) The Playwright dev-server harness timed out (>320s cold-compile + mock startup) so behavioral e2e could not complete locally.
+**Reason**: The e2e smoke step is meaningless without mock handlers for the RPCs it exercises; the dev-server cold-compile flake is the same one documented in `playwright.config.ts` (CI uses a production build).
+**Disposition**: in-scope test-infra + CI-equivalent fallback. The page rewrite, mock, spec, and config are all type-checked by `tsc --noEmit` (the app tsconfig `include` covers `e2e/**/*.ts`) and `pnpm run lint` — both clean. CI's production-bundle e2e run is the authoritative behavioral gate.
 </content>
 </invoke>

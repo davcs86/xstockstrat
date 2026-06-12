@@ -19,6 +19,7 @@ import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
 import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
+import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
 import { NotifyService, type Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
@@ -145,6 +146,36 @@ export async function startMockBackend(): Promise<void> {
             portfolios: [
               { portfolioId: 'port-001', accountId: 'alpaca-default', equity: 50000.00, cash: 20000.00, buyingPower: 40000.00, dayPnl: 150.00, dayPnlPct: 0.003, totalPnl: 1500.00, positions: [{ symbol: 'AAPL', unrealizedPnl: 100.00 }] },
             ],
+          };
+        },
+        async listPositions() {
+          return {
+            positions: [
+              { symbol: 'AAPL', qty: 10, avgEntryPrice: 180.0, currentPrice: 189.8, marketValue: 1898.0, unrealizedPnl: 98.0, unrealizedPnlPct: 0.054, costBasis: 1800.0, accountId: 'alpaca-default', tradingMode: 1 },
+              { symbol: 'MSFT', qty: -5, avgEntryPrice: 420.0, currentPrice: 410.0, marketValue: -2050.0, unrealizedPnl: 50.0, unrealizedPnlPct: 0.024, costBasis: -2100.0, accountId: 'alpaca-default', tradingMode: 1 },
+            ],
+            page: { nextPageToken: '' },
+          };
+        },
+      });
+
+      router.service(LedgerService, {
+        async queryEvents() {
+          return {
+            events: [
+              {
+                eventId: 'evt-001',
+                eventType: 'order.filled',
+                streamKey: 'order:mock-order-001',
+                sourceService: 'trading',
+                payload: {
+                  order_id: 'mock-order-001', symbol: 'AAPL', qty: 10, fill_price: 180.0,
+                  account_id: 'alpaca-default', trading_mode: 'TRADING_MODE_PAPER', user_id: 'test-user-001',
+                },
+                sequence: BigInt(1),
+              },
+            ],
+            page: { nextPageToken: '' },
           };
         },
       });

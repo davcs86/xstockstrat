@@ -73,6 +73,7 @@ export default defineConfig({
       // are unaffected by this routing.
       TRADING_ENDPOINT:    '127.0.0.1:9091',
       PORTFOLIO_ENDPOINT:  '127.0.0.1:9091',
+      LEDGER_ENDPOINT:     '127.0.0.1:9091',
       MARKETDATA_ENDPOINT: '127.0.0.1:9091',
       NOTIFY_ENDPOINT:     '127.0.0.1:9091',
       IDENTITY_ENDPOINT:   '127.0.0.1:9091',
