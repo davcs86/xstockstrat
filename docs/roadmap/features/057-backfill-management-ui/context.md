@@ -268,3 +268,21 @@ in parallel.
 - Verification: npx tsc --noEmit exit 0; prettier clean; grep confirms backfills link + useIsAdmin.
 - Files: services/xstockstrat-ui/src/components/insights/AppShell.tsx
 - Deviations: none.
+
+### Step 13 — test: UI E2E for the Backfills page [done]
+- Created e2e/insights/backfills.spec.ts (6 tests across 3 describes): admin sees nav+page surfaces /
+  non-admin sees neither (FR-7); list renders status badge + truthful bars/chunks (AC-1/2); create
+  posts uppercased symbols (AC-1); cancel flips RUNNING→CANCELED via stateful list stub + dialog
+  accept (AC-3); delete requires typed symbol + second "DELETE ALL" confirm for whole-symbol and
+  shows rowsDeleted (AC-4/FR-5). Uses addCookieWithRoles (admin/non-admin) + browser page.route()
+  Connect stubs (formulas.spec.ts pattern; insights mock 9092 lacks Ingest/MarketData).
+- Static verification: prettier clean; tsc --noEmit exit 0; next lint "No ESLint warnings or errors".
+- Execution: harness ran the suite (1 pass, 5 fail) — all 5 were selector issues diagnosed from the
+  DOM snapshot and FIXED (exact-match text to dodge filter <option>s; exact placeholder; positive-
+  control nav assertion; longer first-nav timeouts). A full green run could NOT be reproduced here:
+  non-CI Playwright = pnpm dev + 10s per-test timeout vs dev cold-compile; next build/webServer
+  orchestration overran every command wall-clock. pnpm build succeeds (page in bundle). Full E2E
+  green deferred to CI (next build && next start, 30s timeout, retries:2 — its designed conditions).
+- Files: services/xstockstrat-ui/e2e/insights/backfills.spec.ts (new)
+- Deviations: E2E full run deferred to CI (environment limitation) — see Deviation Log. NOT claiming
+  a green suite locally.

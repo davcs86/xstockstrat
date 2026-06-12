@@ -583,7 +583,7 @@ established by feature 049. Docs last.
 
 ### Step 13 — test: UI E2E for the Backfills page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/backfills.spec.ts` — create
@@ -668,3 +668,9 @@ established by feature 049. Docs last.
 - `repository.buildDeleteBarsQuery(symbol, timeframe, start, end)` — pure SQL+args builder; `DeleteBars` calls it + `Exec`.
 **Tests**: `TestResolveDeletePlan` (8 sub-cases) + `TestBuildDeleteBarsQuery` (4 variants) asserting the DBA-critical invariant — the symbol predicate is ALWAYS present and always `$1`, so a full-table delete can never be issued.
 **Disposition**: user-approved scope expansion. Verified: `go build` OK, `golangci-lint` 0 issues, all 7 tested packages pass.
+
+### Deviation: Step 13 — E2E full green run deferred to CI (container can't complete dev-mode E2E)
+**Spec verification said**: `pnpm run lint && pnpm test:e2e` — suite passes.
+**Actual**: The spec is authored to the established pattern (`addCookieWithRoles` admin/non-admin, browser-level `page.route()` Connect stubs like `formulas.spec.ts`, `dialog` accept for the cancel confirm, a stateful list stub for the cancel→CANCELED flip) and is **statically green**: prettier clean, `tsc --noEmit` exit 0, `next lint` "No ESLint warnings or errors". The harness **did execute** the suite (first run: 1 test passed, 5 failed) and the 5 failures were diagnosed from the captured DOM snapshot and fixed — all selector issues, not logic: `getByText('running'|'canceled')` matched the filter `<option>`s → switched to `{ exact: true }`; `getByPlaceholder('Symbol')` matched 5 inputs → `{ exact: true }`; added a positive-control (`Strategies` link) before the gated-`Backfills` assertion; longer first-navigation timeouts.
+**Reason**: A full green run could not be reproduced in this container. Non-CI Playwright uses `pnpm dev` with a **10s per-test timeout** + on-demand route compilation; the dev server's cold-compile of `/insights/*` + `/api/auth/me` exceeds 10s on the first hit, and repeated `next build`/webServer orchestration overran every single-command wall-clock. A production `pnpm build` **succeeds** (exit 0, the page is in the bundle).
+**Disposition**: CI runs this spec under its designed conditions — `next build && next start` (precompiled pages, no compile lag), **30s** test timeout, `retries: 2` — where it is expected to pass. Full E2E execution is therefore deferred to CI. No production code depends on this step; it is test-only.
