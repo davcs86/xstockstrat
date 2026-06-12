@@ -297,6 +297,38 @@ func (r *PortfolioRepo) GetAccountBalance(ctx context.Context, accountID string)
 	return &b, nil
 }
 
+// UserAccountBalance pairs an account_id with its latest balance snapshot.
+type UserAccountBalance struct {
+	AccountID string
+	Balance   AccountBalance
+}
+
+// ListAccountBalancesByUser returns the latest balance snapshot for every account
+// owned by a user, ordered by account_id. Used to aggregate the "all accounts"
+// portfolio view, where no single account_id is supplied.
+func (r *PortfolioRepo) ListAccountBalancesByUser(ctx context.Context, userID string) ([]UserAccountBalance, error) {
+	const q = `
+		SELECT account_id, cash, buying_power, equity, last_equity
+		FROM portfolio.account_balances
+		WHERE user_id=$1
+		ORDER BY account_id ASC`
+	rows, err := r.pool.Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list account balances by user: %w", err)
+	}
+	defer rows.Close()
+
+	var result []UserAccountBalance
+	for rows.Next() {
+		var ab UserAccountBalance
+		if err := rows.Scan(&ab.AccountID, &ab.Balance.Cash, &ab.Balance.BuyingPower, &ab.Balance.Equity, &ab.Balance.LastEquity); err != nil {
+			return nil, fmt.Errorf("scan account balance: %w", err)
+		}
+		result = append(result, ab)
+	}
+	return result, rows.Err()
+}
+
 // ListPositionsByAccount returns all positions for a given account, optionally filtered by tradingMode.
 func (r *PortfolioRepo) ListPositionsByAccount(ctx context.Context, accountID string, tradingMode string) ([]*portfoliov1.Position, error) {
 	var (

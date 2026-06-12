@@ -36,8 +36,9 @@ function fmtPct(n: number | undefined | null): string {
 }
 
 export default function PositionsPage() {
-  const { selectedAccountId } = useAccountContext();
-  const [mode, setMode] = useState<TradingMode>('paper');
+  const { selectedAccountId, environmentMode } = useAccountContext();
+  // Trading mode is fixed by the deployment environment — not user-selectable.
+  const mode: TradingMode = environmentMode ?? 'paper';
   const [symbol, setSymbol] = useState('');
   const [side, setSide] = useState<PositionSide>(PositionSide.UNSPECIFIED);
   const [pnlFilter, setPnlFilter] = useState<PnlFilter>('all');
@@ -82,28 +83,6 @@ export default function PositionsPage() {
             <p className="text-sm text-muted-foreground mt-1">
               Open positions for the selected account, refreshed every 10s
             </p>
-          </div>
-          <div className="flex items-center gap-1 rounded-lg bg-secondary p-1">
-            {(['paper', 'live'] as TradingMode[]).map((m) => (
-              <Button
-                key={m}
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setMode(m);
-                  resetPaging();
-                }}
-                className={
-                  mode === m
-                    ? m === 'paper'
-                      ? 'bg-paper/20 text-paper hover:bg-paper/30 h-7 px-3'
-                      : 'bg-buy/20 text-buy hover:bg-buy/30 h-7 px-3'
-                    : 'text-muted-foreground hover:text-foreground h-7 px-3'
-                }
-              >
-                {m.toUpperCase()}
-              </Button>
-            ))}
           </div>
         </div>
 

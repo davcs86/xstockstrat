@@ -75,6 +75,8 @@ def job_row_to_proto(row: dict) -> ingest_pb2.BackfillJob:
         status=row["status"],
         bars_processed=row["bars_processed"] or 0,
         bars_total=row["bars_total"] or 0,
+        chunks_total=row["chunks_total"] or 0,
+        chunks_completed=row["chunks_completed"] or 0,
         failed_symbols=list(row["failed_symbols"] or []),
         error=row["error"] or "",
     )

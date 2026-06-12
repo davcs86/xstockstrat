@@ -43,8 +43,10 @@ ingests signals via the `IngestSignal` gRPC RPC. The former HTTP/Connect-RPC ser
   replaces the former in-memory `self._jobs` dict. Persists status, progress (`bars_processed` /
   `bars_total`), `failed_symbols`, and timestamps so jobs survive a restart. On startup the servicer
   reconciles any job left `RUNNING`/`QUEUED` by a previous process to `FAILED` ("interrupted by
-  restart", FR-3 — no automatic resume).
-- Migration: `migrations/003_backfill_jobs.up.sql`
+  restart", FR-3 — no automatic resume). Chunk-plan progress is tracked by the `chunks_total` /
+  `chunks_completed` columns (added in migration 005 — feature 054 shipped the proto fields and the
+  servicer writes but originally omitted the backing columns, which left jobs stuck in `queued`).
+- Migration: `migrations/003_backfill_jobs.up.sql`, `migrations/005_add_backfill_job_chunk_counts.up.sql`
 - Table: `ingest.backfill_chunks` — per-chunk progress for resumable/chunked backfills (feature 054);
   FK to `ingest.backfill_jobs(job_id)` (cascade). A job is planned into time/symbol chunks
   (`chunk_window_days` × `chunk_max_bars`); chunks run in parallel (`max_concurrent_chunks`) and on

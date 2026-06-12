@@ -75,6 +75,9 @@ func NewMarketDataService(
 
 // GetBars retrieves historical OHLCV bars, querying from TimescaleDB.
 func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBarsRequest) (*marketdatav1.GetBarsResponse, error) {
+	// A charted symbol becomes "warm" so the always-on bar ingester keeps it fresh.
+	s.markWarm(req.Symbol)
+
 	var start, end time.Time
 	if req.Range != nil {
 		if req.Range.Start != nil {
@@ -104,10 +107,58 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 	if err != nil {
 		return nil, fmt.Errorf("query bars: %w", err)
 	}
+
+	// DB miss on the first page — fall back to a live Alpaca fetch, cache the result,
+	// and re-read so pagination stays consistent. Without this the chart stays empty
+	// until an explicit backfill runs, even though the data is one REST call away.
+	// (Mirrors GetLatestQuote's live fallback.) Only on the first page: an empty later
+	// page means end-of-data, not a miss.
+	if len(bars) == 0 && pageToken == "" {
+		bars, nextToken = s.fetchAndCacheBars(ctx, req.Symbol, req.Timeframe, start, end, pageSize) //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+	}
+
 	return &marketdatav1.GetBarsResponse{
 		Bars: bars,
 		Page: &commonv1.PageResponse{NextPageToken: nextToken},
 	}, nil
+}
+
+// fetchAndCacheBars fetches bars for a symbol from the live source, persists them, and
+// returns the first page from the DB (so the next_page_token is consistent with a normal
+// cached read). On any failure it logs and returns no bars — GetBars then yields an empty
+// (but valid) response rather than erroring. If caching fails the freshly fetched bars are
+// still served, truncated to pageSize.
+func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf string, start, end time.Time, pageSize int) ([]*marketdatav1.Bar, string) {
+	src, err := s.registry.Get("")
+	if err != nil {
+		slog.Warn("GetBars: resolve source failed", "symbol", symbol, "error", err)
+		return nil, ""
+	}
+	live, err := src.GetBars(ctx, symbol, tf, start, end)
+	if err != nil {
+		slog.Warn("GetBars: live fetch failed", "symbol", symbol, "timeframe", tf, "error", err)
+		return nil, ""
+	}
+	if len(live) == 0 {
+		return nil, ""
+	}
+	if err := s.repo.InsertBars(ctx, live); err != nil {
+		slog.Warn("GetBars: cache insert failed", "symbol", symbol, "error", err)
+		// Serve what we fetched even if caching failed.
+		if len(live) > pageSize {
+			return live[:pageSize], ""
+		}
+		return live, ""
+	}
+	bars, nextToken, err := s.repo.QueryBars(ctx, symbol, tf, start, end, pageSize, "")
+	if err != nil {
+		slog.Warn("GetBars: re-read after cache failed", "symbol", symbol, "error", err)
+		if len(live) > pageSize {
+			return live[:pageSize], ""
+		}
+		return live, ""
+	}
+	return bars, nextToken
 }
 
 // GetDataCoverage reports stored OHLCV coverage (earliest/latest/count + gaps) for a
@@ -315,6 +366,77 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 					slog.Warn("warm poller: cache insert failed", "symbol", sym, "error", err)
 				}
 			}
+		}
+	}
+}
+
+// StartBarIngestPoller continuously ingests recent bars for every symbol that has been
+// queried (the same warm set StartWarmQuotePoller tracks — populated by GetLatestQuote and
+// GetBars), upserting them into marketdata.ohlcv. This gives the platform an always-on feed
+// instead of one that only runs while a client holds a StreamBars RPC open. Interval is
+// configurable via marketdata.stream.bar_ingest_interval_ms (default 60s); set to 0 to pause.
+func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
+	const defaultIntervalMs = 60000
+	interval := time.Duration(s.cfg.GetInt("marketdata.stream.bar_ingest_interval_ms", defaultIntervalMs)) * time.Millisecond
+	if interval <= 0 {
+		interval = defaultIntervalMs * time.Millisecond
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ms := s.cfg.GetInt("marketdata.stream.bar_ingest_interval_ms", defaultIntervalMs)
+			if ms <= 0 {
+				continue // paused via config
+			}
+			if newInterval := time.Duration(ms) * time.Millisecond; newInterval != interval {
+				interval = newInterval
+				ticker.Reset(interval)
+			}
+			s.ingestRecentBars(ctx)
+		}
+	}
+}
+
+// ingestRecentBars fetches the recent bar window for every warm symbol and upserts it.
+// The lookback (marketdata.stream.bar_ingest_lookback_ms, default 15m) is re-fetched each
+// cycle; overlap is harmless because InsertBars upserts, and a window wider than the poll
+// interval lets the feed self-heal after a brief pause or restart.
+func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
+	s.warmMu.Lock()
+	symbols := make([]string, 0, len(s.warmSymbols))
+	for sym := range s.warmSymbols {
+		symbols = append(symbols, sym)
+	}
+	s.warmMu.Unlock()
+	if len(symbols) == 0 {
+		return
+	}
+	src, err := s.registry.Get("")
+	if err != nil {
+		return
+	}
+	tf := s.cfg.GetString("marketdata.stream.bar_ingest_timeframe", "1m")
+	lookbackMs := s.cfg.GetInt("marketdata.stream.bar_ingest_lookback_ms", 900000)
+	if lookbackMs <= 0 {
+		lookbackMs = 900000
+	}
+	end := time.Now().UTC()
+	start := end.Add(-time.Duration(lookbackMs) * time.Millisecond)
+	for _, sym := range symbols {
+		bars, err := src.GetBars(ctx, sym, tf, start, end)
+		if err != nil {
+			slog.Warn("bar ingest: live fetch failed", "symbol", sym, "timeframe", tf, "error", err)
+			continue
+		}
+		if len(bars) == 0 {
+			continue
+		}
+		if err := s.repo.InsertBars(ctx, bars); err != nil {
+			slog.Warn("bar ingest: insert failed", "symbol", sym, "error", err)
 		}
 	}
 }
