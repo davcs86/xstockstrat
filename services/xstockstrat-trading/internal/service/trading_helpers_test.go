@@ -33,6 +33,30 @@ func TestAlpacaStatusToProto(t *testing.T) {
 	}
 }
 
+// TestCredentialsKnownInvalid covers the syncPositions skip gate: only a confirmed
+// INVALID status causes the poller to skip an account; UNSPECIFIED/OK/UNKNOWN do not,
+// so a never-checked or healthy account still syncs and a transient/unknown error
+// keeps retrying.
+func TestCredentialsKnownInvalid(t *testing.T) {
+	tests := []struct {
+		name   string
+		status tradingv1.CredentialStatus
+		want   bool
+	}{
+		{"unspecified not skipped", tradingv1.CredentialStatus_CREDENTIAL_STATUS_UNSPECIFIED, false},
+		{"ok not skipped", tradingv1.CredentialStatus_CREDENTIAL_STATUS_OK, false},
+		{"invalid skipped", tradingv1.CredentialStatus_CREDENTIAL_STATUS_INVALID, true},
+		{"unknown not skipped", tradingv1.CredentialStatus_CREDENTIAL_STATUS_UNKNOWN, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := credentialsKnownInvalid(int32(tt.status)); got != tt.want {
+				t.Errorf("credentialsKnownInvalid(%v) = %v, want %v", tt.status, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestApprovalThresholdLogic(t *testing.T) {
 	tests := []struct {
 		name                      string
