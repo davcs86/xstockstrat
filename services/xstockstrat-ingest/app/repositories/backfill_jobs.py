@@ -80,23 +80,34 @@ async def list_jobs(
     db_pool,
     *,
     status_filter: int | None = None,
+    symbol_filter: str | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict]:
+    """List jobs newest-first, optionally narrowed by status and/or symbol.
+
+    ``symbol_filter`` matches against the ``symbols`` text[] column via ``= ANY(symbols)``
+    (FR-3). Predicates are combined; placeholder positions are assigned dynamically so the
+    WHERE clause stays parameterized.
+    """
+    conds: list[str] = []
+    params: list = []
     if status_filter is not None:
-        rows = await db_pool.fetch(
-            "SELECT * FROM ingest.backfill_jobs WHERE status = $1"
-            " ORDER BY created_at DESC LIMIT $2 OFFSET $3",
-            status_filter,
-            limit,
-            offset,
-        )
-    else:
-        rows = await db_pool.fetch(
-            "SELECT * FROM ingest.backfill_jobs ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-            limit,
-            offset,
-        )
+        params.append(status_filter)
+        conds.append(f"status = ${len(params)}")
+    if symbol_filter:
+        params.append(symbol_filter)
+        conds.append(f"${len(params)} = ANY(symbols)")
+    where = f" WHERE {' AND '.join(conds)}" if conds else ""
+    params.append(limit)
+    limit_idx = len(params)
+    params.append(offset)
+    offset_idx = len(params)
+    rows = await db_pool.fetch(
+        f"SELECT * FROM ingest.backfill_jobs{where}"
+        f" ORDER BY created_at DESC LIMIT ${limit_idx} OFFSET ${offset_idx}",
+        *params,
+    )
     return [dict(row) for row in rows]
 
 

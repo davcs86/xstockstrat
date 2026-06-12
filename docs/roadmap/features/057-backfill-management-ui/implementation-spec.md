@@ -122,7 +122,7 @@ established by feature 049. Docs last.
 
 ### Step 3 — service: ingest `CancelBackfill` RPC + `ListBackfillJobs` symbol filter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify

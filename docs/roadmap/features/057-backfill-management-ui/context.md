@@ -151,3 +151,19 @@ in parallel.
   MarketDataService_DeleteBackfilledData; TS CancelBackfillRequest; Python CancelBackfill stub.
 - Files: packages/proto/gen/{go,python,ts}/{ingest,marketdata}/v1/* (+ ts/dist)
 - Deviations: host-toolchain codegen (CI-equivalent) — see Deviation Log.
+
+### Step 3 — service: ingest CancelBackfill + ListBackfillJobs symbol filter [done]
+- servicer.py: added `self._canceled_jobs: set[str]` registry; `run_one` returns early if job
+  canceled (before semaphore/BackfillBars) so completed-chunk bars are retained; `_finalize_backfill`
+  re-reads the row and skips the terminal overwrite if status==CANCELED (race guard). New
+  CancelBackfill RPC: UNAVAILABLE/admin-gate(0x04)/NOT_FOUND/FAILED_PRECONDITION (non-QUEUED/RUNNING),
+  sets CANCELED+completed_at, emits ingest.backfill.canceled w/ _propagation_meta, returns updated job.
+  ListBackfillJobs forwards request.symbol → list_jobs(symbol_filter=...).
+- backfill_jobs.py: list_jobs gained symbol_filter kwarg; refactored to a dynamic WHERE builder
+  ($N = ANY(symbols) for symbol, combined with optional status). job_row_to_proto passes status int
+  through so CANCELED=6 renders.
+- Verification: ruff check + format clean; cancel event forwards x-user-id/x-access-scope/x-trace-id
+  (propagation). Behavioral coverage in Step 4.
+- Files: app/handlers/servicer.py, app/repositories/backfill_jobs.py
+- Deviations: none (list_jobs dynamic-builder is the spec's "$N = ANY(symbols)" predicate combined
+  with status, just assembled dynamically).
