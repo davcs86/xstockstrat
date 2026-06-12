@@ -317,6 +317,53 @@ func TestGetLatestQuote_ConfiguredFeed(t *testing.T) {
 	}
 }
 
+func TestGetBars_TranslatesCanonicalTimeframe(t *testing.T) {
+	// The always-on bar ingester and DB-miss fallback pass the canonical interval
+	// strings (1m/5m/1h/1d). Alpaca rejects those with 400 "invalid timeframe: 1m" —
+	// they must be translated to 1Min/5Min/1Hour/1Day on the outbound request, while
+	// the stored bar keeps the canonical form callers query against.
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"1m", "1Min"},
+		{"5m", "5Min"},
+		{"1h", "1Hour"},
+		{"1d", "1Day"},
+		{"1Min", "1Min"},   // already-Alpaca form passes through
+		{"1Hour", "1Hour"}, // already-Alpaca form passes through
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			var gotTF string
+			srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				gotTF = r.URL.Query().Get("timeframe")
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"bars": []map[string]interface{}{
+						{"t": "2024-01-02T10:00:00Z", "o": 1.0, "h": 1.0, "l": 1.0, "c": 1.0, "v": int64(1), "vw": 1.0, "n": int32(1)},
+					},
+					"next_page_token": "",
+				})
+			})
+			defer srv.Close()
+
+			c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", DataURL: srv.URL})
+			bars, err := c.GetBars(context.Background(), "AAPL", tc.in, time.Now().Add(-time.Hour), time.Now())
+			if err != nil {
+				t.Fatalf("GetBars failed: %v", err)
+			}
+			if gotTF != tc.want {
+				t.Errorf("timeframe %q: expected outbound timeframe=%q, got %q", tc.in, tc.want, gotTF)
+			}
+			// Stored bars keep the caller's (canonical) timeframe, not the Alpaca spelling.
+			if len(bars) != 1 || bars[0].Timeframe != tc.in {
+				t.Errorf("timeframe %q: expected stored bar timeframe=%q, got %+v", tc.in, tc.in, bars)
+			}
+		})
+	}
+}
+
 func TestGetBars_SendsFeed(t *testing.T) {
 	var gotFeed string
 	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {

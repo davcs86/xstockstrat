@@ -54,6 +54,26 @@ func (c *Client) feedParam() string {
 	return c.cfg.Feed
 }
 
+// alpacaTimeframe maps the platform's canonical bar-interval strings (1m/5m/1h/1d —
+// the values stored in marketdata.ohlcv and passed by every caller, see internal/timeframe)
+// to the spellings Alpaca's v2 bars endpoint accepts (1Min/5Min/1Hour/1Day). Alpaca rejects
+// the canonical forms with HTTP 400 "invalid timeframe: 1m". Inputs already in Alpaca form,
+// and any unrecognized value, pass through unchanged so future intervals aren't silently dropped.
+func alpacaTimeframe(tf string) string {
+	switch tf {
+	case "1m", "1Min":
+		return "1Min"
+	case "5m", "5Min":
+		return "5Min"
+	case "1h", "1Hour":
+		return "1Hour"
+	case "1d", "1Day":
+		return "1Day"
+	default:
+		return tf
+	}
+}
+
 // alpacaBar is the JSON shape returned by Alpaca v2 bars endpoint.
 type alpacaBar struct {
 	T  string  `json:"t"`
@@ -75,7 +95,7 @@ type alpacaBarsResponse struct {
 // GetBars fetches historical OHLCV bars from Alpaca v2 REST API.
 func (c *Client) GetBars(ctx context.Context, symbol, timeframe string, start, end time.Time) ([]*marketdatav1.Bar, error) {
 	baseURL := fmt.Sprintf("%s/v2/stocks/%s/bars?timeframe=%s&feed=%s&start=%s&end=%s&limit=1000",
-		c.cfg.DataURL, symbol, timeframe, c.feedParam(),
+		c.cfg.DataURL, symbol, alpacaTimeframe(timeframe), c.feedParam(),
 		start.UTC().Format(time.RFC3339),
 		end.UTC().Format(time.RFC3339),
 	)
