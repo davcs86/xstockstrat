@@ -35,7 +35,11 @@ export class LedgerServiceImpl {
           req.streamKey,
           JSON.stringify(req.payload ?? {}),
           JSON.stringify(req.metadata ?? {}),
-          req.occurredAt ? new Date(req.occurredAt.seconds * 1000) : now,
+          // occurredAt is decoded by ts-proto (useDate) into a JS Date — pass it
+          // straight through. Treating it as a protobuf `{ seconds }` object here
+          // produced `new Date(undefined * 1000)` → Invalid Date, which Postgres
+          // rejected as `invalid input syntax for type timestamp` ("0NaN-NaN-NaN…").
+          toValidDate(req.occurredAt, now),
           now,
         ]
       );
@@ -73,13 +77,14 @@ export class LedgerServiceImpl {
       conditions.push(`source_service = $${p++}`);
       params.push(req.sourceService);
     }
+    // timeRange.start/end are ts-proto Date objects (useDate) — pass through.
     if (req.timeRange?.start) {
       conditions.push(`occurred_at >= $${p++}`);
-      params.push(new Date(req.timeRange.start.seconds * 1000));
+      params.push(req.timeRange.start);
     }
     if (req.timeRange?.end) {
       conditions.push(`occurred_at <= $${p++}`);
-      params.push(new Date(req.timeRange.end.seconds * 1000));
+      params.push(req.timeRange.end);
     }
     if (req.fromSequence) {
       conditions.push(`sequence >= $${p++}`);
@@ -171,6 +176,17 @@ export class LedgerServiceImpl {
       callback({ code: 13, message: err.message });
     }
   }
+}
+
+/**
+ * Coerce a ts-proto timestamp field (a JS `Date` under the default `useDate`
+ * codegen) into a valid Date for Postgres, falling back when the value is
+ * missing or an Invalid Date. Guards the append path — the immutable event
+ * store must never persist a NaN timestamp.
+ */
+export function toValidDate(value: unknown, fallback: Date): Date {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  return fallback;
 }
 
 export function rowToEvent(row: any) {
