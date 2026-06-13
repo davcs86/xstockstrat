@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -73,35 +75,76 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 // ConsumeOrderFills subscribes to ledger StreamEvents filtered on "order.filled"
 // and updates positions accordingly.
 func (s *PortfolioService) ConsumeOrderFills(ctx context.Context) {
+	s.consumeEventStream(ctx, "order fill", "order.filled", s.processOrderFill)
+}
+
+// consumeEventStream subscribes to a filtered ledger StreamEvents and dispatches
+// each event to handle, reconnecting on disconnect. It tracks the highest sequence
+// processed and resumes from there (from_sequence = lastSeq+1) across reconnects,
+// so a recycled connection neither re-replays history — which would double-count
+// incremental updates such as order fills — nor drops events that arrived during
+// the gap. The first connection still replays from sequence 0 to build initial
+// state. Graceful HTTP/2 disconnects (GOAWAY / Unavailable), which the DO App
+// Platform issues routinely on long-lived streams, are logged below ERROR so they
+// don't trip alerting; genuine errors stay at ERROR.
+func (s *PortfolioService) consumeEventStream(ctx context.Context, name, eventType string, handle func(context.Context, *ledgerv1.LedgerEvent)) {
+	var lastSeq int64
 	for {
-		if err := s.streamFills(ctx); err != nil {
+		next, err := s.streamEventsFrom(ctx, eventType, lastSeq, handle)
+		lastSeq = next
+		if err != nil {
 			if ctx.Err() != nil {
 				return
 			}
-			slog.Error("order fill stream error, retrying", "error", err)
+			if isGracefulStreamClose(err) {
+				slog.Info(name+" stream disconnected, reconnecting", "resume_from_sequence", lastSeq+1)
+			} else {
+				slog.Error(name+" stream error, retrying", "error", err)
+			}
 			time.Sleep(2 * time.Second)
 		}
 	}
 }
 
-func (s *PortfolioService) streamFills(ctx context.Context) error {
+// streamEventsFrom opens one StreamEvents call and dispatches events until the
+// stream ends or errors. It returns the highest sequence processed so the caller
+// can resume past it on reconnect. lastSeq == 0 replays full history (initial
+// connect); lastSeq > 0 resumes from lastSeq+1.
+func (s *PortfolioService) streamEventsFrom(ctx context.Context, eventType string, lastSeq int64, handle func(context.Context, *ledgerv1.LedgerEvent)) (int64, error) {
+	fromSeq := int64(0)
+	if lastSeq > 0 {
+		fromSeq = lastSeq + 1
+	}
 	stream, err := s.ledger.StreamEvents(ctx, &ledgerv1.StreamEventsRequest{
-		EventType:    "order.filled",
-		FromSequence: 0,
+		EventType:    eventType,
+		FromSequence: fromSeq,
 	})
 	if err != nil {
-		return fmt.Errorf("StreamEvents: %w", err)
+		return lastSeq, fmt.Errorf("StreamEvents: %w", err)
 	}
 	for {
 		event, err := stream.Recv()
 		if err == io.EOF {
-			return nil
+			return lastSeq, nil
 		}
 		if err != nil {
-			return fmt.Errorf("recv: %w", err)
+			return lastSeq, fmt.Errorf("recv: %w", err)
 		}
-		s.processOrderFill(ctx, event)
+		handle(ctx, event)
+		if event.Sequence > lastSeq {
+			lastSeq = event.Sequence
+		}
 	}
+}
+
+// isGracefulStreamClose reports whether a stream error is an expected, benign
+// disconnect (a GOAWAY / transport recycle surfaced as codes.Unavailable) rather
+// than a real failure worth alerting on.
+func isGracefulStreamClose(err error) bool {
+	if st, ok := status.FromError(err); ok {
+		return st.Code() == codes.Unavailable
+	}
+	return false
 }
 
 // orderFillPayload is the expected shape of the order.filled / order.partially_filled event payload.
@@ -609,35 +652,7 @@ type positionSyncPayload struct {
 // ConsumePositionSyncs subscribes to ledger StreamEvents filtered on "account.positions.synced"
 // and upserts positions from broker snapshots.
 func (s *PortfolioService) ConsumePositionSyncs(ctx context.Context) {
-	for {
-		if err := s.streamPositionSyncs(ctx); err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			slog.Error("position sync stream error, retrying", "error", err)
-			time.Sleep(2 * time.Second)
-		}
-	}
-}
-
-func (s *PortfolioService) streamPositionSyncs(ctx context.Context) error {
-	stream, err := s.ledger.StreamEvents(ctx, &ledgerv1.StreamEventsRequest{
-		EventType:    "account.positions.synced",
-		FromSequence: 0,
-	})
-	if err != nil {
-		return fmt.Errorf("StreamEvents: %w", err)
-	}
-	for {
-		event, err := stream.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("recv: %w", err)
-		}
-		s.processPositionSync(ctx, event)
-	}
+	s.consumeEventStream(ctx, "position sync", "account.positions.synced", s.processPositionSync)
 }
 
 func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) {
@@ -690,35 +705,7 @@ type balanceSyncPayload struct {
 // ConsumeBalanceSyncs subscribes to ledger StreamEvents filtered on "account.balance.synced"
 // and stores the latest broker balance snapshot per account.
 func (s *PortfolioService) ConsumeBalanceSyncs(ctx context.Context) {
-	for {
-		if err := s.streamBalanceSyncs(ctx); err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			slog.Error("balance sync stream error, retrying", "error", err)
-			time.Sleep(2 * time.Second)
-		}
-	}
-}
-
-func (s *PortfolioService) streamBalanceSyncs(ctx context.Context) error {
-	stream, err := s.ledger.StreamEvents(ctx, &ledgerv1.StreamEventsRequest{
-		EventType:    "account.balance.synced",
-		FromSequence: 0,
-	})
-	if err != nil {
-		return fmt.Errorf("StreamEvents: %w", err)
-	}
-	for {
-		event, err := stream.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("recv: %w", err)
-		}
-		s.processBalanceSync(ctx, event)
-	}
+	s.consumeEventStream(ctx, "balance sync", "account.balance.synced", s.processBalanceSync)
 }
 
 func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledgerv1.LedgerEvent) {
