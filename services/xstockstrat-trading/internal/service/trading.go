@@ -217,6 +217,19 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		return nil, fmt.Errorf("platform is in maintenance mode — trading halted")
 	}
 
+	// Validate trailing-stop parameters: a trailing_stop order requires exactly one
+	// of trail_price / trail_percent; any other order type must leave both zero.
+	// Catching this here returns a clean InvalidArgument instead of a broker 422.
+	if req.OrderType == tradingv1.OrderType_ORDER_TYPE_TRAILING_STOP {
+		if (req.TrailPrice > 0) == (req.TrailPercent > 0) {
+			return nil, grpcstatus.Errorf(codes.InvalidArgument,
+				"trailing_stop order requires exactly one of trail_price or trail_percent")
+		}
+	} else if req.TrailPrice != 0 || req.TrailPercent != 0 {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument,
+			"trail_price/trail_percent are only valid for trailing_stop orders")
+	}
+
 	// Resolve broker account.
 	accountEntry, err := s.resolveAccount(req.AccountId)
 	if err != nil {
@@ -294,6 +307,10 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 
 	// Submit to broker.
 	brokerReq := s.buildBrokerRequest(req)
+	// Forward our order ID as the broker client_order_id so a retried submission
+	// (trading.order.max_retries) is de-duplicated by the broker instead of placing
+	// a second order.
+	brokerReq.ClientOrderID = orderID
 	brokerOrder, err := accountEntry.client.SubmitOrder(ctx, brokerReq)
 	if err != nil {
 		order.Status = tradingv1.OrderStatus_ORDER_STATUS_REJECTED
@@ -422,6 +439,7 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		Qty:         req.Qty,
 		LimitPrice:  req.LimitPrice,
 		StopPrice:   req.StopPrice,
+		Trail:       req.Trail,
 		TimeInForce: req.TimeInForce,
 	}
 	if _, replaceErr := entry.client.ReplaceOrder(ctx, order.BrokerOrderId, brokerReq); replaceErr != nil {
@@ -1098,6 +1116,7 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 			PaperURL:  "https://paper-api.alpaca.markets",
 			LiveURL:   "https://api.alpaca.markets",
 			Paper:     rec.IsPaper,
+			TimeoutMs: int(s.cfgW.GetInt("trading.broker.timeout_ms", 5000)),
 		}), nil
 	}
 }
@@ -1178,13 +1197,15 @@ func (s *TradingService) buildBrokerRequest(req *tradingv1.PlaceOrderRequest) br
 	}
 
 	return broker.OrderRequest{
-		Symbol:      req.Symbol,
-		Qty:         req.Qty,
-		Side:        sideMap[req.Side],
-		OrderType:   typeMap[req.OrderType],
-		TimeInForce: tif,
-		LimitPrice:  req.LimitPrice,
-		StopPrice:   req.StopPrice,
+		Symbol:       req.Symbol,
+		Qty:          req.Qty,
+		Side:         sideMap[req.Side],
+		OrderType:    typeMap[req.OrderType],
+		TimeInForce:  tif,
+		LimitPrice:   req.LimitPrice,
+		StopPrice:    req.StopPrice,
+		TrailPrice:   req.TrailPrice,
+		TrailPercent: req.TrailPercent,
 	}
 }
 

@@ -156,6 +156,12 @@ Recently added keys (feature 057 — backfill management UI, owned by `xstockstr
 |---|---|---|---|
 | `marketdata.backfill.max_delete_days` | int | `0` | Max date-range span (days) a single scoped `DeleteBackfilledData` may cover; `0` = no window cap (current behavior). Whole-symbol deletes (no range) are exempt and double-confirmed in the UI (FR-5). |
 
+Recently added keys (Alpaca API compliance audit, owned by `xstockstrat-marketdata`):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `marketdata.alpaca.adjustment` | string | `all` | Corporate-action adjustment for historical bars (`raw`/`split`/`dividend`/`all`); sent as `adjustment=` on every Alpaca bars request so splits/dividends do not distort backtest OHLCV. |
+
 ---
 
 ## Environment Variable Naming Convention

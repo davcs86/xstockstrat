@@ -372,6 +372,13 @@ export interface PlaceOrderRequest {
    * Required when multiple accounts are registered; optional when only one exists.
    */
   accountId: string;
+  /**
+   * Trailing-stop parameters. Exactly one of trail_price (dollar offset) or
+   * trail_percent (percent offset) is required when order_type is
+   * ORDER_TYPE_TRAILING_STOP; both must be zero for any other order type.
+   */
+  trailPrice: number;
+  trailPercent: number;
 }
 
 export interface CancelOrderRequest {
@@ -426,6 +433,11 @@ export interface ReplaceOrderRequest {
   stopPrice: number;
   timeInForce: string;
   userId: string;
+  /**
+   * New trail offset for a working trailing_stop order (Alpaca's replace body
+   * uses a single `trail` value); zero means "leave unchanged".
+   */
+  trail: number;
 }
 
 /** BrokerAccount is a registered broker account (credentials never returned). */
@@ -967,6 +979,8 @@ function createBasePlaceOrderRequest(): PlaceOrderRequest {
     requiresApproval: false,
     tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED,
     accountId: "",
+    trailPrice: 0,
+    trailPercent: 0,
   };
 }
 
@@ -1010,6 +1024,12 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
     }
     if (message.accountId !== "") {
       writer.uint32(106).string(message.accountId);
+    }
+    if (message.trailPrice !== 0) {
+      writer.uint32(113).double(message.trailPrice);
+    }
+    if (message.trailPercent !== 0) {
+      writer.uint32(121).double(message.trailPercent);
     }
     return writer;
   },
@@ -1125,6 +1145,22 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
           message.accountId = reader.string();
           continue;
         }
+        case 14: {
+          if (tag !== 113) {
+            break;
+          }
+
+          message.trailPrice = reader.double();
+          continue;
+        }
+        case 15: {
+          if (tag !== 121) {
+            break;
+          }
+
+          message.trailPercent = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1189,6 +1225,16 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
         : isSet(object.account_id)
         ? globalThis.String(object.account_id)
         : "",
+      trailPrice: isSet(object.trailPrice)
+        ? globalThis.Number(object.trailPrice)
+        : isSet(object.trail_price)
+        ? globalThis.Number(object.trail_price)
+        : 0,
+      trailPercent: isSet(object.trailPercent)
+        ? globalThis.Number(object.trailPercent)
+        : isSet(object.trail_percent)
+        ? globalThis.Number(object.trail_percent)
+        : 0,
     };
   },
 
@@ -1233,6 +1279,12 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
     if (message.accountId !== "") {
       obj.accountId = message.accountId;
     }
+    if (message.trailPrice !== 0) {
+      obj.trailPrice = message.trailPrice;
+    }
+    if (message.trailPercent !== 0) {
+      obj.trailPercent = message.trailPercent;
+    }
     return obj;
   },
 
@@ -1254,6 +1306,8 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
     message.requiresApproval = object.requiresApproval ?? false;
     message.tradingMode = object.tradingMode ?? TradingMode.TRADING_MODE_UNSPECIFIED;
     message.accountId = object.accountId ?? "";
+    message.trailPrice = object.trailPrice ?? 0;
+    message.trailPercent = object.trailPercent ?? 0;
     return message;
   },
 };
@@ -1896,7 +1950,7 @@ export const StreamOrderUpdatesRequest: MessageFns<StreamOrderUpdatesRequest> = 
 };
 
 function createBaseReplaceOrderRequest(): ReplaceOrderRequest {
-  return { orderId: "", qty: 0, limitPrice: 0, stopPrice: 0, timeInForce: "", userId: "" };
+  return { orderId: "", qty: 0, limitPrice: 0, stopPrice: 0, timeInForce: "", userId: "", trail: 0 };
 }
 
 export const ReplaceOrderRequest: MessageFns<ReplaceOrderRequest> = {
@@ -1918,6 +1972,9 @@ export const ReplaceOrderRequest: MessageFns<ReplaceOrderRequest> = {
     }
     if (message.userId !== "") {
       writer.uint32(50).string(message.userId);
+    }
+    if (message.trail !== 0) {
+      writer.uint32(57).double(message.trail);
     }
     return writer;
   },
@@ -1977,6 +2034,14 @@ export const ReplaceOrderRequest: MessageFns<ReplaceOrderRequest> = {
           message.userId = reader.string();
           continue;
         }
+        case 7: {
+          if (tag !== 57) {
+            break;
+          }
+
+          message.trail = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2014,6 +2079,7 @@ export const ReplaceOrderRequest: MessageFns<ReplaceOrderRequest> = {
         : isSet(object.user_id)
         ? globalThis.String(object.user_id)
         : "",
+      trail: isSet(object.trail) ? globalThis.Number(object.trail) : 0,
     };
   },
 
@@ -2037,6 +2103,9 @@ export const ReplaceOrderRequest: MessageFns<ReplaceOrderRequest> = {
     if (message.userId !== "") {
       obj.userId = message.userId;
     }
+    if (message.trail !== 0) {
+      obj.trail = message.trail;
+    }
     return obj;
   },
 
@@ -2051,6 +2120,7 @@ export const ReplaceOrderRequest: MessageFns<ReplaceOrderRequest> = {
     message.stopPrice = object.stopPrice ?? 0;
     message.timeInForce = object.timeInForce ?? "";
     message.userId = object.userId ?? "";
+    message.trail = object.trail ?? 0;
     return message;
   },
 };
