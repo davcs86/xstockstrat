@@ -4,7 +4,7 @@
 
 Go gRPC service that is the **sole integration point for Alpaca's market data APIs**. Responsible for:
 
-- Streaming real-time OHLCV bars and NBBO quotes from Alpaca WebSocket
+- Streaming real-time NBBO quotes (and Alpaca's native 1-minute bars) from Alpaca WebSocket
 - Storing bars and quotes in TimescaleDB hypertables
 - Serving historical bar queries to other services
 - Triggering historical backfills (initiated by xstockstrat-ingest)
@@ -49,14 +49,15 @@ Namespace: `marketdata`
 |---|---|---|---|
 | `marketdata.alpaca.paper` | bool | `true` | Use paper trading endpoint |
 | `marketdata.alpaca.feed` | string | `iex` | Alpaca market-data feed for bar/quote requests (`iex`/`sip`/`otc`). The free/basic (paper) data plan only permits `iex`; omitting the param defaults Alpaca to SIP, which those plans reject with HTTP 403. Read at startup. |
+| `marketdata.alpaca.adjustment` | string | `all` | Corporate-action adjustment applied to historical bars (`raw`/`split`/`dividend`/`all`). Default `all` so splits/dividends do not distort backtest OHLCV. Sent as `adjustment=` on every bars request. Read at startup. |
 | `marketdata.stream.reconnect_delay_ms` | int | `2000` | Reconnect delay on stream drop |
 | `marketdata.stream.max_reconnects` | int | `10` | Max reconnect attempts before alert |
 | `marketdata.stream.warm_interval_ms` | int | `30000` | Interval for the warm-quote poller that refreshes the latest quote of every queried symbol into the DB cache. Read live each cycle; `0`/negative pauses it. |
 | `marketdata.stream.bar_ingest_interval_ms` | int | `60000` | Interval for the always-on bar ingester that upserts recent bars for every queried symbol into `marketdata.ohlcv`. Read live each cycle; `0`/negative pauses it. |
 | `marketdata.stream.bar_ingest_timeframe` | string | `15m` | Bar timeframe the always-on ingester fetches each cycle. 15m is the smallest supported interval. |
 | `marketdata.stream.bar_ingest_lookback_ms` | int | `900000` | Lookback window the always-on ingester re-fetches each cycle (default 15m); overlap is harmless because inserts upsert, and a window wider than the interval lets the feed self-heal after a pause/restart. |
-| `marketdata.backfill.batch_size` | int | `1000` | Bars per Alpaca API request |
-| `marketdata.backfill.rate_limit_rps` | int | `200` | Alpaca API rate limit |
+| `marketdata.backfill.batch_size` | int | `1000` | Bars per Alpaca API request (`limit=`). Read at startup and clamped to Alpaca's spec maximum of 10000; pagination is handled transparently by the client. |
+| `marketdata.backfill.rate_limit_rps` | int | `200` | Max outbound Alpaca REST calls per second. Read at startup into a token-bucket limiter the client waits on before every REST call; `0` disables rate limiting. |
 | `marketdata.backfill.max_delete_days` | int | `0` | Max date-range span (days) a single scoped backfill delete may cover; `0` = no window cap. A whole-symbol delete (no range) is exempt and double-confirmed in the UI (feature 057, FR-5). |
 | `marketdata.retention.quotes_days` | int | `90` | Quote data retention |
 | `marketdata.retention.ohlcv_years` | int | `5` | OHLCV data retention |
@@ -72,10 +73,12 @@ Namespace: `marketdata`
 
 ## Alpaca Integration
 
-- REST: historical bars, asset listing, latest quotes — `internal/alpaca/client.go`
-- WebSocket: real-time bar stream, quote stream — same package
+- REST: historical bars (single + multi-symbol), asset listing, latest quotes (single + multi-symbol) — `internal/alpaca/client.go`
+- WebSocket: real-time quote stream + 1-minute bar stream — `internal/alpaca/stream.go`. A single shared connection (the free plan allows only one per account) is established lazily on the first `StreamBars`/`StreamQuotes` call; it authenticates, subscribes to the union of all subscribers' symbols, fans messages out, and reconnects with backoff (`marketdata.stream.reconnect_delay_ms` / `max_reconnects`). **Alpaca only streams 1-minute bars** — there is no 15m WS granularity — so streamed bars carry the canonical `1m` timeframe and are forwarded to live subscribers **only** (not persisted); the platform's 15m/1h/1d OHLCV storage is owned by the always-on REST bar ingester.
+- All outbound REST calls go through a shared rate limiter (`marketdata.backfill.rate_limit_rps`) and set the auth headers centrally
+- Multi-symbol REST batching: `GetBarsMulti` / `GetLatestQuotesMulti` collapse the warm-quote poller and bar ingester's per-symbol fan-out into one request per cycle. The pollers type-assert the source to `source.MultiSymbolSource` and fall back to per-symbol calls when unsupported
 - Credentials sourced from env vars (never from config service — these are secrets)
-- Bar/quote requests send `feed=<marketdata.alpaca.feed>` (default `iex`) — required by the free/basic data plan, which 403s the SIP default
+- Bar/quote requests send `feed=<marketdata.alpaca.feed>` (default `iex`) — required by the free/basic data plan, which 403s the SIP default — and bars also send `adjustment=<marketdata.alpaca.adjustment>` (default `all`)
 - `GetLatestQuote` serves from the `marketdata.quotes` cache, falling back to a live Alpaca call (and caching the result). A background warm poller (`StartWarmQuotePoller`) keeps every queried symbol's latest quote fresh in the DB so per-position P&L reads avoid repeated live calls
 - `GetBars` serves from the `marketdata.ohlcv` table, and on a first-page DB miss falls back to a live Alpaca historical fetch (`fetchAndCacheBars`), persists the bars, and re-reads — so a chart for a never-backfilled symbol populates on demand instead of rendering empty. A live-fetch/credential/feed failure is logged and yields an empty (but valid) response rather than an error. Querying a symbol also marks it "warm"
 - `StartBarIngestPoller` is an **always-on** bar ingester started at boot. Each cycle it upserts recent bars (the `bar_ingest_lookback_ms` window) for every warm symbol — the demand-driven set populated by `GetLatestQuote`/`GetBars` — so ingestion runs continuously without a client holding a `StreamBars` RPC open. The legacy `StreamBars`/`StartBarStream` path (a 60s poll that only runs for the duration of a client stream) remains for explicit subscribers

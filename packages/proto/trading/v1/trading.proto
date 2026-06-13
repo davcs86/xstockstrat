@@ -95,6 +95,11 @@ message PlaceOrderRequest {
   // account_id routes the order to a specific broker account.
   // Required when multiple accounts are registered; optional when only one exists.
   string account_id = 13;
+  // Trailing-stop parameters. Exactly one of trail_price (dollar offset) or
+  // trail_percent (percent offset) is required when order_type is
+  // ORDER_TYPE_TRAILING_STOP; both must be zero for any other order type.
+  double trail_price = 14;
+  double trail_percent = 15;
 }
 
 message CancelOrderRequest {
@@ -145,6 +150,9 @@ message ReplaceOrderRequest {
   double stop_price = 4;
   string time_in_force = 5;
   string user_id = 6;
+  // New trail offset for a working trailing_stop order (Alpaca's replace body
+  // uses a single `trail` value); zero means "leave unchanged".
+  double trail = 7;
 }
 
 // CredentialStatus reflects the last known health of a broker account's stored

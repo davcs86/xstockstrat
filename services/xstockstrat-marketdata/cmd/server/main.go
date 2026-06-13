@@ -65,8 +65,18 @@ func main() {
 		DataURL:   cfg.AlpacaDataURL,
 		// Data feed (iex/sip/otc). Default "iex" so the free/basic paper data
 		// plan works; deployments on a paid SIP plan can override.
-		Feed:  cfgWatcher.GetString("marketdata.alpaca.feed", "iex"),
-		Paper: cfg.TradingMode == "paper",
+		Feed: cfgWatcher.GetString("marketdata.alpaca.feed", "iex"),
+		// Corporate-action adjustment for historical bars (default "all") so
+		// splits/dividends do not distort backtest OHLCV.
+		Adjustment: cfgWatcher.GetString("marketdata.alpaca.adjustment", "all"),
+		// Bars-per-request limit (clamped to the Alpaca spec max of 10000) and
+		// outbound REST rate limit.
+		BatchSize:    int(cfgWatcher.GetInt("marketdata.backfill.batch_size", 1000)),
+		RateLimitRPS: int(cfgWatcher.GetInt("marketdata.backfill.rate_limit_rps", 200)),
+		// Streaming WebSocket reconnect tuning.
+		ReconnectDelayMs: int(cfgWatcher.GetInt("marketdata.stream.reconnect_delay_ms", 2000)),
+		MaxReconnects:    int(cfgWatcher.GetInt("marketdata.stream.max_reconnects", 10)),
+		Paper:            cfg.TradingMode == "paper",
 	})
 
 	// TimescaleDB repository

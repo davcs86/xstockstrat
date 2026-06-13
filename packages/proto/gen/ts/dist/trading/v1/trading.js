@@ -742,6 +742,8 @@ function createBasePlaceOrderRequest() {
         requiresApproval: false,
         tradingMode: common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
         accountId: "",
+        trailPrice: 0,
+        trailPercent: 0,
     };
 }
 exports.PlaceOrderRequest = {
@@ -784,6 +786,12 @@ exports.PlaceOrderRequest = {
         }
         if (message.accountId !== "") {
             writer.uint32(106).string(message.accountId);
+        }
+        if (message.trailPrice !== 0) {
+            writer.uint32(113).double(message.trailPrice);
+        }
+        if (message.trailPercent !== 0) {
+            writer.uint32(121).double(message.trailPercent);
         }
         return writer;
     },
@@ -885,6 +893,20 @@ exports.PlaceOrderRequest = {
                     message.accountId = reader.string();
                     continue;
                 }
+                case 14: {
+                    if (tag !== 113) {
+                        break;
+                    }
+                    message.trailPrice = reader.double();
+                    continue;
+                }
+                case 15: {
+                    if (tag !== 121) {
+                        break;
+                    }
+                    message.trailPercent = reader.double();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -948,6 +970,16 @@ exports.PlaceOrderRequest = {
                 : isSet(object.account_id)
                     ? globalThis.String(object.account_id)
                     : "",
+            trailPrice: isSet(object.trailPrice)
+                ? globalThis.Number(object.trailPrice)
+                : isSet(object.trail_price)
+                    ? globalThis.Number(object.trail_price)
+                    : 0,
+            trailPercent: isSet(object.trailPercent)
+                ? globalThis.Number(object.trailPercent)
+                : isSet(object.trail_percent)
+                    ? globalThis.Number(object.trail_percent)
+                    : 0,
         };
     },
     toJSON(message) {
@@ -991,6 +1023,12 @@ exports.PlaceOrderRequest = {
         if (message.accountId !== "") {
             obj.accountId = message.accountId;
         }
+        if (message.trailPrice !== 0) {
+            obj.trailPrice = message.trailPrice;
+        }
+        if (message.trailPercent !== 0) {
+            obj.trailPercent = message.trailPercent;
+        }
         return obj;
     },
     create(base) {
@@ -1011,6 +1049,8 @@ exports.PlaceOrderRequest = {
         message.requiresApproval = object.requiresApproval ?? false;
         message.tradingMode = object.tradingMode ?? common_1.TradingMode.TRADING_MODE_UNSPECIFIED;
         message.accountId = object.accountId ?? "";
+        message.trailPrice = object.trailPrice ?? 0;
+        message.trailPercent = object.trailPercent ?? 0;
         return message;
     },
 };
@@ -1594,7 +1634,7 @@ exports.StreamOrderUpdatesRequest = {
     },
 };
 function createBaseReplaceOrderRequest() {
-    return { orderId: "", qty: 0, limitPrice: 0, stopPrice: 0, timeInForce: "", userId: "" };
+    return { orderId: "", qty: 0, limitPrice: 0, stopPrice: 0, timeInForce: "", userId: "", trail: 0 };
 }
 exports.ReplaceOrderRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -1615,6 +1655,9 @@ exports.ReplaceOrderRequest = {
         }
         if (message.userId !== "") {
             writer.uint32(50).string(message.userId);
+        }
+        if (message.trail !== 0) {
+            writer.uint32(57).double(message.trail);
         }
         return writer;
     },
@@ -1667,6 +1710,13 @@ exports.ReplaceOrderRequest = {
                     message.userId = reader.string();
                     continue;
                 }
+                case 7: {
+                    if (tag !== 57) {
+                        break;
+                    }
+                    message.trail = reader.double();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1703,6 +1753,7 @@ exports.ReplaceOrderRequest = {
                 : isSet(object.user_id)
                     ? globalThis.String(object.user_id)
                     : "",
+            trail: isSet(object.trail) ? globalThis.Number(object.trail) : 0,
         };
     },
     toJSON(message) {
@@ -1725,6 +1776,9 @@ exports.ReplaceOrderRequest = {
         if (message.userId !== "") {
             obj.userId = message.userId;
         }
+        if (message.trail !== 0) {
+            obj.trail = message.trail;
+        }
         return obj;
     },
     create(base) {
@@ -1738,6 +1792,7 @@ exports.ReplaceOrderRequest = {
         message.stopPrice = object.stopPrice ?? 0;
         message.timeInForce = object.timeInForce ?? "";
         message.userId = object.userId ?? "";
+        message.trail = object.trail ?? 0;
         return message;
     },
 };

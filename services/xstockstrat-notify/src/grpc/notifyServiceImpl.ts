@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
+import { alertSeverityToNumber, alertSeverityFromJSON } from '@xstockstrat/proto/notify/v1/notify';
 import { ConfigWatcher } from '../services/configWatcher';
 import { getLogger } from '../services/logger';
 
@@ -39,7 +40,11 @@ export class NotifyServiceImpl {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [
           alertId,
-          req.severity,
+          // `severity` is a ts-proto string enum (stringEnums codegen), e.g.
+          // "ALERT_SEVERITY_WARNING"; the column is INTEGER. Convert to the numeric
+          // enum value before inserting — passing the string raised
+          // `invalid input syntax for type integer: "ALERT_SEVERITY_WARNING"`.
+          alertSeverityToNumber(req.severity),
           req.category,
           req.title,
           req.body,
@@ -172,7 +177,10 @@ export class NotifyServiceImpl {
 export function rowToAlert(row: any) {
   return {
     alertId: row.alert_id,
-    severity: row.severity,
+    // DB stores severity as the numeric enum value; ts-proto's encoder expects the
+    // string enum (stringEnums) and maps anything else to UNRECOGNIZED, so convert
+    // the integer back to the string enum here.
+    severity: alertSeverityFromJSON(row.severity),
     category: row.category,
     title: row.title,
     body: row.body,
