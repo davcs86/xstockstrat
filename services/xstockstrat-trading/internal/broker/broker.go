@@ -68,4 +68,14 @@ type OrderRequest struct {
 	LimitPrice  float64
 	StopPrice   float64
 	TimeInForce string
+	// TrailPrice / TrailPercent carry the trailing-stop offset on submission.
+	// Exactly one is non-zero for a trailing_stop order; both are zero otherwise.
+	TrailPrice   float64
+	TrailPercent float64
+	// Trail is the new trailing-stop offset on a replace (Alpaca's PATCH body uses a
+	// single `trail` value); zero means "leave unchanged".
+	Trail float64
+	// ClientOrderID is forwarded to the broker for idempotency so a retried
+	// submission is de-duplicated instead of placing a second order.
+	ClientOrderID string
 }

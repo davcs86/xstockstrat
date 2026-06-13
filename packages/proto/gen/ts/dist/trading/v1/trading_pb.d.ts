@@ -159,6 +159,18 @@ export type PlaceOrderRequest = Message<"xstockstrat.trading.v1.PlaceOrderReques
      * @generated from field: string account_id = 13;
      */
     accountId: string;
+    /**
+     * Trailing-stop parameters. Exactly one of trail_price (dollar offset) or
+     * trail_percent (percent offset) is required when order_type is
+     * ORDER_TYPE_TRAILING_STOP; both must be zero for any other order type.
+     *
+     * @generated from field: double trail_price = 14;
+     */
+    trailPrice: number;
+    /**
+     * @generated from field: double trail_percent = 15;
+     */
+    trailPercent: number;
 };
 /**
  * Describes the message xstockstrat.trading.v1.PlaceOrderRequest.
@@ -336,6 +348,13 @@ export type ReplaceOrderRequest = Message<"xstockstrat.trading.v1.ReplaceOrderRe
      * @generated from field: string user_id = 6;
      */
     userId: string;
+    /**
+     * New trail offset for a working trailing_stop order (Alpaca's replace body
+     * uses a single `trail` value); zero means "leave unchanged".
+     *
+     * @generated from field: double trail = 7;
+     */
+    trail: number;
 };
 /**
  * Describes the message xstockstrat.trading.v1.ReplaceOrderRequest.
