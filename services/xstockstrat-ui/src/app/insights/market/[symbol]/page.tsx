@@ -9,15 +9,15 @@ import { Button } from '@/components/ui/button';
 import { ConnectError } from '@connectrpc/connect';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 
-type Timeframe = '10Min' | '30Min' | '1Hour' | '1Day' | '1Week' | '1Month';
+// Only 15m/1h/1d are supported platform-wide (common.v1.Timeframe = 15MIN/1HOUR/1DAY;
+// 15m is the smallest interval the free Alpaca data plan serves). 10m/30m/1w/1mo have no
+// backend support and render empty, so they are not offered.
+type Timeframe = '15Min' | '1Hour' | '1Day';
 
 const TIMEFRAMES: { value: Timeframe; label: string }[] = [
-  { value: '10Min', label: '10m' },
-  { value: '30Min', label: '30m' },
+  { value: '15Min', label: '15m' },
   { value: '1Hour', label: '1h' },
   { value: '1Day', label: '1d' },
-  { value: '1Week', label: '1w' },
-  { value: '1Month', label: '1mo' },
 ];
 
 interface Bar {
