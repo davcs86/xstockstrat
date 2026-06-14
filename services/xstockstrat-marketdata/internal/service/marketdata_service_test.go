@@ -49,6 +49,36 @@ func TestEstimateExpectedBars(t *testing.T) {
 	}
 }
 
+// TestDefaultBarLookback verifies the implicit history window scales with timeframe and bar
+// count (so a daily chart looks back ~months, not the old flat 24h that returned ~0 bars),
+// and that unknown timeframes fall back to a day-sized interval.
+func TestDefaultBarLookback(t *testing.T) {
+	tests := []struct {
+		name string
+		tf   string
+		bars int
+		want time.Duration
+	}{
+		{"daily_100_bars", "1d", 100, 100 * 24 * time.Hour * 3},
+		{"hourly_50_bars", "1h", 50, 50 * time.Hour * 3},
+		{"fifteen_min_200_bars", "15m", 200, 200 * 15 * time.Minute * 3},
+		{"unknown_tf_falls_back_to_day", "1Day", 100, 100 * 24 * time.Hour * 3},
+		{"nonpositive_bars_defaults_to_100", "1d", 0, 100 * 24 * time.Hour * 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := defaultBarLookback(tt.tf, tt.bars)
+			if got != tt.want {
+				t.Errorf("defaultBarLookback(%q, %d) = %v, want %v", tt.tf, tt.bars, got, tt.want)
+			}
+			// Regression guard: a daily window must dwarf the old flat 24h default.
+			if tt.tf == "1d" && got <= 24*time.Hour {
+				t.Errorf("defaultBarLookback(%q, %d) = %v, want >> 24h", tt.tf, tt.bars, got)
+			}
+		})
+	}
+}
+
 // rng builds a common.v1.TimeRange from two times (nil-safe via zero check).
 func rng(start, end time.Time) *commonv1.TimeRange {
 	return &commonv1.TimeRange{Start: timestamppb.New(start), End: timestamppb.New(end)}
