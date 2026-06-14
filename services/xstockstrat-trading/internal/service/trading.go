@@ -155,6 +155,29 @@ func (s *TradingService) LoadBrokerPool(ctx context.Context) error {
 	return nil
 }
 
+// LoadInflightOrders repopulates the in-memory order map from the DB with orders that are
+// still in-flight at the broker (status NEW / PARTIALLY_FILLED with a broker_order_id). The
+// fill poller only tracks orders present in s.orders, which otherwise starts empty after a
+// restart — so an order placed before the restart would never have its fill detected, leaving
+// it stuck NEW forever. Called once at startup, before StartFillPoller. Best-effort: a DB read
+// failure is logged and the poller simply starts with whatever in-process orders exist.
+func (s *TradingService) LoadInflightOrders(ctx context.Context) error {
+	orders, err := s.repo.ListSubmittedOrders(ctx)
+	if err != nil {
+		return fmt.Errorf("LoadInflightOrders: list submitted orders: %w", err)
+	}
+	s.mu.Lock()
+	for _, o := range orders {
+		if _, exists := s.orders[o.OrderId]; !exists {
+			s.orders[o.OrderId] = o
+		}
+	}
+	n := len(orders)
+	s.mu.Unlock()
+	slog.Info("loaded in-flight orders for fill polling", "count", n)
+	return nil
+}
+
 // resolveAccount returns the broker pool entry for the given accountID.
 // If accountID is empty and exactly one broker is registered, that one is returned.
 func (s *TradingService) resolveAccount(accountID string) (brokerPoolEntry, error) {
@@ -480,6 +503,7 @@ func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRe
 	order, ok := s.orders[req.OrderId]
 	s.mu.Unlock()
 	if ok {
+		normalizeFilledQty(order)
 		return order, nil
 	}
 	// Fall back to DB.
@@ -487,6 +511,7 @@ func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRe
 	if err != nil || order == nil {
 		return nil, fmt.Errorf("order %s not found", req.OrderId)
 	}
+	normalizeFilledQty(order)
 	return order, nil
 }
 
@@ -530,8 +555,14 @@ func (s *TradingService) ListOrders(ctx context.Context, req *tradingv1.ListOrde
 			mem = append(mem, o)
 		}
 		s.mu.Unlock()
+		for _, o := range mem {
+			normalizeFilledQty(o)
+		}
 		page, pageResp := paginateOrders(mem, req.Page)
 		return &tradingv1.ListOrdersResponse{Orders: page, Page: pageResp}, nil
+	}
+	for _, o := range orders {
+		normalizeFilledQty(o)
 	}
 	page, pageResp := paginateOrders(orders, req.Page)
 	return &tradingv1.ListOrdersResponse{Orders: page, Page: pageResp}, nil
@@ -795,6 +826,13 @@ func (s *TradingService) syncPositions(ctx context.Context) {
 				"symbol":   p.Symbol,
 				"qty":      p.Quantity,
 				"avg_cost": p.AvgCost,
+				// Broker mark-to-market valuation — lets the portfolio card reconcile with
+				// the broker's authoritative equity instead of recomputing from marketdata
+				// mid-quotes (a different price basis that never ties out).
+				"current_price":   p.CurrentPrice,
+				"market_value":    p.MarketValue,
+				"unrealized_pl":   p.UnrealizedPnl,
+				"unrealized_plpc": p.UnrealizedPnlPct,
 			}
 		}
 		payload := map[string]interface{}{
@@ -1218,6 +1256,22 @@ func (s *TradingService) buildBrokerRequest(req *tradingv1.PlaceOrderRequest) br
 		StopPrice:    req.StopPrice,
 		TrailPrice:   req.TrailPrice,
 		TrailPercent: req.TrailPercent,
+	}
+}
+
+// normalizeFilledQty enforces the orders-table invariant that a fully-filled order reports
+// its full quantity. A FILLED order (Alpaca/IBKR) executed in full, so filled_qty must equal
+// qty. Historical rows persisted before the fill-qty write guards existed — and any fill the
+// poller missed across a restart (it skips terminal orders and never reloads them into memory)
+// — can leave filled_qty at 0, which renders as "Filled 0" in the orders table. Coercing on
+// read keeps the figure correct for every consumer without a data migration. Partial/canceled/
+// expired states are left untouched: a sub-qty filled amount is legitimate there.
+func normalizeFilledQty(o *tradingv1.Order) {
+	if o == nil {
+		return
+	}
+	if o.Status == tradingv1.OrderStatus_ORDER_STATUS_FILLED && o.FilledQty == 0 && o.Qty > 0 {
+		o.FilledQty = o.Qty
 	}
 }
 

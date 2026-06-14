@@ -78,6 +78,27 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 	// A charted symbol becomes "warm" so the always-on bar ingester keeps it fresh.
 	s.markWarm(req.Symbol)
 
+	// Normalize the requested interval to the canonical DB spelling ("1Day"→"1d",
+	// "15Min"→"15m", …). The always-on ingester and backfill store canonical strings;
+	// without this, QueryBars searches for the literal alias and never matches them, so
+	// the chart renders empty for every ingested symbol. Unresolvable inputs (e.g. the
+	// dead "10Min"/"30Min" aliases) fall back to the raw string — they have no stored
+	// bars either way. Prefer timeframe_enum; fall back to the deprecated string field.
+	legacyTf := req.Timeframe //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+	canonicalTf := legacyTf
+	if c, rErr := timeframe.Resolve(req.GetTimeframeEnum(), legacyTf); rErr == nil {
+		canonicalTf = c
+	}
+
+	pageSize := 500
+	pageToken := ""
+	if req.Page != nil {
+		if req.Page.PageSize > 0 {
+			pageSize = int(req.Page.PageSize)
+		}
+		pageToken = req.Page.PageToken
+	}
+
 	var start, end time.Time
 	if req.Range != nil {
 		if req.Range.Start != nil {
@@ -91,19 +112,14 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 		end = time.Now()
 	}
 	if start.IsZero() {
-		start = end.Add(-24 * time.Hour)
+		// Size the implicit history window to the requested page of bars for this
+		// timeframe — not a flat 24h, which yields ~0 bars for a 1d/1h chart (a daily
+		// chart requested on a weekend has no bar inside the last 24h at all). The 3×
+		// slack absorbs weekends/holidays/market-closed gaps so a full page still loads.
+		start = end.Add(-defaultBarLookback(canonicalTf, pageSize))
 	}
 
-	pageSize := 500
-	pageToken := ""
-	if req.Page != nil {
-		if req.Page.PageSize > 0 {
-			pageSize = int(req.Page.PageSize)
-		}
-		pageToken = req.Page.PageToken
-	}
-
-	bars, nextToken, err := s.repo.QueryBars(ctx, req.Symbol, req.Timeframe, start, end, pageSize, pageToken) //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+	bars, nextToken, err := s.repo.QueryBars(ctx, req.Symbol, canonicalTf, start, end, pageSize, pageToken)
 	if err != nil {
 		return nil, fmt.Errorf("query bars: %w", err)
 	}
@@ -114,7 +130,7 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 	// (Mirrors GetLatestQuote's live fallback.) Only on the first page: an empty later
 	// page means end-of-data, not a miss.
 	if len(bars) == 0 && pageToken == "" {
-		bars, nextToken = s.fetchAndCacheBars(ctx, req.Symbol, req.Timeframe, start, end, pageSize) //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+		bars, nextToken = s.fetchAndCacheBars(ctx, req.Symbol, canonicalTf, start, end, pageSize)
 	}
 
 	return &marketdatav1.GetBarsResponse{
@@ -159,6 +175,22 @@ func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf st
 		return live, ""
 	}
 	return bars, nextToken
+}
+
+// defaultBarLookback sizes the implicit history window (when the caller supplies no
+// explicit range) to cover at least `bars` bars of the given canonical timeframe, times a
+// slack multiplier so non-continuous market hours (overnight gaps, weekends, holidays)
+// still yield a full page. Unknown timeframes fall back to a day-sized interval.
+func defaultBarLookback(canonicalTf string, bars int) time.Duration {
+	interval := timeframe.Interval(canonicalTf)
+	if interval <= 0 {
+		interval = 24 * time.Hour
+	}
+	if bars <= 0 {
+		bars = 100
+	}
+	const slack = 3
+	return time.Duration(bars) * interval * slack
 }
 
 // GetDataCoverage reports stored OHLCV coverage (earliest/latest/count + gaps) for a
