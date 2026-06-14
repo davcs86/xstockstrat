@@ -84,8 +84,9 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 	// the chart renders empty for every ingested symbol. Unresolvable inputs (e.g. the
 	// dead "10Min"/"30Min" aliases) fall back to the raw string — they have no stored
 	// bars either way. Prefer timeframe_enum; fall back to the deprecated string field.
-	canonicalTf := req.Timeframe //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
-	if c, rErr := timeframe.Resolve(req.GetTimeframeEnum(), req.GetTimeframe()); rErr == nil {
+	legacyTf := req.Timeframe //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+	canonicalTf := legacyTf
+	if c, rErr := timeframe.Resolve(req.GetTimeframeEnum(), legacyTf); rErr == nil {
 		canonicalTf = c
 	}
 
