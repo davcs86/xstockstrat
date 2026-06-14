@@ -20,6 +20,9 @@ func TestAlpacaStatusToProto(t *testing.T) {
 		{"rejected", tradingv1.OrderStatus_ORDER_STATUS_REJECTED},
 		{"pending_new", tradingv1.OrderStatus_ORDER_STATUS_NEW},
 		{"accepted", tradingv1.OrderStatus_ORDER_STATUS_NEW},
+		// "done_for_day" is transient/non-terminal — it must NOT map to CANCELED, or the
+		// fill poller freezes the order before Alpaca settles it to "expired"/"filled".
+		{"done_for_day", tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED},
 		{"unknown_status", tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED},
 	}
 
