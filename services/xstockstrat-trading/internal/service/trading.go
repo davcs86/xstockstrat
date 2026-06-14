@@ -155,6 +155,29 @@ func (s *TradingService) LoadBrokerPool(ctx context.Context) error {
 	return nil
 }
 
+// LoadInflightOrders repopulates the in-memory order map from the DB with orders that are
+// still in-flight at the broker (status NEW / PARTIALLY_FILLED with a broker_order_id). The
+// fill poller only tracks orders present in s.orders, which otherwise starts empty after a
+// restart — so an order placed before the restart would never have its fill detected, leaving
+// it stuck NEW forever. Called once at startup, before StartFillPoller. Best-effort: a DB read
+// failure is logged and the poller simply starts with whatever in-process orders exist.
+func (s *TradingService) LoadInflightOrders(ctx context.Context) error {
+	orders, err := s.repo.ListSubmittedOrders(ctx)
+	if err != nil {
+		return fmt.Errorf("LoadInflightOrders: list submitted orders: %w", err)
+	}
+	s.mu.Lock()
+	for _, o := range orders {
+		if _, exists := s.orders[o.OrderId]; !exists {
+			s.orders[o.OrderId] = o
+		}
+	}
+	n := len(orders)
+	s.mu.Unlock()
+	slog.Info("loaded in-flight orders for fill polling", "count", n)
+	return nil
+}
+
 // resolveAccount returns the broker pool entry for the given accountID.
 // If accountID is empty and exactly one broker is registered, that one is returned.
 func (s *TradingService) resolveAccount(accountID string) (brokerPoolEntry, error) {
