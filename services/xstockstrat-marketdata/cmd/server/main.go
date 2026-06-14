@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -79,6 +80,19 @@ func main() {
 		Paper:            cfg.TradingMode == "paper",
 	})
 
+	// Fail loud if the Alpaca credentials are missing or still set to the DO app-spec
+	// placeholders (e.g. "YOUR_DEV_ALPACA_API_KEY"). A placeholder makes every Alpaca
+	// call get rejected at the edge with an opaque 401, whose only later symptom is a
+	// warm-poller fetch warning. The service still starts — cached reads and non-Alpaca
+	// RPCs keep working — but the operator gets an unambiguous startup signal.
+	if looksLikePlaceholderCred(cfg.AlpacaAPIKey) || looksLikePlaceholderCred(cfg.AlpacaAPISecret) {
+		slog.Warn("ALPACA credentials look empty or are still set to a placeholder — "+
+			"every Alpaca market-data call will fail with a 401; set the real "+
+			"ALPACA_API_KEY/ALPACA_API_SECRET secrets",
+			"api_key_placeholder", looksLikePlaceholderCred(cfg.AlpacaAPIKey),
+			"api_secret_placeholder", looksLikePlaceholderCred(cfg.AlpacaAPISecret))
+	}
+
 	// TimescaleDB repository
 	repo, err := repository.NewMarketDataRepo(cfg.DBConnStr)
 	if err != nil {
@@ -137,4 +151,17 @@ func main() {
 		slog.Error("server error", "error", err)
 		os.Exit(1)
 	}
+}
+
+// looksLikePlaceholderCred reports whether an Alpaca credential is empty or one of the
+// placeholder values shipped in the DO app specs (e.g. "YOUR_DEV_ALPACA_API_KEY"). It is
+// intentionally conservative — only blank values and the obvious "YOUR_…"/"…PLACEHOLDER…"
+// forms — so a real key is never misflagged.
+func looksLikePlaceholderCred(v string) bool {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return true
+	}
+	upper := strings.ToUpper(v)
+	return strings.HasPrefix(upper, "YOUR_") || strings.Contains(upper, "PLACEHOLDER")
 }
