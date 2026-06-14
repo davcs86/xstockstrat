@@ -325,7 +325,12 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 
 	// Update order with broker-assigned fields.
 	order.BrokerOrderId = brokerOrder.BrokerOrderID
-	order.Status = alpacaStatusToProto(brokerOrder.Status)
+	// Keep the existing status (NEW) if the broker's submit response carries a transient
+	// or unrecognized status (UNSPECIFIED) rather than clobbering it; the fill poller will
+	// reconcile the order to its real status.
+	if st := alpacaStatusToProto(brokerOrder.Status); st != tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED {
+		order.Status = st
+	}
 	order.UpdatedAt = timestamppb.New(time.Now())
 	// Carry any fill the broker already reported on submit (market orders fill
 	// immediately). Without this the fill poller — which skips orders already in
@@ -659,6 +664,13 @@ func (s *TradingService) pollFills(ctx context.Context) {
 		}
 
 		newStatus := alpacaStatusToProto(brokerOrder.Status)
+		// A transient ("done_for_day") or unrecognized broker status maps to UNSPECIFIED;
+		// don't overwrite the order's real status with it (that would both lose the current
+		// status and, if it were terminal, stop reconciliation) — keep polling so the order
+		// converges to its true terminal state on a later cycle.
+		if newStatus == tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED {
+			continue
+		}
 		if newStatus == order.Status {
 			continue
 		}
@@ -1210,6 +1222,9 @@ func (s *TradingService) buildBrokerRequest(req *tradingv1.PlaceOrderRequest) br
 }
 
 // alpacaStatusToProto maps broker order status strings to proto OrderStatus values.
+// A broker status we recognize as transient/non-terminal — or one we don't recognize
+// at all — maps to ORDER_STATUS_UNSPECIFIED, which callers must treat as "no actionable
+// status change, keep reconciling" rather than overwriting the order's current status.
 func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 	switch s {
 	case "new", "accepted", "pending_new":
@@ -1218,12 +1233,19 @@ func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 		return tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED
 	case "filled":
 		return tradingv1.OrderStatus_ORDER_STATUS_FILLED
-	case "canceled", "done_for_day":
+	case "canceled":
 		return tradingv1.OrderStatus_ORDER_STATUS_CANCELED
 	case "expired":
 		return tradingv1.OrderStatus_ORDER_STATUS_EXPIRED
 	case "rejected", "stopped", "suspended", "calculated":
 		return tradingv1.OrderStatus_ORDER_STATUS_REJECTED
+	// "done_for_day" is NOT terminal and NOT a cancellation — Alpaca reports it for a
+	// `day` order at market close, then settles the order to its real terminal state
+	// ("expired" or "filled") later. Mapping it to CANCELED used to freeze the order in
+	// a wrong terminal status, after which the fill poller stopped reconciling and never
+	// captured the eventual "expired". Treat it as UNSPECIFIED so reconciliation continues.
+	case "done_for_day":
+		return tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED
 	default:
 		return tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED
 	}

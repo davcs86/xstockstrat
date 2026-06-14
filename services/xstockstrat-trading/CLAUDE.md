@@ -124,6 +124,19 @@ the new total/remaining per its adapter. A successful replace persists the order
 The IBKR **netting-mode** assumption documented in _Known Limitations_ applies to replace as
 well: a replaced quantity is the new total order quantity (no hedged-mode lot semantics).
 
+## Order Status Reconciliation
+
+The fill poller (`pollFills`) calls `GetOrder` for every non-terminal order and maps the broker
+status via `alpacaStatusToProto`. Terminal statuses (`FILLED`/`CANCELED`/`EXPIRED`/`REJECTED`)
+stop reconciliation for that order. **Transient or unrecognized broker statuses map to
+`ORDER_STATUS_UNSPECIFIED` and are skipped** — they never overwrite the order's current status,
+so reconciliation continues until a real terminal status arrives. In particular, Alpaca's
+**`done_for_day`** is non-terminal: it is reported for a `day` order at market close before the
+order settles to its true terminal state (`expired` or `filled`). It must **not** map to
+`CANCELED` — doing so previously froze the order in a wrong terminal state, after which the poller
+stopped and never captured the eventual `expired` (UI showed CANCELED while the broker showed
+expired).
+
 ## Environment Variables
 
 ```text
