@@ -309,10 +309,16 @@ func (c *IBKRClient) GetPositions(ctx context.Context) ([]BrokerPosition, error)
 		return nil, fmt.Errorf("ibkr GetPositions: status %d: %s", resp.StatusCode, respBody)
 	}
 
+	// IBKR returns mark-to-market valuation as numeric JSON. unrealized P&L percentage is
+	// not provided, so derive it from unrealizedPnl over cost basis (qty * avgCost) when the
+	// cost basis is non-zero — matching how the broker-authoritative fields are consumed.
 	var raw []struct {
-		Ticker   string  `json:"ticker"`
-		Position float64 `json:"position"`
-		AvgCost  float64 `json:"avgCost"`
+		Ticker        string  `json:"ticker"`
+		Position      float64 `json:"position"`
+		AvgCost       float64 `json:"avgCost"`
+		MktPrice      float64 `json:"mktPrice"`
+		MktValue      float64 `json:"mktValue"`
+		UnrealizedPnl float64 `json:"unrealizedPnl"`
 	}
 	if err := json.Unmarshal(respBody, &raw); err != nil {
 		return nil, fmt.Errorf("ibkr GetPositions: parse response: %w", err)
@@ -320,10 +326,18 @@ func (c *IBKRClient) GetPositions(ctx context.Context) ([]BrokerPosition, error)
 
 	positions := make([]BrokerPosition, 0, len(raw))
 	for _, r := range raw {
+		var pnlPct float64
+		if costBasis := r.Position * r.AvgCost; costBasis != 0 {
+			pnlPct = r.UnrealizedPnl / costBasis
+		}
 		positions = append(positions, BrokerPosition{
-			Symbol:   r.Ticker,
-			Quantity: r.Position,
-			AvgCost:  r.AvgCost,
+			Symbol:           r.Ticker,
+			Quantity:         r.Position,
+			AvgCost:          r.AvgCost,
+			CurrentPrice:     r.MktPrice,
+			MarketValue:      r.MktValue,
+			UnrealizedPnl:    r.UnrealizedPnl,
+			UnrealizedPnlPct: pnlPct,
 		})
 	}
 	return positions, nil

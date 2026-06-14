@@ -52,8 +52,8 @@ func (r *PortfolioRepo) ClosePosition(ctx context.Context, userID, symbol string
 
 // GetPosition returns a single position for a user/symbol/mode.
 func (r *PortfolioRepo) GetPosition(ctx context.Context, userID, symbol string, mode commonv1.TradingMode) (*portfoliov1.Position, error) {
-	const q = `
-		SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
+	q := `
+		SELECT ` + positionColumns + `
 		FROM portfolio.positions
 		WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3
 		ORDER BY opened_at DESC LIMIT 1`
@@ -191,35 +191,58 @@ type pgxRow interface {
 
 func scanPositionRow(row pgxRow) (*portfoliov1.Position, error) {
 	var (
-		symbol, modeStr, accountID string
-		qty, avgEntry, costBasis   float64
-		openedAt                   time.Time
+		symbol, modeStr, accountID                                 string
+		qty, avgEntry, costBasis                                   float64
+		currentPrice, marketValue, unrealizedPnl, unrealizedPnlPct float64
+		openedAt                                                   time.Time
 	)
-	if err := row.Scan(&symbol, &qty, &avgEntry, &costBasis, &openedAt, &modeStr, &accountID); err != nil {
+	if err := row.Scan(&symbol, &qty, &avgEntry, &costBasis, &openedAt, &modeStr, &accountID,
+		&currentPrice, &marketValue, &unrealizedPnl, &unrealizedPnlPct); err != nil {
 		return nil, fmt.Errorf("scan position: %w", err)
 	}
 	return &portfoliov1.Position{
-		Symbol:        symbol,
-		Qty:           qty,
-		AvgEntryPrice: avgEntry,
-		CostBasis:     costBasis,
-		OpenedAt:      timestamppb.New(openedAt),
-		AccountId:     accountID,
+		Symbol:           symbol,
+		Qty:              qty,
+		AvgEntryPrice:    avgEntry,
+		CostBasis:        costBasis,
+		OpenedAt:         timestamppb.New(openedAt),
+		AccountId:        accountID,
+		CurrentPrice:     currentPrice,
+		MarketValue:      marketValue,
+		UnrealizedPnl:    unrealizedPnl,
+		UnrealizedPnlPct: unrealizedPnlPct,
 	}, nil
+}
+
+// positionColumns is the SELECT column list backing scanPositionRow — kept in one place so
+// the column order stays in lockstep with the Scan call above.
+const positionColumns = `symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id, current_price, market_value, unrealized_pnl, unrealized_pnl_pct`
+
+// PositionValuation is the broker's mark-to-market snapshot for a single position,
+// carried on account.positions.synced. Zero fields mean the broker did not report a
+// value (e.g. a legacy sync event), in which case the service falls back to marketdata.
+type PositionValuation struct {
+	CurrentPrice     float64
+	MarketValue      float64
+	UnrealizedPnl    float64
+	UnrealizedPnlPct float64
 }
 
 // UpsertPositionFromSync inserts or updates a position from a broker position sync.
 // Unlike UpsertPosition, opened_at is never overwritten on conflict. cost_basis is
 // the total cost (qty × avg_cost) to match the per-fill path and the P&L math in
-// GetPortfolio/ListPortfolios (which compute market_value − cost_basis).
-func (r *PortfolioRepo) UpsertPositionFromSync(ctx context.Context, userID, symbol, tradingMode, accountID string, qty, avgCost float64) error {
+// GetPortfolio/ListPortfolios (which compute market_value − cost_basis). The broker's
+// mark-to-market valuation (val) is stored so ListPortfolios can show figures that
+// reconcile with broker equity instead of recomputing from marketdata mid-quotes.
+func (r *PortfolioRepo) UpsertPositionFromSync(ctx context.Context, userID, symbol, tradingMode, accountID string, qty, avgCost float64, val PositionValuation) error {
 	costBasis := qty * avgCost
 	const q = `
-		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, opened_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, current_price, market_value, unrealized_pnl, unrealized_pnl_pct, opened_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
 		ON CONFLICT (user_id, symbol, trading_mode, account_id) DO UPDATE
-		SET qty=$3, avg_entry_price=$4, cost_basis=$5, updated_at=NOW()`
-	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgCost, costBasis, tradingMode, accountID)
+		SET qty=$3, avg_entry_price=$4, cost_basis=$5, current_price=$8, market_value=$9, unrealized_pnl=$10, unrealized_pnl_pct=$11, updated_at=NOW()`
+	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgCost, costBasis, tradingMode, accountID,
+		val.CurrentPrice, val.MarketValue, val.UnrealizedPnl, val.UnrealizedPnlPct)
 	return err
 }
 
@@ -341,15 +364,15 @@ func (r *PortfolioRepo) ListPositionsByAccount(ctx context.Context, accountID st
 		err error
 	)
 	if tradingMode == "" {
-		const q = `
-			SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
+		q := `
+			SELECT ` + positionColumns + `
 			FROM portfolio.positions
 			WHERE account_id=$1
 			ORDER BY symbol ASC`
 		rows, err = r.pool.Query(ctx, q, accountID)
 	} else {
-		const q = `
-			SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
+		q := `
+			SELECT ` + positionColumns + `
 			FROM portfolio.positions
 			WHERE account_id=$1 AND trading_mode=$2
 			ORDER BY symbol ASC`

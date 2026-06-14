@@ -49,13 +49,13 @@ Namespace: `portfolio`
 | Event Type | Effect |
 |---|---|
 | `order.filled` / `order.partially_filled` | Update positions from order fills (`user_id` + `account_id` from payload) |
-| `account.positions.synced` | Reconcile positions against a broker snapshot (`user_id` + `account_id`) |
+| `account.positions.synced` | Reconcile positions against a broker snapshot (`user_id` + `account_id`); also stores the broker's per-position mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`) so `ListPortfolios` reconciles with broker equity instead of recomputing from marketdata mid-quotes |
 | `account.balance.synced` | Upsert the latest broker balance (cash, buying power, equity, last_equity) per account; surfaced by `ListPortfolios` |
 
 ## Database
 
 - Schema: `portfolio`
-- Table: `portfolio.positions` — current open positions
+- Table: `portfolio.positions` — current open positions, including the broker's last-synced mark-to-market valuation (`current_price`, `market_value`, `unrealized_pnl`, `unrealized_pnl_pct`; migration `005`). These are authoritative for broker-synced positions; order-fill-only positions leave them `0` and the service enriches from marketdata mid-quotes as a fallback.
 - Table: `portfolio.account_balances` — latest broker balance snapshot per account (cash, buying power, equity, last_equity); upserted from `account.balance.synced`
 - Hypertable: `portfolio.snapshots` — point-in-time portfolio state (partition by `time`, chunk = 1 day)
 - Migration tool: `golang-migrate`

@@ -765,6 +765,13 @@ func (s *TradingService) syncPositions(ctx context.Context) {
 				"symbol":   p.Symbol,
 				"qty":      p.Quantity,
 				"avg_cost": p.AvgCost,
+				// Broker mark-to-market valuation — lets the portfolio card reconcile with
+				// the broker's authoritative equity instead of recomputing from marketdata
+				// mid-quotes (a different price basis that never ties out).
+				"current_price":   p.CurrentPrice,
+				"market_value":    p.MarketValue,
+				"unrealized_pl":   p.UnrealizedPnl,
+				"unrealized_plpc": p.UnrealizedPnlPct,
 			}
 		}
 		payload := map[string]interface{}{

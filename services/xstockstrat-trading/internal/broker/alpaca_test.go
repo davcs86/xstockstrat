@@ -211,6 +211,55 @@ func TestGetAccount_Alpaca(t *testing.T) {
 	}
 }
 
+func TestGetPositions_Alpaca_BrokerValuation(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v2/positions", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Alpaca returns qty, avg_entry_price, and the mark-to-market valuation fields as
+		// decimal strings. The valuation fields are what let the portfolio card reconcile
+		// with broker equity, so they must be parsed rather than dropped.
+		_, _ = w.Write([]byte(`[{
+			"symbol": "AMZN",
+			"qty": "2",
+			"avg_entry_price": "331.20",
+			"current_price": "200.00",
+			"market_value": "400.00",
+			"unrealized_pl": "-262.39",
+			"unrealized_plpc": "-0.396"
+		}]`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{
+		APIKey: "k", APISecret: "s", PaperURL: srv.URL, LiveURL: srv.URL, Paper: true,
+	})
+
+	positions, err := c.GetPositions(context.Background())
+	if err != nil {
+		t.Fatalf("GetPositions failed: %v", err)
+	}
+	if len(positions) != 1 {
+		t.Fatalf("positions: got %d, want 1", len(positions))
+	}
+	p := positions[0]
+	if p.Symbol != "AMZN" || p.Quantity != 2 || p.AvgCost != 331.20 {
+		t.Errorf("base fields wrong: %+v", p)
+	}
+	if p.CurrentPrice != 200.00 {
+		t.Errorf("CurrentPrice: got %v, want 200.00", p.CurrentPrice)
+	}
+	if p.MarketValue != 400.00 {
+		t.Errorf("MarketValue: got %v, want 400.00", p.MarketValue)
+	}
+	if p.UnrealizedPnl != -262.39 {
+		t.Errorf("UnrealizedPnl: got %v, want -262.39", p.UnrealizedPnl)
+	}
+	if p.UnrealizedPnlPct != -0.396 {
+		t.Errorf("UnrealizedPnlPct: got %v, want -0.396", p.UnrealizedPnlPct)
+	}
+}
+
 func TestGetAccount_Alpaca_LastEquityFallback(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v2/account", func(w http.ResponseWriter, r *http.Request) {
