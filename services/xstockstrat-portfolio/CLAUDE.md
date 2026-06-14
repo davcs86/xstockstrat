@@ -46,11 +46,12 @@ Namespace: `portfolio`
 
 ## Ledger Events Consumed
 
-| Event Type | Effect |
-|---|---|
-| `order.filled` / `order.partially_filled` | Update positions from order fills (`user_id` + `account_id` from payload) |
-| `account.positions.synced` | Reconcile positions against a broker snapshot (`user_id` + `account_id`) |
-| `account.balance.synced` | Upsert the latest broker balance (cash, buying power, equity, last_equity) per account; surfaced by `ListPortfolios` |
+| Event Type | Consumer | Effect |
+|---|---|---|
+| `order.filled` | `ConsumeOrderFills` (live stream) | Live-update the `positions` table from completed order fills (`user_id` + `account_id` from payload). Uses the incremental `qty` field. |
+| `order.partially_filled` | `GetPnL` (query time) | Consumed in `GetPnL` Pass 2 for realized P&L on orders that never reached `order.filled`, deduplicated per order ID keeping the highest cumulative `filled_qty`. **Not** consumed by the live `positions` stream — partial fills converge into the positions table via the `account.positions.synced` broker reconciliation poller. |
+| `account.positions.synced` | `ConsumePositionSyncs` (live stream) | Reconcile positions against a broker snapshot (`user_id` + `account_id`) |
+| `account.balance.synced` | `ConsumeBalanceSyncs` (live stream) | Upsert the latest broker balance (cash, buying power, equity, last_equity) per account; surfaced by `ListPortfolios` |
 
 ## Database
 
