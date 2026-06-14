@@ -370,14 +370,30 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 					slog.Warn("warm poller: multi-quote fetch failed, falling back to per-symbol", "error", err)
 				}
 			}
+			var fetched, failed int
+			var firstErr error
 			for _, sym := range symbols {
 				q, err := src.GetLatestQuote(ctx, sym)
 				if err != nil {
+					failed++
+					if firstErr == nil {
+						firstErr = err
+					}
 					continue
 				}
+				fetched++
 				if err := s.repo.InsertQuote(ctx, q); err != nil {
 					slog.Warn("warm poller: cache insert failed", "symbol", sym, "error", err)
 				}
+			}
+			// Per-symbol fetch errors used to be dropped silently, which hid
+			// whole-feed failures (e.g. invalid/placeholder Alpaca credentials, where
+			// every call gets the same 401). Surface them once per cycle with a sample
+			// error instead of staying quiet — a high failed count with fetched==0 is
+			// the signature of a credential/feed problem, not a bad ticker.
+			if failed > 0 {
+				slog.Warn("warm poller: per-symbol quote fetch failures",
+					"failed", failed, "fetched", fetched, "total", len(symbols), "sample_error", firstErr)
 			}
 		}
 	}
