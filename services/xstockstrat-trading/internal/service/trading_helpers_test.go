@@ -37,6 +37,50 @@ func TestAlpacaStatusToProto(t *testing.T) {
 // INVALID status causes the poller to skip an account; UNSPECIFIED/OK/UNKNOWN do not,
 // so a never-checked or healthy account still syncs and a transient/unknown error
 // keeps retrying.
+func TestNormalizeFilledQty(t *testing.T) {
+	tests := []struct {
+		name   string
+		order  *tradingv1.Order
+		wantFY float64
+	}{
+		{
+			name:   "filled_with_zero_is_backfilled_to_qty",
+			order:  &tradingv1.Order{Status: tradingv1.OrderStatus_ORDER_STATUS_FILLED, Qty: 10, FilledQty: 0},
+			wantFY: 10,
+		},
+		{
+			name:   "filled_with_correct_qty_unchanged",
+			order:  &tradingv1.Order{Status: tradingv1.OrderStatus_ORDER_STATUS_FILLED, Qty: 15, FilledQty: 15},
+			wantFY: 15,
+		},
+		{
+			name:   "partially_filled_zero_left_untouched",
+			order:  &tradingv1.Order{Status: tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED, Qty: 10, FilledQty: 0},
+			wantFY: 0,
+		},
+		{
+			name:   "canceled_zero_left_untouched",
+			order:  &tradingv1.Order{Status: tradingv1.OrderStatus_ORDER_STATUS_CANCELED, Qty: 10, FilledQty: 0},
+			wantFY: 0,
+		},
+		{
+			name:   "new_zero_left_untouched",
+			order:  &tradingv1.Order{Status: tradingv1.OrderStatus_ORDER_STATUS_NEW, Qty: 10, FilledQty: 0},
+			wantFY: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			normalizeFilledQty(tt.order)
+			if tt.order.FilledQty != tt.wantFY {
+				t.Errorf("FilledQty = %v, want %v", tt.order.FilledQty, tt.wantFY)
+			}
+		})
+	}
+	// Nil-safe.
+	normalizeFilledQty(nil)
+}
+
 func TestCredentialsKnownInvalid(t *testing.T) {
 	tests := []struct {
 		name   string

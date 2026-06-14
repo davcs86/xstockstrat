@@ -457,6 +457,7 @@ func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRe
 	order, ok := s.orders[req.OrderId]
 	s.mu.Unlock()
 	if ok {
+		normalizeFilledQty(order)
 		return order, nil
 	}
 	// Fall back to DB.
@@ -464,6 +465,7 @@ func (s *TradingService) GetOrder(ctx context.Context, req *tradingv1.GetOrderRe
 	if err != nil || order == nil {
 		return nil, fmt.Errorf("order %s not found", req.OrderId)
 	}
+	normalizeFilledQty(order)
 	return order, nil
 }
 
@@ -507,8 +509,14 @@ func (s *TradingService) ListOrders(ctx context.Context, req *tradingv1.ListOrde
 			mem = append(mem, o)
 		}
 		s.mu.Unlock()
+		for _, o := range mem {
+			normalizeFilledQty(o)
+		}
 		page, pageResp := paginateOrders(mem, req.Page)
 		return &tradingv1.ListOrdersResponse{Orders: page, Page: pageResp}, nil
+	}
+	for _, o := range orders {
+		normalizeFilledQty(o)
 	}
 	page, pageResp := paginateOrders(orders, req.Page)
 	return &tradingv1.ListOrdersResponse{Orders: page, Page: pageResp}, nil
@@ -1196,6 +1204,22 @@ func (s *TradingService) buildBrokerRequest(req *tradingv1.PlaceOrderRequest) br
 }
 
 // alpacaStatusToProto maps broker order status strings to proto OrderStatus values.
+// normalizeFilledQty enforces the orders-table invariant that a fully-filled order reports
+// its full quantity. A FILLED order (Alpaca/IBKR) executed in full, so filled_qty must equal
+// qty. Historical rows persisted before the fill-qty write guards existed — and any fill the
+// poller missed across a restart (it skips terminal orders and never reloads them into memory)
+// — can leave filled_qty at 0, which renders as "Filled 0" in the orders table. Coercing on
+// read keeps the figure correct for every consumer without a data migration. Partial/canceled/
+// expired states are left untouched: a sub-qty filled amount is legitimate there.
+func normalizeFilledQty(o *tradingv1.Order) {
+	if o == nil {
+		return
+	}
+	if o.Status == tradingv1.OrderStatus_ORDER_STATUS_FILLED && o.FilledQty == 0 && o.Qty > 0 {
+		o.FilledQty = o.Qty
+	}
+}
+
 func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 	switch s {
 	case "new", "accepted", "pending_new":
