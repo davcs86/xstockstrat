@@ -10,9 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -41,21 +43,30 @@ type PortfolioService struct {
 }
 
 // NewPortfolioService creates the service, opens the DB pool, and dials dependencies.
+// clientKeepAlive pings idle inter-service connections so a silently-dropped link
+// (e.g. an idle ledger connection the server GOAWAYs) is detected and re-established
+// promptly instead of failing the next call.
+var clientKeepAlive = grpc.WithKeepaliveParams(keepalive.ClientParameters{
+	Time:                30 * time.Second,
+	Timeout:             10 * time.Second,
+	PermitWithoutStream: true,
+})
+
 func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*PortfolioService, error) {
 	repo, err := repository.NewPortfolioRepo(cfg.DBConnStr)
 	if err != nil {
 		return nil, fmt.Errorf("portfolio repo: %w", err)
 	}
 
-	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial ledger: %w", err)
 	}
-	mdConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	mdConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial marketdata: %w", err)
 	}
-	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
@@ -619,16 +630,40 @@ func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey s
 		val, _ := structpb.NewValue(v)
 		fields[k] = val
 	}
-	_, err := s.ledger.AppendEvent(ctx, &ledgerv1.AppendEventRequest{
+	req := &ledgerv1.AppendEventRequest{
 		EventType:     eventType,
 		SourceService: "portfolio",
 		StreamKey:     streamKey,
 		OccurredAt:    timestamppb.Now(),
 		Payload:       &structpb.Struct{Fields: fields},
-	})
-	if err != nil {
-		slog.Warn("ledger append failed", "event_type", eventType, "error", err)
+		// Stable per-emit dedup key. Reused across the retries below so a retry that
+		// follows an append the ledger actually committed (but whose response was lost)
+		// returns the stored event instead of writing a duplicate audit event.
+		IdempotencyKey: uuid.NewString(),
 	}
+
+	// Retry transient transport failures. A ledger restart sends an HTTP/2 GOAWAY that
+	// fails the in-flight append with codes.Unavailable; without a retry the event was
+	// silently dropped (it was only logged), so a deploy-time ledger bounce lost audit
+	// events. The idempotency key above makes the retry safe against duplication.
+	const maxAttempts = 4
+	backoff := 100 * time.Millisecond
+	var err error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if _, err = s.ledger.AppendEvent(ctx, req); err == nil {
+			return
+		}
+		if status.Code(err) != codes.Unavailable || attempt == maxAttempts {
+			break
+		}
+		select {
+		case <-time.After(backoff):
+		case <-ctx.Done():
+			return
+		}
+		backoff *= 2
+	}
+	slog.Warn("ledger append failed", "event_type", eventType, "error", err)
 }
 
 // fillAccumulator tracks signed average-cost-basis state per symbol for realized P&L computation.

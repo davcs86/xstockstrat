@@ -48,10 +48,25 @@ Namespace: `ledger`
 | `ledger.compression.after_days` | int | `3` | Compress chunks after N days |
 | `platform.ledger_endpoint` | string | — | Own endpoint (for health checks) |
 
+## Idempotent Append
+
+`AppendEvent` accepts an optional `idempotency_key`. When set, the event is appended **at
+most once** for that key: a retried call (e.g. a caller re-sending after a transient
+transport failure such as a ledger-restart GOAWAY) returns the originally-stored event
+instead of inserting a duplicate. An empty key preserves the prior behavior (every call
+inserts). Dedup is backed by the `ledger.idempotency_keys` table — claim-key and event
+insert happen in one transaction, so a key is only recorded if its event was stored.
+
+`ledger.idempotency_keys` is a **regular table, not a hypertable**, on purpose: it needs a
+real `PRIMARY KEY (idempotency_key)`, which the `ledger.events` hypertable cannot provide
+(a unique index on a hypertable must include the partition column `recorded_at`, defeating
+dedup).
+
 ## Database
 
 - Schema: `ledger`
 - Hypertable: `ledger.events` — partition by `recorded_at`, chunk = 1 day
+- Table: `ledger.idempotency_keys` — caller-supplied `AppendEvent` dedup map (`idempotency_key` PK → `event_id`); migration `002_idempotency_keys`
 - Compression: after 3 days, segmented by `source_service, event_type`
 - Retention: 2 years
 - Live streaming: `pg_notify('ledger_stream_{stream_key}', ...)` fires on every insert

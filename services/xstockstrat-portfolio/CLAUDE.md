@@ -70,6 +70,14 @@ Namespace: `portfolio`
 | `portfolio.risk.drawdown_breach` | Max drawdown exceeded |
 | `portfolio.snapshot` | Periodic snapshot written |
 
+All emissions go through `emitEvent`, which sends a per-emit `idempotency_key` and **retries
+transient `Unavailable` failures** (bounded backoff, 4 attempts). A ledger restart sends an
+HTTP/2 GOAWAY that fails the in-flight append; previously the event was logged-and-dropped, so
+a deploy-time ledger bounce lost audit events. The idempotency key makes the retry safe — the
+ledger dedups it, so a retry after a committed-but-unacked append returns the stored event
+rather than writing a duplicate. The ledger/marketdata/notify client connections also set gRPC
+keepalive so an idle link the server GOAWAYs is re-established promptly.
+
 ## Environment Variables
 
 ```text
