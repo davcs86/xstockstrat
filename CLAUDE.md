@@ -423,6 +423,7 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sd
 | Next.js UI | `services/xstockstrat-ui/` |
 | Docker Compose | `docker-compose.yml` |
 | OTel Collector config | `packages/otel/otel-collector-config.yaml` |
+| Grafana dashboards (as code) | `packages/otel/dashboards/` (synced by `scripts/grafana-deploy-dashboards.sh` via `.github/workflows/grafana-dashboards.yml`) |
 | DO prod app spec | `.do/app.yaml` |
 | DO dev app spec | `.do/app.dev.yaml` |
 | Frontend auth pattern | `docs/patterns/frontend-auth.md` — required for all Next.js services |

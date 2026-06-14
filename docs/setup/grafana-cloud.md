@@ -215,6 +215,23 @@ Prometheus/Mimir and Loki datasources when prompted (each dashboard declares the
 `packages/otel/dashboards/`; the `${DS_PROMETHEUS}` / `${DS_LOKI}` template variables resolve to
 the provisioned datasource UIDs.
 
+**Deploy from CI (Grafana Cloud, no provisioning access):** the **Grafana dashboards** workflow
+(`.github/workflows/grafana-dashboards.yml`) runs `scripts/grafana-deploy-dashboards.sh` on every
+push to `main-dev`/`main` that touches `packages/otel/dashboards/**`. The script uploads each
+dashboard to Grafana Cloud via the HTTP API — it auto-discovers your Prometheus and Loki
+datasource UIDs, substitutes the `${DS_PROMETHEUS}` / `${DS_LOKI}` inputs, and upserts each
+dashboard (keyed by `uid`, into a managed `xstockstrat` folder). It needs two repository secrets:
+
+| Secret | Value | How to obtain |
+|---|---|---|
+| `GRAFANA_URL` | Your stack URL, e.g. `https://xstockstrat.grafana.net` | Grafana Cloud portal home |
+| `GRAFANA_SERVICE_ACCOUNT_TOKEN` | `glsa_...` token with **Editor** role | Administration → Users and access → Service accounts → Add service account → Add token |
+
+Add them in **GitHub → Settings → Secrets and variables → Actions**. These are separate from the
+OTLP export credentials in Step 2. To deploy manually:
+`GRAFANA_URL=... GRAFANA_SERVICE_ACCOUNT_TOKEN=... ./scripts/grafana-deploy-dashboards.sh`
+(override datasource auto-discovery with `GRAFANA_PROMETHEUS_DS_UID` / `GRAFANA_LOKI_DS_UID`).
+
 > V1 ships **metrics + logs** dashboards. Distributed-trace visualization (Tempo) is out of
 > scope for V1 — traces are still collected and can be explored ad hoc via Tempo Search.
 
@@ -273,6 +290,65 @@ Use these exact service names when querying by `service.name` or `service_name` 
 | xstockstrat-ui | `xstockstrat-ui` |
 | xstockstrat-agent | `agent` |
 | otel-collector | `otel-collector` (local dev only) |
+
+---
+
+## Step 9 — (Optional) Grafana MCP Server for the Claude Code Agent
+
+The repo ships a pre-wired **Grafana MCP server** (`grafana/mcp-grafana`) so the
+Claude Code agent can query your Grafana Cloud stack directly — dashboards,
+Prometheus/Mimir metrics, Loki logs, Tempo traces, and incidents — instead of
+you copy-pasting query results into the chat.
+
+This is **developer tooling only**. Runtime services do not use it; it has
+nothing to do with the OTLP export pipeline above (those push telemetry *into*
+Grafana — this pulls data *out* for the agent).
+
+### How it's wired
+
+- **`.mcp.json`** defines a `grafana` server that runs the official
+  `mcp/grafana` image locally over stdio via Docker.
+- **`.claude/settings.json`** lists `grafana` in `enabledMcpjsonServers` so it
+  auto-starts in Claude Code sessions.
+- It reads two env vars (substituted from your `.env` / shell):
+  `GRAFANA_URL` and `GRAFANA_SERVICE_ACCOUNT_TOKEN`.
+
+> **Prerequisite:** the local Docker daemon must be running, and your network
+> policy must allow pulling `mcp/grafana` from Docker Hub. In the web-based
+> remote execution environment (no Docker daemon), the server won't start —
+> use it from a local Claude Code session instead.
+
+### Setup
+
+1. **Create a service account token** in Grafana Cloud:
+   - **Administration → Users and access → Service accounts → Add service account**
+   - Role: **Viewer** for read-only queries, or **Editor** to let the agent
+     create/edit dashboards.
+   - **Add service account token** → copy the `glsa_...` value (shown once).
+
+2. **Set the env vars** in your `.env` (see `.env.example`):
+
+   ```bash
+   GRAFANA_URL=https://<your-stack>.grafana.net
+   GRAFANA_SERVICE_ACCOUNT_TOKEN=glsa_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+
+   `GRAFANA_URL` is your **stack URL** (e.g. `https://xstockstrat.grafana.net`),
+   not the `otlp-gateway-*` endpoint used for OTLP export.
+
+3. **Restart your Claude Code session** so the MCP server picks up the vars.
+   On first run Docker pulls `mcp/grafana`.
+
+### Verify
+
+In a Claude Code session, ask the agent to list available datasources or run a
+query (e.g. *"list my Grafana datasources"* or *"query Loki for config service
+errors in the last hour"*). The agent's `mcp__grafana__*` tools should return
+live results from your stack.
+
+> **Security:** the token grants API access to your Grafana stack — keep it in
+> `.env` (gitignored), never commit it, and prefer **Viewer** scope unless the
+> agent genuinely needs to write dashboards.
 
 ---
 

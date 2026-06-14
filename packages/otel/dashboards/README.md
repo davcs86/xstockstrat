@@ -25,6 +25,16 @@ datasources when prompted.
 a provisioned dashboards path and add a provider entry pointing at this directory. The
 `${DS_PROMETHEUS}` / `${DS_LOKI}` template variables resolve to the provisioned datasource UIDs.
 
+**Via CI (Grafana Cloud, no provisioning access):** the `Grafana dashboards` GitHub Actions
+workflow (`.github/workflows/grafana-dashboards.yml`) runs `scripts/grafana-deploy-dashboards.sh`
+on every push to `main-dev`/`main` that touches this directory. The script uploads each
+dashboard via the Grafana HTTP API — it auto-discovers the Prometheus and Loki datasource UIDs,
+substitutes the `${DS_PROMETHEUS}` / `${DS_LOKI}` inputs, strips the import-only `__inputs`, and
+upserts each dashboard (keyed by `uid`) into a managed `xstockstrat` folder. Requires the
+`GRAFANA_URL` and `GRAFANA_SERVICE_ACCOUNT_TOKEN` (Editor role) repository secrets. Run it
+locally the same way: `GRAFANA_URL=... GRAFANA_SERVICE_ACCOUNT_TOKEN=... ./scripts/grafana-deploy-dashboards.sh`
+(override auto-discovery with `GRAFANA_PROMETHEUS_DS_UID` / `GRAFANA_LOKI_DS_UID`).
+
 ## Metric & label assumptions
 
 Panels are built on the telemetry the existing OTel SDK stubs already emit — no custom
