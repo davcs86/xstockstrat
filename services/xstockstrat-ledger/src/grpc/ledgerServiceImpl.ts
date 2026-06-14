@@ -14,41 +14,99 @@ export class LedgerServiceImpl {
   /**
    * AppendEvent — core write path.
    * Events are strictly immutable once written (no UPDATE/DELETE on ledger.events).
+   *
+   * When the request carries an `idempotency_key`, the event is appended at most once
+   * for that key: a retried AppendEvent (e.g. after a transient transport failure such
+   * as a ledger restart GOAWAY) returns the originally-stored event instead of inserting
+   * a duplicate. An empty key preserves the prior behavior (every call inserts).
    */
   async appendEvent(call: any, callback: any) {
     const req = call.request;
+    const idempotencyKey: string = req.idempotencyKey || '';
     const eventId = uuidv4();
     const now = new Date();
 
+    // event-insert columns + values, shared by the plain and idempotent paths.
+    const insertSql = `INSERT INTO ledger.events
+         (event_id, event_type, source_service, correlation_id, stream_key,
+          payload, metadata, occurred_at, recorded_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING sequence, recorded_at`;
+    const insertParams = [
+      eventId,
+      req.eventType,
+      req.sourceService,
+      req.correlationId || null,
+      req.streamKey,
+      JSON.stringify(req.payload ?? {}),
+      JSON.stringify(req.metadata ?? {}),
+      // occurredAt is decoded by ts-proto (useDate) into a JS Date — pass it
+      // straight through. Treating it as a protobuf `{ seconds }` object here
+      // produced `new Date(undefined * 1000)` → Invalid Date, which Postgres
+      // rejected as `invalid input syntax for type timestamp` ("0NaN-NaN-NaN…").
+      toValidDate(req.occurredAt, now),
+      now,
+    ];
+
+    // Plain path — no dedup key, behave exactly as before.
+    if (!idempotencyKey) {
+      try {
+        const result = await this.pool.query(insertSql, insertParams);
+        const row = result.rows[0];
+        callback(null, { eventId, sequence: row.sequence, recordedAt: row.recorded_at });
+      } catch (err: any) {
+        log.error('appendEvent failed', { error: err.message, streamKey: req.streamKey });
+        callback({ code: 13, message: `Internal error: ${err.message}` });
+      }
+      return;
+    }
+
+    // Idempotent path — claim the key and insert the event atomically. On a duplicate
+    // key, return the event already stored for it instead of appending again.
+    const client = await this.pool.connect();
     try {
-      const result = await this.pool.query(
-        `INSERT INTO ledger.events
-           (event_id, event_type, source_service, correlation_id, stream_key,
-            payload, metadata, occurred_at, recorded_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         RETURNING sequence, recorded_at`,
-        [
-          eventId,
-          req.eventType,
-          req.sourceService,
-          req.correlationId || null,
-          req.streamKey,
-          JSON.stringify(req.payload ?? {}),
-          JSON.stringify(req.metadata ?? {}),
-          req.occurredAt ? new Date(req.occurredAt.seconds * 1000) : now,
-          now,
-        ]
+      await client.query('BEGIN');
+      const claim = await client.query(
+        `INSERT INTO ledger.idempotency_keys (idempotency_key, event_id)
+         VALUES ($1, $2) ON CONFLICT (idempotency_key) DO NOTHING
+         RETURNING event_id`,
+        [idempotencyKey, eventId]
       );
 
+      if (claim.rows.length === 0) {
+        // Key already claimed — the event exists. Roll back our no-op claim and return it.
+        await client.query('ROLLBACK');
+        const existing = await this.pool.query(
+          `SELECT e.event_id, e.sequence, e.recorded_at
+             FROM ledger.idempotency_keys k
+             JOIN ledger.events e ON e.event_id = k.event_id
+            WHERE k.idempotency_key = $1`,
+          [idempotencyKey]
+        );
+        if (existing.rows.length === 0) {
+          callback({ code: 13, message: 'idempotency key present but its event was not found' });
+          return;
+        }
+        const r = existing.rows[0];
+        log.info('appendEvent deduplicated', {
+          idempotencyKey,
+          eventId: r.event_id,
+          streamKey: req.streamKey,
+        });
+        callback(null, { eventId: r.event_id, sequence: r.sequence, recordedAt: r.recorded_at });
+        return;
+      }
+
+      const result = await client.query(insertSql, insertParams);
+      await client.query('COMMIT');
       const row = result.rows[0];
-      callback(null, {
-        eventId,
-        sequence: row.sequence,
-        recordedAt: row.recorded_at,
-      });
+      callback(null, { eventId, sequence: row.sequence, recordedAt: row.recorded_at });
     } catch (err: any) {
+      await client.query('ROLLBACK').catch(() => {});
       log.error('appendEvent failed', { error: err.message, streamKey: req.streamKey });
       callback({ code: 13, message: `Internal error: ${err.message}` });
+    } finally {
+      client.release();
     }
   }
 
@@ -73,13 +131,14 @@ export class LedgerServiceImpl {
       conditions.push(`source_service = $${p++}`);
       params.push(req.sourceService);
     }
+    // timeRange.start/end are ts-proto Date objects (useDate) — pass through.
     if (req.timeRange?.start) {
       conditions.push(`occurred_at >= $${p++}`);
-      params.push(new Date(req.timeRange.start.seconds * 1000));
+      params.push(req.timeRange.start);
     }
     if (req.timeRange?.end) {
       conditions.push(`occurred_at <= $${p++}`);
-      params.push(new Date(req.timeRange.end.seconds * 1000));
+      params.push(req.timeRange.end);
     }
     if (req.fromSequence) {
       conditions.push(`sequence >= $${p++}`);
@@ -171,6 +230,17 @@ export class LedgerServiceImpl {
       callback({ code: 13, message: err.message });
     }
   }
+}
+
+/**
+ * Coerce a ts-proto timestamp field (a JS `Date` under the default `useDate`
+ * codegen) into a valid Date for Postgres, falling back when the value is
+ * missing or an Invalid Date. Guards the append path — the immutable event
+ * store must never persist a NaN timestamp.
+ */
+export function toValidDate(value: unknown, fallback: Date): Date {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  return fallback;
 }
 
 export function rowToEvent(row: any) {

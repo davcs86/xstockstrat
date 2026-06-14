@@ -388,14 +388,43 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 			if err != nil {
 				continue
 			}
+			// Prefer one multi-symbol request per cycle; fall back to per-symbol.
+			if ms, ok := src.(source.MultiSymbolSource); ok {
+				if quotes, err := ms.GetLatestQuotesMulti(ctx, symbols); err == nil {
+					for _, q := range quotes {
+						if err := s.repo.InsertQuote(ctx, q); err != nil {
+							slog.Warn("warm poller: cache insert failed", "symbol", q.Symbol, "error", err)
+						}
+					}
+					continue
+				} else {
+					slog.Warn("warm poller: multi-quote fetch failed, falling back to per-symbol", "error", err)
+				}
+			}
+			var fetched, failed int
+			var firstErr error
 			for _, sym := range symbols {
 				q, err := src.GetLatestQuote(ctx, sym)
 				if err != nil {
+					failed++
+					if firstErr == nil {
+						firstErr = err
+					}
 					continue
 				}
+				fetched++
 				if err := s.repo.InsertQuote(ctx, q); err != nil {
 					slog.Warn("warm poller: cache insert failed", "symbol", sym, "error", err)
 				}
+			}
+			// Per-symbol fetch errors used to be dropped silently, which hid
+			// whole-feed failures (e.g. invalid/placeholder Alpaca credentials, where
+			// every call gets the same 401). Surface them once per cycle with a sample
+			// error instead of staying quiet — a high failed count with fetched==0 is
+			// the signature of a credential/feed problem, not a bad ticker.
+			if failed > 0 {
+				slog.Warn("warm poller: per-symbol quote fetch failures",
+					"failed", failed, "fetched", fetched, "total", len(symbols), "sample_error", firstErr)
 			}
 		}
 	}
@@ -457,6 +486,22 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 	}
 	end := time.Now().UTC()
 	start := end.Add(-time.Duration(lookbackMs) * time.Millisecond)
+	// Prefer one multi-symbol request per cycle; fall back to per-symbol.
+	if ms, ok := src.(source.MultiSymbolSource); ok {
+		if barsBySym, err := ms.GetBarsMulti(ctx, symbols, tf, start, end); err == nil {
+			for sym, bars := range barsBySym {
+				if len(bars) == 0 {
+					continue
+				}
+				if err := s.repo.InsertBars(ctx, bars); err != nil {
+					slog.Warn("bar ingest: insert failed", "symbol", sym, "error", err)
+				}
+			}
+			return
+		} else {
+			slog.Warn("bar ingest: multi-bar fetch failed, falling back to per-symbol", "error", err)
+		}
+	}
 	for _, sym := range symbols {
 		bars, err := src.GetBars(ctx, sym, tf, start, end)
 		if err != nil {
@@ -504,8 +549,9 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 		start = end.Add(-365 * 24 * time.Hour)
 	}
 
-	batchSize := int(s.cfg.GetInt("marketdata.backfill.batch_size", 1000))
-	_ = batchSize // used as hint; Alpaca API handles pagination internally
+	// The per-request bar limit (marketdata.backfill.batch_size) and rate limit are
+	// applied inside the Alpaca client (configured at startup); pagination is handled
+	// transparently by GetBars/GetBarsMulti, so no batching is needed here.
 
 	s.emitEvent(ctx, "marketdata.backfill.started", "marketdata:backfill", map[string]interface{}{
 		"symbols":   req.Symbols,
@@ -646,8 +692,11 @@ func (s *MarketDataService) StartBarStream(ctx context.Context, symbols []string
 		"symbols": symbols, "timeframe": timeframe,
 	})
 	go func() {
+		// Streamed bars are Alpaca's native 1-minute bars (see alpaca.streamBarTimeframe);
+		// they are forwarded to live subscribers only. Persisting the platform's 15m/1h/1d
+		// OHLCV is owned by the always-on REST bar ingester (StartBarIngestPoller), so we do
+		// not write streamed minute bars into the ohlcv table here.
 		for bar := range feed {
-			_ = s.repo.InsertBars(ctx, []*marketdatav1.Bar{bar})
 			s.mu.RLock()
 			for _, ch := range s.barSubs {
 				select {

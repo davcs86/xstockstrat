@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/xstockstrat/trading/internal/broker"
 )
@@ -130,6 +131,93 @@ func TestSubmitOrder_BrokerError(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error for 403 response, got nil")
+	}
+}
+
+func TestSubmitOrder_TrailingStopAndClientOrderID(t *testing.T) {
+	var gotBody map[string]interface{}
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_ = json.NewEncoder(w).Encode(broker.AlpacaOrder{ID: "o1", Status: "new"})
+	})
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{
+		APIKey: "k", APISecret: "s", PaperURL: srv.URL, LiveURL: srv.URL, Paper: true,
+	})
+
+	_, err := c.SubmitOrder(context.Background(), broker.OrderRequest{
+		Symbol: "AAPL", Qty: 10, Side: "sell", OrderType: "trailing_stop",
+		TimeInForce: "day", TrailPercent: 2.5, ClientOrderID: "internal-order-uuid",
+	})
+	if err != nil {
+		t.Fatalf("SubmitOrder failed: %v", err)
+	}
+	if gotBody["type"] != "trailing_stop" {
+		t.Errorf("expected type trailing_stop, got %v", gotBody["type"])
+	}
+	if gotBody["trail_percent"] != "2.5" {
+		t.Errorf("expected trail_percent \"2.5\", got %v", gotBody["trail_percent"])
+	}
+	if _, ok := gotBody["trail_price"]; ok {
+		t.Errorf("trail_price should be omitted when zero, got %v", gotBody["trail_price"])
+	}
+	if gotBody["client_order_id"] != "internal-order-uuid" {
+		t.Errorf("expected client_order_id forwarded, got %v", gotBody["client_order_id"])
+	}
+}
+
+func TestSubmitOrder_TrailPrice(t *testing.T) {
+	var gotBody map[string]interface{}
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_ = json.NewEncoder(w).Encode(broker.AlpacaOrder{ID: "o1", Status: "new"})
+	})
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{APIKey: "k", APISecret: "s", PaperURL: srv.URL, LiveURL: srv.URL, Paper: true})
+	if _, err := c.SubmitOrder(context.Background(), broker.OrderRequest{
+		Symbol: "AAPL", Qty: 10, Side: "sell", OrderType: "trailing_stop", TimeInForce: "gtc", TrailPrice: 1.25,
+	}); err != nil {
+		t.Fatalf("SubmitOrder failed: %v", err)
+	}
+	if gotBody["trail_price"] != "1.25" {
+		t.Errorf("expected trail_price \"1.25\", got %v", gotBody["trail_price"])
+	}
+	if _, ok := gotBody["trail_percent"]; ok {
+		t.Errorf("trail_percent should be omitted when zero, got %v", gotBody["trail_percent"])
+	}
+}
+
+func TestReplaceOrder_Trail(t *testing.T) {
+	var gotBody map[string]interface{}
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_ = json.NewEncoder(w).Encode(broker.AlpacaOrder{ID: "o1", Status: "new"})
+	})
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{APIKey: "k", APISecret: "s", PaperURL: srv.URL, LiveURL: srv.URL, Paper: true})
+	if _, err := c.ReplaceOrder(context.Background(), "o1", broker.OrderRequest{Trail: 3.0}); err != nil {
+		t.Fatalf("ReplaceOrder failed: %v", err)
+	}
+	if gotBody["trail"] != "3" {
+		t.Errorf("expected trail \"3\", got %v", gotBody["trail"])
+	}
+	if _, ok := gotBody["qty"]; ok {
+		t.Errorf("qty should be omitted when zero, got %v", gotBody["qty"])
+	}
+}
+
+func TestNewClient_TimeoutFromConfig(t *testing.T) {
+	// A configured timeout is applied; zero falls back to the documented default.
+	c := broker.NewClient(broker.ClientConfig{APIKey: "k", APISecret: "s", TimeoutMs: 1234})
+	if got := c.HTTPTimeout(); got != 1234*time.Millisecond {
+		t.Errorf("expected timeout 1234ms, got %v", got)
+	}
+	d := broker.NewClient(broker.ClientConfig{APIKey: "k", APISecret: "s"})
+	if got := d.HTTPTimeout(); got != 5000*time.Millisecond {
+		t.Errorf("expected default timeout 5000ms, got %v", got)
 	}
 }
 

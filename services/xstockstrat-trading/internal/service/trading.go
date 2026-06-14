@@ -240,6 +240,19 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		return nil, fmt.Errorf("platform is in maintenance mode — trading halted")
 	}
 
+	// Validate trailing-stop parameters: a trailing_stop order requires exactly one
+	// of trail_price / trail_percent; any other order type must leave both zero.
+	// Catching this here returns a clean InvalidArgument instead of a broker 422.
+	if req.OrderType == tradingv1.OrderType_ORDER_TYPE_TRAILING_STOP {
+		if (req.TrailPrice > 0) == (req.TrailPercent > 0) {
+			return nil, grpcstatus.Errorf(codes.InvalidArgument,
+				"trailing_stop order requires exactly one of trail_price or trail_percent")
+		}
+	} else if req.TrailPrice != 0 || req.TrailPercent != 0 {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument,
+			"trail_price/trail_percent are only valid for trailing_stop orders")
+	}
+
 	// Resolve broker account.
 	accountEntry, err := s.resolveAccount(req.AccountId)
 	if err != nil {
@@ -317,6 +330,10 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 
 	// Submit to broker.
 	brokerReq := s.buildBrokerRequest(req)
+	// Forward our order ID as the broker client_order_id so a retried submission
+	// (trading.order.max_retries) is de-duplicated by the broker instead of placing
+	// a second order.
+	brokerReq.ClientOrderID = orderID
 	brokerOrder, err := accountEntry.client.SubmitOrder(ctx, brokerReq)
 	if err != nil {
 		order.Status = tradingv1.OrderStatus_ORDER_STATUS_REJECTED
@@ -331,7 +348,12 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 
 	// Update order with broker-assigned fields.
 	order.BrokerOrderId = brokerOrder.BrokerOrderID
-	order.Status = alpacaStatusToProto(brokerOrder.Status)
+	// Keep the existing status (NEW) if the broker's submit response carries a transient
+	// or unrecognized status (UNSPECIFIED) rather than clobbering it; the fill poller will
+	// reconcile the order to its real status.
+	if st := alpacaStatusToProto(brokerOrder.Status); st != tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED {
+		order.Status = st
+	}
 	order.UpdatedAt = timestamppb.New(time.Now())
 	// Carry any fill the broker already reported on submit (market orders fill
 	// immediately). Without this the fill poller — which skips orders already in
@@ -445,6 +467,7 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		Qty:         req.Qty,
 		LimitPrice:  req.LimitPrice,
 		StopPrice:   req.StopPrice,
+		Trail:       req.Trail,
 		TimeInForce: req.TimeInForce,
 	}
 	if _, replaceErr := entry.client.ReplaceOrder(ctx, order.BrokerOrderId, brokerReq); replaceErr != nil {
@@ -672,6 +695,13 @@ func (s *TradingService) pollFills(ctx context.Context) {
 		}
 
 		newStatus := alpacaStatusToProto(brokerOrder.Status)
+		// A transient ("done_for_day") or unrecognized broker status maps to UNSPECIFIED;
+		// don't overwrite the order's real status with it (that would both lose the current
+		// status and, if it were terminal, stop reconciliation) — keep polling so the order
+		// converges to its true terminal state on a later cycle.
+		if newStatus == tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED {
+			continue
+		}
 		if newStatus == order.Status {
 			continue
 		}
@@ -1136,6 +1166,7 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 			PaperURL:  "https://paper-api.alpaca.markets",
 			LiveURL:   "https://api.alpaca.markets",
 			Paper:     rec.IsPaper,
+			TimeoutMs: int(s.cfgW.GetInt("trading.broker.timeout_ms", 5000)),
 		}), nil
 	}
 }
@@ -1216,17 +1247,18 @@ func (s *TradingService) buildBrokerRequest(req *tradingv1.PlaceOrderRequest) br
 	}
 
 	return broker.OrderRequest{
-		Symbol:      req.Symbol,
-		Qty:         req.Qty,
-		Side:        sideMap[req.Side],
-		OrderType:   typeMap[req.OrderType],
-		TimeInForce: tif,
-		LimitPrice:  req.LimitPrice,
-		StopPrice:   req.StopPrice,
+		Symbol:       req.Symbol,
+		Qty:          req.Qty,
+		Side:         sideMap[req.Side],
+		OrderType:    typeMap[req.OrderType],
+		TimeInForce:  tif,
+		LimitPrice:   req.LimitPrice,
+		StopPrice:    req.StopPrice,
+		TrailPrice:   req.TrailPrice,
+		TrailPercent: req.TrailPercent,
 	}
 }
 
-// alpacaStatusToProto maps broker order status strings to proto OrderStatus values.
 // normalizeFilledQty enforces the orders-table invariant that a fully-filled order reports
 // its full quantity. A FILLED order (Alpaca/IBKR) executed in full, so filled_qty must equal
 // qty. Historical rows persisted before the fill-qty write guards existed — and any fill the
@@ -1243,6 +1275,10 @@ func normalizeFilledQty(o *tradingv1.Order) {
 	}
 }
 
+// alpacaStatusToProto maps broker order status strings to proto OrderStatus values.
+// A broker status we recognize as transient/non-terminal — or one we don't recognize
+// at all — maps to ORDER_STATUS_UNSPECIFIED, which callers must treat as "no actionable
+// status change, keep reconciling" rather than overwriting the order's current status.
 func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 	switch s {
 	case "new", "accepted", "pending_new":
@@ -1251,12 +1287,19 @@ func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 		return tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED
 	case "filled":
 		return tradingv1.OrderStatus_ORDER_STATUS_FILLED
-	case "canceled", "done_for_day":
+	case "canceled":
 		return tradingv1.OrderStatus_ORDER_STATUS_CANCELED
 	case "expired":
 		return tradingv1.OrderStatus_ORDER_STATUS_EXPIRED
 	case "rejected", "stopped", "suspended", "calculated":
 		return tradingv1.OrderStatus_ORDER_STATUS_REJECTED
+	// "done_for_day" is NOT terminal and NOT a cancellation — Alpaca reports it for a
+	// `day` order at market close, then settles the order to its real terminal state
+	// ("expired" or "filled") later. Mapping it to CANCELED used to freeze the order in
+	// a wrong terminal status, after which the fill poller stopped reconciling and never
+	// captured the eventual "expired". Treat it as UNSPECIFIED so reconciliation continues.
+	case "done_for_day":
+		return tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED
 	default:
 		return tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED
 	}
