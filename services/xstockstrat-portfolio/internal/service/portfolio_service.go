@@ -681,6 +681,13 @@ type positionSyncPayload struct {
 		Symbol  string  `json:"symbol"`
 		Qty     float64 `json:"qty"`
 		AvgCost float64 `json:"avg_cost"`
+		// Broker mark-to-market valuation (zero when the broker did not report it, e.g.
+		// legacy events emitted before these fields existed). When present these are
+		// authoritative and used verbatim so the card reconciles with broker equity.
+		CurrentPrice     float64 `json:"current_price"`
+		MarketValue      float64 `json:"market_value"`
+		UnrealizedPnl    float64 `json:"unrealized_pl"`
+		UnrealizedPnlPct float64 `json:"unrealized_plpc"`
 	} `json:"positions"`
 }
 
@@ -716,7 +723,13 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	}
 	presentSymbols := make([]string, 0, len(sync.Positions))
 	for _, p := range sync.Positions {
-		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost); err != nil {
+		val := repository.PositionValuation{
+			CurrentPrice:     p.CurrentPrice,
+			MarketValue:      p.MarketValue,
+			UnrealizedPnl:    p.UnrealizedPnl,
+			UnrealizedPnlPct: p.UnrealizedPnlPct,
+		}
+		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
 			slog.Warn("upsert position from sync failed", "symbol", p.Symbol, "error", err)
 		}
 		presentSymbols = append(presentSymbols, p.Symbol)
@@ -778,7 +791,17 @@ func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID 
 	if err != nil {
 		return nil, err
 	}
-	s.enrichPositions(ctx, positions)
+	// Positions synced from the broker carry its authoritative mark-to-market valuation
+	// (current_price/market_value/unrealized_pnl), which reconciles with the broker equity
+	// shown below. Only fall back to marketdata mid-quote enrichment for positions the broker
+	// did not value — e.g. a fresh order-fill position not yet reconciled by the sync poller.
+	var needEnrich []*portfoliov1.Position
+	for _, p := range positions {
+		if p.CurrentPrice <= 0 {
+			needEnrich = append(needEnrich, p)
+		}
+	}
+	s.enrichPositions(ctx, needEnrich)
 
 	var positionsValue, unrealizedPnl float64
 	for _, p := range positions {

@@ -37,6 +37,22 @@ func ToCanonical(tf commonv1.Timeframe) (string, bool) {
 	}
 }
 
+// Interval returns the wall-clock duration of one bar for a canonical timeframe string
+// ("15m"/"1h"/"1d"). Unknown / unsupported inputs return 0. Used to size a default history
+// window from a requested bar count when the caller supplies no explicit time range.
+func Interval(canonical string) time.Duration {
+	switch canonical {
+	case "15m":
+		return 15 * time.Minute
+	case "1h":
+		return time.Hour
+	case "1d":
+		return 24 * time.Hour
+	default:
+		return 0
+	}
+}
+
 // FromString accepts all known aliases for backward compatibility during the deprecation
 // cycle. This is what reconciles the "1Day" (analysis) vs "1d" (backfill) mismatch.
 // Returns TIMEFRAME_UNSPECIFIED for unrecognized input.

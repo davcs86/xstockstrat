@@ -32,6 +32,27 @@ func TestFromString(t *testing.T) {
 	}
 }
 
+func TestInterval(t *testing.T) {
+	tests := []struct {
+		in   string
+		want time.Duration
+	}{
+		{"15m", 15 * time.Minute},
+		{"1h", time.Hour},
+		{"1d", 24 * time.Hour},
+		// Non-canonical / unsupported spellings have no defined interval.
+		{"1Day", 0},
+		{"1w", 0},
+		{"10Min", 0},
+		{"", 0},
+	}
+	for _, tt := range tests {
+		if got := Interval(tt.in); got != tt.want {
+			t.Errorf("Interval(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestToCanonical(t *testing.T) {
 	tests := []struct {
 		in     commonv1.Timeframe

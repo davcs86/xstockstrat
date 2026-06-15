@@ -93,7 +93,7 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 | `order.approved` | `approval:{order_id}` | Manual approval granted |
 | `order.broker_submitted` | `order:{order_id}` | Order accepted by Alpaca broker |
 | `order.broker_rejected` | `order:{order_id}` | Alpaca broker rejected the order |
-| `account.positions.synced` | `account:{account_id}` | Periodic broker position snapshot (poller); carries `user_id` + `account_id` |
+| `account.positions.synced` | `account:{account_id}` | Periodic broker position snapshot (poller); carries `user_id` + `account_id` and each position's broker mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`) |
 | `account.balance.synced` | `account:{account_id}` | Periodic broker balance snapshot (poller): cash, buying power, equity, last_equity |
 
 ## Order Replace (`ReplaceOrder`)

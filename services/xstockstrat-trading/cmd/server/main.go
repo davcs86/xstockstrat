@@ -96,6 +96,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Reload still-open orders so the fill poller resumes tracking orders placed before this
+	// restart (otherwise they would never get their fills detected). Best-effort, non-fatal.
+	if err := svc.LoadInflightOrders(ctx); err != nil {
+		slog.Warn("in-flight order reload failed; fill poller starts without pre-restart orders", "error", err)
+	}
+
 	// Start fill poller — detects broker fills and emits order.filled events.
 	go svc.StartFillPoller(ctx)
 	// Start position sync poller — reconciles broker positions every N ms.

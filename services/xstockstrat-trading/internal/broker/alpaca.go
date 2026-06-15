@@ -320,10 +320,17 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("alpaca GetPositions: status %d: %s", resp.StatusCode, body)
 	}
+	// Alpaca returns these monetary fields as decimal strings. current_price / market_value /
+	// unrealized_pl / unrealized_plpc are the broker's mark-to-market valuation — carried
+	// through so the portfolio card reconciles with the broker's authoritative equity.
 	var raw []struct {
-		Symbol  string `json:"symbol"`
-		Qty     string `json:"qty"`
-		AvgCost string `json:"avg_entry_price"`
+		Symbol         string `json:"symbol"`
+		Qty            string `json:"qty"`
+		AvgCost        string `json:"avg_entry_price"`
+		CurrentPrice   string `json:"current_price"`
+		MarketValue    string `json:"market_value"`
+		UnrealizedPL   string `json:"unrealized_pl"`
+		UnrealizedPLPC string `json:"unrealized_plpc"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("alpaca GetPositions: unmarshal: %w", err)
@@ -332,7 +339,19 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 	for _, r := range raw {
 		qty, _ := strconv.ParseFloat(r.Qty, 64)
 		avg, _ := strconv.ParseFloat(r.AvgCost, 64)
-		positions = append(positions, BrokerPosition{Symbol: r.Symbol, Quantity: qty, AvgCost: avg})
+		currentPrice, _ := strconv.ParseFloat(r.CurrentPrice, 64)
+		marketValue, _ := strconv.ParseFloat(r.MarketValue, 64)
+		unrealizedPL, _ := strconv.ParseFloat(r.UnrealizedPL, 64)
+		unrealizedPLPC, _ := strconv.ParseFloat(r.UnrealizedPLPC, 64)
+		positions = append(positions, BrokerPosition{
+			Symbol:           r.Symbol,
+			Quantity:         qty,
+			AvgCost:          avg,
+			CurrentPrice:     currentPrice,
+			MarketValue:      marketValue,
+			UnrealizedPnl:    unrealizedPL,
+			UnrealizedPnlPct: unrealizedPLPC,
+		})
 	}
 	return positions, nil
 }

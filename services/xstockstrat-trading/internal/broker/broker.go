@@ -20,10 +20,20 @@ type BrokerOrder struct {
 }
 
 // BrokerPosition is a normalized position snapshot from a broker.
+//
+// CurrentPrice / MarketValue / UnrealizedPnl / UnrealizedPnlPct are the broker's own
+// mark-to-market valuation (Alpaca and IBKR both return them on their positions endpoints).
+// Carrying them through lets the portfolio card show figures that reconcile with the broker's
+// authoritative equity instead of recomputing from marketdata mid-quotes, which use a
+// different price basis and never tie out. Zero means the broker did not report a value.
 type BrokerPosition struct {
-	Symbol   string
-	Quantity float64
-	AvgCost  float64
+	Symbol           string
+	Quantity         float64
+	AvgCost          float64
+	CurrentPrice     float64
+	MarketValue      float64
+	UnrealizedPnl    float64
+	UnrealizedPnlPct float64
 }
 
 // BrokerBalance is a normalized account-balance snapshot from a broker.
