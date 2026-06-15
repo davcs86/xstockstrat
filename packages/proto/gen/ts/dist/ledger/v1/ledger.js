@@ -336,6 +336,7 @@ function createBaseAppendEventRequest() {
         payload: undefined,
         metadata: {},
         occurredAt: undefined,
+        idempotencyKey: "",
     };
 }
 exports.AppendEventRequest = {
@@ -360,6 +361,9 @@ exports.AppendEventRequest = {
         });
         if (message.occurredAt !== undefined) {
             timestamp_1.Timestamp.encode(toTimestamp(message.occurredAt), writer.uint32(58).fork()).join();
+        }
+        if (message.idempotencyKey !== "") {
+            writer.uint32(66).string(message.idempotencyKey);
         }
         return writer;
     },
@@ -422,6 +426,13 @@ exports.AppendEventRequest = {
                     message.occurredAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.idempotencyKey = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -464,6 +475,11 @@ exports.AppendEventRequest = {
                 : isSet(object.occurred_at)
                     ? fromJsonTimestamp(object.occurred_at)
                     : undefined,
+            idempotencyKey: isSet(object.idempotencyKey)
+                ? globalThis.String(object.idempotencyKey)
+                : isSet(object.idempotency_key)
+                    ? globalThis.String(object.idempotency_key)
+                    : "",
         };
     },
     toJSON(message) {
@@ -495,6 +511,9 @@ exports.AppendEventRequest = {
         if (message.occurredAt !== undefined) {
             obj.occurredAt = message.occurredAt.toISOString();
         }
+        if (message.idempotencyKey !== "") {
+            obj.idempotencyKey = message.idempotencyKey;
+        }
         return obj;
     },
     create(base) {
@@ -514,6 +533,7 @@ exports.AppendEventRequest = {
             return acc;
         }, {});
         message.occurredAt = object.occurredAt ?? undefined;
+        message.idempotencyKey = object.idempotencyKey ?? "";
         return message;
     },
 };

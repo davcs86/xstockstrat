@@ -97,6 +97,13 @@ export interface PlaceOrderRequest {
      * Required when multiple accounts are registered; optional when only one exists.
      */
     accountId: string;
+    /**
+     * Trailing-stop parameters. Exactly one of trail_price (dollar offset) or
+     * trail_percent (percent offset) is required when order_type is
+     * ORDER_TYPE_TRAILING_STOP; both must be zero for any other order type.
+     */
+    trailPrice: number;
+    trailPercent: number;
 }
 export interface CancelOrderRequest {
     orderId: string;
@@ -142,6 +149,11 @@ export interface ReplaceOrderRequest {
     stopPrice: number;
     timeInForce: string;
     userId: string;
+    /**
+     * New trail offset for a working trailing_stop order (Alpaca's replace body
+     * uses a single `trail` value); zero means "leave unchanged".
+     */
+    trail: number;
 }
 /** BrokerAccount is a registered broker account (credentials never returned). */
 export interface BrokerAccount {

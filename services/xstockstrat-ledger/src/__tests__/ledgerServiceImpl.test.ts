@@ -51,6 +51,39 @@ function makeCall(req: any) {
   return { request: req };
 }
 
+// makeIdempotentPool builds a pool whose query() (and transactional client.query())
+// route by SQL so the idempotent appendEvent path can be exercised without a real DB.
+function makeIdempotentPool(opts: {
+  claimRows: any[]; // rows returned by INSERT ... idempotency_keys ... RETURNING
+  insertRow?: any; // row returned by the ledger.events insert (first-time path)
+  existingRows?: any[]; // rows returned by the SELECT join (duplicate path)
+}) {
+  const calls: string[] = [];
+  const handle = (sql: string) => {
+    calls.push(sql);
+    if (/INSERT INTO ledger\.idempotency_keys/.test(sql)) return { rows: opts.claimRows };
+    if (/INSERT INTO ledger\.events/.test(sql))
+      return { rows: [opts.insertRow ?? { sequence: 1, recorded_at: new Date() }] };
+    if (/FROM ledger\.idempotency_keys/.test(sql)) return { rows: opts.existingRows ?? [] };
+    return { rows: [] }; // BEGIN / COMMIT / ROLLBACK
+  };
+  const client = {
+    async query(sql: string, _params?: any[]) {
+      return handle(sql);
+    },
+    release() {},
+  };
+  const pool = {
+    async connect() {
+      return client;
+    },
+    async query(sql: string, _params?: any[]) {
+      return handle(sql);
+    },
+  };
+  return { pool, calls };
+}
+
 // makeRow produces DB-row shaped objects (snake_case from PostgreSQL columns)
 function makeRow(overrides: any = {}) {
   const now = new Date('2024-01-01T00:00:00Z');
@@ -82,7 +115,9 @@ describe('rowToEvent', () => {
     assert.strictEqual(evt.eventId, 'evt-x');
     assert.strictEqual(evt.eventType, 'order.filled');
     assert.strictEqual(evt.sequence, 42);
-    assert.strictEqual(evt.occurredAt.seconds, Math.floor(now.getTime() / 1000));
+    // ts-proto (useDate) represents Timestamp fields as JS Date, not { seconds }.
+    assert.ok(evt.occurredAt instanceof Date);
+    assert.strictEqual(evt.occurredAt.getTime(), now.getTime());
   });
 
   it('uses empty string for missing correlation_id', () => {
@@ -253,6 +288,68 @@ describe('appendEvent', () => {
     });
   });
 
+  // Regression: occurredAt arrives as a ts-proto Date (useDate codegen), NOT a
+  // protobuf `{ seconds }` object. Reading `.seconds` off it yielded
+  // `new Date(undefined * 1000)` → Invalid Date, which Postgres rejected with
+  // `invalid input syntax for type timestamp with time zone: "0NaN-NaN-NaN…"`.
+  it('binds the provided occurredAt Date as occurred_at, not an Invalid Date', async () => {
+    if (!LedgerServiceImpl) return;
+    let capturedParams: any[] = [];
+    const pool = {
+      async query(_sql: string, params?: any[]) {
+        capturedParams = params ?? [];
+        return { rows: [{ sequence: 1, recorded_at: new Date() }] };
+      },
+    };
+    const impl = new LedgerServiceImpl(pool, {});
+    const occurredAt = new Date('2026-06-12T11:51:55.000Z');
+    const call = makeCall({
+      eventType: 'marketdata.backfill.failed',
+      sourceService: 'marketdata',
+      streamKey: 'marketdata:backfill',
+      payload: {},
+      occurredAt,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      impl.appendEvent(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+
+    // occurred_at is the 8th bound param (index 7).
+    const boundOccurredAt = capturedParams[7];
+    assert.ok(boundOccurredAt instanceof Date, 'occurred_at must be a Date');
+    assert.ok(!Number.isNaN(boundOccurredAt.getTime()), 'occurred_at must not be an Invalid Date');
+    assert.strictEqual(boundOccurredAt.getTime(), occurredAt.getTime());
+  });
+
+  // Regression: when occurredAt is absent, occurred_at falls back to `recorded_at`
+  // (a valid Date), never an Invalid Date.
+  it('falls back to a valid Date when occurredAt is omitted', async () => {
+    if (!LedgerServiceImpl) return;
+    let capturedParams: any[] = [];
+    const pool = {
+      async query(_sql: string, params?: any[]) {
+        capturedParams = params ?? [];
+        return { rows: [{ sequence: 1, recorded_at: new Date() }] };
+      },
+    };
+    const impl = new LedgerServiceImpl(pool, {});
+    const call = makeCall({
+      eventType: 'order.filled',
+      sourceService: 'trading',
+      streamKey: 'order:1',
+      payload: {},
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      impl.appendEvent(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+
+    const boundOccurredAt = capturedParams[7];
+    assert.ok(boundOccurredAt instanceof Date, 'occurred_at must be a Date');
+    assert.ok(!Number.isNaN(boundOccurredAt.getTime()), 'occurred_at must not be an Invalid Date');
+  });
+
   // Regression: appendEvent must let `sequence` fall to its column DEFAULT
   // (nextval('ledger.global_sequence')) — the globally-monotonic invariant.
   // A previous version supplied nextval('ledger.event_seq_'||md5(stream_key)),
@@ -286,6 +383,65 @@ describe('appendEvent', () => {
     // event_id, event_type, source_service, correlation_id, stream_key,
     // payload, metadata, occurred_at, recorded_at — 9 bound params.
     assert.strictEqual(capturedParams.length, 9);
+  });
+
+  // Idempotency: a first-seen key claims the row and inserts the event normally.
+  it('idempotent path: claims the key and inserts the event', async () => {
+    if (!LedgerServiceImpl) return;
+    const { pool, calls } = makeIdempotentPool({
+      claimRows: [{ event_id: 'new' }],
+      insertRow: { sequence: 7, recorded_at: new Date() },
+    });
+    const impl = new LedgerServiceImpl(pool, {});
+    const call = makeCall({
+      eventType: 'portfolio.position.opened',
+      sourceService: 'portfolio',
+      streamKey: 'portfolio:u1',
+      payload: {},
+      idempotencyKey: 'k1',
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      impl.appendEvent(call, (err: any, resp: any) => {
+        if (err) return reject(err);
+        assert.ok(resp.eventId); // server-assigned uuid
+        assert.strictEqual(resp.sequence, 7);
+        resolve();
+      });
+    });
+    assert.ok(calls.some((s) => /INSERT INTO ledger\.events/.test(s)), 'first call must insert');
+  });
+
+  // Idempotency: a duplicate key returns the originally-stored event and does NOT
+  // insert a second ledger.events row.
+  it('idempotent path: returns the stored event on a duplicate key (no second insert)', async () => {
+    if (!LedgerServiceImpl) return;
+    const now = new Date();
+    const { pool, calls } = makeIdempotentPool({
+      claimRows: [], // ON CONFLICT DO NOTHING → no row → duplicate
+      existingRows: [{ event_id: 'orig', sequence: 3, recorded_at: now }],
+    });
+    const impl = new LedgerServiceImpl(pool, {});
+    const call = makeCall({
+      eventType: 'portfolio.position.opened',
+      sourceService: 'portfolio',
+      streamKey: 'portfolio:u1',
+      payload: {},
+      idempotencyKey: 'k1',
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      impl.appendEvent(call, (err: any, resp: any) => {
+        if (err) return reject(err);
+        assert.strictEqual(resp.eventId, 'orig'); // returns the originally-stored event
+        assert.strictEqual(resp.sequence, 3);
+        resolve();
+      });
+    });
+    assert.ok(
+      !calls.some((s) => /INSERT INTO ledger\.events/.test(s)),
+      'duplicate key must not insert a second event',
+    );
   });
 });
 

@@ -20,6 +20,9 @@ func TestAlpacaStatusToProto(t *testing.T) {
 		{"rejected", tradingv1.OrderStatus_ORDER_STATUS_REJECTED},
 		{"pending_new", tradingv1.OrderStatus_ORDER_STATUS_NEW},
 		{"accepted", tradingv1.OrderStatus_ORDER_STATUS_NEW},
+		// "done_for_day" is transient/non-terminal — it must NOT map to CANCELED, or the
+		// fill poller freezes the order before Alpaca settles it to "expired"/"filled".
+		{"done_for_day", tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED},
 		{"unknown_status", tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED},
 	}
 
@@ -31,6 +34,50 @@ func TestAlpacaStatusToProto(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNormalizeFilledQty(t *testing.T) {
+	tests := []struct {
+		name   string
+		order  *tradingv1.Order
+		wantFY float64
+	}{
+		{
+			name:   "filled_with_zero_is_backfilled_to_qty",
+			order:  &tradingv1.Order{Status: tradingv1.OrderStatus_ORDER_STATUS_FILLED, Qty: 10, FilledQty: 0},
+			wantFY: 10,
+		},
+		{
+			name:   "filled_with_correct_qty_unchanged",
+			order:  &tradingv1.Order{Status: tradingv1.OrderStatus_ORDER_STATUS_FILLED, Qty: 15, FilledQty: 15},
+			wantFY: 15,
+		},
+		{
+			name:   "partially_filled_zero_left_untouched",
+			order:  &tradingv1.Order{Status: tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED, Qty: 10, FilledQty: 0},
+			wantFY: 0,
+		},
+		{
+			name:   "canceled_zero_left_untouched",
+			order:  &tradingv1.Order{Status: tradingv1.OrderStatus_ORDER_STATUS_CANCELED, Qty: 10, FilledQty: 0},
+			wantFY: 0,
+		},
+		{
+			name:   "new_zero_left_untouched",
+			order:  &tradingv1.Order{Status: tradingv1.OrderStatus_ORDER_STATUS_NEW, Qty: 10, FilledQty: 0},
+			wantFY: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			normalizeFilledQty(tt.order)
+			if tt.order.FilledQty != tt.wantFY {
+				t.Errorf("FilledQty = %v, want %v", tt.order.FilledQty, tt.wantFY)
+			}
+		})
+	}
+	// Nil-safe.
+	normalizeFilledQty(nil)
 }
 
 // TestCredentialsKnownInvalid covers the syncPositions skip gate: only a confirmed
@@ -52,6 +99,64 @@ func TestCredentialsKnownInvalid(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := credentialsKnownInvalid(int32(tt.status)); got != tt.want {
 				t.Errorf("credentialsKnownInvalid(%v) = %v, want %v", tt.status, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestBuildBrokerRequest_TrailFields verifies trailing-stop offsets are mapped from the
+// proto request onto the normalized broker request.
+func TestBuildBrokerRequest_TrailFields(t *testing.T) {
+	s := &TradingService{}
+	got := s.buildBrokerRequest(&tradingv1.PlaceOrderRequest{
+		Symbol:       "AAPL",
+		Side:         tradingv1.OrderSide_ORDER_SIDE_SELL,
+		OrderType:    tradingv1.OrderType_ORDER_TYPE_TRAILING_STOP,
+		Qty:          10,
+		TrailPercent: 2.5,
+	})
+	if got.OrderType != "trailing_stop" {
+		t.Errorf("OrderType: got %q, want trailing_stop", got.OrderType)
+	}
+	if got.TrailPercent != 2.5 {
+		t.Errorf("TrailPercent: got %v, want 2.5", got.TrailPercent)
+	}
+	if got.TrailPrice != 0 {
+		t.Errorf("TrailPrice: got %v, want 0", got.TrailPrice)
+	}
+	if got.Side != "sell" {
+		t.Errorf("Side: got %q, want sell", got.Side)
+	}
+}
+
+// TestTrailingStopValidation replicates the trail-parameter guard from PlaceOrder:
+// a trailing_stop order requires exactly one of trail_price/trail_percent, and any
+// other order type must leave both zero.
+func TestTrailingStopValidation(t *testing.T) {
+	valid := func(orderType tradingv1.OrderType, trailPrice, trailPercent float64) bool {
+		if orderType == tradingv1.OrderType_ORDER_TYPE_TRAILING_STOP {
+			return (trailPrice > 0) != (trailPercent > 0)
+		}
+		return trailPrice == 0 && trailPercent == 0
+	}
+	cases := []struct {
+		name         string
+		orderType    tradingv1.OrderType
+		trailPrice   float64
+		trailPercent float64
+		want         bool
+	}{
+		{"trailing with price", tradingv1.OrderType_ORDER_TYPE_TRAILING_STOP, 1.5, 0, true},
+		{"trailing with percent", tradingv1.OrderType_ORDER_TYPE_TRAILING_STOP, 0, 2.0, true},
+		{"trailing with both", tradingv1.OrderType_ORDER_TYPE_TRAILING_STOP, 1.5, 2.0, false},
+		{"trailing with neither", tradingv1.OrderType_ORDER_TYPE_TRAILING_STOP, 0, 0, false},
+		{"market with no trail", tradingv1.OrderType_ORDER_TYPE_MARKET, 0, 0, true},
+		{"market with stray trail", tradingv1.OrderType_ORDER_TYPE_MARKET, 1.0, 0, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := valid(tc.orderType, tc.trailPrice, tc.trailPercent); got != tc.want {
+				t.Errorf("valid=%v, want %v", got, tc.want)
 			}
 		})
 	}

@@ -8,6 +8,10 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 **Paper vs live**: Mode is resolved per order. Priority: `PlaceOrderRequest.trading_mode` > `trading.broker.paper` (live config) > `ALPACA_PAPER` (env). Paper routes to `https://paper-api.alpaca.markets`; live routes to `https://api.alpaca.markets`.
 
+**Order types & trailing stops**: `PlaceOrder` supports `market`/`limit`/`stop`/`stop_limit`/`trailing_stop`. A `trailing_stop` order requires **exactly one** of `PlaceOrderRequest.trail_price` / `trail_percent` (sent to Alpaca as `trail_price`/`trail_percent`); any other order type must leave both zero — both rules are validated up front with `InvalidArgument` so a bad request never reaches the broker as a 422. `ReplaceOrder.trail` updates a working trailing stop (Alpaca's PATCH body uses a single `trail`).
+
+**Idempotency**: `PlaceOrder` forwards the internally-minted order ID as Alpaca's `client_order_id`, so a retried submission (`trading.order.max_retries`) is de-duplicated by the broker instead of placing a second order.
+
 **Broker account registration mode is environment-owned**: `RegisterBrokerAccount` ignores the (deprecated) `is_paper` request field and derives the account's mode from the environment (`trading.broker.paper` config / `TRADING_MODE` env), so users cannot register an account in a mode the deployment does not run. The UI reads `GetTradingEnvironment` to display the fixed mode instead of offering a paper/live choice.
 
 **Credential health**: every registered account's API secrets are validated against the broker (Alpaca `GET /v2/account`, IBKR `GET /portfolio/accounts`) on register, on credential update (`UpdateBrokerAccountCredentials`), and periodically by a background poller. The latest `CredentialStatus` (OK / INVALID / UNKNOWN) is persisted on `trading.broker_accounts` and returned by `ListBrokerAccounts` so the UI can surface accounts whose secrets stopped working.
@@ -56,7 +60,7 @@ All config values are served by **xstockstrat-config** namespace `trading`.
 | `platform.ledger_endpoint` | string | — | xstockstrat-ledger address |
 | `platform.maintenance_mode` | bool | `false` | Platform-wide halt |
 | `trading.broker.paper` | bool | `true` | Route orders to paper API when true; live API when false. Also the source of truth for the mode new broker accounts are registered in. |
-| `trading.broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout |
+| `trading.broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout. Read at account-client construction and applied as the broker HTTP client's `Timeout`. |
 | `trading.credential_health.interval_ms` | int | `300000` | Interval for the background poller that re-validates each broker account's API secrets. Read live on every cycle; set to `0` (or negative) to disable/pause the poller without a restart. |
 
 ## Webhooks
@@ -89,7 +93,7 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 | `order.approved` | `approval:{order_id}` | Manual approval granted |
 | `order.broker_submitted` | `order:{order_id}` | Order accepted by Alpaca broker |
 | `order.broker_rejected` | `order:{order_id}` | Alpaca broker rejected the order |
-| `account.positions.synced` | `account:{account_id}` | Periodic broker position snapshot (poller); carries `user_id` + `account_id` |
+| `account.positions.synced` | `account:{account_id}` | Periodic broker position snapshot (poller); carries `user_id` + `account_id` and each position's broker mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`) |
 | `account.balance.synced` | `account:{account_id}` | Periodic broker balance snapshot (poller): cash, buying power, equity, last_equity |
 
 ## Order Replace (`ReplaceOrder`)
@@ -114,10 +118,24 @@ the new total/remaining per its adapter. A successful replace persists the order
 | `qty` | `qty` | `quantity` |
 | `limit_price` | `limit_price` | `price` |
 | `stop_price` | `stop_price` | `auxPrice` |
+| `trail` | `trail` | _(not mapped — IBKR ignores)_ |
 | `time_in_force` | `time_in_force` | `tif` |
 
 The IBKR **netting-mode** assumption documented in _Known Limitations_ applies to replace as
 well: a replaced quantity is the new total order quantity (no hedged-mode lot semantics).
+
+## Order Status Reconciliation
+
+The fill poller (`pollFills`) calls `GetOrder` for every non-terminal order and maps the broker
+status via `alpacaStatusToProto`. Terminal statuses (`FILLED`/`CANCELED`/`EXPIRED`/`REJECTED`)
+stop reconciliation for that order. **Transient or unrecognized broker statuses map to
+`ORDER_STATUS_UNSPECIFIED` and are skipped** — they never overwrite the order's current status,
+so reconciliation continues until a real terminal status arrives. In particular, Alpaca's
+**`done_for_day`** is non-terminal: it is reported for a `day` order at market close before the
+order settles to its true terminal state (`expired` or `filled`). It must **not** map to
+`CANCELED` — doing so previously froze the order in a wrong terminal state, after which the poller
+stopped and never captured the eventual `expired` (UI showed CANCELED while the broker showed
+expired).
 
 ## Environment Variables
 

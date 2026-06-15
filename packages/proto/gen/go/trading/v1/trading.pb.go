@@ -461,7 +461,12 @@ type PlaceOrderRequest struct {
 	TradingMode v1.TradingMode `protobuf:"varint,12,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
 	// account_id routes the order to a specific broker account.
 	// Required when multiple accounts are registered; optional when only one exists.
-	AccountId     string `protobuf:"bytes,13,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	AccountId string `protobuf:"bytes,13,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	// Trailing-stop parameters. Exactly one of trail_price (dollar offset) or
+	// trail_percent (percent offset) is required when order_type is
+	// ORDER_TYPE_TRAILING_STOP; both must be zero for any other order type.
+	TrailPrice    float64 `protobuf:"fixed64,14,opt,name=trail_price,json=trailPrice,proto3" json:"trail_price,omitempty"`
+	TrailPercent  float64 `protobuf:"fixed64,15,opt,name=trail_percent,json=trailPercent,proto3" json:"trail_percent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -585,6 +590,20 @@ func (x *PlaceOrderRequest) GetAccountId() string {
 		return x.AccountId
 	}
 	return ""
+}
+
+func (x *PlaceOrderRequest) GetTrailPrice() float64 {
+	if x != nil {
+		return x.TrailPrice
+	}
+	return 0
+}
+
+func (x *PlaceOrderRequest) GetTrailPercent() float64 {
+	if x != nil {
+		return x.TrailPercent
+	}
+	return 0
 }
 
 type CancelOrderRequest struct {
@@ -962,11 +981,14 @@ type ReplaceOrderRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	OrderId string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
 	// Optional replacement fields; a zero/empty value means "leave unchanged".
-	Qty           float64 `protobuf:"fixed64,2,opt,name=qty,proto3" json:"qty,omitempty"`
-	LimitPrice    float64 `protobuf:"fixed64,3,opt,name=limit_price,json=limitPrice,proto3" json:"limit_price,omitempty"`
-	StopPrice     float64 `protobuf:"fixed64,4,opt,name=stop_price,json=stopPrice,proto3" json:"stop_price,omitempty"`
-	TimeInForce   string  `protobuf:"bytes,5,opt,name=time_in_force,json=timeInForce,proto3" json:"time_in_force,omitempty"`
-	UserId        string  `protobuf:"bytes,6,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Qty         float64 `protobuf:"fixed64,2,opt,name=qty,proto3" json:"qty,omitempty"`
+	LimitPrice  float64 `protobuf:"fixed64,3,opt,name=limit_price,json=limitPrice,proto3" json:"limit_price,omitempty"`
+	StopPrice   float64 `protobuf:"fixed64,4,opt,name=stop_price,json=stopPrice,proto3" json:"stop_price,omitempty"`
+	TimeInForce string  `protobuf:"bytes,5,opt,name=time_in_force,json=timeInForce,proto3" json:"time_in_force,omitempty"`
+	UserId      string  `protobuf:"bytes,6,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// New trail offset for a working trailing_stop order (Alpaca's replace body
+	// uses a single `trail` value); zero means "leave unchanged".
+	Trail         float64 `protobuf:"fixed64,7,opt,name=trail,proto3" json:"trail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1041,6 +1063,13 @@ func (x *ReplaceOrderRequest) GetUserId() string {
 		return x.UserId
 	}
 	return ""
+}
+
+func (x *ReplaceOrderRequest) GetTrail() float64 {
+	if x != nil {
+		return x.Trail
+	}
+	return 0
 }
 
 // BrokerAccount is a registered broker account (credentials never returned).
@@ -1651,7 +1680,7 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"\n" +
 	"account_id\x18\x13 \x01(\tR\taccountId\x12B\n" +
 	"\vbroker_type\x18\x14 \x01(\x0e2!.xstockstrat.common.v1.BrokerTypeR\n" +
-	"brokerType\"\x8f\x04\n" +
+	"brokerType\"\xd5\x04\n" +
 	"\x11PlaceOrderRequest\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x125\n" +
 	"\x04side\x18\x02 \x01(\x0e2!.xstockstrat.trading.v1.OrderSideR\x04side\x12@\n" +
@@ -1671,7 +1700,10 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"\x11requires_approval\x18\v \x01(\bR\x10requiresApproval\x12E\n" +
 	"\ftrading_mode\x18\f \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\x12\x1d\n" +
 	"\n" +
-	"account_id\x18\r \x01(\tR\taccountId\"H\n" +
+	"account_id\x18\r \x01(\tR\taccountId\x12\x1f\n" +
+	"\vtrail_price\x18\x0e \x01(\x01R\n" +
+	"trailPrice\x12#\n" +
+	"\rtrail_percent\x18\x0f \x01(\x01R\ftrailPercent\"H\n" +
 	"\x12CancelOrderRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\"d\n" +
@@ -1700,7 +1732,7 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"~\n" +
 	"\x19StreamOrderUpdatesRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12H\n" +
-	"\rstatus_filter\x18\x02 \x03(\x0e2#.xstockstrat.trading.v1.OrderStatusR\fstatusFilter\"\xbf\x01\n" +
+	"\rstatus_filter\x18\x02 \x03(\x0e2#.xstockstrat.trading.v1.OrderStatusR\fstatusFilter\"\xd5\x01\n" +
 	"\x13ReplaceOrderRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x10\n" +
 	"\x03qty\x18\x02 \x01(\x01R\x03qty\x12\x1f\n" +
@@ -1709,7 +1741,8 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"\n" +
 	"stop_price\x18\x04 \x01(\x01R\tstopPrice\x12\"\n" +
 	"\rtime_in_force\x18\x05 \x01(\tR\vtimeInForce\x12\x17\n" +
-	"\auser_id\x18\x06 \x01(\tR\x06userId\"\xfe\x02\n" +
+	"\auser_id\x18\x06 \x01(\tR\x06userId\x12\x14\n" +
+	"\x05trail\x18\a \x01(\x01R\x05trail\"\xfe\x02\n" +
 	"\rBrokerAccount\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12B\n" +

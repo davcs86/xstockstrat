@@ -78,6 +78,27 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 	// A charted symbol becomes "warm" so the always-on bar ingester keeps it fresh.
 	s.markWarm(req.Symbol)
 
+	// Normalize the requested interval to the canonical DB spelling ("1Day"→"1d",
+	// "15Min"→"15m", …). The always-on ingester and backfill store canonical strings;
+	// without this, QueryBars searches for the literal alias and never matches them, so
+	// the chart renders empty for every ingested symbol. Unresolvable inputs (e.g. the
+	// dead "10Min"/"30Min" aliases) fall back to the raw string — they have no stored
+	// bars either way. Prefer timeframe_enum; fall back to the deprecated string field.
+	legacyTf := req.Timeframe //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+	canonicalTf := legacyTf
+	if c, rErr := timeframe.Resolve(req.GetTimeframeEnum(), legacyTf); rErr == nil {
+		canonicalTf = c
+	}
+
+	pageSize := 500
+	pageToken := ""
+	if req.Page != nil {
+		if req.Page.PageSize > 0 {
+			pageSize = int(req.Page.PageSize)
+		}
+		pageToken = req.Page.PageToken
+	}
+
 	var start, end time.Time
 	if req.Range != nil {
 		if req.Range.Start != nil {
@@ -91,19 +112,14 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 		end = time.Now()
 	}
 	if start.IsZero() {
-		start = end.Add(-24 * time.Hour)
+		// Size the implicit history window to the requested page of bars for this
+		// timeframe — not a flat 24h, which yields ~0 bars for a 1d/1h chart (a daily
+		// chart requested on a weekend has no bar inside the last 24h at all). The 3×
+		// slack absorbs weekends/holidays/market-closed gaps so a full page still loads.
+		start = end.Add(-defaultBarLookback(canonicalTf, pageSize))
 	}
 
-	pageSize := 500
-	pageToken := ""
-	if req.Page != nil {
-		if req.Page.PageSize > 0 {
-			pageSize = int(req.Page.PageSize)
-		}
-		pageToken = req.Page.PageToken
-	}
-
-	bars, nextToken, err := s.repo.QueryBars(ctx, req.Symbol, req.Timeframe, start, end, pageSize, pageToken) //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+	bars, nextToken, err := s.repo.QueryBars(ctx, req.Symbol, canonicalTf, start, end, pageSize, pageToken)
 	if err != nil {
 		return nil, fmt.Errorf("query bars: %w", err)
 	}
@@ -114,7 +130,7 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 	// (Mirrors GetLatestQuote's live fallback.) Only on the first page: an empty later
 	// page means end-of-data, not a miss.
 	if len(bars) == 0 && pageToken == "" {
-		bars, nextToken = s.fetchAndCacheBars(ctx, req.Symbol, req.Timeframe, start, end, pageSize) //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+		bars, nextToken = s.fetchAndCacheBars(ctx, req.Symbol, canonicalTf, start, end, pageSize)
 	}
 
 	return &marketdatav1.GetBarsResponse{
@@ -159,6 +175,22 @@ func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf st
 		return live, ""
 	}
 	return bars, nextToken
+}
+
+// defaultBarLookback sizes the implicit history window (when the caller supplies no
+// explicit range) to cover at least `bars` bars of the given canonical timeframe, times a
+// slack multiplier so non-continuous market hours (overnight gaps, weekends, holidays)
+// still yield a full page. Unknown timeframes fall back to a day-sized interval.
+func defaultBarLookback(canonicalTf string, bars int) time.Duration {
+	interval := timeframe.Interval(canonicalTf)
+	if interval <= 0 {
+		interval = 24 * time.Hour
+	}
+	if bars <= 0 {
+		bars = 100
+	}
+	const slack = 3
+	return time.Duration(bars) * interval * slack
 }
 
 // GetDataCoverage reports stored OHLCV coverage (earliest/latest/count + gaps) for a
@@ -357,14 +389,43 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 			if err != nil {
 				continue
 			}
+			// Prefer one multi-symbol request per cycle; fall back to per-symbol.
+			if ms, ok := src.(source.MultiSymbolSource); ok {
+				if quotes, err := ms.GetLatestQuotesMulti(ctx, symbols); err == nil {
+					for _, q := range quotes {
+						if err := s.repo.InsertQuote(ctx, q); err != nil {
+							slog.Warn("warm poller: cache insert failed", "symbol", q.Symbol, "error", err)
+						}
+					}
+					continue
+				} else {
+					slog.Warn("warm poller: multi-quote fetch failed, falling back to per-symbol", "error", err)
+				}
+			}
+			var fetched, failed int
+			var firstErr error
 			for _, sym := range symbols {
 				q, err := src.GetLatestQuote(ctx, sym)
 				if err != nil {
+					failed++
+					if firstErr == nil {
+						firstErr = err
+					}
 					continue
 				}
+				fetched++
 				if err := s.repo.InsertQuote(ctx, q); err != nil {
 					slog.Warn("warm poller: cache insert failed", "symbol", sym, "error", err)
 				}
+			}
+			// Per-symbol fetch errors used to be dropped silently, which hid
+			// whole-feed failures (e.g. invalid/placeholder Alpaca credentials, where
+			// every call gets the same 401). Surface them once per cycle with a sample
+			// error instead of staying quiet — a high failed count with fetched==0 is
+			// the signature of a credential/feed problem, not a bad ticker.
+			if failed > 0 {
+				slog.Warn("warm poller: per-symbol quote fetch failures",
+					"failed", failed, "fetched", fetched, "total", len(symbols), "sample_error", firstErr)
 			}
 		}
 	}
@@ -426,6 +487,22 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 	}
 	end := time.Now().UTC()
 	start := end.Add(-time.Duration(lookbackMs) * time.Millisecond)
+	// Prefer one multi-symbol request per cycle; fall back to per-symbol.
+	if ms, ok := src.(source.MultiSymbolSource); ok {
+		if barsBySym, err := ms.GetBarsMulti(ctx, symbols, tf, start, end); err == nil {
+			for sym, bars := range barsBySym {
+				if len(bars) == 0 {
+					continue
+				}
+				if err := s.repo.InsertBars(ctx, bars); err != nil {
+					slog.Warn("bar ingest: insert failed", "symbol", sym, "error", err)
+				}
+			}
+			return
+		} else {
+			slog.Warn("bar ingest: multi-bar fetch failed, falling back to per-symbol", "error", err)
+		}
+	}
 	for _, sym := range symbols {
 		bars, err := src.GetBars(ctx, sym, tf, start, end)
 		if err != nil {
@@ -473,8 +550,9 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 		start = end.Add(-365 * 24 * time.Hour)
 	}
 
-	batchSize := int(s.cfg.GetInt("marketdata.backfill.batch_size", 1000))
-	_ = batchSize // used as hint; Alpaca API handles pagination internally
+	// The per-request bar limit (marketdata.backfill.batch_size) and rate limit are
+	// applied inside the Alpaca client (configured at startup); pagination is handled
+	// transparently by GetBars/GetBarsMulti, so no batching is needed here.
 
 	s.emitEvent(ctx, "marketdata.backfill.started", "marketdata:backfill", map[string]interface{}{
 		"symbols":   req.Symbols,
@@ -615,8 +693,11 @@ func (s *MarketDataService) StartBarStream(ctx context.Context, symbols []string
 		"symbols": symbols, "timeframe": timeframe,
 	})
 	go func() {
+		// Streamed bars are Alpaca's native 1-minute bars (see alpaca.streamBarTimeframe);
+		// they are forwarded to live subscribers only. Persisting the platform's 15m/1h/1d
+		// OHLCV is owned by the always-on REST bar ingester (StartBarIngestPoller), so we do
+		// not write streamed minute bars into the ohlcv table here.
 		for bar := range feed {
-			_ = s.repo.InsertBars(ctx, []*marketdatav1.Bar{bar})
 			s.mu.RLock()
 			for _, ch := range s.barSubs {
 				select {

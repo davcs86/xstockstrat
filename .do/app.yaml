@@ -124,9 +124,11 @@ services:
         value: ${xstockstrat.DATABASE_URL}
       - key: ALPACA_API_KEY
         scope: RUN_TIME
+        value: YOUR_PROD_ALPACA_API_KEY
         type: SECRET
       - key: ALPACA_API_SECRET
         scope: RUN_TIME
+        value: YOUR_PROD_ALPACA_API_SECRET
         type: SECRET
       - key: DB_POOL_MAX
         value: "2"

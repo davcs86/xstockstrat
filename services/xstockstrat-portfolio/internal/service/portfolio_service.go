@@ -10,8 +10,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -39,21 +43,30 @@ type PortfolioService struct {
 }
 
 // NewPortfolioService creates the service, opens the DB pool, and dials dependencies.
+// clientKeepAlive pings idle inter-service connections so a silently-dropped link
+// (e.g. an idle ledger connection the server GOAWAYs) is detected and re-established
+// promptly instead of failing the next call.
+var clientKeepAlive = grpc.WithKeepaliveParams(keepalive.ClientParameters{
+	Time:                30 * time.Second,
+	Timeout:             10 * time.Second,
+	PermitWithoutStream: true,
+})
+
 func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*PortfolioService, error) {
 	repo, err := repository.NewPortfolioRepo(cfg.DBConnStr)
 	if err != nil {
 		return nil, fmt.Errorf("portfolio repo: %w", err)
 	}
 
-	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial ledger: %w", err)
 	}
-	mdConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	mdConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial marketdata: %w", err)
 	}
-	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
@@ -73,35 +86,76 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 // ConsumeOrderFills subscribes to ledger StreamEvents filtered on "order.filled"
 // and updates positions accordingly.
 func (s *PortfolioService) ConsumeOrderFills(ctx context.Context) {
+	s.consumeEventStream(ctx, "order fill", "order.filled", s.processOrderFill)
+}
+
+// consumeEventStream subscribes to a filtered ledger StreamEvents and dispatches
+// each event to handle, reconnecting on disconnect. It tracks the highest sequence
+// processed and resumes from there (from_sequence = lastSeq+1) across reconnects,
+// so a recycled connection neither re-replays history — which would double-count
+// incremental updates such as order fills — nor drops events that arrived during
+// the gap. The first connection still replays from sequence 0 to build initial
+// state. Graceful HTTP/2 disconnects (GOAWAY / Unavailable), which the DO App
+// Platform issues routinely on long-lived streams, are logged below ERROR so they
+// don't trip alerting; genuine errors stay at ERROR.
+func (s *PortfolioService) consumeEventStream(ctx context.Context, name, eventType string, handle func(context.Context, *ledgerv1.LedgerEvent)) {
+	var lastSeq int64
 	for {
-		if err := s.streamFills(ctx); err != nil {
+		next, err := s.streamEventsFrom(ctx, eventType, lastSeq, handle)
+		lastSeq = next
+		if err != nil {
 			if ctx.Err() != nil {
 				return
 			}
-			slog.Error("order fill stream error, retrying", "error", err)
+			if isGracefulStreamClose(err) {
+				slog.Info(name+" stream disconnected, reconnecting", "resume_from_sequence", lastSeq+1)
+			} else {
+				slog.Error(name+" stream error, retrying", "error", err)
+			}
 			time.Sleep(2 * time.Second)
 		}
 	}
 }
 
-func (s *PortfolioService) streamFills(ctx context.Context) error {
+// streamEventsFrom opens one StreamEvents call and dispatches events until the
+// stream ends or errors. It returns the highest sequence processed so the caller
+// can resume past it on reconnect. lastSeq == 0 replays full history (initial
+// connect); lastSeq > 0 resumes from lastSeq+1.
+func (s *PortfolioService) streamEventsFrom(ctx context.Context, eventType string, lastSeq int64, handle func(context.Context, *ledgerv1.LedgerEvent)) (int64, error) {
+	fromSeq := int64(0)
+	if lastSeq > 0 {
+		fromSeq = lastSeq + 1
+	}
 	stream, err := s.ledger.StreamEvents(ctx, &ledgerv1.StreamEventsRequest{
-		EventType:    "order.filled",
-		FromSequence: 0,
+		EventType:    eventType,
+		FromSequence: fromSeq,
 	})
 	if err != nil {
-		return fmt.Errorf("StreamEvents: %w", err)
+		return lastSeq, fmt.Errorf("StreamEvents: %w", err)
 	}
 	for {
 		event, err := stream.Recv()
 		if err == io.EOF {
-			return nil
+			return lastSeq, nil
 		}
 		if err != nil {
-			return fmt.Errorf("recv: %w", err)
+			return lastSeq, fmt.Errorf("recv: %w", err)
 		}
-		s.processOrderFill(ctx, event)
+		handle(ctx, event)
+		if event.Sequence > lastSeq {
+			lastSeq = event.Sequence
+		}
 	}
+}
+
+// isGracefulStreamClose reports whether a stream error is an expected, benign
+// disconnect (a GOAWAY / transport recycle surfaced as codes.Unavailable) rather
+// than a real failure worth alerting on.
+func isGracefulStreamClose(err error) bool {
+	if st, ok := status.FromError(err); ok {
+		return st.Code() == codes.Unavailable
+	}
+	return false
 }
 
 // orderFillPayload is the expected shape of the order.filled / order.partially_filled event payload.
@@ -576,16 +630,40 @@ func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey s
 		val, _ := structpb.NewValue(v)
 		fields[k] = val
 	}
-	_, err := s.ledger.AppendEvent(ctx, &ledgerv1.AppendEventRequest{
+	req := &ledgerv1.AppendEventRequest{
 		EventType:     eventType,
 		SourceService: "portfolio",
 		StreamKey:     streamKey,
 		OccurredAt:    timestamppb.Now(),
 		Payload:       &structpb.Struct{Fields: fields},
-	})
-	if err != nil {
-		slog.Warn("ledger append failed", "event_type", eventType, "error", err)
+		// Stable per-emit dedup key. Reused across the retries below so a retry that
+		// follows an append the ledger actually committed (but whose response was lost)
+		// returns the stored event instead of writing a duplicate audit event.
+		IdempotencyKey: uuid.NewString(),
 	}
+
+	// Retry transient transport failures. A ledger restart sends an HTTP/2 GOAWAY that
+	// fails the in-flight append with codes.Unavailable; without a retry the event was
+	// silently dropped (it was only logged), so a deploy-time ledger bounce lost audit
+	// events. The idempotency key above makes the retry safe against duplication.
+	const maxAttempts = 4
+	backoff := 100 * time.Millisecond
+	var err error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if _, err = s.ledger.AppendEvent(ctx, req); err == nil {
+			return
+		}
+		if status.Code(err) != codes.Unavailable || attempt == maxAttempts {
+			break
+		}
+		select {
+		case <-time.After(backoff):
+		case <-ctx.Done():
+			return
+		}
+		backoff *= 2
+	}
+	slog.Warn("ledger append failed", "event_type", eventType, "error", err)
 }
 
 // fillAccumulator tracks signed average-cost-basis state per symbol for realized P&L computation.
@@ -603,41 +681,20 @@ type positionSyncPayload struct {
 		Symbol  string  `json:"symbol"`
 		Qty     float64 `json:"qty"`
 		AvgCost float64 `json:"avg_cost"`
+		// Broker mark-to-market valuation (zero when the broker did not report it, e.g.
+		// legacy events emitted before these fields existed). When present these are
+		// authoritative and used verbatim so the card reconciles with broker equity.
+		CurrentPrice     float64 `json:"current_price"`
+		MarketValue      float64 `json:"market_value"`
+		UnrealizedPnl    float64 `json:"unrealized_pl"`
+		UnrealizedPnlPct float64 `json:"unrealized_plpc"`
 	} `json:"positions"`
 }
 
 // ConsumePositionSyncs subscribes to ledger StreamEvents filtered on "account.positions.synced"
 // and upserts positions from broker snapshots.
 func (s *PortfolioService) ConsumePositionSyncs(ctx context.Context) {
-	for {
-		if err := s.streamPositionSyncs(ctx); err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			slog.Error("position sync stream error, retrying", "error", err)
-			time.Sleep(2 * time.Second)
-		}
-	}
-}
-
-func (s *PortfolioService) streamPositionSyncs(ctx context.Context) error {
-	stream, err := s.ledger.StreamEvents(ctx, &ledgerv1.StreamEventsRequest{
-		EventType:    "account.positions.synced",
-		FromSequence: 0,
-	})
-	if err != nil {
-		return fmt.Errorf("StreamEvents: %w", err)
-	}
-	for {
-		event, err := stream.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("recv: %w", err)
-		}
-		s.processPositionSync(ctx, event)
-	}
+	s.consumeEventStream(ctx, "position sync", "account.positions.synced", s.processPositionSync)
 }
 
 func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) {
@@ -666,7 +723,13 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	}
 	presentSymbols := make([]string, 0, len(sync.Positions))
 	for _, p := range sync.Positions {
-		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost); err != nil {
+		val := repository.PositionValuation{
+			CurrentPrice:     p.CurrentPrice,
+			MarketValue:      p.MarketValue,
+			UnrealizedPnl:    p.UnrealizedPnl,
+			UnrealizedPnlPct: p.UnrealizedPnlPct,
+		}
+		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
 			slog.Warn("upsert position from sync failed", "symbol", p.Symbol, "error", err)
 		}
 		presentSymbols = append(presentSymbols, p.Symbol)
@@ -690,35 +753,7 @@ type balanceSyncPayload struct {
 // ConsumeBalanceSyncs subscribes to ledger StreamEvents filtered on "account.balance.synced"
 // and stores the latest broker balance snapshot per account.
 func (s *PortfolioService) ConsumeBalanceSyncs(ctx context.Context) {
-	for {
-		if err := s.streamBalanceSyncs(ctx); err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			slog.Error("balance sync stream error, retrying", "error", err)
-			time.Sleep(2 * time.Second)
-		}
-	}
-}
-
-func (s *PortfolioService) streamBalanceSyncs(ctx context.Context) error {
-	stream, err := s.ledger.StreamEvents(ctx, &ledgerv1.StreamEventsRequest{
-		EventType:    "account.balance.synced",
-		FromSequence: 0,
-	})
-	if err != nil {
-		return fmt.Errorf("StreamEvents: %w", err)
-	}
-	for {
-		event, err := stream.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("recv: %w", err)
-		}
-		s.processBalanceSync(ctx, event)
-	}
+	s.consumeEventStream(ctx, "balance sync", "account.balance.synced", s.processBalanceSync)
 }
 
 func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledgerv1.LedgerEvent) {
@@ -756,7 +791,17 @@ func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID 
 	if err != nil {
 		return nil, err
 	}
-	s.enrichPositions(ctx, positions)
+	// Positions synced from the broker carry its authoritative mark-to-market valuation
+	// (current_price/market_value/unrealized_pnl), which reconciles with the broker equity
+	// shown below. Only fall back to marketdata mid-quote enrichment for positions the broker
+	// did not value — e.g. a fresh order-fill position not yet reconciled by the sync poller.
+	var needEnrich []*portfoliov1.Position
+	for _, p := range positions {
+		if p.CurrentPrice <= 0 {
+			needEnrich = append(needEnrich, p)
+		}
+	}
+	s.enrichPositions(ctx, needEnrich)
 
 	var positionsValue, unrealizedPnl float64
 	for _, p := range positions {

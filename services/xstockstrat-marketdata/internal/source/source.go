@@ -19,6 +19,15 @@ type DataSourceClient interface {
 	StreamQuotes(ctx context.Context, symbols []string) (<-chan *marketdatav1.Quote, error)
 }
 
+// MultiSymbolSource is an optional capability a DataSourceClient may also implement to
+// fetch several symbols in one request. Callers type-assert to it and fall back to the
+// per-symbol DataSourceClient methods when a source does not support batching, so adding
+// this does not force every provider (or test fake) to implement it.
+type MultiSymbolSource interface {
+	GetBarsMulti(ctx context.Context, symbols []string, timeframe string, start, end time.Time) (map[string][]*marketdatav1.Bar, error)
+	GetLatestQuotesMulti(ctx context.Context, symbols []string) (map[string]*marketdatav1.Quote, error)
+}
+
 // Registry maps named source slugs to DataSourceClient implementations.
 // The default source is "alpaca"; pass an empty string to Get to use it.
 type Registry struct {

@@ -6,7 +6,11 @@ import { ConnectError } from '@connectrpc/connect';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
-type Timeframe = '10Min' | '30Min' | '1Hour' | '1Day' | '1Week' | '1Month';
+// Only 15m/1h/1d are supported platform-wide: the marketdata service stores and resolves
+// exactly these canonical intervals (common.v1.Timeframe = 15MIN/1HOUR/1DAY; 15m is the
+// smallest interval the free Alpaca data plan serves). 10m/30m/1w/1mo have no backend
+// support and render empty, so they are not offered.
+type Timeframe = '15Min' | '1Hour' | '1Day';
 type BarCount = 50 | 100 | 200;
 
 interface Bar {
@@ -19,18 +23,14 @@ interface Bar {
 }
 
 const TIMEFRAMES: { value: Timeframe; label: string }[] = [
-  { value: '10Min',  label: '10m' },
-  { value: '30Min',  label: '30m' },
-  { value: '1Hour',  label: '1h'  },
-  { value: '1Day',   label: '1d'  },
-  { value: '1Week',  label: '1w'  },
-  { value: '1Month', label: '1mo' },
+  { value: '15Min', label: '15m' },
+  { value: '1Hour', label: '1h'  },
+  { value: '1Day',  label: '1d'  },
 ];
 
-// Intraday timeframes get auto-refresh; daily/weekly/monthly do not.
+// Intraday timeframes get auto-refresh; daily does not.
 const POLL_INTERVALS_MS: Partial<Record<Timeframe, number>> = {
-  '10Min': 120_000,
-  '30Min': 300_000,
+  '15Min': 120_000,
   '1Hour': 900_000,
 };
 

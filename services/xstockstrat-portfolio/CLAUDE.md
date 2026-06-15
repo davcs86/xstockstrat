@@ -46,16 +46,17 @@ Namespace: `portfolio`
 
 ## Ledger Events Consumed
 
-| Event Type | Effect |
-|---|---|
-| `order.filled` / `order.partially_filled` | Update positions from order fills (`user_id` + `account_id` from payload) |
-| `account.positions.synced` | Reconcile positions against a broker snapshot (`user_id` + `account_id`) |
-| `account.balance.synced` | Upsert the latest broker balance (cash, buying power, equity, last_equity) per account; surfaced by `ListPortfolios` |
+| Event Type | Consumer | Effect |
+|---|---|---|
+| `order.filled` | `ConsumeOrderFills` (live stream) | Live-update the `positions` table from completed order fills (`user_id` + `account_id` from payload). Uses the incremental `qty` field. |
+| `order.partially_filled` | `GetPnL` (query time) | Consumed in `GetPnL` Pass 2 for realized P&L on orders that never reached `order.filled`, deduplicated per order ID keeping the highest cumulative `filled_qty`. **Not** consumed by the live `positions` stream — partial fills converge into the positions table via the `account.positions.synced` broker reconciliation poller. |
+| `account.positions.synced` | `ConsumePositionSyncs` (live stream) | Reconcile positions against a broker snapshot (`user_id` + `account_id`); also stores the broker's per-position mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`) so `ListPortfolios` reconciles with broker equity instead of recomputing from marketdata mid-quotes |
+| `account.balance.synced` | `ConsumeBalanceSyncs` (live stream) | Upsert the latest broker balance (cash, buying power, equity, last_equity) per account; surfaced by `ListPortfolios` |
 
 ## Database
 
 - Schema: `portfolio`
-- Table: `portfolio.positions` — current open positions
+- Table: `portfolio.positions` — current open positions, including the broker's last-synced mark-to-market valuation (`current_price`, `market_value`, `unrealized_pnl`, `unrealized_pnl_pct`; migration `005`). These are authoritative for broker-synced positions; order-fill-only positions leave them `0` and the service enriches from marketdata mid-quotes as a fallback.
 - Table: `portfolio.account_balances` — latest broker balance snapshot per account (cash, buying power, equity, last_equity); upserted from `account.balance.synced`
 - Hypertable: `portfolio.snapshots` — point-in-time portfolio state (partition by `time`, chunk = 1 day)
 - Migration tool: `golang-migrate`
@@ -68,6 +69,14 @@ Namespace: `portfolio`
 | `portfolio.position.closed` | Position fully closed |
 | `portfolio.risk.drawdown_breach` | Max drawdown exceeded |
 | `portfolio.snapshot` | Periodic snapshot written |
+
+All emissions go through `emitEvent`, which sends a per-emit `idempotency_key` and **retries
+transient `Unavailable` failures** (bounded backoff, 4 attempts). A ledger restart sends an
+HTTP/2 GOAWAY that fails the in-flight append; previously the event was logged-and-dropped, so
+a deploy-time ledger bounce lost audit events. The idempotency key makes the retry safe — the
+ledger dedups it, so a retry after a committed-but-unacked append returns the stored event
+rather than writing a duplicate. The ledger/marketdata/notify client connections also set gRPC
+keepalive so an idle link the server GOAWAYs is re-established promptly.
 
 ## Environment Variables
 
