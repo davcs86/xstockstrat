@@ -833,6 +833,10 @@ func (s *TradingService) syncPositions(ctx context.Context) {
 				"market_value":    p.MarketValue,
 				"unrealized_pl":   p.UnrealizedPnl,
 				"unrealized_plpc": p.UnrealizedPnlPct,
+				// Today's (intraday) P&L — change since the previous close. Carried so the
+				// positions table can show "Today's P/L" distinct from total unrealized P&L.
+				"day_pnl":     p.DayPnl,
+				"day_pnl_pct": p.DayPnlPct,
 			}
 		}
 		payload := map[string]interface{}{

@@ -43,6 +43,14 @@ message Position {
   google.protobuf.Timestamp opened_at = 9;
   xstockstrat.common.v1.TradingMode trading_mode = 10;
   string account_id = 11;
+  // Today's (intraday) P&L — change since the previous trading day's close.
+  // Sourced from the broker's per-position intraday valuation (Alpaca
+  // unrealized_intraday_pl / unrealized_intraday_plpc) on account.positions.synced.
+  // Zero when the broker does not report an intraday figure (e.g. order-fill-only
+  // positions enriched from marketdata mid-quotes); distinct from unrealized_pnl,
+  // which is total P&L since entry.
+  double day_pnl = 12;       // dollars
+  double day_pnl_pct = 13;   // fraction (e.g. 0.0125 = +1.25%)
 }
 
 // PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.

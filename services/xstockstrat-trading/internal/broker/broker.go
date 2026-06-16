@@ -34,6 +34,12 @@ type BrokerPosition struct {
 	MarketValue      float64
 	UnrealizedPnl    float64
 	UnrealizedPnlPct float64
+	// DayPnl / DayPnlPct are the broker's intraday (today's) P&L — the change since the
+	// previous trading day's close (Alpaca unrealized_intraday_pl / unrealized_intraday_plpc).
+	// Distinct from UnrealizedPnl, which is total P&L since entry. Zero means the broker did
+	// not report an intraday figure (e.g. IBKR's positions endpoint omits it).
+	DayPnl    float64
+	DayPnlPct float64
 }
 
 // BrokerBalance is a normalized account-balance snapshot from a broker.
