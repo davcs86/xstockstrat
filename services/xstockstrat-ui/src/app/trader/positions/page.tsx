@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import type { JsonObject } from '@bufbuild/protobuf';
 import { AppShell } from '@/components/trader/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
@@ -33,6 +34,21 @@ function fmtPct(n: number | undefined | null): string {
   if (n === undefined || n === null || Number.isNaN(Number(n))) return '—';
   const pct = Number(n) * 100;
   return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+}
+
+function fmtSignedUsd(n: number | undefined | null): string {
+  if (n === undefined || n === null || Number.isNaN(Number(n))) return '—';
+  return `${Number(n) >= 0 ? '+' : ''}${fmtUsd(n)}`;
+}
+
+// pnlClass colors a P&L figure green/red by sign, matching the buy/sell palette.
+function pnlClass(n: number | undefined | null): string {
+  return Number(n ?? 0) >= 0 ? 'text-buy' : 'text-destructive';
+}
+
+// sideLabel derives Long/Short from the signed quantity (qty < 0 is short).
+function sideLabel(qty: number | undefined | null): string {
+  return Number(qty ?? 0) < 0 ? 'Short' : 'Long';
 }
 
 export default function PositionsPage() {
@@ -152,51 +168,69 @@ export default function PositionsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Symbol</TableHead>
+                    <TableHead>Asset</TableHead>
+                    <TableHead>Side</TableHead>
                     <TableHead className="text-right">Qty</TableHead>
+                    <TableHead className="text-right">Price</TableHead>
                     <TableHead className="text-right hidden sm:table-cell">Avg Entry</TableHead>
-                    <TableHead className="text-right">Current</TableHead>
+                    <TableHead className="text-right hidden lg:table-cell">Cost Basis</TableHead>
                     <TableHead className="text-right hidden md:table-cell">Market Value</TableHead>
-                    <TableHead className="text-right">Unrealized P&amp;L</TableHead>
-                    <TableHead className="text-right">%</TableHead>
+                    <TableHead className="text-right">Today&apos;s P/L ($)</TableHead>
+                    <TableHead className="text-right hidden sm:table-cell">Today&apos;s P/L (%)</TableHead>
+                    <TableHead className="text-right">Total P/L ($)</TableHead>
+                    <TableHead className="text-right">Total P/L (%)</TableHead>
+                    <TableHead className="text-right sr-only">Trade</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {positions.map((p) => {
-                    const pnlPositive = Number(p.unrealizedPnl ?? 0) >= 0;
-                    return (
-                      <TableRow
-                        key={`${p.accountId ?? ''}-${p.symbol}`}
-                        onClick={() => setSelected(p)}
-                        className="cursor-pointer"
+                  {positions.map((p) => (
+                    <TableRow
+                      key={`${p.accountId ?? ''}-${p.symbol}`}
+                      onClick={() => setSelected(p)}
+                      className="cursor-pointer"
+                    >
+                      <TableCell className="font-mono font-semibold">{p.symbol}</TableCell>
+                      <TableCell className="text-muted-foreground">{sideLabel(p.qty)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{p.qty}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmtUsd(p.currentPrice)}</TableCell>
+                      <TableCell className="text-right tabular-nums hidden sm:table-cell">
+                        {fmtUsd(p.avgEntryPrice)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums hidden lg:table-cell">
+                        {fmtUsd(p.costBasis)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums hidden md:table-cell">
+                        {fmtUsd(p.marketValue)}
+                      </TableCell>
+                      <TableCell className={`text-right tabular-nums font-semibold ${pnlClass(p.dayPnl)}`}>
+                        {fmtSignedUsd(p.dayPnl)}
+                      </TableCell>
+                      <TableCell
+                        className={`text-right tabular-nums hidden sm:table-cell ${pnlClass(p.dayPnl)}`}
                       >
-                        <TableCell className="font-mono font-semibold">{p.symbol}</TableCell>
-                        <TableCell className="text-right tabular-nums">{p.qty}</TableCell>
-                        <TableCell className="text-right tabular-nums hidden sm:table-cell">
-                          {fmtUsd(p.avgEntryPrice)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{fmtUsd(p.currentPrice)}</TableCell>
-                        <TableCell className="text-right tabular-nums hidden md:table-cell">
-                          {fmtUsd(p.marketValue)}
-                        </TableCell>
-                        <TableCell
-                          className={`text-right tabular-nums font-semibold ${
-                            pnlPositive ? 'text-buy' : 'text-destructive'
-                          }`}
+                        {fmtPct(p.dayPnlPct)}
+                      </TableCell>
+                      <TableCell className={`text-right tabular-nums font-semibold ${pnlClass(p.unrealizedPnl)}`}>
+                        {fmtSignedUsd(p.unrealizedPnl)}
+                      </TableCell>
+                      <TableCell className={`text-right tabular-nums ${pnlClass(p.unrealizedPnl)}`}>
+                        {fmtPct(p.unrealizedPnlPct)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {/* Quick-trade shortcut: opens the order ticket pre-filled with this
+                            symbol. stopPropagation so the row's detail Sheet doesn't also open. */}
+                        <Button
+                          asChild
+                          size="sm"
+                          variant="outline"
+                          className="h-7"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          {pnlPositive ? '+' : ''}
-                          {fmtUsd(p.unrealizedPnl)}
-                        </TableCell>
-                        <TableCell
-                          className={`text-right tabular-nums ${
-                            pnlPositive ? 'text-buy' : 'text-destructive'
-                          }`}
-                        >
-                          {fmtPct(p.unrealizedPnlPct)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                          <Link href={`/trader?symbol=${encodeURIComponent(p.symbol)}`}>Trade</Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             )}
@@ -252,9 +286,13 @@ export default function PositionsPage() {
                 <dd className="text-right tabular-nums">{fmtUsd(selected.currentPrice)}</dd>
                 <dt className="text-muted-foreground">Market value</dt>
                 <dd className="text-right tabular-nums">{fmtUsd(selected.marketValue)}</dd>
-                <dt className="text-muted-foreground">Unrealized P&amp;L</dt>
-                <dd className="text-right tabular-nums">
-                  {fmtUsd(selected.unrealizedPnl)} ({fmtPct(selected.unrealizedPnlPct)})
+                <dt className="text-muted-foreground">Today&apos;s P/L</dt>
+                <dd className={`text-right tabular-nums ${pnlClass(selected.dayPnl)}`}>
+                  {fmtSignedUsd(selected.dayPnl)} ({fmtPct(selected.dayPnlPct)})
+                </dd>
+                <dt className="text-muted-foreground">Total P/L</dt>
+                <dd className={`text-right tabular-nums ${pnlClass(selected.unrealizedPnl)}`}>
+                  {fmtSignedUsd(selected.unrealizedPnl)} ({fmtPct(selected.unrealizedPnlPct)})
                 </dd>
                 <dt className="text-muted-foreground">Cost basis</dt>
                 <dd className="text-right tabular-nums">{fmtUsd(selected.costBasis)}</dd>

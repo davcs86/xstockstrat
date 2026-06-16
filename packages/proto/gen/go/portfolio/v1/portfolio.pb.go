@@ -212,8 +212,16 @@ type Position struct {
 	OpenedAt         *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=opened_at,json=openedAt,proto3" json:"opened_at,omitempty"`
 	TradingMode      v1.TradingMode         `protobuf:"varint,10,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
 	AccountId        string                 `protobuf:"bytes,11,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Today's (intraday) P&L — change since the previous trading day's close.
+	// Sourced from the broker's per-position intraday valuation (Alpaca
+	// unrealized_intraday_pl / unrealized_intraday_plpc) on account.positions.synced.
+	// Zero when the broker does not report an intraday figure (e.g. order-fill-only
+	// positions enriched from marketdata mid-quotes); distinct from unrealized_pnl,
+	// which is total P&L since entry.
+	DayPnl        float64 `protobuf:"fixed64,12,opt,name=day_pnl,json=dayPnl,proto3" json:"day_pnl,omitempty"`            // dollars
+	DayPnlPct     float64 `protobuf:"fixed64,13,opt,name=day_pnl_pct,json=dayPnlPct,proto3" json:"day_pnl_pct,omitempty"` // fraction (e.g. 0.0125 = +1.25%)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Position) Reset() {
@@ -321,6 +329,20 @@ func (x *Position) GetAccountId() string {
 		return x.AccountId
 	}
 	return ""
+}
+
+func (x *Position) GetDayPnl() float64 {
+	if x != nil {
+		return x.DayPnl
+	}
+	return 0
+}
+
+func (x *Position) GetDayPnlPct() float64 {
+	if x != nil {
+		return x.DayPnlPct
+	}
+	return 0
 }
 
 type PortfolioSnapshot struct {
@@ -1063,7 +1085,7 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\tpositions\x18\n" +
 	" \x03(\v2\".xstockstrat.portfolio.v1.PositionR\tpositions\x12\x1d\n" +
 	"\n" +
-	"account_id\x18\v \x01(\tR\taccountId\"\xb7\x03\n" +
+	"account_id\x18\v \x01(\tR\taccountId\"\xf0\x03\n" +
 	"\bPosition\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x10\n" +
 	"\x03qty\x18\x02 \x01(\x01R\x03qty\x12&\n" +
@@ -1078,7 +1100,9 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\ftrading_mode\x18\n" +
 	" \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\x12\x1d\n" +
 	"\n" +
-	"account_id\x18\v \x01(\tR\taccountId\"\xc9\x02\n" +
+	"account_id\x18\v \x01(\tR\taccountId\x12\x17\n" +
+	"\aday_pnl\x18\f \x01(\x01R\x06dayPnl\x12\x1e\n" +
+	"\vday_pnl_pct\x18\r \x01(\x01R\tdayPnlPct\"\xc9\x02\n" +
 	"\x11PortfolioSnapshot\x12!\n" +
 	"\fportfolio_id\x18\x01 \x01(\tR\vportfolioId\x12?\n" +
 	"\rsnapshot_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fsnapshotTime\x12\x16\n" +
