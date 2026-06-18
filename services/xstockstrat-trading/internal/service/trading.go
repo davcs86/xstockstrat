@@ -80,6 +80,10 @@ type TradingService struct {
 	// from the DB in LoadBrokerPool.
 	credStatus   map[string]int32
 	credStatusMu sync.Mutex
+	// credSkipLoggedAt throttles the "skipping account: credentials invalid" warning
+	// to once per credSkipLogInterval per account. Accessed only from the single
+	// position-sync poller goroutine (syncPositions), so it needs no lock.
+	credSkipLoggedAt map[string]time.Time
 }
 
 // clientKeepAlive prevents silent connection drops on idle inter-service links.
@@ -109,18 +113,19 @@ func NewTradingService(
 		return nil, fmt.Errorf("dial portfolio: %w", err)
 	}
 	return &TradingService{
-		cfg:         cfg,
-		cfgW:        cfgW,
-		brokers:     make(map[string]brokerPoolEntry),
-		accountRepo: accountRepo,
-		encKey:      encKey,
-		ledger:      ledgerv1.NewLedgerServiceClient(ledgerConn),
-		notify:      notifyv1.NewNotifyServiceClient(notifyConn),
-		portfolio:   portfoliov1.NewPortfolioServiceClient(portfolioConn),
-		repo:        repo,
-		orders:      make(map[string]*tradingv1.Order),
-		subs:        make(map[string]chan *tradingv1.Order),
-		credStatus:  make(map[string]int32),
+		cfg:              cfg,
+		cfgW:             cfgW,
+		brokers:          make(map[string]brokerPoolEntry),
+		accountRepo:      accountRepo,
+		encKey:           encKey,
+		ledger:           ledgerv1.NewLedgerServiceClient(ledgerConn),
+		notify:           notifyv1.NewNotifyServiceClient(notifyConn),
+		portfolio:        portfoliov1.NewPortfolioServiceClient(portfolioConn),
+		repo:             repo,
+		orders:           make(map[string]*tradingv1.Order),
+		subs:             make(map[string]chan *tradingv1.Order),
+		credStatus:       make(map[string]int32),
+		credSkipLoggedAt: make(map[string]time.Time),
 	}, nil
 }
 
@@ -763,12 +768,34 @@ func (s *TradingService) StartPositionSyncPoller(ctx context.Context) {
 	currentInterval := time.Duration(defaultIntervalMs) * time.Millisecond
 	ticker := time.NewTicker(currentInterval)
 	defer ticker.Stop()
+	// lastOK is the time of the most recent cycle that emitted at least one
+	// account.positions.synced event; the watchdog uses it to detect a silent stall.
+	var lastOK time.Time
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.syncPositions(ctx)
+			synced, skipped, failed := s.syncPositions(ctx)
+			if synced > 0 {
+				lastOK = time.Now()
+			}
+			// Heartbeat: make a healthy sync loop observable and a stalled one
+			// diagnosable from logs alone. Previously a silent stall (e.g. every
+			// account skipped for invalid credentials, or a wedged broker/ledger
+			// call) looked identical to a healthy idle service — zero log output.
+			slog.Info("position sync cycle complete",
+				"accounts_synced", synced, "accounts_skipped", skipped, "accounts_failed", failed)
+			// Watchdog: accounts are registered but none have synced for several
+			// intervals. lastOK guards against a false positive before the first
+			// successful sync (it stays zero until then).
+			if synced == 0 && (skipped > 0 || failed > 0) && !lastOK.IsZero() {
+				if stale := time.Since(lastOK); stale > 3*currentInterval {
+					slog.Warn("position sync stalled: no account has synced recently",
+						"stale_for", stale.Round(time.Second).String(),
+						"accounts_skipped", skipped, "accounts_failed", failed)
+				}
+			}
 			intervalMs := s.cfgW.GetFloat("trading.position_sync.interval_ms", defaultIntervalMs)
 			if intervalMs > 0 {
 				newInterval := time.Duration(intervalMs) * time.Millisecond
@@ -781,7 +808,12 @@ func (s *TradingService) StartPositionSyncPoller(ctx context.Context) {
 	}
 }
 
-func (s *TradingService) syncPositions(ctx context.Context) {
+// syncPositions polls every registered broker account for positions and balance
+// and emits the corresponding ledger snapshots. It returns per-cycle counts —
+// synced (positions emitted), skipped (credentials marked invalid), and failed
+// (broker fetch errored) — so the poller can emit a liveness heartbeat and detect
+// a silent stall.
+func (s *TradingService) syncPositions(ctx context.Context) (synced, skipped, failed int) {
 	type syncAccount struct {
 		client broker.Broker
 		userID string
@@ -807,64 +839,117 @@ func (s *TradingService) syncPositions(ctx context.Context) {
 
 	for accountID, acct := range accounts {
 		if credentialsKnownInvalid(credStatus[accountID]) {
-			slog.Debug("syncPositions: skipping account with invalid credentials", "account_id", accountID)
+			s.warnCredSkip(accountID)
+			skipped++
 			continue
 		}
-		positions, err := acct.client.GetPositions(ctx)
-		if err != nil {
-			slog.Warn("syncPositions: GetPositions failed", "account_id", accountID, "error", err)
-			continue
+		if s.syncAccountPositions(ctx, accountID, acct.client, acct.userID) {
+			synced++
+		} else {
+			failed++
 		}
-		tradingMode := "TRADING_MODE_LIVE"
-		if acct.client.IsPaper() {
-			tradingMode = "TRADING_MODE_PAPER"
-		}
-		// structpb.NewStruct only accepts []interface{}, not typed slices.
-		posEntries := make([]interface{}, len(positions))
-		for i, p := range positions {
-			posEntries[i] = map[string]interface{}{
-				"symbol":   p.Symbol,
-				"qty":      p.Quantity,
-				"avg_cost": p.AvgCost,
-				// Broker mark-to-market valuation — lets the portfolio card reconcile with
-				// the broker's authoritative equity instead of recomputing from marketdata
-				// mid-quotes (a different price basis that never ties out).
-				"current_price":   p.CurrentPrice,
-				"market_value":    p.MarketValue,
-				"unrealized_pl":   p.UnrealizedPnl,
-				"unrealized_plpc": p.UnrealizedPnlPct,
-				// Today's (intraday) P&L — change since the previous close. Carried so the
-				// positions table can show "Today's P/L" distinct from total unrealized P&L.
-				"day_pnl":     p.DayPnl,
-				"day_pnl_pct": p.DayPnlPct,
-			}
-		}
-		payload := map[string]interface{}{
-			"account_id":   accountID,
-			"user_id":      acct.userID,
-			"trading_mode": tradingMode,
-			"positions":    posEntries,
-		}
-		s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), payload)
-
-		// Sync the account balance snapshot (cash, buying power, equity) alongside
-		// positions. Best-effort: a balance fetch failure must not block position sync.
-		bal, err := acct.client.GetAccount(ctx)
-		if err != nil {
-			slog.Warn("syncPositions: GetAccount failed", "account_id", accountID, "error", err)
-			continue
-		}
-		balPayload := map[string]interface{}{
-			"account_id":   accountID,
-			"user_id":      acct.userID,
-			"trading_mode": tradingMode,
-			"cash":         bal.Cash,
-			"buying_power": bal.BuyingPower,
-			"equity":       bal.Equity,
-			"last_equity":  bal.LastEquity,
-		}
-		s.emitLedgerEvent(ctx, "account.balance.synced", fmt.Sprintf("account:%s", accountID), balPayload)
 	}
+	return synced, skipped, failed
+}
+
+// syncAccountPositions fetches one account's positions and balance from the broker
+// and emits the account.positions.synced / account.balance.synced ledger snapshots.
+// Every broker call runs under an explicit per-call deadline so a black-holed
+// connection can never wedge the position-sync poller indefinitely — the
+// credential-health poller already wraps its broker call this way, and this brings
+// position sync to parity (the ledger emit is bounded inside emitLedgerEvent).
+// Returns true when the positions snapshot was fetched and emitted; balance is
+// best-effort and its failure does not flip the result to false.
+func (s *TradingService) syncAccountPositions(ctx context.Context, accountID string, client broker.Broker, userID string) bool {
+	timeout := s.brokerCallTimeout()
+
+	posCtx, cancel := context.WithTimeout(ctx, timeout)
+	positions, err := client.GetPositions(posCtx)
+	cancel()
+	if err != nil {
+		slog.Warn("syncPositions: GetPositions failed", "account_id", accountID, "error", err)
+		return false
+	}
+
+	tradingMode := "TRADING_MODE_LIVE"
+	if client.IsPaper() {
+		tradingMode = "TRADING_MODE_PAPER"
+	}
+	// structpb.NewStruct only accepts []interface{}, not typed slices.
+	posEntries := make([]interface{}, len(positions))
+	for i, p := range positions {
+		posEntries[i] = map[string]interface{}{
+			"symbol":   p.Symbol,
+			"qty":      p.Quantity,
+			"avg_cost": p.AvgCost,
+			// Broker mark-to-market valuation — lets the portfolio card reconcile with
+			// the broker's authoritative equity instead of recomputing from marketdata
+			// mid-quotes (a different price basis that never ties out).
+			"current_price":   p.CurrentPrice,
+			"market_value":    p.MarketValue,
+			"unrealized_pl":   p.UnrealizedPnl,
+			"unrealized_plpc": p.UnrealizedPnlPct,
+			// Today's (intraday) P&L — change since the previous close. Carried so the
+			// positions table can show "Today's P/L" distinct from total unrealized P&L.
+			"day_pnl":     p.DayPnl,
+			"day_pnl_pct": p.DayPnlPct,
+		}
+	}
+	s.emitLedgerEvent(ctx, "account.positions.synced", fmt.Sprintf("account:%s", accountID), map[string]interface{}{
+		"account_id":   accountID,
+		"user_id":      userID,
+		"trading_mode": tradingMode,
+		"positions":    posEntries,
+	})
+
+	// Sync the account balance snapshot (cash, buying power, equity) alongside
+	// positions. Best-effort: a balance fetch failure must not block position sync.
+	balCtx, cancelBal := context.WithTimeout(ctx, timeout)
+	bal, err := client.GetAccount(balCtx)
+	cancelBal()
+	if err != nil {
+		slog.Warn("syncPositions: GetAccount failed", "account_id", accountID, "error", err)
+		return true
+	}
+	s.emitLedgerEvent(ctx, "account.balance.synced", fmt.Sprintf("account:%s", accountID), map[string]interface{}{
+		"account_id":   accountID,
+		"user_id":      userID,
+		"trading_mode": tradingMode,
+		"cash":         bal.Cash,
+		"buying_power": bal.BuyingPower,
+		"equity":       bal.Equity,
+		"last_equity":  bal.LastEquity,
+	})
+	return true
+}
+
+// brokerCallTimeout is the per-call deadline for broker REST calls made by the
+// sync pollers, sourced from the same live config key as the broker HTTP client's
+// own timeout (trading.broker.timeout_ms, default 5000 ms). It is a context-level
+// backstop so a stalled connection surfaces as an error instead of blocking forever.
+func (s *TradingService) brokerCallTimeout() time.Duration {
+	ms := s.cfgW.GetFloat("trading.broker.timeout_ms", 5000)
+	if ms <= 0 {
+		ms = 5000
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
+// credSkipLogInterval throttles the per-account "skipping invalid credentials"
+// warning so a persistently invalid account is visible without logging every cycle.
+const credSkipLogInterval = 15 * time.Minute
+
+// warnCredSkip logs that position sync is skipping an account for invalid
+// credentials, throttled to once per credSkipLogInterval per account. Called only
+// from the single-goroutine position-sync poller, so credSkipLoggedAt needs no lock.
+func (s *TradingService) warnCredSkip(accountID string) {
+	now := time.Now()
+	if last, ok := s.credSkipLoggedAt[accountID]; ok && now.Sub(last) < credSkipLogInterval {
+		return
+	}
+	s.credSkipLoggedAt[accountID] = now
+	slog.Warn("position sync skipping account: broker credentials marked invalid; re-enter credentials to resume position/balance sync",
+		"account_id", accountID)
 }
 
 // RegisterBrokerAccount registers a new broker account, encrypts credentials, and adds it to the pool.
@@ -991,6 +1076,7 @@ func (s *TradingService) validateAndRecordCredential(ctx context.Context, accoun
 	s.credStatusMu.Unlock()
 
 	if changed {
+		logCredentialStatusTransition(accountID, seen, prev, status)
 		if err := s.accountRepo.UpdateCredentialStatus(context.Background(), accountID, status, checkedAt); err != nil {
 			slog.Warn("validateAndRecordCredential: persist status failed", "account_id", accountID, "error", err)
 			// Roll back the cached value so the next check retries the write.
@@ -1120,6 +1206,27 @@ func credentialStatusFromError(err error) int32 {
 // secrets are fixed (status flips back to OK).
 func credentialsKnownInvalid(status int32) bool {
 	return status == int32(tradingv1.CredentialStatus_CREDENTIAL_STATUS_INVALID)
+}
+
+// logCredentialStatusTransition records a broker credential health change so an
+// account whose secrets stop (or start) working is visible in logs, not only in the
+// UI. OK→INVALID is logged at WARN because position/balance sync silently stops for
+// that account; first observations and recoveries are INFO.
+func logCredentialStatusTransition(accountID string, seen bool, prev, status int32) {
+	if seen && prev == status {
+		return
+	}
+	statusName := tradingv1.CredentialStatus(status).String()
+	switch {
+	case credentialsKnownInvalid(status):
+		slog.Warn("broker credential status degraded; position/balance sync will skip this account",
+			"account_id", accountID, "previous", tradingv1.CredentialStatus(prev).String(), "status", statusName)
+	case !seen:
+		slog.Info("broker credential status", "account_id", accountID, "status", statusName)
+	default:
+		slog.Info("broker credential status changed",
+			"account_id", accountID, "previous", tradingv1.CredentialStatus(prev).String(), "status", statusName)
+	}
 }
 
 // DeregisterBrokerAccountSvc deactivates a broker account and removes it from the pool.
@@ -1309,9 +1416,18 @@ func alpacaStatusToProto(s string) tradingv1.OrderStatus {
 	}
 }
 
+// ledgerEmitTimeout bounds a single AppendEvent. gRPC keepalive already detects a
+// dead transport, but a half-open connection or a server stalled mid-RPC can leave
+// an unary call blocked; an explicit deadline guarantees the append surfaces as a
+// logged error within the window instead of silently wedging the calling goroutine
+// (which previously froze the position-sync poller with zero log output).
+const ledgerEmitTimeout = 10 * time.Second
+
 func (s *TradingService) emitLedgerEvent(ctx context.Context, eventType, streamKey string, payload map[string]interface{}) {
 	p, _ := structpb.NewStruct(payload)
-	_, err := s.ledger.AppendEvent(ctx, &ledgerv1.AppendEventRequest{
+	emitCtx, cancel := context.WithTimeout(ctx, ledgerEmitTimeout)
+	defer cancel()
+	_, err := s.ledger.AppendEvent(emitCtx, &ledgerv1.AppendEventRequest{
 		EventType:     eventType,
 		SourceService: "xstockstrat-trading",
 		StreamKey:     streamKey,
