@@ -402,394 +402,6 @@ func (x *RevokeTokenResponse) GetSuccess() bool {
 	return false
 }
 
-type ApiKey struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
-	KeyPrefix     string                 `protobuf:"bytes,2,opt,name=key_prefix,json=keyPrefix,proto3" json:"key_prefix,omitempty"` // first 8 chars only (rest is hashed)
-	UserId        string                 `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
-	Scopes        []string               `protobuf:"bytes,5,rep,name=scopes,proto3" json:"scopes,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ApiKey) Reset() {
-	*x = ApiKey{}
-	mi := &file_identity_v1_identity_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ApiKey) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ApiKey) ProtoMessage() {}
-
-func (x *ApiKey) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ApiKey.ProtoReflect.Descriptor instead.
-func (*ApiKey) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *ApiKey) GetKeyId() string {
-	if x != nil {
-		return x.KeyId
-	}
-	return ""
-}
-
-func (x *ApiKey) GetKeyPrefix() string {
-	if x != nil {
-		return x.KeyPrefix
-	}
-	return ""
-}
-
-func (x *ApiKey) GetUserId() string {
-	if x != nil {
-		return x.UserId
-	}
-	return ""
-}
-
-func (x *ApiKey) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *ApiKey) GetScopes() []string {
-	if x != nil {
-		return x.Scopes
-	}
-	return nil
-}
-
-func (x *ApiKey) GetCreatedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.CreatedAt
-	}
-	return nil
-}
-
-func (x *ApiKey) GetExpiresAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ExpiresAt
-	}
-	return nil
-}
-
-type CreateApiKeyRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Scopes        []string               `protobuf:"bytes,3,rep,name=scopes,proto3" json:"scopes,omitempty"`
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CreateApiKeyRequest) Reset() {
-	*x = CreateApiKeyRequest{}
-	mi := &file_identity_v1_identity_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CreateApiKeyRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateApiKeyRequest) ProtoMessage() {}
-
-func (x *CreateApiKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateApiKeyRequest.ProtoReflect.Descriptor instead.
-func (*CreateApiKeyRequest) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *CreateApiKeyRequest) GetUserId() string {
-	if x != nil {
-		return x.UserId
-	}
-	return ""
-}
-
-func (x *CreateApiKeyRequest) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *CreateApiKeyRequest) GetScopes() []string {
-	if x != nil {
-		return x.Scopes
-	}
-	return nil
-}
-
-func (x *CreateApiKeyRequest) GetExpiresAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ExpiresAt
-	}
-	return nil
-}
-
-type ValidateApiKeyRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ApiKey        string                 `protobuf:"bytes,1,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ValidateApiKeyRequest) Reset() {
-	*x = ValidateApiKeyRequest{}
-	mi := &file_identity_v1_identity_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ValidateApiKeyRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ValidateApiKeyRequest) ProtoMessage() {}
-
-func (x *ValidateApiKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ValidateApiKeyRequest.ProtoReflect.Descriptor instead.
-func (*ValidateApiKeyRequest) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *ValidateApiKeyRequest) GetApiKey() string {
-	if x != nil {
-		return x.ApiKey
-	}
-	return ""
-}
-
-type ListApiKeysRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListApiKeysRequest) Reset() {
-	*x = ListApiKeysRequest{}
-	mi := &file_identity_v1_identity_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListApiKeysRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListApiKeysRequest) ProtoMessage() {}
-
-func (x *ListApiKeysRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListApiKeysRequest.ProtoReflect.Descriptor instead.
-func (*ListApiKeysRequest) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *ListApiKeysRequest) GetUserId() string {
-	if x != nil {
-		return x.UserId
-	}
-	return ""
-}
-
-type ListApiKeysResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Keys          []*ApiKey              `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListApiKeysResponse) Reset() {
-	*x = ListApiKeysResponse{}
-	mi := &file_identity_v1_identity_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListApiKeysResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListApiKeysResponse) ProtoMessage() {}
-
-func (x *ListApiKeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListApiKeysResponse.ProtoReflect.Descriptor instead.
-func (*ListApiKeysResponse) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *ListApiKeysResponse) GetKeys() []*ApiKey {
-	if x != nil {
-		return x.Keys
-	}
-	return nil
-}
-
-type RevokeApiKeyRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RevokeApiKeyRequest) Reset() {
-	*x = RevokeApiKeyRequest{}
-	mi := &file_identity_v1_identity_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RevokeApiKeyRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RevokeApiKeyRequest) ProtoMessage() {}
-
-func (x *RevokeApiKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RevokeApiKeyRequest.ProtoReflect.Descriptor instead.
-func (*RevokeApiKeyRequest) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *RevokeApiKeyRequest) GetKeyId() string {
-	if x != nil {
-		return x.KeyId
-	}
-	return ""
-}
-
-func (x *RevokeApiKeyRequest) GetUserId() string {
-	if x != nil {
-		return x.UserId
-	}
-	return ""
-}
-
-type RevokeApiKeyResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RevokeApiKeyResponse) Reset() {
-	*x = RevokeApiKeyResponse{}
-	mi := &file_identity_v1_identity_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RevokeApiKeyResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RevokeApiKeyResponse) ProtoMessage() {}
-
-func (x *RevokeApiKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RevokeApiKeyResponse.ProtoReflect.Descriptor instead.
-func (*RevokeApiKeyResponse) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *RevokeApiKeyResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
 // ── OAuth 2.1 messages (feature 049 Part B) ──────────────────────────────────
 type OAuthClient struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -803,7 +415,7 @@ type OAuthClient struct {
 
 func (x *OAuthClient) Reset() {
 	*x = OAuthClient{}
-	mi := &file_identity_v1_identity_proto_msgTypes[14]
+	mi := &file_identity_v1_identity_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -815,7 +427,7 @@ func (x *OAuthClient) String() string {
 func (*OAuthClient) ProtoMessage() {}
 
 func (x *OAuthClient) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[14]
+	mi := &file_identity_v1_identity_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -828,7 +440,7 @@ func (x *OAuthClient) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OAuthClient.ProtoReflect.Descriptor instead.
 func (*OAuthClient) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{14}
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *OAuthClient) GetClientId() string {
@@ -869,7 +481,7 @@ type RegisterOAuthClientRequest struct {
 
 func (x *RegisterOAuthClientRequest) Reset() {
 	*x = RegisterOAuthClientRequest{}
-	mi := &file_identity_v1_identity_proto_msgTypes[15]
+	mi := &file_identity_v1_identity_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -881,7 +493,7 @@ func (x *RegisterOAuthClientRequest) String() string {
 func (*RegisterOAuthClientRequest) ProtoMessage() {}
 
 func (x *RegisterOAuthClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[15]
+	mi := &file_identity_v1_identity_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -894,7 +506,7 @@ func (x *RegisterOAuthClientRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterOAuthClientRequest.ProtoReflect.Descriptor instead.
 func (*RegisterOAuthClientRequest) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{15}
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RegisterOAuthClientRequest) GetRedirectUris() []string {
@@ -920,7 +532,7 @@ type GetOAuthClientRequest struct {
 
 func (x *GetOAuthClientRequest) Reset() {
 	*x = GetOAuthClientRequest{}
-	mi := &file_identity_v1_identity_proto_msgTypes[16]
+	mi := &file_identity_v1_identity_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -932,7 +544,7 @@ func (x *GetOAuthClientRequest) String() string {
 func (*GetOAuthClientRequest) ProtoMessage() {}
 
 func (x *GetOAuthClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[16]
+	mi := &file_identity_v1_identity_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -945,7 +557,7 @@ func (x *GetOAuthClientRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOAuthClientRequest.ProtoReflect.Descriptor instead.
 func (*GetOAuthClientRequest) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{16}
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetOAuthClientRequest) GetClientId() string {
@@ -968,7 +580,7 @@ type IssueAuthCodeRequest struct {
 
 func (x *IssueAuthCodeRequest) Reset() {
 	*x = IssueAuthCodeRequest{}
-	mi := &file_identity_v1_identity_proto_msgTypes[17]
+	mi := &file_identity_v1_identity_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -980,7 +592,7 @@ func (x *IssueAuthCodeRequest) String() string {
 func (*IssueAuthCodeRequest) ProtoMessage() {}
 
 func (x *IssueAuthCodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[17]
+	mi := &file_identity_v1_identity_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -993,7 +605,7 @@ func (x *IssueAuthCodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueAuthCodeRequest.ProtoReflect.Descriptor instead.
 func (*IssueAuthCodeRequest) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{17}
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *IssueAuthCodeRequest) GetUserId() string {
@@ -1040,7 +652,7 @@ type IssueAuthCodeResponse struct {
 
 func (x *IssueAuthCodeResponse) Reset() {
 	*x = IssueAuthCodeResponse{}
-	mi := &file_identity_v1_identity_proto_msgTypes[18]
+	mi := &file_identity_v1_identity_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1052,7 +664,7 @@ func (x *IssueAuthCodeResponse) String() string {
 func (*IssueAuthCodeResponse) ProtoMessage() {}
 
 func (x *IssueAuthCodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[18]
+	mi := &file_identity_v1_identity_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1065,7 +677,7 @@ func (x *IssueAuthCodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueAuthCodeResponse.ProtoReflect.Descriptor instead.
 func (*IssueAuthCodeResponse) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{18}
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *IssueAuthCodeResponse) GetCode() string {
@@ -1088,7 +700,7 @@ type ExchangeAuthCodeRequest struct {
 
 func (x *ExchangeAuthCodeRequest) Reset() {
 	*x = ExchangeAuthCodeRequest{}
-	mi := &file_identity_v1_identity_proto_msgTypes[19]
+	mi := &file_identity_v1_identity_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1100,7 +712,7 @@ func (x *ExchangeAuthCodeRequest) String() string {
 func (*ExchangeAuthCodeRequest) ProtoMessage() {}
 
 func (x *ExchangeAuthCodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[19]
+	mi := &file_identity_v1_identity_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1113,7 +725,7 @@ func (x *ExchangeAuthCodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExchangeAuthCodeRequest.ProtoReflect.Descriptor instead.
 func (*ExchangeAuthCodeRequest) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{19}
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ExchangeAuthCodeRequest) GetCode() string {
@@ -1163,7 +775,7 @@ type OAuthTokenResponse struct {
 
 func (x *OAuthTokenResponse) Reset() {
 	*x = OAuthTokenResponse{}
-	mi := &file_identity_v1_identity_proto_msgTypes[20]
+	mi := &file_identity_v1_identity_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1175,7 +787,7 @@ func (x *OAuthTokenResponse) String() string {
 func (*OAuthTokenResponse) ProtoMessage() {}
 
 func (x *OAuthTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[20]
+	mi := &file_identity_v1_identity_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1188,7 +800,7 @@ func (x *OAuthTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OAuthTokenResponse.ProtoReflect.Descriptor instead.
 func (*OAuthTokenResponse) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{20}
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *OAuthTokenResponse) GetAccessToken() string {
@@ -1229,7 +841,7 @@ type RefreshOAuthTokenRequest struct {
 
 func (x *RefreshOAuthTokenRequest) Reset() {
 	*x = RefreshOAuthTokenRequest{}
-	mi := &file_identity_v1_identity_proto_msgTypes[21]
+	mi := &file_identity_v1_identity_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1241,7 +853,7 @@ func (x *RefreshOAuthTokenRequest) String() string {
 func (*RefreshOAuthTokenRequest) ProtoMessage() {}
 
 func (x *RefreshOAuthTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[21]
+	mi := &file_identity_v1_identity_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1254,7 +866,7 @@ func (x *RefreshOAuthTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshOAuthTokenRequest.ProtoReflect.Descriptor instead.
 func (*RefreshOAuthTokenRequest) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{21}
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *RefreshOAuthTokenRequest) GetRefreshToken() string {
@@ -1287,7 +899,7 @@ type AuthorizedApp struct {
 
 func (x *AuthorizedApp) Reset() {
 	*x = AuthorizedApp{}
-	mi := &file_identity_v1_identity_proto_msgTypes[22]
+	mi := &file_identity_v1_identity_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1299,7 +911,7 @@ func (x *AuthorizedApp) String() string {
 func (*AuthorizedApp) ProtoMessage() {}
 
 func (x *AuthorizedApp) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[22]
+	mi := &file_identity_v1_identity_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1312,7 +924,7 @@ func (x *AuthorizedApp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizedApp.ProtoReflect.Descriptor instead.
 func (*AuthorizedApp) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{22}
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *AuthorizedApp) GetClientId() string {
@@ -1359,7 +971,7 @@ type ListAuthorizedAppsRequest struct {
 
 func (x *ListAuthorizedAppsRequest) Reset() {
 	*x = ListAuthorizedAppsRequest{}
-	mi := &file_identity_v1_identity_proto_msgTypes[23]
+	mi := &file_identity_v1_identity_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1371,7 +983,7 @@ func (x *ListAuthorizedAppsRequest) String() string {
 func (*ListAuthorizedAppsRequest) ProtoMessage() {}
 
 func (x *ListAuthorizedAppsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[23]
+	mi := &file_identity_v1_identity_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1384,7 +996,7 @@ func (x *ListAuthorizedAppsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAuthorizedAppsRequest.ProtoReflect.Descriptor instead.
 func (*ListAuthorizedAppsRequest) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{23}
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListAuthorizedAppsRequest) GetUserId() string {
@@ -1403,7 +1015,7 @@ type ListAuthorizedAppsResponse struct {
 
 func (x *ListAuthorizedAppsResponse) Reset() {
 	*x = ListAuthorizedAppsResponse{}
-	mi := &file_identity_v1_identity_proto_msgTypes[24]
+	mi := &file_identity_v1_identity_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1415,7 +1027,7 @@ func (x *ListAuthorizedAppsResponse) String() string {
 func (*ListAuthorizedAppsResponse) ProtoMessage() {}
 
 func (x *ListAuthorizedAppsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[24]
+	mi := &file_identity_v1_identity_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1428,7 +1040,7 @@ func (x *ListAuthorizedAppsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAuthorizedAppsResponse.ProtoReflect.Descriptor instead.
 func (*ListAuthorizedAppsResponse) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{24}
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ListAuthorizedAppsResponse) GetApps() []*AuthorizedApp {
@@ -1448,7 +1060,7 @@ type RevokeAuthorizedAppRequest struct {
 
 func (x *RevokeAuthorizedAppRequest) Reset() {
 	*x = RevokeAuthorizedAppRequest{}
-	mi := &file_identity_v1_identity_proto_msgTypes[25]
+	mi := &file_identity_v1_identity_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1460,7 +1072,7 @@ func (x *RevokeAuthorizedAppRequest) String() string {
 func (*RevokeAuthorizedAppRequest) ProtoMessage() {}
 
 func (x *RevokeAuthorizedAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[25]
+	mi := &file_identity_v1_identity_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1473,7 +1085,7 @@ func (x *RevokeAuthorizedAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeAuthorizedAppRequest.ProtoReflect.Descriptor instead.
 func (*RevokeAuthorizedAppRequest) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{25}
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *RevokeAuthorizedAppRequest) GetUserId() string {
@@ -1499,7 +1111,7 @@ type RevokeAuthorizedAppResponse struct {
 
 func (x *RevokeAuthorizedAppResponse) Reset() {
 	*x = RevokeAuthorizedAppResponse{}
-	mi := &file_identity_v1_identity_proto_msgTypes[26]
+	mi := &file_identity_v1_identity_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1511,7 +1123,7 @@ func (x *RevokeAuthorizedAppResponse) String() string {
 func (*RevokeAuthorizedAppResponse) ProtoMessage() {}
 
 func (x *RevokeAuthorizedAppResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_v1_identity_proto_msgTypes[26]
+	mi := &file_identity_v1_identity_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1524,7 +1136,7 @@ func (x *RevokeAuthorizedAppResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeAuthorizedAppResponse.ProtoReflect.Descriptor instead.
 func (*RevokeAuthorizedAppResponse) Descriptor() ([]byte, []int) {
-	return file_identity_v1_identity_proto_rawDescGZIP(), []int{26}
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RevokeAuthorizedAppResponse) GetSuccess() bool {
@@ -1563,34 +1175,6 @@ const file_identity_v1_identity_proto_rawDesc = "" +
 	"\x12RevokeTokenRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"/\n" +
 	"\x13RevokeTokenResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xf9\x01\n" +
-	"\x06ApiKey\x12\x15\n" +
-	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1d\n" +
-	"\n" +
-	"key_prefix\x18\x02 \x01(\tR\tkeyPrefix\x12\x17\n" +
-	"\auser_id\x18\x03 \x01(\tR\x06userId\x12\x12\n" +
-	"\x04name\x18\x04 \x01(\tR\x04name\x12\x16\n" +
-	"\x06scopes\x18\x05 \x03(\tR\x06scopes\x129\n" +
-	"\n" +
-	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
-	"\n" +
-	"expires_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\x95\x01\n" +
-	"\x13CreateApiKeyRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
-	"\x06scopes\x18\x03 \x03(\tR\x06scopes\x129\n" +
-	"\n" +
-	"expires_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"0\n" +
-	"\x15ValidateApiKeyRequest\x12\x17\n" +
-	"\aapi_key\x18\x01 \x01(\tR\x06apiKey\"-\n" +
-	"\x12ListApiKeysRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\"J\n" +
-	"\x13ListApiKeysResponse\x123\n" +
-	"\x04keys\x18\x01 \x03(\v2\x1f.xstockstrat.identity.v1.ApiKeyR\x04keys\"E\n" +
-	"\x13RevokeApiKeyRequest\x12\x15\n" +
-	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId\"0\n" +
-	"\x14RevokeApiKeyResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xab\x01\n" +
 	"\vOAuthClient\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12#\n" +
@@ -1645,16 +1229,12 @@ const file_identity_v1_identity_proto_rawDesc = "" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\"7\n" +
 	"\x1bRevokeAuthorizedAppResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess2\x8f\r\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess2\xf1\t\n" +
 	"\x0fIdentityService\x12p\n" +
 	"\x10AuthenticateUser\x120.xstockstrat.identity.v1.AuthenticateUserRequest\x1a*.xstockstrat.identity.v1.AuthTokenResponse\x12d\n" +
 	"\rValidateToken\x12-.xstockstrat.identity.v1.ValidateTokenRequest\x1a$.xstockstrat.identity.v1.TokenClaims\x12h\n" +
 	"\fRefreshToken\x12,.xstockstrat.identity.v1.RefreshTokenRequest\x1a*.xstockstrat.identity.v1.AuthTokenResponse\x12h\n" +
-	"\vRevokeToken\x12+.xstockstrat.identity.v1.RevokeTokenRequest\x1a,.xstockstrat.identity.v1.RevokeTokenResponse\x12]\n" +
-	"\fCreateApiKey\x12,.xstockstrat.identity.v1.CreateApiKeyRequest\x1a\x1f.xstockstrat.identity.v1.ApiKey\x12f\n" +
-	"\x0eValidateApiKey\x12..xstockstrat.identity.v1.ValidateApiKeyRequest\x1a$.xstockstrat.identity.v1.TokenClaims\x12h\n" +
-	"\vListApiKeys\x12+.xstockstrat.identity.v1.ListApiKeysRequest\x1a,.xstockstrat.identity.v1.ListApiKeysResponse\x12k\n" +
-	"\fRevokeApiKey\x12,.xstockstrat.identity.v1.RevokeApiKeyRequest\x1a-.xstockstrat.identity.v1.RevokeApiKeyResponse\x12p\n" +
+	"\vRevokeToken\x12+.xstockstrat.identity.v1.RevokeTokenRequest\x1a,.xstockstrat.identity.v1.RevokeTokenResponse\x12p\n" +
 	"\x13RegisterOAuthClient\x123.xstockstrat.identity.v1.RegisterOAuthClientRequest\x1a$.xstockstrat.identity.v1.OAuthClient\x12f\n" +
 	"\x0eGetOAuthClient\x12..xstockstrat.identity.v1.GetOAuthClientRequest\x1a$.xstockstrat.identity.v1.OAuthClient\x12n\n" +
 	"\rIssueAuthCode\x12-.xstockstrat.identity.v1.IssueAuthCodeRequest\x1a..xstockstrat.identity.v1.IssueAuthCodeResponse\x12q\n" +
@@ -1675,7 +1255,7 @@ func file_identity_v1_identity_proto_rawDescGZIP() []byte {
 	return file_identity_v1_identity_proto_rawDescData
 }
 
-var file_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_identity_v1_identity_proto_goTypes = []any{
 	(*AuthenticateUserRequest)(nil),     // 0: xstockstrat.identity.v1.AuthenticateUserRequest
 	(*AuthTokenResponse)(nil),           // 1: xstockstrat.identity.v1.AuthTokenResponse
@@ -1684,76 +1264,57 @@ var file_identity_v1_identity_proto_goTypes = []any{
 	(*RefreshTokenRequest)(nil),         // 4: xstockstrat.identity.v1.RefreshTokenRequest
 	(*RevokeTokenRequest)(nil),          // 5: xstockstrat.identity.v1.RevokeTokenRequest
 	(*RevokeTokenResponse)(nil),         // 6: xstockstrat.identity.v1.RevokeTokenResponse
-	(*ApiKey)(nil),                      // 7: xstockstrat.identity.v1.ApiKey
-	(*CreateApiKeyRequest)(nil),         // 8: xstockstrat.identity.v1.CreateApiKeyRequest
-	(*ValidateApiKeyRequest)(nil),       // 9: xstockstrat.identity.v1.ValidateApiKeyRequest
-	(*ListApiKeysRequest)(nil),          // 10: xstockstrat.identity.v1.ListApiKeysRequest
-	(*ListApiKeysResponse)(nil),         // 11: xstockstrat.identity.v1.ListApiKeysResponse
-	(*RevokeApiKeyRequest)(nil),         // 12: xstockstrat.identity.v1.RevokeApiKeyRequest
-	(*RevokeApiKeyResponse)(nil),        // 13: xstockstrat.identity.v1.RevokeApiKeyResponse
-	(*OAuthClient)(nil),                 // 14: xstockstrat.identity.v1.OAuthClient
-	(*RegisterOAuthClientRequest)(nil),  // 15: xstockstrat.identity.v1.RegisterOAuthClientRequest
-	(*GetOAuthClientRequest)(nil),       // 16: xstockstrat.identity.v1.GetOAuthClientRequest
-	(*IssueAuthCodeRequest)(nil),        // 17: xstockstrat.identity.v1.IssueAuthCodeRequest
-	(*IssueAuthCodeResponse)(nil),       // 18: xstockstrat.identity.v1.IssueAuthCodeResponse
-	(*ExchangeAuthCodeRequest)(nil),     // 19: xstockstrat.identity.v1.ExchangeAuthCodeRequest
-	(*OAuthTokenResponse)(nil),          // 20: xstockstrat.identity.v1.OAuthTokenResponse
-	(*RefreshOAuthTokenRequest)(nil),    // 21: xstockstrat.identity.v1.RefreshOAuthTokenRequest
-	(*AuthorizedApp)(nil),               // 22: xstockstrat.identity.v1.AuthorizedApp
-	(*ListAuthorizedAppsRequest)(nil),   // 23: xstockstrat.identity.v1.ListAuthorizedAppsRequest
-	(*ListAuthorizedAppsResponse)(nil),  // 24: xstockstrat.identity.v1.ListAuthorizedAppsResponse
-	(*RevokeAuthorizedAppRequest)(nil),  // 25: xstockstrat.identity.v1.RevokeAuthorizedAppRequest
-	(*RevokeAuthorizedAppResponse)(nil), // 26: xstockstrat.identity.v1.RevokeAuthorizedAppResponse
-	(*timestamppb.Timestamp)(nil),       // 27: google.protobuf.Timestamp
+	(*OAuthClient)(nil),                 // 7: xstockstrat.identity.v1.OAuthClient
+	(*RegisterOAuthClientRequest)(nil),  // 8: xstockstrat.identity.v1.RegisterOAuthClientRequest
+	(*GetOAuthClientRequest)(nil),       // 9: xstockstrat.identity.v1.GetOAuthClientRequest
+	(*IssueAuthCodeRequest)(nil),        // 10: xstockstrat.identity.v1.IssueAuthCodeRequest
+	(*IssueAuthCodeResponse)(nil),       // 11: xstockstrat.identity.v1.IssueAuthCodeResponse
+	(*ExchangeAuthCodeRequest)(nil),     // 12: xstockstrat.identity.v1.ExchangeAuthCodeRequest
+	(*OAuthTokenResponse)(nil),          // 13: xstockstrat.identity.v1.OAuthTokenResponse
+	(*RefreshOAuthTokenRequest)(nil),    // 14: xstockstrat.identity.v1.RefreshOAuthTokenRequest
+	(*AuthorizedApp)(nil),               // 15: xstockstrat.identity.v1.AuthorizedApp
+	(*ListAuthorizedAppsRequest)(nil),   // 16: xstockstrat.identity.v1.ListAuthorizedAppsRequest
+	(*ListAuthorizedAppsResponse)(nil),  // 17: xstockstrat.identity.v1.ListAuthorizedAppsResponse
+	(*RevokeAuthorizedAppRequest)(nil),  // 18: xstockstrat.identity.v1.RevokeAuthorizedAppRequest
+	(*RevokeAuthorizedAppResponse)(nil), // 19: xstockstrat.identity.v1.RevokeAuthorizedAppResponse
+	(*timestamppb.Timestamp)(nil),       // 20: google.protobuf.Timestamp
 }
 var file_identity_v1_identity_proto_depIdxs = []int32{
-	27, // 0: xstockstrat.identity.v1.AuthTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
+	20, // 0: xstockstrat.identity.v1.AuthTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
 	2,  // 1: xstockstrat.identity.v1.AuthTokenResponse.claims:type_name -> xstockstrat.identity.v1.TokenClaims
-	27, // 2: xstockstrat.identity.v1.TokenClaims.issued_at:type_name -> google.protobuf.Timestamp
-	27, // 3: xstockstrat.identity.v1.TokenClaims.expires_at:type_name -> google.protobuf.Timestamp
-	27, // 4: xstockstrat.identity.v1.ApiKey.created_at:type_name -> google.protobuf.Timestamp
-	27, // 5: xstockstrat.identity.v1.ApiKey.expires_at:type_name -> google.protobuf.Timestamp
-	27, // 6: xstockstrat.identity.v1.CreateApiKeyRequest.expires_at:type_name -> google.protobuf.Timestamp
-	7,  // 7: xstockstrat.identity.v1.ListApiKeysResponse.keys:type_name -> xstockstrat.identity.v1.ApiKey
-	27, // 8: xstockstrat.identity.v1.OAuthClient.created_at:type_name -> google.protobuf.Timestamp
-	27, // 9: xstockstrat.identity.v1.AuthorizedApp.authorized_at:type_name -> google.protobuf.Timestamp
-	27, // 10: xstockstrat.identity.v1.AuthorizedApp.last_used_at:type_name -> google.protobuf.Timestamp
-	22, // 11: xstockstrat.identity.v1.ListAuthorizedAppsResponse.apps:type_name -> xstockstrat.identity.v1.AuthorizedApp
-	0,  // 12: xstockstrat.identity.v1.IdentityService.AuthenticateUser:input_type -> xstockstrat.identity.v1.AuthenticateUserRequest
-	3,  // 13: xstockstrat.identity.v1.IdentityService.ValidateToken:input_type -> xstockstrat.identity.v1.ValidateTokenRequest
-	4,  // 14: xstockstrat.identity.v1.IdentityService.RefreshToken:input_type -> xstockstrat.identity.v1.RefreshTokenRequest
-	5,  // 15: xstockstrat.identity.v1.IdentityService.RevokeToken:input_type -> xstockstrat.identity.v1.RevokeTokenRequest
-	8,  // 16: xstockstrat.identity.v1.IdentityService.CreateApiKey:input_type -> xstockstrat.identity.v1.CreateApiKeyRequest
-	9,  // 17: xstockstrat.identity.v1.IdentityService.ValidateApiKey:input_type -> xstockstrat.identity.v1.ValidateApiKeyRequest
-	10, // 18: xstockstrat.identity.v1.IdentityService.ListApiKeys:input_type -> xstockstrat.identity.v1.ListApiKeysRequest
-	12, // 19: xstockstrat.identity.v1.IdentityService.RevokeApiKey:input_type -> xstockstrat.identity.v1.RevokeApiKeyRequest
-	15, // 20: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:input_type -> xstockstrat.identity.v1.RegisterOAuthClientRequest
-	16, // 21: xstockstrat.identity.v1.IdentityService.GetOAuthClient:input_type -> xstockstrat.identity.v1.GetOAuthClientRequest
-	17, // 22: xstockstrat.identity.v1.IdentityService.IssueAuthCode:input_type -> xstockstrat.identity.v1.IssueAuthCodeRequest
-	19, // 23: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:input_type -> xstockstrat.identity.v1.ExchangeAuthCodeRequest
-	21, // 24: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:input_type -> xstockstrat.identity.v1.RefreshOAuthTokenRequest
-	23, // 25: xstockstrat.identity.v1.IdentityService.ListAuthorizedApps:input_type -> xstockstrat.identity.v1.ListAuthorizedAppsRequest
-	25, // 26: xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp:input_type -> xstockstrat.identity.v1.RevokeAuthorizedAppRequest
-	1,  // 27: xstockstrat.identity.v1.IdentityService.AuthenticateUser:output_type -> xstockstrat.identity.v1.AuthTokenResponse
-	2,  // 28: xstockstrat.identity.v1.IdentityService.ValidateToken:output_type -> xstockstrat.identity.v1.TokenClaims
-	1,  // 29: xstockstrat.identity.v1.IdentityService.RefreshToken:output_type -> xstockstrat.identity.v1.AuthTokenResponse
-	6,  // 30: xstockstrat.identity.v1.IdentityService.RevokeToken:output_type -> xstockstrat.identity.v1.RevokeTokenResponse
-	7,  // 31: xstockstrat.identity.v1.IdentityService.CreateApiKey:output_type -> xstockstrat.identity.v1.ApiKey
-	2,  // 32: xstockstrat.identity.v1.IdentityService.ValidateApiKey:output_type -> xstockstrat.identity.v1.TokenClaims
-	11, // 33: xstockstrat.identity.v1.IdentityService.ListApiKeys:output_type -> xstockstrat.identity.v1.ListApiKeysResponse
-	13, // 34: xstockstrat.identity.v1.IdentityService.RevokeApiKey:output_type -> xstockstrat.identity.v1.RevokeApiKeyResponse
-	14, // 35: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
-	14, // 36: xstockstrat.identity.v1.IdentityService.GetOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
-	18, // 37: xstockstrat.identity.v1.IdentityService.IssueAuthCode:output_type -> xstockstrat.identity.v1.IssueAuthCodeResponse
-	20, // 38: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
-	20, // 39: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
-	24, // 40: xstockstrat.identity.v1.IdentityService.ListAuthorizedApps:output_type -> xstockstrat.identity.v1.ListAuthorizedAppsResponse
-	26, // 41: xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp:output_type -> xstockstrat.identity.v1.RevokeAuthorizedAppResponse
-	27, // [27:42] is the sub-list for method output_type
-	12, // [12:27] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	20, // 2: xstockstrat.identity.v1.TokenClaims.issued_at:type_name -> google.protobuf.Timestamp
+	20, // 3: xstockstrat.identity.v1.TokenClaims.expires_at:type_name -> google.protobuf.Timestamp
+	20, // 4: xstockstrat.identity.v1.OAuthClient.created_at:type_name -> google.protobuf.Timestamp
+	20, // 5: xstockstrat.identity.v1.AuthorizedApp.authorized_at:type_name -> google.protobuf.Timestamp
+	20, // 6: xstockstrat.identity.v1.AuthorizedApp.last_used_at:type_name -> google.protobuf.Timestamp
+	15, // 7: xstockstrat.identity.v1.ListAuthorizedAppsResponse.apps:type_name -> xstockstrat.identity.v1.AuthorizedApp
+	0,  // 8: xstockstrat.identity.v1.IdentityService.AuthenticateUser:input_type -> xstockstrat.identity.v1.AuthenticateUserRequest
+	3,  // 9: xstockstrat.identity.v1.IdentityService.ValidateToken:input_type -> xstockstrat.identity.v1.ValidateTokenRequest
+	4,  // 10: xstockstrat.identity.v1.IdentityService.RefreshToken:input_type -> xstockstrat.identity.v1.RefreshTokenRequest
+	5,  // 11: xstockstrat.identity.v1.IdentityService.RevokeToken:input_type -> xstockstrat.identity.v1.RevokeTokenRequest
+	8,  // 12: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:input_type -> xstockstrat.identity.v1.RegisterOAuthClientRequest
+	9,  // 13: xstockstrat.identity.v1.IdentityService.GetOAuthClient:input_type -> xstockstrat.identity.v1.GetOAuthClientRequest
+	10, // 14: xstockstrat.identity.v1.IdentityService.IssueAuthCode:input_type -> xstockstrat.identity.v1.IssueAuthCodeRequest
+	12, // 15: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:input_type -> xstockstrat.identity.v1.ExchangeAuthCodeRequest
+	14, // 16: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:input_type -> xstockstrat.identity.v1.RefreshOAuthTokenRequest
+	16, // 17: xstockstrat.identity.v1.IdentityService.ListAuthorizedApps:input_type -> xstockstrat.identity.v1.ListAuthorizedAppsRequest
+	18, // 18: xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp:input_type -> xstockstrat.identity.v1.RevokeAuthorizedAppRequest
+	1,  // 19: xstockstrat.identity.v1.IdentityService.AuthenticateUser:output_type -> xstockstrat.identity.v1.AuthTokenResponse
+	2,  // 20: xstockstrat.identity.v1.IdentityService.ValidateToken:output_type -> xstockstrat.identity.v1.TokenClaims
+	1,  // 21: xstockstrat.identity.v1.IdentityService.RefreshToken:output_type -> xstockstrat.identity.v1.AuthTokenResponse
+	6,  // 22: xstockstrat.identity.v1.IdentityService.RevokeToken:output_type -> xstockstrat.identity.v1.RevokeTokenResponse
+	7,  // 23: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
+	7,  // 24: xstockstrat.identity.v1.IdentityService.GetOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
+	11, // 25: xstockstrat.identity.v1.IdentityService.IssueAuthCode:output_type -> xstockstrat.identity.v1.IssueAuthCodeResponse
+	13, // 26: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
+	13, // 27: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
+	17, // 28: xstockstrat.identity.v1.IdentityService.ListAuthorizedApps:output_type -> xstockstrat.identity.v1.ListAuthorizedAppsResponse
+	19, // 29: xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp:output_type -> xstockstrat.identity.v1.RevokeAuthorizedAppResponse
+	19, // [19:30] is the sub-list for method output_type
+	8,  // [8:19] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_identity_v1_identity_proto_init() }
@@ -1767,7 +1328,7 @@ func file_identity_v1_identity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_identity_v1_identity_proto_rawDesc), len(file_identity_v1_identity_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   27,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
