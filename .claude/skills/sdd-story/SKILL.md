@@ -32,9 +32,21 @@ find docs/roadmap/features -maxdepth 1 -type d -name "*-$ARGUMENTS[0]"
 
 ### 3. Compute NNN and create directory
 
+The next number is **`max(existing NNN) + 1`** — never a count, never a gap-fill. A count-based
+scheme silently collides when a gap exists (two features land on the same number) and is the exact bug
+that produced the historical `020`/`052` duplicates. Derive it from the highest existing prefix, then
+**abort if the computed directory already exists** so two racing `/sdd-story` runs can't collide:
+
 ```bash
-NEXT_NNN=$(printf "%03d" $(( $(find docs/roadmap/features -maxdepth 1 -type d -name '[0-9][0-9][0-9]-*' | wc -l) + 1 )))
+MAX_NNN=$(find docs/roadmap/features -maxdepth 1 -type d -name '[0-9][0-9][0-9]-*' \
+  | sed -E 's#.*/([0-9]{3})-.*#\1#' | sort -n | tail -1)
+NEXT_NNN=$(printf "%03d" $(( 10#${MAX_NNN:-0} + 1 )))
 FEATURE_DIRNAME="${NEXT_NNN}-$ARGUMENTS[0]"
+if [ -d "docs/roadmap/features/${FEATURE_DIRNAME}" ] || \
+   find docs/roadmap/features -maxdepth 1 -type d -name "${NEXT_NNN}-*" | grep -q .; then
+  echo "ERROR: ${NEXT_NNN} already taken (race?). Re-run to recompute max+1." >&2
+  exit 1
+fi
 mkdir -p docs/roadmap/features/${FEATURE_DIRNAME}
 ```
 
