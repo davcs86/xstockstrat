@@ -8,10 +8,10 @@ Ten tools:
   ingest_signal        — ingests a trading signal via gRPC IngestSignal
   emit_alert           — emits an alert via gRPC EmitAlert
   run_backtest         — triggers a backtest via gRPC RunBacktest
-  manage_strategy     — registers/updates/deactivates stored strategies in analysis (admin-scoped)
-  manage_formula      — registers/updates/deletes custom formulas in indicators (admin-scoped)
-  manage_signal_source — registers/updates/deactivates signal sources in ingest (admin-scoped)
-  set_strategy_live   — enables/disables live alert evaluation for a strategy (admin-scoped)
+  manage_strategy     — registers/updates/deactivates stored strategies in analysis
+  manage_formula      — registers/updates/deletes custom formulas in indicators
+  manage_signal_source — registers/updates/deactivates signal sources in ingest
+  set_strategy_live   — enables/disables live alert evaluation for a strategy
 """
 
 import base64
@@ -34,7 +34,7 @@ def _grpc_error_message(exc: grpc.aio.AioRpcError, not_found: str = "not found")
     if code == grpc.StatusCode.NOT_FOUND:
         return not_found
     if code == grpc.StatusCode.UNAUTHENTICATED:
-        return "admin API key required"
+        return exc.details() or "unauthorized"
     if code == grpc.StatusCode.PERMISSION_DENIED:
         return exc.details() or "permission denied"
     if code == grpc.StatusCode.INVALID_ARGUMENT:
@@ -252,18 +252,14 @@ def register_tools(server: FastMCP) -> None:
         entry_rule: str = "",
         exit_rule: str = "",
         signal_params: dict | None = None,
-        admin_api_key: str = "",
     ) -> dict:
-        """Register/update/deactivate a stored strategy in xstockstrat-analysis (admin-scoped).
+        """Register/update/deactivate a stored strategy in xstockstrat-analysis.
         operation: 'register' | 'update' | 'deactivate'.
         strategy_id: lowercase/underscore identifier (e.g. 'sma_crossover').
         display_name: human-readable name.
         components: list of {ref_name, kind ('builtin'|'formula'), indicator, formula_id, params}.
         entry_rule / exit_rule: JSON-encoded condition trees.
-        signal_params: optional signal-weighting params.
-        admin_api_key: required; must carry the admin role (validated here at the agent entry)."""
-        if not await client.validate_admin(admin_api_key):
-            raise RuntimeError("admin API key required")
+        signal_params: optional signal-weighting params."""
         definition: dict = {
             "strategy_id": strategy_id,
             "display_name": display_name,
@@ -274,9 +270,7 @@ def register_tools(server: FastMCP) -> None:
         if signal_params:
             definition["signal_params"] = signal_params
         try:
-            return await client.manage_strategy(
-                operation=operation, definition=definition, api_key=admin_api_key
-            )
+            return await client.manage_strategy(operation=operation, definition=definition)
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
 
@@ -290,17 +284,15 @@ def register_tools(server: FastMCP) -> None:
         formula_id: str = "",
         author: str = "",
         formula_author_user_id: str = "",
-        admin_api_key: str = "",
         parameters: list[dict] | None = None,
     ) -> dict:
-        """Register/update/delete a custom formula in xstockstrat-indicators (admin-scoped).
+        """Register/update/delete a custom formula in xstockstrat-indicators.
         operation: 'register' | 'update' | 'delete'.
         name/description/source/is_public: for register and update.
         author: stored immutably on register.
         formula_id: required for update/delete.
         formula_author_user_id: required for update/delete; must match the formula's original
             author (the indicators backend returns PERMISSION_DENIED otherwise).
-        admin_api_key: required; validated by the indicators backend.
         parameters: typed parameter definitions for register/update — a list of
             {name, type, default, description, required, min, max} where type is one of
             'int'|'float'|'bool'|'string' and min/max apply to numeric params only. Values
@@ -316,9 +308,7 @@ def register_tools(server: FastMCP) -> None:
             "parameters": parameters or [],
         }
         try:
-            return await client.manage_formula(
-                operation=operation, formula=formula, api_key=admin_api_key
-            )
+            return await client.manage_formula(operation=operation, formula=formula)
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="formula not found")) from e
 
@@ -331,16 +321,12 @@ def register_tools(server: FastMCP) -> None:
         config_json: dict | None = None,
         extractor_module: str = "",
         credentials_ref: str | None = None,
-        admin_api_key: str = "",
     ) -> dict:
-        """Register/update/deactivate a signal source in xstockstrat-ingest (admin-scoped).
+        """Register/update/deactivate a signal source in xstockstrat-ingest.
         operation: 'register' | 'update' | 'deactivate'.
         slug/display_name/source_type/extractor_module/config_json: SignalSource fields.
         credentials_ref: optional reference forwarded to the ingest backend. It is NEVER
-            echoed back in the response and never exposed to the caller (FR-12).
-        admin_api_key: required; must carry the admin role (validated here at the agent entry)."""
-        if not await client.validate_admin(admin_api_key):
-            raise RuntimeError("admin API key required")
+            echoed back in the response and never exposed to the caller (FR-12)."""
         source: dict = {
             "slug": slug,
             "display_name": display_name,
@@ -353,7 +339,6 @@ def register_tools(server: FastMCP) -> None:
                 operation=operation,
                 source=source,
                 credentials_ref=credentials_ref,
-                api_key=admin_api_key,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="signal source not found")) from e
@@ -362,18 +347,14 @@ def register_tools(server: FastMCP) -> None:
     async def set_strategy_live(
         strategy_id: str,
         live_enabled: bool,
-        admin_api_key: str = "",
     ) -> dict:
-        """Enable or disable live alert evaluation for a strategy. Admin scope required.
+        """Enable or disable live alert evaluation for a strategy.
         strategy_id: ID of the strategy to toggle (from list_strategy_definitions/manage_strategy).
         live_enabled: true to enable continuous live evaluation + alerting; false to disable.
-        admin_api_key: required; must carry the admin role (validated here at the agent entry).
         Returns the updated strategy definition with live_enabled reflected."""
-        if not await client.validate_admin(admin_api_key):
-            raise RuntimeError("admin API key required")
         try:
             return await client.set_strategy_live(
-                strategy_id=strategy_id, live_enabled=live_enabled, api_key=admin_api_key
+                strategy_id=strategy_id, live_enabled=live_enabled
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e

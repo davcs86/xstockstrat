@@ -49,10 +49,7 @@ router.service(IngestService, {
   },
   async manageSignalSource(req, ctx) {
     const claims = await requireSession(ctx);
-    const adminKey = ctx.requestHeader.get('x-admin-api-key');
-    const headers = backendHeaders(claims, ctx);
-    if (adminKey) headers.set('Authorization', `Bearer ${adminKey}`);
-    return ingestClient.manageSignalSource(req, { headers });
+    return ingestClient.manageSignalSource(req, { headers: backendHeaders(claims, ctx) });
   },
 });
 

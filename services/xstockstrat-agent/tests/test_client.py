@@ -77,7 +77,7 @@ def _channel_cm():
 
 class TestManageStrategyClient:
     @pytest.mark.asyncio
-    async def test_uses_analysis_endpoint_and_admin_metadata(self):
+    async def test_uses_analysis_endpoint_and_admin_scope(self):
         from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
 
         resp = analysis_pb2.StrategyDefinition(strategy_id="x", display_name="X")
@@ -95,12 +95,12 @@ class TestManageStrategyClient:
                         "entry_rule": "",
                         "exit_rule": "",
                     },
-                    api_key="key-1",
                 )
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
         meta = mock_stub.ManageStrategy.call_args.kwargs["metadata"]
         assert ("x-mcp-secret", "test-secret") in meta
-        assert ("authorization", "Bearer key-1") in meta
+        assert ("x-access-scope", "7") in meta
+        assert not any(k == "authorization" for k, _ in meta)
         assert result["strategyId"] == "x"
 
     @pytest.mark.asyncio
@@ -123,7 +123,6 @@ class TestManageFormulaClient:
                 result = await client.manage_formula(
                     operation="register",
                     formula={"name": "rsi2", "source": "x=1"},
-                    api_key="k",
                 )
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.INDICATORS_ENDPOINT
         assert result == {"formula_id": "f-9"}
@@ -154,7 +153,6 @@ class TestManageFormulaClient:
                             }
                         ],
                     },
-                    api_key="k",
                 )
         req = mock_stub.RegisterFormula.call_args.args[0]
         assert len(req.parameters) == 1
@@ -184,7 +182,6 @@ class TestManageSignalSourceClient:
                     operation="register",
                     source={"slug": "uw", "display_name": "UW"},
                     credentials_ref="secret",
-                    api_key="k",
                 )
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.INGEST_ENDPOINT
         assert "credentials_ref" not in result  # FR-12
@@ -206,29 +203,9 @@ class TestSetStrategyLiveClient:
         with patch("app.client.grpc") as mock_grpc:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
-                result = await client.set_strategy_live(
-                    strategy_id="s1", live_enabled=True, api_key="key-1"
-                )
+                result = await client.set_strategy_live(strategy_id="s1", live_enabled=True)
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
         meta = mock_stub.SetStrategyLive.call_args.kwargs["metadata"]
         assert ("x-access-scope", "7") in meta
-        assert ("authorization", "Bearer key-1") in meta
+        assert not any(k == "authorization" for k, _ in meta)
         assert result["live_enabled"] is True
-
-
-class TestValidateAdminClient:
-    @pytest.mark.asyncio
-    async def test_returns_false_for_empty_key(self):
-        assert await client.validate_admin("") is False
-
-    @pytest.mark.asyncio
-    async def test_true_when_admin_role(self):
-        from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # type: ignore
-
-        claims = identity_pb2.TokenClaims(roles=["admin", "user"])
-        mock_stub = MagicMock()
-        mock_stub.ValidateApiKey = AsyncMock(return_value=claims)
-        with patch("app.client.grpc") as mock_grpc:
-            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
-            with patch.object(identity_pb2_grpc, "IdentityServiceStub", return_value=mock_stub):
-                assert await client.validate_admin("k") is True
