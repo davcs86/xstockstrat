@@ -10,6 +10,12 @@ cannot open its final integration PR to `main-dev` until the feature in the
   asks for user confirmation before writing.
 - Developers — manual entries when architectural ordering is known before conflicts arise.
 
+> **Coverage note:** this file lists only **hard** ordering constraints — a feature that cannot merge
+> until another lands (shared migration number, proto field-number collision, duplicate config key, or a
+> consumed RPC/schema that must exist first). Most features have none: ordinary textual overlap rebases
+> cleanly and is intentionally **not** listed here. A feature's absence from this table means "no hard
+> dependency," not "untracked."
+
 ---
 
 ## Blocking Dependencies

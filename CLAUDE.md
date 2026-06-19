@@ -156,7 +156,7 @@ Recently added keys (feature 057 — backfill management UI, owned by `xstockstr
 |---|---|---|---|
 | `marketdata.backfill.max_delete_days` | int | `0` | Max date-range span (days) a single scoped `DeleteBackfilledData` may cover; `0` = no window cap (current behavior). Whole-symbol deletes (no range) are exempt and double-confirmed in the UI (FR-5). |
 
-Recently added keys (Alpaca API compliance audit, owned by `xstockstrat-marketdata`):
+Recently added keys (Alpaca API compliance audit — PR #699 "Audit and fix Alpaca API usage against Trading + Market Data specs"; owned by `xstockstrat-marketdata`):
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -171,12 +171,13 @@ All inter-service connection env vars follow these patterns. **Never invent new 
 | Pattern | Format | Used for | Example |
 |---|---|---|---|
 | `<SERVICE>_ENDPOINT` | `host:port` (no protocol) | gRPC connections | `IDENTITY_ENDPOINT=xstockstrat-identity:50058` |
-| `XSTOCKSTRAT_<SERVICE>_PRIVATE_URL` | `PRIVATE_DOMAIN` on DO (e.g. `svc.internal`), bare container name in Compose | **nginx container only** — `envsubst` upstream resolution; entrypoint strips `http://` prefix just in case, but the nginx template already appends `:PORT` so `PRIVATE_URL` (which includes the port) must not be used here | `XSTOCKSTRAT_AGENT_PRIVATE_URL=xstockstrat-agent` |
+
+> **Removed (historical):** `XSTOCKSTRAT_<SERVICE>_PRIVATE_URL` was the nginx-container-only `envsubst` upstream var. Nginx was removed by feature 045 (`ui-consolidation-nextjs`); these vars no longer exist and must not be reintroduced. See `docs/patterns/nginx-routing.md` (deprecated).
 
 **Rules:**
 
 - All backend services are gRPC-only, so all inter-service connection vars use the `_ENDPOINT` (gRPC `host:port`) form. The legacy `<SERVICE>_HTTP_ENDPOINT` form was removed when the backend HTTP/Connect-RPC (80xx) servers were deleted — do not reintroduce it (test-only Playwright mocks may still set it, but no runtime code reads it).
-- No `XSTOCKSTRAT_` prefix except for nginx `PRIVATE_URL` vars.
+- No `XSTOCKSTRAT_` prefix on inter-service connection vars (the only historical exception, the nginx `PRIVATE_URL` vars, was removed with nginx — see above).
 - No `_URL` suffix on inter-service connection vars — always `_ENDPOINT`.
 - When a new service introduces connection env vars, check `docker-compose.yml` first — the var may already exist in another service's block and only needs to be added to the new service's block with the same value.
 - `N8N_WEBHOOK_SECRET` was removed by feature 011 (`remove-n8n-references`). Do not reference it. The MCP agent uses `MCP_AGENT_SECRET` (sent as `x-mcp-secret` header on outbound calls to identify itself to platform services); the receiving services do not currently enforce it.
@@ -368,34 +369,35 @@ Active phases and their current status. See `docs/roadmap/implementation-roadmap
 
 | Phase | Description | Status |
 |---|---|---|
-| Phase 0 | Foundation: proto gen, bootstrap, DB, Docker Compose | Pending |
+| Phase 0 | Foundation: proto gen, bootstrap, DB, Docker Compose | **DONE** |
 | Phase 1 | Core infrastructure: config, ledger, identity, notify | **DONE** |
-| Phase 2 | Data layer: marketdata, portfolio | Pending |
+| Phase 2 | Data layer: marketdata, portfolio | **DONE** |
 | Phase 3 | Processing: indicators, ingest, analysis | **DONE** |
 | Phase 4 | Trading core | **DONE** |
 | Phase 5 | UI layer: trader, insights, config-ui → consolidated as `xstockstrat-ui` (feature 045) | **DONE** |
 | Phase 6 | Integration & webhook wiring | **DONE** |
 | Phase 7 | Observability: OTel + Grafana Cloud | **DONE** |
 
-Deviation notes for completed phases: `docs/roadmap/phase[3-7]-deviations.md`.
+This table is a coarse phase map only; all phases are now **DONE**. Per-feature lifecycle status is authoritative in the feature directories (see § Feature Roadmap) — do not track individual feature status here.
+
+Deviation notes exist only for phases 3–7 (`docs/roadmap/phase[3-7]-deviations.md`). Phases 0–2 predate the deviation-doc convention and have none — their absence is expected, not a missing file.
 
 ---
 
 ## Feature Roadmap
 
-Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number auto-assigned in creation order. Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
+Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is `max(existing NNN) + 1` — never reuse a number, never backfill a gap, and once a feature reaches `launched` its number is immutable. If two `/sdd-story` runs race and collide on a number, renumber the later one to the next free `NNN` (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
 
 - `feature.md` — lifecycle status (`idea`/`draft`/`spec-ready`/`implementation-ready`/`in-progress`/`code-completed`/`launched`/`rolled-back`/`demoted/canceled`), links to all artifacts
 - `product-spec.md` — requirements, affected services, governance gates
 - `implementation-spec.md` — numbered steps with concrete code references and statuses
 - `context.md` — append-only session log of decisions, deviations, files modified
 
-### Active Features
+### Feature Status — Single Source of Truth
 
-| Feature | Status | Branch | Next Action |
-|---|---|---|---|
-| `001-add-ikbr-account-support` | `launched` | `feature/add-ikbr-account-support` | — merged to main-dev via PR #97 |
-| `004-make-repo-public-secure` | `launched` | `feature/make-repo-public-secure` | — promoted to production via PR #158 |
+**Do not maintain a feature-status table here.** It drifts the moment a feature lands. The authoritative
+status of every feature is the `**Lifecycle Status**` field in `docs/roadmap/features/<NNN-slug>/feature.md`.
+Run `/sdd-status` for a live, computed view across all features, or `/sdd-status <slug>` for one.
 
 **When starting any session involving an in-progress feature:**
 
