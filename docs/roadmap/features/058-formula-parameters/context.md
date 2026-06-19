@@ -1,8 +1,8 @@
 # Context: formula-parameters
 
-**Feature**: `docs/roadmap/features/052-formula-parameters/feature.md`
-**Product Spec**: `docs/roadmap/features/052-formula-parameters/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/052-formula-parameters/implementation-spec.md`
+**Feature**: `docs/roadmap/features/058-formula-parameters/feature.md`
+**Product Spec**: `docs/roadmap/features/058-formula-parameters/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/058-formula-parameters/implementation-spec.md`
 
 ---
 
@@ -60,7 +60,7 @@
   `- [ ]` items. Resolved via user decisions below, then re-evaluated to ✓.
 - Trading-domain checks: skipped (non-trading feature).
 - Overlap findings (all advisory ⚠ — no FAIL-level conflicts):
-  - `020-order-snapshots-pnl-patterns` (draft) also edits `analysis.proto` — only a risk if 052
+  - `042-order-snapshots-pnl-patterns` (draft) also edits `analysis.proto` — only a risk if 058
     touched StrategyComponent; it does not (see decision below). No collision.
   - `022-signal-time-decay`, `032-walk-forward-backtesting` (draft) also modify `xstockstrat-analysis`
     (evaluator) — coordinate merge order; no shared symbols.
@@ -144,7 +144,7 @@
 
 ## Session 2026-06-08 — sdd-execute (sequential)
 
-- Mode: SEQUENTIAL, single feature (052). User directive: run all 14 steps but **open only the
+- Mode: SEQUENTIAL, single feature (058). User directive: run all 14 steps but **open only the
   final integration PR** (no per-step PRs). Per the harness, all work lands on the pre-assigned
   branch `claude/sdd-execute-formula-params-gy0lgo` (fast-forwarded to `origin/main-dev` at start —
   it had been based on `main`/the promote commit and lacked the feature dir). Final PR target: `main-dev`.

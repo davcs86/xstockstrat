@@ -688,6 +688,10 @@ type positionSyncPayload struct {
 		MarketValue      float64 `json:"market_value"`
 		UnrealizedPnl    float64 `json:"unrealized_pl"`
 		UnrealizedPnlPct float64 `json:"unrealized_plpc"`
+		// Broker intraday (today's) P&L — change since the previous close. Distinct from
+		// UnrealizedPnl (total since entry); zero when the broker did not report it.
+		DayPnl    float64 `json:"day_pnl"`
+		DayPnlPct float64 `json:"day_pnl_pct"`
 	} `json:"positions"`
 }
 
@@ -728,6 +732,8 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 			MarketValue:      p.MarketValue,
 			UnrealizedPnl:    p.UnrealizedPnl,
 			UnrealizedPnlPct: p.UnrealizedPnlPct,
+			DayPnl:           p.DayPnl,
+			DayPnlPct:        p.DayPnlPct,
 		}
 		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
 			slog.Warn("upsert position from sync failed", "symbol", p.Symbol, "error", err)
