@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { ConnectError } from '@connectrpc/connect';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Combobox, type ComboboxOption } from '../ui/combobox';
 
 // Only 15m/1h/1d are supported platform-wide: the marketdata service stores and resolves
 // exactly these canonical intervals (common.v1.Timeframe = 15MIN/1HOUR/1DAY; 15m is the
@@ -24,8 +25,8 @@ interface Bar {
 
 const TIMEFRAMES: { value: Timeframe; label: string }[] = [
   { value: '15Min', label: '15m' },
-  { value: '1Hour', label: '1h'  },
-  { value: '1Day',  label: '1d'  },
+  { value: '1Hour', label: '1h' },
+  { value: '1Day', label: '1d' },
 ];
 
 // Intraday timeframes get auto-refresh; daily does not.
@@ -48,6 +49,13 @@ export function ChartPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The tradable US-equity universe is ~10k symbols; map once so the picker
+  // isn't rebuilding option objects on every keystroke/render.
+  const symbolOptions = useMemo<ComboboxOption[]>(
+    () => symbols.map((s) => ({ value: s })),
+    [symbols],
+  );
+
   // Load symbol list on mount
   useEffect(() => {
     marketDataClient
@@ -57,7 +65,9 @@ export function ChartPanel() {
         setSymbols(list);
         if (list.length > 0) setSymbol(list[0]);
       })
-      .catch(() => {/* symbol list unavailable — user can type manually */});
+      .catch(() => {
+        /* symbol list unavailable — user can type manually */
+      });
   }, []);
 
   // Create chart on mount
@@ -156,18 +166,19 @@ export function ChartPanel() {
         <div className="flex flex-wrap items-center gap-2">
           <CardTitle className="text-base mr-auto">Chart</CardTitle>
 
-          {/* Symbol selector */}
+          {/* Symbol selector — type-ahead filter; only the top matches render,
+              so the ~10k-symbol universe stays responsive. */}
           {symbols.length > 0 && (
-            <Select value={symbol} onValueChange={setSymbol}>
-              <SelectTrigger className="w-28 h-7 text-xs">
-                <SelectValue placeholder="Symbol" />
-              </SelectTrigger>
-              <SelectContent>
-                {symbols.map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Combobox
+              value={symbol}
+              onChange={setSymbol}
+              options={symbolOptions}
+              maxResults={50}
+              placeholder="Symbol"
+              aria-label="Chart symbol"
+              className="w-28"
+              inputClassName="h-7 text-xs"
+            />
           )}
 
           {/* Timeframe switcher */}
@@ -197,7 +208,9 @@ export function ChartPanel() {
             </SelectTrigger>
             <SelectContent>
               {([50, 100, 200] as BarCount[]).map((n) => (
-                <SelectItem key={n} value={String(n)}>{n} bars</SelectItem>
+                <SelectItem key={n} value={String(n)}>
+                  {n} bars
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
