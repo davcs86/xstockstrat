@@ -206,7 +206,7 @@ raising any service's pool, re-check this table so the total never exceeds 20.**
 | xstockstrat-indicators | Python | 2 | |
 | xstockstrat-ingest | Python | 2 | |
 | xstockstrat-analysis | Python | 2 | |
-| xstockstrat-ledger | Node | 2 | |
+| xstockstrat-ledger | Node | 2 | 1 query-pool conn (`DB_POOL_MAX=1`) + 1 dedicated LISTEN/NOTIFY conn (`EventNotifier`). Live `StreamEvents` subscribers share the single listener and never borrow from the query pool, so concurrent streams can't starve `AppendEvent`. |
 | xstockstrat-identity | Node | 2 | |
 | xstockstrat-config | Node | 2 | |
 | xstockstrat-notify | Node | 1 | Light DB use (alert history only) |

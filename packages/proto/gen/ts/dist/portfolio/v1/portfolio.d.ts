@@ -44,6 +44,17 @@ export interface Position {
     openedAt?: Date | undefined;
     tradingMode: TradingMode;
     accountId: string;
+    /**
+     * Today's (intraday) P&L — change since the previous trading day's close.
+     * Sourced from the broker's per-position intraday valuation (Alpaca
+     * unrealized_intraday_pl / unrealized_intraday_plpc) on account.positions.synced.
+     * Zero when the broker does not report an intraday figure (e.g. order-fill-only
+     * positions enriched from marketdata mid-quotes); distinct from unrealized_pnl,
+     * which is total P&L since entry.
+     */
+    dayPnl: number;
+    /** fraction (e.g. 0.0125 = +1.25%) */
+    dayPnlPct: number;
 }
 export interface PortfolioSnapshot {
     portfolioId: string;
