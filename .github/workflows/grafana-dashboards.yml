@@ -1,0 +1,33 @@
+name: Grafana dashboards
+
+# Deploys dashboards-as-code from grafana/dashboards/ to Grafana Cloud.
+# Source of truth is the repo — see grafana/dashboards/README.md.
+
+on:
+  push:
+    branches:
+      - main-dev
+      - main
+    paths:
+      - 'packages/otel/dashboards/**'
+      - 'scripts/grafana-deploy-dashboards.sh'
+      - '.github/workflows/grafana-dashboards.yml'
+  workflow_dispatch:
+
+# Serialize deploys so concurrent pushes don't race on the same Grafana folder.
+concurrency:
+  group: grafana-dashboards-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-dashboards:
+    name: Deploy dashboards to Grafana Cloud
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Deploy dashboards
+        env:
+          GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
+          GRAFANA_SERVICE_ACCOUNT_TOKEN: ${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}
+        run: ./scripts/grafana-deploy-dashboards.sh

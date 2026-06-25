@@ -1,5 +1,5 @@
 {
-  "enabledMcpjsonServers": ["digitalocean-apps", "digitalocean-databases"],
+  "enabledMcpjsonServers": ["digitalocean-apps", "digitalocean-databases", "grafana"],
   "hooks": {
     "SessionStart": [
       {
