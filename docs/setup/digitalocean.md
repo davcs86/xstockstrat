@@ -30,8 +30,12 @@ This runbook walks through creating and configuring the DigitalOcean infrastruct
 | GitHub Actions | CI/CD; auto-deploys on push to `main-dev` or `main` via `doctl` |
 
 Architecture spec files:
-- `.do/app.dev.yaml` — staging app definition (paper trading, `basic-xs` instances)
-- `.do/app.yaml` — production app definition (live trading, `professional-xs` / `professional-s` instances)
+- `.do/app.dev.yaml` — staging app definition (paper trading, `basic-xxs`/`basic-xs` instances)
+- `.do/app.yaml` — production app definition (live trading, `basic-xs` / `basic-s` instances)
+
+> **Sizing:** Both apps run on the Basic tier. See
+> `docs/runbooks/infra-cost-reduction.md` for the per-service slug map and
+> sizing constraints.
 
 ---
 
@@ -80,7 +84,7 @@ The deploy workflow (`.github/workflows/deploy.yml`) runs this step automaticall
 
 1. Go to **digitalocean.com** and click **Sign Up**.
 2. Complete email verification.
-3. Add a payment method (credit card or PayPal). DigitalOcean charges by usage — App Platform `basic-xs` instances are the cheapest; `professional-xs` and `professional-s` are used in prod.
+3. Add a payment method (credit card or PayPal). DigitalOcean charges by usage — both apps run Basic-tier instances (`basic-xxs`/`basic-xs`/`basic-s`); see `docs/runbooks/infra-cost-reduction.md` for sizing.
 4. Optionally, add a spending limit under **Billing → Spending Limit** to prevent surprise charges.
 
 > **Tip:** Create a team if multiple people will manage the infra: **Settings → Teams → Create Team**.
@@ -246,7 +250,8 @@ doctl apps list
 | `TRADING_MODE` | `paper` |
 | `ALPACA_PAPER` | `true` |
 | `ALPACA_BASE_URL` | `https://paper-api.alpaca.markets` |
-| Instance size (most services) | `basic-xs` |
+| Instance size (Go/Node services) | `basic-xxs` (512 MB — `trading`, `portfolio`, `marketdata`, `ledger`, `identity`, `notify`) |
+| Instance size (Python/UI services) | `basic-xs` (1 GB — `indicators`, `ingest`, `analysis`, `agent`, `ui`) |
 | xstockstrat-config instance size | `basic-s` (WatchConfig streaming needs more headroom) |
 | Database | Managed PostgreSQL attached as `db` |
 
@@ -256,7 +261,7 @@ Inter-service routing uses DigitalOcean private networking: `${xstockstrat-confi
 
 ## Step 6 — Create the Prod App (Live Trading)
 
-The prod app deploys from `main`, runs all services in `TRADING_MODE=live`, and uses `professional-xs` instances (higher throughput, above 60s idle timeout).
+The prod app deploys from `main`, runs all services in `TRADING_MODE=live`, and uses `basic-xs` instances (`basic-s` for `xstockstrat-config`, which needs the raised idle timeout for `WatchConfig` streaming).
 
 > **Prerequisite:** Ensure CI has pushed images to GHCR from the `main` branch before creating the prod app. Check `https://github.com/davcs86?tab=packages` or the `docker-build` workflow run. The first CI push happens automatically when `main-dev` is promoted via the `/promote` workflow.
 
@@ -280,11 +285,11 @@ export DO_PROD_APP_ID=<app-id-from-output>
 | `TRADING_MODE` | `live` |
 | `ALPACA_PAPER` | `false` |
 | `ALPACA_BASE_URL` | `https://api.alpaca.markets` |
-| Instance size (most services) | `professional-xs` |
-| xstockstrat-config instance size | `professional-s` (WatchConfig streaming above 60s idle timeout requirement) |
+| Instance size (most services) | `basic-xs` |
+| xstockstrat-config instance size | `basic-s` (WatchConfig streaming above 60s idle timeout requirement) |
 | Database | Managed PostgreSQL (production-tier cluster) |
 
-> **Why `professional-s` for xstockstrat-config?** The `WatchConfig` gRPC streaming RPC holds long-lived connections. App Platform's HTTP proxy enforces a 60-second idle timeout on `basic-*` and `professional-xs` plans; `professional-s` raises this limit, preventing premature stream termination for subscribers.
+> **Why `basic-s` for xstockstrat-config?** The `WatchConfig` gRPC streaming RPC holds long-lived connections. App Platform's HTTP proxy enforces a 60-second idle timeout on `*-xs` plans; the `*-s` sizes raise this limit, preventing premature stream termination for subscribers.
 
 ---
 
@@ -509,7 +514,7 @@ Check public URLs for each service in: **DO console → App → service componen
 ## Troubleshooting
 
 ### WatchConfig subscribers disconnect immediately
-The xstockstrat-config instance size is too small. Upgrade from `basic-s` to `professional-s` in the app spec and redeploy. See `.do/app.yaml` for the correct size.
+The xstockstrat-config instance size is too small. It must be a `*-s` size (`basic-s`) so the App Platform proxy's idle timeout is raised above 60s; an `*-xs` size will sever long-lived `WatchConfig` streams. See `.do/app.yaml` for the correct size.
 
 ### `${db.DATABASE_URL}` not resolving
 The managed database is not attached to the app. See Step 8 — attach the DB cluster and redeploy.

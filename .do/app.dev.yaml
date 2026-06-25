@@ -47,7 +47,7 @@ services:
     internal_ports:
       - 50051
     instance_count: 1
-    instance_size_slug: basic-xs
+    instance_size_slug: basic-xxs
     envs:
       - key: GRPC_PORT
         value: "50051"
@@ -82,7 +82,7 @@ services:
     internal_ports:
       - 50052
     instance_count: 1
-    instance_size_slug: basic-xs
+    instance_size_slug: basic-xxs
     envs:
       - key: GRPC_PORT
         value: "50052"
@@ -109,7 +109,7 @@ services:
     internal_ports:
       - 50053
     instance_count: 1
-    instance_size_slug: basic-xs
+    instance_size_slug: basic-xxs
     envs:
       - key: GRPC_PORT
         value: "50053"
@@ -289,7 +289,7 @@ services:
     internal_ports:
       - 50057
     instance_count: 1
-    instance_size_slug: basic-xs
+    instance_size_slug: basic-xxs
     envs:
       - key: GRPC_PORT
         value: "50057"
@@ -321,7 +321,7 @@ services:
     internal_ports:
       - 50058
     instance_count: 1
-    instance_size_slug: basic-xs
+    instance_size_slug: basic-xxs
     envs:
       - key: GRPC_PORT
         value: "50058"
@@ -357,7 +357,7 @@ services:
     internal_ports:
       - 50059
     instance_count: 1
-    instance_size_slug: basic-xs
+    instance_size_slug: basic-xxs
     envs:
       - key: GRPC_PORT
         value: "50059"

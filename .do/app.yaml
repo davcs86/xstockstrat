@@ -47,7 +47,7 @@ services:
     internal_ports:
       - 50051
     instance_count: 1
-    instance_size_slug: professional-xs
+    instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50051"
@@ -82,7 +82,7 @@ services:
     internal_ports:
       - 50052
     instance_count: 1
-    instance_size_slug: professional-xs
+    instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50052"
@@ -109,7 +109,7 @@ services:
     internal_ports:
       - 50053
     instance_count: 1
-    instance_size_slug: professional-xs
+    instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50053"
@@ -146,7 +146,7 @@ services:
     internal_ports:
       - 50054
     instance_count: 1
-    instance_size_slug: professional-xs
+    instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50054"
@@ -175,7 +175,7 @@ services:
     internal_ports:
       - 50055
     instance_count: 1
-    instance_size_slug: professional-xs
+    instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50055"
@@ -211,7 +211,7 @@ services:
     internal_ports:
       - 50056
     instance_count: 1
-    instance_size_slug: professional-xs
+    instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50056"
@@ -248,7 +248,7 @@ services:
       tag: "YOUR_IMAGE_TAG"
     http_port: 9000
     instance_count: 1
-    instance_size_slug: professional-xs
+    instance_size_slug: basic-xs
     envs:
       - key: INGEST_ENDPOINT
         value: ${xstockstrat-ingest.PRIVATE_DOMAIN}:50055
@@ -289,7 +289,7 @@ services:
     internal_ports:
       - 50057
     instance_count: 1
-    instance_size_slug: professional-xs
+    instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50057"
@@ -321,7 +321,7 @@ services:
     internal_ports:
       - 50058
     instance_count: 1
-    instance_size_slug: professional-xs
+    instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50058"
@@ -357,7 +357,7 @@ services:
     internal_ports:
       - 50059
     instance_count: 1
-    instance_size_slug: professional-xs
+    instance_size_slug: basic-xs
     envs:
       - key: GRPC_PORT
         value: "50059"
@@ -390,8 +390,8 @@ services:
     internal_ports:
       - 50060
     instance_count: 1
-    # professional-s: extra headroom for WatchConfig streaming RPC (above 60s idle timeout)
-    instance_size_slug: professional-s
+    # basic-s: extra headroom for WatchConfig streaming RPC (above 60s idle timeout)
+    instance_size_slug: basic-s
     envs:
       - key: GRPC_PORT
         value: "50060"
@@ -416,7 +416,7 @@ services:
       tag: "YOUR_IMAGE_TAG"
     http_port: 3000
     instance_count: 1
-    instance_size_slug: professional-xs
+    instance_size_slug: basic-xs
     envs:
       - key: TRADING_ENDPOINT
         value: ${xstockstrat-trading.PRIVATE_DOMAIN}:50051
