@@ -55,14 +55,6 @@ The end-to-end connect flow:
    presented as `Authorization: Bearer <jwt>` on `/sse`; the agent rejects tokens whose `aud` does
    not match.
 
-### SSE — API key (legacy)
-A valid xstockstrat API key in either of:
-- `Authorization: Bearer <api_key>` header
-- `?api_key=<api_key>` query parameter — **DEPRECATED**: OAuth 2.1 forbids credentials in query
-  strings. Kept only as a Desktop-only fallback for clients that cannot perform the OAuth flow.
-
-The key is validated against `xstockstrat-identity` `ValidateApiKey` RPC. Invalid keys return `HTTP 401`.
-
 ### x-mcp-secret (downstream enforcement)
 `MCP_AGENT_SECRET` is a shared secret the agent sends as `x-mcp-secret` on every outbound webhook call to `xstockstrat-ingest`, `xstockstrat-notify`, and `xstockstrat-analysis`. Those services reject requests without the correct header when the secret is configured.
 
@@ -269,7 +261,7 @@ Triggers a backtest via `xstockstrat-analysis`. The default strategy is SMA cros
 
 ### `manage_strategy`
 
-Registers, updates, or deactivates a stored strategy definition in `xstockstrat-analysis` (admin-scoped).
+Registers, updates, or deactivates a stored strategy definition in `xstockstrat-analysis`.
 
 **Parameters**
 
@@ -282,7 +274,6 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 | `entry_rule` | `string` | No | JSON-encoded condition tree |
 | `exit_rule` | `string` | No | JSON-encoded condition tree |
 | `signal_params` | `object` | No | Optional signal-weighting params |
-| `admin_api_key` | `string` | Yes | Admin API key; validated by the analysis backend |
 
 **Return**
 
@@ -294,7 +285,6 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 
 | Condition | Error |
 |---|---|
-| Missing/invalid admin key | `admin API key required` (UNAUTHENTICATED) |
 | Invalid definition (unknown indicator, bad rule JSON, undefined ref_name) | `invalid argument` (INVALID_ARGUMENT) |
 | `update`/`deactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
 
@@ -302,7 +292,7 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 
 ### `manage_formula`
 
-Registers, updates, or deletes a custom formula definition in `xstockstrat-indicators` (admin-scoped).
+Registers, updates, or deletes a custom formula definition in `xstockstrat-indicators`.
 
 **Parameters**
 
@@ -316,7 +306,6 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 | `formula_id` | `string` | update/delete | Formula identifier |
 | `author` | `string` | register | Author, stored immutably on register |
 | `formula_author_user_id` | `string` | update/delete | Must match the formula's original `author` (else PERMISSION_DENIED) |
-| `admin_api_key` | `string` | Yes | Admin API key; validated by the indicators backend |
 
 **Return**
 
@@ -328,7 +317,6 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 
 | Condition | Error |
 |---|---|
-| Missing/invalid admin key | `admin API key required` (UNAUTHENTICATED) |
 | `formula_author_user_id` ≠ author | `permission denied` (PERMISSION_DENIED) |
 | `update`/`delete` on unknown formula | `formula not found` (NOT_FOUND) |
 
@@ -336,7 +324,7 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 
 ### `manage_signal_source`
 
-Registers, updates, or deactivates a signal source in `xstockstrat-ingest` (admin-scoped).
+Registers, updates, or deactivates a signal source in `xstockstrat-ingest`.
 
 **Parameters**
 
@@ -349,7 +337,6 @@ Registers, updates, or deactivates a signal source in `xstockstrat-ingest` (admi
 | `config_json` | `object` | No | Source configuration |
 | `extractor_module` | `string` | No | Extractor module name |
 | `credentials_ref` | `string` | No | Reference to stored credentials — forwarded to the backend, **never echoed** |
-| `admin_api_key` | `string` | Yes | Admin API key; validated by the ingest backend |
 
 **Return**
 
@@ -361,7 +348,6 @@ Registers, updates, or deactivates a signal source in `xstockstrat-ingest` (admi
 
 | Condition | Error |
 |---|---|
-| Missing/invalid admin key | `admin API key required` (UNAUTHENTICATED) |
 | Invalid source fields | `invalid argument` (INVALID_ARGUMENT) |
 | `deactivate` on unknown source | `signal source not found` (NOT_FOUND) |
 | `credentials_ref` exposure | **Never** — `credentials_ref` is intentionally omitted from the return and never exposed to Claude (FR-12) |
@@ -413,11 +399,11 @@ emit_alert(severity="info", category="system",
 
 ```
 1. manage_formula(operation="register", name="rsi_div", source="<python source>",
-                  author="<user_id>", admin_api_key="<key>")
+                  author="<user_id>")
    → formula_id
 
 2. manage_strategy(operation="register", strategy_id="rsi_sma_combo",
-                  display_name="RSI + SMA", admin_api_key="<key>",
+                  display_name="RSI + SMA",
                   components=[
                     {"ref_name": "sma_fast", "kind": "builtin", "indicator": "SMA", "params": {"period": 20}},
                     {"ref_name": "rsi", "kind": "formula", "formula_id": "<formula_id>"}

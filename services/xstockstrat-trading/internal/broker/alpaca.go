@@ -323,6 +323,8 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 	// Alpaca returns these monetary fields as decimal strings. current_price / market_value /
 	// unrealized_pl / unrealized_plpc are the broker's mark-to-market valuation — carried
 	// through so the portfolio card reconciles with the broker's authoritative equity.
+	// unrealized_intraday_pl / unrealized_intraday_plpc are today's (intraday) P&L — the
+	// change since the previous close — surfaced as the positions table's "Today's P/L".
 	var raw []struct {
 		Symbol         string `json:"symbol"`
 		Qty            string `json:"qty"`
@@ -331,6 +333,8 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 		MarketValue    string `json:"market_value"`
 		UnrealizedPL   string `json:"unrealized_pl"`
 		UnrealizedPLPC string `json:"unrealized_plpc"`
+		IntradayPL     string `json:"unrealized_intraday_pl"`
+		IntradayPLPC   string `json:"unrealized_intraday_plpc"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("alpaca GetPositions: unmarshal: %w", err)
@@ -343,6 +347,8 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 		marketValue, _ := strconv.ParseFloat(r.MarketValue, 64)
 		unrealizedPL, _ := strconv.ParseFloat(r.UnrealizedPL, 64)
 		unrealizedPLPC, _ := strconv.ParseFloat(r.UnrealizedPLPC, 64)
+		intradayPL, _ := strconv.ParseFloat(r.IntradayPL, 64)
+		intradayPLPC, _ := strconv.ParseFloat(r.IntradayPLPC, 64)
 		positions = append(positions, BrokerPosition{
 			Symbol:           r.Symbol,
 			Quantity:         qty,
@@ -351,6 +357,8 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 			MarketValue:      marketValue,
 			UnrealizedPnl:    unrealizedPL,
 			UnrealizedPnlPct: unrealizedPLPC,
+			DayPnl:           intradayPL,
+			DayPnlPct:        intradayPLPC,
 		})
 	}
 	return positions, nil

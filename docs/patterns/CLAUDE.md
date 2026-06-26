@@ -14,3 +14,4 @@ Reusable implementation patterns for new services. Each file is a self-contained
 | `observability.md` | Wiring OTel into a service or configuring Grafana Cloud |
 | `ci-overview.md` | Debugging CI failures, checking coverage thresholds, understanding deploys |
 | `docker-build.md` | Docker build patterns, service healthchecks, `WAIT_FOR` entrypoint, `depends_on` conditions |
+| `context-engineering.md` | Adding or refactoring a skill, subagent (`.claude/agents/`), or `CLAUDE.md` — subagent delegation, progressive disclosure, and the structured `context.md` memory schema |

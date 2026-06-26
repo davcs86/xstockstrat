@@ -27,14 +27,6 @@ def _metadata() -> list[tuple[str, str]]:
     return []
 
 
-def _admin_metadata(api_key: str | None = None) -> list[tuple[str, str]]:
-    """_metadata() plus an Authorization Bearer header for admin-scoped backend RPCs."""
-    meta = list(_metadata())
-    if api_key:
-        meta.append(("authorization", f"Bearer {api_key}"))
-    return meta
-
-
 def _iso_to_timestamp(iso_str: str) -> Timestamp:
     dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
     if dt.tzinfo is None:
@@ -175,7 +167,6 @@ async def run_backtest(
 async def manage_strategy(
     operation: str,
     definition: dict[str, Any],
-    api_key: str | None = None,
 ) -> dict[str, Any]:
     """Register/update/deactivate a stored strategy via gRPC ManageStrategy (admin-scoped)."""
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
@@ -222,9 +213,8 @@ async def manage_strategy(
         sp.update(signal_params)
         pb_def.signal_params.CopyFrom(sp)
 
-    # Analysis does a role check on x-access-scope (admin bit); the tool layer has already
-    # authorized the admin role at the entry point. Bearer kept for backward compatibility.
-    meta = list(_admin_metadata(api_key)) + [("x-access-scope", "7")]
+    # Analysis does a role check on the propagated x-access-scope (admin bit).
+    meta = list(_metadata()) + [("x-access-scope", "7")]
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.ManageStrategy(
@@ -263,9 +253,11 @@ async def list_strategy_definitions(include_inactive: bool = False) -> list[dict
 async def manage_formula(
     operation: str,
     formula: dict[str, Any],
-    api_key: str | None = None,
 ) -> dict[str, Any]:
-    """Register/update/delete a custom formula via gRPC indicators RPCs (admin-scoped)."""
+    """Register/update/delete a custom formula via gRPC indicators RPCs.
+
+    Formula management is ownership-based (the indicators backend checks user_id vs author).
+    """
     from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # noqa: PLC0415
 
     if operation not in ("register", "update", "delete"):
@@ -315,7 +307,7 @@ async def manage_formula(
                     author=formula.get("author", ""),
                     parameters=parameters,
                 ),
-                metadata=_admin_metadata(api_key),
+                metadata=_metadata(),
             )
             return {"formula_id": resp.formula_id}
         if operation == "update":
@@ -329,7 +321,7 @@ async def manage_formula(
                     is_public=formula.get("is_public", False),
                     parameters=parameters,
                 ),
-                metadata=_admin_metadata(api_key),
+                metadata=_metadata(),
             )
             return MessageToDict(resp.formula)
         resp = await stub.DeleteFormula(
@@ -337,7 +329,7 @@ async def manage_formula(
                 formula_id=formula["formula_id"],
                 user_id=formula["user_id"],
             ),
-            metadata=_admin_metadata(api_key),
+            metadata=_metadata(),
         )
         return {"success": resp.success}
 
@@ -364,7 +356,6 @@ async def manage_signal_source(
     operation: str,
     source: dict[str, Any],
     credentials_ref: str | None = None,
-    api_key: str | None = None,
 ) -> dict[str, Any]:
     """Register/update/deactivate a signal source via gRPC ManageSignalSource (admin-scoped).
 
@@ -391,7 +382,7 @@ async def manage_signal_source(
         req.credentials_ref = credentials_ref
 
     # Forward the admin access scope so ingest's role check (x-access-scope & 0x04) passes.
-    meta = list(_admin_metadata(api_key)) + [("x-access-scope", "7")]
+    meta = list(_metadata()) + [("x-access-scope", "7")]
     async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.ManageSignalSource(req, metadata=meta)
@@ -405,27 +396,6 @@ async def manage_signal_source(
         "active": resp.source.active,
         "has_credentials": resp.source.has_credentials,
     }
-
-
-async def validate_admin(api_key: str | None) -> bool:
-    """Return True iff the API key is valid AND carries the 'admin' role.
-
-    Entry-point authorization for admin-scoped tools (the SSE auth layer only checks
-    that a key is valid, not that it is admin).
-    """
-    if not api_key:
-        return False
-    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
-
-    try:
-        async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
-            stub = identity_pb2_grpc.IdentityServiceStub(channel)
-            claims = await stub.ValidateApiKey(
-                identity_pb2.ValidateApiKeyRequest(api_key=api_key), metadata=_metadata()
-            )
-            return "admin" in claims.roles
-    except Exception:
-        return False
 
 
 # ── OAuth 2.1 backend gRPC helpers (feature 049 Part B) ──────────────────────
@@ -547,17 +517,14 @@ async def refresh_oauth_token(refresh_token: str, resource: str) -> dict[str, An
     }
 
 
-async def set_strategy_live(
-    strategy_id: str, live_enabled: bool, api_key: str | None = None
-) -> dict[str, Any]:
+async def set_strategy_live(strategy_id: str, live_enabled: bool) -> dict[str, Any]:
     """Enable/disable live evaluation via SetStrategyLive RPC (admin-scoped).
 
-    The tool layer authorizes the admin role before calling this; here we forward the
-    admin access scope so the internal analysis service's role check passes.
+    Forwards the admin access scope so the internal analysis service's role check passes.
     """
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
 
-    meta = list(_admin_metadata(api_key)) + [("x-access-scope", "7")]
+    meta = list(_metadata()) + [("x-access-scope", "7")]
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.SetStrategyLive(

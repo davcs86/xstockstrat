@@ -1,0 +1,91 @@
+# Context Map — machine-readable index of the repo's AI-tooling context assets.
+#
+# Mirrors the human-facing Context Guide in the root CLAUDE.md and records the
+# context-engineering topology (agents, skills + their reference files, the
+# task->doc routing, and the structured-memory convention).
+#
+# Validated by scripts/check-context-map.sh: every `path` below must exist, and
+# the script additionally scans CLAUDE.md files + skill routers for stale
+# `docs/...`, `reference/...`, and `templates/...` references.
+#
+# See docs/patterns/context-engineering.md for the why behind each mechanism.
+
+version: 1
+
+# --- Subagent fleet: isolated read-only windows that return condensed digests ---
+agents:
+  - name: codebase-discovery
+    path: .claude/agents/codebase-discovery.md
+    returns: "path:line evidence digest for a service/step"
+    used_by: [sdd-spec, sdd-execute]
+  - name: spec-reviewer
+    path: .claude/agents/spec-reviewer.md
+    returns: "structured pass/warn/fail verdict per criterion"
+    used_by: [sdd-review]
+  - name: feature-overlap
+    path: .claude/agents/feature-overlap.md
+    returns: "cross-feature collision report"
+    used_by: [sdd-review]
+  - name: service-briefing
+    path: .claude/agents/service-briefing.md
+    returns: "compact briefing for one service"
+    used_by: [sdd-spec, sdd-execute]
+
+# --- Skills: lean SKILL.md routers + on-demand reference/ files ---
+skills:
+  - name: sdd-spec
+    router: .claude/skills/sdd-spec/SKILL.md
+    reference:
+      - .claude/skills/sdd-spec/reference/discovery-checklist.md
+      - .claude/skills/sdd-spec/reference/step-constraints.md
+      - .claude/skills/sdd-spec/reference/spec-template.md
+  - name: sdd-review
+    router: .claude/skills/sdd-review/SKILL.md
+    reference:
+      - .claude/skills/sdd-review/reference/product-spec-criteria.md
+      - .claude/skills/sdd-review/reference/impl-spec-criteria.md
+      - .claude/skills/sdd-review/reference/overlap-check.md
+  - name: sdd-execute
+    router: .claude/skills/sdd-execute/SKILL.md
+    reference:
+      - .claude/skills/sdd-execute/reference/sequential-mode.md
+      - .claude/skills/sdd-execute/reference/deviation-handling.md
+      - .claude/skills/sdd-execute/reference/repo-conventions.md
+    templates:
+      - .claude/skills/sdd-execute/templates/step-pr-body.md
+      - .claude/skills/sdd-execute/templates/integration-pr-body.md
+      - .claude/skills/sdd-execute/templates/branch-sync.md
+
+# --- Structured memory ---
+memory:
+  convention: docs/patterns/context-engineering.md
+  per_feature_log: "docs/roadmap/features/<NNN-slug>/context.md"
+  schema: [Decisions, Open Threads, Files Modified, "Session <ts> log (append-only)"]
+
+# --- Task -> doc routing (mirror of the root CLAUDE.md Context Guide) ---
+# Keep in sync with CLAUDE.md Context Guide. The validator checks each path exists.
+routing:
+  - task: "Build/modify a Next.js frontend"
+    path: docs/patterns/frontend-auth.md
+  - task: "Other Next.js frontend patterns"
+    path: docs/patterns/nextjs-frontends.md
+  - task: "Add a new backend service (any language)"
+    path: docs/patterns/header-propagation.md
+  - task: "Docker build / healthchecks / WAIT_FOR / depends_on"
+    path: docs/patterns/docker-build.md
+  - task: "Config key naming, scoping, startup wiring"
+    path: docs/patterns/config-governance.md
+  - task: "Config service startup readiness"
+    path: docs/patterns/config-startup.md
+  - task: "DB schema map, migration tooling, run order"
+    path: docs/patterns/database.md
+  - task: "OTel setup / per-language modules"
+    path: docs/patterns/observability.md
+  - task: "CI job matrix, coverage thresholds, deploys"
+    path: docs/patterns/ci-overview.md
+  - task: "Proto / buf changes"
+    path: docs/runbooks/proto-versioning.md
+  - task: "Feature workflow (branch, PR, promote)"
+    path: docs/runbooks/feature-workflow.md
+  - task: "Add/refactor a skill, subagent, or CLAUDE.md (context engineering)"
+    path: docs/patterns/context-engineering.md

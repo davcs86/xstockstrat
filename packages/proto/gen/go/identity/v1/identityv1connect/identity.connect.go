@@ -45,18 +45,6 @@ const (
 	// IdentityServiceRevokeTokenProcedure is the fully-qualified name of the IdentityService's
 	// RevokeToken RPC.
 	IdentityServiceRevokeTokenProcedure = "/xstockstrat.identity.v1.IdentityService/RevokeToken"
-	// IdentityServiceCreateApiKeyProcedure is the fully-qualified name of the IdentityService's
-	// CreateApiKey RPC.
-	IdentityServiceCreateApiKeyProcedure = "/xstockstrat.identity.v1.IdentityService/CreateApiKey"
-	// IdentityServiceValidateApiKeyProcedure is the fully-qualified name of the IdentityService's
-	// ValidateApiKey RPC.
-	IdentityServiceValidateApiKeyProcedure = "/xstockstrat.identity.v1.IdentityService/ValidateApiKey"
-	// IdentityServiceListApiKeysProcedure is the fully-qualified name of the IdentityService's
-	// ListApiKeys RPC.
-	IdentityServiceListApiKeysProcedure = "/xstockstrat.identity.v1.IdentityService/ListApiKeys"
-	// IdentityServiceRevokeApiKeyProcedure is the fully-qualified name of the IdentityService's
-	// RevokeApiKey RPC.
-	IdentityServiceRevokeApiKeyProcedure = "/xstockstrat.identity.v1.IdentityService/RevokeApiKey"
 	// IdentityServiceRegisterOAuthClientProcedure is the fully-qualified name of the IdentityService's
 	// RegisterOAuthClient RPC.
 	IdentityServiceRegisterOAuthClientProcedure = "/xstockstrat.identity.v1.IdentityService/RegisterOAuthClient"
@@ -86,10 +74,6 @@ type IdentityServiceClient interface {
 	ValidateToken(context.Context, *connect.Request[v1.ValidateTokenRequest]) (*connect.Response[v1.TokenClaims], error)
 	RefreshToken(context.Context, *connect.Request[v1.RefreshTokenRequest]) (*connect.Response[v1.AuthTokenResponse], error)
 	RevokeToken(context.Context, *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error)
-	CreateApiKey(context.Context, *connect.Request[v1.CreateApiKeyRequest]) (*connect.Response[v1.ApiKey], error)
-	ValidateApiKey(context.Context, *connect.Request[v1.ValidateApiKeyRequest]) (*connect.Response[v1.TokenClaims], error)
-	ListApiKeys(context.Context, *connect.Request[v1.ListApiKeysRequest]) (*connect.Response[v1.ListApiKeysResponse], error)
-	RevokeApiKey(context.Context, *connect.Request[v1.RevokeApiKeyRequest]) (*connect.Response[v1.RevokeApiKeyResponse], error)
 	// OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
 	// OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
 	RegisterOAuthClient(context.Context, *connect.Request[v1.RegisterOAuthClientRequest]) (*connect.Response[v1.OAuthClient], error)
@@ -136,30 +120,6 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+IdentityServiceRevokeTokenProcedure,
 			connect.WithSchema(identityServiceMethods.ByName("RevokeToken")),
-			connect.WithClientOptions(opts...),
-		),
-		createApiKey: connect.NewClient[v1.CreateApiKeyRequest, v1.ApiKey](
-			httpClient,
-			baseURL+IdentityServiceCreateApiKeyProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("CreateApiKey")),
-			connect.WithClientOptions(opts...),
-		),
-		validateApiKey: connect.NewClient[v1.ValidateApiKeyRequest, v1.TokenClaims](
-			httpClient,
-			baseURL+IdentityServiceValidateApiKeyProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("ValidateApiKey")),
-			connect.WithClientOptions(opts...),
-		),
-		listApiKeys: connect.NewClient[v1.ListApiKeysRequest, v1.ListApiKeysResponse](
-			httpClient,
-			baseURL+IdentityServiceListApiKeysProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("ListApiKeys")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeApiKey: connect.NewClient[v1.RevokeApiKeyRequest, v1.RevokeApiKeyResponse](
-			httpClient,
-			baseURL+IdentityServiceRevokeApiKeyProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("RevokeApiKey")),
 			connect.WithClientOptions(opts...),
 		),
 		registerOAuthClient: connect.NewClient[v1.RegisterOAuthClientRequest, v1.OAuthClient](
@@ -213,10 +173,6 @@ type identityServiceClient struct {
 	validateToken       *connect.Client[v1.ValidateTokenRequest, v1.TokenClaims]
 	refreshToken        *connect.Client[v1.RefreshTokenRequest, v1.AuthTokenResponse]
 	revokeToken         *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
-	createApiKey        *connect.Client[v1.CreateApiKeyRequest, v1.ApiKey]
-	validateApiKey      *connect.Client[v1.ValidateApiKeyRequest, v1.TokenClaims]
-	listApiKeys         *connect.Client[v1.ListApiKeysRequest, v1.ListApiKeysResponse]
-	revokeApiKey        *connect.Client[v1.RevokeApiKeyRequest, v1.RevokeApiKeyResponse]
 	registerOAuthClient *connect.Client[v1.RegisterOAuthClientRequest, v1.OAuthClient]
 	getOAuthClient      *connect.Client[v1.GetOAuthClientRequest, v1.OAuthClient]
 	issueAuthCode       *connect.Client[v1.IssueAuthCodeRequest, v1.IssueAuthCodeResponse]
@@ -244,26 +200,6 @@ func (c *identityServiceClient) RefreshToken(ctx context.Context, req *connect.R
 // RevokeToken calls xstockstrat.identity.v1.IdentityService.RevokeToken.
 func (c *identityServiceClient) RevokeToken(ctx context.Context, req *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error) {
 	return c.revokeToken.CallUnary(ctx, req)
-}
-
-// CreateApiKey calls xstockstrat.identity.v1.IdentityService.CreateApiKey.
-func (c *identityServiceClient) CreateApiKey(ctx context.Context, req *connect.Request[v1.CreateApiKeyRequest]) (*connect.Response[v1.ApiKey], error) {
-	return c.createApiKey.CallUnary(ctx, req)
-}
-
-// ValidateApiKey calls xstockstrat.identity.v1.IdentityService.ValidateApiKey.
-func (c *identityServiceClient) ValidateApiKey(ctx context.Context, req *connect.Request[v1.ValidateApiKeyRequest]) (*connect.Response[v1.TokenClaims], error) {
-	return c.validateApiKey.CallUnary(ctx, req)
-}
-
-// ListApiKeys calls xstockstrat.identity.v1.IdentityService.ListApiKeys.
-func (c *identityServiceClient) ListApiKeys(ctx context.Context, req *connect.Request[v1.ListApiKeysRequest]) (*connect.Response[v1.ListApiKeysResponse], error) {
-	return c.listApiKeys.CallUnary(ctx, req)
-}
-
-// RevokeApiKey calls xstockstrat.identity.v1.IdentityService.RevokeApiKey.
-func (c *identityServiceClient) RevokeApiKey(ctx context.Context, req *connect.Request[v1.RevokeApiKeyRequest]) (*connect.Response[v1.RevokeApiKeyResponse], error) {
-	return c.revokeApiKey.CallUnary(ctx, req)
 }
 
 // RegisterOAuthClient calls xstockstrat.identity.v1.IdentityService.RegisterOAuthClient.
@@ -308,10 +244,6 @@ type IdentityServiceHandler interface {
 	ValidateToken(context.Context, *connect.Request[v1.ValidateTokenRequest]) (*connect.Response[v1.TokenClaims], error)
 	RefreshToken(context.Context, *connect.Request[v1.RefreshTokenRequest]) (*connect.Response[v1.AuthTokenResponse], error)
 	RevokeToken(context.Context, *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error)
-	CreateApiKey(context.Context, *connect.Request[v1.CreateApiKeyRequest]) (*connect.Response[v1.ApiKey], error)
-	ValidateApiKey(context.Context, *connect.Request[v1.ValidateApiKeyRequest]) (*connect.Response[v1.TokenClaims], error)
-	ListApiKeys(context.Context, *connect.Request[v1.ListApiKeysRequest]) (*connect.Response[v1.ListApiKeysResponse], error)
-	RevokeApiKey(context.Context, *connect.Request[v1.RevokeApiKeyRequest]) (*connect.Response[v1.RevokeApiKeyResponse], error)
 	// OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
 	// OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
 	RegisterOAuthClient(context.Context, *connect.Request[v1.RegisterOAuthClientRequest]) (*connect.Response[v1.OAuthClient], error)
@@ -354,30 +286,6 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		IdentityServiceRevokeTokenProcedure,
 		svc.RevokeToken,
 		connect.WithSchema(identityServiceMethods.ByName("RevokeToken")),
-		connect.WithHandlerOptions(opts...),
-	)
-	identityServiceCreateApiKeyHandler := connect.NewUnaryHandler(
-		IdentityServiceCreateApiKeyProcedure,
-		svc.CreateApiKey,
-		connect.WithSchema(identityServiceMethods.ByName("CreateApiKey")),
-		connect.WithHandlerOptions(opts...),
-	)
-	identityServiceValidateApiKeyHandler := connect.NewUnaryHandler(
-		IdentityServiceValidateApiKeyProcedure,
-		svc.ValidateApiKey,
-		connect.WithSchema(identityServiceMethods.ByName("ValidateApiKey")),
-		connect.WithHandlerOptions(opts...),
-	)
-	identityServiceListApiKeysHandler := connect.NewUnaryHandler(
-		IdentityServiceListApiKeysProcedure,
-		svc.ListApiKeys,
-		connect.WithSchema(identityServiceMethods.ByName("ListApiKeys")),
-		connect.WithHandlerOptions(opts...),
-	)
-	identityServiceRevokeApiKeyHandler := connect.NewUnaryHandler(
-		IdentityServiceRevokeApiKeyProcedure,
-		svc.RevokeApiKey,
-		connect.WithSchema(identityServiceMethods.ByName("RevokeApiKey")),
 		connect.WithHandlerOptions(opts...),
 	)
 	identityServiceRegisterOAuthClientHandler := connect.NewUnaryHandler(
@@ -432,14 +340,6 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 			identityServiceRefreshTokenHandler.ServeHTTP(w, r)
 		case IdentityServiceRevokeTokenProcedure:
 			identityServiceRevokeTokenHandler.ServeHTTP(w, r)
-		case IdentityServiceCreateApiKeyProcedure:
-			identityServiceCreateApiKeyHandler.ServeHTTP(w, r)
-		case IdentityServiceValidateApiKeyProcedure:
-			identityServiceValidateApiKeyHandler.ServeHTTP(w, r)
-		case IdentityServiceListApiKeysProcedure:
-			identityServiceListApiKeysHandler.ServeHTTP(w, r)
-		case IdentityServiceRevokeApiKeyProcedure:
-			identityServiceRevokeApiKeyHandler.ServeHTTP(w, r)
 		case IdentityServiceRegisterOAuthClientProcedure:
 			identityServiceRegisterOAuthClientHandler.ServeHTTP(w, r)
 		case IdentityServiceGetOAuthClientProcedure:
@@ -477,22 +377,6 @@ func (UnimplementedIdentityServiceHandler) RefreshToken(context.Context, *connec
 
 func (UnimplementedIdentityServiceHandler) RevokeToken(context.Context, *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.RevokeToken is not implemented"))
-}
-
-func (UnimplementedIdentityServiceHandler) CreateApiKey(context.Context, *connect.Request[v1.CreateApiKeyRequest]) (*connect.Response[v1.ApiKey], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.CreateApiKey is not implemented"))
-}
-
-func (UnimplementedIdentityServiceHandler) ValidateApiKey(context.Context, *connect.Request[v1.ValidateApiKeyRequest]) (*connect.Response[v1.TokenClaims], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.ValidateApiKey is not implemented"))
-}
-
-func (UnimplementedIdentityServiceHandler) ListApiKeys(context.Context, *connect.Request[v1.ListApiKeysRequest]) (*connect.Response[v1.ListApiKeysResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.ListApiKeys is not implemented"))
-}
-
-func (UnimplementedIdentityServiceHandler) RevokeApiKey(context.Context, *connect.Request[v1.RevokeApiKeyRequest]) (*connect.Response[v1.RevokeApiKeyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.RevokeApiKey is not implemented"))
 }
 
 func (UnimplementedIdentityServiceHandler) RegisterOAuthClient(context.Context, *connect.Request[v1.RegisterOAuthClientRequest]) (*connect.Response[v1.OAuthClient], error) {

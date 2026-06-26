@@ -11,10 +11,6 @@ service IdentityService {
   rpc ValidateToken(ValidateTokenRequest) returns (TokenClaims);
   rpc RefreshToken(RefreshTokenRequest) returns (AuthTokenResponse);
   rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse);
-  rpc CreateApiKey(CreateApiKeyRequest) returns (ApiKey);
-  rpc ValidateApiKey(ValidateApiKeyRequest) returns (TokenClaims);
-  rpc ListApiKeys(ListApiKeysRequest) returns (ListApiKeysResponse);
-  rpc RevokeApiKey(RevokeApiKeyRequest) returns (RevokeApiKeyResponse);
 
   // OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
   // OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
@@ -55,29 +51,6 @@ message ValidateTokenRequest { string token = 1; }
 message RefreshTokenRequest { string refresh_token = 1; }
 message RevokeTokenRequest { string token = 1; }
 message RevokeTokenResponse { bool success = 1; }
-
-message ApiKey {
-  string key_id = 1;
-  string key_prefix = 2;  // first 8 chars only (rest is hashed)
-  string user_id = 3;
-  string name = 4;
-  repeated string scopes = 5;
-  google.protobuf.Timestamp created_at = 6;
-  google.protobuf.Timestamp expires_at = 7;
-}
-
-message CreateApiKeyRequest {
-  string user_id = 1;
-  string name = 2;
-  repeated string scopes = 3;
-  google.protobuf.Timestamp expires_at = 4;
-}
-
-message ValidateApiKeyRequest { string api_key = 1; }
-message ListApiKeysRequest { string user_id = 1; }
-message ListApiKeysResponse { repeated ApiKey keys = 1; }
-message RevokeApiKeyRequest { string key_id = 1; string user_id = 2; }
-message RevokeApiKeyResponse { bool success = 1; }
 
 // ── OAuth 2.1 messages (feature 049 Part B) ──────────────────────────────────
 message OAuthClient {

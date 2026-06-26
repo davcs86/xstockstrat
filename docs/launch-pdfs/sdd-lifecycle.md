@@ -300,7 +300,7 @@ A few properties worth noting:
 
 3. **The gap between `draft` (12) and `implementation-ready` (2) is intentional.** The `/sdd-spec` step is expensive — it runs a `general-purpose` sub-agent at `high` effort. Features sit in `draft` until there's enough confidence the product spec is right to justify spending planner cycles on the implementation spec. The 12 `draft` features are the prioritization queue.
 
-4. **There are two `020-*` directories.** `020-notify-external-fanout` and `020-order-snapshots-pnl-patterns`. NNN collisions happen when two `/sdd-story` runs race; the lifecycle is unaffected because slugs are unique. Resolving the collision is a cosmetic cleanup at promotion time.
+4. **NNN collisions are resolved by renumbering, not tolerated.** Collisions used to happen when two `/sdd-story` runs raced (the directory was named off a stale `max(NNN)`); the lifecycle is unaffected because slugs are unique, but the duplicate is renumbered to the next free `NNN` as a cleanup. The earlier `020-`/`052-` collisions were resolved this way (`order-snapshots-pnl-patterns` → `042`, `formula-parameters` → `058`), and `/sdd-story` now derives `next = max(NNN) + 1` and aborts if the computed directory already exists, so the race can't recur. See `runbooks/feature-workflow.md` § Feature Numbering.
 
 5. **Browse `product-features.pdf` § "What's Next: The Live Backlog"** for the active 20 grouped by theme (trading safety, strategy quality, agent surface, notifications, infrastructure) with one-line summaries of each.
 

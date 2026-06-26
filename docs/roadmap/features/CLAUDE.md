@@ -2,8 +2,9 @@
 
 Each subdirectory tracks one feature from user story through implementation and deployment.
 Directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a
-zero-padded sequence number auto-assigned by `/sdd-story` or `/sdd-triage` in creation order.
-Git branch names use only the slug without the prefix: `feature/<slug>`.
+zero-padded sequence number assigned by `/sdd-story` or `/sdd-triage` as `max(existing NNN) + 1`
+(never a count, never reusing a number or backfilling a gap — see `docs/runbooks/feature-workflow.md`
+§ Feature Numbering). Git branch names use only the slug without the prefix: `feature/<slug>`.
 
 ---
 
