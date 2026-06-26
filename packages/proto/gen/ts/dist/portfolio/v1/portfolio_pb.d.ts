@@ -108,6 +108,25 @@ export type Position = Message<"xstockstrat.portfolio.v1.Position"> & {
      * @generated from field: string account_id = 11;
      */
     accountId: string;
+    /**
+     * Today's (intraday) P&L — change since the previous trading day's close.
+     * Sourced from the broker's per-position intraday valuation (Alpaca
+     * unrealized_intraday_pl / unrealized_intraday_plpc) on account.positions.synced.
+     * Zero when the broker does not report an intraday figure (e.g. order-fill-only
+     * positions enriched from marketdata mid-quotes); distinct from unrealized_pnl,
+     * which is total P&L since entry.
+     *
+     * dollars
+     *
+     * @generated from field: double day_pnl = 12;
+     */
+    dayPnl: number;
+    /**
+     * fraction (e.g. 0.0125 = +1.25%)
+     *
+     * @generated from field: double day_pnl_pct = 13;
+     */
+    dayPnlPct: number;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Position.

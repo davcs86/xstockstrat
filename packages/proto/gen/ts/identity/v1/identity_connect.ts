@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ApiKey, AuthenticateUserRequest, AuthTokenResponse, CreateApiKeyRequest, ExchangeAuthCodeRequest, GetOAuthClientRequest, IssueAuthCodeRequest, IssueAuthCodeResponse, ListApiKeysRequest, ListApiKeysResponse, ListAuthorizedAppsRequest, ListAuthorizedAppsResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeApiKeyRequest, RevokeApiKeyResponse, RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse, RevokeTokenRequest, RevokeTokenResponse, TokenClaims, ValidateApiKeyRequest, ValidateTokenRequest } from "./identity_pb.js";
+import { AuthenticateUserRequest, AuthTokenResponse, ExchangeAuthCodeRequest, GetOAuthClientRequest, IssueAuthCodeRequest, IssueAuthCodeResponse, ListAuthorizedAppsRequest, ListAuthorizedAppsResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse, RevokeTokenRequest, RevokeTokenResponse, TokenClaims, ValidateTokenRequest } from "./identity_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -46,42 +46,6 @@ export const IdentityService = {
       name: "RevokeToken",
       I: RevokeTokenRequest,
       O: RevokeTokenResponse,
-      kind: MethodKind.Unary,
-    },
-    /**
-     * @generated from rpc xstockstrat.identity.v1.IdentityService.CreateApiKey
-     */
-    createApiKey: {
-      name: "CreateApiKey",
-      I: CreateApiKeyRequest,
-      O: ApiKey,
-      kind: MethodKind.Unary,
-    },
-    /**
-     * @generated from rpc xstockstrat.identity.v1.IdentityService.ValidateApiKey
-     */
-    validateApiKey: {
-      name: "ValidateApiKey",
-      I: ValidateApiKeyRequest,
-      O: TokenClaims,
-      kind: MethodKind.Unary,
-    },
-    /**
-     * @generated from rpc xstockstrat.identity.v1.IdentityService.ListApiKeys
-     */
-    listApiKeys: {
-      name: "ListApiKeys",
-      I: ListApiKeysRequest,
-      O: ListApiKeysResponse,
-      kind: MethodKind.Unary,
-    },
-    /**
-     * @generated from rpc xstockstrat.identity.v1.IdentityService.RevokeApiKey
-     */
-    revokeApiKey: {
-      name: "RevokeApiKey",
-      I: RevokeApiKeyRequest,
-      O: RevokeApiKeyResponse,
       kind: MethodKind.Unary,
     },
     /**

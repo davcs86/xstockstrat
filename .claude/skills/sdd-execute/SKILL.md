@@ -2,11 +2,18 @@
 name: sdd-execute
 description: Phase 3 of SDD — execute implementation steps with mandatory codebase discovery and explicit user confirmation before any writes. Usage: /sdd-execute <feature-slug> [step-number|next|all|sequential]. `sequential` runs a feature (or an ordered multi-feature sequence with per-feature re-spec) end-to-end as stacked per-step PRs, with one up-front confirmation per feature instead of a per-step stop. Re-reads context.md at every session start so prior decisions carry forward.
 argument-hint: <feature-slug | "feat-a (re-spec if needed) > feat-b ..."> [step-number|next|all|sequential]
-allowed-tools: Read Write Edit Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(go install *) Bash(golangci-lint *) Bash(python *) Bash(python3 *) Bash(uv *) Bash(pip *) Bash(ruff *) Bash(pnpm *) Bash(npx *) Bash(buf *) Bash(curl *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git pull *) Bash(git show *) Bash(git ls-remote *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git rebase *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
+allowed-tools: Read Write Edit Task Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(go install *) Bash(golangci-lint *) Bash(python *) Bash(python3 *) Bash(uv *) Bash(pip *) Bash(ruff *) Bash(pnpm *) Bash(npx *) Bash(buf *) Bash(curl *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git pull *) Bash(git show *) Bash(git ls-remote *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git rebase *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
 effort: high
 ---
 
-You are executing implementation steps for an xstockstrat feature. You follow strict rules: discover before writing, confirm before writes (per step in the default modes; **once up-front per feature** in `sequential` mode — see `## SEQUENTIAL MODE`), and document everything in context.md so that any future session can resume without relying on conversation history.
+You are executing implementation steps for an xstockstrat feature. You follow strict rules: discover before writing, confirm before writes (per step in the default modes; **once up-front per feature** in `sequential` mode — see `reference/sequential-mode.md`), and document everything in context.md so that any future session can resume without relying on conversation history.
+
+**Progressive disclosure**: this file is the always-loaded core (boot, the 3-phase per-step
+execution, commit/PR, and the HARD CONSTRAINTS safety rails). Three `reference/` files load only
+when their path activates — do not read them up front:
+- `reference/sequential-mode.md` — read **only** when `$ARGUMENTS[1] == sequential`.
+- `reference/deviation-handling.md` — read when a deviation or in-scope-unresolvable gap arises.
+- `reference/repo-conventions.md` — read when a step touches proto / migrations / config keys / lint / header propagation.
 
 ## Arguments
 
@@ -15,7 +22,7 @@ You are executing implementation steps for an xstockstrat feature. You follow st
   directive in parentheses, e.g. `"003 (re-spec if needed) > 019 > 016 (re-spec Steps 5-6 first)"`.
 - `$ARGUMENTS[1]` — step selector: a number (e.g. `3`), `next` (default), `all`, or `sequential`.
 
-**Mode gating:** every behavior in `## SEQUENTIAL MODE` and every "sequential-mode" carve-out below
+**Mode gating:** every behavior in `reference/sequential-mode.md` and every "sequential-mode" carve-out
 applies **only** when `$ARGUMENTS[1] == sequential`. When the selector is a number, `next`, or `all`,
 this skill behaves exactly as before (per-step Phase-2 confirmation + per-step STOP).
 
@@ -93,8 +100,8 @@ Target: Step N — <title>
 ## STEP SELECTOR
 
 Parse `$ARGUMENTS[1]`:
-- `sequential` → **do not** resolve a single step here. Hand control to `## SEQUENTIAL MODE`, which
-  parses the feature sequence and drives the per-feature loop (iterating pending steps internally).
+- `sequential` → **do not** resolve a single step here. Read `reference/sequential-mode.md` and hand
+  control to it; that driver parses the feature sequence and runs the per-feature loop.
 - absent or `next` → find the first step where `**Status**: \`pending\``
 - a number N → target only Step N
 - `all` → process all `pending` steps in order, applying confirmation to each.
@@ -106,116 +113,13 @@ If no `pending` steps are found (all steps are `done`, `skipped`, or `blocked`):
 
 ---
 
-## SEQUENTIAL MODE — runs only when `$ARGUMENTS[1] == sequential`
+## SEQUENTIAL MODE
 
-A self-contained alternate driver. It reuses the BOOT SEQUENCE, PER-STEP EXECUTION (Phase 1 & 3),
-STEP COMMIT + PR, and ALL-DONE machinery, with the explicit carve-outs documented here and in
-`## HARD CONSTRAINTS`. **Standing authorization:** invoking sequential mode is the user's
-authorization to run Phases 1 and 3 automatically — the per-step Phase-2 prompt and per-step STOP are
-replaced by **one up-front confirmation per feature** (§5.1b / §5.4). The flow pauses only at a
-**blocker** (§5.7).
-
-### 5.1 Parse the feature sequence
-- Split `$ARGUMENTS[0]` on `>` or `→` → an ordered list of feature tokens.
-- For each token: the leading bare slug/number is the feature id; a trailing `(...)` is its re-spec
-  directive:
-  - `(re-spec if needed)` → directive = **conditional**.
-  - `(re-spec Steps X-Y first)` / `(re-spec Step N first)` → directive = **explicit**, with the parsed
-    step set.
-  - no parenthetical → directive = **none**.
-- A single token with no delimiter = a one-feature sequential run (backward compatible).
-- Resolve each feature id to its `FEATURE_DIR` via the B0 glob (`*-<id>`).
-
-### 5.1b Mode-entry confirmation (the very first interactive step)
-Before the loop and before any non-read-only action, present to the user:
-- "Running `/sdd-execute` in **SEQUENTIAL** mode."
-- the parsed ordered sequence with each feature's re-spec directive, and
-- the behavior summary: stacked per-step PRs (each based on the prior step branch); **one up-front
-  confirmation per feature**; blockers routed to `AskUserQuestion`; CI-watch + rebase/autofix after
-  each integration PR.
-
-Ask a single `AskUserQuestion` (agree / cancel). **Proceed only on agree.** On cancel, stop without
-making any change. This entry confirmation is distinct from, and precedes, the per-feature confirm.
-
-### 5.2 Per-feature loop
-For each feature in the sequence, in order:
-1. Run **BOOT SEQUENCE** (B0–B5) scoped to this feature's slug/dir.
-2. **Re-spec gate** (§5.3).
-3. **Up-front confirm** (§5.4).
-4. **Stacked step loop** (§5.5).
-5. **Integration PR** (§5.6) + **CI watch** (§5.8).
-6. Advance to the next feature. Do **not** wait for the integration PR to merge first; cross-feature
-   ordering is governed by `merge-order.md` and surfaced as a blocker (§5.7) if violated.
-
-### 5.3 Re-spec gate (read-only validation first; the sole sanctioned spec edit)
-1. Merge current `origin/main-dev` into `<dev-branch>` so the feature branch reflects reality
-   (`git merge -X ours origin/main-dev` per BRANCH SYNC step 5; push `<dev-branch>`).
-2. **Validate** the spec against the live codebase: for each step, re-run its `**Codebase Evidence**`
-   greps/ls and confirm each `**Files**` path exists.
-3. Apply the directive:
-   - **explicit** → re-spec exactly the named steps' bodies.
-   - **conditional** → re-spec **only** the steps whose evidence/files no longer match (targeted,
-     minimal).
-   - **none** → if any step mismatches, do **not** silently edit — raise a **blocker** (§5.7) asking
-     whether to re-spec.
-4. A re-spec edits the affected step bodies (`**Instructions**`/`**Codebase Evidence**`/`**Files**`/
-   `**Verification**`) + appends a feature.md status-history row + a context.md note, and is committed
-   to the **feature branch** (not a step branch): `git commit -m "respec(<slug>): align steps <list>
-   with current codebase"`, then `git push origin <dev-branch>`.
-5. This is the **only** exception to "step bodies are immutable during execution" — it happens
-   **before** the step loop, on the feature branch, never mid-step.
-
-### 5.4 Up-front confirm (once per feature)
-After §5.3's read-only validation, present the combined plan for this feature: the re-spec summary
-(which steps will be re-spec'd and why) **and** the ordered list of pending steps to execute. Ask one
-`AskUserQuestion` (proceed / stop). On proceed: commit the re-spec (if any) per §5.3, then run §5.5
-unattended (no further per-step confirmation). This single confirmation **replaces** the per-step
-Phase-2 confirmation for this feature.
-
-### 5.5 Stacked step loop
-For each pending step N in order (no per-step confirmation, no STOP):
-- **Branch base:** the first executed step → base = `<dev-branch>`; step N (after the first) → base =
-  the **prior executed step's branch** `feature-steps/<slug>-step-<prev>`. (BRANCH SYNC takes a
-  `<base-branch>` — see `templates/branch-sync.md`.)
-- Run **Phase 1 Discovery** unchanged (read-only). A discovery failure (missing file/symbol) → a
-  **blocker** (§5.7), not the default "mark blocked + stop".
-- **Skip Phase 2's interactive prompt and STOP.** Still compute the change plan internally (for the
-  commit message + deviation record), but do not ask "Proceed?" and do not wait.
-- Run **Phase 3 Execution** + Verification unchanged. Apply the verification fallbacks in
-  `## REPO CONVENTIONS → Sequential-mode verification fallbacks`. A verification failure that would
-  require a spec deviation → a **blocker** (§5.7).
-- Run **STEP COMMIT + PR** with the sequential overrides (§5.6): commit, push the step branch, open the
-  **stacked** step PR, then **continue to step N+1 in the same session** (no STOP).
-
-### 5.6 PR overrides + per-feature integration PR
-- **Step PRs:** use `mcp__github__create_pull_request` (the environment has no `gh`). Set
-  `base` = the prior step branch (or `<dev-branch>` for the first executed step) and
-  `head` = `feature-steps/<slug>-step-<N>`. Render the body from `templates/step-pr-body.md` (which
-  notes the stack). Do **not** print the "merge then run next" STOP.
-- **Integration PR (after all of this feature's steps are done):** run the merge-order gate (ALL-DONE
-  PATH step 1), then `mcp__github__create_pull_request` with `base: main-dev`, `head: <dev-branch>`,
-  body rendered from `templates/integration-pr-body.md`. Print the URL.
-
-### 5.7 Blocker handling (sequential override of DEVIATION HANDLING)
-A **blocker** is any of: a Phase-1 discovery failure; an ambiguous fix; an in-scope-unresolvable gap;
-a deviation that needs a decision; or a re-spec scope decision. On a blocker:
-- Stop the automatic flow and use the `AskUserQuestion` tool — **never decide unilaterally.**
-- Reuse the A/B/C "gap" option shape from `## DEVIATION HANDLING`, but presented via `AskUserQuestion`,
-  with **Option A ("fix now — expand this step's scope to fix it properly") as the preferred default**
-  over deferring or working around.
-- After the user answers, resume the loop where it stopped; record the decision in context.md (and the
-  Deviation Log if it is a deviation).
-
-### 5.8 Post-integration CI watch + rebase/autofix
-After opening each feature's integration PR:
-- `subscribe_pr_activity` to it. On a CI-failure event, fetch the failed job log (`mcp__github__
-  get_job_logs`) and diagnose.
-- If the feature branch is **behind `main-dev`** (e.g. a shared fix landed), rebase or merge `main-dev`
-  in and push so the PR re-runs with current reality.
-- If the failure is a **real defect in this feature**, fix it on the feature branch (or the relevant
-  step branch) and push.
-- If the failure is a **known flake** (e.g. timing-only e2e), do not churn — report it as re-runnable.
-- Stop watching once the PR is merged or closed.
+When `$ARGUMENTS[1] == sequential`, read **`reference/sequential-mode.md`** and follow it end to end.
+It is a self-contained driver (feature-sequence parsing, mode-entry confirmation, per-feature re-spec
+gate, stacked step loop, integration PR + CI watch, blocker handling) plus the sequential-mode
+carve-outs to HARD CONSTRAINTS and the CI-equivalent verification fallbacks. Do not load it for any
+other selector.
 
 ---
 
@@ -261,7 +165,7 @@ When invoked and all steps are already complete (lifecycle `code-completed`):
 Read `.claude/skills/sdd-execute/templates/branch-sync.md` and execute the procedure,
 substituting `<dev-branch>` and `<slug>` from `feature.md` and `<N>` from the current step number.
 `<base-branch>` defaults to `<dev-branch>`; in **sequential mode** pass the prior step branch for
-steps after the first (§5.5).
+steps after the first (`reference/sequential-mode.md` §5.5).
 
 ---
 
@@ -271,9 +175,16 @@ steps after the first (§5.5).
 
 Re-verify that the codebase matches what the spec documented at spec-generation time.
 
-1. Read every file listed in the step's `**Files**` section.
+**Delegation (recommended when the step lists several files or greps):** hand the step's `**Files**`
+and `**Codebase Evidence**` commands to a **`codebase-discovery`** subagent via the Task tool. It reads
+and re-runs them in its own window and returns a confirmed/blocked digest (`path:line` for each symbol,
+plus a `## Not found` section). This keeps the verification reads out of this window — you read the
+target files fresh in Phase 3 only if you proceed to edit. For a single-file step you may verify inline
+instead. Either way, apply the exact block/confirm logic below to the result.
+
+1. Read every file listed in the step's `**Files**` section (or take them from the discovery digest).
 2. Re-run every grep/ls command listed in the step's `**Codebase Evidence**` section. Confirm each symbol exists at the stated location.
-3. If a file does not exist or a symbol is not found at the expected location:
+3. If a file does not exist or a symbol is not found at the expected location (the digest reports it under `## Not found`):
    - Do **not** guess a substitute
    - Do **not** proceed with the step
    - Update the step's `**Status**` to `blocked` in implementation-spec.md
@@ -328,7 +239,7 @@ Proceed? (yes / no / adjust: <instruction>)
 5. If verification **fails**:
    - Diagnose the failure.
    - If the fix is clear and stays within the step's scope: apply it, re-run verification, report.
-   - If the fix requires deviating from the spec: document the deviation (see below) and ask user to confirm before continuing.
+   - If the fix requires deviating from the spec: follow `reference/deviation-handling.md` (document the deviation and ask the user to confirm before continuing).
 
 ### STEP COMMIT + PR — runs immediately after Phase 3 verification passes
 
@@ -379,7 +290,8 @@ Substitute all `<placeholders>` before use.
    Pass the rendered body with all placeholders substituted.
    If `gh` is unavailable, use `mcp__github__create_pull_request` with the same `base`/`head`/`title`/
    `body`. **Sequential mode** always uses `mcp__github__create_pull_request` and sets
-   `base` = the prior step branch (or `<dev-branch>` for the first executed step) — see §5.6.
+   `base` = the prior step branch (or `<dev-branch>` for the first executed step) — see
+   `reference/sequential-mode.md` §5.6.
 6. Print the PR URL returned by `gh pr create`.
 7. **STOP.** Tell the user:
    ```
@@ -388,57 +300,17 @@ Substitute all `<placeholders>` before use.
    ```
    Do not proceed to the next step in the same session.
    **Sequential-mode override:** do NOT stop — print "Step <N> done (PR <url>). Continuing to Step
-   <N+1>." and proceed to the next step (§5.5).
+   <N+1>." and proceed to the next step (`reference/sequential-mode.md` §5.5).
 
 ---
 
 ## DEVIATION HANDLING
 
-When actual implementation differs from what the spec said:
-
-Append to the `## Deviation Log` section of implementation-spec.md:
-```markdown
-### Deviation: Step N — <title>
-**Spec said**: <exact quote from spec Instructions>
-**Actual**: <what was done instead>
-**Reason**: <why the deviation was necessary>
-```
-
-Also record under `Deviations:` in the context.md step entry.
-
-This mirrors the `docs/roadmap/phase*-deviations.md` pattern used throughout this project.
-
-### No vague deferrals — always resolve with the user
-
-**Never write "deferred" without a specific target step or explicit user decision.**
-
-If, during Phase 2 or Phase 3, you identify a gap that cannot be addressed within the current step's scope (e.g. a param the route doesn't handle, a missing field in a proto, a side-effect from an earlier step's scope limit), you must explicitly surface it and ask the user before proceeding:
-
-```
-Gap found: <one-sentence description of the issue>.
-Options:
-  A) Fix it now — expand scope of this step to include <specific change>.
-  B) Accept as known limitation — <explain why it's safe/harmless>.
-  C) Track as follow-up — I'll note it in context.md for the next relevant step.
-
-Which do you prefer? (A / B / C)
-```
-
-**STOP HERE. Wait for the user's explicit reply (A / B / C) before taking any action.**
-
-- Do NOT auto-select an option based on your own judgment — not even Option B ("accepted limitation"). The user must choose.
-- If the session is compacted or resumed before a reply arrives, re-surface the same gap question at the top of the next response and wait again.
-
-- **Option A**: add the fix to the Phase 2 plan and re-present the plan for confirmation before writing.
-- **Option B**: record it in the Deviation Log with `**Disposition**: accepted limitation` and a clear rationale. Only apply after the user explicitly selects B.
-- **Option C**: record it in context.md under a `## Open Items` section with a description and the earliest step where it could be addressed; do NOT write "deferred" in the PR body or deviation log without this entry.
-
-Do not proceed with a vague "deferred" note unless you have a specific step number or explicit user sign-off.
-
-**Sequential-mode override:** present this same A/B/C gap choice via the `AskUserQuestion` tool (not
-free text), with **Option A ("fix now — expand this step's scope") as the recommended first option**.
-This is the only place sequential mode pauses for the human (a "blocker", §5.7). After the answer,
-resume the loop and record the decision in context.md (+ Deviation Log if applicable).
+When actual implementation differs from what the spec said, or when Phase 2/Phase 3 surfaces an
+in-scope-unresolvable gap, follow **`reference/deviation-handling.md`** — the `## Deviation Log` entry
+format and the mandatory A/B/C "no vague deferrals" gap protocol (with its sequential-mode
+`AskUserQuestion` override). Never write "deferred" without a specific target step or explicit user
+sign-off.
 
 ---
 
@@ -452,6 +324,9 @@ Append after each step completes (or is blocked/skipped):
 - Files modified: `path/to/file`, `path/to/other`
 - Deviations: none | <brief description — full detail in Deviation Log>
 ```
+
+If the feature uses the structured-header memory schema (`docs/patterns/context-engineering.md`), also
+update the `## Files Modified` and `## Open Threads` header blocks — not just the session log.
 
 ---
 
@@ -495,59 +370,14 @@ After the last step in the requested range (or on any stop):
 - **Never make changes outside the current step's scope** — no opportunistic cleanup, no refactoring, no extra files. (Exception: making the code the step *itself* introduced pass the step's lint/format Verification — e.g. `ruff format`, gofmt, or fixing a `golangci-lint`/`pnpm run lint` finding on the step's own changed lines — is in scope, not cleanup. Do not reformat or lint-fix code the step did not touch.)
 - **`implementation-spec.md` step bodies are immutable during execution.** The only permitted change to a step entry is flipping `**Status**` from `pending` to `done` (or `blocked`/`skipped`). The `**Instructions**`, `**Codebase Evidence**`, `**Verification**`, `**Files**`, and `**Reviewers**` fields must never be edited — they are the permanent record of the original plan. All divergence from that plan belongs exclusively in the `## Deviation Log` section.
 
-### Sequential-mode carve-outs (apply ONLY when `$ARGUMENTS[1] == sequential`)
-
-- "Never write or edit any file before Phase 2 user confirmation" is satisfied by the **mode-entry
-  confirmation (§5.1b)** plus the **one up-front confirmation per feature (§5.4)**. After those, Phases
-  1 and 3 run automatically; the per-step Phase-2 prompt and per-step STOP are skipped.
-- "step bodies are immutable during execution" still holds **during** step execution. The **re-spec
-  gate (§5.3)** is the sole exception: it edits step bodies **before** the step loop, on the feature
-  branch, in a separate `respec(<slug>): …` commit — never mid-step.
-- **Step PRs are stacked**: a step PR's `base` is the prior step branch (or `<dev-branch>` for the
-  first). Step PRs still never target `main-dev`/`main`; the integration PR → `main-dev` is the
-  existing sanctioned exception.
-- **Verification fallbacks** (REPO CONVENTIONS below) may be applied without asking, provided the
-  fallback matches CI and the divergence is logged in the `## Deviation Log`. Keeping `uv.lock` /
-  `pnpm-lock.yaml` in sync when a manifest changes is a sanctioned staging exception (log it).
-- **All other HARD CONSTRAINTS remain in force** (no guessing paths/symbols; no commit before
-  verification passes; migration immutability).
+**Sequential-mode carve-outs** to these constraints (mode-entry + per-feature confirmation satisfying
+the Phase-2 gate, the re-spec exception, stacked step PRs, auto-applied verification fallbacks) apply
+**only** when `$ARGUMENTS[1] == sequential` and are documented in `reference/sequential-mode.md`. All
+other HARD CONSTRAINTS remain in force in every mode.
 
 ---
 
-## REPO CONVENTIONS (from docs/runbooks/feature-workflow.md)
+## REPO CONVENTIONS
 
-- **Branch model**: `**Development Branch**` in `feature.md` is the integration branch (PR target). Per-step work happens on `feature-steps/<slug>-step-<N>` sub-branches created by BRANCH SYNC. Boot Step B4 validates the current branch context.
-- **Proto edits**: after any `.proto` change, run from `packages/proto/`:
-  ```bash
-  buf lint && buf breaking --against ".git#branch=<dev-branch>"
-  ```
-  where `<dev-branch>` is the `**Development Branch**` value from `feature.md` (parsed in Boot Step B4).
-  If `buf` is not installed: fall back to `grpc_tools.protoc` (precedent: docs/roadmap/phase3-deviations.md) and document as deviation.
-- **Migrations**: naming is `NNN_description.up.sql` + `NNN_description.down.sql`. NNN is the next integer after the last file found by `ls services/<name>/migrations/ | sort | tail -1`.
-- **After proto changes**: run `./scripts/buf-gen.sh` to regenerate stubs; include generated files in the commit.
-- **Config keys**: format is `<service-short-name>.<category>.<key>` — verify before writing.
-- **Never edit applied migrations**: any applied `.up.sql` file (committed to main-dev) is immutable; add a new numbered migration for corrections.
-- **Lint gate**: a `service` step's `**Verification**` (or its paired `test` step's) includes the language's lint command — Go `GOWORK=off golangci-lint run --modules-download-mode=mod`, Python `ruff check . && ruff format --check .`, Node/Next `pnpm run lint` (sdd-spec §5c). Phase 3 runs it like any other Verification; a lint/format failure on the step's own code must be fixed (see HARD CONSTRAINTS carve-out) and re-run before the step is marked `done`.
-- **Header propagation**: any new outbound gRPC call added by a step must forward `x-user-id` / `x-access-scope` / `x-trace-id` via the service's existing mechanism (`docs/patterns/header-propagation.md`). Confirm in Phase 1 discovery; do not introduce a bare client that drops them.
-
-### Sequential-mode verification fallbacks
-
-In `sequential` mode, when the sanctioned verification tool is unavailable, use a **CI-equivalent**
-fallback and log a `## Deviation Log` entry (`**Disposition**: CI-equivalent fallback`). In the
-default modes, surface these as a deviation question instead of auto-applying.
-
-- **Proto codegen container blocked** (e.g. Docker Hub rate limit): install the codegen toolchain on
-  the host pinned to the **CI `proto-freshness` job versions** in `.github/workflows/ci.yml` — `buf`,
-  `protoc-gen-go` / `protoc-gen-go-grpc` / `protoc-gen-connect-go` (the exact pinned versions),
-  `grpcio-tools` + a `protobuf` runtime matching the committed stubs, and the TS plugins from the
-  committed lockfile — then run `./scripts/buf-gen.sh` and confirm `git diff --exit-code
-  packages/proto/gen/` is limited to the intended service (mirrors CI's stale-stub check).
-- **`migrate` / DB unavailable**: apply both `NNN_*.up.sql` and `NNN_*.down.sql` against a throwaway
-  `postgres:16` container (`docker run … postgres:16`; `psql -v ON_ERROR_STOP=1 < …`) to prove the
-  migration is reversible.
-- **Playwright dev-server harness times out / browsers unavailable**: fall back to
-  `pnpm --filter <svc> exec tsc --noEmit` + `pnpm --filter <svc> run lint` (the spec's documented e2e
-  fallback).
-- **Lockfiles**: whenever a step changes `pyproject.toml` / `package.json`, regenerate and stage
-  `uv.lock` / `pnpm-lock.yaml` in the same commit, even if not listed in the step's `**Files**` (CI
-  runs `uv lock --check` / `pnpm install --frozen-lockfile`).
+Proto/migration/config-key/lint/header-propagation conventions from `docs/runbooks/feature-workflow.md`
+live in **`reference/repo-conventions.md`**. Load it when a step touches any of those areas.

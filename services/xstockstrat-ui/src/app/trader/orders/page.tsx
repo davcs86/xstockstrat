@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { AppShell } from '@/components/trader/AppShell';
@@ -44,7 +44,11 @@ export default function OrdersPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           <div className="lg:col-span-4">
-            <OrderForm mode={mode} />
+            {/* OrderForm reads useSearchParams (the ?symbol quick-trade deep link), which
+                Next.js requires to be wrapped in a Suspense boundary for prerendering. */}
+            <Suspense fallback={null}>
+              <OrderForm mode={mode} />
+            </Suspense>
           </div>
           <div className="lg:col-span-8 space-y-4">
             <OrderFiltersPanel onChange={setFilters} />

@@ -1,4 +1,5 @@
 'use client';
+import { Suspense } from 'react';
 import { AppShell } from '@/components/trader/AppShell';
 import { OrderForm } from '@/components/trader/OrderForm';
 import { OrderBook } from '@/components/trader/OrderBook';
@@ -25,7 +26,11 @@ export default function TradingDashboard() {
             <PortfolioPanel />
           </div>
           <div className="md:col-span-4 order-3 md:order-none">
-            <OrderForm mode={mode} />
+            {/* Suspense boundary: OrderForm reads useSearchParams (the ?symbol quick-trade
+                deep link), which Next.js requires to be wrapped to keep the page prerenderable. */}
+            <Suspense fallback={null}>
+              <OrderForm mode={mode} />
+            </Suspense>
           </div>
           <div className="md:col-span-5 order-2 md:order-none">
             <OrderBook mode={mode} />
