@@ -120,6 +120,17 @@ export interface Position {
   openedAt?: Date | undefined;
   tradingMode: TradingMode;
   accountId: string;
+  /**
+   * Today's (intraday) P&L — change since the previous trading day's close.
+   * Sourced from the broker's per-position intraday valuation (Alpaca
+   * unrealized_intraday_pl / unrealized_intraday_plpc) on account.positions.synced.
+   * Zero when the broker does not report an intraday figure (e.g. order-fill-only
+   * positions enriched from marketdata mid-quotes); distinct from unrealized_pnl,
+   * which is total P&L since entry.
+   */
+  dayPnl: number;
+  /** fraction (e.g. 0.0125 = +1.25%) */
+  dayPnlPct: number;
 }
 
 export interface PortfolioSnapshot {
@@ -486,6 +497,8 @@ function createBasePosition(): Position {
     openedAt: undefined,
     tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED,
     accountId: "",
+    dayPnl: 0,
+    dayPnlPct: 0,
   };
 }
 
@@ -523,6 +536,12 @@ export const Position: MessageFns<Position> = {
     }
     if (message.accountId !== "") {
       writer.uint32(90).string(message.accountId);
+    }
+    if (message.dayPnl !== 0) {
+      writer.uint32(97).double(message.dayPnl);
+    }
+    if (message.dayPnlPct !== 0) {
+      writer.uint32(105).double(message.dayPnlPct);
     }
     return writer;
   },
@@ -622,6 +641,22 @@ export const Position: MessageFns<Position> = {
           message.accountId = reader.string();
           continue;
         }
+        case 12: {
+          if (tag !== 97) {
+            break;
+          }
+
+          message.dayPnl = reader.double();
+          continue;
+        }
+        case 13: {
+          if (tag !== 105) {
+            break;
+          }
+
+          message.dayPnlPct = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -680,6 +715,16 @@ export const Position: MessageFns<Position> = {
         : isSet(object.account_id)
         ? globalThis.String(object.account_id)
         : "",
+      dayPnl: isSet(object.dayPnl)
+        ? globalThis.Number(object.dayPnl)
+        : isSet(object.day_pnl)
+        ? globalThis.Number(object.day_pnl)
+        : 0,
+      dayPnlPct: isSet(object.dayPnlPct)
+        ? globalThis.Number(object.dayPnlPct)
+        : isSet(object.day_pnl_pct)
+        ? globalThis.Number(object.day_pnl_pct)
+        : 0,
     };
   },
 
@@ -718,6 +763,12 @@ export const Position: MessageFns<Position> = {
     if (message.accountId !== "") {
       obj.accountId = message.accountId;
     }
+    if (message.dayPnl !== 0) {
+      obj.dayPnl = message.dayPnl;
+    }
+    if (message.dayPnlPct !== 0) {
+      obj.dayPnlPct = message.dayPnlPct;
+    }
     return obj;
   },
 
@@ -737,6 +788,8 @@ export const Position: MessageFns<Position> = {
     message.openedAt = object.openedAt ?? undefined;
     message.tradingMode = object.tradingMode ?? TradingMode.TRADING_MODE_UNSPECIFIED;
     message.accountId = object.accountId ?? "";
+    message.dayPnl = object.dayPnl ?? 0;
+    message.dayPnlPct = object.dayPnlPct ?? 0;
     return message;
   },
 };

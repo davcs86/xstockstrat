@@ -3,7 +3,7 @@
 **Status**: `complete`
 **Created**: 2026-06-08
 **Regenerated**: 2026-06-08 (re-run; all codebase evidence re-verified against current tree)
-**Feature**: `docs/roadmap/features/052-formula-parameters/feature.md`
+**Feature**: `docs/roadmap/features/058-formula-parameters/feature.md`
 **Total Steps**: 14
 **Feature Branch**: `feature/formula-parameters`
 

@@ -274,34 +274,20 @@ class TestManageStrategyTool:
     @pytest.mark.asyncio
     async def test_calls_client_with_args(self):
         server = _make_server()
-        with (
-            patch.object(client, "validate_admin", AsyncMock(return_value=True)),
-            patch.object(
-                client, "manage_strategy", AsyncMock(return_value={"strategy_id": "sma_x"})
-            ) as m,
-        ):
+        with patch.object(
+            client, "manage_strategy", AsyncMock(return_value={"strategy_id": "sma_x"})
+        ) as m:
             result = await _tool_fn(server, "manage_strategy")(
                 operation="register",
                 strategy_id="sma_x",
                 display_name="SMA X",
                 components=[{"ref_name": "fast", "kind": "builtin", "indicator": "SMA"}],
                 entry_rule="{}",
-                admin_api_key="key-123",
             )
         assert result == {"strategy_id": "sma_x"}
         kwargs = m.call_args.kwargs
         assert kwargs["operation"] == "register"
-        assert kwargs["api_key"] == "key-123"
         assert kwargs["definition"]["strategy_id"] == "sma_x"
-
-    @pytest.mark.asyncio
-    async def test_non_admin_rejected_at_entry(self):
-        server = _make_server()
-        with patch.object(client, "validate_admin", AsyncMock(return_value=False)):
-            with pytest.raises(RuntimeError, match="admin API key required"):
-                await _tool_fn(server, "manage_strategy")(
-                    operation="register", strategy_id="x", admin_api_key="bad"
-                )
 
     @pytest.mark.asyncio
     async def test_grpc_error_reraised_as_clear_message(self):
@@ -309,14 +295,9 @@ class TestManageStrategyTool:
 
         server = _make_server()
         err = _rpc_error(grpc.StatusCode.NOT_FOUND, "nope")
-        with (
-            patch.object(client, "validate_admin", AsyncMock(return_value=True)),
-            patch.object(client, "manage_strategy", AsyncMock(side_effect=err)),
-        ):
+        with patch.object(client, "manage_strategy", AsyncMock(side_effect=err)):
             with pytest.raises(RuntimeError, match="strategy not found"):
-                await _tool_fn(server, "manage_strategy")(
-                    operation="update", strategy_id="x", admin_api_key="good"
-                )
+                await _tool_fn(server, "manage_strategy")(operation="update", strategy_id="x")
 
 
 class TestManageFormulaTool:
@@ -327,13 +308,12 @@ class TestManageFormulaTool:
             client, "manage_formula", AsyncMock(return_value={"formula_id": "f-1"})
         ) as m:
             await _tool_fn(server, "manage_formula")(
-                operation="register", name="rsi2", source="x = 1", admin_api_key="k"
+                operation="register", name="rsi2", source="x = 1"
             )
             await _tool_fn(server, "manage_formula")(
                 operation="delete",
                 formula_id="f-1",
                 formula_author_user_id="u1",
-                admin_api_key="k",
             )
         assert m.call_count == 2
         assert m.call_args_list[0].kwargs["operation"] == "register"
@@ -349,7 +329,6 @@ class TestManageFormulaTool:
                 operation="register",
                 name="rsi3",
                 source="result = params['period']",
-                admin_api_key="k",
                 parameters=[
                     {
                         "name": "period",
@@ -386,44 +365,21 @@ class TestManageSignalSourceTool:
             "active": True,
             "has_credentials": True,
         }
-        with (
-            patch.object(client, "validate_admin", AsyncMock(return_value=True)),
-            patch.object(client, "manage_signal_source", AsyncMock(return_value=returned)) as m,
-        ):
+        with patch.object(client, "manage_signal_source", AsyncMock(return_value=returned)) as m:
             result = await _tool_fn(server, "manage_signal_source")(
                 operation="register",
                 slug="uw",
                 display_name="UW",
                 source_type="newsletter",
                 credentials_ref="secret-ref",
-                admin_api_key="k",
             )
         assert "credentials_ref" not in result  # FR-12
         assert m.call_args.kwargs["credentials_ref"] == "secret-ref"
 
-    @pytest.mark.asyncio
-    async def test_non_admin_rejected_at_entry(self):
-        """AC-A2: manage_signal_source validates admin at the agent entry."""
-        server = _make_server()
-        with patch.object(client, "validate_admin", AsyncMock(return_value=False)):
-            with pytest.raises(RuntimeError, match="admin API key required"):
-                await _tool_fn(server, "manage_signal_source")(
-                    operation="register", slug="uw", admin_api_key="bad"
-                )
-
 
 class TestSetStrategyLiveTool:
     @pytest.mark.asyncio
-    async def test_requires_admin(self):
-        server = _make_server()
-        with patch.object(client, "validate_admin", AsyncMock(return_value=False)):
-            with pytest.raises(RuntimeError, match="admin API key required"):
-                await _tool_fn(server, "set_strategy_live")(
-                    strategy_id="s1", live_enabled=True, admin_api_key="bad"
-                )
-
-    @pytest.mark.asyncio
-    async def test_calls_client_when_admin(self):
+    async def test_calls_client(self):
         server = _make_server()
         returned = {
             "strategy_id": "s1",
@@ -431,11 +387,10 @@ class TestSetStrategyLiveTool:
             "live_enabled": True,
             "active": True,
         }
-        with patch.object(client, "validate_admin", AsyncMock(return_value=True)):
-            with patch.object(client, "set_strategy_live", AsyncMock(return_value=returned)) as m:
-                result = await _tool_fn(server, "set_strategy_live")(
-                    strategy_id="s1", live_enabled=True, admin_api_key="good"
-                )
+        with patch.object(client, "set_strategy_live", AsyncMock(return_value=returned)) as m:
+            result = await _tool_fn(server, "set_strategy_live")(
+                strategy_id="s1", live_enabled=True
+            )
         assert result == returned
         assert m.call_args.kwargs["strategy_id"] == "s1"
-        assert m.call_args.kwargs["api_key"] == "good"
+        assert m.call_args.kwargs["live_enabled"] is True

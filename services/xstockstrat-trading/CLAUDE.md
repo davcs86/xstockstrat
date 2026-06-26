@@ -62,6 +62,12 @@ All config values are served by **xstockstrat-config** namespace `trading`.
 | `trading.broker.paper` | bool | `true` | Route orders to paper API when true; live API when false. Also the source of truth for the mode new broker accounts are registered in. |
 | `trading.broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout. Read at account-client construction and applied as the broker HTTP client's `Timeout`. |
 | `trading.credential_health.interval_ms` | int | `300000` | Interval for the background poller that re-validates each broker account's API secrets. Read live on every cycle; set to `0` (or negative) to disable/pause the poller without a restart. |
+| `trading.fill_poller.interval_ms` | float | `5000` | Interval for the order-fill reconciliation poller (`pollFills`). Read live on every cycle. |
+| `trading.position_sync.interval_ms` | float | `300000` | Interval for the broker position/balance sync poller (`syncPositions`). Read live on every cycle. |
+
+`trading.broker.timeout_ms` also bounds each broker REST call made by `syncPositions` (an explicit
+per-call `context` deadline, matching the credential-health poller), so a black-holed connection can
+never wedge the sync loop. Likewise every ledger `AppendEvent` is bounded (`ledgerEmitTimeout`, 10s).
 
 ## Webhooks
 
@@ -93,7 +99,7 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 | `order.approved` | `approval:{order_id}` | Manual approval granted |
 | `order.broker_submitted` | `order:{order_id}` | Order accepted by Alpaca broker |
 | `order.broker_rejected` | `order:{order_id}` | Alpaca broker rejected the order |
-| `account.positions.synced` | `account:{account_id}` | Periodic broker position snapshot (poller); carries `user_id` + `account_id` and each position's broker mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`) |
+| `account.positions.synced` | `account:{account_id}` | Periodic broker position snapshot (poller); carries `user_id` + `account_id`, each position's broker mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`), and its intraday/today's P&L (`day_pnl`/`day_pnl_pct`, from Alpaca `unrealized_intraday_pl`/`unrealized_intraday_plpc`) |
 | `account.balance.synced` | `account:{account_id}` | Periodic broker balance snapshot (poller): cash, buying power, equity, last_equity |
 
 ## Order Replace (`ReplaceOrder`)
@@ -136,6 +142,17 @@ order settles to its true terminal state (`expired` or `filled`). It must **not*
 `CANCELED` — doing so previously froze the order in a wrong terminal state, after which the poller
 stopped and never captured the eventual `expired` (UI showed CANCELED while the broker showed
 expired).
+
+## Position & Balance Sync Observability
+
+The position-sync poller (`syncPositions`) emits no events on a quiet cycle, which previously made a
+silent stall (every account skipped for invalid credentials, or a wedged broker/ledger call)
+indistinguishable from a healthy idle service — zero log output for days. The poller now:
+
+- Logs a per-cycle **heartbeat** at INFO: `position sync cycle complete accounts_synced=N accounts_skipped=M accounts_failed=K`.
+- Runs a **watchdog**: WARNs `position sync stalled` when accounts are registered but none have synced for >3 intervals.
+- WARNs (throttled to once per 15 min/account) when an account is **skipped for invalid credentials**, instead of a DEBUG line invisible at INFO.
+- Logs broker **credential status transitions** (OK→INVALID at WARN; recoveries/first-observations at INFO) from the credential-health poller, so a credential that stops working is visible in logs, not only in the UI.
 
 ## Environment Variables
 
