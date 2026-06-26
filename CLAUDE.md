@@ -40,6 +40,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | OTel / Grafana Cloud wiring | `docs/setup/grafana-cloud.md` |
 | Feature workflow (branch, PR, promote) | `docs/runbooks/feature-workflow.md` |
 | Using or troubleshooting the agent MCP tools | `docs/runbooks/mcp-tools.md` |
+| Adding/refactoring a skill, subagent, or `CLAUDE.md`; how the AI tooling curates context (subagent delegation, progressive disclosure, structured `context.md` memory) | `docs/patterns/context-engineering.md` |
 
 ---
 
