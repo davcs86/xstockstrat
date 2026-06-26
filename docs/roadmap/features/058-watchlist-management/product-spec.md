@@ -8,7 +8,7 @@
 ## Problem Statement
 
 There is no persisted notion of a user-defined symbol set on the platform (no watchlist/symbol-group
-message exists in `portfolio.proto`; no watchlist table exists in the `portfolio` migrations 000–005).
+message exists in `portfolio.proto`; no watchlist table exists in the `portfolio` migrations 000–006).
 Every list of symbols today is ad-hoc per request. The screener (060) and the fundamentals-signal
 producer (062) need a durable, per-user universe to scan.
 
@@ -74,7 +74,8 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Database Changes
 
-New migrations `006_watchlists.up.sql` / `.down.sql` in `services/xstockstrat-portfolio/migrations/`:
+New migrations `007_watchlists.up.sql` / `.down.sql` in `services/xstockstrat-portfolio/migrations/`
+(next free number after the applied `006_positions_day_pnl`):
 - `portfolio.watchlists(watchlist_id uuid PK default gen_random_uuid(), user_id text NOT NULL,
   name text NOT NULL, description text NOT NULL default '', created_at timestamptz default now(),
   updated_at timestamptz default now(), UNIQUE(user_id, name))`

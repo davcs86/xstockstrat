@@ -107,13 +107,17 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Database Changes
 
-New migrations in `services/xstockstrat-analysis/migrations/`:
-- `analysis.fundsignal_runs(run_id uuid PK, started_at, finished_at, status, symbols_total,
-  symbols_done, calls_spent, deferred_count)` — resumability + budget accounting.
-- `analysis.fundsignal_emitted(symbol text, source text, as_of_date date, signal_id bigint,
-  score numeric, direction text, PRIMARY KEY(symbol, source, as_of_date))` — **idempotency guard** (FR-5).
+New migrations in `services/xstockstrat-analysis/migrations/` (next free numbers after the existing
+`001_strategies` / `002_strategy_live_enabled`; each with an up+down pair — exact NNN confirmed at
+/sdd-spec):
+- `003_fundsignal_runs.up.sql` / `.down.sql` — `analysis.fundsignal_runs(run_id uuid PK, started_at,
+  finished_at, status, symbols_total, symbols_done, calls_spent, deferred_count)` — resumability +
+  budget accounting.
+- `004_fundsignal_emitted.up.sql` / `.down.sql` — `analysis.fundsignal_emitted(symbol text, source text,
+  as_of_date date, signal_id bigint, score numeric, direction text,
+  PRIMARY KEY(symbol, source, as_of_date))` — **idempotency guard** (FR-5).
 - The fundamentals *values* are **not** re-cached here — they live in `marketdata.fundamentals`
-  (Feature 059). **No new DB pool** (reuses analysis pgxpool).
+  (Feature 059). **No new DB pool** (reuses analysis's existing asyncpg pool; budget unchanged at 2).
 
 ## Feature Workflow Notes
 

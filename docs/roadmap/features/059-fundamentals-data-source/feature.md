@@ -1,6 +1,6 @@
 # Feature: fundamentals-data-source
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/fundamentals-data-source`
 **Created**: 2026-06-26
 **Last Updated**: 2026-06-26
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-06-26 | `idea` → `draft` | /sdd-story | Product spec generated (feature 2 of 6 in the screener initiative) |
+| 2026-06-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning: OQ-059-a-impl FMP endpoint paths deferred to /sdd-spec — non-blocking) |
 
 ---
 
@@ -46,4 +47,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review fundamentals-data-source product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec fundamentals-data-source` — generate implementation spec (resolve OQ-059-a-impl FMP endpoint paths here)

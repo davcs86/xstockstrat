@@ -1,6 +1,6 @@
 # Feature: fundamentals-signal-producer
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/fundamentals-signal-producer`
 **Created**: 2026-06-26
 **Last Updated**: 2026-06-26
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-06-26 | `idea` → `draft` | /sdd-story | Product spec generated (feature 5 of 6 in the screener initiative) |
+| 2026-06-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (warnings fixed: pinned analysis migrations 003/004 + up/down pairs; pgxpool→asyncpg wording. Impl-spec re-checks: analysis.proto field nums w/ 060, analysis.fundsignal.* namespace w/ 063) |
 
 ---
 
@@ -48,4 +49,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review fundamentals-signal-producer product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec fundamentals-signal-producer` — generate implementation spec

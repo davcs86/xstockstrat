@@ -1,6 +1,6 @@
 # Feature: screener-engine
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/screener-engine`
 **Created**: 2026-06-26
 **Last Updated**: 2026-06-26
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-06-26 | `idea` → `draft` | /sdd-story | Product spec generated (feature 3 of 6 in the screener initiative) |
+| 2026-06-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings fixed: Comparator marked new additive enum w/ zero sentinel; evaluator.py → sandbox.py/execute_formula) |
 
 ---
 
@@ -47,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review screener-engine product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec screener-engine` — generate implementation spec

@@ -17,3 +17,14 @@
 - Derived from a read-only screener gap-analysis exploration + multi-session design. Key decisions:
   watchlists mode-agnostic, hard-delete + ledger audit, owned by portfolio, universe resolved at the
   UI/agent layer (the screener RPC takes explicit symbols — decouples 058 from 060 at the RPC level).
+
+## Session 2026-06-26 — sdd-review product-spec
+
+- Product spec reviewed (spec-reviewer + feature-overlap subagents). Status: draft → spec-ready.
+- Blocker found and fixed: proposed migration `006_watchlists` collided with the already-applied
+  `006_positions_day_pnl`; trunk migrations run 000–006. Renumbered to `007_watchlists` and corrected
+  the stale "migrations 000–005" claim in Problem Statement to "000–006".
+- Warnings: none.
+- Overlap findings: no feature-vs-feature collisions with siblings 059–063 (disjoint protos, configs,
+  migration dirs). The one feature-vs-trunk migration collision was resolved by the renumber (no
+  merge-order row needed). Shared `xstockstrat-ui` insights parent dir with 060 is distinct files.

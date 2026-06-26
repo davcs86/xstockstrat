@@ -1,6 +1,6 @@
 # Feature: screener-agent-tool
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/screener-agent-tool`
 **Created**: 2026-06-26
 **Last Updated**: 2026-06-26
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-06-26 | `idea` → `draft` | /sdd-story | Product spec generated (feature 4 of 6 — optional thin follow-up) |
+| 2026-06-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings fixed: resolved OQ-061-a → explicit symbols only; corrected phantom `_admin_metadata()` ref to inline admin-scope pattern) |
 
 ---
 
@@ -42,4 +43,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review screener-agent-tool product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec screener-agent-tool` — generate implementation spec
