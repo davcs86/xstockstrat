@@ -66,6 +66,13 @@ jobs:
             claude-md:
               - '**/CLAUDE.md'
               - '.markdownlint.yaml'
+            context-map:
+              - '.claude/context-map.yaml'
+              - '.claude/agents/**'
+              - '.claude/skills/**'
+              - 'scripts/check-context-map.sh'
+              - 'docs/**'
+              - '**/CLAUDE.md'
 
       - name: Print matched filters
         run: |
@@ -559,6 +566,19 @@ jobs:
         with:
           config: .markdownlint.yaml
           globs: '**/CLAUDE.md'
+
+  context-map:
+    name: Context map references (AI tooling)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'context-map') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate context map and doc cross-references
+        run: ./scripts/check-context-map.sh
 
   secret-scan:
     name: Secret scan (trufflehog + gitleaks)

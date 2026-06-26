@@ -2,7 +2,7 @@
 name: sdd-spec
 description: Phase 2 of SDD — generate an implementation spec by searching the codebase. Usage: /sdd-spec <feature-slug>. Reads product-spec.md, searches affected services for real file paths and symbol names, writes implementation-spec.md. No invented references — every step cites evidence found by grep.
 argument-hint: <feature-slug>
-allowed-tools: Read Write Bash(ls *) Bash(find *) Bash(grep *) Bash(cat *)
+allowed-tools: Read Write Bash(ls *) Bash(find *) Bash(grep *) Bash(cat *) Task
 effort: high
 context: fork
 agent: general-purpose
@@ -10,7 +10,10 @@ agent: general-purpose
 
 You are an implementation planner for the xstockstrat platform. Your job is to search the codebase and produce a concrete, numbered implementation spec that an engineer (or a future Claude session) can execute step by step.
 
-**CRITICAL RULE**: Every step you write must cite evidence found in the codebase via Read, find, or grep. Never invent a file path, function name, struct name, or line number. If you cannot find something, say so explicitly.
+**CRITICAL RULE**: Every step you write must cite evidence found in the codebase via Read, find, grep, or a `codebase-discovery` digest. Never invent a file path, function name, struct name, or line number. If you cannot find something, say so explicitly.
+
+**Progressive disclosure**: this file is the router. Load a `reference/` file only at the
+step that needs it — do not read all three up front.
 
 ## Arguments
 
@@ -24,23 +27,21 @@ You are an implementation planner for the xstockstrat platform. Your job is to s
 find docs/roadmap/features -maxdepth 1 -type d -name "*-$ARGUMENTS[0]"
 ```
 If no directory is found: stop — "No feature directory found for slug `$ARGUMENTS[0]`. Run /sdd-story first."
-Capture the result as `FEATURE_DIR` (e.g. `docs/roadmap/features/001-add-ikbr-account-support`).
-Use `$FEATURE_DIR` for all file reads and writes in this skill.
+Capture the result as `FEATURE_DIR`. Use `$FEATURE_DIR` for all file reads and writes.
 
 ### 1. Read the product spec and lifecycle guard
 
-Read `$FEATURE_DIR/product-spec.md`.
-If absent: stop with "No product spec found. Run /sdd-story $ARGUMENTS[0] first."
+Read `$FEATURE_DIR/product-spec.md`. If absent: stop with "No product spec found. Run /sdd-story $ARGUMENTS[0] first."
 
 Read `$FEATURE_DIR/feature.md` and check `**Lifecycle Status**`.
-If status is `draft` (meaning `/sdd-review product-spec` has not yet been run):
+If status is `draft` (`/sdd-review product-spec` has not been run):
 > "Product spec has not been AI-reviewed. Run `/sdd-review $ARGUMENTS[0] product-spec` first
 > to advance to `spec-ready`. Proceed anyway? (yes / no)"
 Only continue on `yes`.
 
 ### 2. Read governance docs (always — no exceptions for base docs)
 
-Always read the following before writing anything, no exceptions:
+Always read before writing anything:
 
 - `CLAUDE.md` — service registry, port map, inter-service dependency graph, config governance
 - `docs/runbooks/reviewer-registry.md` — service review focus, role reviewers, step-category governance matrix
@@ -49,213 +50,64 @@ Apply these static conventions from feature-workflow.md without reading it:
 - **Migration naming**: `NNN_description.up.sql` + `NNN_description.down.sql`; NNN continues from the last file found in `services/<name>/migrations/`
 - **Proto verification**: all `proto` steps must include `buf lint && buf breaking --against ".git#branch=feature/<slug>"` in `**Verification**`
 
-Read `docs/runbooks/approval-flow.md` only if the product spec lists breaking proto changes or database schema changes — those trigger multi-owner approval flows that affect step reviewers.
+Read `docs/runbooks/approval-flow.md` only if the product spec lists breaking proto changes or database schema changes.
 
-Then read only the phase deviation files whose services appear in the product spec's "Affected Services" section:
+Then read only the phase deviation files whose services appear in "Affected Services":
 
-- `docs/roadmap/phase3-deviations.md` — read if Affected Services contains: `xstockstrat-indicators`, `xstockstrat-ingest`, or `xstockstrat-analysis`
-- `docs/roadmap/phase4-deviations.md` — read if Affected Services contains: `xstockstrat-trading` or `xstockstrat-portfolio`
-- `docs/roadmap/phase5-deviations.md` — read if Affected Services contains: `xstockstrat-trader`, `xstockstrat-insights`, or `xstockstrat-config-ui`
-- `docs/roadmap/phase6-deviations.md` — read if Affected Services contains: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, or `xstockstrat-config`; OR if the product spec mentions "n8n" or "webhook"
+- `docs/roadmap/phase3-deviations.md` — `xstockstrat-indicators`, `xstockstrat-ingest`, or `xstockstrat-analysis`
+- `docs/roadmap/phase4-deviations.md` — `xstockstrat-trading` or `xstockstrat-portfolio`
+- `docs/roadmap/phase5-deviations.md` — `xstockstrat-trader`, `xstockstrat-insights`, or `xstockstrat-config-ui`
+- `docs/roadmap/phase6-deviations.md` — `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, or `xstockstrat-config`; OR if the spec mentions "n8n" or "webhook"
 
-If the product spec mentions **config key changes**, also read `docs/runbooks/config-rollout.md`.
-If the product spec mentions **proto changes**, also read `docs/runbooks/proto-versioning.md`.
+If the spec mentions **config key changes**, also read `docs/runbooks/config-rollout.md`.
+If the spec mentions **proto changes**, also read `docs/runbooks/proto-versioning.md`.
 
-### 3. Search each affected service
+### 3. Discover each affected service (delegate — keep this window lean)
 
-For every service listed in the product spec's "Affected Services" section:
+For every service in "Affected Services", spawn a **`codebase-discovery`** subagent (one per
+service, in parallel via the Task tool) and hand it the checklist in
+`reference/discovery-checklist.md` — tailored with the specific symbols, config keys, env
+vars, and ports this feature introduces. Each subagent returns a condensed digest of real
+`path:line` evidence; collect those digests as the `**Codebase Evidence**` for the steps that
+touch that service.
 
-a. Read `services/<name>/CLAUDE.md`
-b. Run `find services/<name> -type f | sort` — real file inventory
-c. Read the service's main entry point:
-   - Go: `services/<name>/cmd/server/main.go`
-   - Python: `services/<name>/app/main.py`
-   - Node.js: `services/<name>/src/index.ts`
-d. Read the handler/servicer file (contains existing RPC implementations):
-   - Go: grep for `func.*Server` or `func.*Handler`
-   - Python: `services/<name>/app/handlers/servicer.py`
-   - Node.js: grep for `export.*function\|router\.\(get\|post\|put\)`
-e. Run: `grep -rn "func \|def \|export function\|export const\|register\|handler\|servicer" services/<name>/` — locate real symbols with line numbers
-f. Run: `ls services/<name>/migrations/ 2>/dev/null | sort` — find last NNN migration number
-g. Run: `grep -rn "GetConfig\|WatchConfig\|config\." services/<name>/` — find config key read patterns
-h. Grep all three deployment files to record the service's current env var wiring
-   and detect missing entries for new variables the feature requires:
-   ```bash
-   grep -n "<service-name>" docker-compose.yml .do/app.dev.yaml .do/app.yaml
-   ```
-   For each new env var the feature will introduce (e.g. a new upstream endpoint key),
-   confirm it is absent from all three files:
-   ```bash
-   grep -n "NEW_VAR_NAME" docker-compose.yml .do/app.dev.yaml .do/app.yaml
-   ```
-   Record the result: **absent** (must add in the step's `**Files**` + `**Instructions**`) or
-   **present** (no change needed). New ports must also be absent from the `ports:` block in
-   `docker-compose.yml` and from port-related entries in the app specs.
+The discovery checklist also covers the trading-domain symbol survey and the proto-file
+search — run those parts only when they apply (see the checklist's guard conditions).
 
-i. If the product spec is trading-domain-relevant — any of: `xstockstrat-trading` or
-   `xstockstrat-portfolio` in Affected Services, or mentions of IBKR, Alpaca, broker, order type,
-   order status, fill, or TRADING_MODE in the product spec — run these targeted surveys on each
-   affected service and record all matches in the relevant step's `**Codebase Evidence**` field:
-   ```bash
-   # Where paper/live gating is implemented today:
-   grep -rn "TRADING_MODE\|TradingMode\|trading_mode\|PAPER\|LIVE" services/<name>/
-   # How broker dispatch is currently handled:
-   grep -rn "BrokerType\|broker_type\|ALPACA\|IBKR\|AlpacaClient\|IBKRClient\|BrokerInterface" services/<name>/
-   # Which OrderType values are currently processed:
-   grep -rn "OrderType\|order_type\|ORDER_TYPE_MARKET\|ORDER_TYPE_LIMIT\|ORDER_TYPE_STOP\|ORDER_TYPE_TRAILING" services/<name>/
-   # Where fill state is currently tracked:
-   grep -rn "OrderStatus\|order_status\|PARTIALLY_FILLED\|FILLED\|filled_qty\|filled_avg_price" services/<name>/
-   ```
-   If a survey returns no matches, note "**not found** — pattern not yet present in this service"
-   in Codebase Evidence. These findings feed directly into the constraints in Step 5b.
+If you prefer to search inline for a single-service feature, the checklist is the same recipe
+— but for multi-service features, delegate so this planner's window holds digests, not raw greps.
 
-### 4. Search proto files (if proto changes required)
+### 4. Apply the zero-assumption rule
 
-- Read `packages/proto/<service>/v1/<service>.proto` for each affected service
-- Read existing stubs in `packages/proto/gen/go/`, `gen/python/`, `gen/ts/` to understand generated code shape
-
-### 5. Apply the zero-assumption rule
-
-Before writing any step instruction, verify you have grep or Read evidence for every reference. Specifically:
+Before writing any step instruction, verify you have evidence (grep, Read, or a discovery
+digest) for every reference:
 
 - ✗ "add a handler function" → ✓ "add `def ingest_signal(self, stream)` to `services/xstockstrat-ingest/app/handlers/servicer.py` after `query_signals` at L88, matching its signature pattern"
-- ✗ "create a migration" → ✓ "create `services/xstockstrat-ingest/migrations/002_add_signals_table.up.sql` — confirmed last file is `001_newsletter_signals.up.sql` via `ls`"
+- ✗ "create a migration" → ✓ "create `services/xstockstrat-ingest/migrations/002_add_signals_table.up.sql` — confirmed last file is `001_newsletter_signals.up.sql`"
 - ✗ "update the config handler" → ✓ "add key `ingest.signals.polygon.enabled` following the SetConfig call pattern at `services/xstockstrat-config/src/handlers/config.ts:L34`"
 - If a file or function is not found: write "**Not found** — this must be created from scratch; no existing pattern available in the codebase"
-- ✗ "add the env var to docker-compose" → ✓ "add `NEW_ENDPOINT: http://xstockstrat-new:8061` to the `xstockstrat-<name>` `environment:` block in `docker-compose.yml` (confirmed absent: `grep -n NEW_ENDPOINT docker-compose.yml` → no match); add `- key: NEW_ENDPOINT` / `value: ${xstockstrat-new.PRIVATE_URL}` to the `xstockstrat-<name>` `envs:` block in `.do/app.dev.yaml` and `.do/app.yaml` (confirmed absent: same grep)"
+- ✗ "add the env var to docker-compose" → ✓ "add `NEW_ENDPOINT: http://xstockstrat-new:8061` to the `xstockstrat-<name>` `environment:` block in `docker-compose.yml` (confirmed absent); add `- key: NEW_ENDPOINT` / `value: ${xstockstrat-new.PRIVATE_URL}` to the `envs:` block in `.do/app.dev.yaml` and `.do/app.yaml` (confirmed absent)"
 
-### 5b. Trading-domain step constraints
+### 5. Apply step constraints
 
-If the product spec is trading-domain-relevant (detected as in Step 3i), apply the following
-constraints when writing each affected step in Step 6. A step is "affected" when the Step 3i
-symbol survey produced matches relevant to that step's scope.
-
-| Domain | If step touches… | Required in **Instructions** | Required in **Verification** |
-|---|---|---|---|
-| **Docker Compose ↔ DO value parity** | `TRADING_MODE` or any env var with environment-specific values | State the exact value per deployment target: `TRADING_MODE: paper` in `docker-compose.yml` and `.do/app.dev.yaml`; `TRADING_MODE: live` in `.do/app.yaml` | `grep TRADING_MODE docker-compose.yml .do/app.dev.yaml .do/app.yaml` — confirm correct values in all three |
-| **Broker coverage** | `BrokerType`, Alpaca client, IBKR client, or order routing | Either handle all `BrokerType` values (ALPACA=1, IBKR=2) in this step — or add an explicit note: "`IBKR`/`ALPACA`: out of scope for this step — handled by Step N" or "other broker unaffected" | If handling both brokers: verify both dispatch paths are exercised in the test step |
-| **Trading mode gate** | Order placement, `PlaceOrder` RPC, or order submission logic | Include a `TRADING_MODE` check in Instructions — paper mode must not submit real orders; describe the conditional or the existing gate being reused (cite the grep hit from Step 3i) | `grep -n "TRADING_MODE\|TradingMode\|paper\|PAPER" <modified-file>` — confirm gate is present |
-| **Order type coverage** | `OrderType` enum, order creation, order dispatch, or routing | Enumerate which of the 5 `OrderType` values this step handles: MARKET, LIMIT, STOP, STOP_LIMIT, TRAILING_STOP — or state "order type handling unaffected by this step" | If adding type handling: confirm each named type is covered in the updated code |
-| **Fill state completeness** | `OrderStatus`, order fill callbacks, fill processing, or status updates | Address both `PARTIALLY_FILLED` and `FILLED` states in Instructions — describe how each is handled or propagated — or state "fill handling unaffected by this step" | Include a partial-fill test case alongside the full-fill (happy-path) case |
-
-### 5c. Cross-cutting code-quality constraints (every `service` step)
-
-These apply to **every** `service` step regardless of domain. They mirror conventions CI
-already enforces — wiring them into each step's `**Verification**` surfaces failures during
-`/sdd-execute` Phase 3 instead of after a per-step PR is pushed.
-
-| Concern | Trigger | Required in **Instructions** / **Codebase Evidence** | Required in **Verification** |
-|---|---|---|---|
-| **Lint/format gate** | Any `service` step that creates or modifies a source file | — | Include the service's lint command (table below) in addition to the behavioral/coverage check |
-| **Header propagation** | Step adds a **new outbound gRPC call** to another backend service (e.g. a new client stub call, `grpc.Dial`/`NewClient`, or a new RPC invocation on an existing client) | Cite the service's existing propagation mechanism from `docs/patterns/header-propagation.md`, confirmed via grep: Go interceptor, Python per-method `metadata`, or Node.js AsyncLocalStorage. The new call must forward `x-user-id`, `x-access-scope`, `x-trace-id`. If the call reuses an already-propagating client/interceptor, say so and cite it. | `grep -n` confirming the new call path carries the three headers (or reuses the propagating client/interceptor) |
-
-**Lint command table** (run from repo root; matches `.github/workflows/ci.yml`):
-
-| Language / services | Lint command |
-|---|---|
-| Go — `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata` | `cd services/<name> && GOWORK=off golangci-lint run --modules-download-mode=mod` |
-| Python — `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`, `xstockstrat-agent` | `cd services/<name> && ruff check . && ruff format --check .` |
-| Node.js — `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`, `xstockstrat-config` | `cd services/<name> && pnpm run lint` |
-| Next.js — `xstockstrat-trader`, `xstockstrat-insights`, `xstockstrat-config-ui` | `cd services/<name> && pnpm run lint` |
-
-The lint command may live in the paired `test` step's `**Verification**` (alongside the
-coverage command) rather than the `service` step — either placement satisfies the gate, as
-long as one of the two paired steps runs it.
+If the feature is trading-domain-relevant, or for any `service` step, apply the constraints in
+**`reference/step-constraints.md`** (trading-domain table + cross-cutting code-quality table +
+lint command table). Load it now.
 
 ### 6. Write implementation-spec.md
 
-Write `$FEATURE_DIR/implementation-spec.md`:
-
-```markdown
-# Implementation Spec: <slug>
-
-**Status**: `pending`
-**Created**: <ISO date>
-**Feature**: `docs/roadmap/features/<NNN-slug>/feature.md`
-**Total Steps**: N
-**Feature Branch**: `feature/<slug>`
-
----
-
-## Execution Summary
-
-<2–4 sentences explaining the implementation order and why>
-
-## Step Dependencies
-
-- Step N requires Step M: <reason>
-- (list all ordering constraints)
-
----
-
-### Step N — <category>: <title>
-
-**Status**: `pending`
-**Service**: `xstockstrat-<name>` (or `packages/proto`, `docs/runbooks/`, etc.)
-**Files**:
-- `exact/path/to/file` — modify | create | delete
-(For `service` steps that introduce a new environment variable or port: also list
-`docker-compose.yml`, `.do/app.dev.yaml`, and `.do/app.yaml` as modify — confirmed absent
-via the grep run in Step 3h.)
-
-**Reviewers**: <role1> — <focus phrase from registry>, <role2> — <focus phrase>
-(Look up step category + **Service** in docs/runbooks/reviewer-registry.md governance matrix.
-For `proto-gen` steps: inherit reviewers from the immediately preceding `proto` step.
-For `docs` steps: write "none".)
-
-**Codebase Evidence**:
-- Confirmed via: `grep -n "SymbolName" services/.../file.ext` → line N
-- Existing pattern: `<direct quote or close paraphrase of actual code found>`
-
-**Instructions**:
-<Precise, actionable steps that cite real file paths and real symbol names confirmed above>
-
-**Verification**:
-<Exact bash command to run, or exact output/behavior to observe>
-
----
-
-(repeat for all steps)
-
----
-
-## Deviation Log
-
-_Populated by /sdd-execute as implementation proceeds._
-```
-
-Categories to use for step naming: `proto`, `proto-gen`, `migration`, `service`, `config`, `docs`, `test`.
-
-**Test step pairing rule**: Every `service` step for a non-frontend service must have a
-corresponding `test` step. Place it immediately after the `service` step, or declare it in
-`## Step Dependencies` (e.g. "Step 5 [test] covers Step 4 [service]"). The `test` step's
-`**Verification**` must be a runnable bash command enforcing the CI coverage threshold, and
-must also include the language's lint command per §5c (lint + coverage together satisfy the
-code-quality gate):
-
-| Service | Threshold | Verification command |
-|---|---|---|
-| xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata | 40% | `cd services/<name> && GOWORK=off COVERPKGS=$(go list ./... \| grep -Ev '/(cmd\|handler\|repository\|telemetry\|service)(/\|$)' \| tr '\n' ',' \| sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out \| grep "^total:"` — confirm ≥ 40% |
-| xstockstrat-indicators | 50% | `cd services/xstockstrat-indicators && pytest --cov=app --cov-fail-under=50` |
-| xstockstrat-ingest, xstockstrat-analysis | 40% | `cd services/<name> && pytest --cov=app --cov-fail-under=40` |
-| xstockstrat-config, xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify | 40% | `cd services/<name> && pnpm run test:coverage` — confirm threshold passes |
-| xstockstrat-trader, xstockstrat-insights, xstockstrat-config-ui | n/a | No coverage threshold — use `pnpm test:e2e` or note existing E2E coverage applies |
-
-If new code lands only in Go packages excluded from CI measurement (`cmd/`, `handler/`,
-`repository/`, `telemetry/`, `service/`), note this in the `test` step:
-"New logic is in an excluded package — no coverage threshold applies; integration test
-verification is sufficient." A `test` step is still required.
+Write `$FEATURE_DIR/implementation-spec.md` using the structure, step categories, and
+test-step-pairing rules in **`reference/spec-template.md`** (includes the coverage-threshold
+table). Load it now.
 
 ### 7. Update feature.md status
 
 Edit `$FEATURE_DIR/feature.md`:
 - Change `**Lifecycle Status**: \`draft\`` (or `spec-ready`) to `**Lifecycle Status**: \`implementation-ready\``
-- Append a row to the Status History table:
-  `| <ISO date> | <prev> → \`implementation-ready\` | /sdd-spec | Implementation spec generated with N steps |`
-- Update the Artifacts section: replace `_not yet generated_` with `[Implementation Spec](implementation-spec.md)`
-- Finalize the `## Reviewers` table: collect all distinct `**Reviewers**` values from
-  all steps in implementation-spec.md, deduplicate, and write the canonical snapshot table.
-  This is the stable snapshot — it will not change unless `/sdd-spec` is re-run.
+- Append a Status History row: `| <ISO date> | <prev> → \`implementation-ready\` | /sdd-spec | Implementation spec generated with N steps |`
+- Update Artifacts: replace `_not yet generated_` with `[Implementation Spec](implementation-spec.md)`
+- Finalize the `## Reviewers` table: collect all distinct `**Reviewers**` values from all
+  steps, deduplicate, and write the canonical snapshot table (stable unless `/sdd-spec` re-runs).
 - Update Next Action to: `` `/sdd-review <slug> impl-spec` — validate implementation spec, then `/sdd-execute <slug>` ``
 
 ### 8. Append to context.md
@@ -271,6 +123,10 @@ Append to `$FEATURE_DIR/context.md`:
   - <finding 2>
   - <finding 3 if relevant>
 ```
+
+If the feature uses the structured-header memory schema (see
+`docs/patterns/context-engineering.md`), also fold durable findings into the `## Decisions`
+and `## Open Threads` header blocks, not just the session log.
 
 ### 9. Report to user
 
