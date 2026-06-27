@@ -56,3 +56,13 @@
     inconsistent), and the `docs/runbooks/CLAUDE.md` index line. New true count = eleven.
   - Reviewers snapshot: `xstockstrat-agent` (service owner) drives Steps 1–3; Step 4 is docs (no
     reviewer). `xstockstrat-analysis` kept advisory only (no analysis-side change here).
+
+## Session 2026-06-27 — sdd-review impl-spec (advisory)
+
+- Impl-spec reviewed. Verdict: PASS WITH WARNINGS, 0 blockers. Overlap CLEAN. All cited symbols verified (run_backtest
+  per-call grpc.aio channel + _metadata() x-mcp-secret, ANALYSIS_ENDPOINT, 10 tools today → 11 after; read-only invariant
+  enforced, no admin x-access-scope). Build-order dep on 060's ScreenSymbols stubs correctly flagged (already in merge-order.md).
+- Advisories for execute: (1) Step 3 — assert the channel opened against the client.ANALYSIS_ENDPOINT SYMBOL, not the literal
+  "xstockstrat-analysis:50056" (conftest patches it to analysis-test:50056). (2) Re-verify CoverageGap/ScreenResult field names
+  against 060's regenerated analysis_pb2 before writing. (3) 058-formula-parameters (launched) edits the same agent files —
+  re-verify line anchors against merged trunk before writing.

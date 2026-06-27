@@ -226,8 +226,8 @@ is rejected by the PK; `.down.sql` drops cleanly.
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/006_analysis_fundsignal_keys.up.sql` — create
-- `services/xstockstrat-config/migrations/006_analysis_fundsignal_keys.down.sql` — create
+- `services/xstockstrat-config/migrations/008_analysis_fundsignal_keys.up.sql` — create
+- `services/xstockstrat-config/migrations/008_analysis_fundsignal_keys.down.sql` — create
 
 **Reviewers**: `xstockstrat-config` (service owner) — key naming `<service>.<category>.<key>`,
 dev+prod rows, `trading_mode='all'`; `xstockstrat-analysis` (service owner) — defaults match the
@@ -239,7 +239,11 @@ producer's reads
   `INSERT INTO config.config_values (namespace, key, value_type, value_data, description, default_value,
   consuming_service, environment, trading_mode) VALUES (...) ON CONFLICT ... DO NOTHING;` — two rows
   (dev + production), both `trading_mode='all'`.
-- Last config migration confirmed is `005_ingest_backfill_chunking` — next free is `006`.
+- Last config migration on trunk is `005_ingest_backfill_chunking`. To avoid a three-way `006` collision
+  in the shared `xstockstrat-config` migrations dir, this feature is pre-assigned **008** (058 keeps
+  `006_watchlist_config`, 059 takes `007_marketdata_fmp`; see merge-order.md "Screener config-migration
+  ordering"). Because golang-migrate applies in numeric order, this config migration must land after 058's
+  `006` and 059's `007`.
 - `analysis.signals.source_weights` already exists (`003_analysis_signal_source_weights.up.sql:8`) —
   **do not re-create it**; the producer reuses it (Step 8/11).
 - **Namespace coordination with 063**: 063 may add `analysis.fundsignal.value_weight`/`quality_weight`.

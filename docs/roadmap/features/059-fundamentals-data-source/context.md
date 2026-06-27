@@ -44,3 +44,16 @@
   - **Config keys = SQL seed migrations only** (no code constant map). Last config migration = `005` → new `006_marketdata_fmp.{up,down}.sql`. Template = `005_ingest_backfill_chunking.up.sql`; seed each key twice (dev+prod), 4-column `ON CONFLICT (namespace,key,environment,trading_mode)`. `secret.marketdata.fmp.api_key` is the FIRST seeded secret — must add `is_secret=TRUE` to the INSERT and use a secret-reference value, never plaintext. No `src/` change needed (serving is data-driven).
   - **OQ-059-a-impl resolved**: hybrid FMP fetch — batchable `quote` for core metrics (1 call/chunk), per-symbol `ratios-ttm` + `profile` for extended; paths built under config `marketdata.fmp.base_url` (`/stable/quote`, `/stable/ratios-ttm`, `/stable/profile`); avoid gated `profile-bulk`.
   - **Deploy env**: marketdata block in docker-compose.yml:233-264 / .do/app.dev.yaml:103-136 / .do/app.yaml:103-136 already wires CONFIG/LEDGER/NOTIFY/DATABASE_URL + DB_POOL_MAX=2; no new env vars/ports introduced by this feature.
+
+## Session 2026-06-27 — sdd-review impl-spec (advisory)
+
+- Impl-spec reviewed. Verdict: PASS WITH WARNINGS, 0 blockers. All cited symbols verified (source.go DataSourceClient/
+  Registry untouched, alpaca do() pattern, service-layer read-through idiom, config Watcher accessors, httptest test
+  pattern; FMP endpoint paths /stable/quote|ratios-ttm|profile concrete; secret.marketdata.fmp.api_key is first seeded
+  secret w/ is_secret=TRUE + secret-reference value).
+- KEY ADVISORY for execute: Step 8 — the existing emitAlert helper (marketdata_service.go:761) HARDCODES
+  ALERT_SEVERITY_ERROR and takes only (ctx,msg). FR-7's 80%-quota alert needs ALERT_SEVERITY_WARNING — add a new
+  WARNING-capable emit (or parameterize emitAlert by severity); do NOT silently reuse the ERROR-only helper.
+- CONFIG-MIGRATION RENUMBER (user-approved): config seed migration renumbered 006 → `007_marketdata_fmp` to resolve the
+  three-way config-006 collision (058=006, 059=007, 062=008). Must merge AFTER 058's 006 (golang-migrate numeric order).
+  All impl-spec references updated; recorded in merge-order.md.

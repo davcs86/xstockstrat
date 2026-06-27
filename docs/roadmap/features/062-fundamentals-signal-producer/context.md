@@ -70,3 +70,16 @@
     at 002; config keys seeded via SQL INSERT migrations (config migrations stop at 005 → next 006).
   - **analysis.proto**: last RPC `SetStrategyLive` (`analysis.proto:19`), highest field number 13; new
     messages number from 1. Coordinate additive append order with 060 (`ScreenSymbols`).
+
+## Session 2026-06-27 — sdd-review impl-spec (advisory)
+
+- Impl-spec reviewed. Verdict: PASS, 0 blockers. Risks verified correct: ExternalSignal has NO as_of_date and direction is
+  a string → idempotency correctly lives in analysis.fundsignal_emitted PK(symbol,source,as_of_date); analysis interval-loop
+  + asyncpg pool reused (no new pool); migrations 003/004 are next-free analysis NNN; PORTFOLIO_ENDPOINT net-new in main.py +
+  docker-compose + both .do specs.
+- BIGGEST OPEN ITEM for execute (in Deviation Log): ingest signal_sources.source_type CHECK allows only the five email/website
+  values — registering a 'fundamentals' source needs either an existing allowed value OR a CHECK-relaxation migration in ingest
+  (next-free ingest migration would be 006, uncontested). Coordinate with the ingest owner BEFORE execute; the producer cannot
+  register its source until resolved.
+- CONFIG-MIGRATION RENUMBER (user-approved): config seed migration renumbered 006 → `008_analysis_fundsignal_keys` (058=006,
+  059=007, 062=008). Must merge AFTER 058's 006 and 059's 007 (golang-migrate numeric order). Recorded in merge-order.md.

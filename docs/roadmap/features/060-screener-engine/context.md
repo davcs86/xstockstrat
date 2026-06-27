@@ -65,3 +65,13 @@
     `backendHeaders` `:32-38`). Clone `useBacktest.ts` (`:6-17`) → `useScreenSymbols`; page mirrors
     `strategies/[id]/page.tsx`; E2E mirrors `e2e/insights/backtest-coverage.spec.ts` with a new
     `screenSymbols` mock in `e2e/mock-backend.ts` (`:239`). No DB/pool.
+
+## Session 2026-06-27 — sdd-review impl-spec (advisory)
+
+- Impl-spec reviewed. Verdict: PASS WITH WARNINGS, 0 blockers. All cited symbols verified, including the load-bearing
+  reality that analysis currently calls ComputeIndicator/GetFormula (NOT ExecuteFormula) — so the screener's
+  ExecuteFormula call is a NET-NEW outbound RPC needing per-method propagation_meta. FR-4 scoring math extracted to
+  pure app/services/scoring.py behind a golden test; fundamental criteria report skipped until 059 lands.
+- Advisories for execute: Step 6 golden-baseline freeze (capture pre-refactor expected values) is a MANUAL prerequisite,
+  not a runnable command; Steps 8↔9 share a data-testid contract — keep names identical; Step 5 is large but cohesive.
+- analysis.proto + servicer.py overlap with 062 is rebase-only (no field/name collision); whichever merges second rebases.

@@ -55,3 +55,14 @@
     seed dev+production twins ending in ON CONFLICT (namespace,key,environment,trading_mode) DO NOTHING
     (template: 005_ingest_backfill_chunking.up.sql).
 - All proto changes additive → no v2; buf breaking against feature branch.
+
+## Session 2026-06-27 — sdd-review impl-spec (advisory)
+
+- Impl-spec reviewed (spec-reviewer + feature-overlap). Verdict: PASS, 0 blockers. All cited symbols verified
+  (PortfolioHandler+grpcPortfolioAdapter, unexported PortfolioRepo pool, toGRPCError first PermissionDenied path,
+  insights BFF PortfolioService wiring). Advisory: Step 5 is a verbose multi-target step; Step 6 new logic lives
+  in the CI-coverpkg-excluded service/ package (E2E + unit compensate — no real coverage hole).
+- CONFIG-MIGRATION ORDERING (user-approved): 058 KEEPS `006_watchlist_config`. Three-way config-006 collision with
+  059/062 resolved by pre-assigning ascending numbers (058=006, 059=007, 062=008). Because golang-migrate applies
+  in numeric order, 058's config migration must merge BEFORE 059's and 062's. Recorded in merge-order.md.
+- insightsBff.ts is shared with 060 (distinct router blocks) — rebase-only, no hard dep.

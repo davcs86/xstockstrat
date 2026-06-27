@@ -71,3 +71,12 @@
   (063 adds no config keys; weights/bands are formula params, `scoring_formula_id` is 062-owned).
 - AC-5 ("match intuition on a small labeled sample") concretized into a deterministic labeled-sample
   threshold test (Step 5) rather than left qualitative.
+
+## Session 2026-06-27 — sdd-review impl-spec (advisory)
+
+- Impl-spec reviewed. Verdict: PASS, 0 blockers. Overlap CLEAN. SEEDING HOOK VALIDATED SOUND: ON CONFLICT (formula_id)
+  uses the existing formulas PK (no new migration needed); deterministic UUIDv5 well-known FORMULA_ID gives 062 a stable
+  scoring_formula_id. FormulasRepository.upsert confirmed absent (spec adds it). 063's analysis-side code is a NEW file
+  (app/services/fundamentals_scoring.py) — disjoint from 062's servicer edits.
+- Advisory: Step 5 doesn't restate --cov-fail-under=50 on its command (covered by Step 2 on the same file); Step 1 touches
+  5 files (at the split-consideration boundary, cohesive). Confirmed 063 adds NO proto/config/migration.

@@ -221,20 +221,23 @@ Table present after `up`, absent after `down 1`, re-created on re-`up` — satis
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/006_marketdata_fmp.up.sql` — create
-- `services/xstockstrat-config/migrations/006_marketdata_fmp.down.sql` — create
+- `services/xstockstrat-config/migrations/007_marketdata_fmp.up.sql` — create
+- `services/xstockstrat-config/migrations/007_marketdata_fmp.down.sql` — create
 
 **Reviewers**: `xstockstrat-config` (service owner) — new `marketdata.fmp.*` keys + the new `marketdata.<source>.enabled` convention, key naming `<service>.<category>.<key>`; Security — `secret.marketdata.fmp.api_key` uses `secret.*` prefix, seeded value is a secret reference (never plaintext).
 
 **Codebase Evidence**:
 - Defaults are seeded **only in SQL migrations** (no code constant map) — confirmed by discovery digest; service code (`src/grpc/configServiceImpl.ts`) serves whatever rows exist, so **no `src/` change is needed** to register keys.
-- Last config migration is `005` → next is **006**. Template = `migrations/005_ingest_backfill_chunking.up.sql:5-26` (and `.down.sql:4-10`).
+- Last config migration on trunk is `005`. To avoid a three-way `006` collision with siblings 058/062 in
+  the shared `xstockstrat-config` migrations dir, this feature is pre-assigned **007** (058 keeps
+  `006_watchlist_config`, 062 takes `008`; see merge-order.md "Screener config-migration ordering").
+  Template = `migrations/005_ingest_backfill_chunking.up.sql:5-26` (and `.down.sql:4-10`).
 - Insert columns + 4-column conflict target: `(namespace, key, value_type, value_data, description, default_value, consuming_service, environment, trading_mode)` with `ON CONFLICT (namespace, key, environment, trading_mode) DO NOTHING` — confirmed via `002_config_environment.up.sql:20-21` UNIQUE constraint; keys are seeded **twice** (`'dev','all'` and `'production','all'`).
 - `is_secret` column exists (`001_config_tables.up.sql:12`, default FALSE) but **no existing seed sets it TRUE** — `secret.marketdata.fmp.api_key` is the first; the INSERT column list must add `is_secret` and the value must be a secret reference, never the real key (CLAUDE.md:32 invariant).
 - `value_type` CHECK set is `'string'|'int'|'float'|'bool'|'json'` (`001_config_tables.up.sql`). Existing `marketdata.*` example: `002_config_environment.up.sql:65-67`.
 
 **Instructions**:
-1. Create `006_marketdata_fmp.up.sql` following the migration-005 template. Seed each of the six keys **twice** (once `environment='dev', trading_mode='all'`, once `environment='production', trading_mode='all'`), `consuming_service='xstockstrat-marketdata'`, with these `value_type`/`value_data` defaults (from product-spec Config Key Changes):
+1. Create `007_marketdata_fmp.up.sql` following the migration-005 template. Seed each of the six keys **twice** (once `environment='dev', trading_mode='all'`, once `environment='production', trading_mode='all'`), `consuming_service='xstockstrat-marketdata'`, with these `value_type`/`value_data` defaults (from product-spec Config Key Changes):
    - `marketdata.fmp.enabled` → `bool`, `'false'`
    - `secret.marketdata.fmp.api_key` → `string`, `is_secret=TRUE`, `value_data` = a secret reference placeholder (e.g. `'secret://marketdata/fmp-api-key'`), **never** a real key
    - `marketdata.fmp.cache_ttl_hours` → `int`, `'24'`
@@ -243,12 +246,12 @@ Table present after `up`, absent after `down 1`, re-created on re-`up` — satis
    - `marketdata.fmp.metrics` → `string`, `'core,extended'`
    For the secret row, extend the INSERT column list to include `is_secret` (the other five rows can omit it and rely on the FALSE default, or set it explicitly to FALSE for clarity).
    Use `ON CONFLICT (namespace, key, environment, trading_mode) DO NOTHING`.
-2. Create `006_marketdata_fmp.down.sql` following `005_ingest_backfill_chunking.down.sql`'s `DELETE FROM config.config_values WHERE namespace='marketdata' AND key IN (...)` pattern — list all six keys (note `secret.marketdata.fmp.api_key`'s namespace is still `marketdata`; confirm namespace/key split matches how the row is seeded in the up migration, then mirror it exactly).
+2. Create `007_marketdata_fmp.down.sql` following `005_ingest_backfill_chunking.down.sql`'s `DELETE FROM config.config_values WHERE namespace='marketdata' AND key IN (...)` pattern — list all six keys (note `secret.marketdata.fmp.api_key`'s namespace is still `marketdata`; confirm namespace/key split matches how the row is seeded in the up migration, then mirror it exactly).
 3. Do not edit `configServiceImpl.ts` — serving is data-driven.
 
 **Verification**: covered by Step 10. Manual:
 ```bash
-ls services/xstockstrat-config/migrations/ | sort   # confirm 006_marketdata_fmp.{up,down}.sql present
+ls services/xstockstrat-config/migrations/ | sort   # confirm 007_marketdata_fmp.{up,down}.sql present
 ```
 
 ---
@@ -392,7 +395,7 @@ Confirm lint clean and total coverage ≥ 40%. (New mapping/quota logic in `inte
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
-- (no new files — exercises `006_marketdata_fmp.{up,down}.sql` + existing config test suite)
+- (no new files — exercises `007_marketdata_fmp.{up,down}.sql` + existing config test suite)
 
 **Reviewers**: `xstockstrat-config` (service owner) — keys seeded in both dev+prod scopes, secret flag set, down removes all six.
 
@@ -401,8 +404,8 @@ Confirm lint clean and total coverage ≥ 40%. (New mapping/quota logic in `inte
 - Seed lives entirely in SQL (Step 5) — no `src/` logic change, so this step validates migration application + that `getConfig`/`listKeys` serve the new rows (serving logic `configServiceImpl.ts:232,276`).
 
 **Instructions**:
-1. Apply config migrations through `006`, then confirm `GetConfig(namespace="marketdata")` returns the six new keys (with `marketdata.fmp.enabled=false`, `marketdata.fmp.daily_request_cap=250`, etc.) and that the secret key is flagged `is_secret=true` with a secret-reference value (not plaintext).
-2. Roll `006` down and confirm all six rows are removed; roll back up to confirm reversibility.
+1. Apply config migrations through `007`, then confirm `GetConfig(namespace="marketdata")` returns the six new keys (with `marketdata.fmp.enabled=false`, `marketdata.fmp.daily_request_cap=250`, etc.) and that the secret key is flagged `is_secret=true` with a secret-reference value (not plaintext).
+2. Roll `007` down and confirm all six rows are removed; roll back up to confirm reversibility.
 
 **Verification**:
 ```bash
