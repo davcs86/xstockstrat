@@ -25,8 +25,10 @@ FR-2. `client.screen_symbols` opens a fresh `grpc.aio.insecure_channel(ANALYSIS_
 `metadata=_metadata()` (`x-mcp-secret`), and returns the ranked results — **exactly the
 per-call-channel pattern of `run_backtest`** (no pooling).
 
-FR-3. **Read-only / non-admin** — uses `_metadata()`, not `_admin_metadata()` (a scan triggers no
-writes).
+FR-3. **Read-only / non-admin** — uses `_metadata()` only and attaches **no** admin `x-access-scope`
+header. (Admin-scoped calls in `app/client.py` add `("x-access-scope", "7")` inline on top of
+`_metadata()`; a scan triggers no writes, so that admin scope is omitted — there is no
+`_admin_metadata()` helper to call.)
 
 ## Out of Scope
 
@@ -67,8 +69,13 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    results matching a direct gRPC `ScreenSymbols` call.
 2. The call carries `x-mcp-secret` and no admin headers; no other tool's behavior changes.
 
+## Resolved Decisions
+
+- [x] **OQ-061-a — explicit symbol list only** (resolved): the tool accepts an explicit symbol list and
+  does **not** resolve a `watchlist_id` via a portfolio call, matching feature 060's resolved decision
+  OQ-060-a (`ScreenSymbols` takes explicit symbols; a `watchlist_id` convenience path is a deferred
+  additive follow-up). Universe resolution stays at the UI/agent caller layer.
+
 ## Open Questions
 
-- [ ] OQ-061-a: Should the tool accept a `watchlist_id` and resolve it via a portfolio call, or only
-  an explicit symbol list (consistent with OQ-060-a's "explicit symbols" decision)? Default: explicit
-  symbols only.
+- [ ] None — all resolved (see Resolved Decisions).

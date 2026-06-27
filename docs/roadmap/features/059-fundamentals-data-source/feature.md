@@ -1,9 +1,9 @@
 # Feature: fundamentals-data-source
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/fundamentals-data-source`
 **Created**: 2026-06-26
-**Last Updated**: 2026-06-26
+**Last Updated**: 2026-06-27
 
 ---
 
@@ -12,13 +12,15 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-06-26 | `idea` → `draft` | /sdd-story | Product spec generated (feature 2 of 6 in the screener initiative) |
+| 2026-06-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning: OQ-059-a-impl FMP endpoint paths deferred to /sdd-spec — non-blocking) |
+| 2026-06-27 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps; OQ-059-a-impl resolved (hybrid quote/ratios-ttm/profile under config base_url) |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fundamentals-data-source`_
+- [Implementation Spec](implementation-spec.md) — 11 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -46,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review fundamentals-data-source product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-review fundamentals-data-source impl-spec` — validate the implementation spec, then `/sdd-execute fundamentals-data-source`

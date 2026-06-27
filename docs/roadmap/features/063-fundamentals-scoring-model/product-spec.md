@@ -26,7 +26,7 @@ FR-1. Ship a **default "value+quality composite" formula**, registered as a publ
 FR-2. **Reuse the sandbox**: the formula receives a single symbol's fundamentals as the sandbox `data`
 variable (analysis puts them in `ExecuteFormula.input_data` — `input_data` is an arbitrary Struct, so
 **no sandbox change and no new injected variable**), and tunables (sub-weights, bands) as `params`
-(typed Feature-052 parameters).
+(typed parameters from the launched `058-formula-parameters` feature).
 
 FR-3. **Composite definition** (v1): `composite = value_weight × value_subscore + quality_weight ×
 quality_subscore`, each sub-score the normalized average of its inputs:
@@ -94,8 +94,10 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Config Key Changes
 
-- `analysis.fundsignal.value_weight` (float, `0.5`) and `analysis.fundsignal.quality_weight`
-  (float, `0.5`) — **or** carried as formula params (decided at impl-spec; no new keys if params chosen).
+- [x] **None.** Per OQ-063-c, the sub-weights (`value_weight`/`quality_weight`) and band endpoints are
+  carried as typed formula `params`, not config keys — retuning needs no deploy, and 063 therefore adds
+  **nothing** to feature 062's `analysis.fundsignal.*` namespace. The single `analysis.fundsignal.scoring_formula_id`
+  integration touchpoint stays 062-owned. (This resolves the only cross-feature namespace concern with 062.)
 
 ## Database Changes
 
@@ -109,7 +111,8 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval (`xstockstrat-indicators`)
 - [ ] No proto / migration gates
 
-**Depends on** 059 (the metric fields exist) and the existing formula-parameters infra (Feature 052).
+**Depends on** 059 (the metric fields exist) and the existing typed formula-parameters infra (the
+launched `058-formula-parameters` feature).
 
 ## Acceptance Criteria
 
@@ -126,7 +129,8 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] **Default bands** (OQ-063-a): the table in FR-4, anchored on Graham (value) + ROE/Piotroski
   (quality) + dividend-trap convention.
 - [x] **Value + quality only for v1** (OQ-063-b): income/growth additive later.
-- [x] **Weights/bands as formula `params`** (OQ-063-c): retune with no deploy (reuse Feature 052).
+- [x] **Weights/bands as formula `params`** (OQ-063-c): retune with no deploy (reuse the launched
+  `058-formula-parameters` typed-parameter infra). No `analysis.fundsignal.*` config keys are added by 063.
 - [x] **Per-symbol absolute bands in the formula** (OQ-063-d): peer-relative normalization, if wanted,
   lives in 062's orchestration so the formula stays a pure per-symbol function.
 

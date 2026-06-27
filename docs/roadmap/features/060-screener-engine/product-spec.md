@@ -29,7 +29,8 @@ Feature-058 watchlist → symbols and passes them — keeping analysis free of a
 dependency). A convenience `watchlist_id` path is explicitly deferred (OQ-060-a).
 
 FR-3. Criteria are **formula-driven**, reusing the indicators sandbox through the **existing
-`evaluator.py` `ExecuteFormula` invocation** (`input_data={"close": closes}`, `input_params=params`)
+`ExecuteFormula` RPC** (the `execute_formula` entrypoint in `xstockstrat-indicators`
+`app/services/sandbox.py`), invoked with `input_data={"close": closes}` / `input_params=params`
 — identical to backtest, so screener formulas behave exactly like backtest formulas. Each criterion
 is a `ScreenCriterion` (see Proto) with a `kind`, a comparator, a threshold, and a ranking weight.
 
@@ -92,9 +93,11 @@ resolution stays at the UI/agent layer.)
     - `ScreenSymbolsRequest` (`repeated string symbols`, `repeated ScreenCriterion criteria`,
       signal-blend params, `int32 rank_limit`, optional `TimeRange evaluation_window`).
     - `ScreenCriterion` (`ref_name`; `kind` enum `FUNDAMENTAL | TECHNICAL_FORMULA |
-      TECHNICAL_INDICATOR | SIGNAL`; `metric_name` for FUNDAMENTAL; `StrategyComponent component` for
-      TECHNICAL; `Comparator op` `LT|LTE|GT|GTE|BETWEEN`; `double threshold`; `double weight`;
-      `bool hard_filter`).
+      TECHNICAL_INDICATOR | SIGNAL`; `metric_name` for FUNDAMENTAL; reuses the existing
+      `StrategyComponent component` message for TECHNICAL; a **new** `Comparator op` enum
+      `COMPARATOR_UNSPECIFIED=0 | LT | LTE | GT | GTE | BETWEEN` (net-new additive enum with the
+      mandatory zero-value sentinel per Proto Contract Governance); `double threshold`;
+      `double weight`; `bool hard_filter`).
     - `ScreenResult` (`symbol`, `double score`, `map<string,double> criterion_scores`, `bool passed`,
       status enum, optional `CoverageGap`).
     - `ScreenSymbolsResponse` (`repeated ScreenResult results`, `repeated CoverageGap coverage_gaps`).
