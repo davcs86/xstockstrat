@@ -1,9 +1,9 @@
 # Feature: fundamentals-scoring-model
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/fundamentals-scoring-model`
 **Created**: 2026-06-26
-**Last Updated**: 2026-06-26
+**Last Updated**: 2026-06-27
 
 ---
 
@@ -13,13 +13,14 @@
 |---|---|---|---|
 | 2026-06-26 | `idea` → `draft` | /sdd-story | Product spec generated (feature 6 of 6 in the screener initiative) |
 | 2026-06-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings fixed: resolved weights→formula params (no config keys, closes 062 namespace risk); corrected typed-params dep 052→058-formula-parameters) |
+| 2026-06-27 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fundamentals-scoring-model`_
+- [Implementation Spec](implementation-spec.md) — 6 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -39,10 +40,11 @@ re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| `xstockstrat-indicators` (service owner) | Formula sandboxing, numeric precision, missing-metric robustness, no side effects |
-| `xstockstrat-analysis` (service owner) | Correct consumption of the composite + sub-scores, cross-sectional step correctness |
-| `xstockstrat-config` (service owner) | Any `analysis.fundsignal.*` weight keys not already owned by 062 |
+| `xstockstrat-indicators` (service owner) | Formula sandboxing, numeric precision, timeout enforcement, missing-metric robustness, no side-effects from formula execution; idempotent startup seeding |
+| `xstockstrat-analysis` (service owner) | Correct consumption of the composite + sub-scores, header propagation on the new ExecuteFormula call, no look-ahead bias |
+
+_(`xstockstrat-config` dropped at /sdd-spec: 063 adds no `analysis.fundsignal.*` config keys — weights/bands are typed formula `params`; the `scoring_formula_id` key stays 062-owned.)_
 
 ## Next Action
 
-`/sdd-spec fundamentals-scoring-model` — generate implementation spec
+`/sdd-review fundamentals-scoring-model impl-spec` — validate implementation spec, then `/sdd-execute fundamentals-scoring-model`
