@@ -158,6 +158,17 @@ Recently added keys (feature 058 — watchlist management, owned by `xstockstrat
 | `portfolio.watchlist.max_per_user` | int | `50` | Max watchlists a single user may own |
 | `portfolio.watchlist.max_symbols_per_list` | int | `500` | Max symbols allowed in one watchlist |
 
+Recently added keys (feature 059 — fundamentals data source, owned by `xstockstrat-marketdata`). Establishes the `marketdata.<source>.enabled` convention (a source is off until its `enabled` key is flipped):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `marketdata.fmp.enabled` | bool | `false` | Master gate for the FMP fundamentals source; off by default |
+| `secret.marketdata.fmp.api_key` | string (secret) | — | FMP API key; first seeded secret (`is_secret=TRUE`), value is a `secret://` reference, never plaintext |
+| `marketdata.fmp.cache_ttl_hours` | int | `24` | Hours a cached fundamentals row stays fresh before re-fetch |
+| `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day (free Basic budget) |
+| `marketdata.fmp.base_url` | string | `https://financialmodelingprep.com` | FMP API base URL |
+| `marketdata.fmp.metrics` | string | `core,extended` | Metric tiers to fetch (`core`, `extended`) |
+
 Recently added keys (feature 057 — backfill management UI, owned by `xstockstrat-marketdata`):
 
 | Key | Type | Default | Description |

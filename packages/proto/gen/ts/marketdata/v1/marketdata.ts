@@ -176,6 +176,51 @@ export interface DeleteBackfilledDataResponse {
   rowsDeleted: number;
 }
 
+/** Fundamentals (feature 059) — cached fundamental metrics for a symbol, FMP-backed. */
+export interface Fundamentals {
+  symbol: string;
+  marketCap: number;
+  peRatio: number;
+  pbRatio: number;
+  dividendYield: number;
+  eps: number;
+  beta: number;
+  roe: number;
+  debtToEquity: number;
+  price: number;
+  yearHigh: number;
+  yearLow: number;
+  /** FMP's open-ended metric set (keys are FMP field names) */
+  extraMetrics: { [key: string]: number };
+  asOf?: Date | undefined;
+  currency: string;
+  /** "fmp" */
+  source: string;
+  /** true when served past TTL under quota exhaustion (FR-4) */
+  stale: boolean;
+}
+
+export interface Fundamentals_ExtraMetricsEntry {
+  key: string;
+  value: number;
+}
+
+export interface GetFundamentalsRequest {
+  symbol: string;
+}
+
+export interface GetFundamentalsResponse {
+  fundamentals?: Fundamentals | undefined;
+}
+
+export interface GetFundamentalsMultiRequest {
+  symbols: string[];
+}
+
+export interface GetFundamentalsMultiResponse {
+  fundamentals: Fundamentals[];
+}
+
 function createBaseBar(): Bar {
   return {
     symbol: "",
@@ -1987,6 +2032,723 @@ export const DeleteBackfilledDataResponse: MessageFns<DeleteBackfilledDataRespon
   },
 };
 
+function createBaseFundamentals(): Fundamentals {
+  return {
+    symbol: "",
+    marketCap: 0,
+    peRatio: 0,
+    pbRatio: 0,
+    dividendYield: 0,
+    eps: 0,
+    beta: 0,
+    roe: 0,
+    debtToEquity: 0,
+    price: 0,
+    yearHigh: 0,
+    yearLow: 0,
+    extraMetrics: {},
+    asOf: undefined,
+    currency: "",
+    source: "",
+    stale: false,
+  };
+}
+
+export const Fundamentals: MessageFns<Fundamentals> = {
+  encode(message: Fundamentals, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.marketCap !== 0) {
+      writer.uint32(17).double(message.marketCap);
+    }
+    if (message.peRatio !== 0) {
+      writer.uint32(25).double(message.peRatio);
+    }
+    if (message.pbRatio !== 0) {
+      writer.uint32(33).double(message.pbRatio);
+    }
+    if (message.dividendYield !== 0) {
+      writer.uint32(41).double(message.dividendYield);
+    }
+    if (message.eps !== 0) {
+      writer.uint32(49).double(message.eps);
+    }
+    if (message.beta !== 0) {
+      writer.uint32(57).double(message.beta);
+    }
+    if (message.roe !== 0) {
+      writer.uint32(65).double(message.roe);
+    }
+    if (message.debtToEquity !== 0) {
+      writer.uint32(73).double(message.debtToEquity);
+    }
+    if (message.price !== 0) {
+      writer.uint32(81).double(message.price);
+    }
+    if (message.yearHigh !== 0) {
+      writer.uint32(89).double(message.yearHigh);
+    }
+    if (message.yearLow !== 0) {
+      writer.uint32(97).double(message.yearLow);
+    }
+    globalThis.Object.entries(message.extraMetrics).forEach(([key, value]: [string, number]) => {
+      Fundamentals_ExtraMetricsEntry.encode({ key: key as any, value }, writer.uint32(106).fork()).join();
+    });
+    if (message.asOf !== undefined) {
+      Timestamp.encode(toTimestamp(message.asOf), writer.uint32(114).fork()).join();
+    }
+    if (message.currency !== "") {
+      writer.uint32(122).string(message.currency);
+    }
+    if (message.source !== "") {
+      writer.uint32(130).string(message.source);
+    }
+    if (message.stale !== false) {
+      writer.uint32(136).bool(message.stale);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Fundamentals {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFundamentals();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.marketCap = reader.double();
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.peRatio = reader.double();
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.pbRatio = reader.double();
+          continue;
+        }
+        case 5: {
+          if (tag !== 41) {
+            break;
+          }
+
+          message.dividendYield = reader.double();
+          continue;
+        }
+        case 6: {
+          if (tag !== 49) {
+            break;
+          }
+
+          message.eps = reader.double();
+          continue;
+        }
+        case 7: {
+          if (tag !== 57) {
+            break;
+          }
+
+          message.beta = reader.double();
+          continue;
+        }
+        case 8: {
+          if (tag !== 65) {
+            break;
+          }
+
+          message.roe = reader.double();
+          continue;
+        }
+        case 9: {
+          if (tag !== 73) {
+            break;
+          }
+
+          message.debtToEquity = reader.double();
+          continue;
+        }
+        case 10: {
+          if (tag !== 81) {
+            break;
+          }
+
+          message.price = reader.double();
+          continue;
+        }
+        case 11: {
+          if (tag !== 89) {
+            break;
+          }
+
+          message.yearHigh = reader.double();
+          continue;
+        }
+        case 12: {
+          if (tag !== 97) {
+            break;
+          }
+
+          message.yearLow = reader.double();
+          continue;
+        }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          const entry13 = Fundamentals_ExtraMetricsEntry.decode(reader, reader.uint32());
+          if (entry13.value !== undefined) {
+            message.extraMetrics[entry13.key] = entry13.value;
+          }
+          continue;
+        }
+        case 14: {
+          if (tag !== 114) {
+            break;
+          }
+
+          message.asOf = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.currency = reader.string();
+          continue;
+        }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          message.source = reader.string();
+          continue;
+        }
+        case 17: {
+          if (tag !== 136) {
+            break;
+          }
+
+          message.stale = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Fundamentals {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      marketCap: isSet(object.marketCap)
+        ? globalThis.Number(object.marketCap)
+        : isSet(object.market_cap)
+        ? globalThis.Number(object.market_cap)
+        : 0,
+      peRatio: isSet(object.peRatio)
+        ? globalThis.Number(object.peRatio)
+        : isSet(object.pe_ratio)
+        ? globalThis.Number(object.pe_ratio)
+        : 0,
+      pbRatio: isSet(object.pbRatio)
+        ? globalThis.Number(object.pbRatio)
+        : isSet(object.pb_ratio)
+        ? globalThis.Number(object.pb_ratio)
+        : 0,
+      dividendYield: isSet(object.dividendYield)
+        ? globalThis.Number(object.dividendYield)
+        : isSet(object.dividend_yield)
+        ? globalThis.Number(object.dividend_yield)
+        : 0,
+      eps: isSet(object.eps) ? globalThis.Number(object.eps) : 0,
+      beta: isSet(object.beta) ? globalThis.Number(object.beta) : 0,
+      roe: isSet(object.roe) ? globalThis.Number(object.roe) : 0,
+      debtToEquity: isSet(object.debtToEquity)
+        ? globalThis.Number(object.debtToEquity)
+        : isSet(object.debt_to_equity)
+        ? globalThis.Number(object.debt_to_equity)
+        : 0,
+      price: isSet(object.price) ? globalThis.Number(object.price) : 0,
+      yearHigh: isSet(object.yearHigh)
+        ? globalThis.Number(object.yearHigh)
+        : isSet(object.year_high)
+        ? globalThis.Number(object.year_high)
+        : 0,
+      yearLow: isSet(object.yearLow)
+        ? globalThis.Number(object.yearLow)
+        : isSet(object.year_low)
+        ? globalThis.Number(object.year_low)
+        : 0,
+      extraMetrics: isObject(object.extraMetrics)
+        ? (globalThis.Object.entries(object.extraMetrics) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : isObject(object.extra_metrics)
+        ? (globalThis.Object.entries(object.extra_metrics) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : {},
+      asOf: isSet(object.asOf)
+        ? fromJsonTimestamp(object.asOf)
+        : isSet(object.as_of)
+        ? fromJsonTimestamp(object.as_of)
+        : undefined,
+      currency: isSet(object.currency) ? globalThis.String(object.currency) : "",
+      source: isSet(object.source) ? globalThis.String(object.source) : "",
+      stale: isSet(object.stale) ? globalThis.Boolean(object.stale) : false,
+    };
+  },
+
+  toJSON(message: Fundamentals): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.marketCap !== 0) {
+      obj.marketCap = message.marketCap;
+    }
+    if (message.peRatio !== 0) {
+      obj.peRatio = message.peRatio;
+    }
+    if (message.pbRatio !== 0) {
+      obj.pbRatio = message.pbRatio;
+    }
+    if (message.dividendYield !== 0) {
+      obj.dividendYield = message.dividendYield;
+    }
+    if (message.eps !== 0) {
+      obj.eps = message.eps;
+    }
+    if (message.beta !== 0) {
+      obj.beta = message.beta;
+    }
+    if (message.roe !== 0) {
+      obj.roe = message.roe;
+    }
+    if (message.debtToEquity !== 0) {
+      obj.debtToEquity = message.debtToEquity;
+    }
+    if (message.price !== 0) {
+      obj.price = message.price;
+    }
+    if (message.yearHigh !== 0) {
+      obj.yearHigh = message.yearHigh;
+    }
+    if (message.yearLow !== 0) {
+      obj.yearLow = message.yearLow;
+    }
+    if (message.extraMetrics) {
+      const entries = globalThis.Object.entries(message.extraMetrics) as [string, number][];
+      if (entries.length > 0) {
+        obj.extraMetrics = {};
+        entries.forEach(([k, v]) => {
+          obj.extraMetrics[k] = v;
+        });
+      }
+    }
+    if (message.asOf !== undefined) {
+      obj.asOf = message.asOf.toISOString();
+    }
+    if (message.currency !== "") {
+      obj.currency = message.currency;
+    }
+    if (message.source !== "") {
+      obj.source = message.source;
+    }
+    if (message.stale !== false) {
+      obj.stale = message.stale;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Fundamentals>, I>>(base?: I): Fundamentals {
+    return Fundamentals.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Fundamentals>, I>>(object: I): Fundamentals {
+    const message = createBaseFundamentals();
+    message.symbol = object.symbol ?? "";
+    message.marketCap = object.marketCap ?? 0;
+    message.peRatio = object.peRatio ?? 0;
+    message.pbRatio = object.pbRatio ?? 0;
+    message.dividendYield = object.dividendYield ?? 0;
+    message.eps = object.eps ?? 0;
+    message.beta = object.beta ?? 0;
+    message.roe = object.roe ?? 0;
+    message.debtToEquity = object.debtToEquity ?? 0;
+    message.price = object.price ?? 0;
+    message.yearHigh = object.yearHigh ?? 0;
+    message.yearLow = object.yearLow ?? 0;
+    message.extraMetrics = (globalThis.Object.entries(object.extraMetrics ?? {}) as [string, number][]).reduce(
+      (acc: { [key: string]: number }, [key, value]: [string, number]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.Number(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    message.asOf = object.asOf ?? undefined;
+    message.currency = object.currency ?? "";
+    message.source = object.source ?? "";
+    message.stale = object.stale ?? false;
+    return message;
+  },
+};
+
+function createBaseFundamentals_ExtraMetricsEntry(): Fundamentals_ExtraMetricsEntry {
+  return { key: "", value: 0 };
+}
+
+export const Fundamentals_ExtraMetricsEntry: MessageFns<Fundamentals_ExtraMetricsEntry> = {
+  encode(message: Fundamentals_ExtraMetricsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== 0) {
+      writer.uint32(17).double(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Fundamentals_ExtraMetricsEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFundamentals_ExtraMetricsEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.value = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Fundamentals_ExtraMetricsEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+    };
+  },
+
+  toJSON(message: Fundamentals_ExtraMetricsEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== 0) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Fundamentals_ExtraMetricsEntry>, I>>(base?: I): Fundamentals_ExtraMetricsEntry {
+    return Fundamentals_ExtraMetricsEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Fundamentals_ExtraMetricsEntry>, I>>(
+    object: I,
+  ): Fundamentals_ExtraMetricsEntry {
+    const message = createBaseFundamentals_ExtraMetricsEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? 0;
+    return message;
+  },
+};
+
+function createBaseGetFundamentalsRequest(): GetFundamentalsRequest {
+  return { symbol: "" };
+}
+
+export const GetFundamentalsRequest: MessageFns<GetFundamentalsRequest> = {
+  encode(message: GetFundamentalsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetFundamentalsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetFundamentalsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetFundamentalsRequest {
+    return { symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "" };
+  },
+
+  toJSON(message: GetFundamentalsRequest): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetFundamentalsRequest>, I>>(base?: I): GetFundamentalsRequest {
+    return GetFundamentalsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetFundamentalsRequest>, I>>(object: I): GetFundamentalsRequest {
+    const message = createBaseGetFundamentalsRequest();
+    message.symbol = object.symbol ?? "";
+    return message;
+  },
+};
+
+function createBaseGetFundamentalsResponse(): GetFundamentalsResponse {
+  return { fundamentals: undefined };
+}
+
+export const GetFundamentalsResponse: MessageFns<GetFundamentalsResponse> = {
+  encode(message: GetFundamentalsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.fundamentals !== undefined) {
+      Fundamentals.encode(message.fundamentals, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetFundamentalsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetFundamentalsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.fundamentals = Fundamentals.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetFundamentalsResponse {
+    return { fundamentals: isSet(object.fundamentals) ? Fundamentals.fromJSON(object.fundamentals) : undefined };
+  },
+
+  toJSON(message: GetFundamentalsResponse): unknown {
+    const obj: any = {};
+    if (message.fundamentals !== undefined) {
+      obj.fundamentals = Fundamentals.toJSON(message.fundamentals);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetFundamentalsResponse>, I>>(base?: I): GetFundamentalsResponse {
+    return GetFundamentalsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetFundamentalsResponse>, I>>(object: I): GetFundamentalsResponse {
+    const message = createBaseGetFundamentalsResponse();
+    message.fundamentals = (object.fundamentals !== undefined && object.fundamentals !== null)
+      ? Fundamentals.fromPartial(object.fundamentals)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetFundamentalsMultiRequest(): GetFundamentalsMultiRequest {
+  return { symbols: [] };
+}
+
+export const GetFundamentalsMultiRequest: MessageFns<GetFundamentalsMultiRequest> = {
+  encode(message: GetFundamentalsMultiRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.symbols) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetFundamentalsMultiRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetFundamentalsMultiRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetFundamentalsMultiRequest {
+    return {
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: GetFundamentalsMultiRequest): unknown {
+    const obj: any = {};
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetFundamentalsMultiRequest>, I>>(base?: I): GetFundamentalsMultiRequest {
+    return GetFundamentalsMultiRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetFundamentalsMultiRequest>, I>>(object: I): GetFundamentalsMultiRequest {
+    const message = createBaseGetFundamentalsMultiRequest();
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseGetFundamentalsMultiResponse(): GetFundamentalsMultiResponse {
+  return { fundamentals: [] };
+}
+
+export const GetFundamentalsMultiResponse: MessageFns<GetFundamentalsMultiResponse> = {
+  encode(message: GetFundamentalsMultiResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.fundamentals) {
+      Fundamentals.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetFundamentalsMultiResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetFundamentalsMultiResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.fundamentals.push(Fundamentals.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetFundamentalsMultiResponse {
+    return {
+      fundamentals: globalThis.Array.isArray(object?.fundamentals)
+        ? object.fundamentals.map((e: any) => Fundamentals.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: GetFundamentalsMultiResponse): unknown {
+    const obj: any = {};
+    if (message.fundamentals?.length) {
+      obj.fundamentals = message.fundamentals.map((e) => Fundamentals.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetFundamentalsMultiResponse>, I>>(base?: I): GetFundamentalsMultiResponse {
+    return GetFundamentalsMultiResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetFundamentalsMultiResponse>, I>>(object: I): GetFundamentalsMultiResponse {
+    const message = createBaseGetFundamentalsMultiResponse();
+    message.fundamentals = object.fundamentals?.map((e) => Fundamentals.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -2079,6 +2841,30 @@ export const MarketDataServiceService = {
     responseSerialize: (value: ListAssetsResponse): Buffer => Buffer.from(ListAssetsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListAssetsResponse => ListAssetsResponse.decode(value),
   },
+  /** Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache) */
+  getFundamentals: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentals" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetFundamentalsRequest): Buffer =>
+      Buffer.from(GetFundamentalsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetFundamentalsRequest => GetFundamentalsRequest.decode(value),
+    responseSerialize: (value: GetFundamentalsResponse): Buffer =>
+      Buffer.from(GetFundamentalsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetFundamentalsResponse => GetFundamentalsResponse.decode(value),
+  },
+  /** Batched fundamentals for a watchlist scan (core metrics via one FMP quote call) */
+  getFundamentalsMulti: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentalsMulti" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetFundamentalsMultiRequest): Buffer =>
+      Buffer.from(GetFundamentalsMultiRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetFundamentalsMultiRequest => GetFundamentalsMultiRequest.decode(value),
+    responseSerialize: (value: GetFundamentalsMultiResponse): Buffer =>
+      Buffer.from(GetFundamentalsMultiResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetFundamentalsMultiResponse => GetFundamentalsMultiResponse.decode(value),
+  },
 } as const;
 
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
@@ -2098,6 +2884,10 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
   deleteBackfilledData: handleUnaryCall<DeleteBackfilledDataRequest, DeleteBackfilledDataResponse>;
   /** Get available symbols */
   listAssets: handleUnaryCall<ListAssetsRequest, ListAssetsResponse>;
+  /** Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache) */
+  getFundamentals: handleUnaryCall<GetFundamentalsRequest, GetFundamentalsResponse>;
+  /** Batched fundamentals for a watchlist scan (core metrics via one FMP quote call) */
+  getFundamentalsMulti: handleUnaryCall<GetFundamentalsMultiRequest, GetFundamentalsMultiResponse>;
 }
 
 export interface MarketDataServiceClient extends Client {
@@ -2211,6 +3001,38 @@ export interface MarketDataServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListAssetsResponse) => void,
   ): ClientUnaryCall;
+  /** Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache) */
+  getFundamentals(
+    request: GetFundamentalsRequest,
+    callback: (error: ServiceError | null, response: GetFundamentalsResponse) => void,
+  ): ClientUnaryCall;
+  getFundamentals(
+    request: GetFundamentalsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetFundamentalsResponse) => void,
+  ): ClientUnaryCall;
+  getFundamentals(
+    request: GetFundamentalsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetFundamentalsResponse) => void,
+  ): ClientUnaryCall;
+  /** Batched fundamentals for a watchlist scan (core metrics via one FMP quote call) */
+  getFundamentalsMulti(
+    request: GetFundamentalsMultiRequest,
+    callback: (error: ServiceError | null, response: GetFundamentalsMultiResponse) => void,
+  ): ClientUnaryCall;
+  getFundamentalsMulti(
+    request: GetFundamentalsMultiRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetFundamentalsMultiResponse) => void,
+  ): ClientUnaryCall;
+  getFundamentalsMulti(
+    request: GetFundamentalsMultiRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetFundamentalsMultiResponse) => void,
+  ): ClientUnaryCall;
 }
 
 export const MarketDataServiceClient = makeGenericClientConstructor(
@@ -2265,6 +3087,10 @@ function longToNumber(int64: { toString(): string }): number {
     throw new globalThis.Error("Value is smaller than Number.MIN_SAFE_INTEGER");
   }
   return num;
+}
+
+function isObject(value: any): boolean {
+  return typeof value === "object" && value !== null;
 }
 
 function isSet(value: any): boolean {

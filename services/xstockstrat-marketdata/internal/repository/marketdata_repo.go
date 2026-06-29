@@ -2,13 +2,17 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
+	"github.com/xstockstrat/marketdata/internal/source"
 )
 
 // MarketDataRepo handles TimescaleDB reads and writes for OHLCV bars and quotes.
@@ -233,4 +237,110 @@ func (r *MarketDataRepo) GetLatestQuote(ctx context.Context, symbol string) (*ma
 		BidSize:  bidSize,
 		Source:   source,
 	}, nil
+}
+
+// ── Fundamentals cache (feature 059) ─────────────────────────────────────────
+// Reuses the existing pgxpool — no second pool (DB budget stays 2).
+
+// fundamentalsColumns is the SELECT/scan column order for a fundamentals row.
+const fundamentalsColumns = `symbol, as_of, market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe, debt_to_equity, price, year_high, year_low, extra_metrics, currency, source, fetched_at`
+
+// GetFundamentals reads one cached fundamentals row by symbol (PK lookup). found=false
+// when no row exists. fetchedAt is returned so the service can apply the TTL/quota logic.
+func (r *MarketDataRepo) GetFundamentals(ctx context.Context, symbol string) (f *source.Fundamentals, fetchedAt time.Time, found bool, err error) {
+	row := r.pool.QueryRow(ctx,
+		`SELECT `+fundamentalsColumns+` FROM marketdata.fundamentals WHERE symbol = $1`, symbol)
+	var (
+		sym, currency, src                                                   string
+		asOf, fetched                                                        time.Time
+		extraJSON                                                            []byte
+		marketCap, pe, pb, divYield, eps, beta, roe, dte, price, yHigh, yLow *float64
+	)
+	if scanErr := row.Scan(&sym, &asOf, &marketCap, &pe, &pb, &divYield, &eps, &beta, &roe, &dte,
+		&price, &yHigh, &yLow, &extraJSON, &currency, &src, &fetched); scanErr != nil {
+		if errors.Is(scanErr, pgx.ErrNoRows) {
+			return nil, time.Time{}, false, nil
+		}
+		return nil, time.Time{}, false, fmt.Errorf("get fundamentals %s: %w", symbol, scanErr)
+	}
+	extra := map[string]float64{}
+	if len(extraJSON) > 0 {
+		_ = json.Unmarshal(extraJSON, &extra)
+	}
+	deref := func(p *float64) float64 {
+		if p == nil {
+			return 0
+		}
+		return *p
+	}
+	return &source.Fundamentals{
+		Symbol:        sym,
+		AsOf:          asOf,
+		MarketCap:     deref(marketCap),
+		PERatio:       deref(pe),
+		PBRatio:       deref(pb),
+		DividendYield: deref(divYield),
+		EPS:           deref(eps),
+		Beta:          deref(beta),
+		ROE:           deref(roe),
+		DebtToEquity:  deref(dte),
+		Price:         deref(price),
+		YearHigh:      deref(yHigh),
+		YearLow:       deref(yLow),
+		ExtraMetrics:  extra,
+		Currency:      currency,
+		Source:        src,
+	}, fetched, true, nil
+}
+
+// UpsertFundamentals inserts or refreshes a cached fundamentals row, bumping fetched_at
+// to now() so the quota count (CountFundamentalsFetchedToday) and TTL reflect the fetch.
+func (r *MarketDataRepo) UpsertFundamentals(ctx context.Context, f *source.Fundamentals) error {
+	extraJSON, err := json.Marshal(f.ExtraMetrics)
+	if err != nil {
+		return fmt.Errorf("marshal extra_metrics: %w", err)
+	}
+	if len(extraJSON) == 0 {
+		extraJSON = []byte("{}")
+	}
+	src := f.Source
+	if src == "" {
+		src = "fmp"
+	}
+	const q = `
+		INSERT INTO marketdata.fundamentals
+		  (symbol, as_of, market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe,
+		   debt_to_equity, price, year_high, year_low, extra_metrics, currency, source, fetched_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, now())
+		ON CONFLICT (symbol) DO UPDATE SET
+		  as_of=EXCLUDED.as_of, market_cap=EXCLUDED.market_cap, pe_ratio=EXCLUDED.pe_ratio,
+		  pb_ratio=EXCLUDED.pb_ratio, dividend_yield=EXCLUDED.dividend_yield, eps=EXCLUDED.eps,
+		  beta=EXCLUDED.beta, roe=EXCLUDED.roe, debt_to_equity=EXCLUDED.debt_to_equity,
+		  price=EXCLUDED.price, year_high=EXCLUDED.year_high, year_low=EXCLUDED.year_low,
+		  extra_metrics=EXCLUDED.extra_metrics, currency=EXCLUDED.currency, source=EXCLUDED.source,
+		  fetched_at=now()`
+	asOf := f.AsOf
+	if asOf.IsZero() {
+		asOf = time.Now().UTC()
+	}
+	_, err = r.pool.Exec(ctx, q,
+		f.Symbol, asOf, f.MarketCap, f.PERatio, f.PBRatio, f.DividendYield, f.EPS, f.Beta, f.ROE,
+		f.DebtToEquity, f.Price, f.YearHigh, f.YearLow, extraJSON, f.Currency, src)
+	if err != nil {
+		return fmt.Errorf("upsert fundamentals %s: %w", f.Symbol, err)
+	}
+	return nil
+}
+
+// CountFundamentalsFetchedToday counts rows fetched within the current UTC day — the
+// FR-4 daily quota window. The idx_fundamentals_fetched_at index backs this scan.
+func (r *MarketDataRepo) CountFundamentalsFetchedToday(ctx context.Context) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx,
+		`SELECT count(*) FROM marketdata.fundamentals
+		 WHERE fetched_at >= date_trunc('day', now() AT TIME ZONE 'UTC')`).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count fundamentals fetched today: %w", err)
+	}
+	return n, nil
 }
