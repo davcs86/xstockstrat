@@ -1,6 +1,8 @@
 # Feature: fundamentals-scoring-model
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: e8742e4e4f4dd88cbbc6ed85151784c4434d4885
+**Launched date**: 2026-06-29
 **Development Branch**: `feature/fundamentals-scoring-model`
 **Created**: 2026-06-26
 **Last Updated**: 2026-06-29
@@ -16,6 +18,7 @@
 | 2026-06-27 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-06-29 | `implementation-ready` → `code-completed` | /sdd-execute | All 6 steps done on `feature/fundamentals-scoring-model` (stacked on 059); integration PR → 059 |
 
+| 2026-06-29 | `code-completed` → `launched` | CI workflow | Promoted via PR #729; committed e8742e4e4f4dd88cbbc6ed85151784c4434d4885 |
 ---
 
 ## Artifacts

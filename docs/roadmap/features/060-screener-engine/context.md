@@ -116,3 +116,10 @@ degrades fundamental criteria to **skipped** on any RpcError (FMP disabled by de
 FailedPrecondition, quota-exhausted, or unavailable), satisfying FR-5 both ways. See Deviation Log.
 
 **Stopped at**: all complete → integration PR → `feature/fundamentals-data-source` (059).
+
+## Session 2026-06-29 (CI: feature status automation)
+
+- Promotion PR #729 merged to main
+- Feature promoted and committed: e8742e4e4f4dd88cbbc6ed85151784c4434d4885
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-29

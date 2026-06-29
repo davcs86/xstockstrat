@@ -97,3 +97,10 @@ Executed all 11 steps on `feature/fundamentals-data-source` (stacked on `feature
   feature-059 block + `marketdata.<source>.enabled` convention note in root CLAUDE.md.
 
 **Stopped at**: all complete → integration PR → `feature/watchlist-management` (058).
+
+## Session 2026-06-29 (CI: feature status automation)
+
+- Promotion PR #729 merged to main
+- Feature promoted and committed: e8742e4e4f4dd88cbbc6ed85151784c4434d4885
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-29

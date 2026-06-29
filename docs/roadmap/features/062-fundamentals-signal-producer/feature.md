@@ -1,6 +1,8 @@
 # Feature: fundamentals-signal-producer
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: e8742e4e4f4dd88cbbc6ed85151784c4434d4885
+**Launched date**: 2026-06-29
 **Development Branch**: `feature/fundamentals-signal-producer`
 **Created**: 2026-06-26
 **Last Updated**: 2026-06-29
@@ -17,6 +19,7 @@
 | 2026-06-27 | `implementation-ready` | /sdd-review (impl-spec) | Resolved the ingest source_type open item (user decision): added Step 13 — additive ingest migration `006_signal_source_type_derived` adds a `derived` source_type; producer registers with `source_type='derived'` + `app.extractors.noop`. Now 13 steps. Config migration renumbered 006→008 (config-006 collision; see merge-order.md) |
 | 2026-06-29 | `implementation-ready` → `code-completed` | /sdd-execute | All 13 steps implemented on `feature/fundamentals-signal-producer` (stacked on `feature/fundamentals-scoring-model`). Producer loop + `RunFundamentalsScan` RPC + migrations + config seed + ingest `derived` source_type (fail-closed validation). 125 analysis tests pass (65% cov); 29 ingest signal_sources tests pass. Universe used the `explicit` fallback (058 `ListWatchlists` is user-scoped). |
 
+| 2026-06-29 | `code-completed` → `launched` | CI workflow | Promoted via PR #729; committed e8742e4e4f4dd88cbbc6ed85151784c4434d4885 |
 ---
 
 ## Artifacts

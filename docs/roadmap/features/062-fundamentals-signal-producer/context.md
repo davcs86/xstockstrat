@@ -170,3 +170,10 @@ subsection, new dependency edges, `PORTFOLIO_ENDPOINT`), root CLAUDE.md (feature
 
 **Deviation**: universe used the `explicit` fallback (058 `ListWatchlists` is user-scoped, no global
 union RPC). See Deviation Log.
+
+## Session 2026-06-29 (CI: feature status automation)
+
+- Promotion PR #729 merged to main
+- Feature promoted and committed: e8742e4e4f4dd88cbbc6ed85151784c4434d4885
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-06-29
