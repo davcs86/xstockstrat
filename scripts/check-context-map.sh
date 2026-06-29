@@ -29,9 +29,11 @@ trap 'rm -f "$REFS" "$SRCS"' EXIT
 grep -oE '(\.claude|docs|scripts)/[A-Za-z0-9._/<>-]+\.(md|ya?ml|sh)' "$MAP" >>"$REFS"
 
 # (2) doc/skill references embedded in CLAUDE.md files and skill routers.
-find . -name CLAUDE.md -not -path '*/node_modules/*' >>"$SRCS"
-find .claude/skills -name SKILL.md >>"$SRCS"
-find .claude/skills -path '*/reference/*.md' >>"$SRCS"
+{
+  find . -name CLAUDE.md -not -path '*/node_modules/*'
+  find .claude/skills -name SKILL.md
+  find .claude/skills -path '*/reference/*.md'
+} >>"$SRCS"
 
 while IFS= read -r f; do
   # Strip URLs first so paths embedded in links (e.g. github.com/.../docs/x.md)

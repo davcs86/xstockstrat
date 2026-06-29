@@ -1,13 +1,17 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
+	"github.com/xstockstrat/marketdata/internal/source"
 )
 
 func TestEstimateExpectedBars(t *testing.T) {
@@ -154,4 +158,225 @@ func TestResolveDeletePlan(t *testing.T) {
 			t.Fatalf("window guard should be off, got %v", err)
 		}
 	})
+}
+
+// ── Fundamentals (feature 059) ───────────────────────────────────────────────
+
+type fakeFundRepo struct {
+	rows       map[string]*source.Fundamentals
+	fetchedAt  map[string]time.Time
+	todayCount int
+	upserts    int
+}
+
+func newFakeFundRepo() *fakeFundRepo {
+	return &fakeFundRepo{rows: map[string]*source.Fundamentals{}, fetchedAt: map[string]time.Time{}}
+}
+
+func (r *fakeFundRepo) GetFundamentals(_ context.Context, symbol string) (*source.Fundamentals, time.Time, bool, error) {
+	f, ok := r.rows[symbol]
+	if !ok || f == nil {
+		return nil, time.Time{}, false, nil
+	}
+	return f, r.fetchedAt[symbol], true, nil
+}
+
+func (r *fakeFundRepo) UpsertFundamentals(_ context.Context, f *source.Fundamentals) error {
+	r.upserts++
+	r.rows[f.Symbol] = f
+	r.fetchedAt[f.Symbol] = time.Now()
+	r.todayCount++
+	return nil
+}
+
+func (r *fakeFundRepo) CountFundamentalsFetchedToday(_ context.Context) (int, error) {
+	return r.todayCount, nil
+}
+
+type fakeFundSource struct {
+	calls   int
+	resp    *source.Fundamentals
+	respErr error
+}
+
+func (s *fakeFundSource) GetFundamentals(_ context.Context, symbol string) (*source.Fundamentals, error) {
+	s.calls++
+	if s.respErr != nil {
+		return nil, s.respErr
+	}
+	r := *s.resp
+	r.Symbol = symbol
+	return &r, nil
+}
+
+func (s *fakeFundSource) GetFundamentalsMulti(_ context.Context, symbols []string) ([]*source.Fundamentals, error) {
+	s.calls++
+	if s.respErr != nil {
+		return nil, s.respErr
+	}
+	out := make([]*source.Fundamentals, 0, len(symbols))
+	for _, sym := range symbols {
+		r := *s.resp
+		r.Symbol = sym
+		out = append(out, &r)
+	}
+	return out, nil
+}
+
+type fakeCfg struct {
+	bools map[string]bool
+	ints  map[string]int64
+}
+
+func (c *fakeCfg) GetBool(k string, d bool) bool {
+	if v, ok := c.bools[k]; ok {
+		return v
+	}
+	return d
+}
+func (c *fakeCfg) GetInt(k string, d int64) int64 {
+	if v, ok := c.ints[k]; ok {
+		return v
+	}
+	return d
+}
+func (c *fakeCfg) GetString(_, d string) string { return d }
+
+type fakeNotify struct {
+	notifyv1.NotifyServiceClient
+	warnings int
+}
+
+func (n *fakeNotify) EmitAlert(_ context.Context, in *notifyv1.EmitAlertRequest, _ ...grpc.CallOption) (*notifyv1.EmitAlertResponse, error) {
+	if in.Severity == notifyv1.AlertSeverity_ALERT_SEVERITY_WARNING {
+		n.warnings++
+	}
+	return &notifyv1.EmitAlertResponse{}, nil
+}
+
+func enabledCfg() *fakeCfg {
+	return &fakeCfg{
+		bools: map[string]bool{"marketdata.fmp.enabled": true},
+		ints:  map[string]int64{"marketdata.fmp.cache_ttl_hours": 24, "marketdata.fmp.daily_request_cap": 250},
+	}
+}
+
+func newFundSvc(cfg *fakeCfg, repo *fakeFundRepo, src source.FundamentalsSource, notify notifyv1.NotifyServiceClient) *MarketDataService {
+	return &MarketDataService{fundamentals: src, fundCfg: cfg, fundRepo: repo, notify: notify}
+}
+
+// Acceptance #2: a within-TTL second call issues zero FMP calls.
+func TestGetFundamentals_CacheHitNoFMP(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: 100}
+	repo.fetchedAt["AAPL"] = time.Now()
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	svc := newFundSvc(enabledCfg(), repo, src, &fakeNotify{})
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if f.Price != 100 || f.Stale {
+		t.Fatalf("expected fresh cache hit, got %+v", f)
+	}
+	if src.calls != 0 {
+		t.Fatalf("cache hit should issue zero FMP calls, got %d", src.calls)
+	}
+}
+
+// Acceptance #3a: at-cap miss with a stale cache returns stale=true.
+func TestGetFundamentals_AtCapStale(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: 100}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
+	repo.todayCount = 250
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	svc := newFundSvc(enabledCfg(), repo, src, &fakeNotify{})
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if !f.Stale {
+		t.Fatalf("expected stale=true under quota exhaustion, got %+v", f)
+	}
+	if src.calls != 0 {
+		t.Fatalf("at-cap must not call FMP, got %d", src.calls)
+	}
+}
+
+// Acceptance #3b: at-cap miss with NO cache returns ResourceExhausted.
+func TestGetFundamentals_AtCapNoCacheResourceExhausted(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.todayCount = 250
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	svc := newFundSvc(enabledCfg(), repo, src, &fakeNotify{})
+
+	_, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("expected ResourceExhausted, got %v", err)
+	}
+}
+
+// Acceptance #4: enabled=false returns FailedPrecondition and makes zero FMP calls.
+func TestGetFundamentals_DisabledFailedPrecondition(t *testing.T) {
+	repo := newFakeFundRepo()
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	cfg := &fakeCfg{bools: map[string]bool{"marketdata.fmp.enabled": false}}
+	svc := newFundSvc(cfg, repo, src, &fakeNotify{})
+
+	_, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("expected FailedPrecondition, got %v", err)
+	}
+	if src.calls != 0 {
+		t.Fatalf("disabled must not call FMP, got %d", src.calls)
+	}
+}
+
+// Acceptance #5: miss + under cap fetches and upserts.
+func TestGetFundamentals_MissFetchesAndUpserts(t *testing.T) {
+	repo := newFakeFundRepo()
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	svc := newFundSvc(enabledCfg(), repo, src, &fakeNotify{})
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if f.Price != 200 || f.Stale {
+		t.Fatalf("expected fresh fetch, got %+v", f)
+	}
+	if src.calls != 1 || repo.upserts != 1 {
+		t.Fatalf("expected 1 fetch + 1 upsert, got calls=%d upserts=%d", src.calls, repo.upserts)
+	}
+}
+
+// FR-7: crossing 80% of the cap emits exactly one WARNING (deduped per day).
+func TestGetFundamentals_QuotaWarningEmittedOnce(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.todayCount = 199 // post-fetch 200 == 80% of 250
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	notify := &fakeNotify{}
+	svc := newFundSvc(enabledCfg(), repo, src, notify)
+
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("first fetch: %v", err)
+	}
+	if _, err := svc.GetFundamentals(context.Background(), "MSFT"); err != nil {
+		t.Fatalf("second fetch: %v", err)
+	}
+	if notify.warnings != 1 {
+		t.Fatalf("expected exactly 1 WARNING, got %d", notify.warnings)
+	}
+}
+
+// FR-6: enabled but nil source (not built) → FailedPrecondition, no panic.
+func TestGetFundamentals_NilSourceFailedPrecondition(t *testing.T) {
+	svc := newFundSvc(enabledCfg(), newFakeFundRepo(), nil, &fakeNotify{})
+	_, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("expected FailedPrecondition for nil source, got %v", err)
+	}
 }

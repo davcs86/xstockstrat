@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BacktestResult, GetStrategyReportRequest, GetStrategyRequest, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, RunBacktestRequest, ScoreStrategyRequest, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
+import { BacktestResult, FundamentalsScanSummary, GetStrategyReportRequest, GetStrategyRequest, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -82,6 +82,28 @@ export const AnalysisService = {
       name: "SetStrategyLive",
       I: SetStrategyLiveRequest,
       O: SetStrategyLiveResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Screen a symbol universe against weighted criteria (feature 060)
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ScreenSymbols
+     */
+    screenSymbols: {
+      name: "ScreenSymbols",
+      I: ScreenSymbolsRequest,
+      O: ScreenSymbolsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan
+     */
+    runFundamentalsScan: {
+      name: "RunFundamentalsScan",
+      I: RunFundamentalsScanRequest,
+      O: FundamentalsScanSummary,
       kind: MethodKind.Unary,
     },
   }

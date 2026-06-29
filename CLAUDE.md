@@ -151,6 +151,50 @@ Recently added keys (feature 049 Part B — MCP OAuth 2.1 edge auth, owned by `x
 | `agent.oauth.registration_enabled` | bool | `true` | Allow RFC 7591 Dynamic Client Registration at `/oauth/register` |
 | `agent.oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only (no allow-any) |
 
+Recently added keys (feature 058 — watchlist management, owned by `xstockstrat-portfolio`):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `portfolio.watchlist.max_per_user` | int | `50` | Max watchlists a single user may own |
+| `portfolio.watchlist.max_symbols_per_list` | int | `500` | Max symbols allowed in one watchlist |
+
+Recently added keys (feature 060 — screener engine, owned by `xstockstrat-analysis`):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.screener.max_universe_size` | int | `100` | Max symbols a single `ScreenSymbols` scan may cover |
+| `analysis.screener.max_duration_seconds` | int | `120` | Overall deadline for one screener scan |
+| `analysis.screener.default_rank_limit` | int | `50` | Default ranked results returned when `rank_limit` is omitted |
+| `analysis.screener.max_concurrent_formula_evals` | int | `4` | Max concurrent `ExecuteFormula` evals during a scan |
+
+Recently added keys (feature 059 — fundamentals data source, owned by `xstockstrat-marketdata`). Establishes the `marketdata.<source>.enabled` convention (a source is off until its `enabled` key is flipped):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `marketdata.fmp.enabled` | bool | `false` | Master gate for the FMP fundamentals source; off by default |
+| `secret.marketdata.fmp.api_key` | string (secret) | — | FMP API key; first seeded secret (`is_secret=TRUE`), value is a `secret://` reference, never plaintext |
+| `marketdata.fmp.cache_ttl_hours` | int | `24` | Hours a cached fundamentals row stays fresh before re-fetch |
+| `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day (free Basic budget) |
+| `marketdata.fmp.base_url` | string | `https://financialmodelingprep.com` | FMP API base URL |
+| `marketdata.fmp.metrics` | string | `core,extended` | Metric tiers to fetch (`core`, `extended`) |
+
+Recently added keys (feature 062 — fundamentals signal producer, owned by `xstockstrat-analysis`). A daily background loop reads cached fundamentals via marketdata `GetFundamentalsMulti` (never FMP), scores, and emits `buy`/`sell`/`hold` `ExternalSignal`s through ingest. Analysis also gains a `PORTFOLIO_ENDPOINT` (gRPC `xstockstrat-portfolio:50052`) for the watchlist universe, and ingest migration `006_signal_source_type_derived` adds the `derived` source type:
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.fundsignal.enabled` | bool | `false` | Master gate for the producer loop; off by default |
+| `analysis.fundsignal.run_interval_hours` | int | `24` | Hours between scheduled cycles |
+| `analysis.fundsignal.universe_source` | string | `watchlists` | `watchlists` \| `explicit` \| `both` (watchlists union pends a global portfolio RPC; falls back to `explicit`) |
+| `analysis.fundsignal.explicit_symbols` | string | `""` | Comma-separated symbols for the explicit universe |
+| `analysis.fundsignal.max_symbols_per_run` | int | `200` | Cap on symbols scanned per cycle |
+| `analysis.fundsignal.daily_call_budget` | int | `200` | Max cached `GetFundamentalsMulti` calls per cycle; ≤ `marketdata.fmp.daily_request_cap` (250) |
+| `analysis.fundsignal.source_slug` | string | `fundamentals` | Slug of the registered `derived` signal source |
+| `analysis.fundsignal.scoring_formula_id` | string | `""` | Optional 063 scoring formula id; empty → built-in default score |
+| `analysis.fundsignal.buy_quantile` | float | `0.80` | Cross-sectional quantile ≥ → `buy` |
+| `analysis.fundsignal.sell_quantile` | float | `0.20` | Cross-sectional quantile ≤ → `sell` |
+| `analysis.fundsignal.min_conviction_to_emit` | float | `0.0` | Drop symbols below this score before emitting |
+| `analysis.fundsignal.valid_days` | int | `90` | Emitted signal validity window in days |
+
 Recently added keys (feature 057 — backfill management UI, owned by `xstockstrat-marketdata`):
 
 | Key | Type | Default | Description |

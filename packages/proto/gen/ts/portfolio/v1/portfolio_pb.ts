@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file portfolio/v1/portfolio.proto.
  */
 export const file_portfolio_v1_portfolio: GenFile = /*@__PURE__*/
-  fileDesc("Chxwb3J0Zm9saW8vdjEvcG9ydGZvbGlvLnByb3RvEhh4c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEimgIKCVBvcnRmb2xpbxIUCgxwb3J0Zm9saW9faWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIOCgZlcXVpdHkYAyABKAESDAoEY2FzaBgEIAEoARIUCgxidXlpbmdfcG93ZXIYBSABKAESDwoHZGF5X3BubBgGIAEoARITCgtkYXlfcG5sX3BjdBgHIAEoARIRCgl0b3RhbF9wbmwYCCABKAESLgoKdXBkYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoJcG9zaXRpb25zGAogAygLMiIueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvc2l0aW9uEhIKCmFjY291bnRfaWQYCyABKAki2AIKCFBvc2l0aW9uEg4KBnN5bWJvbBgBIAEoCRILCgNxdHkYAiABKAESFwoPYXZnX2VudHJ5X3ByaWNlGAMgASgBEhUKDWN1cnJlbnRfcHJpY2UYBCABKAESFAoMbWFya2V0X3ZhbHVlGAUgASgBEhYKDnVucmVhbGl6ZWRfcG5sGAYgASgBEhoKEnVucmVhbGl6ZWRfcG5sX3BjdBgHIAEoARISCgpjb3N0X2Jhc2lzGAggASgBEi0KCW9wZW5lZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASOAoMdHJhZGluZ19tb2RlGAogASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhIKCmFjY291bnRfaWQYCyABKAkSDwoHZGF5X3BubBgMIAEoARITCgtkYXlfcG5sX3BjdBgNIAEoASLxAQoRUG9ydGZvbGlvU25hcHNob3QSFAoMcG9ydGZvbGlvX2lkGAEgASgJEjEKDXNuYXBzaG90X3RpbWUYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg4KBmVxdWl0eRgDIAEoARIMCgRjYXNoGAQgASgBEg8KB2RheV9wbmwYBSABKAESFgoOb3Blbl9wb3NpdGlvbnMYBiABKAUSOAoMdHJhZGluZ19tb2RlGAcgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhIKCmFjY291bnRfaWQYCCABKAkikAEKC1BuTFJlc3BvbnNlEhQKDHJlYWxpemVkX3BubBgBIAEoARIWCg51bnJlYWxpemVkX3BubBgCIAEoARIRCgl0b3RhbF9wbmwYAyABKAESDwoHZGF5X3BubBgEIAEoARIvCgVyYW5nZRgFIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UiiAEKE0dldFBvcnRmb2xpb1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRI4Cgx0cmFkaW5nX21vZGUYAiABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUSFwoKYWNjb3VudF9pZBgDIAEoCUgAiAEBQg0KC19hY2NvdW50X2lkIpcBChJHZXRQb3NpdGlvblJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIOCgZzeW1ib2wYAiABKAkSOAoMdHJhZGluZ19tb2RlGAMgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhcKCmFjY291bnRfaWQYBCABKAlIAIgBAUINCgtfYWNjb3VudF9pZCKBAgoUTGlzdFBvc2l0aW9uc1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIwCgRwYWdlGAIgASgLMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0EjgKDHRyYWRpbmdfbW9kZRgDIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UcmFkaW5nTW9kZRIXCgphY2NvdW50X2lkGAQgASgJSACIAQESDgoGc3ltYm9sGAUgASgJEjQKBHNpZGUYBiABKA4yJi54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuUG9zaXRpb25TaWRlQg0KC19hY2NvdW50X2lkIoEBChVMaXN0UG9zaXRpb25zUmVzcG9uc2USNQoJcG9zaXRpb25zGAEgAygLMiIueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvc2l0aW9uEjEKBHBhZ2UYAiABKAsyIy54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlc3BvbnNlIrMBCg1HZXRQbkxSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSLwoFcmFuZ2UYAiABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlEjgKDHRyYWRpbmdfbW9kZRgDIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UcmFkaW5nTW9kZRIXCgphY2NvdW50X2lkGAQgASgJSACIAQFCDQoLX2FjY291bnRfaWQifwoSR2V0U25hcHNob3RSZXF1ZXN0EhQKDHBvcnRmb2xpb19pZBgBIAEoCRIrCgdhdF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIXCgphY2NvdW50X2lkGAMgASgJSACIAQFCDQoLX2FjY291bnRfaWQikgEKHVN0cmVhbVBvcnRmb2xpb1VwZGF0ZXNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSOAoMdHJhZGluZ19tb2RlGAIgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhcKCmFjY291bnRfaWQYAyABKAlIAIgBAUINCgtfYWNjb3VudF9pZCI/ChVMaXN0UG9ydGZvbGlvc1JlcXVlc3QSFwoKYWNjb3VudF9pZBgBIAEoCUgAiAEBQg0KC19hY2NvdW50X2lkIlEKFkxpc3RQb3J0Zm9saW9zUmVzcG9uc2USNwoKcG9ydGZvbGlvcxgBIAMoCzIjLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5Qb3J0Zm9saW8qXgoMUG9zaXRpb25TaWRlEh0KGVBPU0lUSU9OX1NJREVfVU5TUEVDSUZJRUQQABIWChJQT1NJVElPTl9TSURFX0xPTkcQARIXChNQT1NJVElPTl9TSURFX1NIT1JUEAIyhQYKEFBvcnRmb2xpb1NlcnZpY2USYgoMR2V0UG9ydGZvbGlvEi0ueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkdldFBvcnRmb2xpb1JlcXVlc3QaIy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuUG9ydGZvbGlvEl8KC0dldFBvc2l0aW9uEiwueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkdldFBvc2l0aW9uUmVxdWVzdBoiLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5Qb3NpdGlvbhJwCg1MaXN0UG9zaXRpb25zEi4ueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkxpc3RQb3NpdGlvbnNSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkxpc3RQb3NpdGlvbnNSZXNwb25zZRJYCgZHZXRQbkwSJy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuR2V0UG5MUmVxdWVzdBolLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5QbkxSZXNwb25zZRJoCgtHZXRTbmFwc2hvdBIsLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5HZXRTbmFwc2hvdFJlcXVlc3QaKy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuUG9ydGZvbGlvU25hcHNob3QSgAEKFlN0cmVhbVBvcnRmb2xpb1VwZGF0ZXMSNy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuU3RyZWFtUG9ydGZvbGlvVXBkYXRlc1JlcXVlc3QaKy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuUG9ydGZvbGlvU25hcHNob3QwARJzCg5MaXN0UG9ydGZvbGlvcxIvLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5MaXN0UG9ydGZvbGlvc1JlcXVlc3QaMC54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuTGlzdFBvcnRmb2xpb3NSZXNwb25zZUJCWkBnaXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vcG9ydGZvbGlvL3YxO3BvcnRmb2xpb3YxYgZwcm90bzM", [file_google_protobuf_timestamp, file_common_v1_common]);
+  fileDesc("Chxwb3J0Zm9saW8vdjEvcG9ydGZvbGlvLnByb3RvEhh4c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEimgIKCVBvcnRmb2xpbxIUCgxwb3J0Zm9saW9faWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIOCgZlcXVpdHkYAyABKAESDAoEY2FzaBgEIAEoARIUCgxidXlpbmdfcG93ZXIYBSABKAESDwoHZGF5X3BubBgGIAEoARITCgtkYXlfcG5sX3BjdBgHIAEoARIRCgl0b3RhbF9wbmwYCCABKAESLgoKdXBkYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoJcG9zaXRpb25zGAogAygLMiIueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvc2l0aW9uEhIKCmFjY291bnRfaWQYCyABKAki2AIKCFBvc2l0aW9uEg4KBnN5bWJvbBgBIAEoCRILCgNxdHkYAiABKAESFwoPYXZnX2VudHJ5X3ByaWNlGAMgASgBEhUKDWN1cnJlbnRfcHJpY2UYBCABKAESFAoMbWFya2V0X3ZhbHVlGAUgASgBEhYKDnVucmVhbGl6ZWRfcG5sGAYgASgBEhoKEnVucmVhbGl6ZWRfcG5sX3BjdBgHIAEoARISCgpjb3N0X2Jhc2lzGAggASgBEi0KCW9wZW5lZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASOAoMdHJhZGluZ19tb2RlGAogASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhIKCmFjY291bnRfaWQYCyABKAkSDwoHZGF5X3BubBgMIAEoARITCgtkYXlfcG5sX3BjdBgNIAEoASLxAQoRUG9ydGZvbGlvU25hcHNob3QSFAoMcG9ydGZvbGlvX2lkGAEgASgJEjEKDXNuYXBzaG90X3RpbWUYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg4KBmVxdWl0eRgDIAEoARIMCgRjYXNoGAQgASgBEg8KB2RheV9wbmwYBSABKAESFgoOb3Blbl9wb3NpdGlvbnMYBiABKAUSOAoMdHJhZGluZ19tb2RlGAcgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhIKCmFjY291bnRfaWQYCCABKAkikAEKC1BuTFJlc3BvbnNlEhQKDHJlYWxpemVkX3BubBgBIAEoARIWCg51bnJlYWxpemVkX3BubBgCIAEoARIRCgl0b3RhbF9wbmwYAyABKAESDwoHZGF5X3BubBgEIAEoARIvCgVyYW5nZRgFIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UiiAEKE0dldFBvcnRmb2xpb1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRI4Cgx0cmFkaW5nX21vZGUYAiABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUSFwoKYWNjb3VudF9pZBgDIAEoCUgAiAEBQg0KC19hY2NvdW50X2lkIpcBChJHZXRQb3NpdGlvblJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIOCgZzeW1ib2wYAiABKAkSOAoMdHJhZGluZ19tb2RlGAMgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhcKCmFjY291bnRfaWQYBCABKAlIAIgBAUINCgtfYWNjb3VudF9pZCKBAgoUTGlzdFBvc2l0aW9uc1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIwCgRwYWdlGAIgASgLMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0EjgKDHRyYWRpbmdfbW9kZRgDIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UcmFkaW5nTW9kZRIXCgphY2NvdW50X2lkGAQgASgJSACIAQESDgoGc3ltYm9sGAUgASgJEjQKBHNpZGUYBiABKA4yJi54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuUG9zaXRpb25TaWRlQg0KC19hY2NvdW50X2lkIoEBChVMaXN0UG9zaXRpb25zUmVzcG9uc2USNQoJcG9zaXRpb25zGAEgAygLMiIueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvc2l0aW9uEjEKBHBhZ2UYAiABKAsyIy54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlc3BvbnNlIrMBCg1HZXRQbkxSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSLwoFcmFuZ2UYAiABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlEjgKDHRyYWRpbmdfbW9kZRgDIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UcmFkaW5nTW9kZRIXCgphY2NvdW50X2lkGAQgASgJSACIAQFCDQoLX2FjY291bnRfaWQifwoSR2V0U25hcHNob3RSZXF1ZXN0EhQKDHBvcnRmb2xpb19pZBgBIAEoCRIrCgdhdF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIXCgphY2NvdW50X2lkGAMgASgJSACIAQFCDQoLX2FjY291bnRfaWQikgEKHVN0cmVhbVBvcnRmb2xpb1VwZGF0ZXNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSOAoMdHJhZGluZ19tb2RlGAIgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhcKCmFjY291bnRfaWQYAyABKAlIAIgBAUINCgtfYWNjb3VudF9pZCI/ChVMaXN0UG9ydGZvbGlvc1JlcXVlc3QSFwoKYWNjb3VudF9pZBgBIAEoCUgAiAEBQg0KC19hY2NvdW50X2lkIlEKFkxpc3RQb3J0Zm9saW9zUmVzcG9uc2USNwoKcG9ydGZvbGlvcxgBIAMoCzIjLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5Qb3J0Zm9saW8ixgEKCVdhdGNobGlzdBIUCgx3YXRjaGxpc3RfaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEg8KB3N5bWJvbHMYBSADKAkSLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiTAoWQ3JlYXRlV2F0Y2hsaXN0UmVxdWVzdBIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEg8KB3N5bWJvbHMYAyADKAkiUQoXQ3JlYXRlV2F0Y2hsaXN0UmVzcG9uc2USNgoJd2F0Y2hsaXN0GAEgASgLMiMueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdCIrChNHZXRXYXRjaGxpc3RSZXF1ZXN0EhQKDHdhdGNobGlzdF9pZBgBIAEoCSJOChRHZXRXYXRjaGxpc3RSZXNwb25zZRI2Cgl3YXRjaGxpc3QYASABKAsyIy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuV2F0Y2hsaXN0IkkKFUxpc3RXYXRjaGxpc3RzUmVxdWVzdBIwCgRwYWdlGAEgASgLMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0IoQBChZMaXN0V2F0Y2hsaXN0c1Jlc3BvbnNlEjcKCndhdGNobGlzdHMYASADKAsyIy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuV2F0Y2hsaXN0EjEKBHBhZ2UYAiABKAsyIy54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlc3BvbnNlImIKFlVwZGF0ZVdhdGNobGlzdFJlcXVlc3QSFAoMd2F0Y2hsaXN0X2lkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSDwoHc3ltYm9scxgEIAMoCSJRChdVcGRhdGVXYXRjaGxpc3RSZXNwb25zZRI2Cgl3YXRjaGxpc3QYASABKAsyIy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuV2F0Y2hsaXN0Ii4KFkRlbGV0ZVdhdGNobGlzdFJlcXVlc3QSFAoMd2F0Y2hsaXN0X2lkGAEgASgJIhkKF0RlbGV0ZVdhdGNobGlzdFJlc3BvbnNlIkMKGkFkZFdhdGNobGlzdFN5bWJvbHNSZXF1ZXN0EhQKDHdhdGNobGlzdF9pZBgBIAEoCRIPCgdzeW1ib2xzGAIgAygJIlUKG0FkZFdhdGNobGlzdFN5bWJvbHNSZXNwb25zZRI2Cgl3YXRjaGxpc3QYASABKAsyIy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuV2F0Y2hsaXN0IkYKHVJlbW92ZVdhdGNobGlzdFN5bWJvbHNSZXF1ZXN0EhQKDHdhdGNobGlzdF9pZBgBIAEoCRIPCgdzeW1ib2xzGAIgAygJIlgKHlJlbW92ZVdhdGNobGlzdFN5bWJvbHNSZXNwb25zZRI2Cgl3YXRjaGxpc3QYASABKAsyIy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuV2F0Y2hsaXN0Kl4KDFBvc2l0aW9uU2lkZRIdChlQT1NJVElPTl9TSURFX1VOU1BFQ0lGSUVEEAASFgoSUE9TSVRJT05fU0lERV9MT05HEAESFwoTUE9TSVRJT05fU0lERV9TSE9SVBACMuQMChBQb3J0Zm9saW9TZXJ2aWNlEmIKDEdldFBvcnRmb2xpbxItLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5HZXRQb3J0Zm9saW9SZXF1ZXN0GiMueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvcnRmb2xpbxJfCgtHZXRQb3NpdGlvbhIsLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5HZXRQb3NpdGlvblJlcXVlc3QaIi54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuUG9zaXRpb24ScAoNTGlzdFBvc2l0aW9ucxIuLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5MaXN0UG9zaXRpb25zUmVxdWVzdBovLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5MaXN0UG9zaXRpb25zUmVzcG9uc2USWAoGR2V0UG5MEicueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkdldFBuTFJlcXVlc3QaJS54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuUG5MUmVzcG9uc2USaAoLR2V0U25hcHNob3QSLC54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuR2V0U25hcHNob3RSZXF1ZXN0GisueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvcnRmb2xpb1NuYXBzaG90EoABChZTdHJlYW1Qb3J0Zm9saW9VcGRhdGVzEjcueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlN0cmVhbVBvcnRmb2xpb1VwZGF0ZXNSZXF1ZXN0GisueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvcnRmb2xpb1NuYXBzaG90MAEScwoOTGlzdFBvcnRmb2xpb3MSLy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuTGlzdFBvcnRmb2xpb3NSZXF1ZXN0GjAueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkxpc3RQb3J0Zm9saW9zUmVzcG9uc2USdgoPQ3JlYXRlV2F0Y2hsaXN0EjAueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkNyZWF0ZVdhdGNobGlzdFJlcXVlc3QaMS54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuQ3JlYXRlV2F0Y2hsaXN0UmVzcG9uc2USbQoMR2V0V2F0Y2hsaXN0Ei0ueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkdldFdhdGNobGlzdFJlcXVlc3QaLi54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuR2V0V2F0Y2hsaXN0UmVzcG9uc2UScwoOTGlzdFdhdGNobGlzdHMSLy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuTGlzdFdhdGNobGlzdHNSZXF1ZXN0GjAueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkxpc3RXYXRjaGxpc3RzUmVzcG9uc2USdgoPVXBkYXRlV2F0Y2hsaXN0EjAueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlVwZGF0ZVdhdGNobGlzdFJlcXVlc3QaMS54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuVXBkYXRlV2F0Y2hsaXN0UmVzcG9uc2USdgoPRGVsZXRlV2F0Y2hsaXN0EjAueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkRlbGV0ZVdhdGNobGlzdFJlcXVlc3QaMS54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuRGVsZXRlV2F0Y2hsaXN0UmVzcG9uc2USggEKE0FkZFdhdGNobGlzdFN5bWJvbHMSNC54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuQWRkV2F0Y2hsaXN0U3ltYm9sc1JlcXVlc3QaNS54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuQWRkV2F0Y2hsaXN0U3ltYm9sc1Jlc3BvbnNlEosBChZSZW1vdmVXYXRjaGxpc3RTeW1ib2xzEjcueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlJlbW92ZVdhdGNobGlzdFN5bWJvbHNSZXF1ZXN0GjgueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlJlbW92ZVdhdGNobGlzdFN5bWJvbHNSZXNwb25zZUJCWkBnaXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vcG9ydGZvbGlvL3YxO3BvcnRmb2xpb3YxYgZwcm90bzM", [file_google_protobuf_timestamp, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.Portfolio
@@ -518,6 +518,334 @@ export const ListPortfoliosResponseSchema: GenMessage<ListPortfoliosResponse> = 
   messageDesc(file_portfolio_v1_portfolio, 12);
 
 /**
+ * Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols.
+ *
+ * @generated from message xstockstrat.portfolio.v1.Watchlist
+ */
+export type Watchlist = Message<"xstockstrat.portfolio.v1.Watchlist"> & {
+  /**
+   * @generated from field: string watchlist_id = 1;
+   */
+  watchlistId: string;
+
+  /**
+   * @generated from field: string user_id = 2;
+   */
+  userId: string;
+
+  /**
+   * @generated from field: string name = 3;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string description = 4;
+   */
+  description: string;
+
+  /**
+   * @generated from field: repeated string symbols = 5;
+   */
+  symbols: string[];
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 6;
+   */
+  createdAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp updated_at = 7;
+   */
+  updatedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.Watchlist.
+ * Use `create(WatchlistSchema)` to create a new message.
+ */
+export const WatchlistSchema: GenMessage<Watchlist> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 13);
+
+/**
+ * user_id is intentionally absent from all request messages — ownership is taken
+ * from the propagated x-user-id header server-side (FR-2), never from the wire.
+ *
+ * @generated from message xstockstrat.portfolio.v1.CreateWatchlistRequest
+ */
+export type CreateWatchlistRequest = Message<"xstockstrat.portfolio.v1.CreateWatchlistRequest"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string description = 2;
+   */
+  description: string;
+
+  /**
+   * @generated from field: repeated string symbols = 3;
+   */
+  symbols: string[];
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.CreateWatchlistRequest.
+ * Use `create(CreateWatchlistRequestSchema)` to create a new message.
+ */
+export const CreateWatchlistRequestSchema: GenMessage<CreateWatchlistRequest> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 14);
+
+/**
+ * @generated from message xstockstrat.portfolio.v1.CreateWatchlistResponse
+ */
+export type CreateWatchlistResponse = Message<"xstockstrat.portfolio.v1.CreateWatchlistResponse"> & {
+  /**
+   * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
+   */
+  watchlist?: Watchlist | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.CreateWatchlistResponse.
+ * Use `create(CreateWatchlistResponseSchema)` to create a new message.
+ */
+export const CreateWatchlistResponseSchema: GenMessage<CreateWatchlistResponse> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 15);
+
+/**
+ * @generated from message xstockstrat.portfolio.v1.GetWatchlistRequest
+ */
+export type GetWatchlistRequest = Message<"xstockstrat.portfolio.v1.GetWatchlistRequest"> & {
+  /**
+   * @generated from field: string watchlist_id = 1;
+   */
+  watchlistId: string;
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.GetWatchlistRequest.
+ * Use `create(GetWatchlistRequestSchema)` to create a new message.
+ */
+export const GetWatchlistRequestSchema: GenMessage<GetWatchlistRequest> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 16);
+
+/**
+ * @generated from message xstockstrat.portfolio.v1.GetWatchlistResponse
+ */
+export type GetWatchlistResponse = Message<"xstockstrat.portfolio.v1.GetWatchlistResponse"> & {
+  /**
+   * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
+   */
+  watchlist?: Watchlist | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.GetWatchlistResponse.
+ * Use `create(GetWatchlistResponseSchema)` to create a new message.
+ */
+export const GetWatchlistResponseSchema: GenMessage<GetWatchlistResponse> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 17);
+
+/**
+ * @generated from message xstockstrat.portfolio.v1.ListWatchlistsRequest
+ */
+export type ListWatchlistsRequest = Message<"xstockstrat.portfolio.v1.ListWatchlistsRequest"> & {
+  /**
+   * @generated from field: xstockstrat.common.v1.PageRequest page = 1;
+   */
+  page?: PageRequest | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.ListWatchlistsRequest.
+ * Use `create(ListWatchlistsRequestSchema)` to create a new message.
+ */
+export const ListWatchlistsRequestSchema: GenMessage<ListWatchlistsRequest> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 18);
+
+/**
+ * @generated from message xstockstrat.portfolio.v1.ListWatchlistsResponse
+ */
+export type ListWatchlistsResponse = Message<"xstockstrat.portfolio.v1.ListWatchlistsResponse"> & {
+  /**
+   * @generated from field: repeated xstockstrat.portfolio.v1.Watchlist watchlists = 1;
+   */
+  watchlists: Watchlist[];
+
+  /**
+   * @generated from field: xstockstrat.common.v1.PageResponse page = 2;
+   */
+  page?: PageResponse | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.ListWatchlistsResponse.
+ * Use `create(ListWatchlistsResponseSchema)` to create a new message.
+ */
+export const ListWatchlistsResponseSchema: GenMessage<ListWatchlistsResponse> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 19);
+
+/**
+ * Replace semantics for name/description/symbols per FR-1.
+ *
+ * @generated from message xstockstrat.portfolio.v1.UpdateWatchlistRequest
+ */
+export type UpdateWatchlistRequest = Message<"xstockstrat.portfolio.v1.UpdateWatchlistRequest"> & {
+  /**
+   * @generated from field: string watchlist_id = 1;
+   */
+  watchlistId: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string description = 3;
+   */
+  description: string;
+
+  /**
+   * @generated from field: repeated string symbols = 4;
+   */
+  symbols: string[];
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.UpdateWatchlistRequest.
+ * Use `create(UpdateWatchlistRequestSchema)` to create a new message.
+ */
+export const UpdateWatchlistRequestSchema: GenMessage<UpdateWatchlistRequest> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 20);
+
+/**
+ * @generated from message xstockstrat.portfolio.v1.UpdateWatchlistResponse
+ */
+export type UpdateWatchlistResponse = Message<"xstockstrat.portfolio.v1.UpdateWatchlistResponse"> & {
+  /**
+   * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
+   */
+  watchlist?: Watchlist | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.UpdateWatchlistResponse.
+ * Use `create(UpdateWatchlistResponseSchema)` to create a new message.
+ */
+export const UpdateWatchlistResponseSchema: GenMessage<UpdateWatchlistResponse> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 21);
+
+/**
+ * @generated from message xstockstrat.portfolio.v1.DeleteWatchlistRequest
+ */
+export type DeleteWatchlistRequest = Message<"xstockstrat.portfolio.v1.DeleteWatchlistRequest"> & {
+  /**
+   * @generated from field: string watchlist_id = 1;
+   */
+  watchlistId: string;
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.DeleteWatchlistRequest.
+ * Use `create(DeleteWatchlistRequestSchema)` to create a new message.
+ */
+export const DeleteWatchlistRequestSchema: GenMessage<DeleteWatchlistRequest> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 22);
+
+/**
+ * @generated from message xstockstrat.portfolio.v1.DeleteWatchlistResponse
+ */
+export type DeleteWatchlistResponse = Message<"xstockstrat.portfolio.v1.DeleteWatchlistResponse"> & {
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.DeleteWatchlistResponse.
+ * Use `create(DeleteWatchlistResponseSchema)` to create a new message.
+ */
+export const DeleteWatchlistResponseSchema: GenMessage<DeleteWatchlistResponse> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 23);
+
+/**
+ * @generated from message xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest
+ */
+export type AddWatchlistSymbolsRequest = Message<"xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest"> & {
+  /**
+   * @generated from field: string watchlist_id = 1;
+   */
+  watchlistId: string;
+
+  /**
+   * @generated from field: repeated string symbols = 2;
+   */
+  symbols: string[];
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest.
+ * Use `create(AddWatchlistSymbolsRequestSchema)` to create a new message.
+ */
+export const AddWatchlistSymbolsRequestSchema: GenMessage<AddWatchlistSymbolsRequest> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 24);
+
+/**
+ * @generated from message xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse
+ */
+export type AddWatchlistSymbolsResponse = Message<"xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse"> & {
+  /**
+   * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
+   */
+  watchlist?: Watchlist | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse.
+ * Use `create(AddWatchlistSymbolsResponseSchema)` to create a new message.
+ */
+export const AddWatchlistSymbolsResponseSchema: GenMessage<AddWatchlistSymbolsResponse> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 25);
+
+/**
+ * @generated from message xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest
+ */
+export type RemoveWatchlistSymbolsRequest = Message<"xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest"> & {
+  /**
+   * @generated from field: string watchlist_id = 1;
+   */
+  watchlistId: string;
+
+  /**
+   * @generated from field: repeated string symbols = 2;
+   */
+  symbols: string[];
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest.
+ * Use `create(RemoveWatchlistSymbolsRequestSchema)` to create a new message.
+ */
+export const RemoveWatchlistSymbolsRequestSchema: GenMessage<RemoveWatchlistSymbolsRequest> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 26);
+
+/**
+ * @generated from message xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse
+ */
+export type RemoveWatchlistSymbolsResponse = Message<"xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse"> & {
+  /**
+   * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
+   */
+  watchlist?: Watchlist | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse.
+ * Use `create(RemoveWatchlistSymbolsResponseSchema)` to create a new message.
+ */
+export const RemoveWatchlistSymbolsResponseSchema: GenMessage<RemoveWatchlistSymbolsResponse> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 27);
+
+/**
  * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
  * Used only as an additive filter on ListPositionsRequest; the Position message itself
  * continues to carry signed qty.
@@ -612,6 +940,65 @@ export const PortfolioService: GenService<{
     methodKind: "unary";
     input: typeof ListPortfoliosRequestSchema;
     output: typeof ListPortfoliosResponseSchema;
+  },
+  /**
+   * Watchlist management (feature 058). Additive — ownership is taken from the
+   * propagated x-user-id header server-side, never from request fields.
+   *
+   * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.CreateWatchlist
+   */
+  createWatchlist: {
+    methodKind: "unary";
+    input: typeof CreateWatchlistRequestSchema;
+    output: typeof CreateWatchlistResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.GetWatchlist
+   */
+  getWatchlist: {
+    methodKind: "unary";
+    input: typeof GetWatchlistRequestSchema;
+    output: typeof GetWatchlistResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.ListWatchlists
+   */
+  listWatchlists: {
+    methodKind: "unary";
+    input: typeof ListWatchlistsRequestSchema;
+    output: typeof ListWatchlistsResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlist
+   */
+  updateWatchlist: {
+    methodKind: "unary";
+    input: typeof UpdateWatchlistRequestSchema;
+    output: typeof UpdateWatchlistResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.DeleteWatchlist
+   */
+  deleteWatchlist: {
+    methodKind: "unary";
+    input: typeof DeleteWatchlistRequestSchema;
+    output: typeof DeleteWatchlistResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.AddWatchlistSymbols
+   */
+  addWatchlistSymbols: {
+    methodKind: "unary";
+    input: typeof AddWatchlistSymbolsRequestSchema;
+    output: typeof AddWatchlistSymbolsResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.RemoveWatchlistSymbols
+   */
+  removeWatchlistSymbols: {
+    methodKind: "unary";
+    input: typeof RemoveWatchlistSymbolsRequestSchema;
+    output: typeof RemoveWatchlistSymbolsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_portfolio_v1_portfolio, 0);

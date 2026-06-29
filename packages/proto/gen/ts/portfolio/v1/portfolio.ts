@@ -218,6 +218,85 @@ export interface ListPortfoliosResponse {
   portfolios: Portfolio[];
 }
 
+/** Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols. */
+export interface Watchlist {
+  watchlistId: string;
+  userId: string;
+  name: string;
+  description: string;
+  symbols: string[];
+  createdAt?: Date | undefined;
+  updatedAt?: Date | undefined;
+}
+
+/**
+ * user_id is intentionally absent from all request messages — ownership is taken
+ * from the propagated x-user-id header server-side (FR-2), never from the wire.
+ */
+export interface CreateWatchlistRequest {
+  name: string;
+  description: string;
+  symbols: string[];
+}
+
+export interface CreateWatchlistResponse {
+  watchlist?: Watchlist | undefined;
+}
+
+export interface GetWatchlistRequest {
+  watchlistId: string;
+}
+
+export interface GetWatchlistResponse {
+  watchlist?: Watchlist | undefined;
+}
+
+export interface ListWatchlistsRequest {
+  page?: PageRequest | undefined;
+}
+
+export interface ListWatchlistsResponse {
+  watchlists: Watchlist[];
+  page?: PageResponse | undefined;
+}
+
+/** Replace semantics for name/description/symbols per FR-1. */
+export interface UpdateWatchlistRequest {
+  watchlistId: string;
+  name: string;
+  description: string;
+  symbols: string[];
+}
+
+export interface UpdateWatchlistResponse {
+  watchlist?: Watchlist | undefined;
+}
+
+export interface DeleteWatchlistRequest {
+  watchlistId: string;
+}
+
+export interface DeleteWatchlistResponse {
+}
+
+export interface AddWatchlistSymbolsRequest {
+  watchlistId: string;
+  symbols: string[];
+}
+
+export interface AddWatchlistSymbolsResponse {
+  watchlist?: Watchlist | undefined;
+}
+
+export interface RemoveWatchlistSymbolsRequest {
+  watchlistId: string;
+  symbols: string[];
+}
+
+export interface RemoveWatchlistSymbolsResponse {
+  watchlist?: Watchlist | undefined;
+}
+
 function createBasePortfolio(): Portfolio {
   return {
     portfolioId: "",
@@ -2064,6 +2143,1165 @@ export const ListPortfoliosResponse: MessageFns<ListPortfoliosResponse> = {
   },
 };
 
+function createBaseWatchlist(): Watchlist {
+  return {
+    watchlistId: "",
+    userId: "",
+    name: "",
+    description: "",
+    symbols: [],
+    createdAt: undefined,
+    updatedAt: undefined,
+  };
+}
+
+export const Watchlist: MessageFns<Watchlist> = {
+  encode(message: Watchlist, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.watchlistId !== "") {
+      writer.uint32(10).string(message.watchlistId);
+    }
+    if (message.userId !== "") {
+      writer.uint32(18).string(message.userId);
+    }
+    if (message.name !== "") {
+      writer.uint32(26).string(message.name);
+    }
+    if (message.description !== "") {
+      writer.uint32(34).string(message.description);
+    }
+    for (const v of message.symbols) {
+      writer.uint32(42).string(v!);
+    }
+    if (message.createdAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(50).fork()).join();
+    }
+    if (message.updatedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(58).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Watchlist {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseWatchlist();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlistId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.description = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.updatedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Watchlist {
+    return {
+      watchlistId: isSet(object.watchlistId)
+        ? globalThis.String(object.watchlistId)
+        : isSet(object.watchlist_id)
+        ? globalThis.String(object.watchlist_id)
+        : "",
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      description: isSet(object.description) ? globalThis.String(object.description) : "",
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+      createdAt: isSet(object.createdAt)
+        ? fromJsonTimestamp(object.createdAt)
+        : isSet(object.created_at)
+        ? fromJsonTimestamp(object.created_at)
+        : undefined,
+      updatedAt: isSet(object.updatedAt)
+        ? fromJsonTimestamp(object.updatedAt)
+        : isSet(object.updated_at)
+        ? fromJsonTimestamp(object.updated_at)
+        : undefined,
+    };
+  },
+
+  toJSON(message: Watchlist): unknown {
+    const obj: any = {};
+    if (message.watchlistId !== "") {
+      obj.watchlistId = message.watchlistId;
+    }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.description !== "") {
+      obj.description = message.description;
+    }
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    if (message.createdAt !== undefined) {
+      obj.createdAt = message.createdAt.toISOString();
+    }
+    if (message.updatedAt !== undefined) {
+      obj.updatedAt = message.updatedAt.toISOString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Watchlist>, I>>(base?: I): Watchlist {
+    return Watchlist.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Watchlist>, I>>(object: I): Watchlist {
+    const message = createBaseWatchlist();
+    message.watchlistId = object.watchlistId ?? "";
+    message.userId = object.userId ?? "";
+    message.name = object.name ?? "";
+    message.description = object.description ?? "";
+    message.symbols = object.symbols?.map((e) => e) || [];
+    message.createdAt = object.createdAt ?? undefined;
+    message.updatedAt = object.updatedAt ?? undefined;
+    return message;
+  },
+};
+
+function createBaseCreateWatchlistRequest(): CreateWatchlistRequest {
+  return { name: "", description: "", symbols: [] };
+}
+
+export const CreateWatchlistRequest: MessageFns<CreateWatchlistRequest> = {
+  encode(message: CreateWatchlistRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.description !== "") {
+      writer.uint32(18).string(message.description);
+    }
+    for (const v of message.symbols) {
+      writer.uint32(26).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateWatchlistRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCreateWatchlistRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.description = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CreateWatchlistRequest {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      description: isSet(object.description) ? globalThis.String(object.description) : "",
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: CreateWatchlistRequest): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.description !== "") {
+      obj.description = message.description;
+    }
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<CreateWatchlistRequest>, I>>(base?: I): CreateWatchlistRequest {
+    return CreateWatchlistRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CreateWatchlistRequest>, I>>(object: I): CreateWatchlistRequest {
+    const message = createBaseCreateWatchlistRequest();
+    message.name = object.name ?? "";
+    message.description = object.description ?? "";
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseCreateWatchlistResponse(): CreateWatchlistResponse {
+  return { watchlist: undefined };
+}
+
+export const CreateWatchlistResponse: MessageFns<CreateWatchlistResponse> = {
+  encode(message: CreateWatchlistResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.watchlist !== undefined) {
+      Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateWatchlistResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCreateWatchlistResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlist = Watchlist.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CreateWatchlistResponse {
+    return { watchlist: isSet(object.watchlist) ? Watchlist.fromJSON(object.watchlist) : undefined };
+  },
+
+  toJSON(message: CreateWatchlistResponse): unknown {
+    const obj: any = {};
+    if (message.watchlist !== undefined) {
+      obj.watchlist = Watchlist.toJSON(message.watchlist);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<CreateWatchlistResponse>, I>>(base?: I): CreateWatchlistResponse {
+    return CreateWatchlistResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CreateWatchlistResponse>, I>>(object: I): CreateWatchlistResponse {
+    const message = createBaseCreateWatchlistResponse();
+    message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
+      ? Watchlist.fromPartial(object.watchlist)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetWatchlistRequest(): GetWatchlistRequest {
+  return { watchlistId: "" };
+}
+
+export const GetWatchlistRequest: MessageFns<GetWatchlistRequest> = {
+  encode(message: GetWatchlistRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.watchlistId !== "") {
+      writer.uint32(10).string(message.watchlistId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetWatchlistRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetWatchlistRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlistId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetWatchlistRequest {
+    return {
+      watchlistId: isSet(object.watchlistId)
+        ? globalThis.String(object.watchlistId)
+        : isSet(object.watchlist_id)
+        ? globalThis.String(object.watchlist_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetWatchlistRequest): unknown {
+    const obj: any = {};
+    if (message.watchlistId !== "") {
+      obj.watchlistId = message.watchlistId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetWatchlistRequest>, I>>(base?: I): GetWatchlistRequest {
+    return GetWatchlistRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetWatchlistRequest>, I>>(object: I): GetWatchlistRequest {
+    const message = createBaseGetWatchlistRequest();
+    message.watchlistId = object.watchlistId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetWatchlistResponse(): GetWatchlistResponse {
+  return { watchlist: undefined };
+}
+
+export const GetWatchlistResponse: MessageFns<GetWatchlistResponse> = {
+  encode(message: GetWatchlistResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.watchlist !== undefined) {
+      Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetWatchlistResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetWatchlistResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlist = Watchlist.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetWatchlistResponse {
+    return { watchlist: isSet(object.watchlist) ? Watchlist.fromJSON(object.watchlist) : undefined };
+  },
+
+  toJSON(message: GetWatchlistResponse): unknown {
+    const obj: any = {};
+    if (message.watchlist !== undefined) {
+      obj.watchlist = Watchlist.toJSON(message.watchlist);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetWatchlistResponse>, I>>(base?: I): GetWatchlistResponse {
+    return GetWatchlistResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetWatchlistResponse>, I>>(object: I): GetWatchlistResponse {
+    const message = createBaseGetWatchlistResponse();
+    message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
+      ? Watchlist.fromPartial(object.watchlist)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseListWatchlistsRequest(): ListWatchlistsRequest {
+  return { page: undefined };
+}
+
+export const ListWatchlistsRequest: MessageFns<ListWatchlistsRequest> = {
+  encode(message: ListWatchlistsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.page !== undefined) {
+      PageRequest.encode(message.page, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListWatchlistsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListWatchlistsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.page = PageRequest.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListWatchlistsRequest {
+    return { page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined };
+  },
+
+  toJSON(message: ListWatchlistsRequest): unknown {
+    const obj: any = {};
+    if (message.page !== undefined) {
+      obj.page = PageRequest.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListWatchlistsRequest>, I>>(base?: I): ListWatchlistsRequest {
+    return ListWatchlistsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListWatchlistsRequest>, I>>(object: I): ListWatchlistsRequest {
+    const message = createBaseListWatchlistsRequest();
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageRequest.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseListWatchlistsResponse(): ListWatchlistsResponse {
+  return { watchlists: [], page: undefined };
+}
+
+export const ListWatchlistsResponse: MessageFns<ListWatchlistsResponse> = {
+  encode(message: ListWatchlistsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.watchlists) {
+      Watchlist.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      PageResponse.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListWatchlistsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListWatchlistsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlists.push(Watchlist.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.page = PageResponse.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListWatchlistsResponse {
+    return {
+      watchlists: globalThis.Array.isArray(object?.watchlists)
+        ? object.watchlists.map((e: any) => Watchlist.fromJSON(e))
+        : [],
+      page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: ListWatchlistsResponse): unknown {
+    const obj: any = {};
+    if (message.watchlists?.length) {
+      obj.watchlists = message.watchlists.map((e) => Watchlist.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = PageResponse.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListWatchlistsResponse>, I>>(base?: I): ListWatchlistsResponse {
+    return ListWatchlistsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListWatchlistsResponse>, I>>(object: I): ListWatchlistsResponse {
+    const message = createBaseListWatchlistsResponse();
+    message.watchlists = object.watchlists?.map((e) => Watchlist.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageResponse.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseUpdateWatchlistRequest(): UpdateWatchlistRequest {
+  return { watchlistId: "", name: "", description: "", symbols: [] };
+}
+
+export const UpdateWatchlistRequest: MessageFns<UpdateWatchlistRequest> = {
+  encode(message: UpdateWatchlistRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.watchlistId !== "") {
+      writer.uint32(10).string(message.watchlistId);
+    }
+    if (message.name !== "") {
+      writer.uint32(18).string(message.name);
+    }
+    if (message.description !== "") {
+      writer.uint32(26).string(message.description);
+    }
+    for (const v of message.symbols) {
+      writer.uint32(34).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateWatchlistRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateWatchlistRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlistId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.description = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdateWatchlistRequest {
+    return {
+      watchlistId: isSet(object.watchlistId)
+        ? globalThis.String(object.watchlistId)
+        : isSet(object.watchlist_id)
+        ? globalThis.String(object.watchlist_id)
+        : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      description: isSet(object.description) ? globalThis.String(object.description) : "",
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: UpdateWatchlistRequest): unknown {
+    const obj: any = {};
+    if (message.watchlistId !== "") {
+      obj.watchlistId = message.watchlistId;
+    }
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.description !== "") {
+      obj.description = message.description;
+    }
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdateWatchlistRequest>, I>>(base?: I): UpdateWatchlistRequest {
+    return UpdateWatchlistRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateWatchlistRequest>, I>>(object: I): UpdateWatchlistRequest {
+    const message = createBaseUpdateWatchlistRequest();
+    message.watchlistId = object.watchlistId ?? "";
+    message.name = object.name ?? "";
+    message.description = object.description ?? "";
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseUpdateWatchlistResponse(): UpdateWatchlistResponse {
+  return { watchlist: undefined };
+}
+
+export const UpdateWatchlistResponse: MessageFns<UpdateWatchlistResponse> = {
+  encode(message: UpdateWatchlistResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.watchlist !== undefined) {
+      Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateWatchlistResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateWatchlistResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlist = Watchlist.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdateWatchlistResponse {
+    return { watchlist: isSet(object.watchlist) ? Watchlist.fromJSON(object.watchlist) : undefined };
+  },
+
+  toJSON(message: UpdateWatchlistResponse): unknown {
+    const obj: any = {};
+    if (message.watchlist !== undefined) {
+      obj.watchlist = Watchlist.toJSON(message.watchlist);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdateWatchlistResponse>, I>>(base?: I): UpdateWatchlistResponse {
+    return UpdateWatchlistResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateWatchlistResponse>, I>>(object: I): UpdateWatchlistResponse {
+    const message = createBaseUpdateWatchlistResponse();
+    message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
+      ? Watchlist.fromPartial(object.watchlist)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseDeleteWatchlistRequest(): DeleteWatchlistRequest {
+  return { watchlistId: "" };
+}
+
+export const DeleteWatchlistRequest: MessageFns<DeleteWatchlistRequest> = {
+  encode(message: DeleteWatchlistRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.watchlistId !== "") {
+      writer.uint32(10).string(message.watchlistId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteWatchlistRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDeleteWatchlistRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlistId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DeleteWatchlistRequest {
+    return {
+      watchlistId: isSet(object.watchlistId)
+        ? globalThis.String(object.watchlistId)
+        : isSet(object.watchlist_id)
+        ? globalThis.String(object.watchlist_id)
+        : "",
+    };
+  },
+
+  toJSON(message: DeleteWatchlistRequest): unknown {
+    const obj: any = {};
+    if (message.watchlistId !== "") {
+      obj.watchlistId = message.watchlistId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DeleteWatchlistRequest>, I>>(base?: I): DeleteWatchlistRequest {
+    return DeleteWatchlistRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteWatchlistRequest>, I>>(object: I): DeleteWatchlistRequest {
+    const message = createBaseDeleteWatchlistRequest();
+    message.watchlistId = object.watchlistId ?? "";
+    return message;
+  },
+};
+
+function createBaseDeleteWatchlistResponse(): DeleteWatchlistResponse {
+  return {};
+}
+
+export const DeleteWatchlistResponse: MessageFns<DeleteWatchlistResponse> = {
+  encode(_: DeleteWatchlistResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteWatchlistResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDeleteWatchlistResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): DeleteWatchlistResponse {
+    return {};
+  },
+
+  toJSON(_: DeleteWatchlistResponse): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DeleteWatchlistResponse>, I>>(base?: I): DeleteWatchlistResponse {
+    return DeleteWatchlistResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteWatchlistResponse>, I>>(_: I): DeleteWatchlistResponse {
+    const message = createBaseDeleteWatchlistResponse();
+    return message;
+  },
+};
+
+function createBaseAddWatchlistSymbolsRequest(): AddWatchlistSymbolsRequest {
+  return { watchlistId: "", symbols: [] };
+}
+
+export const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest> = {
+  encode(message: AddWatchlistSymbolsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.watchlistId !== "") {
+      writer.uint32(10).string(message.watchlistId);
+    }
+    for (const v of message.symbols) {
+      writer.uint32(18).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AddWatchlistSymbolsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAddWatchlistSymbolsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlistId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AddWatchlistSymbolsRequest {
+    return {
+      watchlistId: isSet(object.watchlistId)
+        ? globalThis.String(object.watchlistId)
+        : isSet(object.watchlist_id)
+        ? globalThis.String(object.watchlist_id)
+        : "",
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: AddWatchlistSymbolsRequest): unknown {
+    const obj: any = {};
+    if (message.watchlistId !== "") {
+      obj.watchlistId = message.watchlistId;
+    }
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AddWatchlistSymbolsRequest>, I>>(base?: I): AddWatchlistSymbolsRequest {
+    return AddWatchlistSymbolsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AddWatchlistSymbolsRequest>, I>>(object: I): AddWatchlistSymbolsRequest {
+    const message = createBaseAddWatchlistSymbolsRequest();
+    message.watchlistId = object.watchlistId ?? "";
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseAddWatchlistSymbolsResponse(): AddWatchlistSymbolsResponse {
+  return { watchlist: undefined };
+}
+
+export const AddWatchlistSymbolsResponse: MessageFns<AddWatchlistSymbolsResponse> = {
+  encode(message: AddWatchlistSymbolsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.watchlist !== undefined) {
+      Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AddWatchlistSymbolsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAddWatchlistSymbolsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlist = Watchlist.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AddWatchlistSymbolsResponse {
+    return { watchlist: isSet(object.watchlist) ? Watchlist.fromJSON(object.watchlist) : undefined };
+  },
+
+  toJSON(message: AddWatchlistSymbolsResponse): unknown {
+    const obj: any = {};
+    if (message.watchlist !== undefined) {
+      obj.watchlist = Watchlist.toJSON(message.watchlist);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AddWatchlistSymbolsResponse>, I>>(base?: I): AddWatchlistSymbolsResponse {
+    return AddWatchlistSymbolsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AddWatchlistSymbolsResponse>, I>>(object: I): AddWatchlistSymbolsResponse {
+    const message = createBaseAddWatchlistSymbolsResponse();
+    message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
+      ? Watchlist.fromPartial(object.watchlist)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseRemoveWatchlistSymbolsRequest(): RemoveWatchlistSymbolsRequest {
+  return { watchlistId: "", symbols: [] };
+}
+
+export const RemoveWatchlistSymbolsRequest: MessageFns<RemoveWatchlistSymbolsRequest> = {
+  encode(message: RemoveWatchlistSymbolsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.watchlistId !== "") {
+      writer.uint32(10).string(message.watchlistId);
+    }
+    for (const v of message.symbols) {
+      writer.uint32(18).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RemoveWatchlistSymbolsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRemoveWatchlistSymbolsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlistId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RemoveWatchlistSymbolsRequest {
+    return {
+      watchlistId: isSet(object.watchlistId)
+        ? globalThis.String(object.watchlistId)
+        : isSet(object.watchlist_id)
+        ? globalThis.String(object.watchlist_id)
+        : "",
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: RemoveWatchlistSymbolsRequest): unknown {
+    const obj: any = {};
+    if (message.watchlistId !== "") {
+      obj.watchlistId = message.watchlistId;
+    }
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RemoveWatchlistSymbolsRequest>, I>>(base?: I): RemoveWatchlistSymbolsRequest {
+    return RemoveWatchlistSymbolsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RemoveWatchlistSymbolsRequest>, I>>(
+    object: I,
+  ): RemoveWatchlistSymbolsRequest {
+    const message = createBaseRemoveWatchlistSymbolsRequest();
+    message.watchlistId = object.watchlistId ?? "";
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseRemoveWatchlistSymbolsResponse(): RemoveWatchlistSymbolsResponse {
+  return { watchlist: undefined };
+}
+
+export const RemoveWatchlistSymbolsResponse: MessageFns<RemoveWatchlistSymbolsResponse> = {
+  encode(message: RemoveWatchlistSymbolsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.watchlist !== undefined) {
+      Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RemoveWatchlistSymbolsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRemoveWatchlistSymbolsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.watchlist = Watchlist.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RemoveWatchlistSymbolsResponse {
+    return { watchlist: isSet(object.watchlist) ? Watchlist.fromJSON(object.watchlist) : undefined };
+  },
+
+  toJSON(message: RemoveWatchlistSymbolsResponse): unknown {
+    const obj: any = {};
+    if (message.watchlist !== undefined) {
+      obj.watchlist = Watchlist.toJSON(message.watchlist);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RemoveWatchlistSymbolsResponse>, I>>(base?: I): RemoveWatchlistSymbolsResponse {
+    return RemoveWatchlistSymbolsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RemoveWatchlistSymbolsResponse>, I>>(
+    object: I,
+  ): RemoveWatchlistSymbolsResponse {
+    const message = createBaseRemoveWatchlistSymbolsResponse();
+    message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
+      ? Watchlist.fromPartial(object.watchlist)
+      : undefined;
+    return message;
+  },
+};
+
 export type PortfolioServiceService = typeof PortfolioServiceService;
 export const PortfolioServiceService = {
   getPortfolio: {
@@ -2133,6 +3371,87 @@ export const PortfolioServiceService = {
       Buffer.from(ListPortfoliosResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListPortfoliosResponse => ListPortfoliosResponse.decode(value),
   },
+  /**
+   * Watchlist management (feature 058). Additive — ownership is taken from the
+   * propagated x-user-id header server-side, never from request fields.
+   */
+  createWatchlist: {
+    path: "/xstockstrat.portfolio.v1.PortfolioService/CreateWatchlist" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CreateWatchlistRequest): Buffer =>
+      Buffer.from(CreateWatchlistRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CreateWatchlistRequest => CreateWatchlistRequest.decode(value),
+    responseSerialize: (value: CreateWatchlistResponse): Buffer =>
+      Buffer.from(CreateWatchlistResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CreateWatchlistResponse => CreateWatchlistResponse.decode(value),
+  },
+  getWatchlist: {
+    path: "/xstockstrat.portfolio.v1.PortfolioService/GetWatchlist" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetWatchlistRequest): Buffer => Buffer.from(GetWatchlistRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetWatchlistRequest => GetWatchlistRequest.decode(value),
+    responseSerialize: (value: GetWatchlistResponse): Buffer =>
+      Buffer.from(GetWatchlistResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetWatchlistResponse => GetWatchlistResponse.decode(value),
+  },
+  listWatchlists: {
+    path: "/xstockstrat.portfolio.v1.PortfolioService/ListWatchlists" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListWatchlistsRequest): Buffer =>
+      Buffer.from(ListWatchlistsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListWatchlistsRequest => ListWatchlistsRequest.decode(value),
+    responseSerialize: (value: ListWatchlistsResponse): Buffer =>
+      Buffer.from(ListWatchlistsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListWatchlistsResponse => ListWatchlistsResponse.decode(value),
+  },
+  updateWatchlist: {
+    path: "/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlist" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: UpdateWatchlistRequest): Buffer =>
+      Buffer.from(UpdateWatchlistRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateWatchlistRequest => UpdateWatchlistRequest.decode(value),
+    responseSerialize: (value: UpdateWatchlistResponse): Buffer =>
+      Buffer.from(UpdateWatchlistResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): UpdateWatchlistResponse => UpdateWatchlistResponse.decode(value),
+  },
+  deleteWatchlist: {
+    path: "/xstockstrat.portfolio.v1.PortfolioService/DeleteWatchlist" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: DeleteWatchlistRequest): Buffer =>
+      Buffer.from(DeleteWatchlistRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DeleteWatchlistRequest => DeleteWatchlistRequest.decode(value),
+    responseSerialize: (value: DeleteWatchlistResponse): Buffer =>
+      Buffer.from(DeleteWatchlistResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DeleteWatchlistResponse => DeleteWatchlistResponse.decode(value),
+  },
+  addWatchlistSymbols: {
+    path: "/xstockstrat.portfolio.v1.PortfolioService/AddWatchlistSymbols" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: AddWatchlistSymbolsRequest): Buffer =>
+      Buffer.from(AddWatchlistSymbolsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AddWatchlistSymbolsRequest => AddWatchlistSymbolsRequest.decode(value),
+    responseSerialize: (value: AddWatchlistSymbolsResponse): Buffer =>
+      Buffer.from(AddWatchlistSymbolsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): AddWatchlistSymbolsResponse => AddWatchlistSymbolsResponse.decode(value),
+  },
+  removeWatchlistSymbols: {
+    path: "/xstockstrat.portfolio.v1.PortfolioService/RemoveWatchlistSymbols" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RemoveWatchlistSymbolsRequest): Buffer =>
+      Buffer.from(RemoveWatchlistSymbolsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RemoveWatchlistSymbolsRequest => RemoveWatchlistSymbolsRequest.decode(value),
+    responseSerialize: (value: RemoveWatchlistSymbolsResponse): Buffer =>
+      Buffer.from(RemoveWatchlistSymbolsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RemoveWatchlistSymbolsResponse =>
+      RemoveWatchlistSymbolsResponse.decode(value),
+  },
 } as const;
 
 export interface PortfolioServiceServer extends UntypedServiceImplementation {
@@ -2143,6 +3462,17 @@ export interface PortfolioServiceServer extends UntypedServiceImplementation {
   getSnapshot: handleUnaryCall<GetSnapshotRequest, PortfolioSnapshot>;
   streamPortfolioUpdates: handleServerStreamingCall<StreamPortfolioUpdatesRequest, PortfolioSnapshot>;
   listPortfolios: handleUnaryCall<ListPortfoliosRequest, ListPortfoliosResponse>;
+  /**
+   * Watchlist management (feature 058). Additive — ownership is taken from the
+   * propagated x-user-id header server-side, never from request fields.
+   */
+  createWatchlist: handleUnaryCall<CreateWatchlistRequest, CreateWatchlistResponse>;
+  getWatchlist: handleUnaryCall<GetWatchlistRequest, GetWatchlistResponse>;
+  listWatchlists: handleUnaryCall<ListWatchlistsRequest, ListWatchlistsResponse>;
+  updateWatchlist: handleUnaryCall<UpdateWatchlistRequest, UpdateWatchlistResponse>;
+  deleteWatchlist: handleUnaryCall<DeleteWatchlistRequest, DeleteWatchlistResponse>;
+  addWatchlistSymbols: handleUnaryCall<AddWatchlistSymbolsRequest, AddWatchlistSymbolsResponse>;
+  removeWatchlistSymbols: handleUnaryCall<RemoveWatchlistSymbolsRequest, RemoveWatchlistSymbolsResponse>;
 }
 
 export interface PortfolioServiceClient extends Client {
@@ -2244,6 +3574,115 @@ export interface PortfolioServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListPortfoliosResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Watchlist management (feature 058). Additive — ownership is taken from the
+   * propagated x-user-id header server-side, never from request fields.
+   */
+  createWatchlist(
+    request: CreateWatchlistRequest,
+    callback: (error: ServiceError | null, response: CreateWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  createWatchlist(
+    request: CreateWatchlistRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CreateWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  createWatchlist(
+    request: CreateWatchlistRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CreateWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  getWatchlist(
+    request: GetWatchlistRequest,
+    callback: (error: ServiceError | null, response: GetWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  getWatchlist(
+    request: GetWatchlistRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  getWatchlist(
+    request: GetWatchlistRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  listWatchlists(
+    request: ListWatchlistsRequest,
+    callback: (error: ServiceError | null, response: ListWatchlistsResponse) => void,
+  ): ClientUnaryCall;
+  listWatchlists(
+    request: ListWatchlistsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListWatchlistsResponse) => void,
+  ): ClientUnaryCall;
+  listWatchlists(
+    request: ListWatchlistsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListWatchlistsResponse) => void,
+  ): ClientUnaryCall;
+  updateWatchlist(
+    request: UpdateWatchlistRequest,
+    callback: (error: ServiceError | null, response: UpdateWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  updateWatchlist(
+    request: UpdateWatchlistRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: UpdateWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  updateWatchlist(
+    request: UpdateWatchlistRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: UpdateWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  deleteWatchlist(
+    request: DeleteWatchlistRequest,
+    callback: (error: ServiceError | null, response: DeleteWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  deleteWatchlist(
+    request: DeleteWatchlistRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DeleteWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  deleteWatchlist(
+    request: DeleteWatchlistRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DeleteWatchlistResponse) => void,
+  ): ClientUnaryCall;
+  addWatchlistSymbols(
+    request: AddWatchlistSymbolsRequest,
+    callback: (error: ServiceError | null, response: AddWatchlistSymbolsResponse) => void,
+  ): ClientUnaryCall;
+  addWatchlistSymbols(
+    request: AddWatchlistSymbolsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: AddWatchlistSymbolsResponse) => void,
+  ): ClientUnaryCall;
+  addWatchlistSymbols(
+    request: AddWatchlistSymbolsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: AddWatchlistSymbolsResponse) => void,
+  ): ClientUnaryCall;
+  removeWatchlistSymbols(
+    request: RemoveWatchlistSymbolsRequest,
+    callback: (error: ServiceError | null, response: RemoveWatchlistSymbolsResponse) => void,
+  ): ClientUnaryCall;
+  removeWatchlistSymbols(
+    request: RemoveWatchlistSymbolsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: RemoveWatchlistSymbolsResponse) => void,
+  ): ClientUnaryCall;
+  removeWatchlistSymbols(
+    request: RemoveWatchlistSymbolsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: RemoveWatchlistSymbolsResponse) => void,
   ): ClientUnaryCall;
 }
 

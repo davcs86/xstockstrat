@@ -100,4 +100,15 @@ def validate_config_json(source_type: str, config_json: dict | None) -> str | No
         if not cfg.get("scrape_selector"):
             return f"{source_type} requires non-empty scrape_selector in config_json"
 
+    elif source_type == "derived":
+        # Internally-produced (non-extraction) signal — e.g. the fundamentals signal
+        # producer (feature 062). No extraction config is required (config_json is NULL).
+        return None
+
+    else:
+        # Fail-closed (feature 062): reject any source_type not explicitly allow-listed
+        # above. The allow-list is a superset of the ingest.signal_sources source_type DB
+        # CHECK, so no CHECK-valid type is wrongly rejected.
+        return f"unsupported source_type {source_type!r}"
+
     return None

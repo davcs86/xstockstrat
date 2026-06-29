@@ -13,6 +13,27 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-06-29
+
+### Features
+- phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
+- watchlist-management: Persist user-defined watchlists (named symbol groups) in `xstockstrat-portfolio` with gRPC CRUD,
+- fundamentals-data-source: Add Financial Modeling Prep (FMP) as a fundamentals data source in `xstockstrat-marketdata` via a new
+- screener-engine: Add an on-demand `ScreenSymbols` RPC to `xstockstrat-analysis` that ranks a symbol universe against
+- screener-agent-tool: Expose `ScreenSymbols` (Feature 060) as an MCP tool in `xstockstrat-agent`, mirroring the existing
+- fundamentals-signal-producer: A scheduled job in `xstockstrat-analysis` that, for a deduplicated symbol universe, reads cached
+- fundamentals-scoring-model: The concrete value-plus-quality composite that turns a symbol's raw fundamentals into a single 0–1
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- marketdata/v1/marketdata.proto
+- portfolio/v1/portfolio.proto
+
+### Summary
+8 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-06-26
 
 ### Features

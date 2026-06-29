@@ -19,6 +19,7 @@ import (
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	"github.com/xstockstrat/marketdata/internal/alpaca"
 	"github.com/xstockstrat/marketdata/internal/config"
+	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/handler"
 	"github.com/xstockstrat/marketdata/internal/middleware"
 	"github.com/xstockstrat/marketdata/internal/repository"
@@ -103,7 +104,20 @@ func main() {
 	reg := source.NewRegistry()
 	reg.Register("alpaca", alpacaClient)
 
-	svc, err := service.NewMarketDataService(reg, repo, cfgWatcher, cfg.LedgerEndpoint, cfg.NotifyEndpoint)
+	// FMP fundamentals source (feature 059) — built only when enabled. It is held as a
+	// dedicated service field, NOT registered in the OHLCV registry above (FR-2). When
+	// disabled the service gets nil and GetFundamentals returns FailedPrecondition.
+	var fundamentalsSrc source.FundamentalsSource
+	if cfgWatcher.GetBool("marketdata.fmp.enabled", false) {
+		fundamentalsSrc = fmp.NewClient(fmp.ClientConfig{
+			BaseURL: cfgWatcher.GetString("marketdata.fmp.base_url", "https://financialmodelingprep.com"),
+			APIKey:  cfgWatcher.GetString("secret.marketdata.fmp.api_key", ""),
+			Metrics: strings.Split(cfgWatcher.GetString("marketdata.fmp.metrics", "core,extended"), ","),
+		})
+		slog.Info("FMP fundamentals source enabled")
+	}
+
+	svc, err := service.NewMarketDataService(reg, repo, cfgWatcher, cfg.LedgerEndpoint, cfg.NotifyEndpoint, fundamentalsSrc)
 	if err != nil {
 		slog.Error("service init failed", "error", err)
 		os.Exit(1)

@@ -605,3 +605,217 @@ class TestSetStrategyLive:
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.SetStrategyLive(req, ctx)
+
+
+# ---------------------------------------------------------------------------
+# ScreenSymbols (feature 060)
+# ---------------------------------------------------------------------------
+
+
+class TestScreenSymbols:
+    @staticmethod
+    def _ctx():
+        ctx = MagicMock()
+        ctx.invocation_metadata = MagicMock(
+            return_value=[
+                ("x-user-id", "u1"),
+                ("x-access-scope", "7"),
+                ("x-trace-id", "t1"),
+            ]
+        )
+        return ctx
+
+    @staticmethod
+    def _svc():
+        svc = make_servicer()
+        # screener reads get_int — return the supplied defaults.
+        svc._cfg.get_int = MagicMock(side_effect=lambda key, default=0: default)
+        return svc
+
+    @staticmethod
+    def _bars(closes):
+        from types import SimpleNamespace
+
+        from gen.marketdata.v1 import marketdata_pb2
+
+        return SimpleNamespace(bars=[marketdata_pb2.Bar(close=c) for c in closes])
+
+    @staticmethod
+    def _formula_resp(value):
+        from types import SimpleNamespace
+
+        from google.protobuf.struct_pb2 import Struct
+
+        out = Struct()
+        out.update({"value": value})
+        return SimpleNamespace(success=True, output=out, error="")
+
+    @pytest.mark.asyncio
+    async def test_ranks_universe_and_forwards_headers(self):
+        from gen.analysis.v1 import analysis_pb2
+
+        svc = self._svc()
+        svc._marketdata.GetBars = AsyncMock(return_value=self._bars([1.0, 2.0, 3.0]))
+        svc._indicators.ExecuteFormula = AsyncMock(
+            side_effect=[
+                self._formula_resp([0.1]),
+                self._formula_resp([0.9]),
+                self._formula_resp([0.5]),
+            ]
+        )
+
+        req = analysis_pb2.ScreenSymbolsRequest(
+            symbols=["AAA", "BBB", "CCC"],
+            criteria=[
+                analysis_pb2.ScreenCriterion(
+                    ref_name="f1",
+                    kind=analysis_pb2.SCREEN_KIND_TECHNICAL_FORMULA,
+                    component=analysis_pb2.StrategyComponent(formula_id="fid"),
+                    op=analysis_pb2.COMPARATOR_GT,
+                    threshold=0.0,
+                    weight=1.0,
+                )
+            ],
+        )
+        resp = await svc.ScreenSymbols(req, self._ctx())
+        assert len(resp.results) == 3
+        assert resp.results[0].symbol == "BBB"  # highest normalized value
+        # Header propagation forwarded to the new ExecuteFormula call.
+        meta = dict(svc._indicators.ExecuteFormula.await_args.kwargs["metadata"])
+        assert meta["x-user-id"] == "u1"
+        assert meta["x-trace-id"] == "t1"
+
+    @pytest.mark.asyncio
+    async def test_insufficient_data_marked_not_dropped(self):
+        from gen.analysis.v1 import analysis_pb2
+
+        svc = self._svc()
+        svc._marketdata.GetBars = AsyncMock(return_value=self._bars([]))  # no bars
+        svc._indicators.ExecuteFormula = AsyncMock(return_value=self._formula_resp([0.5]))
+
+        req = analysis_pb2.ScreenSymbolsRequest(
+            symbols=["AAA"],
+            criteria=[
+                analysis_pb2.ScreenCriterion(
+                    ref_name="f1",
+                    kind=analysis_pb2.SCREEN_KIND_TECHNICAL_FORMULA,
+                    component=analysis_pb2.StrategyComponent(formula_id="fid"),
+                    op=analysis_pb2.COMPARATOR_GT,
+                    threshold=0.0,
+                )
+            ],
+        )
+        resp = await svc.ScreenSymbols(req, self._ctx())
+        assert len(resp.results) == 1
+        assert resp.results[0].status == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
+
+    @pytest.mark.asyncio
+    async def test_fundamental_skipped_when_rpc_absent(self):
+        """FR-5: a fundamental hard-filter is skipped (scan completes) when fundamentals fail."""
+        import grpc
+        from gen.analysis.v1 import analysis_pb2
+
+        svc = self._svc()
+        svc._marketdata.GetBars = AsyncMock(return_value=self._bars([1.0, 2.0, 3.0]))
+        svc._marketdata.GetFundamentalsMulti = AsyncMock(side_effect=grpc.RpcError())
+
+        req = analysis_pb2.ScreenSymbolsRequest(
+            symbols=["AAA"],
+            criteria=[
+                analysis_pb2.ScreenCriterion(
+                    ref_name="cheap",
+                    kind=analysis_pb2.SCREEN_KIND_FUNDAMENTAL,
+                    metric_name="pe_ratio",
+                    op=analysis_pb2.COMPARATOR_LT,
+                    threshold=20.0,
+                    hard_filter=True,
+                )
+            ],
+        )
+        resp = await svc.ScreenSymbols(req, self._ctx())
+        assert len(resp.results) == 1
+        assert "cheap" not in resp.results[0].criterion_scores
+        assert resp.results[0].passed is True
+
+
+# ---------------------------------------------------------------------------
+# RunFundamentalsScan (feature 062)
+# ---------------------------------------------------------------------------
+
+
+def _scan_req(force=False, dry_run=False, symbols=()):
+    req = MagicMock()
+    req.force = force
+    req.dry_run = dry_run
+    req.symbols = list(symbols)
+    return req
+
+
+class TestRunFundamentalsScan:
+    @pytest.mark.asyncio
+    async def test_requires_admin_scope(self):
+        svc = make_servicer()
+        svc._fundsignal_loop = AsyncMock()
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "1")]  # READ only
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception, match="aborted"):
+            await svc.RunFundamentalsScan(_scan_req(), ctx)
+        ctx.abort.assert_called_once()
+        svc._fundsignal_loop.run_once.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_unavailable_when_loop_not_initialized(self):
+        svc = make_servicer()
+        svc._fundsignal_loop = None
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]  # admin
+        ctx.abort = AsyncMock(side_effect=Exception("unavailable"))
+        with pytest.raises(Exception, match="unavailable"):
+            await svc.RunFundamentalsScan(_scan_req(), ctx)
+        ctx.abort.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_admin_happy_path_maps_summary(self):
+        svc = make_servicer()
+        summary = analysis_pb2.FundamentalsScanSummary(
+            run_id="run-xyz",
+            symbols_processed=10,
+            signals_emitted=4,
+            calls_spent=1,
+            deferred_count=0,
+            status="completed",
+        )
+        svc._fundsignal_loop = MagicMock()
+        svc._fundsignal_loop.run_once = AsyncMock(return_value=summary)
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [
+            ("x-access-scope", "7"),
+            ("x-user-id", "u1"),
+            ("x-trace-id", "t1"),
+        ]
+        resp = await svc.RunFundamentalsScan(_scan_req(symbols=["AAPL", "MSFT"]), ctx)
+        assert resp.run_id == "run-xyz"
+        assert resp.signals_emitted == 4
+        assert resp.calls_spent == 1
+        assert resp.deferred_count == 0
+        assert resp.status == "completed"
+        # Caller metadata is propagated and the explicit symbol override is forwarded.
+        kwargs = svc._fundsignal_loop.run_once.call_args.kwargs
+        assert kwargs["override_symbols"] == ["AAPL", "MSFT"]
+        meta_keys = {k for k, _ in kwargs["metadata"]}
+        assert meta_keys == {"x-access-scope", "x-user-id", "x-trace-id"}
+
+    @pytest.mark.asyncio
+    async def test_dry_run_passes_through(self):
+        svc = make_servicer()
+        svc._fundsignal_loop = MagicMock()
+        svc._fundsignal_loop.run_once = AsyncMock(
+            return_value=analysis_pb2.FundamentalsScanSummary(status="completed")
+        )
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        await svc.RunFundamentalsScan(_scan_req(dry_run=True), ctx)
+        assert svc._fundsignal_loop.run_once.call_args.kwargs["dry_run"] is True
+        # No explicit symbols → override_symbols is None (use computed universe).
+        assert svc._fundsignal_loop.run_once.call_args.kwargs["override_symbols"] is None

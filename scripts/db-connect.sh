@@ -22,30 +22,55 @@
 set -euo pipefail
 
 # ---- defaults (override with flags or env) ---------------------------------
-CLUSTER_ID="${DB_CLUSTER_ID:-1b5ad082-8145-4e09-bdcf-936adfc21f2a}"  # xstockstrat cluster
-DB_NAME="${DB_NAME:-defaultdb}"   # e.g. xstockstrat-staging | xstockstrat-production
-IP="${DB_IP:-}"                   # auto-detected if empty
+CLUSTER_ID="${DB_CLUSTER_ID:-1b5ad082-8145-4e09-bdcf-936adfc21f2a}" # xstockstrat cluster
+DB_NAME="${DB_NAME:-defaultdb}"                                     # e.g. xstockstrat-staging | xstockstrat-production
+IP="${DB_IP:-}"                                                     # auto-detected if empty
 PSQL_ARGS=()
 
 # ---- arg parsing -----------------------------------------------------------
 while [ $# -gt 0 ]; do
   case "$1" in
-    -c|--cluster) CLUSTER_ID="$2"; shift 2 ;;
-    -d|--db)      DB_NAME="$2";    shift 2 ;;
-    -i|--ip)      IP="$2";         shift 2 ;;
-    --)           shift; PSQL_ARGS=("$@"); break ;;
-    -h|--help)    sed -n '2,20p' "$0"; exit 0 ;;
-    *) echo "unknown option: $1" >&2; exit 1 ;;
+  -c | --cluster)
+    CLUSTER_ID="$2"
+    shift 2
+    ;;
+  -d | --db)
+    DB_NAME="$2"
+    shift 2
+    ;;
+  -i | --ip)
+    IP="$2"
+    shift 2
+    ;;
+  --)
+    shift
+    PSQL_ARGS=("$@")
+    break
+    ;;
+  -h | --help)
+    sed -n '2,20p' "$0"
+    exit 0
+    ;;
+  *)
+    echo "unknown option: $1" >&2
+    exit 1
+    ;;
   esac
 done
 
 # ---- preflight -------------------------------------------------------------
 for bin in doctl psql curl; do
-  command -v "$bin" >/dev/null 2>&1 || { echo "error: '$bin' not found in PATH" >&2; exit 1; }
+  command -v "$bin" >/dev/null 2>&1 || {
+    echo "error: '$bin' not found in PATH" >&2
+    exit 1
+  }
 done
 
 if [ -z "$IP" ]; then
-  IP="$(curl -fsS https://api.ipify.org)" || { echo "error: could not detect public IP" >&2; exit 1; }
+  IP="$(curl -fsS https://api.ipify.org)" || {
+    echo "error: could not detect public IP" >&2
+    exit 1
+  }
 fi
 echo "Using IP: $IP"
 
@@ -54,13 +79,13 @@ RULE_ADDED=0
 cleanup() {
   [ "$RULE_ADDED" -eq 1 ] || return 0
   local uuid
-  uuid="$(doctl databases firewalls list "$CLUSTER_ID" --format UUID,Type,Value --no-header 2>/dev/null \
-    | awk -v ip="$IP" '$2 == "ip_addr" && $3 == ip { print $1; exit }')"
+  uuid="$(doctl databases firewalls list "$CLUSTER_ID" --format UUID,Type,Value --no-header 2>/dev/null |
+    awk -v ip="$IP" '$2 == "ip_addr" && $3 == ip { print $1; exit }')"
   if [ -n "${uuid:-}" ]; then
     echo "Removing firewall rule for $IP ($uuid)..."
-    doctl databases firewalls remove "$CLUSTER_ID" --uuid "$uuid" >/dev/null \
-      && echo "Firewall rule removed." \
-      || echo "WARNING: failed to remove rule $uuid — remove it manually in the DO dashboard." >&2
+    doctl databases firewalls remove "$CLUSTER_ID" --uuid "$uuid" >/dev/null &&
+      echo "Firewall rule removed." ||
+      echo "WARNING: failed to remove rule $uuid — remove it manually in the DO dashboard." >&2
   fi
 }
 trap cleanup EXIT INT TERM

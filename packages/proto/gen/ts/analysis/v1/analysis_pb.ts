@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file analysis/v1/analysis.proto.
  */
 export const file_analysis_v1_analysis: GenFile = /*@__PURE__*/
-  fileDesc("ChphbmFseXNpcy92MS9hbmFseXNpcy5wcm90bxIXeHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEilwIKElJ1bkJhY2t0ZXN0UmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCRIvCgVyYW5nZRgCIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USDwoHc3ltYm9scxgDIAMoCRIXCg9pbml0aWFsX2NhcGl0YWwYBCABKAESMAoPc3RyYXRlZ3lfcGFyYW1zGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIXCg9zdHJhdGVneV9pZF9yZWYYBiABKAkSRgoRaW5saW5lX2RlZmluaXRpb24YByABKAsyKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneURlZmluaXRpb24i4gEKC0NvdmVyYWdlR2FwEg4KBnN5bWJvbBgBIAEoCRIzCgl0aW1lZnJhbWUYAiABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEjkKD3JlcXVlc3RlZF9yYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USEQoJYmFyc19oYXZlGAQgASgDEhEKCWJhcnNfbmVlZBgFIAEoAxItCgNnYXAYBiABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlIrQDCg5CYWNrdGVzdFJlc3VsdBITCgtiYWNrdGVzdF9pZBgBIAEoCRITCgtzdHJhdGVneV9pZBgCIAEoCRIUCgx0b3RhbF9yZXR1cm4YAyABKAESGQoRYW5udWFsaXplZF9yZXR1cm4YBCABKAESFAoMc2hhcnBlX3JhdGlvGAUgASgBEhQKDG1heF9kcmF3ZG93bhgGIAEoARIQCgh3aW5fcmF0ZRgHIAEoARIUCgx0b3RhbF90cmFkZXMYCCABKAUSFQoNcHJvZml0X2ZhY3RvchgJIAEoARIwCgxjb21wbGV0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKBnRyYWRlcxgLIAMoCzIkLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlRyYWRlUmVjb3JkEjcKBnN0YXR1cxgMIAEoDjInLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhY2t0ZXN0U3RhdHVzEjsKDWNvdmVyYWdlX2dhcHMYDSADKAsyJC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5Db3ZlcmFnZUdhcCLNAQoLVHJhZGVSZWNvcmQSDgoGc3ltYm9sGAEgASgJEgwKBHNpZGUYAiABKAkSCwoDcXR5GAMgASgBEhMKC2VudHJ5X3ByaWNlGAQgASgBEhIKCmV4aXRfcHJpY2UYBSABKAESCwoDcG5sGAYgASgBEi4KCmVudHJ5X3RpbWUYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi0KCWV4aXRfdGltZRgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiXAoUU2NvcmVTdHJhdGVneVJlcXVlc3QSEwoLc3RyYXRlZ3lfaWQYASABKAkSLwoFcmFuZ2UYAiABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlItoBCg1TdHJhdGVneVNjb3JlEhMKC3N0cmF0ZWd5X2lkGAEgASgJEhUKDW92ZXJhbGxfc2NvcmUYAiABKAESVQoQY29tcG9uZW50X3Njb3JlcxgDIAMoCzI7LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5U2NvcmUuQ29tcG9uZW50U2NvcmVzRW50cnkSDgoGcmF0aW5nGAQgASgJGjYKFENvbXBvbmVudFNjb3Jlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEiyQEKDlN0cmF0ZWd5UmVwb3J0EhMKC3N0cmF0ZWd5X2lkGAEgASgJEkAKD2xhdGVzdF9iYWNrdGVzdBgCIAEoCzInLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhY2t0ZXN0UmVzdWx0EjUKBXNjb3JlGAMgASgLMiYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lTY29yZRIpCghtZXRhZGF0YRgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiWgoVTGlzdFN0cmF0ZWdpZXNSZXF1ZXN0EjAKBHBhZ2UYASABKAsyIi54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlcXVlc3QSDwoHdXNlcl9pZBgCIAEoCSKHAQoWTGlzdFN0cmF0ZWdpZXNSZXNwb25zZRI6CgpzdHJhdGVnaWVzGAEgAygLMiYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lTY29yZRIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIvChhHZXRTdHJhdGVneVJlcG9ydFJlcXVlc3QSEwoLc3RyYXRlZ3lfaWQYASABKAki+QEKEVN0cmF0ZWd5Q29tcG9uZW50EhAKCHJlZl9uYW1lGAEgASgJEjQKBGtpbmQYAiABKA4yJi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5Db21wb25lbnRLaW5kEhEKCWluZGljYXRvchgDIAEoCRISCgpmb3JtdWxhX2lkGAQgASgJEkYKBnBhcmFtcxgFIAMoCzI2LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5Q29tcG9uZW50LlBhcmFtc0VudHJ5Gi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEi/AEKElN0cmF0ZWd5RGVmaW5pdGlvbhITCgtzdHJhdGVneV9pZBgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSPgoKY29tcG9uZW50cxgDIAMoCzIqLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5Q29tcG9uZW50EhIKCmVudHJ5X3J1bGUYBCABKAkSEQoJZXhpdF9ydWxlGAUgASgJEi4KDXNpZ25hbF9wYXJhbXMYBiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Eg4KBmFjdGl2ZRgHIAEoCBIUCgxsaXZlX2VuYWJsZWQYCCABKAgilwEKFU1hbmFnZVN0cmF0ZWd5UmVxdWVzdBI9CglvcGVyYXRpb24YASABKA4yKi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneU9wZXJhdGlvbhI/CgpkZWZpbml0aW9uGAIgASgLMisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uIikKEkdldFN0cmF0ZWd5UmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCSJiCh5MaXN0U3RyYXRlZ3lEZWZpbml0aW9uc1JlcXVlc3QSGAoQaW5jbHVkZV9pbmFjdGl2ZRgBIAEoCBIRCglwYWdlX3NpemUYAiABKAUSEwoLcGFnZV9vZmZzZXQYAyABKAUieAofTGlzdFN0cmF0ZWd5RGVmaW5pdGlvbnNSZXNwb25zZRJACgtkZWZpbml0aW9ucxgBIAMoCzIrLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5RGVmaW5pdGlvbhITCgt0b3RhbF9jb3VudBgCIAEoBSJDChZTZXRTdHJhdGVneUxpdmVSZXF1ZXN0EhMKC3N0cmF0ZWd5X2lkGAEgASgJEhQKDGxpdmVfZW5hYmxlZBgCIAEoCCJaChdTZXRTdHJhdGVneUxpdmVSZXNwb25zZRI/CgpkZWZpbml0aW9uGAEgASgLMisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uKnAKDkJhY2t0ZXN0U3RhdHVzEh8KG0JBQ0tURVNUX1NUQVRVU19VTlNQRUNJRklFRBAAEhYKEkJBQ0tURVNUX1NUQVRVU19PSxABEiUKIUJBQ0tURVNUX1NUQVRVU19JTlNVRkZJQ0lFTlRfREFUQRACKngKDUNvbXBvbmVudEtpbmQSHgoaQ09NUE9ORU5UX0tJTkRfVU5TUEVDSUZJRUQQABIkCiBDT01QT05FTlRfS0lORF9CVUlMVElOX0lORElDQVRPUhABEiEKHUNPTVBPTkVOVF9LSU5EX0NVU1RPTV9GT1JNVUxBEAIqmgEKEVN0cmF0ZWd5T3BlcmF0aW9uEiIKHlNUUkFURUdZX09QRVJBVElPTl9VTlNQRUNJRklFRBAAEh8KG1NUUkFURUdZX09QRVJBVElPTl9SRUdJU1RFUhABEh0KGVNUUkFURUdZX09QRVJBVElPTl9VUERBVEUQAhIhCh1TVFJBVEVHWV9PUEVSQVRJT05fREVBQ1RJVkFURRADMp8HCg9BbmFseXNpc1NlcnZpY2USYwoLUnVuQmFja3Rlc3QSKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5SdW5CYWNrdGVzdFJlcXVlc3QaJy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5CYWNrdGVzdFJlc3VsdBJmCg1TY29yZVN0cmF0ZWd5Ei0ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU2NvcmVTdHJhdGVneVJlcXVlc3QaJi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneVNjb3JlEnEKDkxpc3RTdHJhdGVnaWVzEi4ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuTGlzdFN0cmF0ZWdpZXNSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuTGlzdFN0cmF0ZWdpZXNSZXNwb25zZRJvChFHZXRTdHJhdGVneVJlcG9ydBIxLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkdldFN0cmF0ZWd5UmVwb3J0UmVxdWVzdBonLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5UmVwb3J0Em0KDk1hbmFnZVN0cmF0ZWd5Ei4ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuTWFuYWdlU3RyYXRlZ3lSZXF1ZXN0GisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uEmcKC0dldFN0cmF0ZWd5EisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuR2V0U3RyYXRlZ3lSZXF1ZXN0GisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uEowBChdMaXN0U3RyYXRlZ3lEZWZpbml0aW9ucxI3LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RTdHJhdGVneURlZmluaXRpb25zUmVxdWVzdBo4LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RTdHJhdGVneURlZmluaXRpb25zUmVzcG9uc2USdAoPU2V0U3RyYXRlZ3lMaXZlEi8ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU2V0U3RyYXRlZ3lMaXZlUmVxdWVzdBowLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNldFN0cmF0ZWd5TGl2ZVJlc3BvbnNlQkBaPmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9hbmFseXNpcy92MTthbmFseXNpc3YxYgZwcm90bzM", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
+  fileDesc("ChphbmFseXNpcy92MS9hbmFseXNpcy5wcm90bxIXeHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEilwIKElJ1bkJhY2t0ZXN0UmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCRIvCgVyYW5nZRgCIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USDwoHc3ltYm9scxgDIAMoCRIXCg9pbml0aWFsX2NhcGl0YWwYBCABKAESMAoPc3RyYXRlZ3lfcGFyYW1zGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIXCg9zdHJhdGVneV9pZF9yZWYYBiABKAkSRgoRaW5saW5lX2RlZmluaXRpb24YByABKAsyKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneURlZmluaXRpb24i4gEKC0NvdmVyYWdlR2FwEg4KBnN5bWJvbBgBIAEoCRIzCgl0aW1lZnJhbWUYAiABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEjkKD3JlcXVlc3RlZF9yYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USEQoJYmFyc19oYXZlGAQgASgDEhEKCWJhcnNfbmVlZBgFIAEoAxItCgNnYXAYBiABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlIrQDCg5CYWNrdGVzdFJlc3VsdBITCgtiYWNrdGVzdF9pZBgBIAEoCRITCgtzdHJhdGVneV9pZBgCIAEoCRIUCgx0b3RhbF9yZXR1cm4YAyABKAESGQoRYW5udWFsaXplZF9yZXR1cm4YBCABKAESFAoMc2hhcnBlX3JhdGlvGAUgASgBEhQKDG1heF9kcmF3ZG93bhgGIAEoARIQCgh3aW5fcmF0ZRgHIAEoARIUCgx0b3RhbF90cmFkZXMYCCABKAUSFQoNcHJvZml0X2ZhY3RvchgJIAEoARIwCgxjb21wbGV0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKBnRyYWRlcxgLIAMoCzIkLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlRyYWRlUmVjb3JkEjcKBnN0YXR1cxgMIAEoDjInLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhY2t0ZXN0U3RhdHVzEjsKDWNvdmVyYWdlX2dhcHMYDSADKAsyJC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5Db3ZlcmFnZUdhcCLNAQoLVHJhZGVSZWNvcmQSDgoGc3ltYm9sGAEgASgJEgwKBHNpZGUYAiABKAkSCwoDcXR5GAMgASgBEhMKC2VudHJ5X3ByaWNlGAQgASgBEhIKCmV4aXRfcHJpY2UYBSABKAESCwoDcG5sGAYgASgBEi4KCmVudHJ5X3RpbWUYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi0KCWV4aXRfdGltZRgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiXAoUU2NvcmVTdHJhdGVneVJlcXVlc3QSEwoLc3RyYXRlZ3lfaWQYASABKAkSLwoFcmFuZ2UYAiABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlItoBCg1TdHJhdGVneVNjb3JlEhMKC3N0cmF0ZWd5X2lkGAEgASgJEhUKDW92ZXJhbGxfc2NvcmUYAiABKAESVQoQY29tcG9uZW50X3Njb3JlcxgDIAMoCzI7LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5U2NvcmUuQ29tcG9uZW50U2NvcmVzRW50cnkSDgoGcmF0aW5nGAQgASgJGjYKFENvbXBvbmVudFNjb3Jlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEiyQEKDlN0cmF0ZWd5UmVwb3J0EhMKC3N0cmF0ZWd5X2lkGAEgASgJEkAKD2xhdGVzdF9iYWNrdGVzdBgCIAEoCzInLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhY2t0ZXN0UmVzdWx0EjUKBXNjb3JlGAMgASgLMiYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lTY29yZRIpCghtZXRhZGF0YRgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiWgoVTGlzdFN0cmF0ZWdpZXNSZXF1ZXN0EjAKBHBhZ2UYASABKAsyIi54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlcXVlc3QSDwoHdXNlcl9pZBgCIAEoCSKHAQoWTGlzdFN0cmF0ZWdpZXNSZXNwb25zZRI6CgpzdHJhdGVnaWVzGAEgAygLMiYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lTY29yZRIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIvChhHZXRTdHJhdGVneVJlcG9ydFJlcXVlc3QSEwoLc3RyYXRlZ3lfaWQYASABKAki+QEKEVN0cmF0ZWd5Q29tcG9uZW50EhAKCHJlZl9uYW1lGAEgASgJEjQKBGtpbmQYAiABKA4yJi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5Db21wb25lbnRLaW5kEhEKCWluZGljYXRvchgDIAEoCRISCgpmb3JtdWxhX2lkGAQgASgJEkYKBnBhcmFtcxgFIAMoCzI2LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5Q29tcG9uZW50LlBhcmFtc0VudHJ5Gi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEi/AEKElN0cmF0ZWd5RGVmaW5pdGlvbhITCgtzdHJhdGVneV9pZBgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSPgoKY29tcG9uZW50cxgDIAMoCzIqLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5Q29tcG9uZW50EhIKCmVudHJ5X3J1bGUYBCABKAkSEQoJZXhpdF9ydWxlGAUgASgJEi4KDXNpZ25hbF9wYXJhbXMYBiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Eg4KBmFjdGl2ZRgHIAEoCBIUCgxsaXZlX2VuYWJsZWQYCCABKAgilwEKFU1hbmFnZVN0cmF0ZWd5UmVxdWVzdBI9CglvcGVyYXRpb24YASABKA4yKi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneU9wZXJhdGlvbhI/CgpkZWZpbml0aW9uGAIgASgLMisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uIikKEkdldFN0cmF0ZWd5UmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCSJiCh5MaXN0U3RyYXRlZ3lEZWZpbml0aW9uc1JlcXVlc3QSGAoQaW5jbHVkZV9pbmFjdGl2ZRgBIAEoCBIRCglwYWdlX3NpemUYAiABKAUSEwoLcGFnZV9vZmZzZXQYAyABKAUieAofTGlzdFN0cmF0ZWd5RGVmaW5pdGlvbnNSZXNwb25zZRJACgtkZWZpbml0aW9ucxgBIAMoCzIrLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5RGVmaW5pdGlvbhITCgt0b3RhbF9jb3VudBgCIAEoBSJDChZTZXRTdHJhdGVneUxpdmVSZXF1ZXN0EhMKC3N0cmF0ZWd5X2lkGAEgASgJEhQKDGxpdmVfZW5hYmxlZBgCIAEoCCJaChdTZXRTdHJhdGVneUxpdmVSZXNwb25zZRI/CgpkZWZpbml0aW9uGAEgASgLMisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uIqsCCg9TY3JlZW5Dcml0ZXJpb24SEAoIcmVmX25hbWUYASABKAkSMQoEa2luZBgCIAEoDjIjLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNjcmVlbktpbmQSEwoLbWV0cmljX25hbWUYAyABKAkSPQoJY29tcG9uZW50GAQgASgLMioueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lDb21wb25lbnQSLwoCb3AYBSABKA4yIy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5Db21wYXJhdG9yEhEKCXRocmVzaG9sZBgGIAEoARIWCg50aHJlc2hvbGRfaGlnaBgHIAEoARIOCgZ3ZWlnaHQYCCABKAESEwoLaGFyZF9maWx0ZXIYCSABKAgiuwIKDFNjcmVlblJlc3VsdBIOCgZzeW1ib2wYASABKAkSDQoFc2NvcmUYAiABKAESVAoQY3JpdGVyaW9uX3Njb3JlcxgDIAMoCzI6LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNjcmVlblJlc3VsdC5Dcml0ZXJpb25TY29yZXNFbnRyeRIOCgZwYXNzZWQYBCABKAgSOwoGc3RhdHVzGAUgASgOMisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU2NyZWVuUmVzdWx0U3RhdHVzEjEKA2dhcBgGIAEoCzIkLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkNvdmVyYWdlR2FwGjYKFENyaXRlcmlvblNjb3Jlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEilQIKFFNjcmVlblN5bWJvbHNSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSOgoIY3JpdGVyaWEYAiADKAsyKC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TY3JlZW5Dcml0ZXJpb24SFgoOc2lnbmFsX3NvdXJjZXMYAyADKAkSFQoNc2lnbmFsX3dlaWdodBgEIAEoARIYChB0ZWNobmljYWxfd2VpZ2h0GAUgASgBEhYKDm1pbl9jb252aWN0aW9uGAYgASgBEhIKCnJhbmtfbGltaXQYByABKAUSOwoRZXZhbHVhdGlvbl93aW5kb3cYCCABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlIowBChVTY3JlZW5TeW1ib2xzUmVzcG9uc2USNgoHcmVzdWx0cxgBIAMoCzIlLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNjcmVlblJlc3VsdBI7Cg1jb3ZlcmFnZV9nYXBzGAIgAygLMiQueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuQ292ZXJhZ2VHYXAiTQoaUnVuRnVuZGFtZW50YWxzU2NhblJlcXVlc3QSDQoFZm9yY2UYASABKAgSDwoHZHJ5X3J1bhgCIAEoCBIPCgdzeW1ib2xzGAMgAygJIssBChdGdW5kYW1lbnRhbHNTY2FuU3VtbWFyeRIOCgZydW5faWQYASABKAkSGQoRc3ltYm9sc19wcm9jZXNzZWQYAiABKAUSFwoPc2lnbmFsc19lbWl0dGVkGAMgASgFEhMKC2NhbGxzX3NwZW50GAQgASgFEhYKDmRlZmVycmVkX2NvdW50GAUgASgFEg4KBnN0YXR1cxgGIAEoCRIvCgtmaW5pc2hlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAqcAoOQmFja3Rlc3RTdGF0dXMSHwobQkFDS1RFU1RfU1RBVFVTX1VOU1BFQ0lGSUVEEAASFgoSQkFDS1RFU1RfU1RBVFVTX09LEAESJQohQkFDS1RFU1RfU1RBVFVTX0lOU1VGRklDSUVOVF9EQVRBEAIqeAoNQ29tcG9uZW50S2luZBIeChpDT01QT05FTlRfS0lORF9VTlNQRUNJRklFRBAAEiQKIENPTVBPTkVOVF9LSU5EX0JVSUxUSU5fSU5ESUNBVE9SEAESIQodQ09NUE9ORU5UX0tJTkRfQ1VTVE9NX0ZPUk1VTEEQAiqaAQoRU3RyYXRlZ3lPcGVyYXRpb24SIgoeU1RSQVRFR1lfT1BFUkFUSU9OX1VOU1BFQ0lGSUVEEAASHwobU1RSQVRFR1lfT1BFUkFUSU9OX1JFR0lTVEVSEAESHQoZU1RSQVRFR1lfT1BFUkFUSU9OX1VQREFURRACEiEKHVNUUkFURUdZX09QRVJBVElPTl9ERUFDVElWQVRFEAMqjgEKCkNvbXBhcmF0b3ISGgoWQ09NUEFSQVRPUl9VTlNQRUNJRklFRBAAEhEKDUNPTVBBUkFUT1JfTFQQARISCg5DT01QQVJBVE9SX0xURRACEhEKDUNPTVBBUkFUT1JfR1QQAxISCg5DT01QQVJBVE9SX0dURRAEEhYKEkNPTVBBUkFUT1JfQkVUV0VFThAFKqYBCgpTY3JlZW5LaW5kEhsKF1NDUkVFTl9LSU5EX1VOU1BFQ0lGSUVEEAASGwoXU0NSRUVOX0tJTkRfRlVOREFNRU5UQUwQARIhCh1TQ1JFRU5fS0lORF9URUNITklDQUxfRk9STVVMQRACEiMKH1NDUkVFTl9LSU5EX1RFQ0hOSUNBTF9JTkRJQ0FUT1IQAxIWChJTQ1JFRU5fS0lORF9TSUdOQUwQBCqDAQoSU2NyZWVuUmVzdWx0U3RhdHVzEiQKIFNDUkVFTl9SRVNVTFRfU1RBVFVTX1VOU1BFQ0lGSUVEEAASGwoXU0NSRUVOX1JFU1VMVF9TVEFUVVNfT0sQARIqCiZTQ1JFRU5fUkVTVUxUX1NUQVRVU19JTlNVRkZJQ0lFTlRfREFUQRACMo0JCg9BbmFseXNpc1NlcnZpY2USYwoLUnVuQmFja3Rlc3QSKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5SdW5CYWNrdGVzdFJlcXVlc3QaJy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5CYWNrdGVzdFJlc3VsdBJmCg1TY29yZVN0cmF0ZWd5Ei0ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU2NvcmVTdHJhdGVneVJlcXVlc3QaJi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneVNjb3JlEnEKDkxpc3RTdHJhdGVnaWVzEi4ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuTGlzdFN0cmF0ZWdpZXNSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuTGlzdFN0cmF0ZWdpZXNSZXNwb25zZRJvChFHZXRTdHJhdGVneVJlcG9ydBIxLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkdldFN0cmF0ZWd5UmVwb3J0UmVxdWVzdBonLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5UmVwb3J0Em0KDk1hbmFnZVN0cmF0ZWd5Ei4ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuTWFuYWdlU3RyYXRlZ3lSZXF1ZXN0GisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uEmcKC0dldFN0cmF0ZWd5EisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuR2V0U3RyYXRlZ3lSZXF1ZXN0GisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uEowBChdMaXN0U3RyYXRlZ3lEZWZpbml0aW9ucxI3LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RTdHJhdGVneURlZmluaXRpb25zUmVxdWVzdBo4LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RTdHJhdGVneURlZmluaXRpb25zUmVzcG9uc2USdAoPU2V0U3RyYXRlZ3lMaXZlEi8ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU2V0U3RyYXRlZ3lMaXZlUmVxdWVzdBowLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNldFN0cmF0ZWd5TGl2ZVJlc3BvbnNlEm4KDVNjcmVlblN5bWJvbHMSLS54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TY3JlZW5TeW1ib2xzUmVxdWVzdBouLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNjcmVlblN5bWJvbHNSZXNwb25zZRJ8ChNSdW5GdW5kYW1lbnRhbHNTY2FuEjMueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuUnVuRnVuZGFtZW50YWxzU2NhblJlcXVlc3QaMC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5GdW5kYW1lbnRhbHNTY2FuU3VtbWFyeUJAWj5naXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vYW5hbHlzaXMvdjE7YW5hbHlzaXN2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_google_protobuf_struct, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.analysis.v1.RunBacktestRequest
@@ -618,6 +618,279 @@ export const SetStrategyLiveResponseSchema: GenMessage<SetStrategyLiveResponse> 
   messageDesc(file_analysis_v1_analysis, 17);
 
 /**
+ * @generated from message xstockstrat.analysis.v1.ScreenCriterion
+ */
+export type ScreenCriterion = Message<"xstockstrat.analysis.v1.ScreenCriterion"> & {
+  /**
+   * @generated from field: string ref_name = 1;
+   */
+  refName: string;
+
+  /**
+   * @generated from field: xstockstrat.analysis.v1.ScreenKind kind = 2;
+   */
+  kind: ScreenKind;
+
+  /**
+   * FUNDAMENTAL only (e.g. "pe_ratio")
+   *
+   * @generated from field: string metric_name = 3;
+   */
+  metricName: string;
+
+  /**
+   * reused, for TECHNICAL_* kinds
+   *
+   * @generated from field: xstockstrat.analysis.v1.StrategyComponent component = 4;
+   */
+  component?: StrategyComponent | undefined;
+
+  /**
+   * @generated from field: xstockstrat.analysis.v1.Comparator op = 5;
+   */
+  op: Comparator;
+
+  /**
+   * @generated from field: double threshold = 6;
+   */
+  threshold: number;
+
+  /**
+   * for COMPARATOR_BETWEEN
+   *
+   * @generated from field: double threshold_high = 7;
+   */
+  thresholdHigh: number;
+
+  /**
+   * contribution to the blended score
+   *
+   * @generated from field: double weight = 8;
+   */
+  weight: number;
+
+  /**
+   * true → failing this excludes the symbol
+   *
+   * @generated from field: bool hard_filter = 9;
+   */
+  hardFilter: boolean;
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.ScreenCriterion.
+ * Use `create(ScreenCriterionSchema)` to create a new message.
+ */
+export const ScreenCriterionSchema: GenMessage<ScreenCriterion> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 18);
+
+/**
+ * @generated from message xstockstrat.analysis.v1.ScreenResult
+ */
+export type ScreenResult = Message<"xstockstrat.analysis.v1.ScreenResult"> & {
+  /**
+   * @generated from field: string symbol = 1;
+   */
+  symbol: string;
+
+  /**
+   * @generated from field: double score = 2;
+   */
+  score: number;
+
+  /**
+   * per ref_name; skipped criteria are absent
+   *
+   * @generated from field: map<string, double> criterion_scores = 3;
+   */
+  criterionScores: { [key: string]: number };
+
+  /**
+   * @generated from field: bool passed = 4;
+   */
+  passed: boolean;
+
+  /**
+   * @generated from field: xstockstrat.analysis.v1.ScreenResultStatus status = 5;
+   */
+  status: ScreenResultStatus;
+
+  /**
+   * populated when status == INSUFFICIENT_DATA
+   *
+   * @generated from field: xstockstrat.analysis.v1.CoverageGap gap = 6;
+   */
+  gap?: CoverageGap | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.ScreenResult.
+ * Use `create(ScreenResultSchema)` to create a new message.
+ */
+export const ScreenResultSchema: GenMessage<ScreenResult> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 19);
+
+/**
+ * @generated from message xstockstrat.analysis.v1.ScreenSymbolsRequest
+ */
+export type ScreenSymbolsRequest = Message<"xstockstrat.analysis.v1.ScreenSymbolsRequest"> & {
+  /**
+   * @generated from field: repeated string symbols = 1;
+   */
+  symbols: string[];
+
+  /**
+   * @generated from field: repeated xstockstrat.analysis.v1.ScreenCriterion criteria = 2;
+   */
+  criteria: ScreenCriterion[];
+
+  /**
+   * Blend params — same names the extracted scoring module reads (kept consistent with backtest).
+   *
+   * @generated from field: repeated string signal_sources = 3;
+   */
+  signalSources: string[];
+
+  /**
+   * @generated from field: double signal_weight = 4;
+   */
+  signalWeight: number;
+
+  /**
+   * @generated from field: double technical_weight = 5;
+   */
+  technicalWeight: number;
+
+  /**
+   * @generated from field: double min_conviction = 6;
+   */
+  minConviction: number;
+
+  /**
+   * @generated from field: int32 rank_limit = 7;
+   */
+  rankLimit: number;
+
+  /**
+   * Reserved/optional — historical as-of is deferred (OQ-060-e); latest bar is the default.
+   *
+   * @generated from field: xstockstrat.common.v1.TimeRange evaluation_window = 8;
+   */
+  evaluationWindow?: TimeRange | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.ScreenSymbolsRequest.
+ * Use `create(ScreenSymbolsRequestSchema)` to create a new message.
+ */
+export const ScreenSymbolsRequestSchema: GenMessage<ScreenSymbolsRequest> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 20);
+
+/**
+ * @generated from message xstockstrat.analysis.v1.ScreenSymbolsResponse
+ */
+export type ScreenSymbolsResponse = Message<"xstockstrat.analysis.v1.ScreenSymbolsResponse"> & {
+  /**
+   * @generated from field: repeated xstockstrat.analysis.v1.ScreenResult results = 1;
+   */
+  results: ScreenResult[];
+
+  /**
+   * @generated from field: repeated xstockstrat.analysis.v1.CoverageGap coverage_gaps = 2;
+   */
+  coverageGaps: CoverageGap[];
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.ScreenSymbolsResponse.
+ * Use `create(ScreenSymbolsResponseSchema)` to create a new message.
+ */
+export const ScreenSymbolsResponseSchema: GenMessage<ScreenSymbolsResponse> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 21);
+
+/**
+ * @generated from message xstockstrat.analysis.v1.RunFundamentalsScanRequest
+ */
+export type RunFundamentalsScanRequest = Message<"xstockstrat.analysis.v1.RunFundamentalsScanRequest"> & {
+  /**
+   * ignore the day's idempotency guard / re-emit
+   *
+   * @generated from field: bool force = 1;
+   */
+  force: boolean;
+
+  /**
+   * score + report but do not emit or spend cache calls
+   *
+   * @generated from field: bool dry_run = 2;
+   */
+  dryRun: boolean;
+
+  /**
+   * optional explicit override of the computed universe
+   *
+   * @generated from field: repeated string symbols = 3;
+   */
+  symbols: string[];
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.RunFundamentalsScanRequest.
+ * Use `create(RunFundamentalsScanRequestSchema)` to create a new message.
+ */
+export const RunFundamentalsScanRequestSchema: GenMessage<RunFundamentalsScanRequest> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 22);
+
+/**
+ * @generated from message xstockstrat.analysis.v1.FundamentalsScanSummary
+ */
+export type FundamentalsScanSummary = Message<"xstockstrat.analysis.v1.FundamentalsScanSummary"> & {
+  /**
+   * @generated from field: string run_id = 1;
+   */
+  runId: string;
+
+  /**
+   * @generated from field: int32 symbols_processed = 2;
+   */
+  symbolsProcessed: number;
+
+  /**
+   * @generated from field: int32 signals_emitted = 3;
+   */
+  signalsEmitted: number;
+
+  /**
+   * @generated from field: int32 calls_spent = 4;
+   */
+  callsSpent: number;
+
+  /**
+   * @generated from field: int32 deferred_count = 5;
+   */
+  deferredCount: number;
+
+  /**
+   * "completed" | "budget_deferred" | "failed"
+   *
+   * @generated from field: string status = 6;
+   */
+  status: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp finished_at = 7;
+   */
+  finishedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.analysis.v1.FundamentalsScanSummary.
+ * Use `create(FundamentalsScanSummarySchema)` to create a new message.
+ */
+export const FundamentalsScanSummarySchema: GenMessage<FundamentalsScanSummary> = /*@__PURE__*/
+  messageDesc(file_analysis_v1_analysis, 23);
+
+/**
  * @generated from enum xstockstrat.analysis.v1.BacktestStatus
  */
 export enum BacktestStatus {
@@ -701,6 +974,123 @@ export const StrategyOperationSchema: GenEnum<StrategyOperation> = /*@__PURE__*/
   enumDesc(file_analysis_v1_analysis, 2);
 
 /**
+ * Comparator for a screen criterion's threshold test (closed set → enum).
+ *
+ * @generated from enum xstockstrat.analysis.v1.Comparator
+ */
+export enum Comparator {
+  /**
+   * @generated from enum value: COMPARATOR_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: COMPARATOR_LT = 1;
+   */
+  LT = 1,
+
+  /**
+   * @generated from enum value: COMPARATOR_LTE = 2;
+   */
+  LTE = 2,
+
+  /**
+   * @generated from enum value: COMPARATOR_GT = 3;
+   */
+  GT = 3,
+
+  /**
+   * @generated from enum value: COMPARATOR_GTE = 4;
+   */
+  GTE = 4,
+
+  /**
+   * threshold <= x <= threshold_high
+   *
+   * @generated from enum value: COMPARATOR_BETWEEN = 5;
+   */
+  BETWEEN = 5,
+}
+
+/**
+ * Describes the enum xstockstrat.analysis.v1.Comparator.
+ */
+export const ComparatorSchema: GenEnum<Comparator> = /*@__PURE__*/
+  enumDesc(file_analysis_v1_analysis, 3);
+
+/**
+ * What a screen criterion evaluates.
+ *
+ * @generated from enum xstockstrat.analysis.v1.ScreenKind
+ */
+export enum ScreenKind {
+  /**
+   * @generated from enum value: SCREEN_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * a fundamental metric (metric_name)
+   *
+   * @generated from enum value: SCREEN_KIND_FUNDAMENTAL = 1;
+   */
+  FUNDAMENTAL = 1,
+
+  /**
+   * a custom formula (component)
+   *
+   * @generated from enum value: SCREEN_KIND_TECHNICAL_FORMULA = 2;
+   */
+  TECHNICAL_FORMULA = 2,
+
+  /**
+   * a built-in indicator (component)
+   *
+   * @generated from enum value: SCREEN_KIND_TECHNICAL_INDICATOR = 3;
+   */
+  TECHNICAL_INDICATOR = 3,
+
+  /**
+   * source-weighted signal blend
+   *
+   * @generated from enum value: SCREEN_KIND_SIGNAL = 4;
+   */
+  SIGNAL = 4,
+}
+
+/**
+ * Describes the enum xstockstrat.analysis.v1.ScreenKind.
+ */
+export const ScreenKindSchema: GenEnum<ScreenKind> = /*@__PURE__*/
+  enumDesc(file_analysis_v1_analysis, 4);
+
+/**
+ * @generated from enum xstockstrat.analysis.v1.ScreenResultStatus
+ */
+export enum ScreenResultStatus {
+  /**
+   * @generated from enum value: SCREEN_RESULT_STATUS_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: SCREEN_RESULT_STATUS_OK = 1;
+   */
+  OK = 1,
+
+  /**
+   * @generated from enum value: SCREEN_RESULT_STATUS_INSUFFICIENT_DATA = 2;
+   */
+  INSUFFICIENT_DATA = 2,
+}
+
+/**
+ * Describes the enum xstockstrat.analysis.v1.ScreenResultStatus.
+ */
+export const ScreenResultStatusSchema: GenEnum<ScreenResultStatus> = /*@__PURE__*/
+  enumDesc(file_analysis_v1_analysis, 5);
+
+/**
  * @generated from service xstockstrat.analysis.v1.AnalysisService
  */
 export const AnalysisService: GenService<{
@@ -767,6 +1157,26 @@ export const AnalysisService: GenService<{
     methodKind: "unary";
     input: typeof SetStrategyLiveRequestSchema;
     output: typeof SetStrategyLiveResponseSchema;
+  },
+  /**
+   * Screen a symbol universe against weighted criteria (feature 060)
+   *
+   * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ScreenSymbols
+   */
+  screenSymbols: {
+    methodKind: "unary";
+    input: typeof ScreenSymbolsRequestSchema;
+    output: typeof ScreenSymbolsResponseSchema;
+  },
+  /**
+   * Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+   *
+   * @generated from rpc xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan
+   */
+  runFundamentalsScan: {
+    methodKind: "unary";
+    input: typeof RunFundamentalsScanRequestSchema;
+    output: typeof FundamentalsScanSummarySchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_analysis_v1_analysis, 0);

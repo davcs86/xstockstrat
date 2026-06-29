@@ -127,6 +127,66 @@ class TestManageFormulaClient:
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.INDICATORS_ENDPOINT
         assert result == {"formula_id": "f-9"}
 
+
+# ── screen_symbols client (feature 061) ────────────────────────────────────
+
+
+class TestScreenSymbolsClient:
+    @pytest.mark.asyncio
+    async def test_screen_symbols_sends_grpc_call(self):
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        resp = analysis_pb2.ScreenSymbolsResponse(
+            results=[
+                analysis_pb2.ScreenResult(
+                    symbol="NVDA",
+                    score=0.91,
+                    criterion_scores={"pe": 1.0},
+                    passed=True,
+                    status=analysis_pb2.SCREEN_RESULT_STATUS_OK,
+                )
+            ],
+            coverage_gaps=[analysis_pb2.CoverageGap(symbol="TSLA")],
+        )
+        mock_stub = MagicMock()
+        mock_stub.ScreenSymbols = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.screen_symbols(
+                    symbols=["NVDA"],
+                    criteria=[
+                        {
+                            "ref_name": "pe",
+                            "kind": "SCREEN_KIND_FUNDAMENTAL",
+                            "metric_name": "pe_ratio",
+                            "op": "COMPARATOR_LTE",
+                            "threshold": 25.0,
+                            "hard_filter": True,
+                        }
+                    ],
+                )
+        # Channel opened against the (test-patched) analysis endpoint symbol.
+        assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
+        # Read-only: carries x-mcp-secret, never an admin x-access-scope.
+        meta = mock_stub.ScreenSymbols.call_args.kwargs["metadata"]
+        assert ("x-mcp-secret", "test-secret") in meta
+        assert not any(k == "x-access-scope" for k, _ in meta)
+        # Response is shaped into a JSON-serializable dict.
+        assert result["results"][0] == {
+            "symbol": "NVDA",
+            "score": pytest.approx(0.91),
+            "criterion_scores": {"pe": 1.0},
+            "passed": True,
+            "status": "SCREEN_RESULT_STATUS_OK",
+        }
+        assert result["coverage_gaps"] == [{"symbol": "TSLA"}]
+        # Enum-name criterion mapping reached the request unmodified.
+        sent_req = mock_stub.ScreenSymbols.call_args[0][0]
+        assert sent_req.criteria[0].kind == analysis_pb2.SCREEN_KIND_FUNDAMENTAL
+        assert sent_req.criteria[0].op == analysis_pb2.COMPARATOR_LTE
+        assert sent_req.criteria[0].hard_filter is True
+
     @pytest.mark.asyncio
     async def test_register_maps_parameter_definitions(self):
         from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # type: ignore
