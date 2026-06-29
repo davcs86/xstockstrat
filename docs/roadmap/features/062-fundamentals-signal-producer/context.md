@@ -83,3 +83,36 @@
   register its source until resolved.
 - CONFIG-MIGRATION RENUMBER (user-approved): config seed migration renumbered 006 → `008_analysis_fundsignal_keys` (058=006,
   059=007, 062=008). Must merge AFTER 058's 006 and 059's 007 (golang-migrate numeric order). Recorded in merge-order.md.
+
+## Session 2026-06-27 — resolve ingest source_type open item (user decision)
+
+- DECISION (user): resolve the biggest open item — registering a fundamentals signal source — with an
+  ADDITIVE ingest migration adding a new `source_type='derived'` (generic bucket for internally-produced,
+  non-extraction signals), NOT a reused email/website value and NOT a literal `fundamentals` value
+  (`derived` is reusable for future synthetic producers: momentum/sentiment/etc.).
+- Added **Step 13** to implementation-spec.md (now 13 steps): ingest migration
+  `006_signal_source_type_derived.{up,down}.sql` — DROP + re-ADD the `signal_sources_source_type_check`
+  CHECK with `derived` appended. Purely additive (no value removed); down deletes derived rows first then
+  restores the 5-value CHECK. `006` is next-free ingest migration (trunk at 005).
+- Why low-risk (verified in code): `IngestSignal` checks only slug+active, never source_type
+  (servicer.py:639); `validate_config_json` returns None/pass for any non-email/website type
+  (signal_sources.py:103); no background worker runs extractors over the registry; the registration row
+  reuses the existing `app/extractors/noop.py` no-op extractor. So no ingest app-code change is needed.
+  The CHECK was already behind the code (validation references mediated_* types absent from the CHECK),
+  so extending the allow-list is routine, not a loosening of validation.
+- Step 8 updated: `_ensure_source_registered()` now registers source_type='derived',
+  extractor_module='app.extractors.noop'; depends on Step 13 applying first. Deviation Log entry marked
+  RESOLVED. Cross-service migration → needs ingest-service-owner + DBA sign-off at execute.
+- NOTE: the migration SQL is DRAFTED IN THE SPEC (Step 13), not committed as live ingest files — keeps this
+  PR spec-only; /sdd-execute writes the files verbatim.
+
+## Session 2026-06-27 — TODO: make validate_config_json fail-closed (user-flagged)
+
+- User flagged that relying on validate_config_json's fail-open default (returns None/pass for any
+  unrecognized source_type, signal_sources.py:103) is wrong — it should be FAIL-CLOSED.
+- Added a tracked TODO to Step 13 (Instruction 4) + a Deviation Log entry: convert validate_config_json to
+  explicitly allow-list known source_types (incl. `derived`) and return an error for unknown ones; the
+  allow-list must be a superset of the DB CHECK so no CHECK-valid type is wrongly rejected. Add a unit test
+  for the unknown-type rejection. Land with Step 13 or file as a follow-up — do not leave `derived`
+  depending on the permissive fall-through.
+- Reconciled the Step 8 evidence note (previously "no validation change needed") to point at this hardening.

@@ -14,13 +14,14 @@
 | 2026-06-26 | `idea` → `draft` | /sdd-story | Product spec generated (feature 5 of 6 in the screener initiative) |
 | 2026-06-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (warnings fixed: pinned analysis migrations 003/004 + up/down pairs; pgxpool→asyncpg wording. Impl-spec re-checks: analysis.proto field nums w/ 060, analysis.fundsignal.* namespace w/ 063) |
 | 2026-06-27 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
+| 2026-06-27 | `implementation-ready` | /sdd-review (impl-spec) | Resolved the ingest source_type open item (user decision): added Step 13 — additive ingest migration `006_signal_source_type_derived` adds a `derived` source_type; producer registers with `source_type='derived'` + `app.extractors.noop`. Now 13 steps. Config migration renumbered 006→008 (config-006 collision; see merge-order.md) |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 12 numbered steps with codebase evidence
+- [Implementation Spec](implementation-spec.md) — 13 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
