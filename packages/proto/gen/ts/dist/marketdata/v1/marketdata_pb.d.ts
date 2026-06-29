@@ -444,6 +444,150 @@ export type DeleteBackfilledDataResponse = Message<"xstockstrat.marketdata.v1.De
  */
 export declare const DeleteBackfilledDataResponseSchema: GenMessage<DeleteBackfilledDataResponse>;
 /**
+ * Fundamentals (feature 059) — cached fundamental metrics for a symbol, FMP-backed.
+ *
+ * @generated from message xstockstrat.marketdata.v1.Fundamentals
+ */
+export type Fundamentals = Message<"xstockstrat.marketdata.v1.Fundamentals"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: double market_cap = 2;
+     */
+    marketCap: number;
+    /**
+     * @generated from field: double pe_ratio = 3;
+     */
+    peRatio: number;
+    /**
+     * @generated from field: double pb_ratio = 4;
+     */
+    pbRatio: number;
+    /**
+     * @generated from field: double dividend_yield = 5;
+     */
+    dividendYield: number;
+    /**
+     * @generated from field: double eps = 6;
+     */
+    eps: number;
+    /**
+     * @generated from field: double beta = 7;
+     */
+    beta: number;
+    /**
+     * @generated from field: double roe = 8;
+     */
+    roe: number;
+    /**
+     * @generated from field: double debt_to_equity = 9;
+     */
+    debtToEquity: number;
+    /**
+     * @generated from field: double price = 10;
+     */
+    price: number;
+    /**
+     * @generated from field: double year_high = 11;
+     */
+    yearHigh: number;
+    /**
+     * @generated from field: double year_low = 12;
+     */
+    yearLow: number;
+    /**
+     * FMP's open-ended metric set (keys are FMP field names)
+     *
+     * @generated from field: map<string, double> extra_metrics = 13;
+     */
+    extraMetrics: {
+        [key: string]: number;
+    };
+    /**
+     * @generated from field: google.protobuf.Timestamp as_of = 14;
+     */
+    asOf?: Timestamp | undefined;
+    /**
+     * @generated from field: string currency = 15;
+     */
+    currency: string;
+    /**
+     * "fmp"
+     *
+     * @generated from field: string source = 16;
+     */
+    source: string;
+    /**
+     * true when served past TTL under quota exhaustion (FR-4)
+     *
+     * @generated from field: bool stale = 17;
+     */
+    stale: boolean;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.Fundamentals.
+ * Use `create(FundamentalsSchema)` to create a new message.
+ */
+export declare const FundamentalsSchema: GenMessage<Fundamentals>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetFundamentalsRequest
+ */
+export type GetFundamentalsRequest = Message<"xstockstrat.marketdata.v1.GetFundamentalsRequest"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetFundamentalsRequest.
+ * Use `create(GetFundamentalsRequestSchema)` to create a new message.
+ */
+export declare const GetFundamentalsRequestSchema: GenMessage<GetFundamentalsRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetFundamentalsResponse
+ */
+export type GetFundamentalsResponse = Message<"xstockstrat.marketdata.v1.GetFundamentalsResponse"> & {
+    /**
+     * @generated from field: xstockstrat.marketdata.v1.Fundamentals fundamentals = 1;
+     */
+    fundamentals?: Fundamentals | undefined;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetFundamentalsResponse.
+ * Use `create(GetFundamentalsResponseSchema)` to create a new message.
+ */
+export declare const GetFundamentalsResponseSchema: GenMessage<GetFundamentalsResponse>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetFundamentalsMultiRequest
+ */
+export type GetFundamentalsMultiRequest = Message<"xstockstrat.marketdata.v1.GetFundamentalsMultiRequest"> & {
+    /**
+     * @generated from field: repeated string symbols = 1;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetFundamentalsMultiRequest.
+ * Use `create(GetFundamentalsMultiRequestSchema)` to create a new message.
+ */
+export declare const GetFundamentalsMultiRequestSchema: GenMessage<GetFundamentalsMultiRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetFundamentalsMultiResponse
+ */
+export type GetFundamentalsMultiResponse = Message<"xstockstrat.marketdata.v1.GetFundamentalsMultiResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.marketdata.v1.Fundamentals fundamentals = 1;
+     */
+    fundamentals: Fundamentals[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetFundamentalsMultiResponse.
+ * Use `create(GetFundamentalsMultiResponseSchema)` to create a new message.
+ */
+export declare const GetFundamentalsMultiResponseSchema: GenMessage<GetFundamentalsMultiResponse>;
+/**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
  *
@@ -529,5 +673,25 @@ export declare const MarketDataService: GenService<{
         methodKind: "unary";
         input: typeof ListAssetsRequestSchema;
         output: typeof ListAssetsResponseSchema;
+    };
+    /**
+     * Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache)
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetFundamentals
+     */
+    getFundamentals: {
+        methodKind: "unary";
+        input: typeof GetFundamentalsRequestSchema;
+        output: typeof GetFundamentalsResponseSchema;
+    };
+    /**
+     * Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetFundamentalsMulti
+     */
+    getFundamentalsMulti: {
+        methodKind: "unary";
+        input: typeof GetFundamentalsMultiRequestSchema;
+        output: typeof GetFundamentalsMultiResponseSchema;
     };
 }>;

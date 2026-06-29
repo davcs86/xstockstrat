@@ -1,6 +1,6 @@
 # Implementation Spec: fundamentals-data-source
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-27
 **Feature**: `docs/roadmap/features/059-fundamentals-data-source/feature.md`
 **Total Steps**: 11
@@ -36,7 +36,7 @@ adding a *separate* interface and a *separate* `internal/fmp/` package alongside
 
 ### Step 1 — proto: Add GetFundamentals / GetFundamentalsMulti RPCs + Fundamentals message
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/marketdata/v1/marketdata.proto` — modify
@@ -109,7 +109,7 @@ Both must pass (additive change → no breaking findings).
 
 ### Step 2 — proto-gen: Regenerate stubs (Go / Python / TS)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/marketdata/v1/` — modify (generated)
@@ -137,7 +137,7 @@ Exit code 0 (no diff after running) means stubs are fresh — matches the `proto
 
 ### Step 3 — migration: Create marketdata.fundamentals cache table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/migrations/002_fundamentals.up.sql` — create
@@ -191,7 +191,7 @@ ls services/xstockstrat-marketdata/migrations/ | sort   # confirm 002_fundamenta
 
 ### Step 4 — test: Verify 002 migration up/down applies cleanly
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - (no new files — runs `scripts/db-migrate.sh` against the marketdata schema)
@@ -218,7 +218,7 @@ Table present after `up`, absent after `down 1`, re-created on re-`up` — satis
 
 ### Step 5 — config: Seed the six marketdata.fmp.* config keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/007_marketdata_fmp.up.sql` — create
@@ -258,7 +258,7 @@ ls services/xstockstrat-config/migrations/ | sort   # confirm 007_marketdata_fmp
 
 ### Step 6 — service: FMP client behind a new FundamentalsSource interface
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/source/source.go` — modify (add `FundamentalsSource` interface only; do **not** touch `DataSourceClient`)
@@ -304,7 +304,7 @@ git diff services/xstockstrat-marketdata/internal/alpaca/   # must be empty — 
 
 ### Step 7 — service: Repository read-through cache + daily quota-count methods
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify
@@ -327,7 +327,7 @@ git diff services/xstockstrat-marketdata/internal/alpaca/   # must be empty — 
 
 ### Step 8 — service: GetFundamentals(Multi) RPC — cache → quota guard → FMP → alert
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -364,7 +364,7 @@ Confirm the new WARNING `EmitAlert` call passes the request `ctx` and the notify
 
 ### Step 9 — test: FMP client + repo + service RPC (mocked transport, quota, disabled gate)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go` — create
@@ -392,7 +392,7 @@ Confirm lint clean and total coverage ≥ 40%. (New mapping/quota logic in `inte
 
 ### Step 10 — test: Verify config 006 seed migration up/down + key serving
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - (no new files — exercises `007_marketdata_fmp.{up,down}.sql` + existing config test suite)
@@ -420,7 +420,7 @@ Confirm lint clean, coverage threshold passes, and the six `marketdata.fmp.*` ro
 
 ### Step 11 — docs: Document marketdata.fmp.* keys in marketdata CLAUDE.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify
@@ -446,4 +446,20 @@ Confirm all six keys appear in both the service CLAUDE.md config table and the r
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 5 — config seed `key` column uses the full dotted key
+The impl-spec describes the keys logically as `marketdata.fmp.enabled`, `secret.marketdata.fmp.api_key`,
+etc. and says namespace stays `marketdata`. During execution the config WatchConfig path was verified
+(`services/xstockstrat-config/src/grpc/configServiceImpl.ts`): the streamed snapshot's value map is
+keyed by the raw `key` column with **no namespace prefix added**, and the marketdata Go watcher does a
+direct `snapshot[key]` lookup using the full dotted string the service reads
+(`cfgWatcher.GetBool("marketdata.fmp.enabled")`, `GetString("secret.marketdata.fmp.api_key")`). To make
+the runtime enable + API-key reads actually resolve (not silently fall back to code defaults), the seed
+`key` column is set to the full dotted key for every row, with `namespace='marketdata'` throughout
+(including the secret). The down migration deletes by those full keys.
+
+### Step 8 — fundamentals config/repo behind interfaces (testability)
+The service struct gained two small interfaces (`fundamentalsConfig`, `fundamentalsRepo`) and matching
+fields wired to the concrete `*config.Watcher` and `*repository.MarketDataRepo` in the constructor. This
+is additive (the existing fields and Alpaca/OHLCV paths are unchanged) and lets Step 9's unit tests
+inject chosen caps/cache state without a live config stream or DB — the `*config.Watcher` snapshot is
+unexported and cannot be populated from the `service` test package otherwise.
