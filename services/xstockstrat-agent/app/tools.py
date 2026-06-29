@@ -1,13 +1,14 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Ten tools:
+Eleven tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
   ingest_signal        — ingests a trading signal via gRPC IngestSignal
   emit_alert           — emits an alert via gRPC EmitAlert
   run_backtest         — triggers a backtest via gRPC RunBacktest
+  screen_symbols       — scans a symbol universe via gRPC ScreenSymbols (read-only)
   manage_strategy     — registers/updates/deactivates stored strategies in analysis
   manage_formula      — registers/updates/deletes custom formulas in indicators
   manage_signal_source — registers/updates/deactivates signal sources in ingest
@@ -241,6 +242,33 @@ def register_tools(server: FastMCP) -> None:
             strategy_id=strategy_id,
             symbols=symbols,
             initial_capital=initial_capital,
+        )
+
+    @server.tool()
+    async def screen_symbols(
+        symbols: list[str],
+        criteria: list[dict] | None = None,
+        signal_sources: list[str] | None = None,
+        signal_weight: float = 0.0,
+        technical_weight: float = 1.0,
+        min_conviction: float = 0.0,
+        rank_limit: int = 0,
+    ) -> dict:
+        """Scan a universe of symbols via xstockstrat-analysis and return ranked candidates.
+        symbols: explicit ticker list to screen e.g. ['NVDA', 'AAPL'] (no watchlist resolution).
+        criteria: list of criterion dicts, each with keys: ref_name, kind
+            (e.g. 'SCREEN_KIND_FUNDAMENTAL'|'SCREEN_KIND_TECHNICAL_FORMULA'|'SCREEN_KIND_SIGNAL'),
+            metric_name, op (e.g. 'COMPARATOR_GTE'), threshold, threshold_high, weight, hard_filter.
+        signal_sources/signal_weight/technical_weight/min_conviction: optional signal-blend params.
+        rank_limit: cap on returned results (0 = analysis default). Read-only, no admin scope."""
+        return await client.screen_symbols(
+            symbols=symbols,
+            criteria=criteria,
+            signal_sources=signal_sources,
+            signal_weight=signal_weight,
+            technical_weight=technical_weight,
+            min_conviction=min_conviction,
+            rank_limit=rank_limit,
         )
 
     @server.tool()

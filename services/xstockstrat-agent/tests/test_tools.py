@@ -247,6 +247,38 @@ async def test_run_backtest_calls_grpc():
         )
 
 
+# ── screen_symbols (feature 061) ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_screen_symbols_calls_client():
+    """screen_symbols delegates to client.screen_symbols with the forwarded kwargs."""
+    mock_screen = AsyncMock(
+        return_value={
+            "results": [{"symbol": "NVDA", "score": 0.9, "passed": True}],
+            "coverage_gaps": [],
+        }
+    )
+    criteria = [{"ref_name": "pe", "kind": "SCREEN_KIND_FUNDAMENTAL", "op": "COMPARATOR_LTE"}]
+    with patch.object(client, "screen_symbols", mock_screen):
+        server = _make_server()
+        result = await _tool_fn(server, "screen_symbols")(
+            symbols=["NVDA", "AAPL"],
+            criteria=criteria,
+            rank_limit=5,
+        )
+        assert result["results"][0]["symbol"] == "NVDA"
+        mock_screen.assert_called_once_with(
+            symbols=["NVDA", "AAPL"],
+            criteria=criteria,
+            signal_sources=None,
+            signal_weight=0.0,
+            technical_weight=1.0,
+            min_conviction=0.0,
+            rank_limit=5,
+        )
+
+
 # ── extractor_tool mapping ────────────────────────────────────────────────
 
 

@@ -1,6 +1,6 @@
 # Implementation Spec: screener-agent-tool
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-06-27
 **Feature**: `docs/roadmap/features/061-screener-agent-tool/feature.md`
 **Total Steps**: 4
@@ -43,7 +43,7 @@ already recorded in `docs/roadmap/features/merge-order.md`.
 
 ### Step 1 — service: Add `client.screen_symbols` gRPC wrapper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -167,7 +167,7 @@ already recorded in `docs/roadmap/features/merge-order.md`.
 
 ### Step 2 — service: Add `screen_symbols` FastMCP tool
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -234,7 +234,7 @@ already recorded in `docs/roadmap/features/merge-order.md`.
 
 ### Step 3 — test: Unit tests for `screen_symbols` tool + client wrapper (covers Steps 1 & 2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify (tool-level delegation test)
@@ -287,7 +287,7 @@ already recorded in `docs/roadmap/features/merge-order.md`.
 
 ### Step 4 — docs: Update tool count and tool enumeration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/` + `services/xstockstrat-agent/CLAUDE.md`
 **Files**:
 - `services/xstockstrat-agent/CLAUDE.md` — modify
@@ -330,3 +330,18 @@ already recorded in `docs/roadmap/features/merge-order.md`.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **EXECUTED 2026-06-29** — All 4 steps implemented on `feature/screener-agent-tool`, branched from
+  `origin/feature/screener-engine` (060) so the `ScreenSymbols`/`ScreenResult`/`CoverageGap` stubs are
+  present. No deviations from the spec.
+  - Step 1 advisory #2 (re-verify field names): confirmed against 060's regenerated proto —
+    `CoverageGap.symbol` (field 1), `ScreenResult{symbol, score, criterion_scores, passed, status, gap}`,
+    `ScreenResultStatus{...OK, ...INSUFFICIENT_DATA}`. Response shaping used as specified.
+  - Step 3 advisory #1: client test asserts the channel opened against the `client.ANALYSIS_ENDPOINT`
+    **symbol** (conftest patches it), not the literal string; asserts `x-mcp-secret` present and no
+    `x-access-scope`; also asserts enum-name criterion mapping (`SCREEN_KIND_FUNDAMENTAL`,
+    `COMPARATOR_LTE`) reaches the request.
+  - Step 3 advisory #3: agent `client.py`/`tools.py` anchors re-verified on the merged base (run_backtest
+    at `client.py:138`, `tools.py:231`; header "Ten tools:" at `tools.py:4`) — matched, no drift.
+  - Verification: `ruff check`/`ruff format --check` clean; `pytest --cov=app --cov-fail-under=40` →
+    49 passed, 60% coverage; 11 `@server.tool()` decorators; no stale tool counts remain.

@@ -164,6 +164,76 @@ async def run_backtest(
     }
 
 
+async def screen_symbols(
+    symbols: list[str],
+    criteria: list[dict[str, Any]] | None = None,
+    signal_sources: list[str] | None = None,
+    signal_weight: float = 0.0,
+    technical_weight: float = 1.0,
+    min_conviction: float = 0.0,
+    rank_limit: int = 0,
+) -> dict[str, Any]:
+    """Scan an explicit symbol universe via gRPC ScreenSymbols (feature 061, read-only).
+
+    ``criteria`` is a list of plain dicts (JSON-shaped) mapped into ``ScreenCriterion`` protos;
+    ``kind`` / ``op`` accept either the enum name (e.g. ``"SCREEN_KIND_FUNDAMENTAL"``,
+    ``"COMPARATOR_GTE"``) or a numeric value. The ``component`` field (for technical kinds) is
+    not mapped from string input in this thin wrapper. Defaults of ``0`` / ``0.0`` let the analysis
+    side apply its own config-driven defaults (e.g. ``analysis.screener.default_rank_limit``).
+    Carries only ``x-mcp-secret`` — no admin ``x-access-scope``.
+    """
+    from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
+
+    req_criteria = [
+        analysis_pb2.ScreenCriterion(
+            ref_name=c.get("ref_name", ""),
+            kind=(
+                analysis_pb2.ScreenKind.Value(c["kind"])
+                if isinstance(c.get("kind"), str)
+                else c.get("kind", 0)
+            ),
+            metric_name=c.get("metric_name", ""),
+            op=(
+                analysis_pb2.Comparator.Value(c["op"])
+                if isinstance(c.get("op"), str)
+                else c.get("op", 0)
+            ),
+            threshold=c.get("threshold", 0.0),
+            threshold_high=c.get("threshold_high", 0.0),
+            weight=c.get("weight", 0.0),
+            hard_filter=c.get("hard_filter", False),
+        )
+        for c in (criteria or [])
+    ]
+    async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
+        stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
+        resp = await stub.ScreenSymbols(
+            analysis_pb2.ScreenSymbolsRequest(
+                symbols=list(symbols),
+                criteria=req_criteria,
+                signal_sources=list(signal_sources or []),
+                signal_weight=signal_weight,
+                technical_weight=technical_weight,
+                min_conviction=min_conviction,
+                rank_limit=rank_limit,
+            ),
+            metadata=_metadata(),
+        )
+    return {
+        "results": [
+            {
+                "symbol": r.symbol,
+                "score": r.score,
+                "criterion_scores": dict(r.criterion_scores),
+                "passed": r.passed,
+                "status": analysis_pb2.ScreenResultStatus.Name(r.status),
+            }
+            for r in resp.results
+        ],
+        "coverage_gaps": [{"symbol": g.symbol} for g in resp.coverage_gaps],
+    }
+
+
 async def manage_strategy(
     operation: str,
     definition: dict[str, Any],

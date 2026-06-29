@@ -66,3 +66,27 @@
   "xstockstrat-analysis:50056" (conftest patches it to analysis-test:50056). (2) Re-verify CoverageGap/ScreenResult field names
   against 060's regenerated analysis_pb2 before writing. (3) 058-formula-parameters (launched) edits the same agent files —
   re-verify line anchors against merged trunk before writing.
+
+## Session 2026-06-29 — sdd-execute (all 4 steps)
+
+Executed on `feature/screener-agent-tool`, branched from `origin/feature/screener-engine` (060) so the
+`ScreenSymbols` stubs exist. PR targets the parent `feature/screener-engine`.
+
+- **Step 1 (client)**: added `async def screen_symbols(...)` to `app/client.py` after `run_backtest`,
+  mirroring it exactly — lazy proto import, per-call `grpc.aio.insecure_channel(ANALYSIS_ENDPOINT)`,
+  `AnalysisServiceStub.ScreenSymbols`, `metadata=_metadata()` (x-mcp-secret only, **no** x-access-scope).
+  Maps criterion dicts → `ScreenCriterion` (enum-name or numeric `kind`/`op`); shapes the response into a
+  flat JSON dict (`results[].{symbol,score,criterion_scores,passed,status}` + `coverage_gaps[].symbol`).
+  Re-verified 060 field names against the regenerated proto (CoverageGap.symbol, ScreenResult fields,
+  ScreenResultStatus enum) — all matched.
+- **Step 2 (tool)**: added the `@server.tool() screen_symbols` wrapper in `app/tools.py` delegating to the
+  client; bumped the module header "Ten tools:" → "Eleven tools:" and added the enumeration line.
+- **Step 3 (tests)**: `test_tools.py::test_screen_symbols_calls_client` (delegation + forwarded kwargs);
+  `test_client.py::TestScreenSymbolsClient::test_screen_symbols_sends_grpc_call` (channel opened against
+  `client.ANALYSIS_ENDPOINT` symbol, x-mcp-secret present + no x-access-scope, response shaping,
+  enum-name criterion mapping). 49 agent tests pass, 60% cov.
+- **Step 4 (docs)**: agent CLAUDE.md (ten→eleven + table row), `docs/runbooks/mcp-tools.md` (intro
+  nine→eleven + full `screen_symbols` subsection), `docs/runbooks/CLAUDE.md` index line. No stale counts
+  remain; 11 `@server.tool()` decorators.
+
+No proto/config/DB/migration changes — pure runtime consumer of 060's `ScreenSymbols`. No deviations.
