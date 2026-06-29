@@ -13,8 +13,9 @@
 -- resolve. `namespace` stays `marketdata` for every row (the marketdata watcher
 -- subscribes to that namespace), including the secret key.
 --
--- secret.marketdata.fmp.api_key is the first seeded secret: is_secret=TRUE and the value
--- is a secret reference, never a real key.
+-- The secret.marketdata.fmp.api_key row below is the platform's first row with the
+-- is_secret flag set. Its stored value is a placeholder reference (secret://...),
+-- resolved at deploy time, and is never a plaintext credential.
 
 INSERT INTO config.config_values
   (namespace, key, value_type, value_data, description, default_value, consuming_service, environment, trading_mode, is_secret)
