@@ -605,6 +605,26 @@ export interface ScreenSymbolsResponse {
   coverageGaps: CoverageGap[];
 }
 
+export interface RunFundamentalsScanRequest {
+  /** ignore the day's idempotency guard / re-emit */
+  force: boolean;
+  /** score + report but do not emit or spend cache calls */
+  dryRun: boolean;
+  /** optional explicit override of the computed universe */
+  symbols: string[];
+}
+
+export interface FundamentalsScanSummary {
+  runId: string;
+  symbolsProcessed: number;
+  signalsEmitted: number;
+  callsSpent: number;
+  deferredCount: number;
+  /** "completed" | "budget_deferred" | "failed" */
+  status: string;
+  finishedAt?: Date | undefined;
+}
+
 function createBaseRunBacktestRequest(): RunBacktestRequest {
   return {
     strategyId: "",
@@ -3809,6 +3829,290 @@ export const ScreenSymbolsResponse: MessageFns<ScreenSymbolsResponse> = {
   },
 };
 
+function createBaseRunFundamentalsScanRequest(): RunFundamentalsScanRequest {
+  return { force: false, dryRun: false, symbols: [] };
+}
+
+export const RunFundamentalsScanRequest: MessageFns<RunFundamentalsScanRequest> = {
+  encode(message: RunFundamentalsScanRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.force !== false) {
+      writer.uint32(8).bool(message.force);
+    }
+    if (message.dryRun !== false) {
+      writer.uint32(16).bool(message.dryRun);
+    }
+    for (const v of message.symbols) {
+      writer.uint32(26).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RunFundamentalsScanRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRunFundamentalsScanRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.force = reader.bool();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.dryRun = reader.bool();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RunFundamentalsScanRequest {
+    return {
+      force: isSet(object.force) ? globalThis.Boolean(object.force) : false,
+      dryRun: isSet(object.dryRun)
+        ? globalThis.Boolean(object.dryRun)
+        : isSet(object.dry_run)
+        ? globalThis.Boolean(object.dry_run)
+        : false,
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: RunFundamentalsScanRequest): unknown {
+    const obj: any = {};
+    if (message.force !== false) {
+      obj.force = message.force;
+    }
+    if (message.dryRun !== false) {
+      obj.dryRun = message.dryRun;
+    }
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RunFundamentalsScanRequest>, I>>(base?: I): RunFundamentalsScanRequest {
+    return RunFundamentalsScanRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RunFundamentalsScanRequest>, I>>(object: I): RunFundamentalsScanRequest {
+    const message = createBaseRunFundamentalsScanRequest();
+    message.force = object.force ?? false;
+    message.dryRun = object.dryRun ?? false;
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseFundamentalsScanSummary(): FundamentalsScanSummary {
+  return {
+    runId: "",
+    symbolsProcessed: 0,
+    signalsEmitted: 0,
+    callsSpent: 0,
+    deferredCount: 0,
+    status: "",
+    finishedAt: undefined,
+  };
+}
+
+export const FundamentalsScanSummary: MessageFns<FundamentalsScanSummary> = {
+  encode(message: FundamentalsScanSummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.runId !== "") {
+      writer.uint32(10).string(message.runId);
+    }
+    if (message.symbolsProcessed !== 0) {
+      writer.uint32(16).int32(message.symbolsProcessed);
+    }
+    if (message.signalsEmitted !== 0) {
+      writer.uint32(24).int32(message.signalsEmitted);
+    }
+    if (message.callsSpent !== 0) {
+      writer.uint32(32).int32(message.callsSpent);
+    }
+    if (message.deferredCount !== 0) {
+      writer.uint32(40).int32(message.deferredCount);
+    }
+    if (message.status !== "") {
+      writer.uint32(50).string(message.status);
+    }
+    if (message.finishedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.finishedAt), writer.uint32(58).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FundamentalsScanSummary {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFundamentalsScanSummary();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.runId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.symbolsProcessed = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.signalsEmitted = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.callsSpent = reader.int32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.deferredCount = reader.int32();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.status = reader.string();
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.finishedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FundamentalsScanSummary {
+    return {
+      runId: isSet(object.runId)
+        ? globalThis.String(object.runId)
+        : isSet(object.run_id)
+        ? globalThis.String(object.run_id)
+        : "",
+      symbolsProcessed: isSet(object.symbolsProcessed)
+        ? globalThis.Number(object.symbolsProcessed)
+        : isSet(object.symbols_processed)
+        ? globalThis.Number(object.symbols_processed)
+        : 0,
+      signalsEmitted: isSet(object.signalsEmitted)
+        ? globalThis.Number(object.signalsEmitted)
+        : isSet(object.signals_emitted)
+        ? globalThis.Number(object.signals_emitted)
+        : 0,
+      callsSpent: isSet(object.callsSpent)
+        ? globalThis.Number(object.callsSpent)
+        : isSet(object.calls_spent)
+        ? globalThis.Number(object.calls_spent)
+        : 0,
+      deferredCount: isSet(object.deferredCount)
+        ? globalThis.Number(object.deferredCount)
+        : isSet(object.deferred_count)
+        ? globalThis.Number(object.deferred_count)
+        : 0,
+      status: isSet(object.status) ? globalThis.String(object.status) : "",
+      finishedAt: isSet(object.finishedAt)
+        ? fromJsonTimestamp(object.finishedAt)
+        : isSet(object.finished_at)
+        ? fromJsonTimestamp(object.finished_at)
+        : undefined,
+    };
+  },
+
+  toJSON(message: FundamentalsScanSummary): unknown {
+    const obj: any = {};
+    if (message.runId !== "") {
+      obj.runId = message.runId;
+    }
+    if (message.symbolsProcessed !== 0) {
+      obj.symbolsProcessed = Math.round(message.symbolsProcessed);
+    }
+    if (message.signalsEmitted !== 0) {
+      obj.signalsEmitted = Math.round(message.signalsEmitted);
+    }
+    if (message.callsSpent !== 0) {
+      obj.callsSpent = Math.round(message.callsSpent);
+    }
+    if (message.deferredCount !== 0) {
+      obj.deferredCount = Math.round(message.deferredCount);
+    }
+    if (message.status !== "") {
+      obj.status = message.status;
+    }
+    if (message.finishedAt !== undefined) {
+      obj.finishedAt = message.finishedAt.toISOString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FundamentalsScanSummary>, I>>(base?: I): FundamentalsScanSummary {
+    return FundamentalsScanSummary.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FundamentalsScanSummary>, I>>(object: I): FundamentalsScanSummary {
+    const message = createBaseFundamentalsScanSummary();
+    message.runId = object.runId ?? "";
+    message.symbolsProcessed = object.symbolsProcessed ?? 0;
+    message.signalsEmitted = object.signalsEmitted ?? 0;
+    message.callsSpent = object.callsSpent ?? 0;
+    message.deferredCount = object.deferredCount ?? 0;
+    message.status = object.status ?? "";
+    message.finishedAt = object.finishedAt ?? undefined;
+    return message;
+  },
+};
+
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export const AnalysisServiceService = {
   runBacktest: {
@@ -3903,6 +4207,18 @@ export const AnalysisServiceService = {
       Buffer.from(ScreenSymbolsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ScreenSymbolsResponse => ScreenSymbolsResponse.decode(value),
   },
+  /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+  runFundamentalsScan: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RunFundamentalsScanRequest): Buffer =>
+      Buffer.from(RunFundamentalsScanRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RunFundamentalsScanRequest => RunFundamentalsScanRequest.decode(value),
+    responseSerialize: (value: FundamentalsScanSummary): Buffer =>
+      Buffer.from(FundamentalsScanSummary.encode(value).finish()),
+    responseDeserialize: (value: Buffer): FundamentalsScanSummary => FundamentalsScanSummary.decode(value),
+  },
 } as const;
 
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
@@ -3916,6 +4232,8 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
   setStrategyLive: handleUnaryCall<SetStrategyLiveRequest, SetStrategyLiveResponse>;
   /** Screen a symbol universe against weighted criteria (feature 060) */
   screenSymbols: handleUnaryCall<ScreenSymbolsRequest, ScreenSymbolsResponse>;
+  /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+  runFundamentalsScan: handleUnaryCall<RunFundamentalsScanRequest, FundamentalsScanSummary>;
 }
 
 export interface AnalysisServiceClient extends Client {
@@ -4054,6 +4372,22 @@ export interface AnalysisServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ScreenSymbolsResponse) => void,
+  ): ClientUnaryCall;
+  /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+  runFundamentalsScan(
+    request: RunFundamentalsScanRequest,
+    callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void,
+  ): ClientUnaryCall;
+  runFundamentalsScan(
+    request: RunFundamentalsScanRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void,
+  ): ClientUnaryCall;
+  runFundamentalsScan(
+    request: RunFundamentalsScanRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void,
   ): ClientUnaryCall;
 }
 

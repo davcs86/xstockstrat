@@ -254,6 +254,24 @@ export interface ScreenSymbolsResponse {
     results: ScreenResult[];
     coverageGaps: CoverageGap[];
 }
+export interface RunFundamentalsScanRequest {
+    /** ignore the day's idempotency guard / re-emit */
+    force: boolean;
+    /** score + report but do not emit or spend cache calls */
+    dryRun: boolean;
+    /** optional explicit override of the computed universe */
+    symbols: string[];
+}
+export interface FundamentalsScanSummary {
+    runId: string;
+    symbolsProcessed: number;
+    signalsEmitted: number;
+    callsSpent: number;
+    deferredCount: number;
+    /** "completed" | "budget_deferred" | "failed" */
+    status: string;
+    finishedAt?: Date | undefined;
+}
 export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
 export declare const CoverageGap: MessageFns<CoverageGap>;
 export declare const BacktestResult: MessageFns<BacktestResult>;
@@ -279,6 +297,8 @@ export declare const ScreenResult: MessageFns<ScreenResult>;
 export declare const ScreenResult_CriterionScoresEntry: MessageFns<ScreenResult_CriterionScoresEntry>;
 export declare const ScreenSymbolsRequest: MessageFns<ScreenSymbolsRequest>;
 export declare const ScreenSymbolsResponse: MessageFns<ScreenSymbolsResponse>;
+export declare const RunFundamentalsScanRequest: MessageFns<RunFundamentalsScanRequest>;
+export declare const FundamentalsScanSummary: MessageFns<FundamentalsScanSummary>;
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export declare const AnalysisServiceService: {
     readonly runBacktest: {
@@ -363,6 +383,16 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: ScreenSymbolsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => ScreenSymbolsResponse;
     };
+    /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+    readonly runFundamentalsScan: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: RunFundamentalsScanRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => RunFundamentalsScanRequest;
+        readonly responseSerialize: (value: FundamentalsScanSummary) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => FundamentalsScanSummary;
+    };
 };
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
     runBacktest: handleUnaryCall<RunBacktestRequest, BacktestResult>;
@@ -375,6 +405,8 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
     setStrategyLive: handleUnaryCall<SetStrategyLiveRequest, SetStrategyLiveResponse>;
     /** Screen a symbol universe against weighted criteria (feature 060) */
     screenSymbols: handleUnaryCall<ScreenSymbolsRequest, ScreenSymbolsResponse>;
+    /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+    runFundamentalsScan: handleUnaryCall<RunFundamentalsScanRequest, FundamentalsScanSummary>;
 }
 export interface AnalysisServiceClient extends Client {
     runBacktest(request: RunBacktestRequest, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
@@ -405,6 +437,10 @@ export interface AnalysisServiceClient extends Client {
     screenSymbols(request: ScreenSymbolsRequest, callback: (error: ServiceError | null, response: ScreenSymbolsResponse) => void): ClientUnaryCall;
     screenSymbols(request: ScreenSymbolsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ScreenSymbolsResponse) => void): ClientUnaryCall;
     screenSymbols(request: ScreenSymbolsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ScreenSymbolsResponse) => void): ClientUnaryCall;
+    /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+    runFundamentalsScan(request: RunFundamentalsScanRequest, callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void): ClientUnaryCall;
+    runFundamentalsScan(request: RunFundamentalsScanRequest, metadata: Metadata, callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void): ClientUnaryCall;
+    runFundamentalsScan(request: RunFundamentalsScanRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void): ClientUnaryCall;
 }
 export declare const AnalysisServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AnalysisServiceClient;

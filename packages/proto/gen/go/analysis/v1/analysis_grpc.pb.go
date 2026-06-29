@@ -28,6 +28,7 @@ const (
 	AnalysisService_ListStrategyDefinitions_FullMethodName = "/xstockstrat.analysis.v1.AnalysisService/ListStrategyDefinitions"
 	AnalysisService_SetStrategyLive_FullMethodName         = "/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive"
 	AnalysisService_ScreenSymbols_FullMethodName           = "/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols"
+	AnalysisService_RunFundamentalsScan_FullMethodName     = "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan"
 )
 
 // AnalysisServiceClient is the client API for AnalysisService service.
@@ -44,6 +45,8 @@ type AnalysisServiceClient interface {
 	SetStrategyLive(ctx context.Context, in *SetStrategyLiveRequest, opts ...grpc.CallOption) (*SetStrategyLiveResponse, error)
 	// Screen a symbol universe against weighted criteria (feature 060)
 	ScreenSymbols(ctx context.Context, in *ScreenSymbolsRequest, opts ...grpc.CallOption) (*ScreenSymbolsResponse, error)
+	// Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+	RunFundamentalsScan(ctx context.Context, in *RunFundamentalsScanRequest, opts ...grpc.CallOption) (*FundamentalsScanSummary, error)
 }
 
 type analysisServiceClient struct {
@@ -144,6 +147,16 @@ func (c *analysisServiceClient) ScreenSymbols(ctx context.Context, in *ScreenSym
 	return out, nil
 }
 
+func (c *analysisServiceClient) RunFundamentalsScan(ctx context.Context, in *RunFundamentalsScanRequest, opts ...grpc.CallOption) (*FundamentalsScanSummary, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FundamentalsScanSummary)
+	err := c.cc.Invoke(ctx, AnalysisService_RunFundamentalsScan_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AnalysisServiceServer is the server API for AnalysisService service.
 // All implementations should embed UnimplementedAnalysisServiceServer
 // for forward compatibility.
@@ -158,6 +171,8 @@ type AnalysisServiceServer interface {
 	SetStrategyLive(context.Context, *SetStrategyLiveRequest) (*SetStrategyLiveResponse, error)
 	// Screen a symbol universe against weighted criteria (feature 060)
 	ScreenSymbols(context.Context, *ScreenSymbolsRequest) (*ScreenSymbolsResponse, error)
+	// Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+	RunFundamentalsScan(context.Context, *RunFundamentalsScanRequest) (*FundamentalsScanSummary, error)
 }
 
 // UnimplementedAnalysisServiceServer should be embedded to have
@@ -193,6 +208,9 @@ func (UnimplementedAnalysisServiceServer) SetStrategyLive(context.Context, *SetS
 }
 func (UnimplementedAnalysisServiceServer) ScreenSymbols(context.Context, *ScreenSymbolsRequest) (*ScreenSymbolsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ScreenSymbols not implemented")
+}
+func (UnimplementedAnalysisServiceServer) RunFundamentalsScan(context.Context, *RunFundamentalsScanRequest) (*FundamentalsScanSummary, error) {
+	return nil, status.Error(codes.Unimplemented, "method RunFundamentalsScan not implemented")
 }
 func (UnimplementedAnalysisServiceServer) testEmbeddedByValue() {}
 
@@ -376,6 +394,24 @@ func _AnalysisService_ScreenSymbols_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AnalysisService_RunFundamentalsScan_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RunFundamentalsScanRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).RunFundamentalsScan(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_RunFundamentalsScan_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).RunFundamentalsScan(ctx, req.(*RunFundamentalsScanRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AnalysisService_ServiceDesc is the grpc.ServiceDesc for AnalysisService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -418,6 +454,10 @@ var AnalysisService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ScreenSymbols",
 			Handler:    _AnalysisService_ScreenSymbols_Handler,
+		},
+		{
+			MethodName: "RunFundamentalsScan",
+			Handler:    _AnalysisService_RunFundamentalsScan_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

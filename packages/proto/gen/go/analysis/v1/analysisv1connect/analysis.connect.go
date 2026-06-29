@@ -60,6 +60,9 @@ const (
 	// AnalysisServiceScreenSymbolsProcedure is the fully-qualified name of the AnalysisService's
 	// ScreenSymbols RPC.
 	AnalysisServiceScreenSymbolsProcedure = "/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols"
+	// AnalysisServiceRunFundamentalsScanProcedure is the fully-qualified name of the AnalysisService's
+	// RunFundamentalsScan RPC.
+	AnalysisServiceRunFundamentalsScanProcedure = "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan"
 )
 
 // AnalysisServiceClient is a client for the xstockstrat.analysis.v1.AnalysisService service.
@@ -74,6 +77,8 @@ type AnalysisServiceClient interface {
 	SetStrategyLive(context.Context, *connect.Request[v1.SetStrategyLiveRequest]) (*connect.Response[v1.SetStrategyLiveResponse], error)
 	// Screen a symbol universe against weighted criteria (feature 060)
 	ScreenSymbols(context.Context, *connect.Request[v1.ScreenSymbolsRequest]) (*connect.Response[v1.ScreenSymbolsResponse], error)
+	// Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+	RunFundamentalsScan(context.Context, *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error)
 }
 
 // NewAnalysisServiceClient constructs a client for the xstockstrat.analysis.v1.AnalysisService
@@ -141,6 +146,12 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(analysisServiceMethods.ByName("ScreenSymbols")),
 			connect.WithClientOptions(opts...),
 		),
+		runFundamentalsScan: connect.NewClient[v1.RunFundamentalsScanRequest, v1.FundamentalsScanSummary](
+			httpClient,
+			baseURL+AnalysisServiceRunFundamentalsScanProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("RunFundamentalsScan")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -155,6 +166,7 @@ type analysisServiceClient struct {
 	listStrategyDefinitions *connect.Client[v1.ListStrategyDefinitionsRequest, v1.ListStrategyDefinitionsResponse]
 	setStrategyLive         *connect.Client[v1.SetStrategyLiveRequest, v1.SetStrategyLiveResponse]
 	screenSymbols           *connect.Client[v1.ScreenSymbolsRequest, v1.ScreenSymbolsResponse]
+	runFundamentalsScan     *connect.Client[v1.RunFundamentalsScanRequest, v1.FundamentalsScanSummary]
 }
 
 // RunBacktest calls xstockstrat.analysis.v1.AnalysisService.RunBacktest.
@@ -202,6 +214,11 @@ func (c *analysisServiceClient) ScreenSymbols(ctx context.Context, req *connect.
 	return c.screenSymbols.CallUnary(ctx, req)
 }
 
+// RunFundamentalsScan calls xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan.
+func (c *analysisServiceClient) RunFundamentalsScan(ctx context.Context, req *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error) {
+	return c.runFundamentalsScan.CallUnary(ctx, req)
+}
+
 // AnalysisServiceHandler is an implementation of the xstockstrat.analysis.v1.AnalysisService
 // service.
 type AnalysisServiceHandler interface {
@@ -215,6 +232,8 @@ type AnalysisServiceHandler interface {
 	SetStrategyLive(context.Context, *connect.Request[v1.SetStrategyLiveRequest]) (*connect.Response[v1.SetStrategyLiveResponse], error)
 	// Screen a symbol universe against weighted criteria (feature 060)
 	ScreenSymbols(context.Context, *connect.Request[v1.ScreenSymbolsRequest]) (*connect.Response[v1.ScreenSymbolsResponse], error)
+	// Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+	RunFundamentalsScan(context.Context, *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error)
 }
 
 // NewAnalysisServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -278,6 +297,12 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		connect.WithSchema(analysisServiceMethods.ByName("ScreenSymbols")),
 		connect.WithHandlerOptions(opts...),
 	)
+	analysisServiceRunFundamentalsScanHandler := connect.NewUnaryHandler(
+		AnalysisServiceRunFundamentalsScanProcedure,
+		svc.RunFundamentalsScan,
+		connect.WithSchema(analysisServiceMethods.ByName("RunFundamentalsScan")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.analysis.v1.AnalysisService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AnalysisServiceRunBacktestProcedure:
@@ -298,6 +323,8 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 			analysisServiceSetStrategyLiveHandler.ServeHTTP(w, r)
 		case AnalysisServiceScreenSymbolsProcedure:
 			analysisServiceScreenSymbolsHandler.ServeHTTP(w, r)
+		case AnalysisServiceRunFundamentalsScanProcedure:
+			analysisServiceRunFundamentalsScanHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -341,4 +368,8 @@ func (UnimplementedAnalysisServiceHandler) SetStrategyLive(context.Context, *con
 
 func (UnimplementedAnalysisServiceHandler) ScreenSymbols(context.Context, *connect.Request[v1.ScreenSymbolsRequest]) (*connect.Response[v1.ScreenSymbolsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.ScreenSymbols is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) RunFundamentalsScan(context.Context, *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan is not implemented"))
 }

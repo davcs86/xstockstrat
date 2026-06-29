@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.BacktestStatus = exports.protobufPackage = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -3298,6 +3298,268 @@ exports.ScreenSymbolsResponse = {
         return message;
     },
 };
+function createBaseRunFundamentalsScanRequest() {
+    return { force: false, dryRun: false, symbols: [] };
+}
+exports.RunFundamentalsScanRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.force !== false) {
+            writer.uint32(8).bool(message.force);
+        }
+        if (message.dryRun !== false) {
+            writer.uint32(16).bool(message.dryRun);
+        }
+        for (const v of message.symbols) {
+            writer.uint32(26).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseRunFundamentalsScanRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.force = reader.bool();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.dryRun = reader.bool();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            force: isSet(object.force) ? globalThis.Boolean(object.force) : false,
+            dryRun: isSet(object.dryRun)
+                ? globalThis.Boolean(object.dryRun)
+                : isSet(object.dry_run)
+                    ? globalThis.Boolean(object.dry_run)
+                    : false,
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.force !== false) {
+            obj.force = message.force;
+        }
+        if (message.dryRun !== false) {
+            obj.dryRun = message.dryRun;
+        }
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.RunFundamentalsScanRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseRunFundamentalsScanRequest();
+        message.force = object.force ?? false;
+        message.dryRun = object.dryRun ?? false;
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseFundamentalsScanSummary() {
+    return {
+        runId: "",
+        symbolsProcessed: 0,
+        signalsEmitted: 0,
+        callsSpent: 0,
+        deferredCount: 0,
+        status: "",
+        finishedAt: undefined,
+    };
+}
+exports.FundamentalsScanSummary = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.runId !== "") {
+            writer.uint32(10).string(message.runId);
+        }
+        if (message.symbolsProcessed !== 0) {
+            writer.uint32(16).int32(message.symbolsProcessed);
+        }
+        if (message.signalsEmitted !== 0) {
+            writer.uint32(24).int32(message.signalsEmitted);
+        }
+        if (message.callsSpent !== 0) {
+            writer.uint32(32).int32(message.callsSpent);
+        }
+        if (message.deferredCount !== 0) {
+            writer.uint32(40).int32(message.deferredCount);
+        }
+        if (message.status !== "") {
+            writer.uint32(50).string(message.status);
+        }
+        if (message.finishedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.finishedAt), writer.uint32(58).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseFundamentalsScanSummary();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.runId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.symbolsProcessed = reader.int32();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.signalsEmitted = reader.int32();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.callsSpent = reader.int32();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.deferredCount = reader.int32();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.status = reader.string();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.finishedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            runId: isSet(object.runId)
+                ? globalThis.String(object.runId)
+                : isSet(object.run_id)
+                    ? globalThis.String(object.run_id)
+                    : "",
+            symbolsProcessed: isSet(object.symbolsProcessed)
+                ? globalThis.Number(object.symbolsProcessed)
+                : isSet(object.symbols_processed)
+                    ? globalThis.Number(object.symbols_processed)
+                    : 0,
+            signalsEmitted: isSet(object.signalsEmitted)
+                ? globalThis.Number(object.signalsEmitted)
+                : isSet(object.signals_emitted)
+                    ? globalThis.Number(object.signals_emitted)
+                    : 0,
+            callsSpent: isSet(object.callsSpent)
+                ? globalThis.Number(object.callsSpent)
+                : isSet(object.calls_spent)
+                    ? globalThis.Number(object.calls_spent)
+                    : 0,
+            deferredCount: isSet(object.deferredCount)
+                ? globalThis.Number(object.deferredCount)
+                : isSet(object.deferred_count)
+                    ? globalThis.Number(object.deferred_count)
+                    : 0,
+            status: isSet(object.status) ? globalThis.String(object.status) : "",
+            finishedAt: isSet(object.finishedAt)
+                ? fromJsonTimestamp(object.finishedAt)
+                : isSet(object.finished_at)
+                    ? fromJsonTimestamp(object.finished_at)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.runId !== "") {
+            obj.runId = message.runId;
+        }
+        if (message.symbolsProcessed !== 0) {
+            obj.symbolsProcessed = Math.round(message.symbolsProcessed);
+        }
+        if (message.signalsEmitted !== 0) {
+            obj.signalsEmitted = Math.round(message.signalsEmitted);
+        }
+        if (message.callsSpent !== 0) {
+            obj.callsSpent = Math.round(message.callsSpent);
+        }
+        if (message.deferredCount !== 0) {
+            obj.deferredCount = Math.round(message.deferredCount);
+        }
+        if (message.status !== "") {
+            obj.status = message.status;
+        }
+        if (message.finishedAt !== undefined) {
+            obj.finishedAt = message.finishedAt.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.FundamentalsScanSummary.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseFundamentalsScanSummary();
+        message.runId = object.runId ?? "";
+        message.symbolsProcessed = object.symbolsProcessed ?? 0;
+        message.signalsEmitted = object.signalsEmitted ?? 0;
+        message.callsSpent = object.callsSpent ?? 0;
+        message.deferredCount = object.deferredCount ?? 0;
+        message.status = object.status ?? "";
+        message.finishedAt = object.finishedAt ?? undefined;
+        return message;
+    },
+};
 exports.AnalysisServiceService = {
     runBacktest: {
         path: "/xstockstrat.analysis.v1.AnalysisService/RunBacktest",
@@ -3380,6 +3642,16 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.ScreenSymbolsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.ScreenSymbolsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.ScreenSymbolsResponse.decode(value),
+    },
+    /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+    runFundamentalsScan: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.RunFundamentalsScanRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.RunFundamentalsScanRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.FundamentalsScanSummary.encode(value).finish()),
+        responseDeserialize: (value) => exports.FundamentalsScanSummary.decode(value),
     },
 };
 exports.AnalysisServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.AnalysisServiceService, "xstockstrat.analysis.v1.AnalysisService");

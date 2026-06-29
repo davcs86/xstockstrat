@@ -58,6 +58,19 @@ Namespace: `indicators`
 | `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports |
 | `indicators.sandbox.max_concurrent` | int | `4` | Max concurrent sandbox executions |
 
+## Seeded Formulas
+
+A built-in **public** "Value+Quality Composite" fundamentals formula (feature 063) is seeded at
+startup by `app/services/seed_formulas.py` (called from `app/main.py` after the DB pool is created,
+before serving). The definition lives in `app/formulas/fundamentals_value_quality.py` — source,
+typed `params` (band endpoints + weights), declared outputs (`quality`, `composite`; `value` is the
+implicit primary series), and a **deterministic well-known** `FORMULA_ID`
+(`d1ff5e6b-6d9c-589d-b95e-defd862c702b`, a UUIDv5). Seeding is **idempotent**: it upserts on the
+`formula_id` PK (`FormulasRepository.upsert`, `ON CONFLICT`), so re-seeding on every restart is safe
+and a band/param/source change takes effect on the next deploy. Feature 062 references the formula by
+this stable id (`analysis.fundsignal.scoring_formula_id`, 062-owned). Seeding is non-fatal — a
+failure is logged and never blocks startup.
+
 ## Sandbox Security Model
 
 - **Subprocess isolation**: formula runs in a fresh Python subprocess

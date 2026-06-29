@@ -6,6 +6,18 @@ Python gRPC service for strategy backtesting, scoring, and report generation. Re
 
 Beyond the gRPC server, the service runs an **asyncio live evaluation loop** (`app/engine/live_loop.py`, feature 048) that continuously evaluates `live_enabled` strategies via the shared evaluator (`app/services/evaluator.py`) and emits alerts to xstockstrat-notify on entry/exit transitions — guaranteeing backtest/live parity. The loop never places orders.
 
+### Fundamentals Signal Producer (feature 062)
+
+A second asyncio background loop (`app/engine/fundsignal_loop.py`) runs a daily **fundamentals signal producer**. Each cycle it builds a deduplicated symbol universe, reads cached fundamentals **only** via marketdata `GetFundamentalsMulti` (never FMP directly — the single FMP chokepoint lives in marketdata, feature 059), scores each symbol (built-in deterministic default, or a 063 scoring formula when `analysis.fundsignal.scoring_formula_id` is set), maps the score to a `buy`/`sell`/`hold` direction by cross-sectional quantile, and emits an `ExternalSignal` per surviving symbol through ingest `IngestSignal`.
+
+- **Cache-only FMP discipline**: the producer imports no FMP client; all fundamentals come through marketdata's 24h cache. Chunked fetches are bounded by `analysis.fundsignal.daily_call_budget`; when the budget is exhausted the run is marked `budget_deferred`, a notify warning is emitted, and remaining symbols resume on the next cycle.
+- **Idempotency**: ingest's `IngestSignal` does **not** dedup, so analysis owns the guard in `analysis.fundsignal_emitted` (PK `(symbol, source, as_of_date)`). A same-day re-run emits nothing new and spends zero cache calls; `force=true` re-emits by clearing the day's rows first.
+- **Run state**: `analysis.fundsignal_runs` tracks per-cycle status and budget accounting.
+- **Source registration**: the producer idempotently registers its source via ingest `ManageSignalSource` as `source_type='derived'` (a generic bucket for internally-produced, non-extraction signals — added by ingest migration `006_signal_source_type_derived`), `extractor_module='app.extractors.noop'`. This call is admin-scoped; the background path injects the admin bit, the RPC path forwards the caller's scope.
+- **Manual trigger**: the admin-scoped `RunFundamentalsScan` RPC invokes the same `run_once` code path (`force`, `dry_run`, explicit `symbols` override) so the scheduled loop and manual trigger never diverge.
+
+New dependency edges: **analysis → ingest write** (`IngestSignal` / `ManageSignalSource`, gRPC not DB) and **analysis → portfolio read** (watchlist universe; requires `PORTFOLIO_ENDPOINT`). The loop reuses the existing asyncpg pool (no new pool — budget stays 2).
+
 As of Phase 3, RunBacktest executes a real SMA crossover engine (no more synthetic stubs) that:
 
 1. Fetches OHLCV bars via `MarketDataService.GetBars`
@@ -45,7 +57,8 @@ triggers backtests via the `RunBacktest` gRPC RPC. The former HTTP/Connect-RPC s
 | xstockstrat-config | gRPC WatchConfig | Live config at startup |
 | xstockstrat-marketdata | gRPC read | Historical OHLCV data for backtesting |
 | xstockstrat-indicators | gRPC read | SMA/EMA/indicator computation |
-| xstockstrat-ingest | gRPC read | QuerySignals for signal-weighted backtesting |
+| xstockstrat-ingest | gRPC read/write | QuerySignals for signal-weighted backtesting; `IngestSignal`/`ManageSignalSource` for the fundamentals signal producer (feature 062) |
+| xstockstrat-portfolio | gRPC read | Watchlist universe for the fundamentals signal producer (feature 062) |
 | xstockstrat-ledger | gRPC write | Store backtest lifecycle events |
 | xstockstrat-notify | gRPC write | Alert on completed backtests |
 
@@ -112,6 +125,18 @@ Namespace: `analysis`
 | `analysis.screener.max_duration_seconds` | int | `120` | Overall deadline for one screener scan |
 | `analysis.screener.default_rank_limit` | int | `50` | Default number of ranked results returned when the request omits `rank_limit` |
 | `analysis.screener.max_concurrent_formula_evals` | int | `4` | Max concurrent `ExecuteFormula` evaluations during a scan (semaphore-bounded so a scan can't starve the live loop) |
+| `analysis.fundsignal.enabled` | bool | `false` | Master gate for the fundamentals signal producer loop (feature 062) |
+| `analysis.fundsignal.run_interval_hours` | int | `24` | Hours between scheduled producer cycles |
+| `analysis.fundsignal.universe_source` | string | `watchlists` | Symbol universe source: `watchlists` \| `explicit` \| `both` (watchlists union pends a global portfolio RPC; falls back to `explicit`) |
+| `analysis.fundsignal.explicit_symbols` | string | `""` | Comma-separated symbols used when `universe_source` resolves to explicit |
+| `analysis.fundsignal.max_symbols_per_run` | int | `200` | Cap on symbols scanned per cycle |
+| `analysis.fundsignal.daily_call_budget` | int | `200` | Max cached `GetFundamentalsMulti` chunk calls per cycle; ≤ `marketdata.fmp.daily_request_cap` (250) |
+| `analysis.fundsignal.source_slug` | string | `fundamentals` | Slug of the registered `derived` signal source the producer emits under |
+| `analysis.fundsignal.scoring_formula_id` | string | `""` | Optional 063 scoring formula id; empty → built-in deterministic default score |
+| `analysis.fundsignal.buy_quantile` | float | `0.80` | Cross-sectional score quantile ≥ → `buy` |
+| `analysis.fundsignal.sell_quantile` | float | `0.20` | Cross-sectional score quantile ≤ → `sell` |
+| `analysis.fundsignal.min_conviction_to_emit` | float | `0.0` | Drop symbols whose score is below this before emitting |
+| `analysis.fundsignal.valid_days` | int | `90` | Emitted signal validity window (`valid_until` = run date + this) |
 
 ## Ledger Events Emitted
 
@@ -122,6 +147,8 @@ Namespace: `analysis`
 | `analysis.strategy.scored` | Strategy scored |
 | `analysis.strategy.triggered` | Live loop detected an entry or exit transition |
 | `analysis.strategy.live_toggled` | `SetStrategyLive` enabled/disabled live evaluation |
+| `analysis.fundsignal.run_started` | Fundamentals signal producer cycle started |
+| `analysis.fundsignal.run_completed` | Fundamentals signal producer cycle finished |
 
 ## Running Tests
 
@@ -141,6 +168,7 @@ CONFIG_ENDPOINT=xstockstrat-config:50060
 MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
 INDICATORS_ENDPOINT=xstockstrat-indicators:50054
 INGEST_ENDPOINT=xstockstrat-ingest:50055
+PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052   # feature 062 — fundamentals signal producer watchlist universe
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env

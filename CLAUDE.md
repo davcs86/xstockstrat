@@ -178,6 +178,23 @@ Recently added keys (feature 059 — fundamentals data source, owned by `xstocks
 | `marketdata.fmp.base_url` | string | `https://financialmodelingprep.com` | FMP API base URL |
 | `marketdata.fmp.metrics` | string | `core,extended` | Metric tiers to fetch (`core`, `extended`) |
 
+Recently added keys (feature 062 — fundamentals signal producer, owned by `xstockstrat-analysis`). A daily background loop reads cached fundamentals via marketdata `GetFundamentalsMulti` (never FMP), scores, and emits `buy`/`sell`/`hold` `ExternalSignal`s through ingest. Analysis also gains a `PORTFOLIO_ENDPOINT` (gRPC `xstockstrat-portfolio:50052`) for the watchlist universe, and ingest migration `006_signal_source_type_derived` adds the `derived` source type:
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.fundsignal.enabled` | bool | `false` | Master gate for the producer loop; off by default |
+| `analysis.fundsignal.run_interval_hours` | int | `24` | Hours between scheduled cycles |
+| `analysis.fundsignal.universe_source` | string | `watchlists` | `watchlists` \| `explicit` \| `both` (watchlists union pends a global portfolio RPC; falls back to `explicit`) |
+| `analysis.fundsignal.explicit_symbols` | string | `""` | Comma-separated symbols for the explicit universe |
+| `analysis.fundsignal.max_symbols_per_run` | int | `200` | Cap on symbols scanned per cycle |
+| `analysis.fundsignal.daily_call_budget` | int | `200` | Max cached `GetFundamentalsMulti` calls per cycle; ≤ `marketdata.fmp.daily_request_cap` (250) |
+| `analysis.fundsignal.source_slug` | string | `fundamentals` | Slug of the registered `derived` signal source |
+| `analysis.fundsignal.scoring_formula_id` | string | `""` | Optional 063 scoring formula id; empty → built-in default score |
+| `analysis.fundsignal.buy_quantile` | float | `0.80` | Cross-sectional quantile ≥ → `buy` |
+| `analysis.fundsignal.sell_quantile` | float | `0.20` | Cross-sectional quantile ≤ → `sell` |
+| `analysis.fundsignal.min_conviction_to_emit` | float | `0.0` | Drop symbols below this score before emitting |
+| `analysis.fundsignal.valid_days` | int | `90` | Emitted signal validity window in days |
+
 Recently added keys (feature 057 — backfill management UI, owned by `xstockstrat-marketdata`):
 
 | Key | Type | Default | Description |

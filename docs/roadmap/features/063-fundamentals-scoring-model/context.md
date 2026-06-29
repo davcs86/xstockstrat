@@ -80,3 +80,33 @@
   (app/services/fundamentals_scoring.py) — disjoint from 062's servicer edits.
 - Advisory: Step 5 doesn't restate --cov-fail-under=50 on its command (covered by Step 2 on the same file); Step 1 touches
   5 files (at the split-consideration boundary, cohesive). Confirmed 063 adds NO proto/config/migration.
+
+## Session 2026-06-29 — sdd-execute (all 6 steps)
+
+Executed all 6 steps on `feature/fundamentals-scoring-model` (stacked on
+`feature/fundamentals-data-source`, 059). Python-only — no proto/migration/config (confirmed). One
+integration PR per feature.
+
+- **Step 1 (indicators formula + seed)**: `app/formulas/fundamentals_value_quality.py` (SOURCE for
+  the sandbox, 12 tunable FLOAT `PARAMETERS`, `OUTPUTS=[quality, composite]`, well-known
+  `FORMULA_ID=d1ff5e6b-6d9c-589d-b95e-defd862c702b`). Added `FormulasRepository.upsert`
+  (`ON CONFLICT (formula_id) DO UPDATE`). `app/services/seed_formulas.py` validates with the same
+  gate RegisterFormula uses, then upserts; non-fatal. Wired into `app/main.py` after the pool, before
+  serving. The formula honors FR-4 specials (P/E≤0→0, neg book→0, neg equity→0, EPS sign binary,
+  triangular dividend) and FR-5 missing-metric neutrality (drop-out, 0.5 if a sub-score is empty).
+- **Step 2/5 (indicators tests)**: `tests/test_fundamentals_formula.py` runs SOURCE through the real
+  sandbox — AC-1 range, AC-2 high/low, AC-3 missing-data, FR-4 special cases, definition validation,
+  upsert ON CONFLICT idempotency, and a labeled-sample ordering + yield-trap check (Step 5).
+  ruff clean, 89 passed, coverage 79% (≥50%).
+- **Step 3 (analysis helper)**: `app/services/fundamentals_scoring.py` — `score_fundamentals(stub,
+  formula_id, fundamentals, metadata, params=None)` builds `input_data`/`input_params` (split),
+  forwards propagation metadata verbatim, raises `FundamentalsScoringError` on `success=False`, and
+  parses `{value, quality, composite}`. Pure helper; no handler/config/migration.
+- **Step 4 (analysis test)**: `tests/test_fundamentals_scoring.py` — parse + metadata forward +
+  data/params split, default-to-zero on missing keys, raise on failure. ruff clean, 108 passed,
+  coverage 62% (≥40%).
+- **Step 6 (docs)**: indicator-builder.md "Default fundamentals Value+Quality formula" section
+  (well-known id, FR-4 band table, tunable params, retune-without-deploy); indicators CLAUDE.md
+  "Seeded Formulas" note. No `analysis.fundsignal.*` key added (062-owned).
+
+**Stopped at**: all complete → integration PR → `feature/fundamentals-data-source` (059).

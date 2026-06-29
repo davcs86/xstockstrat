@@ -116,3 +116,57 @@
   for the unknown-type rejection. Land with Step 13 or file as a follow-up — do not leave `derived`
   depending on the permissive fall-through.
 - Reconciled the Step 8 evidence note (previously "no validation change needed") to point at this hardening.
+
+---
+
+## Session 2026-06-29 — /sdd-execute (all 13 steps)
+
+Executed on `feature/fundamentals-signal-producer`, stacked on `feature/fundamentals-scoring-model`
+(which is stacked on `feature/fundamentals-data-source` → `feature/watchlist-management` → `main-dev`).
+PR targets the parent `feature/fundamentals-scoring-model`.
+
+**Steps 1–2 (proto + gen)**: Added `RunFundamentalsScan(RunFundamentalsScanRequest)` →
+`FundamentalsScanSummary` to `analysis.proto` after `SetStrategyLive` (new messages number from 1;
+no collision with 060's additive `ScreenSymbols`). Regenerated Go/Python/TS stubs with the
+CI-pinned plugin versions so the diff stays minimal.
+
+**Steps 3–4 (analysis migrations)**: `003_fundsignal_runs` (run-state + budget accounting),
+`004_fundsignal_emitted` (PK `(symbol, source, as_of_date)` idempotency guard, FK → runs). Validated
+against a local Postgres cluster (schema created upstream, per the 001/002 convention).
+
+**Step 5 (config seed)**: `008_analysis_fundsignal_keys` seeds the 12 `analysis.fundsignal.*` keys ×
+{dev, production} = 24 rows, stored split (namespace `analysis`, key `fundsignal.<rest>`) matching
+`003_analysis_signal_source_weights`. Numbered 008 to sit after 058's 006 and 059's 007 in the shared
+config migrations dir.
+
+**Steps 6/8/9 (producer + RPC)**: `app/engine/fundsignal_loop.py` `FundamentalsSignalLoop` mirrors
+`LiveEvaluationLoop`: `run_forever` (interval/enabled-gated, lock skip-if-running, broad try/except) and
+the shared `run_once(force, dry_run, override_symbols, metadata)` path. Helpers: `_resolve_universe`
+(explicit fallback — see deviation), `_paced_fetch` (budget-bounded `GetFundamentalsMulti` chunks, never
+FMP), `_score` (built-in `_BUILTIN_BANDS`/`_lin` default OR 063 `score_fundamentals` when
+`scoring_formula_id` set), `_map_directions` (cross-sectional quantile), `_ensure_source_registered`
+(`ManageSignalSource` `source_type='derived'`, admin bit injected on the loop path), `_emit_signal`
+(`IngestSignal` `ExternalSignal`), `_finish` (returns `FundamentalsScanSummary`). `servicer.py` adds the
+portfolio stub + admin-gated `RunFundamentalsScan` (PERMISSION_DENIED non-admin, UNAVAILABLE if loop
+unset, forwards propagation metadata). `main.py` wires `PORTFOLIO_ENDPOINT` + constructs the loop and
+`create_task(run_forever())`, reusing the existing asyncpg pool (no new pool).
+
+**Step 13 (ingest `derived`)**: `006_signal_source_type_derived` DROP/ADD CHECK adds `derived`; down
+deletes derived rows first. `validate_config_json` made **fail-closed** (explicit `derived` branch +
+`else` rejecting unknown types).
+
+**Steps 7/10 (tests)**: `test_fundsignal_loop.py` (13 tests — cache-only forbidden-import guard,
+idempotency via already-emitted + ON CONFLICT claim, dedup, budget defer + notify warning,
+score→direction, min-conviction drop, dry-run). `test_analysis_servicer.py` +4 `RunFundamentalsScan`
+cases (admin gate, unavailable, summary mapping + metadata propagation, dry-run pass-through).
+`test_signal_sources.py` +2 (derived no-config, unknown-type rejection). Analysis: 125 pass, 65% cov
+(fundsignal_loop 79%). Ingest signal_sources: 29 pass. `ruff check`/`ruff format --check` clean.
+
+**Step 12 (docs)**: analysis CLAUDE.md (12 keys, 2 ledger events, "Fundamentals Signal Producer"
+subsection, new dependency edges, `PORTFOLIO_ENDPOINT`), root CLAUDE.md (feature 062 keys block).
+
+**Deployment**: `PORTFOLIO_ENDPOINT` added to the analysis block in docker-compose.yml + .do/app.dev.yaml
++ .do/app.yaml.
+
+**Deviation**: universe used the `explicit` fallback (058 `ListWatchlists` is user-scoped, no global
+union RPC). See Deviation Log.

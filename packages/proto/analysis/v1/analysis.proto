@@ -19,6 +19,8 @@ service AnalysisService {
   rpc SetStrategyLive(SetStrategyLiveRequest) returns (SetStrategyLiveResponse);
   // Screen a symbol universe against weighted criteria (feature 060)
   rpc ScreenSymbols(ScreenSymbolsRequest) returns (ScreenSymbolsResponse);
+  // Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+  rpc RunFundamentalsScan(RunFundamentalsScanRequest) returns (FundamentalsScanSummary);
 }
 
 message RunBacktestRequest {
@@ -236,4 +238,22 @@ message ScreenSymbolsRequest {
 message ScreenSymbolsResponse {
   repeated ScreenResult results = 1;
   repeated CoverageGap coverage_gaps = 2;
+}
+
+// ── Fundamentals signal producer (feature 062) ───────────────────────────────
+
+message RunFundamentalsScanRequest {
+  bool force = 1;                  // ignore the day's idempotency guard / re-emit
+  bool dry_run = 2;                // score + report but do not emit or spend cache calls
+  repeated string symbols = 3;     // optional explicit override of the computed universe
+}
+
+message FundamentalsScanSummary {
+  string run_id = 1;
+  int32 symbols_processed = 2;
+  int32 signals_emitted = 3;
+  int32 calls_spent = 4;
+  int32 deferred_count = 5;
+  string status = 6;               // "completed" | "budget_deferred" | "failed"
+  google.protobuf.Timestamp finished_at = 7;
 }

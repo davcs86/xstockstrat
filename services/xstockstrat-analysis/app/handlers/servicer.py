@@ -25,6 +25,7 @@ from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc
 from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
 from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc
 from gen.notify.v1 import notify_pb2_grpc
+from gen.portfolio.v1 import portfolio_pb2_grpc
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -66,6 +67,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         ledger_channel,
         db_pool=None,
         notify_channel=None,
+        portfolio_channel=None,
     ):
         self._cfg = config_watcher
         self._marketdata = marketdata_pb2_grpc.MarketDataServiceStub(marketdata_channel)
@@ -73,9 +75,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._ingest = ingest_pb2_grpc.IngestServiceStub(ingest_channel)
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
         self._notify = notify_pb2_grpc.NotifyServiceStub(notify_channel) if notify_channel else None
+        # Portfolio stub (feature 062) — used by the fundamentals signal producer for the
+        # watchlist universe read. nil when PORTFOLIO_ENDPOINT is not wired (tests).
+        self._portfolio = (
+            portfolio_pb2_grpc.PortfolioServiceStub(portfolio_channel)
+            if portfolio_channel
+            else None
+        )
         self._backtests: dict[str, analysis_pb2.BacktestResult] = {}
         self._strategies: dict[str, analysis_pb2.StrategyScore] = {}
         self._strategies_repo = StrategiesRepository(db_pool) if db_pool else None
+        # Set by main.py after the fundamentals signal loop is constructed (feature 062);
+        # RunFundamentalsScan invokes its shared run_once path.
+        self._fundsignal_loop = None
 
     @staticmethod
     def _has_admin_scope(context) -> bool:
@@ -893,6 +905,33 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 grpc.StatusCode.DEADLINE_EXCEEDED,
                 f"screen exceeded {deadline}s deadline",
             )
+
+    async def RunFundamentalsScan(self, request, context):
+        """Manually trigger one fundamentals signal producer scan (feature 062, admin-scoped).
+
+        Reuses the producer's single ``run_once`` path so the scheduled loop and the manual
+        trigger never diverge. Forwards the caller's propagation metadata to all outbound calls.
+        """
+        if not self._has_admin_scope(context):
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
+            return
+        if self._fundsignal_loop is None:
+            await context.abort(
+                grpc.StatusCode.UNAVAILABLE, "fundamentals signal producer not initialized"
+            )
+            return
+
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+        return await self._fundsignal_loop.run_once(
+            force=request.force,
+            dry_run=request.dry_run,
+            override_symbols=list(request.symbols) or None,
+            metadata=propagation_meta,
+        )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
