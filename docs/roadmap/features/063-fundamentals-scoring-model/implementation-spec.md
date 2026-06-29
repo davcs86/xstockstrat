@@ -1,6 +1,6 @@
 # Implementation Spec: fundamentals-scoring-model
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-27
 **Feature**: `docs/roadmap/features/063-fundamentals-scoring-model/feature.md`
 **Total Steps**: 6
@@ -41,7 +41,7 @@ each `service` step immediately followed by its `test` step, then docs.
 
 ### Step 1 — service: Author the value+quality composite formula and seed it idempotently in indicators
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/formulas/__init__.py` — create
@@ -90,7 +90,7 @@ each `service` step immediately followed by its `test` step, then docs.
 
 ### Step 2 — test: Sandbox + seeding tests for the fundamentals formula (indicators)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_fundamentals_formula.py` — create
@@ -122,7 +122,7 @@ each `service` step immediately followed by its `test` step, then docs.
 
 ### Step 3 — service: Add a fundamentals-scoring consumer helper in analysis
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/fundamentals_scoring.py` — create (helper that calls `ExecuteFormula` and parses `{value, quality, composite}`)
@@ -156,7 +156,7 @@ each `service` step immediately followed by its `test` step, then docs.
 
 ### Step 4 — test: Consumer-helper test in analysis (mocked ExecuteFormula)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundamentals_scoring.py` — create
@@ -183,7 +183,7 @@ each `service` step immediately followed by its `test` step, then docs.
 
 ### Step 5 — test: End-to-end scoring-intuition check (formula + helper)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators` (formula execution is the indicators sandbox; the labeled-sample assertions live with the formula)
 **Files**:
 - `services/xstockstrat-indicators/tests/test_fundamentals_formula.py` — modify (add a small labeled-sample table test)
@@ -205,7 +205,7 @@ each `service` step immediately followed by its `test` step, then docs.
 
 ### Step 6 — docs: Document the default formula, well-known id, bands, and tunable params
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + service CLAUDE.md
 **Files**:
 - `docs/runbooks/indicator-builder.md` — modify (add a "Default fundamentals value+quality formula" section: the well-known `FORMULA_ID`, the FR-4 band table, the tunable `params`, and how to retune without a deploy)

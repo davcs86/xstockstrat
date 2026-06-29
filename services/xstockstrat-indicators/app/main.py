@@ -21,6 +21,7 @@ from grpc_reflection.v1alpha import reflection
 
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IndicatorsServicer
+from app.services.seed_formulas import seed_default_formulas
 from app.telemetry import init_telemetry
 
 logging.basicConfig(
@@ -49,6 +50,9 @@ async def serve():
         DATABASE_URL, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "2"))
     )
     log.info("database pool established")
+
+    # Seed built-in formulas (feature 063) — idempotent, non-fatal — before serving.
+    await seed_default_formulas(db_pool)
 
     servicer = IndicatorsServicer(config_watcher=config_watcher, db_pool=db_pool)
 
