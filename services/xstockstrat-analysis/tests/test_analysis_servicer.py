@@ -605,3 +605,86 @@ class TestSetStrategyLive:
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.SetStrategyLive(req, ctx)
+
+
+# ---------------------------------------------------------------------------
+# RunFundamentalsScan (feature 062)
+# ---------------------------------------------------------------------------
+
+
+def _scan_req(force=False, dry_run=False, symbols=()):
+    req = MagicMock()
+    req.force = force
+    req.dry_run = dry_run
+    req.symbols = list(symbols)
+    return req
+
+
+class TestRunFundamentalsScan:
+    @pytest.mark.asyncio
+    async def test_requires_admin_scope(self):
+        svc = make_servicer()
+        svc._fundsignal_loop = AsyncMock()
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "1")]  # READ only
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception, match="aborted"):
+            await svc.RunFundamentalsScan(_scan_req(), ctx)
+        ctx.abort.assert_called_once()
+        svc._fundsignal_loop.run_once.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_unavailable_when_loop_not_initialized(self):
+        svc = make_servicer()
+        svc._fundsignal_loop = None
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]  # admin
+        ctx.abort = AsyncMock(side_effect=Exception("unavailable"))
+        with pytest.raises(Exception, match="unavailable"):
+            await svc.RunFundamentalsScan(_scan_req(), ctx)
+        ctx.abort.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_admin_happy_path_maps_summary(self):
+        svc = make_servicer()
+        summary = analysis_pb2.FundamentalsScanSummary(
+            run_id="run-xyz",
+            symbols_processed=10,
+            signals_emitted=4,
+            calls_spent=1,
+            deferred_count=0,
+            status="completed",
+        )
+        svc._fundsignal_loop = MagicMock()
+        svc._fundsignal_loop.run_once = AsyncMock(return_value=summary)
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [
+            ("x-access-scope", "7"),
+            ("x-user-id", "u1"),
+            ("x-trace-id", "t1"),
+        ]
+        resp = await svc.RunFundamentalsScan(_scan_req(symbols=["AAPL", "MSFT"]), ctx)
+        assert resp.run_id == "run-xyz"
+        assert resp.signals_emitted == 4
+        assert resp.calls_spent == 1
+        assert resp.deferred_count == 0
+        assert resp.status == "completed"
+        # Caller metadata is propagated and the explicit symbol override is forwarded.
+        kwargs = svc._fundsignal_loop.run_once.call_args.kwargs
+        assert kwargs["override_symbols"] == ["AAPL", "MSFT"]
+        meta_keys = {k for k, _ in kwargs["metadata"]}
+        assert meta_keys == {"x-access-scope", "x-user-id", "x-trace-id"}
+
+    @pytest.mark.asyncio
+    async def test_dry_run_passes_through(self):
+        svc = make_servicer()
+        svc._fundsignal_loop = MagicMock()
+        svc._fundsignal_loop.run_once = AsyncMock(
+            return_value=analysis_pb2.FundamentalsScanSummary(status="completed")
+        )
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        await svc.RunFundamentalsScan(_scan_req(dry_run=True), ctx)
+        assert svc._fundsignal_loop.run_once.call_args.kwargs["dry_run"] is True
+        # No explicit symbols → override_symbols is None (use computed universe).
+        assert svc._fundsignal_loop.run_once.call_args.kwargs["override_symbols"] is None

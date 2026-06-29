@@ -503,6 +503,74 @@ export type SetStrategyLiveResponse = Message<"xstockstrat.analysis.v1.SetStrate
  */
 export declare const SetStrategyLiveResponseSchema: GenMessage<SetStrategyLiveResponse>;
 /**
+ * @generated from message xstockstrat.analysis.v1.RunFundamentalsScanRequest
+ */
+export type RunFundamentalsScanRequest = Message<"xstockstrat.analysis.v1.RunFundamentalsScanRequest"> & {
+    /**
+     * ignore the day's idempotency guard / re-emit
+     *
+     * @generated from field: bool force = 1;
+     */
+    force: boolean;
+    /**
+     * score + report but do not emit or spend cache calls
+     *
+     * @generated from field: bool dry_run = 2;
+     */
+    dryRun: boolean;
+    /**
+     * optional explicit override of the computed universe
+     *
+     * @generated from field: repeated string symbols = 3;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.RunFundamentalsScanRequest.
+ * Use `create(RunFundamentalsScanRequestSchema)` to create a new message.
+ */
+export declare const RunFundamentalsScanRequestSchema: GenMessage<RunFundamentalsScanRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.FundamentalsScanSummary
+ */
+export type FundamentalsScanSummary = Message<"xstockstrat.analysis.v1.FundamentalsScanSummary"> & {
+    /**
+     * @generated from field: string run_id = 1;
+     */
+    runId: string;
+    /**
+     * @generated from field: int32 symbols_processed = 2;
+     */
+    symbolsProcessed: number;
+    /**
+     * @generated from field: int32 signals_emitted = 3;
+     */
+    signalsEmitted: number;
+    /**
+     * @generated from field: int32 calls_spent = 4;
+     */
+    callsSpent: number;
+    /**
+     * @generated from field: int32 deferred_count = 5;
+     */
+    deferredCount: number;
+    /**
+     * "completed" | "budget_deferred" | "failed"
+     *
+     * @generated from field: string status = 6;
+     */
+    status: string;
+    /**
+     * @generated from field: google.protobuf.Timestamp finished_at = 7;
+     */
+    finishedAt?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.FundamentalsScanSummary.
+ * Use `create(FundamentalsScanSummarySchema)` to create a new message.
+ */
+export declare const FundamentalsScanSummarySchema: GenMessage<FundamentalsScanSummary>;
+/**
  * @generated from enum xstockstrat.analysis.v1.BacktestStatus
  */
 export declare enum BacktestStatus {
@@ -636,5 +704,15 @@ export declare const AnalysisService: GenService<{
         methodKind: "unary";
         input: typeof SetStrategyLiveRequestSchema;
         output: typeof SetStrategyLiveResponseSchema;
+    };
+    /**
+     * Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan
+     */
+    runFundamentalsScan: {
+        methodKind: "unary";
+        input: typeof RunFundamentalsScanRequestSchema;
+        output: typeof FundamentalsScanSummarySchema;
     };
 }>;

@@ -133,6 +133,19 @@ class TestValidateConfigJson:
             is not None
         )
 
+    # ── derived + fail-closed (feature 062) ──────────────────────────────────
+
+    def test_derived_requires_no_config(self):
+        # Internally-produced signals (e.g. the fundamentals producer) need no config.
+        assert validate_config_json("derived", None) is None
+        assert validate_config_json("derived", {}) is None
+
+    def test_unknown_source_type_is_rejected(self):
+        # Fail-closed: an unrecognized source_type must be rejected, not fail-open.
+        err = validate_config_json("bogus_type", {})
+        assert err is not None
+        assert "unsupported source_type" in err
+
 
 # ---------------------------------------------------------------------------
 # get_active_source
