@@ -274,6 +274,25 @@ export async function startMockBackend(): Promise<void> {
           // No prior backtest — the page falls back to the run-backtest flow above.
           return { strategyId: req.strategyId };
         },
+        // Feature 060: deterministic ranked screen result — 3 results, score-ordered,
+        // one with INSUFFICIENT_DATA + a coverage gap.
+        async screenSymbols(req) {
+          const symbols = req.symbols.length ? req.symbols : ['AAA', 'BBB', 'CCC'];
+          return {
+            results: [
+              { symbol: symbols[0], score: 0.91, passed: true, status: 1, criterionScores: { c1: 0.9 } },
+              { symbol: symbols[1] ?? 'BBB', score: 0.55, passed: true, status: 1, criterionScores: { c1: 0.5 } },
+              {
+                symbol: symbols[2] ?? 'CCC',
+                score: 0,
+                passed: false,
+                status: 2, // SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
+                gap: { symbol: symbols[2] ?? 'CCC', timeframe: 4, barsHave: BigInt(0), barsNeed: BigInt(2) },
+              },
+            ],
+            coverageGaps: [],
+          };
+        },
         // Feature 048: trader BFF analysisClient dials ANALYSIS_ENDPOINT (9092 in e2e),
         // so the live-strategy methods are mocked here.
         async listStrategyDefinitions() {

@@ -121,6 +121,10 @@ Namespace: `analysis`
 | `analysis.engine.eval_interval_seconds` | int | `60` | Live evaluation polling cadence in seconds |
 | `analysis.engine.max_strategies_per_cycle` | int | `50` | Max (strategy × symbol) pairs evaluated per cycle |
 | `analysis.engine.alert_throttle_seconds` | int | `300` | Min seconds between alerts per (strategy, symbol) pair |
+| `analysis.screener.max_universe_size` | int | `100` | Max symbols a single `ScreenSymbols` scan may cover (feature 060); over-cap requests are truncated |
+| `analysis.screener.max_duration_seconds` | int | `120` | Overall deadline for one screener scan |
+| `analysis.screener.default_rank_limit` | int | `50` | Default number of ranked results returned when the request omits `rank_limit` |
+| `analysis.screener.max_concurrent_formula_evals` | int | `4` | Max concurrent `ExecuteFormula` evaluations during a scan (semaphore-bounded so a scan can't starve the live loop) |
 | `analysis.fundsignal.enabled` | bool | `false` | Master gate for the fundamentals signal producer loop (feature 062) |
 | `analysis.fundsignal.run_interval_hours` | int | `24` | Hours between scheduled producer cycles |
 | `analysis.fundsignal.universe_source` | string | `watchlists` | Symbol universe source: `watchlists` \| `explicit` \| `both` (watchlists union pends a global portfolio RPC; falls back to `explicit`) |

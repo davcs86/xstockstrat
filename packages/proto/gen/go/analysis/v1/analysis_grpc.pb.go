@@ -27,6 +27,7 @@ const (
 	AnalysisService_GetStrategy_FullMethodName             = "/xstockstrat.analysis.v1.AnalysisService/GetStrategy"
 	AnalysisService_ListStrategyDefinitions_FullMethodName = "/xstockstrat.analysis.v1.AnalysisService/ListStrategyDefinitions"
 	AnalysisService_SetStrategyLive_FullMethodName         = "/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive"
+	AnalysisService_ScreenSymbols_FullMethodName           = "/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols"
 	AnalysisService_RunFundamentalsScan_FullMethodName     = "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan"
 )
 
@@ -42,6 +43,8 @@ type AnalysisServiceClient interface {
 	GetStrategy(ctx context.Context, in *GetStrategyRequest, opts ...grpc.CallOption) (*StrategyDefinition, error)
 	ListStrategyDefinitions(ctx context.Context, in *ListStrategyDefinitionsRequest, opts ...grpc.CallOption) (*ListStrategyDefinitionsResponse, error)
 	SetStrategyLive(ctx context.Context, in *SetStrategyLiveRequest, opts ...grpc.CallOption) (*SetStrategyLiveResponse, error)
+	// Screen a symbol universe against weighted criteria (feature 060)
+	ScreenSymbols(ctx context.Context, in *ScreenSymbolsRequest, opts ...grpc.CallOption) (*ScreenSymbolsResponse, error)
 	// Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
 	RunFundamentalsScan(ctx context.Context, in *RunFundamentalsScanRequest, opts ...grpc.CallOption) (*FundamentalsScanSummary, error)
 }
@@ -134,6 +137,16 @@ func (c *analysisServiceClient) SetStrategyLive(ctx context.Context, in *SetStra
 	return out, nil
 }
 
+func (c *analysisServiceClient) ScreenSymbols(ctx context.Context, in *ScreenSymbolsRequest, opts ...grpc.CallOption) (*ScreenSymbolsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ScreenSymbolsResponse)
+	err := c.cc.Invoke(ctx, AnalysisService_ScreenSymbols_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *analysisServiceClient) RunFundamentalsScan(ctx context.Context, in *RunFundamentalsScanRequest, opts ...grpc.CallOption) (*FundamentalsScanSummary, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(FundamentalsScanSummary)
@@ -156,6 +169,8 @@ type AnalysisServiceServer interface {
 	GetStrategy(context.Context, *GetStrategyRequest) (*StrategyDefinition, error)
 	ListStrategyDefinitions(context.Context, *ListStrategyDefinitionsRequest) (*ListStrategyDefinitionsResponse, error)
 	SetStrategyLive(context.Context, *SetStrategyLiveRequest) (*SetStrategyLiveResponse, error)
+	// Screen a symbol universe against weighted criteria (feature 060)
+	ScreenSymbols(context.Context, *ScreenSymbolsRequest) (*ScreenSymbolsResponse, error)
 	// Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
 	RunFundamentalsScan(context.Context, *RunFundamentalsScanRequest) (*FundamentalsScanSummary, error)
 }
@@ -190,6 +205,9 @@ func (UnimplementedAnalysisServiceServer) ListStrategyDefinitions(context.Contex
 }
 func (UnimplementedAnalysisServiceServer) SetStrategyLive(context.Context, *SetStrategyLiveRequest) (*SetStrategyLiveResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetStrategyLive not implemented")
+}
+func (UnimplementedAnalysisServiceServer) ScreenSymbols(context.Context, *ScreenSymbolsRequest) (*ScreenSymbolsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ScreenSymbols not implemented")
 }
 func (UnimplementedAnalysisServiceServer) RunFundamentalsScan(context.Context, *RunFundamentalsScanRequest) (*FundamentalsScanSummary, error) {
 	return nil, status.Error(codes.Unimplemented, "method RunFundamentalsScan not implemented")
@@ -358,6 +376,24 @@ func _AnalysisService_SetStrategyLive_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AnalysisService_ScreenSymbols_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ScreenSymbolsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).ScreenSymbols(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_ScreenSymbols_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).ScreenSymbols(ctx, req.(*ScreenSymbolsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AnalysisService_RunFundamentalsScan_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RunFundamentalsScanRequest)
 	if err := dec(in); err != nil {
@@ -414,6 +450,10 @@ var AnalysisService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetStrategyLive",
 			Handler:    _AnalysisService_SetStrategyLive_Handler,
+		},
+		{
+			MethodName: "ScreenSymbols",
+			Handler:    _AnalysisService_ScreenSymbols_Handler,
 		},
 		{
 			MethodName: "RunFundamentalsScan",

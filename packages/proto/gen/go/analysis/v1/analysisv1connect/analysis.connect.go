@@ -57,6 +57,9 @@ const (
 	// AnalysisServiceSetStrategyLiveProcedure is the fully-qualified name of the AnalysisService's
 	// SetStrategyLive RPC.
 	AnalysisServiceSetStrategyLiveProcedure = "/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive"
+	// AnalysisServiceScreenSymbolsProcedure is the fully-qualified name of the AnalysisService's
+	// ScreenSymbols RPC.
+	AnalysisServiceScreenSymbolsProcedure = "/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols"
 	// AnalysisServiceRunFundamentalsScanProcedure is the fully-qualified name of the AnalysisService's
 	// RunFundamentalsScan RPC.
 	AnalysisServiceRunFundamentalsScanProcedure = "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan"
@@ -72,6 +75,8 @@ type AnalysisServiceClient interface {
 	GetStrategy(context.Context, *connect.Request[v1.GetStrategyRequest]) (*connect.Response[v1.StrategyDefinition], error)
 	ListStrategyDefinitions(context.Context, *connect.Request[v1.ListStrategyDefinitionsRequest]) (*connect.Response[v1.ListStrategyDefinitionsResponse], error)
 	SetStrategyLive(context.Context, *connect.Request[v1.SetStrategyLiveRequest]) (*connect.Response[v1.SetStrategyLiveResponse], error)
+	// Screen a symbol universe against weighted criteria (feature 060)
+	ScreenSymbols(context.Context, *connect.Request[v1.ScreenSymbolsRequest]) (*connect.Response[v1.ScreenSymbolsResponse], error)
 	// Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
 	RunFundamentalsScan(context.Context, *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error)
 }
@@ -135,6 +140,12 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(analysisServiceMethods.ByName("SetStrategyLive")),
 			connect.WithClientOptions(opts...),
 		),
+		screenSymbols: connect.NewClient[v1.ScreenSymbolsRequest, v1.ScreenSymbolsResponse](
+			httpClient,
+			baseURL+AnalysisServiceScreenSymbolsProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("ScreenSymbols")),
+			connect.WithClientOptions(opts...),
+		),
 		runFundamentalsScan: connect.NewClient[v1.RunFundamentalsScanRequest, v1.FundamentalsScanSummary](
 			httpClient,
 			baseURL+AnalysisServiceRunFundamentalsScanProcedure,
@@ -154,6 +165,7 @@ type analysisServiceClient struct {
 	getStrategy             *connect.Client[v1.GetStrategyRequest, v1.StrategyDefinition]
 	listStrategyDefinitions *connect.Client[v1.ListStrategyDefinitionsRequest, v1.ListStrategyDefinitionsResponse]
 	setStrategyLive         *connect.Client[v1.SetStrategyLiveRequest, v1.SetStrategyLiveResponse]
+	screenSymbols           *connect.Client[v1.ScreenSymbolsRequest, v1.ScreenSymbolsResponse]
 	runFundamentalsScan     *connect.Client[v1.RunFundamentalsScanRequest, v1.FundamentalsScanSummary]
 }
 
@@ -197,6 +209,11 @@ func (c *analysisServiceClient) SetStrategyLive(ctx context.Context, req *connec
 	return c.setStrategyLive.CallUnary(ctx, req)
 }
 
+// ScreenSymbols calls xstockstrat.analysis.v1.AnalysisService.ScreenSymbols.
+func (c *analysisServiceClient) ScreenSymbols(ctx context.Context, req *connect.Request[v1.ScreenSymbolsRequest]) (*connect.Response[v1.ScreenSymbolsResponse], error) {
+	return c.screenSymbols.CallUnary(ctx, req)
+}
+
 // RunFundamentalsScan calls xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan.
 func (c *analysisServiceClient) RunFundamentalsScan(ctx context.Context, req *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error) {
 	return c.runFundamentalsScan.CallUnary(ctx, req)
@@ -213,6 +230,8 @@ type AnalysisServiceHandler interface {
 	GetStrategy(context.Context, *connect.Request[v1.GetStrategyRequest]) (*connect.Response[v1.StrategyDefinition], error)
 	ListStrategyDefinitions(context.Context, *connect.Request[v1.ListStrategyDefinitionsRequest]) (*connect.Response[v1.ListStrategyDefinitionsResponse], error)
 	SetStrategyLive(context.Context, *connect.Request[v1.SetStrategyLiveRequest]) (*connect.Response[v1.SetStrategyLiveResponse], error)
+	// Screen a symbol universe against weighted criteria (feature 060)
+	ScreenSymbols(context.Context, *connect.Request[v1.ScreenSymbolsRequest]) (*connect.Response[v1.ScreenSymbolsResponse], error)
 	// Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
 	RunFundamentalsScan(context.Context, *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error)
 }
@@ -272,6 +291,12 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		connect.WithSchema(analysisServiceMethods.ByName("SetStrategyLive")),
 		connect.WithHandlerOptions(opts...),
 	)
+	analysisServiceScreenSymbolsHandler := connect.NewUnaryHandler(
+		AnalysisServiceScreenSymbolsProcedure,
+		svc.ScreenSymbols,
+		connect.WithSchema(analysisServiceMethods.ByName("ScreenSymbols")),
+		connect.WithHandlerOptions(opts...),
+	)
 	analysisServiceRunFundamentalsScanHandler := connect.NewUnaryHandler(
 		AnalysisServiceRunFundamentalsScanProcedure,
 		svc.RunFundamentalsScan,
@@ -296,6 +321,8 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 			analysisServiceListStrategyDefinitionsHandler.ServeHTTP(w, r)
 		case AnalysisServiceSetStrategyLiveProcedure:
 			analysisServiceSetStrategyLiveHandler.ServeHTTP(w, r)
+		case AnalysisServiceScreenSymbolsProcedure:
+			analysisServiceScreenSymbolsHandler.ServeHTTP(w, r)
 		case AnalysisServiceRunFundamentalsScanProcedure:
 			analysisServiceRunFundamentalsScanHandler.ServeHTTP(w, r)
 		default:
@@ -337,6 +364,10 @@ func (UnimplementedAnalysisServiceHandler) ListStrategyDefinitions(context.Conte
 
 func (UnimplementedAnalysisServiceHandler) SetStrategyLive(context.Context, *connect.Request[v1.SetStrategyLiveRequest]) (*connect.Response[v1.SetStrategyLiveResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.SetStrategyLive is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) ScreenSymbols(context.Context, *connect.Request[v1.ScreenSymbolsRequest]) (*connect.Response[v1.ScreenSymbolsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.ScreenSymbols is not implemented"))
 }
 
 func (UnimplementedAnalysisServiceHandler) RunFundamentalsScan(context.Context, *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error) {
