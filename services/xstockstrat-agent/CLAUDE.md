@@ -19,7 +19,7 @@ Python 3.12 (asyncio, grpc.aio, FastMCP)
 
 ## MCP Tools
 
-The agent registers ten tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers eleven tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -30,6 +30,7 @@ reference):
 | `ingest_signal` | Ingest a trading signal (auto-alerts above conviction threshold) |
 | `emit_alert` | Emit an alert via xstockstrat-notify |
 | `run_backtest` | Trigger a backtest via xstockstrat-analysis |
+| `screen_symbols` | Scan a symbol universe via xstockstrat-analysis and return ranked candidates (read-only) |
 | `manage_strategy` | Register/update/deactivate stored strategies |
 | `manage_formula` | Register/update/delete custom formulas |
 | `manage_signal_source` | Register/update/deactivate signal sources |

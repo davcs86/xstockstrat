@@ -1,9 +1,9 @@
 # Feature: screener-agent-tool
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/screener-agent-tool`
 **Created**: 2026-06-26
-**Last Updated**: 2026-06-27
+**Last Updated**: 2026-06-29
 
 ---
 
@@ -14,6 +14,7 @@
 | 2026-06-26 | `idea` → `draft` | /sdd-story | Product spec generated (feature 4 of 6 — optional thin follow-up) |
 | 2026-06-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings fixed: resolved OQ-061-a → explicit symbols only; corrected phantom `_admin_metadata()` ref to inline admin-scope pattern) |
 | 2026-06-27 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps |
+| 2026-06-29 | `implementation-ready` → `code-completed` | /sdd-execute | All 4 steps implemented on `feature/screener-agent-tool` (stacked on `feature/screener-engine`). Added `client.screen_symbols` + `screen_symbols` FastMCP tool (read-only, `x-mcp-secret`, no admin scope), paired tool+client tests, docs bumped to eleven tools. 49 agent tests pass (60% cov). CoverageGap/ScreenResult field names re-verified against 060's regenerated `analysis_pb2`. |
 
 ---
 

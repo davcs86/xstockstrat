@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the nine tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the eleven tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -256,6 +256,46 @@ Triggers a backtest via `xstockstrat-analysis`. The default strategy is SMA cros
 |---|---|
 | Unknown `strategy_id` | `HTTP 400` from analysis |
 | Analysis service unreachable | `httpx` connection error propagated |
+
+---
+
+### `screen_symbols`
+
+Scans an explicit universe of symbols via `xstockstrat-analysis` `ScreenSymbols` (feature 060) and returns ranked candidates. **Read-only** — sends `x-mcp-secret` and **no** admin `x-access-scope`. Symbols are passed explicitly; there is no watchlist resolution in this tool.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `symbols` | `string[]` | Yes | Explicit ticker list to screen, e.g. `["NVDA", "AAPL"]` |
+| `criteria` | `object[]` | No | Criterion dicts; each key set: `ref_name`, `kind` (`"SCREEN_KIND_FUNDAMENTAL"` \| `"SCREEN_KIND_TECHNICAL_FORMULA"` \| `"SCREEN_KIND_TECHNICAL_INDICATOR"` \| `"SCREEN_KIND_SIGNAL"`), `metric_name`, `op` (e.g. `"COMPARATOR_GTE"`, `"COMPARATOR_BETWEEN"`), `threshold`, `threshold_high`, `weight`, `hard_filter` |
+| `signal_sources` | `string[]` | No | Signal source names for the signal-blend kind |
+| `signal_weight` | `float` | No | Share of score from signals (default `0.0`) |
+| `technical_weight` | `float` | No | Share of score from technicals (default `1.0`) |
+| `min_conviction` | `float` | No | Minimum blended score to pass (default `0.0`) |
+| `rank_limit` | `int` | No | Cap on returned results; `0` ⇒ analysis-side default (`analysis.screener.default_rank_limit`) |
+
+`kind` and `op` accept either the enum name (string) or a numeric value. The `component` field (for technical kinds) is not mapped from string input in this thin wrapper.
+
+**Return**
+
+```json
+{
+  "results": [
+    { "symbol": "NVDA", "score": 0.91, "criterion_scores": { "pe": 1.0 }, "passed": true, "status": "SCREEN_RESULT_STATUS_OK" }
+  ],
+  "coverage_gaps": [ { "symbol": "TSLA" } ]
+}
+```
+
+`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`); `coverage_gaps` lists symbols lacking enough data to screen.
+
+**Errors**
+
+| Condition | Error |
+|---|---|
+| Over-cap universe (> `analysis.screener.max_universe_size`) | Truncated analysis-side |
+| Analysis service unreachable | gRPC error propagated |
 
 ---
 
