@@ -74,6 +74,54 @@ class FormulasRepository:
         )
         return _to_dict(row)
 
+    async def upsert(
+        self,
+        formula_id,
+        name,
+        description,
+        source,
+        author,
+        is_public,
+        input_schema,
+        parameters=None,
+        outputs=None,
+    ) -> dict:
+        """Idempotent insert-or-update keyed on the formula_id PK.
+
+        Used by the startup seeding hook (feature 063): re-seeding the same well-known
+        id on every restart is safe, and a band/param/source change takes effect on the
+        next deploy. Mirrors ``create``'s JSONB encoding.
+        """
+        row = await self._db.fetchrow(
+            """
+            INSERT INTO indicators.formulas
+                (formula_id, name, description, source, author, is_public, input_schema,
+                 parameters, outputs)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb)
+            ON CONFLICT (formula_id) DO UPDATE SET
+                name = EXCLUDED.name,
+                description = EXCLUDED.description,
+                source = EXCLUDED.source,
+                author = EXCLUDED.author,
+                is_public = EXCLUDED.is_public,
+                input_schema = EXCLUDED.input_schema,
+                parameters = EXCLUDED.parameters,
+                outputs = EXCLUDED.outputs,
+                updated_at = NOW()
+            RETURNING *
+            """,
+            formula_id,
+            name,
+            description or "",
+            source,
+            author,
+            is_public,
+            json.dumps(dict(input_schema) if input_schema else {}),
+            json.dumps(list(parameters) if parameters else []),
+            json.dumps(list(outputs) if outputs else []),
+        )
+        return _to_dict(row)
+
     async def get_by_id(self, formula_id) -> dict | None:
         row = await self._db.fetchrow(
             "SELECT * FROM indicators.formulas WHERE formula_id = $1::uuid",

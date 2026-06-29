@@ -167,6 +167,24 @@ export interface SetStrategyLiveRequest {
 export interface SetStrategyLiveResponse {
     definition?: StrategyDefinition | undefined;
 }
+export interface RunFundamentalsScanRequest {
+    /** ignore the day's idempotency guard / re-emit */
+    force: boolean;
+    /** score + report but do not emit or spend cache calls */
+    dryRun: boolean;
+    /** optional explicit override of the computed universe */
+    symbols: string[];
+}
+export interface FundamentalsScanSummary {
+    runId: string;
+    symbolsProcessed: number;
+    signalsEmitted: number;
+    callsSpent: number;
+    deferredCount: number;
+    /** "completed" | "budget_deferred" | "failed" */
+    status: string;
+    finishedAt?: Date | undefined;
+}
 export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
 export declare const CoverageGap: MessageFns<CoverageGap>;
 export declare const BacktestResult: MessageFns<BacktestResult>;
@@ -187,6 +205,8 @@ export declare const ListStrategyDefinitionsRequest: MessageFns<ListStrategyDefi
 export declare const ListStrategyDefinitionsResponse: MessageFns<ListStrategyDefinitionsResponse>;
 export declare const SetStrategyLiveRequest: MessageFns<SetStrategyLiveRequest>;
 export declare const SetStrategyLiveResponse: MessageFns<SetStrategyLiveResponse>;
+export declare const RunFundamentalsScanRequest: MessageFns<RunFundamentalsScanRequest>;
+export declare const FundamentalsScanSummary: MessageFns<FundamentalsScanSummary>;
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export declare const AnalysisServiceService: {
     readonly runBacktest: {
@@ -261,6 +281,16 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: SetStrategyLiveResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => SetStrategyLiveResponse;
     };
+    /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+    readonly runFundamentalsScan: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: RunFundamentalsScanRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => RunFundamentalsScanRequest;
+        readonly responseSerialize: (value: FundamentalsScanSummary) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => FundamentalsScanSummary;
+    };
 };
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
     runBacktest: handleUnaryCall<RunBacktestRequest, BacktestResult>;
@@ -271,6 +301,8 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
     getStrategy: handleUnaryCall<GetStrategyRequest, StrategyDefinition>;
     listStrategyDefinitions: handleUnaryCall<ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse>;
     setStrategyLive: handleUnaryCall<SetStrategyLiveRequest, SetStrategyLiveResponse>;
+    /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+    runFundamentalsScan: handleUnaryCall<RunFundamentalsScanRequest, FundamentalsScanSummary>;
 }
 export interface AnalysisServiceClient extends Client {
     runBacktest(request: RunBacktestRequest, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
@@ -297,6 +329,10 @@ export interface AnalysisServiceClient extends Client {
     setStrategyLive(request: SetStrategyLiveRequest, callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void): ClientUnaryCall;
     setStrategyLive(request: SetStrategyLiveRequest, metadata: Metadata, callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void): ClientUnaryCall;
     setStrategyLive(request: SetStrategyLiveRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void): ClientUnaryCall;
+    /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+    runFundamentalsScan(request: RunFundamentalsScanRequest, callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void): ClientUnaryCall;
+    runFundamentalsScan(request: RunFundamentalsScanRequest, metadata: Metadata, callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void): ClientUnaryCall;
+    runFundamentalsScan(request: RunFundamentalsScanRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void): ClientUnaryCall;
 }
 export declare const AnalysisServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AnalysisServiceClient;

@@ -227,6 +227,8 @@ services:
         value: ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
       - key: INGEST_ENDPOINT
         value: ${xstockstrat-ingest.PRIVATE_DOMAIN}:50055
+      - key: PORTFOLIO_ENDPOINT
+        value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
       - key: WAIT_FOR
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057 ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
       - key: DATABASE_URL

@@ -1,6 +1,6 @@
 # Implementation Spec: fundamentals-signal-producer
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-06-27
 **Feature**: `docs/roadmap/features/062-fundamentals-signal-producer/feature.md`
 **Total Steps**: 13
@@ -63,7 +63,7 @@ Confirmed by discovery — **the fundamentals data path and watchlists do not ex
 
 ### Step 1 — proto: Add `RunFundamentalsScan` RPC to analysis.proto
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -104,7 +104,7 @@ Confirmed by discovery — **the fundamentals data path and watchlists do not ex
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/analysis/v1/` — modify (generated)
@@ -133,7 +133,7 @@ matching the `proto-freshness` CI job).
 
 ### Step 3 — migration: `003_fundsignal_runs` (run-state / resumability + budget accounting)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/003_fundsignal_runs.up.sql` — create
@@ -179,7 +179,7 @@ the `idx_fundsignal_runs_started_at` index; the `.down.sql` drops the table with
 
 ### Step 4 — migration: `004_fundsignal_emitted` (idempotency guard, FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/004_fundsignal_emitted.up.sql` — create
@@ -227,7 +227,7 @@ is rejected by the PK; `.down.sql` drops cleanly.
 
 ### Step 5 — config: Seed `analysis.fundsignal.*` keys via config migration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/008_analysis_fundsignal_keys.up.sql` — create
@@ -284,7 +284,7 @@ key LIKE 'fundsignal.%';` returns 12 keys × 2 environments = 24 rows; `.down.sq
 
 ### Step 6 — service: Fundamentals producer background loop
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — create
@@ -393,7 +393,7 @@ the new loop logs a startup line; `grep -n "PORTFOLIO_ENDPOINT" docker-compose.y
 
 ### Step 7 — test: Producer loop (cache-only, dedup, idempotency, budget defer)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — create
@@ -433,7 +433,7 @@ marketdata/ingest/portfolio/notify/ledger stubs):
 
 ### Step 8 — service: Universe / scoring / budget / source-registration helpers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify (pure helper methods)
@@ -505,7 +505,7 @@ Helper-level unit assertions are in Step 7's test file (dedup, quantile mapping,
 
 ### Step 9 — service: `RunFundamentalsScan` RPC handler (manual trigger, admin-scoped)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify (add `RunFundamentalsScan` method)
@@ -549,7 +549,7 @@ Helper-level unit assertions are in Step 7's test file (dedup, quantile mapping,
 
 ### Step 10 — test: `RunFundamentalsScan` RPC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (add `RunFundamentalsScan` cases)
@@ -577,7 +577,7 @@ Helper-level unit assertions are in Step 7's test file (dedup, quantile mapping,
 
 ### Step 11 — config: Roll out `analysis.fundsignal.*` defaults to running environments
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - (operational — no source change; uses `SetConfig`/`RolloutConfig` per the runbook)
@@ -609,7 +609,7 @@ upstream deps (059/058) land
 
 ### Step 12 — docs: Update service + root docs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + service CLAUDE.md
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -642,7 +642,7 @@ new entries; markdown links resolve.
 
 ### Step 13 — migration (xstockstrat-ingest): add `derived` to the `signal_sources.source_type` CHECK
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest` (cross-service change owned by this feature — requires ingest-service-owner + DBA sign-off)
 
 **Files**:
@@ -741,3 +741,16 @@ _Populated by /sdd-execute as implementation proceeds._
   default does not persist.
 - (Anticipated) Step 8: watchlist global-union read depends on 058 shipping a global `ListWatchlists`
   variant — record whether the implementation used a global RPC or the `explicit` fallback.
+- **APPLIED (Step 8, execute)** — `_resolve_universe` uses the **`explicit` fallback** for
+  `universe_source` ∈ {`watchlists`,`both`}: 058's `ListWatchlists` is user-scoped (`x-user-id`) with no
+  global union RPC, so the producer parses `analysis.fundsignal.explicit_symbols` and logs that the
+  watchlist union is pending a global portfolio variant. Portfolio is still wired (`PORTFOLIO_ENDPOINT` +
+  stub) so the global read can drop in without re-plumbing. No new DB pool (reuses the analysis asyncpg
+  pool; budget stays 2).
+- **APPLIED (Step 13, execute)** — `validate_config_json` made **fail-closed**: added an explicit
+  `derived` branch (`return None`) and a final `else` returning `unsupported source_type <type>` so
+  unknown types are rejected instead of fail-open. Allow-list is a superset of the DB CHECK. Two unit
+  tests added (`test_derived_requires_no_config`, `test_unknown_source_type_is_rejected`).
+- **NOTE (Step 11)** — operational/no-source change. The 24 seed rows ship via Step 5's migration with
+  `analysis.fundsignal.enabled=false`, so the producer is dormant until an operator flips it (after 059
+  cache + universe are in the target env). No live value change made during execute.
