@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-06-27
 **Feature**: `docs/roadmap/features/062-fundamentals-signal-producer/feature.md`
-**Total Steps**: 12
+**Total Steps**: 13
 **Feature Branch**: `feature/fundamentals-signal-producer`
 
 ---
@@ -53,7 +53,11 @@ Confirmed by discovery — **the fundamentals data path and watchlists do not ex
 - Step 9 (`RunFundamentalsScan` handler) requires Step 2 (proto stubs) and Step 6 (the producer it invokes).
 - Step 10 [test] covers Step 9 [service].
 - Step 11 (config rollout) requires Step 5 (the keys must exist before rollout).
-- Step 12 (docs) last — reflects all of the above.
+- Step 13 (ingest `derived` source_type migration) must be applied **before** Step 8's
+  `_ensure_source_registered()` runs — the `derived` value must exist in the CHECK or the source upsert
+  fails the constraint. It is an independent, cross-service (ingest-owned) migration with no dependency on
+  Steps 1–12, so it can be executed early; sequence it ahead of the first producer run.
+- Step 12 (docs) last — reflects all of the above (incl. the new ingest `derived` source_type).
 
 ---
 
@@ -452,13 +456,18 @@ daily cap
   `ingest_stub.ManageSignalSource` (`packages/proto/ingest/v1/ingest.proto:155-159`,
   `ManageSignalSourceRequest{source, credentials_ref, operation}`); admin-gated at
   `services/xstockstrat-ingest/app/handlers/servicer.py:858` (`_has_admin_scope`, requires
-  `x-access-scope` bit `0x04`, `servicer.py:118-131`). **CHECK-constraint caveat**: ingest's
-  `signal_sources.source_type` CHECK allows only
+  `x-access-scope` bit `0x04`, `servicer.py:118-131`). **CHECK-constraint — RESOLVED (user decision)**:
+  ingest's `signal_sources.source_type` CHECK allows only
   `('simple_email','email_attachment','linked_email','simple_website','authenticated_website')`
-  (`services/xstockstrat-ingest/migrations/002_add_signal_sources_registry.up.sql:8-10`). A
-  `fundamentals` source has no matching `source_type`. **Coordinate with ingest owner**: either pick an
-  existing allowed `source_type` value for the registration, or 059/058/another PR relaxes the CHECK to
-  add a `derived`/`fundamentals` type. Record the chosen value in the Deviation Log.
+  (`services/xstockstrat-ingest/migrations/002_add_signal_sources_registry.up.sql:8-10`). The producer
+  registers its source as the **new `source_type='derived'`** — a generic bucket for internally-produced
+  (non-extraction) signals — added by the additive ingest migration in **Step 13**. The registration row
+  uses `extractor_module='app.extractors.noop'` (the existing canonical no-op extractor for
+  non-extracting source types, `services/xstockstrat-ingest/app/extractors/noop.py`), `config_json=NULL`,
+  `credentials_ref=NULL`. No validation change is needed: `validate_config_json`
+  (`services/xstockstrat-ingest/app/repositories/signal_sources.py:70-103`) returns `None` (passes) for any
+  `source_type` outside the email/website branches, and `IngestSignal` checks only `slug`+`active`
+  (`servicer.py:639`) — it never branches on `source_type`, so emitted signals flow through unchanged.
 - **Source weight (FR-7)**: ensure the source has a weight in `analysis.signals.source_weights` (already
   exists; read at `servicer.py:129` `self._cfg.get_str("analysis.signals.source_weights", default="{}")`).
   Reuse this existing key — do not add a new one.
@@ -480,8 +489,11 @@ daily cap
    `≥ buy_quantile` → `"buy"`, `≤ sell_quantile` → `"sell"`, else `"hold"` (FR-6). `conviction` = the
    (normalized) score; drop `< min_conviction_to_emit`.
 5. `_ensure_source_registered()` → idempotently `ManageSignalSource(operation="register", source=
-   SignalSource(slug=source_slug, ...))` with admin metadata `("x-access-scope","4")`; tolerate
-   already-registered (no-op). Run once per process (cache a bool) or on first cycle.
+   SignalSource(slug=source_slug, display_name="Fundamentals Signal Producer",
+   source_type="derived", extractor_module="app.extractors.noop", active=True))` with admin metadata
+   `("x-access-scope","4")`; tolerate already-registered (no-op). Run once per process (cache a bool) or
+   on first cycle. **Requires Step 13's ingest migration to be applied first** (the `derived` `source_type`
+   must exist in the CHECK, else `upsert_source` fails the constraint).
 
 **Verification**:
 Helper-level unit assertions are in Step 7's test file (dedup, quantile mapping, budget defer). Lint:
@@ -626,11 +638,81 @@ new entries; markdown links resolve.
 
 ---
 
+### Step 13 — migration (xstockstrat-ingest): add `derived` to the `signal_sources.source_type` CHECK
+
+**Status**: `pending`
+**Service**: `xstockstrat-ingest` (cross-service change owned by this feature — requires ingest-service-owner + DBA sign-off)
+
+**Files**:
+- `services/xstockstrat-ingest/migrations/006_signal_source_type_derived.up.sql` — create
+- `services/xstockstrat-ingest/migrations/006_signal_source_type_derived.down.sql` — create
+
+**Reviewers**: `xstockstrat-ingest` (service owner) — additive `source_type` allow-list extension, no
+existing value removed, no behavioral change to extraction; DBA — CHECK drop/re-add correctness, down
+migration safety, constraint name
+
+**Codebase Evidence**:
+- The CHECK is an inline 5-value allow-list (`services/xstockstrat-ingest/migrations/002_add_signal_sources_registry.up.sql:8-10`);
+  Postgres names an inline column CHECK `<table>_<column>_check` → `signal_sources_source_type_check`
+  (confirm at execute with `\d ingest.signal_sources`).
+- This is **purely additive** — adds one value (`derived`), removes none; existing rows and types stay valid.
+  The change does not loosen validation: `validate_config_json` already passes any non-email/website type
+  (`app/repositories/signal_sources.py:70-103`), and the allow-list is already behind the code (the
+  validation references `mediated_*` types absent from the CHECK), so extending it is consistent with how
+  the code already treats this set.
+- `006` is the next free ingest migration number (trunk tops out at `005_add_backfill_job_chunk_counts`,
+  `services/xstockstrat-ingest/migrations/`).
+
+**Instructions**:
+1. Create `006_signal_source_type_derived.up.sql`:
+   ```sql
+   -- 006_signal_source_type_derived.up.sql
+   -- Add 'derived' to signal_sources.source_type — a generic bucket for internally-produced
+   -- (non-extraction) signals (e.g. the fundamentals signal producer, feature 062). Additive only.
+   ALTER TABLE ingest.signal_sources DROP CONSTRAINT signal_sources_source_type_check;
+   ALTER TABLE ingest.signal_sources ADD CONSTRAINT signal_sources_source_type_check
+       CHECK (source_type IN (
+           'simple_email', 'email_attachment', 'linked_email',
+           'simple_website', 'authenticated_website',
+           'derived'));
+   ```
+2. Create `006_signal_source_type_derived.down.sql` — restore the original 5-value CHECK. Because
+   re-adding the stricter constraint fails if any `derived` row exists, **remove derived rows first**:
+   ```sql
+   -- 006_signal_source_type_derived.down.sql
+   DELETE FROM ingest.signal_sources WHERE source_type = 'derived';
+   ALTER TABLE ingest.signal_sources DROP CONSTRAINT signal_sources_source_type_check;
+   ALTER TABLE ingest.signal_sources ADD CONSTRAINT signal_sources_source_type_check
+       CHECK (source_type IN (
+           'simple_email', 'email_attachment', 'linked_email',
+           'simple_website', 'authenticated_website'));
+   ```
+3. No application-code change in ingest: `IngestSignal` ignores `source_type` (`servicer.py:639`),
+   `validate_config_json` passes `derived` (`signal_sources.py:103`), and `app/extractors/noop.py` is the
+   `extractor_module` the registration row uses — all pre-existing.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ingest
+# confirm next-free number and files present
+ls migrations/ | sort | grep -E '00[56]_'
+# round-trip the migration, then confirm a 'derived' source registers and rejects an unknown type
+../../scripts/db-migrate.sh up && ../../scripts/db-migrate.sh down && ../../scripts/db-migrate.sh up
+```
+Then assert (via the ingest test suite / psql) that an `INSERT … source_type='derived'` succeeds and an
+unknown value still raises a CHECK violation (the constraint stays strict — only the allow-list grew).
+
+---
+
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
 
-- (Anticipated) Step 8: ingest `signal_sources.source_type` CHECK has no `fundamentals` value — record
-  the chosen allowed `source_type` (or the coordinated CHECK relaxation) here at execute time.
+- **RESOLVED (user decision, pre-execute)** — Step 8 source registration: the producer registers with the
+  **new `source_type='derived'`** (a generic bucket for internally-produced, non-extraction signals), added
+  by the additive ingest migration in **Step 13** (`006_signal_source_type_derived`). Registration row uses
+  `extractor_module='app.extractors.noop'`; no ingest validation/emit-path change is needed. Chosen over
+  reusing an email/website value (semantically wrong) and over a literal `fundamentals` value (less reusable
+  for future synthetic producers). Requires ingest-service-owner + DBA sign-off on the cross-service migration.
 - (Anticipated) Step 8: watchlist global-union read depends on 058 shipping a global `ListWatchlists`
   variant — record whether the implementation used a global RPC or the `explicit` fallback.
