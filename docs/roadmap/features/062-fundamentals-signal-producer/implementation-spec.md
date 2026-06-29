@@ -464,10 +464,12 @@ daily cap
   (non-extraction) signals — added by the additive ingest migration in **Step 13**. The registration row
   uses `extractor_module='app.extractors.noop'` (the existing canonical no-op extractor for
   non-extracting source types, `services/xstockstrat-ingest/app/extractors/noop.py`), `config_json=NULL`,
-  `credentials_ref=NULL`. No validation change is needed: `validate_config_json`
-  (`services/xstockstrat-ingest/app/repositories/signal_sources.py:70-103`) returns `None` (passes) for any
-  `source_type` outside the email/website branches, and `IngestSignal` checks only `slug`+`active`
-  (`servicer.py:639`) — it never branches on `source_type`, so emitted signals flow through unchanged.
+  `credentials_ref=NULL`. `IngestSignal` checks only `slug`+`active` (`servicer.py:639`) — it never
+  branches on `source_type`, so emitted signals flow through unchanged. `validate_config_json`
+  (`services/xstockstrat-ingest/app/repositories/signal_sources.py:70-103`) currently **fail-opens**
+  (returns `None` for any type outside the email/website branches), so `derived` passes today — but Step 13
+  includes a **TODO to make that validation fail-closed** and explicitly allow-list `derived`; do not leave
+  the registration depending on the permissive fall-through.
 - **Source weight (FR-7)**: ensure the source has a weight in `analysis.signals.source_weights` (already
   exists; read at `servicer.py:129` `self._cfg.get_str("analysis.signals.source_weights", default="{}")`).
   Reuse this existing key — do not add a new one.
@@ -687,9 +689,26 @@ migration safety, constraint name
            'simple_email', 'email_attachment', 'linked_email',
            'simple_website', 'authenticated_website'));
    ```
-3. No application-code change in ingest: `IngestSignal` ignores `source_type` (`servicer.py:639`),
-   `validate_config_json` passes `derived` (`signal_sources.py:103`), and `app/extractors/noop.py` is the
-   `extractor_module` the registration row uses — all pre-existing.
+3. `IngestSignal` ignores `source_type` (`servicer.py:639`) and `app/extractors/noop.py` is the
+   `extractor_module` the registration row uses — both pre-existing, no change.
+4. **TODO (hardening — make `validate_config_json` fail-closed):** today `validate_config_json`
+   (`services/xstockstrat-ingest/app/repositories/signal_sources.py:70-103`) has an email branch and a
+   website branch and then `return None` — i.e. it **fail-opens**: any unrecognized `source_type` passes
+   validation with zero required config. `derived` currently relies on that permissive fall-through. As
+   part of this step, convert it to **fail-closed**: explicitly allow-list the known types and reject the
+   rest, e.g.
+   ```python
+   # after the email/website branches:
+   elif source_type == "derived":
+       return None  # internally-produced signal — no extraction config required
+   else:
+       return f"unsupported source_type '{source_type}'"
+   ```
+   Guard: the allow-listed set must be a **superset of the DB CHECK** (the two existing branches already
+   cover all 5 CHECK values plus the `mediated_*` variants; add `derived`) — otherwise a CHECK-valid type
+   would be wrongly rejected. Add a unit test asserting an unknown `source_type` now returns an error.
+   This is a small, self-contained ingest hardening; if it can't land with 062, file it as a follow-up so
+   the fail-open default doesn't persist.
 
 **Verification**:
 ```bash
@@ -714,5 +733,11 @@ _Populated by /sdd-execute as implementation proceeds._
   `extractor_module='app.extractors.noop'`; no ingest validation/emit-path change is needed. Chosen over
   reusing an email/website value (semantically wrong) and over a literal `fundamentals` value (less reusable
   for future synthetic producers). Requires ingest-service-owner + DBA sign-off on the cross-service migration.
+- **TODO (security hardening, Step 13)** — `validate_config_json` (`signal_sources.py:70-103`) is
+  **fail-open**: it `return None`s for any unrecognized `source_type`, so unknown/garbage types pass
+  validation with no required config. Adding `derived` currently leans on this. Make it **fail-closed**:
+  explicitly allow-list known types (incl. `derived`) and return an error for the rest (allow-list must be a
+  superset of the DB CHECK). Land it with Step 13 or file as a follow-up — track until done so the fail-open
+  default does not persist.
 - (Anticipated) Step 8: watchlist global-union read depends on 058 shipping a global `ListWatchlists`
   variant — record whether the implementation used a global RPC or the `explicit` fallback.

@@ -105,3 +105,14 @@
   RESOLVED. Cross-service migration → needs ingest-service-owner + DBA sign-off at execute.
 - NOTE: the migration SQL is DRAFTED IN THE SPEC (Step 13), not committed as live ingest files — keeps this
   PR spec-only; /sdd-execute writes the files verbatim.
+
+## Session 2026-06-27 — TODO: make validate_config_json fail-closed (user-flagged)
+
+- User flagged that relying on validate_config_json's fail-open default (returns None/pass for any
+  unrecognized source_type, signal_sources.py:103) is wrong — it should be FAIL-CLOSED.
+- Added a tracked TODO to Step 13 (Instruction 4) + a Deviation Log entry: convert validate_config_json to
+  explicitly allow-list known source_types (incl. `derived`) and return an error for unknown ones; the
+  allow-list must be a superset of the DB CHECK so no CHECK-valid type is wrongly rejected. Add a unit test
+  for the unknown-type rejection. Land with Step 13 or file as a follow-up — do not leave `derived`
+  depending on the permissive fall-through.
+- Reconciled the Step 8 evidence note (previously "no validation change needed") to point at this hardening.
