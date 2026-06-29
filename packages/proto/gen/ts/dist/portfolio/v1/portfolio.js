@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: portfolio/v1/portfolio.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.PositionSide = exports.protobufPackage = void 0;
+exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.PositionSide = exports.protobufPackage = void 0;
 exports.positionSideFromJSON = positionSideFromJSON;
 exports.positionSideToJSON = positionSideToJSON;
 exports.positionSideToNumber = positionSideToNumber;
@@ -1775,6 +1775,1043 @@ exports.ListPortfoliosResponse = {
         return message;
     },
 };
+function createBaseWatchlist() {
+    return {
+        watchlistId: "",
+        userId: "",
+        name: "",
+        description: "",
+        symbols: [],
+        createdAt: undefined,
+        updatedAt: undefined,
+    };
+}
+exports.Watchlist = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.watchlistId !== "") {
+            writer.uint32(10).string(message.watchlistId);
+        }
+        if (message.userId !== "") {
+            writer.uint32(18).string(message.userId);
+        }
+        if (message.name !== "") {
+            writer.uint32(26).string(message.name);
+        }
+        if (message.description !== "") {
+            writer.uint32(34).string(message.description);
+        }
+        for (const v of message.symbols) {
+            writer.uint32(42).string(v);
+        }
+        if (message.createdAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(50).fork()).join();
+        }
+        if (message.updatedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(58).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseWatchlist();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlistId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.name = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.description = reader.string();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.createdAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.updatedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            watchlistId: isSet(object.watchlistId)
+                ? globalThis.String(object.watchlistId)
+                : isSet(object.watchlist_id)
+                    ? globalThis.String(object.watchlist_id)
+                    : "",
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            name: isSet(object.name) ? globalThis.String(object.name) : "",
+            description: isSet(object.description) ? globalThis.String(object.description) : "",
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+            createdAt: isSet(object.createdAt)
+                ? fromJsonTimestamp(object.createdAt)
+                : isSet(object.created_at)
+                    ? fromJsonTimestamp(object.created_at)
+                    : undefined,
+            updatedAt: isSet(object.updatedAt)
+                ? fromJsonTimestamp(object.updatedAt)
+                : isSet(object.updated_at)
+                    ? fromJsonTimestamp(object.updated_at)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlistId !== "") {
+            obj.watchlistId = message.watchlistId;
+        }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.name !== "") {
+            obj.name = message.name;
+        }
+        if (message.description !== "") {
+            obj.description = message.description;
+        }
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        if (message.createdAt !== undefined) {
+            obj.createdAt = message.createdAt.toISOString();
+        }
+        if (message.updatedAt !== undefined) {
+            obj.updatedAt = message.updatedAt.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.Watchlist.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseWatchlist();
+        message.watchlistId = object.watchlistId ?? "";
+        message.userId = object.userId ?? "";
+        message.name = object.name ?? "";
+        message.description = object.description ?? "";
+        message.symbols = object.symbols?.map((e) => e) || [];
+        message.createdAt = object.createdAt ?? undefined;
+        message.updatedAt = object.updatedAt ?? undefined;
+        return message;
+    },
+};
+function createBaseCreateWatchlistRequest() {
+    return { name: "", description: "", symbols: [] };
+}
+exports.CreateWatchlistRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.name !== "") {
+            writer.uint32(10).string(message.name);
+        }
+        if (message.description !== "") {
+            writer.uint32(18).string(message.description);
+        }
+        for (const v of message.symbols) {
+            writer.uint32(26).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCreateWatchlistRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.name = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.description = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            name: isSet(object.name) ? globalThis.String(object.name) : "",
+            description: isSet(object.description) ? globalThis.String(object.description) : "",
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.name !== "") {
+            obj.name = message.name;
+        }
+        if (message.description !== "") {
+            obj.description = message.description;
+        }
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.CreateWatchlistRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCreateWatchlistRequest();
+        message.name = object.name ?? "";
+        message.description = object.description ?? "";
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseCreateWatchlistResponse() {
+    return { watchlist: undefined };
+}
+exports.CreateWatchlistResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.watchlist !== undefined) {
+            exports.Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCreateWatchlistResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlist = exports.Watchlist.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { watchlist: isSet(object.watchlist) ? exports.Watchlist.fromJSON(object.watchlist) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlist !== undefined) {
+            obj.watchlist = exports.Watchlist.toJSON(message.watchlist);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.CreateWatchlistResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCreateWatchlistResponse();
+        message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
+            ? exports.Watchlist.fromPartial(object.watchlist)
+            : undefined;
+        return message;
+    },
+};
+function createBaseGetWatchlistRequest() {
+    return { watchlistId: "" };
+}
+exports.GetWatchlistRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.watchlistId !== "") {
+            writer.uint32(10).string(message.watchlistId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetWatchlistRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlistId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            watchlistId: isSet(object.watchlistId)
+                ? globalThis.String(object.watchlistId)
+                : isSet(object.watchlist_id)
+                    ? globalThis.String(object.watchlist_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlistId !== "") {
+            obj.watchlistId = message.watchlistId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetWatchlistRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetWatchlistRequest();
+        message.watchlistId = object.watchlistId ?? "";
+        return message;
+    },
+};
+function createBaseGetWatchlistResponse() {
+    return { watchlist: undefined };
+}
+exports.GetWatchlistResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.watchlist !== undefined) {
+            exports.Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetWatchlistResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlist = exports.Watchlist.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { watchlist: isSet(object.watchlist) ? exports.Watchlist.fromJSON(object.watchlist) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlist !== undefined) {
+            obj.watchlist = exports.Watchlist.toJSON(message.watchlist);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetWatchlistResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetWatchlistResponse();
+        message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
+            ? exports.Watchlist.fromPartial(object.watchlist)
+            : undefined;
+        return message;
+    },
+};
+function createBaseListWatchlistsRequest() {
+    return { page: undefined };
+}
+exports.ListWatchlistsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.page !== undefined) {
+            common_1.PageRequest.encode(message.page, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListWatchlistsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.page = common_1.PageRequest.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { page: isSet(object.page) ? common_1.PageRequest.fromJSON(object.page) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.page !== undefined) {
+            obj.page = common_1.PageRequest.toJSON(message.page);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListWatchlistsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListWatchlistsRequest();
+        message.page = (object.page !== undefined && object.page !== null)
+            ? common_1.PageRequest.fromPartial(object.page)
+            : undefined;
+        return message;
+    },
+};
+function createBaseListWatchlistsResponse() {
+    return { watchlists: [], page: undefined };
+}
+exports.ListWatchlistsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.watchlists) {
+            exports.Watchlist.encode(v, writer.uint32(10).fork()).join();
+        }
+        if (message.page !== undefined) {
+            common_1.PageResponse.encode(message.page, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListWatchlistsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlists.push(exports.Watchlist.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.page = common_1.PageResponse.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            watchlists: globalThis.Array.isArray(object?.watchlists)
+                ? object.watchlists.map((e) => exports.Watchlist.fromJSON(e))
+                : [],
+            page: isSet(object.page) ? common_1.PageResponse.fromJSON(object.page) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlists?.length) {
+            obj.watchlists = message.watchlists.map((e) => exports.Watchlist.toJSON(e));
+        }
+        if (message.page !== undefined) {
+            obj.page = common_1.PageResponse.toJSON(message.page);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListWatchlistsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListWatchlistsResponse();
+        message.watchlists = object.watchlists?.map((e) => exports.Watchlist.fromPartial(e)) || [];
+        message.page = (object.page !== undefined && object.page !== null)
+            ? common_1.PageResponse.fromPartial(object.page)
+            : undefined;
+        return message;
+    },
+};
+function createBaseUpdateWatchlistRequest() {
+    return { watchlistId: "", name: "", description: "", symbols: [] };
+}
+exports.UpdateWatchlistRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.watchlistId !== "") {
+            writer.uint32(10).string(message.watchlistId);
+        }
+        if (message.name !== "") {
+            writer.uint32(18).string(message.name);
+        }
+        if (message.description !== "") {
+            writer.uint32(26).string(message.description);
+        }
+        for (const v of message.symbols) {
+            writer.uint32(34).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUpdateWatchlistRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlistId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.name = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.description = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            watchlistId: isSet(object.watchlistId)
+                ? globalThis.String(object.watchlistId)
+                : isSet(object.watchlist_id)
+                    ? globalThis.String(object.watchlist_id)
+                    : "",
+            name: isSet(object.name) ? globalThis.String(object.name) : "",
+            description: isSet(object.description) ? globalThis.String(object.description) : "",
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlistId !== "") {
+            obj.watchlistId = message.watchlistId;
+        }
+        if (message.name !== "") {
+            obj.name = message.name;
+        }
+        if (message.description !== "") {
+            obj.description = message.description;
+        }
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.UpdateWatchlistRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUpdateWatchlistRequest();
+        message.watchlistId = object.watchlistId ?? "";
+        message.name = object.name ?? "";
+        message.description = object.description ?? "";
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseUpdateWatchlistResponse() {
+    return { watchlist: undefined };
+}
+exports.UpdateWatchlistResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.watchlist !== undefined) {
+            exports.Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUpdateWatchlistResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlist = exports.Watchlist.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { watchlist: isSet(object.watchlist) ? exports.Watchlist.fromJSON(object.watchlist) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlist !== undefined) {
+            obj.watchlist = exports.Watchlist.toJSON(message.watchlist);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.UpdateWatchlistResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUpdateWatchlistResponse();
+        message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
+            ? exports.Watchlist.fromPartial(object.watchlist)
+            : undefined;
+        return message;
+    },
+};
+function createBaseDeleteWatchlistRequest() {
+    return { watchlistId: "" };
+}
+exports.DeleteWatchlistRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.watchlistId !== "") {
+            writer.uint32(10).string(message.watchlistId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseDeleteWatchlistRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlistId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            watchlistId: isSet(object.watchlistId)
+                ? globalThis.String(object.watchlistId)
+                : isSet(object.watchlist_id)
+                    ? globalThis.String(object.watchlist_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlistId !== "") {
+            obj.watchlistId = message.watchlistId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.DeleteWatchlistRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseDeleteWatchlistRequest();
+        message.watchlistId = object.watchlistId ?? "";
+        return message;
+    },
+};
+function createBaseDeleteWatchlistResponse() {
+    return {};
+}
+exports.DeleteWatchlistResponse = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseDeleteWatchlistResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.DeleteWatchlistResponse.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseDeleteWatchlistResponse();
+        return message;
+    },
+};
+function createBaseAddWatchlistSymbolsRequest() {
+    return { watchlistId: "", symbols: [] };
+}
+exports.AddWatchlistSymbolsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.watchlistId !== "") {
+            writer.uint32(10).string(message.watchlistId);
+        }
+        for (const v of message.symbols) {
+            writer.uint32(18).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseAddWatchlistSymbolsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlistId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            watchlistId: isSet(object.watchlistId)
+                ? globalThis.String(object.watchlistId)
+                : isSet(object.watchlist_id)
+                    ? globalThis.String(object.watchlist_id)
+                    : "",
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlistId !== "") {
+            obj.watchlistId = message.watchlistId;
+        }
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.AddWatchlistSymbolsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseAddWatchlistSymbolsRequest();
+        message.watchlistId = object.watchlistId ?? "";
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseAddWatchlistSymbolsResponse() {
+    return { watchlist: undefined };
+}
+exports.AddWatchlistSymbolsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.watchlist !== undefined) {
+            exports.Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseAddWatchlistSymbolsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlist = exports.Watchlist.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { watchlist: isSet(object.watchlist) ? exports.Watchlist.fromJSON(object.watchlist) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlist !== undefined) {
+            obj.watchlist = exports.Watchlist.toJSON(message.watchlist);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.AddWatchlistSymbolsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseAddWatchlistSymbolsResponse();
+        message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
+            ? exports.Watchlist.fromPartial(object.watchlist)
+            : undefined;
+        return message;
+    },
+};
+function createBaseRemoveWatchlistSymbolsRequest() {
+    return { watchlistId: "", symbols: [] };
+}
+exports.RemoveWatchlistSymbolsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.watchlistId !== "") {
+            writer.uint32(10).string(message.watchlistId);
+        }
+        for (const v of message.symbols) {
+            writer.uint32(18).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseRemoveWatchlistSymbolsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlistId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            watchlistId: isSet(object.watchlistId)
+                ? globalThis.String(object.watchlistId)
+                : isSet(object.watchlist_id)
+                    ? globalThis.String(object.watchlist_id)
+                    : "",
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlistId !== "") {
+            obj.watchlistId = message.watchlistId;
+        }
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.RemoveWatchlistSymbolsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseRemoveWatchlistSymbolsRequest();
+        message.watchlistId = object.watchlistId ?? "";
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseRemoveWatchlistSymbolsResponse() {
+    return { watchlist: undefined };
+}
+exports.RemoveWatchlistSymbolsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.watchlist !== undefined) {
+            exports.Watchlist.encode(message.watchlist, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseRemoveWatchlistSymbolsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.watchlist = exports.Watchlist.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { watchlist: isSet(object.watchlist) ? exports.Watchlist.fromJSON(object.watchlist) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.watchlist !== undefined) {
+            obj.watchlist = exports.Watchlist.toJSON(message.watchlist);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.RemoveWatchlistSymbolsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseRemoveWatchlistSymbolsResponse();
+        message.watchlist = (object.watchlist !== undefined && object.watchlist !== null)
+            ? exports.Watchlist.fromPartial(object.watchlist)
+            : undefined;
+        return message;
+    },
+};
 exports.PortfolioServiceService = {
     getPortfolio: {
         path: "/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio",
@@ -1838,6 +2875,73 @@ exports.PortfolioServiceService = {
         requestDeserialize: (value) => exports.ListPortfoliosRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.ListPortfoliosResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.ListPortfoliosResponse.decode(value),
+    },
+    /**
+     * Watchlist management (feature 058). Additive — ownership is taken from the
+     * propagated x-user-id header server-side, never from request fields.
+     */
+    createWatchlist: {
+        path: "/xstockstrat.portfolio.v1.PortfolioService/CreateWatchlist",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.CreateWatchlistRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.CreateWatchlistRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.CreateWatchlistResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.CreateWatchlistResponse.decode(value),
+    },
+    getWatchlist: {
+        path: "/xstockstrat.portfolio.v1.PortfolioService/GetWatchlist",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetWatchlistRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetWatchlistRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetWatchlistResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetWatchlistResponse.decode(value),
+    },
+    listWatchlists: {
+        path: "/xstockstrat.portfolio.v1.PortfolioService/ListWatchlists",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListWatchlistsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListWatchlistsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListWatchlistsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListWatchlistsResponse.decode(value),
+    },
+    updateWatchlist: {
+        path: "/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlist",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.UpdateWatchlistRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.UpdateWatchlistRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.UpdateWatchlistResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.UpdateWatchlistResponse.decode(value),
+    },
+    deleteWatchlist: {
+        path: "/xstockstrat.portfolio.v1.PortfolioService/DeleteWatchlist",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.DeleteWatchlistRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.DeleteWatchlistRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.DeleteWatchlistResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.DeleteWatchlistResponse.decode(value),
+    },
+    addWatchlistSymbols: {
+        path: "/xstockstrat.portfolio.v1.PortfolioService/AddWatchlistSymbols",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.AddWatchlistSymbolsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.AddWatchlistSymbolsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.AddWatchlistSymbolsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.AddWatchlistSymbolsResponse.decode(value),
+    },
+    removeWatchlistSymbols: {
+        path: "/xstockstrat.portfolio.v1.PortfolioService/RemoveWatchlistSymbols",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.RemoveWatchlistSymbolsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.RemoveWatchlistSymbolsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.RemoveWatchlistSymbolsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.RemoveWatchlistSymbolsResponse.decode(value),
     },
 };
 exports.PortfolioServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.PortfolioServiceService, "xstockstrat.portfolio.v1.PortfolioService");

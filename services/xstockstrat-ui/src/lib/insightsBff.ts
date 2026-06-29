@@ -145,6 +145,36 @@ router.service(PortfolioService, {
     const claims = await requireSession(ctx);
     return portfolioClient.listPortfolios(req, { headers: backendHeaders(claims, ctx) });
   },
+  // Watchlists (feature 058). Ownership is enforced server-side from the propagated
+  // x-user-id header (forwarded by backendHeaders) — request messages carry no user_id.
+  async createWatchlist(req, ctx) {
+    const claims = await requireSession(ctx);
+    return portfolioClient.createWatchlist(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async getWatchlist(req, ctx) {
+    const claims = await requireSession(ctx);
+    return portfolioClient.getWatchlist(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async listWatchlists(req, ctx) {
+    const claims = await requireSession(ctx);
+    return portfolioClient.listWatchlists(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async updateWatchlist(req, ctx) {
+    const claims = await requireSession(ctx);
+    return portfolioClient.updateWatchlist(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async deleteWatchlist(req, ctx) {
+    const claims = await requireSession(ctx);
+    return portfolioClient.deleteWatchlist(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async addWatchlistSymbols(req, ctx) {
+    const claims = await requireSession(ctx);
+    return portfolioClient.addWatchlistSymbols(req, { headers: backendHeaders(claims, ctx) });
+  },
+  async removeWatchlistSymbols(req, ctx) {
+    const claims = await requireSession(ctx);
+    return portfolioClient.removeWatchlistSymbols(req, { headers: backendHeaders(claims, ctx) });
+  },
 });
 
 router.service(TradingService, {

@@ -15,6 +15,15 @@ service PortfolioService {
   rpc GetSnapshot(GetSnapshotRequest) returns (PortfolioSnapshot);
   rpc StreamPortfolioUpdates(StreamPortfolioUpdatesRequest) returns (stream PortfolioSnapshot);
   rpc ListPortfolios (ListPortfoliosRequest) returns (ListPortfoliosResponse);
+  // Watchlist management (feature 058). Additive — ownership is taken from the
+  // propagated x-user-id header server-side, never from request fields.
+  rpc CreateWatchlist(CreateWatchlistRequest) returns (CreateWatchlistResponse);
+  rpc GetWatchlist(GetWatchlistRequest) returns (GetWatchlistResponse);
+  rpc ListWatchlists(ListWatchlistsRequest) returns (ListWatchlistsResponse);
+  rpc UpdateWatchlist(UpdateWatchlistRequest) returns (UpdateWatchlistResponse);
+  rpc DeleteWatchlist(DeleteWatchlistRequest) returns (DeleteWatchlistResponse);
+  rpc AddWatchlistSymbols(AddWatchlistSymbolsRequest) returns (AddWatchlistSymbolsResponse);
+  rpc RemoveWatchlistSymbols(RemoveWatchlistSymbolsRequest) returns (RemoveWatchlistSymbolsResponse);
 }
 
 message Portfolio {
@@ -132,4 +141,73 @@ message ListPortfoliosRequest {
 
 message ListPortfoliosResponse {
   repeated Portfolio portfolios = 1;
+}
+
+// Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols.
+message Watchlist {
+  string watchlist_id = 1;
+  string user_id = 2;
+  string name = 3;
+  string description = 4;
+  repeated string symbols = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+// user_id is intentionally absent from all request messages — ownership is taken
+// from the propagated x-user-id header server-side (FR-2), never from the wire.
+message CreateWatchlistRequest {
+  string name = 1;
+  string description = 2;
+  repeated string symbols = 3;
+}
+message CreateWatchlistResponse {
+  Watchlist watchlist = 1;
+}
+
+message GetWatchlistRequest {
+  string watchlist_id = 1;
+}
+message GetWatchlistResponse {
+  Watchlist watchlist = 1;
+}
+
+message ListWatchlistsRequest {
+  xstockstrat.common.v1.PageRequest page = 1;
+}
+message ListWatchlistsResponse {
+  repeated Watchlist watchlists = 1;
+  xstockstrat.common.v1.PageResponse page = 2;
+}
+
+// Replace semantics for name/description/symbols per FR-1.
+message UpdateWatchlistRequest {
+  string watchlist_id = 1;
+  string name = 2;
+  string description = 3;
+  repeated string symbols = 4;
+}
+message UpdateWatchlistResponse {
+  Watchlist watchlist = 1;
+}
+
+message DeleteWatchlistRequest {
+  string watchlist_id = 1;
+}
+message DeleteWatchlistResponse {}
+
+message AddWatchlistSymbolsRequest {
+  string watchlist_id = 1;
+  repeated string symbols = 2;
+}
+message AddWatchlistSymbolsResponse {
+  Watchlist watchlist = 1;
+}
+
+message RemoveWatchlistSymbolsRequest {
+  string watchlist_id = 1;
+  repeated string symbols = 2;
+}
+message RemoveWatchlistSymbolsResponse {
+  Watchlist watchlist = 1;
 }

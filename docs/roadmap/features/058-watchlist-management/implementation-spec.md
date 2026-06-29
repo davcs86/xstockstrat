@@ -1,6 +1,6 @@
 # Implementation Spec: watchlist-management
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-27
 **Feature**: `docs/roadmap/features/058-watchlist-management/feature.md`
 **Total Steps**: 10
@@ -34,7 +34,7 @@ table). Order is dictated by codegen-then-consume and migration-then-code depend
 
 ### Step 1 — proto: Add Watchlist message and 7 CRUD RPCs to PortfolioService
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/portfolio/v1/portfolio.proto` — modify
@@ -89,7 +89,7 @@ Mirror the qualified pagination reference style already used at `portfolio.proto
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/portfolio/v1/` — modify (generated)
@@ -117,7 +117,7 @@ job must be clean (re-running buf-gen produces no diff).
 
 ### Step 3 — migration: Create watchlists tables (portfolio)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/007_watchlists.up.sql` — create
@@ -171,7 +171,7 @@ after `up` and are gone after `down`.
 
 ### Step 4 — migration: Seed portfolio.watchlist.* config defaults (config)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/006_watchlist_config.up.sql` — create
@@ -211,7 +211,7 @@ on the next `WatchConfig` reload; portfolio's `GetInt` fallback covers the pre-s
 
 ### Step 5 — service: Watchlist repository + service + handler (portfolio)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go` — create
@@ -243,7 +243,7 @@ on the next `WatchConfig` reload; portfolio's `GetInt` fallback covers the pre-s
 
 ### Step 6 — test: Portfolio watchlist RPC tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go` — create (or extend an existing service test file in the package)
@@ -274,7 +274,7 @@ required and present.
 
 ### Step 7 — service: Insights BFF watchlist handlers + browser client (UI)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify (add watchlist handler methods to the existing `PortfolioService` router block)
@@ -309,7 +309,7 @@ grep: `grep -n "x-user-id\|x-access-scope\|x-trace-id\|backendHeaders" services/
 
 ### Step 8 — service: Insights Watchlists page + React-Query hooks (UI)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/watchlists/page.tsx` — create
@@ -344,7 +344,7 @@ compiles the new route. (E2E in Step 9.)
 
 ### Step 9 — test: Playwright E2E for the Watchlists page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts` — create
@@ -372,7 +372,7 @@ spec passes. No coverage threshold applies to Next.js (E2E covers behavior).
 
 ### Step 10 — docs: Config defaults in portfolio CLAUDE.md + root config table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` / `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify (add `portfolio.watchlist.*` defaults to the Config Keys section)
@@ -400,4 +400,11 @@ spec passes. No coverage threshold applies to Next.js (E2E covers behavior).
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 2 — extra WKT files in the proto-gen diff
+`./scripts/buf-gen.sh` (run with the CI-pinned plugin versions) regenerated the portfolio stubs as
+expected, but also rewrote `packages/proto/gen/ts/google/protobuf/timestamp.ts` and its compiled
+`dist/google/protobuf/timestamp.d.ts`. The change is a comment-text refresh of the
+`google.protobuf.Timestamp` well-known type bundled with the current `buf` release — pre-existing
+latent staleness surfaced by regeneration, not caused by this feature. These two files are committed
+with the feature because the `proto-freshness` CI job regenerates with the same `buf` and would flag
+them stale otherwise. No generated message/RPC semantics changed.

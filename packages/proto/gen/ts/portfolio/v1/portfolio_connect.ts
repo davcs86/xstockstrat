@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { GetPnLRequest, GetPortfolioRequest, GetPositionRequest, GetSnapshotRequest, ListPortfoliosRequest, ListPortfoliosResponse, ListPositionsRequest, ListPositionsResponse, PnLResponse, Portfolio, PortfolioSnapshot, Position, StreamPortfolioUpdatesRequest } from "./portfolio_pb.js";
+import { AddWatchlistSymbolsRequest, AddWatchlistSymbolsResponse, CreateWatchlistRequest, CreateWatchlistResponse, DeleteWatchlistRequest, DeleteWatchlistResponse, GetPnLRequest, GetPortfolioRequest, GetPositionRequest, GetSnapshotRequest, GetWatchlistRequest, GetWatchlistResponse, ListPortfoliosRequest, ListPortfoliosResponse, ListPositionsRequest, ListPositionsResponse, ListWatchlistsRequest, ListWatchlistsResponse, PnLResponse, Portfolio, PortfolioSnapshot, Position, RemoveWatchlistSymbolsRequest, RemoveWatchlistSymbolsResponse, StreamPortfolioUpdatesRequest, UpdateWatchlistRequest, UpdateWatchlistResponse } from "./portfolio_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -73,6 +73,72 @@ export const PortfolioService = {
       name: "ListPortfolios",
       I: ListPortfoliosRequest,
       O: ListPortfoliosResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Watchlist management (feature 058). Additive — ownership is taken from the
+     * propagated x-user-id header server-side, never from request fields.
+     *
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.CreateWatchlist
+     */
+    createWatchlist: {
+      name: "CreateWatchlist",
+      I: CreateWatchlistRequest,
+      O: CreateWatchlistResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.GetWatchlist
+     */
+    getWatchlist: {
+      name: "GetWatchlist",
+      I: GetWatchlistRequest,
+      O: GetWatchlistResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.ListWatchlists
+     */
+    listWatchlists: {
+      name: "ListWatchlists",
+      I: ListWatchlistsRequest,
+      O: ListWatchlistsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlist
+     */
+    updateWatchlist: {
+      name: "UpdateWatchlist",
+      I: UpdateWatchlistRequest,
+      O: UpdateWatchlistResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.DeleteWatchlist
+     */
+    deleteWatchlist: {
+      name: "DeleteWatchlist",
+      I: DeleteWatchlistRequest,
+      O: DeleteWatchlistResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.AddWatchlistSymbols
+     */
+    addWatchlistSymbols: {
+      name: "AddWatchlistSymbols",
+      I: AddWatchlistSymbolsRequest,
+      O: AddWatchlistSymbolsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.RemoveWatchlistSymbols
+     */
+    removeWatchlistSymbols: {
+      name: "RemoveWatchlistSymbols",
+      I: RemoveWatchlistSymbolsRequest,
+      O: RemoveWatchlistSymbolsResponse,
       kind: MethodKind.Unary,
     },
   }
