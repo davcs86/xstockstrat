@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.StrategyOperation = exports.ComponentKind = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.BacktestStatus = exports.protobufPackage = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -15,6 +15,15 @@ exports.componentKindToNumber = componentKindToNumber;
 exports.strategyOperationFromJSON = strategyOperationFromJSON;
 exports.strategyOperationToJSON = strategyOperationToJSON;
 exports.strategyOperationToNumber = strategyOperationToNumber;
+exports.comparatorFromJSON = comparatorFromJSON;
+exports.comparatorToJSON = comparatorToJSON;
+exports.comparatorToNumber = comparatorToNumber;
+exports.screenKindFromJSON = screenKindFromJSON;
+exports.screenKindToJSON = screenKindToJSON;
+exports.screenKindToNumber = screenKindToNumber;
+exports.screenResultStatusFromJSON = screenResultStatusFromJSON;
+exports.screenResultStatusToJSON = screenResultStatusToJSON;
+exports.screenResultStatusToNumber = screenResultStatusToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -176,6 +185,203 @@ function strategyOperationToNumber(object) {
         case StrategyOperation.STRATEGY_OPERATION_DEACTIVATE:
             return 3;
         case StrategyOperation.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** Comparator for a screen criterion's threshold test (closed set → enum). */
+var Comparator;
+(function (Comparator) {
+    Comparator["COMPARATOR_UNSPECIFIED"] = "COMPARATOR_UNSPECIFIED";
+    Comparator["COMPARATOR_LT"] = "COMPARATOR_LT";
+    Comparator["COMPARATOR_LTE"] = "COMPARATOR_LTE";
+    Comparator["COMPARATOR_GT"] = "COMPARATOR_GT";
+    Comparator["COMPARATOR_GTE"] = "COMPARATOR_GTE";
+    /** COMPARATOR_BETWEEN - threshold <= x <= threshold_high */
+    Comparator["COMPARATOR_BETWEEN"] = "COMPARATOR_BETWEEN";
+    Comparator["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(Comparator || (exports.Comparator = Comparator = {}));
+function comparatorFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "COMPARATOR_UNSPECIFIED":
+            return Comparator.COMPARATOR_UNSPECIFIED;
+        case 1:
+        case "COMPARATOR_LT":
+            return Comparator.COMPARATOR_LT;
+        case 2:
+        case "COMPARATOR_LTE":
+            return Comparator.COMPARATOR_LTE;
+        case 3:
+        case "COMPARATOR_GT":
+            return Comparator.COMPARATOR_GT;
+        case 4:
+        case "COMPARATOR_GTE":
+            return Comparator.COMPARATOR_GTE;
+        case 5:
+        case "COMPARATOR_BETWEEN":
+            return Comparator.COMPARATOR_BETWEEN;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return Comparator.UNRECOGNIZED;
+    }
+}
+function comparatorToJSON(object) {
+    switch (object) {
+        case Comparator.COMPARATOR_UNSPECIFIED:
+            return "COMPARATOR_UNSPECIFIED";
+        case Comparator.COMPARATOR_LT:
+            return "COMPARATOR_LT";
+        case Comparator.COMPARATOR_LTE:
+            return "COMPARATOR_LTE";
+        case Comparator.COMPARATOR_GT:
+            return "COMPARATOR_GT";
+        case Comparator.COMPARATOR_GTE:
+            return "COMPARATOR_GTE";
+        case Comparator.COMPARATOR_BETWEEN:
+            return "COMPARATOR_BETWEEN";
+        case Comparator.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function comparatorToNumber(object) {
+    switch (object) {
+        case Comparator.COMPARATOR_UNSPECIFIED:
+            return 0;
+        case Comparator.COMPARATOR_LT:
+            return 1;
+        case Comparator.COMPARATOR_LTE:
+            return 2;
+        case Comparator.COMPARATOR_GT:
+            return 3;
+        case Comparator.COMPARATOR_GTE:
+            return 4;
+        case Comparator.COMPARATOR_BETWEEN:
+            return 5;
+        case Comparator.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** What a screen criterion evaluates. */
+var ScreenKind;
+(function (ScreenKind) {
+    ScreenKind["SCREEN_KIND_UNSPECIFIED"] = "SCREEN_KIND_UNSPECIFIED";
+    /** SCREEN_KIND_FUNDAMENTAL - a fundamental metric (metric_name) */
+    ScreenKind["SCREEN_KIND_FUNDAMENTAL"] = "SCREEN_KIND_FUNDAMENTAL";
+    /** SCREEN_KIND_TECHNICAL_FORMULA - a custom formula (component) */
+    ScreenKind["SCREEN_KIND_TECHNICAL_FORMULA"] = "SCREEN_KIND_TECHNICAL_FORMULA";
+    /** SCREEN_KIND_TECHNICAL_INDICATOR - a built-in indicator (component) */
+    ScreenKind["SCREEN_KIND_TECHNICAL_INDICATOR"] = "SCREEN_KIND_TECHNICAL_INDICATOR";
+    /** SCREEN_KIND_SIGNAL - source-weighted signal blend */
+    ScreenKind["SCREEN_KIND_SIGNAL"] = "SCREEN_KIND_SIGNAL";
+    ScreenKind["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(ScreenKind || (exports.ScreenKind = ScreenKind = {}));
+function screenKindFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "SCREEN_KIND_UNSPECIFIED":
+            return ScreenKind.SCREEN_KIND_UNSPECIFIED;
+        case 1:
+        case "SCREEN_KIND_FUNDAMENTAL":
+            return ScreenKind.SCREEN_KIND_FUNDAMENTAL;
+        case 2:
+        case "SCREEN_KIND_TECHNICAL_FORMULA":
+            return ScreenKind.SCREEN_KIND_TECHNICAL_FORMULA;
+        case 3:
+        case "SCREEN_KIND_TECHNICAL_INDICATOR":
+            return ScreenKind.SCREEN_KIND_TECHNICAL_INDICATOR;
+        case 4:
+        case "SCREEN_KIND_SIGNAL":
+            return ScreenKind.SCREEN_KIND_SIGNAL;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return ScreenKind.UNRECOGNIZED;
+    }
+}
+function screenKindToJSON(object) {
+    switch (object) {
+        case ScreenKind.SCREEN_KIND_UNSPECIFIED:
+            return "SCREEN_KIND_UNSPECIFIED";
+        case ScreenKind.SCREEN_KIND_FUNDAMENTAL:
+            return "SCREEN_KIND_FUNDAMENTAL";
+        case ScreenKind.SCREEN_KIND_TECHNICAL_FORMULA:
+            return "SCREEN_KIND_TECHNICAL_FORMULA";
+        case ScreenKind.SCREEN_KIND_TECHNICAL_INDICATOR:
+            return "SCREEN_KIND_TECHNICAL_INDICATOR";
+        case ScreenKind.SCREEN_KIND_SIGNAL:
+            return "SCREEN_KIND_SIGNAL";
+        case ScreenKind.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function screenKindToNumber(object) {
+    switch (object) {
+        case ScreenKind.SCREEN_KIND_UNSPECIFIED:
+            return 0;
+        case ScreenKind.SCREEN_KIND_FUNDAMENTAL:
+            return 1;
+        case ScreenKind.SCREEN_KIND_TECHNICAL_FORMULA:
+            return 2;
+        case ScreenKind.SCREEN_KIND_TECHNICAL_INDICATOR:
+            return 3;
+        case ScreenKind.SCREEN_KIND_SIGNAL:
+            return 4;
+        case ScreenKind.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+var ScreenResultStatus;
+(function (ScreenResultStatus) {
+    ScreenResultStatus["SCREEN_RESULT_STATUS_UNSPECIFIED"] = "SCREEN_RESULT_STATUS_UNSPECIFIED";
+    ScreenResultStatus["SCREEN_RESULT_STATUS_OK"] = "SCREEN_RESULT_STATUS_OK";
+    ScreenResultStatus["SCREEN_RESULT_STATUS_INSUFFICIENT_DATA"] = "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA";
+    ScreenResultStatus["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(ScreenResultStatus || (exports.ScreenResultStatus = ScreenResultStatus = {}));
+function screenResultStatusFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "SCREEN_RESULT_STATUS_UNSPECIFIED":
+            return ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED;
+        case 1:
+        case "SCREEN_RESULT_STATUS_OK":
+            return ScreenResultStatus.SCREEN_RESULT_STATUS_OK;
+        case 2:
+        case "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA":
+            return ScreenResultStatus.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return ScreenResultStatus.UNRECOGNIZED;
+    }
+}
+function screenResultStatusToJSON(object) {
+    switch (object) {
+        case ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED:
+            return "SCREEN_RESULT_STATUS_UNSPECIFIED";
+        case ScreenResultStatus.SCREEN_RESULT_STATUS_OK:
+            return "SCREEN_RESULT_STATUS_OK";
+        case ScreenResultStatus.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA:
+            return "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA";
+        case ScreenResultStatus.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function screenResultStatusToNumber(object) {
+    switch (object) {
+        case ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED:
+            return 0;
+        case ScreenResultStatus.SCREEN_RESULT_STATUS_OK:
+            return 1;
+        case ScreenResultStatus.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA:
+            return 2;
+        case ScreenResultStatus.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -2393,6 +2599,705 @@ exports.SetStrategyLiveResponse = {
         return message;
     },
 };
+function createBaseScreenCriterion() {
+    return {
+        refName: "",
+        kind: ScreenKind.SCREEN_KIND_UNSPECIFIED,
+        metricName: "",
+        component: undefined,
+        op: Comparator.COMPARATOR_UNSPECIFIED,
+        threshold: 0,
+        thresholdHigh: 0,
+        weight: 0,
+        hardFilter: false,
+    };
+}
+exports.ScreenCriterion = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.refName !== "") {
+            writer.uint32(10).string(message.refName);
+        }
+        if (message.kind !== ScreenKind.SCREEN_KIND_UNSPECIFIED) {
+            writer.uint32(16).int32(screenKindToNumber(message.kind));
+        }
+        if (message.metricName !== "") {
+            writer.uint32(26).string(message.metricName);
+        }
+        if (message.component !== undefined) {
+            exports.StrategyComponent.encode(message.component, writer.uint32(34).fork()).join();
+        }
+        if (message.op !== Comparator.COMPARATOR_UNSPECIFIED) {
+            writer.uint32(40).int32(comparatorToNumber(message.op));
+        }
+        if (message.threshold !== 0) {
+            writer.uint32(49).double(message.threshold);
+        }
+        if (message.thresholdHigh !== 0) {
+            writer.uint32(57).double(message.thresholdHigh);
+        }
+        if (message.weight !== 0) {
+            writer.uint32(65).double(message.weight);
+        }
+        if (message.hardFilter !== false) {
+            writer.uint32(72).bool(message.hardFilter);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseScreenCriterion();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.refName = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.kind = screenKindFromJSON(reader.int32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.metricName = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.component = exports.StrategyComponent.decode(reader, reader.uint32());
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.op = comparatorFromJSON(reader.int32());
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 49) {
+                        break;
+                    }
+                    message.threshold = reader.double();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 57) {
+                        break;
+                    }
+                    message.thresholdHigh = reader.double();
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 65) {
+                        break;
+                    }
+                    message.weight = reader.double();
+                    continue;
+                }
+                case 9: {
+                    if (tag !== 72) {
+                        break;
+                    }
+                    message.hardFilter = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            refName: isSet(object.refName)
+                ? globalThis.String(object.refName)
+                : isSet(object.ref_name)
+                    ? globalThis.String(object.ref_name)
+                    : "",
+            kind: isSet(object.kind) ? screenKindFromJSON(object.kind) : ScreenKind.SCREEN_KIND_UNSPECIFIED,
+            metricName: isSet(object.metricName)
+                ? globalThis.String(object.metricName)
+                : isSet(object.metric_name)
+                    ? globalThis.String(object.metric_name)
+                    : "",
+            component: isSet(object.component) ? exports.StrategyComponent.fromJSON(object.component) : undefined,
+            op: isSet(object.op) ? comparatorFromJSON(object.op) : Comparator.COMPARATOR_UNSPECIFIED,
+            threshold: isSet(object.threshold) ? globalThis.Number(object.threshold) : 0,
+            thresholdHigh: isSet(object.thresholdHigh)
+                ? globalThis.Number(object.thresholdHigh)
+                : isSet(object.threshold_high)
+                    ? globalThis.Number(object.threshold_high)
+                    : 0,
+            weight: isSet(object.weight) ? globalThis.Number(object.weight) : 0,
+            hardFilter: isSet(object.hardFilter)
+                ? globalThis.Boolean(object.hardFilter)
+                : isSet(object.hard_filter)
+                    ? globalThis.Boolean(object.hard_filter)
+                    : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.refName !== "") {
+            obj.refName = message.refName;
+        }
+        if (message.kind !== ScreenKind.SCREEN_KIND_UNSPECIFIED) {
+            obj.kind = screenKindToJSON(message.kind);
+        }
+        if (message.metricName !== "") {
+            obj.metricName = message.metricName;
+        }
+        if (message.component !== undefined) {
+            obj.component = exports.StrategyComponent.toJSON(message.component);
+        }
+        if (message.op !== Comparator.COMPARATOR_UNSPECIFIED) {
+            obj.op = comparatorToJSON(message.op);
+        }
+        if (message.threshold !== 0) {
+            obj.threshold = message.threshold;
+        }
+        if (message.thresholdHigh !== 0) {
+            obj.thresholdHigh = message.thresholdHigh;
+        }
+        if (message.weight !== 0) {
+            obj.weight = message.weight;
+        }
+        if (message.hardFilter !== false) {
+            obj.hardFilter = message.hardFilter;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ScreenCriterion.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseScreenCriterion();
+        message.refName = object.refName ?? "";
+        message.kind = object.kind ?? ScreenKind.SCREEN_KIND_UNSPECIFIED;
+        message.metricName = object.metricName ?? "";
+        message.component = (object.component !== undefined && object.component !== null)
+            ? exports.StrategyComponent.fromPartial(object.component)
+            : undefined;
+        message.op = object.op ?? Comparator.COMPARATOR_UNSPECIFIED;
+        message.threshold = object.threshold ?? 0;
+        message.thresholdHigh = object.thresholdHigh ?? 0;
+        message.weight = object.weight ?? 0;
+        message.hardFilter = object.hardFilter ?? false;
+        return message;
+    },
+};
+function createBaseScreenResult() {
+    return {
+        symbol: "",
+        score: 0,
+        criterionScores: {},
+        passed: false,
+        status: ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED,
+        gap: undefined,
+    };
+}
+exports.ScreenResult = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.score !== 0) {
+            writer.uint32(17).double(message.score);
+        }
+        globalThis.Object.entries(message.criterionScores).forEach(([key, value]) => {
+            exports.ScreenResult_CriterionScoresEntry.encode({ key: key, value }, writer.uint32(26).fork()).join();
+        });
+        if (message.passed !== false) {
+            writer.uint32(32).bool(message.passed);
+        }
+        if (message.status !== ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED) {
+            writer.uint32(40).int32(screenResultStatusToNumber(message.status));
+        }
+        if (message.gap !== undefined) {
+            exports.CoverageGap.encode(message.gap, writer.uint32(50).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseScreenResult();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.score = reader.double();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    const entry3 = exports.ScreenResult_CriterionScoresEntry.decode(reader, reader.uint32());
+                    if (entry3.value !== undefined) {
+                        message.criterionScores[entry3.key] = entry3.value;
+                    }
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.passed = reader.bool();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.status = screenResultStatusFromJSON(reader.int32());
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.gap = exports.CoverageGap.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            score: isSet(object.score) ? globalThis.Number(object.score) : 0,
+            criterionScores: isObject(object.criterionScores)
+                ? globalThis.Object.entries(object.criterionScores).reduce((acc, [key, value]) => {
+                    acc[key] = globalThis.Number(value);
+                    return acc;
+                }, {})
+                : isObject(object.criterion_scores)
+                    ? globalThis.Object.entries(object.criterion_scores).reduce((acc, [key, value]) => {
+                        acc[key] = globalThis.Number(value);
+                        return acc;
+                    }, {})
+                    : {},
+            passed: isSet(object.passed) ? globalThis.Boolean(object.passed) : false,
+            status: isSet(object.status)
+                ? screenResultStatusFromJSON(object.status)
+                : ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED,
+            gap: isSet(object.gap) ? exports.CoverageGap.fromJSON(object.gap) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.score !== 0) {
+            obj.score = message.score;
+        }
+        if (message.criterionScores) {
+            const entries = globalThis.Object.entries(message.criterionScores);
+            if (entries.length > 0) {
+                obj.criterionScores = {};
+                entries.forEach(([k, v]) => {
+                    obj.criterionScores[k] = v;
+                });
+            }
+        }
+        if (message.passed !== false) {
+            obj.passed = message.passed;
+        }
+        if (message.status !== ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED) {
+            obj.status = screenResultStatusToJSON(message.status);
+        }
+        if (message.gap !== undefined) {
+            obj.gap = exports.CoverageGap.toJSON(message.gap);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ScreenResult.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseScreenResult();
+        message.symbol = object.symbol ?? "";
+        message.score = object.score ?? 0;
+        message.criterionScores = globalThis.Object.entries(object.criterionScores ?? {}).reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = globalThis.Number(value);
+            }
+            return acc;
+        }, {});
+        message.passed = object.passed ?? false;
+        message.status = object.status ?? ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED;
+        message.gap = (object.gap !== undefined && object.gap !== null) ? exports.CoverageGap.fromPartial(object.gap) : undefined;
+        return message;
+    },
+};
+function createBaseScreenResult_CriterionScoresEntry() {
+    return { key: "", value: 0 };
+}
+exports.ScreenResult_CriterionScoresEntry = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.key !== "") {
+            writer.uint32(10).string(message.key);
+        }
+        if (message.value !== 0) {
+            writer.uint32(17).double(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseScreenResult_CriterionScoresEntry();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.key = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.value = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            key: isSet(object.key) ? globalThis.String(object.key) : "",
+            value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.key !== "") {
+            obj.key = message.key;
+        }
+        if (message.value !== 0) {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ScreenResult_CriterionScoresEntry.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseScreenResult_CriterionScoresEntry();
+        message.key = object.key ?? "";
+        message.value = object.value ?? 0;
+        return message;
+    },
+};
+function createBaseScreenSymbolsRequest() {
+    return {
+        symbols: [],
+        criteria: [],
+        signalSources: [],
+        signalWeight: 0,
+        technicalWeight: 0,
+        minConviction: 0,
+        rankLimit: 0,
+        evaluationWindow: undefined,
+    };
+}
+exports.ScreenSymbolsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.symbols) {
+            writer.uint32(10).string(v);
+        }
+        for (const v of message.criteria) {
+            exports.ScreenCriterion.encode(v, writer.uint32(18).fork()).join();
+        }
+        for (const v of message.signalSources) {
+            writer.uint32(26).string(v);
+        }
+        if (message.signalWeight !== 0) {
+            writer.uint32(33).double(message.signalWeight);
+        }
+        if (message.technicalWeight !== 0) {
+            writer.uint32(41).double(message.technicalWeight);
+        }
+        if (message.minConviction !== 0) {
+            writer.uint32(49).double(message.minConviction);
+        }
+        if (message.rankLimit !== 0) {
+            writer.uint32(56).int32(message.rankLimit);
+        }
+        if (message.evaluationWindow !== undefined) {
+            common_1.TimeRange.encode(message.evaluationWindow, writer.uint32(66).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseScreenSymbolsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.criteria.push(exports.ScreenCriterion.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.signalSources.push(reader.string());
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 33) {
+                        break;
+                    }
+                    message.signalWeight = reader.double();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 41) {
+                        break;
+                    }
+                    message.technicalWeight = reader.double();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 49) {
+                        break;
+                    }
+                    message.minConviction = reader.double();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 56) {
+                        break;
+                    }
+                    message.rankLimit = reader.int32();
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.evaluationWindow = common_1.TimeRange.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+            criteria: globalThis.Array.isArray(object?.criteria)
+                ? object.criteria.map((e) => exports.ScreenCriterion.fromJSON(e))
+                : [],
+            signalSources: globalThis.Array.isArray(object?.signalSources)
+                ? object.signalSources.map((e) => globalThis.String(e))
+                : globalThis.Array.isArray(object?.signal_sources)
+                    ? object.signal_sources.map((e) => globalThis.String(e))
+                    : [],
+            signalWeight: isSet(object.signalWeight)
+                ? globalThis.Number(object.signalWeight)
+                : isSet(object.signal_weight)
+                    ? globalThis.Number(object.signal_weight)
+                    : 0,
+            technicalWeight: isSet(object.technicalWeight)
+                ? globalThis.Number(object.technicalWeight)
+                : isSet(object.technical_weight)
+                    ? globalThis.Number(object.technical_weight)
+                    : 0,
+            minConviction: isSet(object.minConviction)
+                ? globalThis.Number(object.minConviction)
+                : isSet(object.min_conviction)
+                    ? globalThis.Number(object.min_conviction)
+                    : 0,
+            rankLimit: isSet(object.rankLimit)
+                ? globalThis.Number(object.rankLimit)
+                : isSet(object.rank_limit)
+                    ? globalThis.Number(object.rank_limit)
+                    : 0,
+            evaluationWindow: isSet(object.evaluationWindow)
+                ? common_1.TimeRange.fromJSON(object.evaluationWindow)
+                : isSet(object.evaluation_window)
+                    ? common_1.TimeRange.fromJSON(object.evaluation_window)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        if (message.criteria?.length) {
+            obj.criteria = message.criteria.map((e) => exports.ScreenCriterion.toJSON(e));
+        }
+        if (message.signalSources?.length) {
+            obj.signalSources = message.signalSources;
+        }
+        if (message.signalWeight !== 0) {
+            obj.signalWeight = message.signalWeight;
+        }
+        if (message.technicalWeight !== 0) {
+            obj.technicalWeight = message.technicalWeight;
+        }
+        if (message.minConviction !== 0) {
+            obj.minConviction = message.minConviction;
+        }
+        if (message.rankLimit !== 0) {
+            obj.rankLimit = Math.round(message.rankLimit);
+        }
+        if (message.evaluationWindow !== undefined) {
+            obj.evaluationWindow = common_1.TimeRange.toJSON(message.evaluationWindow);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ScreenSymbolsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseScreenSymbolsRequest();
+        message.symbols = object.symbols?.map((e) => e) || [];
+        message.criteria = object.criteria?.map((e) => exports.ScreenCriterion.fromPartial(e)) || [];
+        message.signalSources = object.signalSources?.map((e) => e) || [];
+        message.signalWeight = object.signalWeight ?? 0;
+        message.technicalWeight = object.technicalWeight ?? 0;
+        message.minConviction = object.minConviction ?? 0;
+        message.rankLimit = object.rankLimit ?? 0;
+        message.evaluationWindow = (object.evaluationWindow !== undefined && object.evaluationWindow !== null)
+            ? common_1.TimeRange.fromPartial(object.evaluationWindow)
+            : undefined;
+        return message;
+    },
+};
+function createBaseScreenSymbolsResponse() {
+    return { results: [], coverageGaps: [] };
+}
+exports.ScreenSymbolsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.results) {
+            exports.ScreenResult.encode(v, writer.uint32(10).fork()).join();
+        }
+        for (const v of message.coverageGaps) {
+            exports.CoverageGap.encode(v, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseScreenSymbolsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.results.push(exports.ScreenResult.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.coverageGaps.push(exports.CoverageGap.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            results: globalThis.Array.isArray(object?.results)
+                ? object.results.map((e) => exports.ScreenResult.fromJSON(e))
+                : [],
+            coverageGaps: globalThis.Array.isArray(object?.coverageGaps)
+                ? object.coverageGaps.map((e) => exports.CoverageGap.fromJSON(e))
+                : globalThis.Array.isArray(object?.coverage_gaps)
+                    ? object.coverage_gaps.map((e) => exports.CoverageGap.fromJSON(e))
+                    : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.results?.length) {
+            obj.results = message.results.map((e) => exports.ScreenResult.toJSON(e));
+        }
+        if (message.coverageGaps?.length) {
+            obj.coverageGaps = message.coverageGaps.map((e) => exports.CoverageGap.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ScreenSymbolsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseScreenSymbolsResponse();
+        message.results = object.results?.map((e) => exports.ScreenResult.fromPartial(e)) || [];
+        message.coverageGaps = object.coverageGaps?.map((e) => exports.CoverageGap.fromPartial(e)) || [];
+        return message;
+    },
+};
 exports.AnalysisServiceService = {
     runBacktest: {
         path: "/xstockstrat.analysis.v1.AnalysisService/RunBacktest",
@@ -2465,6 +3370,16 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.SetStrategyLiveRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.SetStrategyLiveResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.SetStrategyLiveResponse.decode(value),
+    },
+    /** Screen a symbol universe against weighted criteria (feature 060) */
+    screenSymbols: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ScreenSymbolsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ScreenSymbolsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ScreenSymbolsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ScreenSymbolsResponse.decode(value),
     },
 };
 exports.AnalysisServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.AnalysisServiceService, "xstockstrat.analysis.v1.AnalysisService");

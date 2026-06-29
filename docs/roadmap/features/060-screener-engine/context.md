@@ -75,3 +75,44 @@
 - Advisories for execute: Step 6 golden-baseline freeze (capture pre-refactor expected values) is a MANUAL prerequisite,
   not a runnable command; Steps 8↔9 share a data-testid contract — keep names identical; Step 5 is large but cohesive.
 - analysis.proto + servicer.py overlap with 062 is rebase-only (no field/name collision); whichever merges second rebases.
+
+## Session 2026-06-29 — sdd-execute (all 9 steps)
+
+Executed all 9 steps on `feature/screener-engine` (stacked on `feature/fundamentals-data-source`,
+059). One integration PR per feature.
+
+- **Step 1–2 (proto+gen)**: additive `ScreenSymbols` RPC + `ScreenCriterion`/`ScreenResult`/
+  `ScreenSymbolsRequest`/`ScreenSymbolsResponse` + `Comparator`/`ScreenKind`/`ScreenResultStatus`
+  enums. `buf lint`/`buf breaking` clean; regen touched only analysis stubs.
+- **Step 3 (config)**: 4 `analysis.screener.*` keys in root + analysis CLAUDE.md.
+- **Step 4 (extract scoring)**: `app/services/scoring.py` (`compute_signal_score`, `combine_score`,
+  `buy_threshold`, `sell_threshold`) moved VERBATIM from the inline `_backtest_symbol` math; servicer
+  delegates and keeps the `_compute_signal_score` re-export alias (FR-8). **Golden proof**: the full
+  pre-existing analysis suite (105 tests) passes unchanged after the refactor, plus a frozen-value
+  golden test (`TestScoringGolden` in test_analysis_helpers.py) pins the extracted functions
+  byte-for-byte (see Deviation Log for the golden-baseline approach).
+- **Step 5 (ScreenSymbols)**: `app/services/screener.py` `ScreenerEngine` + servicer method. Reuses
+  `scoring.combine_score` (technical aggregate [0,1]→[-1,1] so the blend == backtest, FR-4), calls
+  `ExecuteFormula` exactly as a backtest (FR-3) under a concurrency semaphore, forwards propagation
+  metadata on every outbound call, INSUFFICIENT_DATA+CoverageGap for thin symbols (FR-7), universe
+  min-max normalization (FR-6), rank-limit + universe cap, and a scan deadline.
+- **Step 6 (tests)**: golden (helpers), `ScreenSymbols` RPC tests (servicer), engine units
+  (test_screener.py). Full suite 120 passed, coverage 64% (≥40%), ruff clean.
+- **Step 7–8 (UI)**: `screenSymbols` BFF handler, `useScreenSymbols` mutation hook, `/insights/screener`
+  page (symbol entry + criteria builder + ranked results table with insufficient-data badge). tsc +
+  next lint clean.
+- **Step 9 (E2E)**: `e2e/insights/screener.spec.ts` + `screenSymbols` mock authored — runs a scan,
+  asserts the ranked 3-row table and the insufficient-data state. **Could not be run to completion in
+  this container**: Playwright's dev `webServer` repeatedly failed to bind within 60s (post-restart apt
+  + Playwright-Firefox setup churn starved the Next.js compile; production `next build` also not viable
+  here as it type-checks the temp config). Per user direction (retry-once-then-commit), committed with
+  the spec/mock authored and verified-by-construction (`tsc --noEmit` + `next lint` clean, mirrors the
+  passing 058/backtest-coverage specs). See Deviation Log. Re-run `pnpm test:e2e -- screener` in a
+  stable env.
+
+**Fundamentals note**: since 060 is stacked on 059, `GetFundamentals(Multi)` proto exists in the
+ancestry — so instead of a compile-time `hasattr` skip, the engine calls `GetFundamentalsMulti` and
+degrades fundamental criteria to **skipped** on any RpcError (FMP disabled by default →
+FailedPrecondition, quota-exhausted, or unavailable), satisfying FR-5 both ways. See Deviation Log.
+
+**Stopped at**: all complete → integration PR → `feature/fundamentals-data-source` (059).

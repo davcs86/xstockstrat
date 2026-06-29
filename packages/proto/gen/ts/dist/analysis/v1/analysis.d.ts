@@ -30,6 +30,45 @@ export declare enum StrategyOperation {
 export declare function strategyOperationFromJSON(object: any): StrategyOperation;
 export declare function strategyOperationToJSON(object: StrategyOperation): string;
 export declare function strategyOperationToNumber(object: StrategyOperation): number;
+/** Comparator for a screen criterion's threshold test (closed set → enum). */
+export declare enum Comparator {
+    COMPARATOR_UNSPECIFIED = "COMPARATOR_UNSPECIFIED",
+    COMPARATOR_LT = "COMPARATOR_LT",
+    COMPARATOR_LTE = "COMPARATOR_LTE",
+    COMPARATOR_GT = "COMPARATOR_GT",
+    COMPARATOR_GTE = "COMPARATOR_GTE",
+    /** COMPARATOR_BETWEEN - threshold <= x <= threshold_high */
+    COMPARATOR_BETWEEN = "COMPARATOR_BETWEEN",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function comparatorFromJSON(object: any): Comparator;
+export declare function comparatorToJSON(object: Comparator): string;
+export declare function comparatorToNumber(object: Comparator): number;
+/** What a screen criterion evaluates. */
+export declare enum ScreenKind {
+    SCREEN_KIND_UNSPECIFIED = "SCREEN_KIND_UNSPECIFIED",
+    /** SCREEN_KIND_FUNDAMENTAL - a fundamental metric (metric_name) */
+    SCREEN_KIND_FUNDAMENTAL = "SCREEN_KIND_FUNDAMENTAL",
+    /** SCREEN_KIND_TECHNICAL_FORMULA - a custom formula (component) */
+    SCREEN_KIND_TECHNICAL_FORMULA = "SCREEN_KIND_TECHNICAL_FORMULA",
+    /** SCREEN_KIND_TECHNICAL_INDICATOR - a built-in indicator (component) */
+    SCREEN_KIND_TECHNICAL_INDICATOR = "SCREEN_KIND_TECHNICAL_INDICATOR",
+    /** SCREEN_KIND_SIGNAL - source-weighted signal blend */
+    SCREEN_KIND_SIGNAL = "SCREEN_KIND_SIGNAL",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function screenKindFromJSON(object: any): ScreenKind;
+export declare function screenKindToJSON(object: ScreenKind): string;
+export declare function screenKindToNumber(object: ScreenKind): number;
+export declare enum ScreenResultStatus {
+    SCREEN_RESULT_STATUS_UNSPECIFIED = "SCREEN_RESULT_STATUS_UNSPECIFIED",
+    SCREEN_RESULT_STATUS_OK = "SCREEN_RESULT_STATUS_OK",
+    SCREEN_RESULT_STATUS_INSUFFICIENT_DATA = "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function screenResultStatusFromJSON(object: any): ScreenResultStatus;
+export declare function screenResultStatusToJSON(object: ScreenResultStatus): string;
+export declare function screenResultStatusToNumber(object: ScreenResultStatus): number;
 export interface RunBacktestRequest {
     strategyId: string;
     range?: TimeRange | undefined;
@@ -167,6 +206,54 @@ export interface SetStrategyLiveRequest {
 export interface SetStrategyLiveResponse {
     definition?: StrategyDefinition | undefined;
 }
+export interface ScreenCriterion {
+    refName: string;
+    kind: ScreenKind;
+    /** FUNDAMENTAL only (e.g. "pe_ratio") */
+    metricName: string;
+    /** reused, for TECHNICAL_* kinds */
+    component?: StrategyComponent | undefined;
+    op: Comparator;
+    threshold: number;
+    /** for COMPARATOR_BETWEEN */
+    thresholdHigh: number;
+    /** contribution to the blended score */
+    weight: number;
+    /** true → failing this excludes the symbol */
+    hardFilter: boolean;
+}
+export interface ScreenResult {
+    symbol: string;
+    score: number;
+    /** per ref_name; skipped criteria are absent */
+    criterionScores: {
+        [key: string]: number;
+    };
+    passed: boolean;
+    status: ScreenResultStatus;
+    /** populated when status == INSUFFICIENT_DATA */
+    gap?: CoverageGap | undefined;
+}
+export interface ScreenResult_CriterionScoresEntry {
+    key: string;
+    value: number;
+}
+export interface ScreenSymbolsRequest {
+    symbols: string[];
+    criteria: ScreenCriterion[];
+    /** Blend params — same names the extracted scoring module reads (kept consistent with backtest). */
+    signalSources: string[];
+    signalWeight: number;
+    technicalWeight: number;
+    minConviction: number;
+    rankLimit: number;
+    /** Reserved/optional — historical as-of is deferred (OQ-060-e); latest bar is the default. */
+    evaluationWindow?: TimeRange | undefined;
+}
+export interface ScreenSymbolsResponse {
+    results: ScreenResult[];
+    coverageGaps: CoverageGap[];
+}
 export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
 export declare const CoverageGap: MessageFns<CoverageGap>;
 export declare const BacktestResult: MessageFns<BacktestResult>;
@@ -187,6 +274,11 @@ export declare const ListStrategyDefinitionsRequest: MessageFns<ListStrategyDefi
 export declare const ListStrategyDefinitionsResponse: MessageFns<ListStrategyDefinitionsResponse>;
 export declare const SetStrategyLiveRequest: MessageFns<SetStrategyLiveRequest>;
 export declare const SetStrategyLiveResponse: MessageFns<SetStrategyLiveResponse>;
+export declare const ScreenCriterion: MessageFns<ScreenCriterion>;
+export declare const ScreenResult: MessageFns<ScreenResult>;
+export declare const ScreenResult_CriterionScoresEntry: MessageFns<ScreenResult_CriterionScoresEntry>;
+export declare const ScreenSymbolsRequest: MessageFns<ScreenSymbolsRequest>;
+export declare const ScreenSymbolsResponse: MessageFns<ScreenSymbolsResponse>;
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export declare const AnalysisServiceService: {
     readonly runBacktest: {
@@ -261,6 +353,16 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: SetStrategyLiveResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => SetStrategyLiveResponse;
     };
+    /** Screen a symbol universe against weighted criteria (feature 060) */
+    readonly screenSymbols: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ScreenSymbolsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ScreenSymbolsRequest;
+        readonly responseSerialize: (value: ScreenSymbolsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ScreenSymbolsResponse;
+    };
 };
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
     runBacktest: handleUnaryCall<RunBacktestRequest, BacktestResult>;
@@ -271,6 +373,8 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
     getStrategy: handleUnaryCall<GetStrategyRequest, StrategyDefinition>;
     listStrategyDefinitions: handleUnaryCall<ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse>;
     setStrategyLive: handleUnaryCall<SetStrategyLiveRequest, SetStrategyLiveResponse>;
+    /** Screen a symbol universe against weighted criteria (feature 060) */
+    screenSymbols: handleUnaryCall<ScreenSymbolsRequest, ScreenSymbolsResponse>;
 }
 export interface AnalysisServiceClient extends Client {
     runBacktest(request: RunBacktestRequest, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
@@ -297,6 +401,10 @@ export interface AnalysisServiceClient extends Client {
     setStrategyLive(request: SetStrategyLiveRequest, callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void): ClientUnaryCall;
     setStrategyLive(request: SetStrategyLiveRequest, metadata: Metadata, callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void): ClientUnaryCall;
     setStrategyLive(request: SetStrategyLiveRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void): ClientUnaryCall;
+    /** Screen a symbol universe against weighted criteria (feature 060) */
+    screenSymbols(request: ScreenSymbolsRequest, callback: (error: ServiceError | null, response: ScreenSymbolsResponse) => void): ClientUnaryCall;
+    screenSymbols(request: ScreenSymbolsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ScreenSymbolsResponse) => void): ClientUnaryCall;
+    screenSymbols(request: ScreenSymbolsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ScreenSymbolsResponse) => void): ClientUnaryCall;
 }
 export declare const AnalysisServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AnalysisServiceClient;

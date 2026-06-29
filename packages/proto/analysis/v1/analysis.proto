@@ -17,6 +17,8 @@ service AnalysisService {
   rpc GetStrategy(GetStrategyRequest) returns (StrategyDefinition);
   rpc ListStrategyDefinitions(ListStrategyDefinitionsRequest) returns (ListStrategyDefinitionsResponse);
   rpc SetStrategyLive(SetStrategyLiveRequest) returns (SetStrategyLiveResponse);
+  // Screen a symbol universe against weighted criteria (feature 060)
+  rpc ScreenSymbols(ScreenSymbolsRequest) returns (ScreenSymbolsResponse);
 }
 
 message RunBacktestRequest {
@@ -168,4 +170,70 @@ message SetStrategyLiveRequest {
 
 message SetStrategyLiveResponse {
   StrategyDefinition definition = 1;
+}
+
+// ── Screener engine (feature 060) ────────────────────────────────────────────
+
+// Comparator for a screen criterion's threshold test (closed set → enum).
+enum Comparator {
+  COMPARATOR_UNSPECIFIED = 0;
+  COMPARATOR_LT = 1;
+  COMPARATOR_LTE = 2;
+  COMPARATOR_GT = 3;
+  COMPARATOR_GTE = 4;
+  COMPARATOR_BETWEEN = 5;  // threshold <= x <= threshold_high
+}
+
+// What a screen criterion evaluates.
+enum ScreenKind {
+  SCREEN_KIND_UNSPECIFIED = 0;
+  SCREEN_KIND_FUNDAMENTAL = 1;          // a fundamental metric (metric_name)
+  SCREEN_KIND_TECHNICAL_FORMULA = 2;    // a custom formula (component)
+  SCREEN_KIND_TECHNICAL_INDICATOR = 3;  // a built-in indicator (component)
+  SCREEN_KIND_SIGNAL = 4;               // source-weighted signal blend
+}
+
+enum ScreenResultStatus {
+  SCREEN_RESULT_STATUS_UNSPECIFIED = 0;
+  SCREEN_RESULT_STATUS_OK = 1;
+  SCREEN_RESULT_STATUS_INSUFFICIENT_DATA = 2;
+}
+
+message ScreenCriterion {
+  string ref_name = 1;
+  ScreenKind kind = 2;
+  string metric_name = 3;          // FUNDAMENTAL only (e.g. "pe_ratio")
+  StrategyComponent component = 4; // reused, for TECHNICAL_* kinds
+  Comparator op = 5;
+  double threshold = 6;
+  double threshold_high = 7;       // for COMPARATOR_BETWEEN
+  double weight = 8;               // contribution to the blended score
+  bool hard_filter = 9;            // true → failing this excludes the symbol
+}
+
+message ScreenResult {
+  string symbol = 1;
+  double score = 2;
+  map<string, double> criterion_scores = 3;  // per ref_name; skipped criteria are absent
+  bool passed = 4;
+  ScreenResultStatus status = 5;
+  CoverageGap gap = 6;                        // populated when status == INSUFFICIENT_DATA
+}
+
+message ScreenSymbolsRequest {
+  repeated string symbols = 1;
+  repeated ScreenCriterion criteria = 2;
+  // Blend params — same names the extracted scoring module reads (kept consistent with backtest).
+  repeated string signal_sources = 3;
+  double signal_weight = 4;
+  double technical_weight = 5;
+  double min_conviction = 6;
+  int32 rank_limit = 7;
+  // Reserved/optional — historical as-of is deferred (OQ-060-e); latest bar is the default.
+  xstockstrat.common.v1.TimeRange evaluation_window = 8;
+}
+
+message ScreenSymbolsResponse {
+  repeated ScreenResult results = 1;
+  repeated CoverageGap coverage_gaps = 2;
 }

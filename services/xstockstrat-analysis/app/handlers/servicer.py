@@ -10,6 +10,7 @@ RunBacktest implements a real SMA crossover engine that:
 ScoreStrategy grades backtests using Sharpe ratio, max drawdown, and win rate.
 """
 
+import asyncio
 import json
 import logging
 import math
@@ -29,7 +30,14 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
 from app.repositories.strategies import StrategiesRepository
+from app.services import scoring
 from app.services.evaluator import StrategyEvaluator, _validate_definition
+from app.services.screener import ScreenerEngine
+
+# Backward-compat alias: the source-weighted signal math moved to app.services.scoring
+# (feature 060). Re-exported so existing imports of `_compute_signal_score` from this
+# module stay valid.
+_compute_signal_score = scoring.compute_signal_score
 
 log = logging.getLogger(__name__)
 
@@ -441,22 +449,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 tech_signal = 0.0
 
             # Signal score from newsletter signals active on this bar's date
-            signal_score = _compute_signal_score(
+            signal_score = scoring.compute_signal_score(
                 signals_map, bar, signal_sources, source_weights=source_weights
             )
 
-            # Combined conviction
-            if signal_weight > 0 and signals_map:
-                combined = (
-                    technical_weight * (tech_signal * 0.5 + 0.5) + signal_weight * signal_score
-                )
-            else:
-                # Pure technical: map tech_signal to 0-1 for threshold comparison
-                combined = tech_signal * 0.5 + 0.5  # -1→0, 0→0.5, +1→1
+            # Combined conviction (pure scoring module — identical to the screener, FR-4)
+            combined = scoring.combine_score(
+                tech_signal,
+                signal_score,
+                signal_weight,
+                technical_weight,
+                signals_present=bool(signals_map),
+            )
 
             # Entry: no position + combined above threshold → buy
-            buy_threshold = max(0.5 + min_conviction * 0.5, 0.55)
-            sell_threshold = 0.45
+            buy_threshold = scoring.buy_threshold(min_conviction)
+            sell_threshold = scoring.sell_threshold()
 
             if position == 0.0 and combined >= buy_threshold:
                 # Buy: use 95% of equity (keep 5% as buffer)
@@ -846,6 +854,46 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         return analysis_pb2.SetStrategyLiveResponse(definition=_row_to_strategy_definition(row))
 
+    async def ScreenSymbols(self, request, context):
+        """Screen a symbol universe against weighted criteria (feature 060).
+
+        Delegates to the pure-ish ScreenerEngine, reusing the same source-weighted scoring
+        as a backtest (FR-4) and ExecuteFormula invocation (FR-3). Fundamental criteria
+        degrade to skipped when marketdata's GetFundamentals is unavailable (FR-5). Does not
+        touch RunBacktest/ScoreStrategy (FR-8).
+        """
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+
+        _weights_raw = self._cfg.get_str("analysis.signals.source_weights", default="{}")
+        try:
+            source_weights = (
+                {k: max(0.0, min(1.0, float(v))) for k, v in json.loads(_weights_raw).items()}
+                if _weights_raw
+                else {}
+            )
+        except (ValueError, TypeError):
+            source_weights = {}
+
+        engine = ScreenerEngine(
+            self._marketdata, self._indicators, self._ingest, self._cfg, source_weights
+        )
+
+        # Enforce the overall scan deadline (default 120s).
+        deadline = self._cfg.get_int("analysis.screener.max_duration_seconds", 120)
+        try:
+            return await asyncio.wait_for(
+                engine.screen(request, propagation_meta), timeout=deadline
+            )
+        except TimeoutError:
+            await context.abort(
+                grpc.StatusCode.DEADLINE_EXCEEDED,
+                f"screen exceeded {deadline}s deadline",
+            )
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -881,39 +929,8 @@ def _unwrap_value(v):
     return None
 
 
-def _compute_signal_score(
-    signals_map: dict, bar, signal_sources: list, source_weights: dict | None = None
-) -> float:
-    """Return a 0.0–1.0 signal score from active newsletter signals for this bar."""
-    if not signals_map or not signal_sources:
-        return 0.5
-
-    bar_ts = bar.timestamp.ToDatetime()
-    buy_conviction = 0.0
-    sell_conviction = 0.0
-    count = 0
-
-    for source in signal_sources:
-        weight = max(0.0, min(1.0, (source_weights or {}).get(source, 1.0)))
-        for sig in signals_map.get(source, []):
-            valid_from = sig.valid_from.ToDatetime() if sig.valid_from.seconds > 0 else None
-            valid_until = sig.valid_until.ToDatetime() if sig.valid_until.seconds > 0 else None
-            if valid_from and bar_ts < valid_from:
-                continue
-            if valid_until and bar_ts > valid_until:
-                continue
-            conviction = sig.conviction if sig.conviction > 0 else 0.5
-            if sig.direction == "buy":
-                buy_conviction += conviction * weight
-            elif sig.direction == "sell":
-                sell_conviction += conviction * weight
-            count += 1
-
-    if count == 0:
-        return 0.5  # neutral
-
-    net = (buy_conviction - sell_conviction) / count
-    return (net + 1.0) / 2.0  # map -1..1 to 0..1
+# _compute_signal_score moved to app.services.scoring.compute_signal_score (feature 060);
+# the module-level alias near the imports preserves the old name for existing callers/tests.
 
 
 def _compute_metrics(daily_equity: list[float], trades: list, initial_equity: float) -> dict:

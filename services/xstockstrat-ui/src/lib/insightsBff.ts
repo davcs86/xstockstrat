@@ -55,6 +55,10 @@ router.service(AnalysisService, {
     const claims = await requireSession(ctx);
     return analysisClient.runBacktest(req, { headers: backendHeaders(claims, ctx) });
   },
+  async screenSymbols(req, ctx) {
+    const claims = await requireSession(ctx);
+    return analysisClient.screenSymbols(req, { headers: backendHeaders(claims, ctx) });
+  },
   async getStrategyReport(req, ctx) {
     const claims = await requireSession(ctx);
     return analysisClient.getStrategyReport(req, { headers: backendHeaders(claims, ctx) });

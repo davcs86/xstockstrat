@@ -158,6 +158,15 @@ Recently added keys (feature 058 — watchlist management, owned by `xstockstrat
 | `portfolio.watchlist.max_per_user` | int | `50` | Max watchlists a single user may own |
 | `portfolio.watchlist.max_symbols_per_list` | int | `500` | Max symbols allowed in one watchlist |
 
+Recently added keys (feature 060 — screener engine, owned by `xstockstrat-analysis`):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.screener.max_universe_size` | int | `100` | Max symbols a single `ScreenSymbols` scan may cover |
+| `analysis.screener.max_duration_seconds` | int | `120` | Overall deadline for one screener scan |
+| `analysis.screener.default_rank_limit` | int | `50` | Default ranked results returned when `rank_limit` is omitted |
+| `analysis.screener.max_concurrent_formula_evals` | int | `4` | Max concurrent `ExecuteFormula` evals during a scan |
+
 Recently added keys (feature 059 — fundamentals data source, owned by `xstockstrat-marketdata`). Establishes the `marketdata.<source>.enabled` convention (a source is off until its `enabled` key is flipped):
 
 | Key | Type | Default | Description |
