@@ -32,6 +32,13 @@ func NewPortfolioRepo(connStr string) (*PortfolioRepo, error) {
 	return &PortfolioRepo{pool: pool}, nil
 }
 
+// Pool exposes the underlying connection pool so sibling repositories in this
+// package (e.g. WatchlistRepo) can reuse the single portfolio pgxpool rather than
+// opening a second pool (keeps the connection-pool budget at 2).
+func (r *PortfolioRepo) Pool() *pgxpool.Pool {
+	return r.pool
+}
+
 // UpsertPosition inserts or updates a position row.
 func (r *PortfolioRepo) UpsertPosition(ctx context.Context, userID, symbol string, qty, avgEntry, costBasis float64, mode commonv1.TradingMode, accountID string) error {
 	const q = `

@@ -3,13 +3,16 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -37,6 +40,11 @@ type PortfolioService struct {
 	ledger     ledgerv1.LedgerServiceClient
 	marketdata marketdatav1.MarketDataServiceClient
 	notify     notifyv1.NotifyServiceClient
+
+	// Watchlists (feature 058). Held behind interfaces so the cap/ownership business
+	// rules can be unit-tested with a stubbed store + config.
+	watchlists WatchlistStore
+	wlCfg      watchlistConfig
 
 	mu   sync.RWMutex
 	subs map[string]chan *portfoliov1.PortfolioSnapshot
@@ -78,6 +86,9 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 		ledger:     ledgerv1.NewLedgerServiceClient(ledgerConn),
 		marketdata: marketdatav1.NewMarketDataServiceClient(mdConn),
 		notify:     notifyv1.NewNotifyServiceClient(notifyConn),
+		// Watchlists reuse the single portfolio pgxpool (no second pool — budget stays 2).
+		watchlists: repository.NewWatchlistRepo(repo.Pool()),
+		wlCfg:      cfgWatcher,
 		subs:       make(map[string]chan *portfoliov1.PortfolioSnapshot),
 	}
 	return svc, nil
@@ -875,4 +886,249 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		portfolios = append(portfolios, portfolio)
 	}
 	return &portfoliov1.ListPortfoliosResponse{Portfolios: portfolios}, nil
+}
+
+// ─── Watchlists (feature 058) ────────────────────────────────────────────────
+//
+// Ownership (FR-2) is enforced from the propagated x-user-id header, never from the
+// wire: every mutation loads the row, compares its user_id to the caller, and returns
+// PermissionDenied on mismatch. Caps (FR-3/FR-7) are read fresh from config on every
+// mutation so a lowered limit is honored immediately. Ledger emission (FR-6) is
+// non-fatal — emitEvent logs and drops on failure, never failing the mutation.
+
+const (
+	defaultMaxWatchlistsPerUser = 50
+	defaultMaxSymbolsPerList    = 500
+)
+
+// WatchlistStore is the persistence surface the watchlist RPCs depend on. The
+// concrete implementation is *repository.WatchlistRepo; tests inject a stub.
+type WatchlistStore interface {
+	Create(ctx context.Context, userID, name, description string, symbols []string) (*portfoliov1.Watchlist, error)
+	GetByID(ctx context.Context, watchlistID string) (*portfoliov1.Watchlist, error)
+	ListByUser(ctx context.Context, userID string, pageSize int, pageToken string) ([]*portfoliov1.Watchlist, string, error)
+	Update(ctx context.Context, watchlistID, name, description string, symbols []string) (*portfoliov1.Watchlist, error)
+	Delete(ctx context.Context, watchlistID string) error
+	AddSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
+	RemoveSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
+	CountByUser(ctx context.Context, userID string) (int, error)
+}
+
+// watchlistConfig is the slice of the config watcher the watchlist caps read. Lets
+// tests inject chosen caps without a live config stream.
+type watchlistConfig interface {
+	GetInt(key string, defaultVal int64) int64
+}
+
+// normalizeSymbols uppercases, trims, and de-duplicates a symbol list, dropping
+// empties while preserving first-seen order (FR-3).
+func normalizeSymbols(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		u := strings.ToUpper(strings.TrimSpace(s))
+		if u == "" {
+			continue
+		}
+		if _, dup := seen[u]; dup {
+			continue
+		}
+		seen[u] = struct{}{}
+		out = append(out, u)
+	}
+	return out
+}
+
+func (s *PortfolioService) maxWatchlistsPerUser() int {
+	return int(s.wlCfg.GetInt("portfolio.watchlist.max_per_user", defaultMaxWatchlistsPerUser))
+}
+
+func (s *PortfolioService) maxSymbolsPerList() int {
+	return int(s.wlCfg.GetInt("portfolio.watchlist.max_symbols_per_list", defaultMaxSymbolsPerList))
+}
+
+// requireUserID returns the caller's propagated user id or an InvalidArgument error.
+func requireUserID(ctx context.Context) (string, error) {
+	userID := middleware.FromContext(ctx).UserID
+	if userID == "" {
+		return "", connect.NewError(connect.CodeInvalidArgument, errors.New("missing user identity"))
+	}
+	return userID, nil
+}
+
+// loadOwned fetches a watchlist and enforces FR-2 ownership against the caller.
+// Returns NotFound if it does not exist, PermissionDenied if owned by someone else.
+func (s *PortfolioService) loadOwned(ctx context.Context, userID, watchlistID string) (*portfoliov1.Watchlist, error) {
+	if watchlistID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("watchlist_id required"))
+	}
+	wl, err := s.watchlists.GetByID(ctx, watchlistID)
+	if err != nil {
+		if errors.Is(err, repository.ErrWatchlistNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, errors.New("watchlist not found"))
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if wl.UserId != userID {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("watchlist not owned by caller"))
+	}
+	return wl, nil
+}
+
+// CreateWatchlist creates a new watchlist for the calling user (FR-1).
+func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1.CreateWatchlistRequest) (*portfoliov1.CreateWatchlistResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.GetName()) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name required"))
+	}
+	symbols := normalizeSymbols(req.GetSymbols())
+	if len(symbols) > s.maxSymbolsPerList() {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("too many symbols: %d exceeds max %d", len(symbols), s.maxSymbolsPerList()))
+	}
+	count, err := s.watchlists.CountByUser(ctx, userID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if count >= s.maxWatchlistsPerUser() {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("watchlist limit reached: %d", s.maxWatchlistsPerUser()))
+	}
+	wl, err := s.watchlists.Create(ctx, userID, req.GetName(), req.GetDescription(), symbols)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.emitEvent(ctx, "portfolio.watchlist.created", "watchlist:"+wl.WatchlistId, map[string]interface{}{
+		"user_id": userID, "watchlist_id": wl.WatchlistId, "name": wl.Name,
+	})
+	return &portfoliov1.CreateWatchlistResponse{Watchlist: wl}, nil
+}
+
+// GetWatchlist returns a single watchlist owned by the caller (FR-2).
+func (s *PortfolioService) GetWatchlist(ctx context.Context, req *portfoliov1.GetWatchlistRequest) (*portfoliov1.GetWatchlistResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	wl, err := s.loadOwned(ctx, userID, req.GetWatchlistId())
+	if err != nil {
+		return nil, err
+	}
+	return &portfoliov1.GetWatchlistResponse{Watchlist: wl}, nil
+}
+
+// ListWatchlists returns the caller's watchlists, paginated.
+func (s *PortfolioService) ListWatchlists(ctx context.Context, req *portfoliov1.ListWatchlistsRequest) (*portfoliov1.ListWatchlistsResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	pageSize := 0
+	pageToken := ""
+	if p := req.GetPage(); p != nil {
+		pageSize = int(p.GetPageSize())
+		pageToken = p.GetPageToken()
+	}
+	wls, next, err := s.watchlists.ListByUser(ctx, userID, pageSize, pageToken)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &portfoliov1.ListWatchlistsResponse{
+		Watchlists: wls,
+		Page:       &commonv1.PageResponse{NextPageToken: next},
+	}, nil
+}
+
+// UpdateWatchlist replaces name/description/symbols (FR-1).
+func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1.UpdateWatchlistRequest) (*portfoliov1.UpdateWatchlistResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.loadOwned(ctx, userID, req.GetWatchlistId()); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.GetName()) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name required"))
+	}
+	symbols := normalizeSymbols(req.GetSymbols())
+	if len(symbols) > s.maxSymbolsPerList() {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("too many symbols: %d exceeds max %d", len(symbols), s.maxSymbolsPerList()))
+	}
+	wl, err := s.watchlists.Update(ctx, req.GetWatchlistId(), req.GetName(), req.GetDescription(), symbols)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
+		"user_id": userID, "watchlist_id": wl.WatchlistId,
+	})
+	return &portfoliov1.UpdateWatchlistResponse{Watchlist: wl}, nil
+}
+
+// DeleteWatchlist hard-deletes a watchlist owned by the caller (FR-6).
+func (s *PortfolioService) DeleteWatchlist(ctx context.Context, req *portfoliov1.DeleteWatchlistRequest) (*portfoliov1.DeleteWatchlistResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.loadOwned(ctx, userID, req.GetWatchlistId()); err != nil {
+		return nil, err
+	}
+	if err := s.watchlists.Delete(ctx, req.GetWatchlistId()); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.emitEvent(ctx, "portfolio.watchlist.deleted", "watchlist:"+req.GetWatchlistId(), map[string]interface{}{
+		"user_id": userID, "watchlist_id": req.GetWatchlistId(),
+	})
+	return &portfoliov1.DeleteWatchlistResponse{}, nil
+}
+
+// AddWatchlistSymbols adds symbols, enforcing the per-list cap on the resulting set (FR-3).
+func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfoliov1.AddWatchlistSymbolsRequest) (*portfoliov1.AddWatchlistSymbolsResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	existing, err := s.loadOwned(ctx, userID, req.GetWatchlistId())
+	if err != nil {
+		return nil, err
+	}
+	add := normalizeSymbols(req.GetSymbols())
+	// Resulting count = union of current + new (both normalized).
+	resulting := normalizeSymbols(append(append([]string{}, existing.Symbols...), add...))
+	if len(resulting) > s.maxSymbolsPerList() {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("too many symbols: %d exceeds max %d", len(resulting), s.maxSymbolsPerList()))
+	}
+	wl, err := s.watchlists.AddSymbols(ctx, req.GetWatchlistId(), add)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
+		"user_id": userID, "watchlist_id": wl.WatchlistId,
+	})
+	return &portfoliov1.AddWatchlistSymbolsResponse{Watchlist: wl}, nil
+}
+
+// RemoveWatchlistSymbols removes symbols from a watchlist owned by the caller.
+func (s *PortfolioService) RemoveWatchlistSymbols(ctx context.Context, req *portfoliov1.RemoveWatchlistSymbolsRequest) (*portfoliov1.RemoveWatchlistSymbolsResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.loadOwned(ctx, userID, req.GetWatchlistId()); err != nil {
+		return nil, err
+	}
+	wl, err := s.watchlists.RemoveSymbols(ctx, req.GetWatchlistId(), normalizeSymbols(req.GetSymbols()))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
+		"user_id": userID, "watchlist_id": wl.WatchlistId,
+	})
+	return &portfoliov1.RemoveWatchlistSymbolsResponse{Watchlist: wl}, nil
 }

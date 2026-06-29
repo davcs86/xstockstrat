@@ -66,3 +66,43 @@
   059/062 resolved by pre-assigning ascending numbers (058=006, 059=007, 062=008). Because golang-migrate applies
   in numeric order, 058's config migration must merge BEFORE 059's and 062's. Recorded in merge-order.md.
 - insightsBff.ts is shared with 060 (distinct router blocks) — rebase-only, no hard dep.
+
+## Session 2026-06-29 — sdd-execute (all 10 steps)
+
+Executed all 10 steps on `feature/watchlist-management` (branched from `main-dev`) as a single
+feature branch (one integration PR, not per-step PRs). All verifications run locally.
+
+- **Step 1 (proto)**: Added `Watchlist` message + 7 CRUD RPCs to `PortfolioService`. `buf lint` +
+  `buf breaking` (against `main-dev`) pass — all additive.
+- **Step 2 (proto-gen)**: Ran `./scripts/buf-gen.sh`. Toolchain pinned to the CI versions
+  (`protoc-gen-go@v1.36.11`, `protoc-gen-go-grpc@v1.6.2`, `protoc-gen-connect-go@v1.19.2`,
+  `grpcio-tools==1.80.0`, buf latest) so regen touches only the portfolio stubs. **Deviation**: two
+  WKT files (`gen/ts/google/protobuf/timestamp.{ts,d.ts}`) also changed — a buf-bundled WKT-comment
+  refresh surfaced by regeneration, unrelated to the feature. Committed because proto-freshness CI
+  regenerates with the same buf and would otherwise flag them stale (see Deviation Log).
+- **Step 3 (portfolio migration 007)**: Created `007_watchlists.{up,down}.sql`. Applied + rolled back
+  on a real local Postgres 16 (full portfolio 000→007 chain) — tables created and dropped cleanly.
+- **Step 4 (config migration 006)**: Created `006_watchlist_config.{up,down}.sql` (4 rows: 2 keys ×
+  dev/production). Applied + rolled back on local Postgres — exactly 4 rows seeded/removed. Keeps the
+  pre-assigned `006` (058→006, 059→007, 062→008 config-migration ordering).
+- **Step 5 (service)**: `watchlist_repo.go` (reuses the existing pool via a new `PortfolioRepo.Pool()`
+  accessor — no second pool, budget stays 2); watchlist methods + `WatchlistStore`/`watchlistConfig`
+  interfaces + `normalizeSymbols` in `portfolio_service.go`; 7 handler + 7 adapter methods and a new
+  `PermissionDenied` mapping in `toGRPCError`. `go build` + `golangci-lint` clean.
+- **Step 6 (test)**: `watchlist_service_test.go` — AC-1 (round-trip + uppercase/dedupe), AC-2
+  (ownership → PermissionDenied), AC-3 (symbol cap, per-user cap, lowered-cap honored next mutation),
+  FR-6 (ledger failure non-fatal). New logic lives in the CI-coverpkg-excluded `service/` package;
+  these unit tests + the Step 9 E2E provide behavioral verification. Tests + lint pass.
+- **Step 7 (UI BFF)**: 7 watchlist handlers in the insights `PortfolioService` block (reuse
+  `backendHeaders` for x-user-id/x-access-scope/x-trace-id) + new `/insights/api`-bound
+  `insightsPortfolioClient.ts`. `tsc --noEmit` + `next lint` clean.
+- **Step 8 (UI page+hooks)**: `useWatchlists.ts` (query + 5 mutation hooks, invalidate `['watchlists']`)
+  and `insights/watchlists/page.tsx` (`'use client'`, AppShell). `next build` succeeds (35 routes).
+- **Step 9 (E2E)**: `e2e/insights/watchlists.spec.ts` drives AC-5 (create → add 2 → remove 1 → delete)
+  against a stateful `page.route` mock. Passed. (Env note: ran via a throwaway override config pointing
+  Playwright at the pre-installed chromium-1194 — the image lacks the chrome-headless-shell build the
+  pinned @playwright/test expects; override not committed.)
+- **Step 10 (docs)**: Added `portfolio.watchlist.*` defaults to portfolio CLAUDE.md + a feature-058
+  block in root CLAUDE.md § Config Governance Rules.
+
+**Stopped at**: all complete → integration PR → `main-dev`.

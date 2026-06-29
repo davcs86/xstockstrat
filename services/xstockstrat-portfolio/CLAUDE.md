@@ -42,6 +42,8 @@ Namespace: `portfolio`
 | `portfolio.snapshot.interval_minutes` | int | `5` | How often to write portfolio snapshots |
 | `portfolio.risk.max_drawdown_pct` | float | `0.10` | Alert if drawdown exceeds 10% |
 | `portfolio.risk.concentration_limit_pct` | float | `0.20` | Alert if single position > 20% of portfolio |
+| `portfolio.watchlist.max_per_user` | int | `50` | Max watchlists a single user may own (feature 058) |
+| `portfolio.watchlist.max_symbols_per_list` | int | `500` | Max symbols allowed in one watchlist (feature 058) |
 | `platform.ledger_endpoint` | string | — | Ledger address |
 
 ## Ledger Events Consumed

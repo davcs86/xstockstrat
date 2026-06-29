@@ -151,6 +151,13 @@ Recently added keys (feature 049 Part B — MCP OAuth 2.1 edge auth, owned by `x
 | `agent.oauth.registration_enabled` | bool | `true` | Allow RFC 7591 Dynamic Client Registration at `/oauth/register` |
 | `agent.oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only (no allow-any) |
 
+Recently added keys (feature 058 — watchlist management, owned by `xstockstrat-portfolio`):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `portfolio.watchlist.max_per_user` | int | `50` | Max watchlists a single user may own |
+| `portfolio.watchlist.max_symbols_per_list` | int | `500` | Max symbols allowed in one watchlist |
+
 Recently added keys (feature 057 — backfill management UI, owned by `xstockstrat-marketdata`):
 
 | Key | Type | Default | Description |

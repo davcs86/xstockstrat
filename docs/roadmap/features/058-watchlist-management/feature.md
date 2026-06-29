@@ -1,9 +1,9 @@
 # Feature: watchlist-management
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/watchlist-management`
 **Created**: 2026-06-26
-**Last Updated**: 2026-06-26
+**Last Updated**: 2026-06-29
 
 ---
 
@@ -14,6 +14,7 @@
 | 2026-06-26 | `idea` → `draft` | /sdd-story | Product spec generated (feature 1 of 6 in the screener initiative) |
 | 2026-06-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; fixed migration number 006→007 collision) |
 | 2026-06-27 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
+| 2026-06-29 | `implementation-ready` → `code-completed` | /sdd-execute | All 10 steps done on `feature/watchlist-management`; integration PR → main-dev |
 
 ---
 
