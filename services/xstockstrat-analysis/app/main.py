@@ -30,6 +30,8 @@ INDICATORS_ENDPOINT = os.environ.get("INDICATORS_ENDPOINT", "xstockstrat-indicat
 INGEST_ENDPOINT = os.environ.get("INGEST_ENDPOINT", "xstockstrat-ingest:50055")
 LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
 NOTIFY_ENDPOINT = os.environ.get("NOTIFY_ENDPOINT", "xstockstrat-notify:50059")
+# Feature 062 — fundamentals signal producer reads the watchlist universe from portfolio.
+PORTFOLIO_ENDPOINT = os.environ.get("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 
@@ -55,6 +57,7 @@ async def serve():
         ledger_channel=grpc.aio.insecure_channel(LEDGER_ENDPOINT),
         db_pool=db_pool,
         notify_channel=grpc.aio.insecure_channel(NOTIFY_ENDPOINT),
+        portfolio_channel=grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT),
     )
 
     # ── gRPC server (internal, port 50056) ────────────────────────────────
@@ -93,6 +96,23 @@ async def serve():
         )
         asyncio.get_event_loop().create_task(live_loop.run_forever())
         log.info("live evaluation loop started")
+
+        # ── Fundamentals signal producer (feature 062) ───────────────────
+        from app.engine.fundsignal_loop import FundamentalsSignalLoop
+
+        fundsignal_loop = FundamentalsSignalLoop(
+            config_watcher=cfg_watcher,
+            db_pool=db_pool,
+            marketdata_stub=servicer._marketdata,
+            ingest_stub=servicer._ingest,
+            portfolio_stub=servicer._portfolio,
+            indicators_stub=servicer._indicators,
+            notify_stub=servicer._notify,
+            ledger_stub=servicer._ledger,
+        )
+        servicer._fundsignal_loop = fundsignal_loop
+        asyncio.get_event_loop().create_task(fundsignal_loop.run_forever())
+        log.info("fundamentals signal producer loop started")
 
     await grpc_server.wait_for_termination()
 

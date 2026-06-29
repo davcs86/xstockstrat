@@ -74,6 +74,11 @@ class AnalysisServiceStub(object):
                 request_serializer=analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveRequest.SerializeToString,
                 response_deserializer=analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveResponse.FromString,
                 _registered_method=True)
+        self.RunFundamentalsScan = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.RunFundamentalsScanRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.FundamentalsScanSummary.FromString,
+                _registered_method=True)
 
 
 class AnalysisServiceServicer(object):
@@ -127,6 +132,13 @@ class AnalysisServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def RunFundamentalsScan(self, request, context):
+        """Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AnalysisServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -169,6 +181,11 @@ def add_AnalysisServiceServicer_to_server(servicer, server):
                     servicer.SetStrategyLive,
                     request_deserializer=analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveRequest.FromString,
                     response_serializer=analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveResponse.SerializeToString,
+            ),
+            'RunFundamentalsScan': grpc.unary_unary_rpc_method_handler(
+                    servicer.RunFundamentalsScan,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.RunFundamentalsScanRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.FundamentalsScanSummary.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -387,6 +404,33 @@ class AnalysisService(object):
             '/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive',
             analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveRequest.SerializeToString,
             analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RunFundamentalsScan(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan',
+            analysis_dot_v1_dot_analysis__pb2.RunFundamentalsScanRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.FundamentalsScanSummary.FromString,
             options,
             channel_credentials,
             insecure,
