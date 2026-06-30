@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+# DRY guard rail — pre-commit (husky v9). See docs/patterns/dry-guard-rail.md.
+# Bypass in an emergency with: git commit --no-verify
+
+# 1. Format staged files (prettier via lint-staged).
+pnpm exec lint-staged || exit 1
+
+# 2. UI is ENFORCED: if staged changes touch xstockstrat-ui, hard-block on lint
+#    (magic-literal rules) + new clones (jscpd, threshold 0).
+if git diff --cached --name-only | grep -q '^services/xstockstrat-ui/'; then
+  echo "▶ DRY guard rail: xstockstrat-ui (enforced)"
+  pnpm --filter xstockstrat-ui run lint || exit 1
+  bash scripts/check-duplication.sh services/xstockstrat-ui/src || exit 1
+fi
+
+# 3. Rest of the repo is REPORT-ONLY for now: warn on duplication, never block.
+#    Drop DUP_REPORT_ONLY (or scope check-duplication.sh) per area as owners opt in.
+DUP_REPORT_ONLY=1 bash scripts/check-duplication.sh services packages || true

@@ -1,33 +1,21 @@
 'use client';
 import { useState } from 'react';
-import Link from 'next/link';
 import type { Order } from '@xstockstrat/proto/trading/v1/trading_pb';
-import { OrderSide, OrderStatus, OrderType } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { OrderStatus, OrderType } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { useOrderUpdates } from '@/hooks/useOrderUpdates';
 import { useCancelOrder } from '@/hooks/useCancelOrder';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
 import { EditOrderDialog } from './EditOrderDialog';
-
-const STATUS_VARIANT: Record<string, 'info' | 'warning' | 'buy' | 'secondary' | 'destructive'> = {
-  NEW: 'info',
-  PARTIALLY_FILLED: 'warning',
-  FILLED: 'buy',
-  CANCELED: 'secondary',
-  EXPIRED: 'secondary',
-  REJECTED: 'destructive',
-  PENDING_APPROVAL: 'warning',
-};
-
-const TYPE_LABEL: Record<string, string> = {
-  MARKET: 'Market',
-  LIMIT: 'Limit',
-  STOP: 'Stop',
-  STOP_LIMIT: 'Stop Limit',
-  TRAILING_STOP: 'Trailing Stop',
-};
+import { QueryStateMessages } from '../shared/QueryStateMessages';
+import {
+  TYPE_LABEL,
+  formatUsd,
+  OrderSymbolCell,
+  OrderSideCell,
+  OrderStatusCell,
+} from './orderShared';
 
 // Terminal statuses cannot be edited or canceled (FR-4/FR-8).
 const TERMINAL = new Set<OrderStatus>([
@@ -44,7 +32,12 @@ interface OrdersTableProps {
   emptyLabel?: string;
 }
 
-export function OrdersTable({ orders, isLoading, error, emptyLabel = 'No orders' }: OrdersTableProps) {
+export function OrdersTable({
+  orders,
+  isLoading,
+  error,
+  emptyLabel = 'No orders',
+}: OrdersTableProps) {
   // Live updates pushed via StreamOrderUpdates override the listed snapshot so status
   // transitions appear without a manual refresh (FR-5/FR-6).
   const liveUpdates = useOrderUpdates();
@@ -70,8 +63,7 @@ export function OrdersTable({ orders, isLoading, error, emptyLabel = 'No orders'
         <CardTitle>Orders</CardTitle>
       </CardHeader>
       <CardContent>
-        {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {error && <p className="text-sm text-destructive">Failed to load orders</p>}
+        <QueryStateMessages isLoading={isLoading} error={error} errorText="Failed to load orders" />
         {!isLoading && !error && (
           <Table>
             <TableHeader>
@@ -88,32 +80,23 @@ export function OrdersTable({ orders, isLoading, error, emptyLabel = 'No orders'
             </TableHeader>
             <TableBody>
               {merged.map((order) => {
-                const statusName = OrderStatus[order.status] ?? 'UNKNOWN';
                 const typeName = OrderType[order.orderType] ?? 'UNKNOWN';
                 const isTerminal = TERMINAL.has(order.status);
                 return (
                   <TableRow key={order.orderId} data-testid={`order-row-${order.orderId}`}>
-                    <TableCell className="font-mono font-semibold">
-                      <Link href={`/trader/orders/${order.orderId}`} className="hover:underline">
-                        {order.symbol}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={order.side === OrderSide.BUY ? 'buy' : 'sell'}>
-                        {order.side === OrderSide.BUY ? 'BUY' : 'SELL'}
-                      </Badge>
-                    </TableCell>
+                    <OrderSymbolCell order={order} />
+                    <OrderSideCell side={order.side} />
                     <TableCell className="hidden sm:table-cell text-muted-foreground">
                       {TYPE_LABEL[typeName] ?? typeName}
                     </TableCell>
                     <TableCell className="text-right">{order.qty}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">{order.filledQty ?? 0}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {order.filledQty ?? 0}
+                    </TableCell>
                     <TableCell className="text-right hidden md:table-cell">
-                      {order.filledAvgPrice ? `$${Number(order.filledAvgPrice).toFixed(2)}` : '—'}
+                      {formatUsd(order.filledAvgPrice)}
                     </TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_VARIANT[statusName] ?? 'secondary'}>{statusName}</Badge>
-                    </TableCell>
+                    <OrderStatusCell status={order.status} />
                     <TableCell className="text-right whitespace-nowrap">
                       <Button
                         type="button"
@@ -147,7 +130,13 @@ export function OrdersTable({ orders, isLoading, error, emptyLabel = 'No orders'
           <p className="text-sm text-muted-foreground text-center py-6">{emptyLabel}</p>
         )}
       </CardContent>
-      <EditOrderDialog order={editing} open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null); }} />
+      <EditOrderDialog
+        order={editing}
+        open={!!editing}
+        onOpenChange={(o) => {
+          if (!o) setEditing(null);
+        }}
+      />
     </Card>
   );
 }

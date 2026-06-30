@@ -18,6 +18,14 @@ CI runs on every PR targeting `main-dev` or `main` (`.github/workflows/ci.yml`).
 | `node-test` (×4) | `pnpm run test:coverage` (Node.js services only) | 40% |
 | `frontend-e2e` (×3) | Playwright on trader, insights, config-ui | — |
 
+## Local guard rails (not CI jobs)
+
+Some guard rails run **locally** (git hooks / Claude subagent), deliberately **not** as CI jobs:
+
+| Guard rail | Where | What it does |
+|---|---|---|
+| DRY duplication rail | `.husky/pre-commit` + `scripts/check-duplication.sh` (jscpd) + UI ESLint rules + `dry-reviewer` subagent | Blocks new duplicated constants/literals/types/helpers in `xstockstrat-ui` on commit; report-only elsewhere. Full pattern → `docs/patterns/dry-guard-rail.md`. |
+
 ## Deployment Pipelines
 
 | Branch | Trigger | Target |

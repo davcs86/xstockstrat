@@ -30,6 +30,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | DB schema map, migration tooling, run order | `docs/patterns/database.md` |
 | OTel setup, env vars, per-language modules | `docs/patterns/observability.md` |
 | CI job matrix, coverage thresholds, deploys | `docs/patterns/ci-overview.md` |
+| DRY guard rail (no repeated constants/literals/types/helpers) — pre-commit hook, jscpd tool, `dry-reviewer` subagent | `docs/patterns/dry-guard-rail.md` |
 | Proto / buf changes | `docs/runbooks/proto-versioning.md` |
 | Adding a data source (Polygon, Tiingo, etc.) | `docs/runbooks/add-data-source.md` |
 | Building a custom indicator formula | `docs/runbooks/indicator-builder.md` |
@@ -482,6 +483,9 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sd
 | User management script | `scripts/manage-users.sh` — also at `/app/scripts/manage-users.sh` inside the identity container |
 | Proto gen script | `scripts/buf-gen.sh` |
 | Integration tests | `scripts/integration-test.sh` |
+| DRY duplication check (jscpd) | `scripts/check-duplication.sh`, `.jscpd.json` |
+| DRY pre-commit hook | `.husky/pre-commit` |
+| DRY semantic reviewer subagent | `.claude/agents/dry-reviewer.md` |
 | CI workflow | `.github/workflows/ci.yml` |
 | Dev deploy workflow | `.github/workflows/deploy-dev.yml` |
 | Prod deploy workflow | `.github/workflows/deploy-prod.yml` |

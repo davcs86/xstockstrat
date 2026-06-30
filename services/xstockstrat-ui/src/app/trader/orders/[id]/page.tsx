@@ -1,37 +1,17 @@
 'use client';
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 import { AppShell } from '@/components/trader/AppShell';
+import { BackToDashboardButton } from '@/components/trader/BackToDashboardButton';
 import { useOrder } from '@/hooks/useOrders';
-import { OrderSide, OrderStatus, OrderType } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { OrderType } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { TradingMode } from '@xstockstrat/proto/common/v1/common_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-
-const STATUS_VARIANT: Record<string, 'info' | 'warning' | 'buy' | 'secondary' | 'destructive'> = {
-  NEW: 'info',
-  PARTIALLY_FILLED: 'warning',
-  FILLED: 'buy',
-  CANCELED: 'secondary',
-  EXPIRED: 'secondary',
-  REJECTED: 'destructive',
-  PENDING_APPROVAL: 'warning',
-};
-
-const TYPE_LABEL: Record<string, string> = {
-  MARKET: 'Market',
-  LIMIT: 'Limit',
-  STOP: 'Stop',
-  STOP_LIMIT: 'Stop Limit',
-  TRAILING_STOP: 'Trailing Stop',
-};
-
-function formatPrice(v: number | undefined | null): string {
-  if (v === undefined || v === null || Number(v) === 0) return '—';
-  return `$${Number(v).toFixed(2)}`;
-}
+import {
+  TYPE_LABEL,
+  formatUsd as formatPrice,
+  OrderSideBadge,
+  OrderStatusBadge,
+} from '@/components/trader/orderShared';
 
 function formatQty(v: number | undefined | null): string {
   if (v === undefined || v === null) return '—';
@@ -47,19 +27,16 @@ export default function OrderDetailPage() {
     <AppShell>
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/trader" className="flex items-center gap-1.5">
-              <ArrowLeft className="h-4 w-4" />
-              Back to dashboard
-            </Link>
-          </Button>
+          <BackToDashboardButton />
         </div>
 
         {isLoading && <p className="text-sm text-muted-foreground">Loading order…</p>}
         {error && (
           <Card>
             <CardContent className="pt-6">
-              <p className="text-sm text-destructive">Failed to load order: {(error as Error).message}</p>
+              <p className="text-sm text-destructive">
+                Failed to load order: {(error as Error).message}
+              </p>
             </CardContent>
           </Card>
         )}
@@ -70,13 +47,9 @@ export default function OrderDetailPage() {
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-3">
                   <CardTitle className="text-xl font-mono">{order.symbol}</CardTitle>
-                  <Badge variant={order.side === OrderSide.BUY ? 'buy' : 'sell'}>
-                    {order.side === OrderSide.BUY ? 'BUY' : 'SELL'}
-                  </Badge>
+                  <OrderSideBadge side={order.side} />
                 </div>
-                <Badge variant={STATUS_VARIANT[OrderStatus[order.status]] ?? 'secondary'}>
-                  {OrderStatus[order.status] ?? 'UNKNOWN'}
-                </Badge>
+                <OrderStatusBadge status={order.status} />
               </div>
               <p className="text-xs text-muted-foreground font-mono mt-1">{order.orderId}</p>
             </CardHeader>
@@ -91,11 +64,7 @@ export default function OrderDetailPage() {
                 <Field label="Time in force" value={order.timeInForce || '—'} />
                 <Field label="Account" value={order.accountId || '—'} mono />
                 <Field label="Strategy" value={order.strategyId || '—'} mono />
-                <Field
-                  label="Broker order id"
-                  value={order.brokerOrderId || '—'}
-                  mono
-                />
+                <Field label="Broker order id" value={order.brokerOrderId || '—'} mono />
                 <Field
                   label="Mode"
                   value={order.tradingMode === TradingMode.LIVE ? 'LIVE' : 'PAPER'}

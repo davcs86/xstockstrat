@@ -2,5 +2,19 @@
   "name": "xstockstrat",
   "version": "0.0.0",
   "private": true,
-  "packageManager": "pnpm@9.15.0"
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "prepare": "husky",
+    "check:dup": "bash scripts/check-duplication.sh",
+    "check:dup:report": "DUP_REPORT_ONLY=1 bash scripts/check-duplication.sh"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "jscpd": "^4.0.5",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.3.0"
+  },
+  "lint-staged": {
+    "services/xstockstrat-ui/**/*.{ts,tsx,css,json}": "prettier --write"
+  }
 }
