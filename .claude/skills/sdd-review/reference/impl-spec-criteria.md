@@ -4,6 +4,11 @@ These are the per-step criteria a `spec-reviewer` subagent applies to an impleme
 The agent reads this file, reads `implementation-spec.md`, verifies code-checkable claims, and
 returns a per-step verdict. **Mode B is advisory — it never changes lifecycle state.**
 
+**Tag findings with the Constitution.** Where a step finding maps to a binding rule in
+`docs/sdd/constitution.md`, cite the ID — e.g. `C-01` (evidence-cited), `C-07`/`F-01` (migration
+naming / immutability), `C-08`/`P-06` (test pairing / red-before-green), `C-09` (proto verification).
+Even in advisory mode, surface any Floor (`F-*`) risk prominently.
+
 ## B2. Per-step quality check
 
 For each numbered step, apply:

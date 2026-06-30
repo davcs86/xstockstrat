@@ -22,6 +22,9 @@ verify claims against the actual codebase where the criteria require it, and ret
 4. **Severity discipline.** Classify each finding as `BLOCKER` (must fix before the gate
    passes), `WARNING` (advisory, gate can still pass), or `NOTE` (informational). Be
    conservative about BLOCKERs — only genuine gate failures.
+5. **Cite the Constitution by ID.** Read `docs/sdd/constitution.md`. When a finding maps to a binding
+   rule, tag it with the ID (`C-08`, `P-03`, `F-01`, …). A finding that maps to a **Floor** (`F-*`)
+   rule is a `BLOCKER` by definition — the gate cannot pass over an unresolved Floor breach (**F-11**).
 
 ## What you receive from the caller
 
@@ -46,7 +49,7 @@ verify claims against the actual codebase where the criteria require it, and ret
 
 ## Findings
 ### <criterion name>  — [BLOCKER|WARNING|NOTE|OK]
-<finding; cite path:line if code-grounded>
+<finding; cite path:line if code-grounded; tag the Constitution ID (e.g. F-01) if one applies>
 ### ...
 
 ## Blockers (must fix before gate passes)
