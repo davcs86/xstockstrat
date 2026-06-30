@@ -1,5 +1,3 @@
-import { createConnectRouter, ConnectError, Code, type HandlerContext } from '@connectrpc/connect';
-import { compressionGzip, compressionBrotli } from '@connectrpc/connect-node';
 import { AnalysisService, StrategyOperation } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { IndicatorsService } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
@@ -14,30 +12,17 @@ import {
   portfolioClient,
   tradingClient,
 } from '@/lib/connectClients';
-import { verifyAccessToken, rolesToAccessScope, generateTraceId, type JwtClaims } from '@/lib/auth';
+import {
+  createBffRouter,
+  createDispatch,
+  requireSession,
+  backendHeaders,
+  requireAdminScope,
+  forward,
+  forwardAdmin,
+} from '@/lib/bffShared';
 
-function parseCookieValue(cookieHeader: string, name: string): string | undefined {
-  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : undefined;
-}
-
-async function requireSession(ctx: HandlerContext): Promise<JwtClaims> {
-  const token = parseCookieValue(ctx.requestHeader.get('cookie') ?? '', 'access_token');
-  if (!token) throw new ConnectError('Unauthenticated', Code.Unauthenticated);
-  const claims = await verifyAccessToken(token);
-  if (!claims) throw new ConnectError('Token invalid or expired', Code.Unauthenticated);
-  return claims;
-}
-
-function backendHeaders(claims: JwtClaims, ctx: HandlerContext): Headers {
-  return new Headers({
-    'x-user-id': claims.user_id,
-    'x-access-scope': String(rolesToAccessScope(claims.roles)),
-    'x-trace-id': ctx.requestHeader.get('x-trace-id') ?? generateTraceId(),
-  });
-}
-
-const router = createConnectRouter({ acceptCompression: [compressionGzip, compressionBrotli] });
+const router = createBffRouter();
 
 router.service(AnalysisService, {
   async listStrategies(req, ctx) {
@@ -47,22 +32,10 @@ router.service(AnalysisService, {
       { headers: backendHeaders(claims, ctx) },
     );
   },
-  async scoreStrategy(req, ctx) {
-    const claims = await requireSession(ctx);
-    return analysisClient.scoreStrategy(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async runBacktest(req, ctx) {
-    const claims = await requireSession(ctx);
-    return analysisClient.runBacktest(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async screenSymbols(req, ctx) {
-    const claims = await requireSession(ctx);
-    return analysisClient.screenSymbols(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async getStrategyReport(req, ctx) {
-    const claims = await requireSession(ctx);
-    return analysisClient.getStrategyReport(req, { headers: backendHeaders(claims, ctx) });
-  },
+  scoreStrategy: forward((req, opts) => analysisClient.scoreStrategy(req, opts)),
+  runBacktest: forward((req, opts) => analysisClient.runBacktest(req, opts)),
+  screenSymbols: forward((req, opts) => analysisClient.screenSymbols(req, opts)),
+  getStrategyReport: forward((req, opts) => analysisClient.getStrategyReport(req, opts)),
   async manageStrategy(req, ctx) {
     const claims = await requireSession(ctx);
     // Mutations (register/update/deactivate) are admin-only per FR-8 — enforced
@@ -72,41 +45,21 @@ router.service(AnalysisService, {
       req.operation === StrategyOperation.UPDATE ||
       req.operation === StrategyOperation.DEACTIVATE;
     if (mutating) {
-      const ADMIN_BIT = 0x04;
-      if ((rolesToAccessScope(claims.roles) & ADMIN_BIT) === 0) {
-        throw new ConnectError('Admin scope required', Code.PermissionDenied);
-      }
+      requireAdminScope(claims);
     }
     return analysisClient.manageStrategy(req, { headers: backendHeaders(claims, ctx) });
   },
-  async getStrategy(req, ctx) {
-    const claims = await requireSession(ctx);
-    return analysisClient.getStrategy(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async listStrategyDefinitions(req, ctx) {
-    const claims = await requireSession(ctx);
-    return analysisClient.listStrategyDefinitions(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async setStrategyLive(req, ctx) {
-    const claims = await requireSession(ctx);
-    // Admin scope gate — enforced server-side before forwarding to the gRPC service.
-    const ADMIN_BIT = 0x04;
-    if ((rolesToAccessScope(claims.roles) & ADMIN_BIT) === 0) {
-      throw new ConnectError('Admin scope required', Code.PermissionDenied);
-    }
-    return analysisClient.setStrategyLive(req, { headers: backendHeaders(claims, ctx) });
-  },
+  getStrategy: forward((req, opts) => analysisClient.getStrategy(req, opts)),
+  listStrategyDefinitions: forward((req, opts) =>
+    analysisClient.listStrategyDefinitions(req, opts),
+  ),
+  // Admin scope gate — enforced server-side before forwarding to the gRPC service.
+  setStrategyLive: forwardAdmin((req, opts) => analysisClient.setStrategyLive(req, opts)),
 });
 
 router.service(IngestService, {
-  async listSignalSources(req, ctx) {
-    const claims = await requireSession(ctx);
-    return ingestClient.listSignalSources(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async triggerBackfill(req, ctx) {
-    const claims = await requireSession(ctx);
-    return ingestClient.triggerBackfill(req, { headers: backendHeaders(claims, ctx) });
-  },
+  listSignalSources: forward((req, opts) => ingestClient.listSignalSources(req, opts)),
+  triggerBackfill: forward((req, opts) => ingestClient.triggerBackfill(req, opts)),
   async getBackfillStatus(req, ctx) {
     // Read-only progress poll — operators monitor jobs, so no admin gate (FR-2/FR-3).
     const claims = await requireSession(ctx);
@@ -117,75 +70,33 @@ router.service(IngestService, {
     const claims = await requireSession(ctx);
     return ingestClient.listBackfillJobs(req, { headers: backendHeaders(claims, ctx) });
   },
-  async cancelBackfill(req, ctx) {
-    const claims = await requireSession(ctx);
-    // Mutating — admin only (FR-7); the ingest server re-checks the scope (Step 3).
-    const ADMIN_BIT = 0x04;
-    if ((rolesToAccessScope(claims.roles) & ADMIN_BIT) === 0) {
-      throw new ConnectError('Admin scope required', Code.PermissionDenied);
-    }
-    return ingestClient.cancelBackfill(req, { headers: backendHeaders(claims, ctx) });
-  },
+  // Mutating — admin only (FR-7); the ingest server re-checks the scope (Step 3).
+  cancelBackfill: forwardAdmin((req, opts) => ingestClient.cancelBackfill(req, opts)),
 });
 
 router.service(MarketDataService, {
-  async getBars(req, ctx) {
-    const claims = await requireSession(ctx);
-    return marketDataClient.getBars(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async deleteBackfilledData(req, ctx) {
-    const claims = await requireSession(ctx);
-    // Destructive — admin only (FR-7); the marketdata server enforces it again (Step 5).
-    const ADMIN_BIT = 0x04;
-    if ((rolesToAccessScope(claims.roles) & ADMIN_BIT) === 0) {
-      throw new ConnectError('Admin scope required', Code.PermissionDenied);
-    }
-    return marketDataClient.deleteBackfilledData(req, { headers: backendHeaders(claims, ctx) });
-  },
+  getBars: forward((req, opts) => marketDataClient.getBars(req, opts)),
+  // Destructive — admin only (FR-7); the marketdata server enforces it again (Step 5).
+  deleteBackfilledData: forwardAdmin((req, opts) =>
+    marketDataClient.deleteBackfilledData(req, opts),
+  ),
 });
 
 router.service(PortfolioService, {
-  async listPortfolios(req, ctx) {
-    const claims = await requireSession(ctx);
-    return portfolioClient.listPortfolios(req, { headers: backendHeaders(claims, ctx) });
-  },
+  listPortfolios: forward((req, opts) => portfolioClient.listPortfolios(req, opts)),
   // Watchlists (feature 058). Ownership is enforced server-side from the propagated
   // x-user-id header (forwarded by backendHeaders) — request messages carry no user_id.
-  async createWatchlist(req, ctx) {
-    const claims = await requireSession(ctx);
-    return portfolioClient.createWatchlist(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async getWatchlist(req, ctx) {
-    const claims = await requireSession(ctx);
-    return portfolioClient.getWatchlist(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async listWatchlists(req, ctx) {
-    const claims = await requireSession(ctx);
-    return portfolioClient.listWatchlists(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async updateWatchlist(req, ctx) {
-    const claims = await requireSession(ctx);
-    return portfolioClient.updateWatchlist(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async deleteWatchlist(req, ctx) {
-    const claims = await requireSession(ctx);
-    return portfolioClient.deleteWatchlist(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async addWatchlistSymbols(req, ctx) {
-    const claims = await requireSession(ctx);
-    return portfolioClient.addWatchlistSymbols(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async removeWatchlistSymbols(req, ctx) {
-    const claims = await requireSession(ctx);
-    return portfolioClient.removeWatchlistSymbols(req, { headers: backendHeaders(claims, ctx) });
-  },
+  createWatchlist: forward((req, opts) => portfolioClient.createWatchlist(req, opts)),
+  getWatchlist: forward((req, opts) => portfolioClient.getWatchlist(req, opts)),
+  listWatchlists: forward((req, opts) => portfolioClient.listWatchlists(req, opts)),
+  updateWatchlist: forward((req, opts) => portfolioClient.updateWatchlist(req, opts)),
+  deleteWatchlist: forward((req, opts) => portfolioClient.deleteWatchlist(req, opts)),
+  addWatchlistSymbols: forward((req, opts) => portfolioClient.addWatchlistSymbols(req, opts)),
+  removeWatchlistSymbols: forward((req, opts) => portfolioClient.removeWatchlistSymbols(req, opts)),
 });
 
 router.service(TradingService, {
-  async listBrokerAccounts(req, ctx) {
-    const claims = await requireSession(ctx);
-    return tradingClient.listBrokerAccounts(req, { headers: backendHeaders(claims, ctx) });
-  },
+  listBrokerAccounts: forward((req, opts) => tradingClient.listBrokerAccounts(req, opts)),
 });
 
 router.service(IndicatorsService, {
@@ -197,14 +108,8 @@ router.service(IndicatorsService, {
       { headers: backendHeaders(claims, ctx) },
     );
   },
-  async getFormula(req, ctx) {
-    const claims = await requireSession(ctx);
-    return indicatorsClient.getFormula(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async listFormulas(req, ctx) {
-    const claims = await requireSession(ctx);
-    return indicatorsClient.listFormulas(req, { headers: backendHeaders(claims, ctx) });
-  },
+  getFormula: forward((req, opts) => indicatorsClient.getFormula(req, opts)),
+  listFormulas: forward((req, opts) => indicatorsClient.listFormulas(req, opts)),
   async updateFormula(req, ctx) {
     const claims = await requireSession(ctx);
     // Enforce user_id from JWT — caller cannot impersonate another user
@@ -220,76 +125,11 @@ router.service(IndicatorsService, {
       { headers: backendHeaders(claims, ctx) },
     );
   },
-  async executeFormula(req, ctx) {
-    const claims = await requireSession(ctx);
-    return indicatorsClient.executeFormula(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async computeIndicator(req, ctx) {
-    const claims = await requireSession(ctx);
-    return indicatorsClient.computeIndicator(req, { headers: backendHeaders(claims, ctx) });
-  },
-  async listIndicators(req, ctx) {
-    const claims = await requireSession(ctx);
-    return indicatorsClient.listIndicators(req, { headers: backendHeaders(claims, ctx) });
-  },
+  executeFormula: forward((req, opts) => indicatorsClient.executeFormula(req, opts)),
+  computeIndicator: forward((req, opts) => indicatorsClient.computeIndicator(req, opts)),
+  listIndicators: forward((req, opts) => indicatorsClient.listIndicators(req, opts)),
 });
 
 // In the consolidated app there is no basePath — the full URL /insights/api/<service>/<method>
 // reaches this handler, so the prefix must include the segment path.
-const PREFIX = '/insights/api';
-const handlerMap = new Map(router.handlers.map((h) => [PREFIX + h.requestPath, h]));
-
-function bodyAsIterable(body: ReadableStream<Uint8Array> | null): AsyncIterable<Uint8Array> {
-  if (!body) return (async function* () {})();
-  return body as unknown as AsyncIterable<Uint8Array>;
-}
-
-function iterableAsStream(iter: AsyncIterable<Uint8Array>): ReadableStream<Uint8Array> {
-  const it = iter[Symbol.asyncIterator]();
-  return new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      const { value, done } = await it.next();
-      if (done) controller.close();
-      else controller.enqueue(value);
-    },
-    cancel(reason) {
-      it.return?.(reason);
-    },
-  });
-}
-
-export async function dispatchConnect(req: Request): Promise<Response> {
-  const pathname = new URL(req.url).pathname;
-  const handler = handlerMap.get(pathname);
-  if (!handler) return new Response(null, { status: 404 });
-
-  const uRes = await handler({
-    httpVersion: '2.0',
-    url: req.url,
-    method: req.method,
-    header: req.headers,
-    body: bodyAsIterable(req.body),
-    signal: req.signal,
-  });
-
-  const responseHeaders = new Headers(uRes.header);
-  uRes.trailer?.forEach((value, key) => responseHeaders.append(key, value));
-
-  // Connect unary errors are always uncompressed JSON. When a handler forwards a
-  // ConnectError from a downstream gRPC service, that error's metadata carries the
-  // gRPC response's content-type (application/grpc+proto) and content-encoding;
-  // createConnectRouter copies them onto the error response, so the browser's Connect
-  // client cannot parse the JSON body and surfaces a generic "HTTP <status>" instead
-  // of the real validation message. Normalise the headers on the error path.
-  if (uRes.status >= 400) {
-    responseHeaders.set('content-type', 'application/json');
-    responseHeaders.delete('content-encoding');
-    responseHeaders.delete('grpc-encoding');
-    responseHeaders.delete('content-length');
-  }
-
-  return new Response(uRes.body ? iterableAsStream(uRes.body) : null, {
-    status: uRes.status,
-    headers: responseHeaders,
-  });
-}
+export const dispatchConnect = createDispatch(router, '/insights/api');

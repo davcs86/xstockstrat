@@ -4,20 +4,12 @@ import type { TradingMode } from '@/app/trader/page';
 import { useAccountContext } from '@/context/AccountContext';
 import { useOrders } from '@/hooks/useOrders';
 import { usePortfolio } from '@/hooks/usePortfolio';
-import { OrderSide, OrderStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Badge } from '../ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
-
-const STATUS_VARIANT: Record<string, 'info' | 'warning' | 'buy' | 'secondary' | 'destructive'> = {
-  NEW: 'info',
-  PARTIALLY_FILLED: 'warning',
-  FILLED: 'buy',
-  CANCELED: 'secondary',
-  EXPIRED: 'secondary',
-  REJECTED: 'destructive',
-  PENDING_APPROVAL: 'warning',
-};
+import { Stat } from '../shared/Stat';
+import { CardNotice } from '../shared/CardNotice';
+import { QueryStateMessages } from '../shared/QueryStateMessages';
+import { OrderSymbolCell, OrderSideCell, OrderStatusCell, formatUsd } from './orderShared';
 
 // ── OrderBook ──────────────────────────────────────────────────────────────
 export function OrderBook({ mode }: { mode: TradingMode }) {
@@ -30,8 +22,7 @@ export function OrderBook({ mode }: { mode: TradingMode }) {
         <CardTitle>Orders</CardTitle>
       </CardHeader>
       <CardContent>
-        {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {error && <p className="text-sm text-destructive">Failed to load orders</p>}
+        <QueryStateMessages isLoading={isLoading} error={error} errorText="Failed to load orders" />
         {data?.orders && (
           <>
             <Table>
@@ -46,33 +37,20 @@ export function OrderBook({ mode }: { mode: TradingMode }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.orders.map((order) => {
-                  const statusName = OrderStatus[order.status] ?? 'UNKNOWN';
-                  return (
-                    <TableRow key={order.orderId} className="cursor-pointer hover:bg-accent/40">
-                      <TableCell className="font-mono font-semibold">
-                        <Link href={`/trader/orders/${order.orderId}`} className="hover:underline">
-                          {order.symbol}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={order.side === OrderSide.BUY ? 'buy' : 'sell'}>
-                          {order.side === OrderSide.BUY ? 'BUY' : 'SELL'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">{order.qty}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{order.filledQty ?? 0}</TableCell>
-                      <TableCell className="text-right hidden sm:table-cell">
-                        {order.filledAvgPrice ? `$${Number(order.filledAvgPrice).toFixed(2)}` : '—'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={STATUS_VARIANT[statusName] ?? 'secondary'}>
-                          {statusName}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {data.orders.map((order) => (
+                  <TableRow key={order.orderId} className="cursor-pointer hover:bg-accent/40">
+                    <OrderSymbolCell order={order} />
+                    <OrderSideCell side={order.side} />
+                    <TableCell className="text-right">{order.qty}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {order.filledQty ?? 0}
+                    </TableCell>
+                    <TableCell className="text-right hidden sm:table-cell">
+                      {formatUsd(order.filledAvgPrice)}
+                    </TableCell>
+                    <OrderStatusCell status={order.status} />
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
             {data.orders.length === 0 && (
@@ -90,21 +68,8 @@ export function PortfolioSummary({ mode }: { mode: TradingMode }) {
   const { selectedAccountId } = useAccountContext();
   const { data, isLoading, error } = usePortfolio(mode, selectedAccountId);
 
-  if (isLoading) return (
-    <Card>
-      <CardContent className="pt-5">
-        <p className="text-sm text-muted-foreground">Loading portfolio…</p>
-      </CardContent>
-    </Card>
-  );
-
-  if (error || !data) return (
-    <Card>
-      <CardContent className="pt-5">
-        <p className="text-sm text-destructive">Portfolio unavailable</p>
-      </CardContent>
-    </Card>
-  );
+  if (isLoading) return <CardNotice>Loading portfolio…</CardNotice>;
+  if (error || !data) return <CardNotice variant="error">Portfolio unavailable</CardNotice>;
 
   const pnlPositive = data.dayPnl >= 0;
 
@@ -115,9 +80,18 @@ export function PortfolioSummary({ mode }: { mode: TradingMode }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Stat label="Equity" value={`$${Number(data.equity).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />
-          <Stat label="Cash" value={`$${Number(data.cash).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />
-          <Stat label="Buying Power" value={`$${Number(data.buyingPower).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />
+          <Stat
+            label="Equity"
+            value={`$${Number(data.equity).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+          />
+          <Stat
+            label="Cash"
+            value={`$${Number(data.cash).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+          />
+          <Stat
+            label="Buying Power"
+            value={`$${Number(data.buyingPower).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+          />
           <Stat
             label="Day P&L"
             value={`${pnlPositive ? '+' : ''}$${Number(data.dayPnl).toFixed(2)} (${Number(data.dayPnlPct * 100).toFixed(2)}%)`}
@@ -129,7 +103,9 @@ export function PortfolioSummary({ mode }: { mode: TradingMode }) {
         {data.positions?.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Positions</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Positions
+              </p>
               <Link href="/trader/positions" className="text-xs text-primary hover:underline">
                 View all →
               </Link>
@@ -148,15 +124,5 @@ export function PortfolioSummary({ mode }: { mode: TradingMode }) {
         )}
       </CardContent>
     </Card>
-  );
-}
-
-// ── Shared helpers ─────────────────────────────────────────────────────────
-function Stat({ label, value, valueClass = 'text-foreground' }: { label: string; value: string; valueClass?: string }) {
-  return (
-    <div className="flex justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`font-medium tabular-nums ${valueClass}`}>{value}</span>
-    </div>
   );
 }

@@ -1,5 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { insightsPortfolioClient } from '@/lib/browserClients/insightsPortfolioClient';
+import { useInvalidatingMutation } from './useInvalidatingMutation';
 
 type ListWatchlistsResult = Awaited<ReturnType<typeof insightsPortfolioClient.listWatchlists>>;
 
@@ -18,60 +19,49 @@ export function useWatchlists(): {
 }
 
 export function useCreateWatchlist() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { name: string; description?: string; symbols?: string[] }) =>
+  return useInvalidatingMutation(
+    (input: { name: string; description?: string; symbols?: string[] }) =>
       insightsPortfolioClient.createWatchlist({
         name: input.name,
         description: input.description ?? '',
         symbols: input.symbols ?? [],
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: WATCHLISTS_KEY }),
-  });
+    [WATCHLISTS_KEY],
+  );
 }
 
 export function useUpdateWatchlist() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: {
-      watchlistId: string;
-      name: string;
-      description?: string;
-      symbols?: string[];
-    }) =>
+  return useInvalidatingMutation(
+    (input: { watchlistId: string; name: string; description?: string; symbols?: string[] }) =>
       insightsPortfolioClient.updateWatchlist({
         watchlistId: input.watchlistId,
         name: input.name,
         description: input.description ?? '',
         symbols: input.symbols ?? [],
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: WATCHLISTS_KEY }),
-  });
+    [WATCHLISTS_KEY],
+  );
 }
 
 export function useDeleteWatchlist() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (watchlistId: string) =>
-      insightsPortfolioClient.deleteWatchlist({ watchlistId }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: WATCHLISTS_KEY }),
-  });
+  return useInvalidatingMutation(
+    (watchlistId: string) => insightsPortfolioClient.deleteWatchlist({ watchlistId }),
+    [WATCHLISTS_KEY],
+  );
 }
 
 export function useAddWatchlistSymbols() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { watchlistId: string; symbols: string[] }) =>
+  return useInvalidatingMutation(
+    (input: { watchlistId: string; symbols: string[] }) =>
       insightsPortfolioClient.addWatchlistSymbols(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: WATCHLISTS_KEY }),
-  });
+    [WATCHLISTS_KEY],
+  );
 }
 
 export function useRemoveWatchlistSymbols() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { watchlistId: string; symbols: string[] }) =>
+  return useInvalidatingMutation(
+    (input: { watchlistId: string; symbols: string[] }) =>
       insightsPortfolioClient.removeWatchlistSymbols(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: WATCHLISTS_KEY }),
-  });
+    [WATCHLISTS_KEY],
+  );
 }

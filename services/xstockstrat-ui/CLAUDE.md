@@ -71,11 +71,14 @@ propagation in `docs/patterns/header-propagation.md`.
 
 | File | Runtime | Purpose |
 |---|---|---|
-| `src/lib/auth.ts` | **Edge-safe** | JWT verify (`jose`, `JWT_SECRET`), cookie helpers, scope bitmap, trace IDs. **Must not import `@connectrpc/connect-node` or any Node-only module** — `middleware.ts` bundles it for the Edge runtime. |
+| `src/lib/auth.ts` | **Edge-safe** | JWT verify (`jose`, `JWT_SECRET`), cookie helpers, scope bitmap (`ADMIN_SCOPE`, `hasAdminScope`), trace IDs. **Must not import `@connectrpc/connect-node` or any Node-only module** — `middleware.ts` bundles it for the Edge runtime. |
 | `src/lib/identity.ts` | Node | `refreshSession` / `revokeToken` wrapping the identity gRPC client |
 | `src/lib/connectClients.ts` | Node | Typed gRPC clients (`createGrpcTransport`) from `*_ENDPOINT` env vars |
-| `src/lib/{traderBff,insightsBff,configUiBff}.ts` | Node | Per-segment `createConnectRouter` impls + `dispatchConnect`; verify session and forward `x-user-id` / `x-access-scope` / `x-trace-id` on every outbound call |
-| `src/lib/basepath.ts` | shared | basePath helper for cross-segment links/fetches |
+| `src/lib/bffShared.ts` | Node | **Canonical** BFF plumbing shared by all three segment routers: `requireSession`, `backendHeaders`, `requireAdminScope`, `createBffRouter`, `createDispatch`. Do not re-implement these per segment (DRY guard rail). |
+| `src/lib/{traderBff,insightsBff,configUiBff}.ts` | Node | Per-segment routers — register `router.service(...)` then `export const dispatchConnect = createDispatch(router, '<prefix>')`; all session/header/dispatch logic comes from `bffShared.ts`. |
+| `src/lib/headers.ts` | shared | **Canonical** propagation header names (`HEADER_USER_ID` / `HEADER_ACCESS_SCOPE` / `HEADER_TRACE_ID`). The DRY guard rail bans the raw `x-*` literals elsewhere. |
+| `src/lib/basepath.ts` | shared | **Canonical** segment base paths (`BASE_PATH_*`) for cross-segment links/fetches. |
+| `src/hooks/useInvalidatingMutation.ts` | Browser | **Canonical** factory for "call a BFF RPC then invalidate query keys" mutation hooks (order + watchlist hooks build on it). |
 | `src/middleware.ts` | Edge | Route protection, token refresh, trace-ID injection; matcher must include `/` |
 | `src/app/auth/{login,oauth-login}/page.tsx` | Browser | Unified login (domain root, outside all basePaths) + OAuth agent login |
 | `src/app/api/auth/{login,refresh,logout,me}/route.ts` | Node | Auth endpoints (set/clear cookies, current session) |

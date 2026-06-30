@@ -10,27 +10,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useAccountPortfolios } from '@/hooks/useAccountPortfolios';
-import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
-
-function brokerLabel(brokerType: number): string {
-  return brokerType === BrokerType.IBKR ? 'IBKR' : 'Alpaca';
-}
-
-function Stat({ label, value, valueClass = 'text-foreground' }: { label: string; value: string; valueClass?: string }) {
-  return (
-    <div className="flex justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`font-medium tabular-nums ${valueClass}`}>{value}</span>
-    </div>
-  );
-}
+import { Stat } from '@/components/shared/Stat';
+import { brokerLabel } from '@/lib/brokers';
 
 interface AccountPortfolioSelectorProps {
   accountId: string;
   onAccountChange: (id: string) => void;
 }
 
-export function AccountPortfolioSelector({ accountId, onAccountChange }: AccountPortfolioSelectorProps) {
+export function AccountPortfolioSelector({
+  accountId,
+  onAccountChange,
+}: AccountPortfolioSelectorProps) {
   const { data, isLoading } = useAccountPortfolios(accountId);
 
   const accounts = data?.accounts ?? [];
@@ -47,12 +38,8 @@ export function AccountPortfolioSelector({ accountId, onAccountChange }: Account
     { equity: 0, dayPnl: 0, positions: [] as unknown[] },
   );
 
-  const selectedPortfolio = accountId
-    ? portfolios.find((p) => p.accountId === accountId)
-    : null;
-  const selectedAccount = accountId
-    ? accounts.find((a) => a.id === accountId)
-    : null;
+  const selectedPortfolio = accountId ? portfolios.find((p) => p.accountId === accountId) : null;
+  const selectedAccount = accountId ? accounts.find((a) => a.id === accountId) : null;
 
   return (
     <div className="space-y-3">
@@ -119,7 +106,8 @@ export function AccountPortfolioSelector({ accountId, onAccountChange }: Account
             />
             {selectedPortfolio.positions?.length > 0 && (
               <p className="text-xs text-muted-foreground pt-1">
-                {selectedPortfolio.positions.length} position{selectedPortfolio.positions.length > 1 ? 's' : ''}
+                {selectedPortfolio.positions.length} position
+                {selectedPortfolio.positions.length > 1 ? 's' : ''}
               </p>
             )}
           </CardContent>
@@ -142,7 +130,8 @@ export function AccountPortfolioSelector({ accountId, onAccountChange }: Account
             />
             {aggregated.positions.length > 0 && (
               <p className="text-xs text-muted-foreground pt-1">
-                {aggregated.positions.length} position{aggregated.positions.length > 1 ? 's' : ''} across all accounts
+                {aggregated.positions.length} position{aggregated.positions.length > 1 ? 's' : ''}{' '}
+                across all accounts
               </p>
             )}
           </CardContent>

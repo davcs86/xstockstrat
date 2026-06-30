@@ -9,6 +9,7 @@
     "start": "next start -p 3000",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
+    "lint:dup": "jscpd --config ../../.jscpd.json --threshold 0 src",
     "format": "prettier --write src",
     "format:check": "prettier --check src",
     "test:e2e": "playwright test",
