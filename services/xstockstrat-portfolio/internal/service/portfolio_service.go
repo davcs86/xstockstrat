@@ -251,8 +251,16 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 // from the latest market-data quote. A failed lookup or an empty (zero) quote leaves
 // the position's price fields at zero, but is logged so the gap is diagnosable rather
 // than silently masked (otherwise positions render at $0.00 with no explanation).
+//
+// Positions the broker already valued (CurrentPrice > 0, set by the account.positions.synced
+// reconciliation) are left untouched so their authoritative mark-to-market figures reconcile
+// with broker equity instead of being overwritten by a marketdata mid-quote. Only positions
+// the broker did not value (e.g. a fresh order-fill position) fall back to mid-quote enrichment.
 func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*portfoliov1.Position) {
 	for _, p := range positions {
+		if p.CurrentPrice > 0 {
+			continue
+		}
 		quote, err := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
 		if err != nil {
 			slog.Warn("latest quote unavailable for position", "symbol", p.Symbol, "error", err)
@@ -337,14 +345,10 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 	if err != nil {
 		return nil, err
 	}
-	// Enrich each position with live price / market value / unrealized P&L (repo ListPositions
-	// returns these unset; the UI winners/losers P&L filter and detail view need them).
-	for _, p := range positions {
-		quote, qErr := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
-		if qErr == nil {
-			enrichPosition(p, quote.AskPrice, quote.BidPrice)
-		}
-	}
+	// Preserve the broker's mark-to-market valuation for positions it valued; only fall back to
+	// marketdata mid-quote enrichment for positions the broker did not value (CurrentPrice <= 0).
+	// The UI winners/losers P&L filter and detail view read these enriched figures.
+	s.enrichPositions(ctx, positions)
 	return &portfoliov1.ListPositionsResponse{
 		Positions: positions,
 		Page:      &commonv1.PageResponse{NextPageToken: nextToken},
@@ -810,15 +814,10 @@ func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID 
 	}
 	// Positions synced from the broker carry its authoritative mark-to-market valuation
 	// (current_price/market_value/unrealized_pnl), which reconciles with the broker equity
-	// shown below. Only fall back to marketdata mid-quote enrichment for positions the broker
-	// did not value — e.g. a fresh order-fill position not yet reconciled by the sync poller.
-	var needEnrich []*portfoliov1.Position
-	for _, p := range positions {
-		if p.CurrentPrice <= 0 {
-			needEnrich = append(needEnrich, p)
-		}
-	}
-	s.enrichPositions(ctx, needEnrich)
+	// shown below. enrichPositions only falls back to marketdata mid-quote enrichment for
+	// positions the broker did not value — e.g. a fresh order-fill position not yet reconciled
+	// by the sync poller.
+	s.enrichPositions(ctx, positions)
 
 	var positionsValue, unrealizedPnl float64
 	for _, p := range positions {
