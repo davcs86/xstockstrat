@@ -1,7 +1,7 @@
 ---
 name: sdd-design
-description: Phase 1.75 of SDD — ground a debated design before implementation planning. Usage: /sdd-design <feature-slug>. Phase 0 (Recon) produces a saved recon.md dossier; Phase 1 (Grilling) runs a bounded proposer-vs-adversary design debate and writes design.md. Advances spec-ready → design-approved. Reads the Constitution and the Ledger; sdd-spec then consumes recon.md + design.md.
-argument-hint: <feature-slug>
+description: Phase 1.75 of SDD — ground a debated design before implementation planning. Usage: /sdd-design <feature-slug> [quick]. Phase 0 (Recon) produces a saved recon.md dossier; Phase 1 (Grilling) runs a proposer-vs-adversary design debate (full: 2–5 rounds; `quick`: a single mandated round for small/bug fixes) and writes design.md. Advances spec-ready → design-approved. Reads the Constitution and the Ledger; sdd-spec then consumes recon.md + design.md.
+argument-hint: <feature-slug> [quick]
 allowed-tools: Read Write Edit AskUserQuestion Task Bash(ls *) Bash(find *) Bash(grep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *)
 effort: high
 ---
@@ -24,6 +24,10 @@ when their phase activates — do not read them up front:
 ## Arguments
 
 - `$ARGUMENTS[0]` — feature slug (required).
+- `$ARGUMENTS[1]` — debate depth (optional): `quick` runs a **single mandated round** (the `--rounds=1`
+  analog) for changes too small to debate but too risky to skip; absent runs the **full** debate
+  (min 2, cap 5). Either way Phase 0 Recon runs in full and both artifacts are written — `quick` only
+  shortens the debate, never removes the adversarial pass or the Floor check.
 
 ---
 
@@ -54,9 +58,11 @@ Capture as `FEATURE_DIR`.
   patterns to reuse. Carry the entries relevant to this feature's services into both phases.
 - `$FEATURE_DIR/context.md` — prior session decisions (Constitution **C-02**). Read before writing.
 
-**Step B4.** Announce context:
+**Step B4.** Resolve the debate mode from `$ARGUMENTS[1]` (`quick` → single mandated round; absent →
+full debate, 2–5 rounds) and announce context:
 ```
 Designing: <slug> (lifecycle: <status>)
+Mode: <quick — 1 round | full debate — 2–5 rounds>
 Affected services (from product-spec): <list>
 Relevant ledger entries: <count fails / insights, or "none">
 Starting Phase 0 — Recon.
@@ -86,9 +92,10 @@ after Phase 1 approval).
 
 ## PHASE 1 — GRILLING (bounded design debate → design.md)
 
-Read **`reference/grilling-protocol.md`** and run the loop. In short:
+Read **`reference/grilling-protocol.md`** and run the loop. Pass it the mode resolved in B4 — **full**
+(≥2 rounds, cap 5) or **quick** (exactly 1 mandated round, then the approval gate). In short:
 
-- **Round (≥2, hard cap 5):**
+- **Round (full: ≥2, hard cap 5; quick: 1 mandated round):**
   1. Spawn a **`design-proposer`** subagent with `recon.md` + `product-spec.md` + your synthesized
      state from the prior round (never the adversary's raw output). It returns ONE concrete approach
      with cited evidence and explicit assumptions.
@@ -116,9 +123,11 @@ Read **`reference/grilling-protocol.md`** and run the loop. In short:
 After `design.md` is written and user-approved:
 
 1. Edit `$FEATURE_DIR/feature.md`:
-   - Set `**Lifecycle Status**: \`spec-ready\`` → `**Lifecycle Status**: \`design-approved\``.
+   - Set `**Lifecycle Status**` to `**Lifecycle Status**: \`design-approved\``. The prior value is
+     normally `spec-ready`; for a **Track C bug** that skipped `/sdd-review` it may be `draft` — use the
+     actual prior value `<prev>` in the history row below (do not assume `spec-ready`).
    - Append a Status History row:
-     `| <ISO date> | \`spec-ready\` → \`design-approved\` | /sdd-design | Design debated (N rounds) and approved; recon.md + design.md written |`
+     `| <ISO date> | \`<prev>\` → \`design-approved\` | /sdd-design | Design debated (N rounds, <quick|full>) and approved; recon.md + design.md written |`
    - Update `## Next Action` to: `` `/sdd-spec <slug>` — generate implementation spec from the approved design ``.
    - Update the Artifacts list to link `recon.md` and `design.md`.
    (If status was already `design-approved` or later via the B2 re-run path, append an
@@ -128,9 +137,9 @@ After `design.md` is written and user-approved:
    ## Session <ISO timestamp> — sdd-design
 
    - Phase 0 Recon: wrote recon.md (services: <list>; key reuse patterns: <1-2>).
-   - Phase 1 Grilling: <N> rounds. Chosen approach: <1 line>. Rejected: <1 line>.
+   - Phase 1 Grilling: <N> rounds (<quick|full>). Chosen approach: <1 line>. Rejected: <1 line>.
    - Constitution rules touched: <IDs>. Floor breaches: <none | resolved how>.
-   - Status: spec-ready → design-approved.
+   - Status: <prev> → design-approved.
    ```
    If the feature uses the structured-header `context.md` schema, also fold the chosen approach into
    `## Decisions` and each open risk into `## Open Threads` (with a target step).
@@ -154,6 +163,10 @@ After `design.md` is written and user-approved:
   is surfaced to the user, never guessed.
 - **Never write `feature.md` lifecycle before the debate is user-approved.** `recon.md` and
   `design.md` are written during the phases; the status flip happens only at COMPLETION.
-- **A Floor (`F-*`) breach blocks approval (F-11).** No "proceed anyway" past a Floor item.
-- **Minimum 2 debate rounds; hard cap 5.** Do not approve on a single round; do not loop past 5.
+- **A Floor (`F-*`) breach blocks approval (F-11)** in **both** modes. No "proceed anyway" past a Floor
+  item — `quick` shortens the debate, it never relaxes the Floor.
+- **Debate-round bounds by mode.** Full mode: minimum 2 rounds, hard cap 5 — do not approve on a single
+  round, do not loop past 5. Quick mode: exactly 1 mandated round (proposer + adversary + synthesis +
+  the approval gate). The user may always opt into *more* rounds, never fewer than the mode's mandated
+  count.
 - **Read `context.md` + the Constitution + the Ledger at boot (C-02).** Never skip the boot reads.

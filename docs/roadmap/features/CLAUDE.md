@@ -89,7 +89,7 @@ These tracking fields make production audits easy: you can always see exactly wh
 |---|---|---|
 | `/sdd-story <slug>` | 1 | Write product spec from user story |
 | `/sdd-review <slug> product-spec` | 1.5 | AI review: gates `draft` → `spec-ready` |
-| `/sdd-design <slug>` | 1.75 | Recon dossier + adversarial design debate: gates `spec-ready` → `design-approved` |
+| `/sdd-design <slug> [quick]` | 1.75 | Recon dossier + adversarial design debate (`quick` = one round for small/bug fixes): gates `spec-ready` → `design-approved` |
 | `/sdd-spec <slug>` | 2 | Write implementation spec with codebase evidence (consumes `recon.md` + `design.md`) |
 | `/sdd-review <slug> impl-spec` | 2.5 | AI review: advisory quality check + overlap scan |
 | `/sdd-execute <slug> [step\|next\|all]` | 3 | Execute steps with discovery + confirmation |

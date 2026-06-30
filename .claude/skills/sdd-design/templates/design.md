@@ -6,7 +6,7 @@ Write `$FEATURE_DIR/design.md` using this exact structure, after the debate is u
 # Design: <slug>
 
 **Created**: <ISO date>
-**Rounds**: <N>  (termination: approved | open-risk-accepted)
+**Rounds**: <N> (<quick|full>; termination: approved | open-risk-accepted)
 **Approved by**: user @ <ISO timestamp>
 **Grounded in**: recon.md
 

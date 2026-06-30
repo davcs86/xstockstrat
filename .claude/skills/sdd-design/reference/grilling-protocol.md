@@ -12,7 +12,12 @@ mediate every exchange so the two subagents never see each other's raw output (*
 - `docs/sdd/constitution.md` — the rules the adversary cites by ID.
 - relevant `docs/roadmap/ledger/fails.md` entries — known traps.
 
-## The loop (minimum 2 rounds, hard cap 5)
+## The loop (full: minimum 2 rounds; quick: 1 mandated round; hard cap 5)
+
+The orchestrator passes a **mode**: `full` (default) or `quick`. The two differ only in how many rounds
+are *mandated* before the approval gate unlocks — `quick` mandates one, `full` mandates two. Everything
+else (the proposer→adversary pass, synthesis, the Floor check) is identical, so `quick` keeps the single
+adversarial review that makes this a gate rather than a rubber stamp; it does not weaken **F-11**.
 
 For each round `R`:
 
@@ -34,12 +39,15 @@ For each round `R`:
 
 4. **Gate (you, via `AskUserQuestion` — Constitution P-04).** Present a tight synthesis (current
    approach, the strongest surviving objection, Floor status) and offer:
-   - **Approve design** — only selectable if there is **no unresolved Floor breach** and `R ≥ 2`.
-     Exit the loop.
+   - **Approve design** — selectable once `R ≥ mandated` (full: `R ≥ 2`; quick: `R ≥ 1`) and there is
+     **no unresolved Floor breach**. Exit the loop.
    - **Run another round** — feed your synthesis into round `R+1`.
    - **Inject a constraint / steer** — record the user's note, then run round `R+1` with it.
 
-   If `R == 1`, do not offer "Approve" yet — at least one more round is mandatory.
+   If `R` is below the mode's mandated count (full mode, `R == 1`), do not offer "Approve" yet — at
+   least one more round is mandatory. In **quick** mode the mandated count is met at `R == 1`, so
+   *Approve* is offered after the first round (a Floor breach still blocks it, and *Run another round*
+   is still available to upgrade into a fuller debate).
    If `R == 5` and still not approved, present the state and ask the user to either approve as-is,
    accept a documented open risk, or stop the design phase (do not loop past 5).
 
