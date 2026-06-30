@@ -30,6 +30,10 @@ agents:
     path: .claude/agents/service-briefing.md
     returns: "compact briefing for one service"
     used_by: [sdd-spec, sdd-execute]
+  - name: dry-reviewer
+    path: .claude/agents/dry-reviewer.md
+    returns: "semantic DRY findings (repeated constants/literals/types/helpers) with canonical homes"
+    used_by: [pre-pr-review]
 
 # --- Skills: lean SKILL.md routers + on-demand reference/ files ---
 skills:
@@ -83,6 +87,8 @@ routing:
     path: docs/patterns/observability.md
   - task: "CI job matrix, coverage thresholds, deploys"
     path: docs/patterns/ci-overview.md
+  - task: "DRY guard rail (no repeated constants/literals/types/helpers)"
+    path: docs/patterns/dry-guard-rail.md
   - task: "Proto / buf changes"
     path: docs/runbooks/proto-versioning.md
   - task: "Feature workflow (branch, PR, promote)"

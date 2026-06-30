@@ -1,15 +1,13 @@
 'use client';
 import { Suspense, useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
 import { AppShell } from '@/components/trader/AppShell';
 import { OrderForm } from '@/components/trader/OrderForm';
 import { OrderFiltersPanel } from '@/components/trader/OrderFilters';
 import { OrdersTable } from '@/components/trader/OrdersTable';
+import { BackToDashboardButton } from '@/components/trader/BackToDashboardButton';
 import { useOrders, type OrderFilters } from '@/hooks/useOrders';
 import { useAccountContext } from '@/context/AccountContext';
 import type { TradingMode } from '@/app/trader/page';
-import { Button } from '@/components/ui/button';
 
 // Full order lifecycle management page (FR-1..FR-8): create (all 5 order types), a
 // server-side-filterable + paginated historical list, inline edit (replace) and cancel,
@@ -33,12 +31,7 @@ export default function OrdersPage() {
     <AppShell>
       <div className="p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/trader" className="flex items-center gap-1.5">
-              <ArrowLeft className="h-4 w-4" />
-              Back to dashboard
-            </Link>
-          </Button>
+          <BackToDashboardButton />
           <h1 className="text-lg font-semibold">Orders</h1>
         </div>
 

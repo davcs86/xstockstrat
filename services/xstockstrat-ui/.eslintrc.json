@@ -2,6 +2,33 @@
   "extends": ["next/core-web-vitals", "plugin:@typescript-eslint/recommended", "prettier"],
   "rules": {
     "@typescript-eslint/no-explicit-any": "warn",
-    "@typescript-eslint/no-unused-vars": "error"
-  }
+    "@typescript-eslint/no-unused-vars": "error",
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "Literal[value='x-user-id']",
+        "message": "DRY guard rail: import HEADER_USER_ID from '@/lib/headers' instead of inlining the 'x-user-id' header literal."
+      },
+      {
+        "selector": "Literal[value='x-access-scope']",
+        "message": "DRY guard rail: import HEADER_ACCESS_SCOPE from '@/lib/headers' instead of inlining the 'x-access-scope' header literal."
+      },
+      {
+        "selector": "Literal[value='x-trace-id']",
+        "message": "DRY guard rail: import HEADER_TRACE_ID from '@/lib/headers' instead of inlining the 'x-trace-id' header literal."
+      },
+      {
+        "selector": "Literal[raw='0x04']",
+        "message": "DRY guard rail: import ADMIN_SCOPE from '@/lib/auth' (or use requireAdminScope/hasAdminScope) instead of inlining the 0x04 admin-scope bit."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/lib/headers.ts", "src/lib/auth.ts"],
+      "rules": {
+        "no-restricted-syntax": "off"
+      }
+    }
+  ]
 }

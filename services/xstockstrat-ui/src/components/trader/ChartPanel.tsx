@@ -1,33 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { ConnectError } from '@connectrpc/connect';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox, type ComboboxOption } from '../ui/combobox';
+import { type Timeframe, TIMEFRAMES, mapBars } from '@/lib/chart';
+import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 
-// Only 15m/1h/1d are supported platform-wide: the marketdata service stores and resolves
-// exactly these canonical intervals (common.v1.Timeframe = 15MIN/1HOUR/1DAY; 15m is the
-// smallest interval the free Alpaca data plan serves). 10m/30m/1w/1mo have no backend
-// support and render empty, so they are not offered.
-type Timeframe = '15Min' | '1Hour' | '1Day';
 type BarCount = 50 | 100 | 200;
-
-interface Bar {
-  time: number; // Unix seconds
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
-
-const TIMEFRAMES: { value: Timeframe; label: string }[] = [
-  { value: '15Min', label: '15m' },
-  { value: '1Hour', label: '1h' },
-  { value: '1Day', label: '1d' },
-];
 
 // Intraday timeframes get auto-refresh; daily does not.
 const POLL_INTERVALS_MS: Partial<Record<Timeframe, number>> = {
@@ -36,11 +18,7 @@ const POLL_INTERVALS_MS: Partial<Record<Timeframe, number>> = {
 };
 
 export function ChartPanel() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const chartRef = useRef<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const seriesRef = useRef<any>(null);
+  const { containerRef, seriesRef } = useCandlestickChart(320);
 
   const [symbols, setSymbols] = useState<string[]>([]);
   const [symbol, setSymbol] = useState<string>('');
@@ -70,55 +48,6 @@ export function ChartPanel() {
       });
   }, []);
 
-  // Create chart on mount
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    let cleanup: (() => void) | undefined;
-
-    import('lightweight-charts').then(({ createChart }) => {
-      if (!containerRef.current) return;
-
-      const chart = createChart(containerRef.current, {
-        width: containerRef.current.offsetWidth,
-        height: 320,
-        layout: { background: { color: 'transparent' }, textColor: '#94a3b8' },
-        grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
-        crosshair: { mode: 1 },
-        rightPriceScale: { borderColor: '#334155' },
-        timeScale: { borderColor: '#334155', timeVisible: true },
-      });
-
-      // v4 API: addCandlestickSeries (v5 renamed this to addSeries(CandlestickSeries))
-      const series = chart.addCandlestickSeries({
-        upColor: '#22c55e',
-        downColor: '#ef4444',
-        borderVisible: false,
-        wickUpColor: '#22c55e',
-        wickDownColor: '#ef4444',
-      });
-
-      chartRef.current = chart;
-      seriesRef.current = series;
-
-      const resizeObserver = new ResizeObserver(() => {
-        if (containerRef.current) {
-          chart.applyOptions({ width: containerRef.current.offsetWidth });
-        }
-      });
-      resizeObserver.observe(containerRef.current);
-
-      cleanup = () => {
-        resizeObserver.disconnect();
-        chart.remove();
-        chartRef.current = null;
-        seriesRef.current = null;
-      };
-    });
-
-    return () => cleanup?.();
-  }, []);
-
   const fetchBars = async (sym: string, tf: Timeframe, count: BarCount) => {
     if (!sym || !seriesRef.current) return;
     setLoading(true);
@@ -129,17 +58,7 @@ export function ChartPanel() {
         timeframe: tf,
         page: { pageSize: count },
       });
-      const bars: Bar[] = res.bars
-        .map((b) => ({
-          time: b.time ? Number(b.time.seconds) : 0,
-          open: b.open,
-          high: b.high,
-          low: b.low,
-          close: b.close,
-          volume: Number(b.volume),
-        }))
-        .sort((a, b) => a.time - b.time);
-      seriesRef.current.setData(bars);
+      seriesRef.current.setData(mapBars(res.bars));
     } catch (err) {
       setError(err instanceof ConnectError ? err.rawMessage : (err as Error).message);
     } finally {
