@@ -19,7 +19,7 @@ Use this as the narration outline. Each beat ties to a section below.
 | Time | Beat | What to show |
 |---|---|---|
 | 0:00 – 0:15 | **The problem.** Multi-service codebases drift. Specs go stale. Agents hallucinate file paths. | Logo, title card "Spec-Driven Development". |
-| 0:15 – 0:35 | **The pattern.** Five phases: story → review → spec → review → execute. Every phase produces a checked-in artifact. Every transition requires a gate. | Diagram: the five-phase loop with gates between them. |
+| 0:15 – 0:35 | **The pattern.** The loop: story → review → design → spec → review → execute. Every phase produces a checked-in artifact. Every transition requires a gate. | Diagram: the phase loop with gates between them. |
 | 0:35 – 1:00 | **Phase 1 — Story.** A human types one sentence. An agent expands it into a product spec with affected services, governance gates, and acceptance criteria. A second agent reviews it. | Screen: `/sdd-story add-rsi-alert "..."` and the generated `product-spec.md`. |
 | 1:00 – 1:25 | **Phase 2 — Spec.** A planning agent searches the codebase. Every step it writes cites a real file path found by grep. No invented references. | Screen: the implementation spec with file paths and line numbers highlighted. |
 | 1:25 – 1:55 | **Phase 3 — Execute.** Steps run one at a time. Each step opens its own PR into the feature branch. Each step requires human confirmation before any write. | Screen: `/sdd-execute next`, the discovery → confirmation → PR loop. |
@@ -41,13 +41,14 @@ SDD on xstockstrat eliminates all three at the structural level. It does not dep
 
 ---
 
-## Section 2 — The Five Phases
+## Section 2 — The Phases
 
 Each phase is a separate skill (slash command) in `.claude/skills/`. Each produces a markdown artifact under `docs/roadmap/features/NNN-<slug>/`.
 
 ```
 /sdd-story         →  product-spec.md            (status: draft)
 /sdd-review        →  product-spec.md approved   (status: spec-ready)
+/sdd-design        →  recon.md + design.md       (status: design-approved)
 /sdd-spec          →  implementation-spec.md     (status: implementation-ready)
 /sdd-review        →  impl spec advisory pass    (status unchanged)
 /sdd-execute       →  per-step PRs               (status: in-progress → code-completed)
@@ -172,7 +173,7 @@ Nothing about SDD is specific to stock strategies. The pattern transfers to any 
 The reusable pieces in this repo:
 
 - The seven SDD skills in `.claude/skills/` — drop-in, parameterized by your repo's feature directory layout.
-- The lifecycle states (`idea` → `draft` → `spec-ready` → `implementation-ready` → `in-progress` → `code-completed` → `launched`).
+- The lifecycle states (`idea` → `draft` → `spec-ready` → `design-approved` → `implementation-ready` → `in-progress` → `code-completed` → `launched`).
 - The "every step cites grep evidence" rule as a hard-coded prompt constraint.
 - CLAUDE.md files at every directory level as the agent-readable project description.
 

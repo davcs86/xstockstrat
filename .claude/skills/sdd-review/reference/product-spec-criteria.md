@@ -8,6 +8,11 @@ verdict. Keeping the tables here (not in the router) means the orchestrator neve
 For each criterion assign ✓ PASS / ⚠ WARN / ✗ FAIL. **WARN is advisory. FAIL blocks lifecycle
 advancement.**
 
+**Tag findings with the Constitution.** Where a finding maps to a binding rule in
+`docs/sdd/constitution.md`, cite the ID (e.g. `C-05` for config-key naming, `C-04` for enums). A
+finding that maps to a **Floor** rule (`F-*`) is a ✗ FAIL by definition — a Floor breach cannot pass
+the gate (**F-11**).
+
 ## A3. Core criteria
 
 | # | Criterion | FAIL condition |

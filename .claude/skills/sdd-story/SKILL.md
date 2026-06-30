@@ -73,6 +73,15 @@ config / new service), identify which reviewer roles apply using the
 **Step Category → Reviewer Roles** matrix. Also look up the **Review Focus** for each
 affected service from the **Service Owners** table. Store these for use in Step 6.
 
+### 5.6. Read the Ledger (avoid known traps)
+
+Read `docs/roadmap/ledger/fails.md` (and skim `insights.md`). Surface any entry whose category or
+service overlaps this story — a recurring mistake to design out, or a pattern to lean on. If a
+relevant `fails.md` entry exists, note it in the product spec's `## Open Questions` (or a one-line
+"Known trap" callout) so the design phase and review address it. This is the front-of-pipeline read
+side of the cross-feature memory (Constitution **P-05**); the binding rules it may cite live in
+`docs/sdd/constitution.md`.
+
 ### 6. Write feature.md
 
 Write `docs/roadmap/features/${FEATURE_DIRNAME}/feature.md` using this exact template:
