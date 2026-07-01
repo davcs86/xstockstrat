@@ -64,6 +64,7 @@ Routes (registered in `app/main.py` `build_sse_app`):
 | `POST /oauth/token` | `authorization_code` + `refresh_token` grants (tokens in JSON body only) |
 | `/` (GET/POST) | **Streamable HTTP** MCP endpoint (Claude.ai remote connector) |
 | `/sse` + `/messages` | Legacy HTTP+SSE MCP endpoint (Claude Desktop) |
+| `GET /api/tools` | Tool catalog (name/description/inputSchema) — **unauthenticated**, capability metadata only; powers the `xstockstrat-ui` `/accounts/mcp-tools` page |
 
 Both MCP endpoints (root Streamable HTTP and `/sse`) require an **`aud`-bound JWT** (`aud` ==
 `AGENT_PUBLIC_URL`); unauthenticated requests get `401` with a

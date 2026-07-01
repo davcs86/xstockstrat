@@ -5,7 +5,8 @@
 Consolidated Next.js frontend serving all three UI segments under path prefixes:
 `/trader` (order execution, positions, accounts), `/insights` (strategy analytics, backtesting,
 formula authoring, backfills), and `/config-ui` (runtime config, signal sources, audit log). A fourth
-segment, `/accounts`, hosts the OAuth authorized-apps UI (feature 051).
+segment, `/accounts`, hosts the OAuth authorized-apps UI (feature 051) and the MCP tool catalog page
+(`/accounts/mcp-tools`).
 
 It is the platform's **Backend-for-Frontend (BFF)**: backend services are gRPC-only, so the UI exposes
 per-segment Connect-RPC routers that authenticate the request (JWT cookie), forward identity headers,
@@ -42,7 +43,7 @@ No gRPC server — this is a frontend. It is a gRPC *client* of the backend serv
 | `/trader` | `/trader` | Orders, positions, accounts, alert stream | `src/app/trader/{layout,providers}.tsx`, `src/app/trader/api/[...connect]/route.ts` |
 | `/insights` | `/insights` | Strategies, backtests, formulas, backfills | `src/app/insights/...` |
 | `/config-ui` | `/config-ui` | Config namespaces, signal sources, audit | `src/app/config-ui/...` |
-| `/accounts` | `/accounts` | OAuth authorized-apps (feature 051) | `src/app/accounts/...` |
+| `/accounts` | `/accounts` | OAuth authorized-apps (feature 051), MCP tool catalog | `src/app/accounts/...` |
 
 `next.config.js` redirects `/` → `/trader` (`permanent: false`).
 
