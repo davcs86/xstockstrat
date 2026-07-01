@@ -26,6 +26,7 @@ the gate (**F-11**).
 | 7 | **DB changes** | Schema changes described but migration strategy (NNN naming, up+down, run order) not stated |
 | 8 | **Acceptance Criteria** | Missing or not verifiable (no observable outcome stated) |
 | 9 | **Open Questions** | Any `- [ ]` items remain unchecked and unresolved |
+| 10 | **Integration completeness (`C-10`)** | Spec touches a shared/duplicated surface but omits completing it: (a) adds a new UI page/route without stating it will be registered in the shared nav (`PLATFORM_SUBNAV`) and reachable from it; (b) introduces a displayed value from an authoritative source (broker/mark-to-market) without requiring parity across **every** RPC/read path that surfaces it (e.g. `ListPositions` ↔ `ListPortfolios`); (c) seeds or depends on a shared resource other services use without a mutation-protection requirement (and, for any new ownership sentinel like `author="system"`, a governance note) |
 
 WARN (advisory, does not block):
 - `## Out of Scope` has items but they seem insufficiently explicit

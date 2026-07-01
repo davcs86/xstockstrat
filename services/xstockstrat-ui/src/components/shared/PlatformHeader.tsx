@@ -86,6 +86,8 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
     { label: 'Dashboard', href: '/insights', match: 'exact' },
     { label: 'Strategies', href: '/insights/strategies' },
     { label: 'Formulas', href: '/insights/formulas' },
+    { label: 'Screener', href: '/insights/screener' },
+    { label: 'Watchlists', href: '/insights/watchlists' },
   ],
   config: [
     { label: 'Namespaces', href: '/config-ui', match: 'exact' },

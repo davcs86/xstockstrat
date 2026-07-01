@@ -146,6 +146,17 @@ Playwright E2E in `e2e/`, organized by segment (`e2e/{trader,insights,config-ui,
 `e2e/auth.spec.ts`) against a mock gRPC backend (`e2e/mock-backend.ts`, `e2e/global-setup.ts`,
 `e2e/helpers/`). Run `pnpm test:e2e` (or `pnpm test:e2e:ui`).
 
+**Browser resolution.** `@playwright/test` is pinned to an **exact** version (no `^`) so the
+managed browser build never drifts out from under a pre-baked sandbox. `playwright.config.ts`
+adapts to environments that pre-install browsers and block downloads (`PLAYWRIGHT_BROWSERS_PATH`
+with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`): it points chromium's `launchOptions.executablePath`
+(NOT a top-level `use.executablePath`, which Playwright silently ignores) at the pre-installed
+Chromium and drops the Firefox project when no Firefox build is present, so the suite runs on
+whatever is actually installed instead of failing at launch. When `PLAYWRIGHT_BROWSERS_PATH` is
+unset (normal CI / local), Playwright uses its own managed browsers and both projects run.
+When bumping the pinned version, run `pnpm exec playwright install chromium firefox` (CI does
+this in the `frontend-e2e` job) so the matching build is fetched.
+
 ## Running Locally
 
 ```bash
