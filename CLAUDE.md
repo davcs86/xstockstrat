@@ -446,7 +446,7 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 **IMPORTANT — this overrides task framing.** Before writing any code for a new capability (a new
 UI page/route, endpoint, service behavior, tool, or config surface), run the SDD pipeline at
 minimum: `/sdd-story <slug>` → `/sdd-design <slug> quick` → the design-phase ledger touch
-(Constitution **C-10**, `docs/sdd/constitution.md`). This applies **regardless of how the request
+(Constitution **C-11**, `docs/sdd/constitution.md`). This applies **regardless of how the request
 arrives** — a GitHub issue, a chat message, or a session/task instruction that says, in plain
 language, to "implement X, commit, and push." That framing is a request for the *capability*, not
 permission to skip the pipeline — run `/sdd-story` and `/sdd-design quick` yourself first, *then*

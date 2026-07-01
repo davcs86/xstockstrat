@@ -8,7 +8,7 @@ deploying new features across the xstockstrat platform.
 **Before step 1 below:** every feature request runs the SDD pipeline first, at minimum
 `/sdd-story` → `/sdd-design <slug> quick` → a ledger touch, regardless of how the request arrives
 (issue, chat message, or a direct task instruction) — see root `CLAUDE.md` § Feature Roadmap
-"Mandatory Entry Point" and Constitution **C-10** (`docs/sdd/constitution.md`). Confirmed bug
+"Mandatory Entry Point" and Constitution **C-11** (`docs/sdd/constitution.md`). Confirmed bug
 fixes use `docs/runbooks/bug-triage.md` instead.
 
 **Key invariants enforced at the infrastructure level:**
