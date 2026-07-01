@@ -43,21 +43,20 @@ test.describe('Formula management UI', () => {
     await addAuthCookie(page);
     // A built-in formula authored by the reserved "system" author must render read-only:
     // the editor shows the read-only badge and hides the Save and Delete actions.
+    // GetFormula returns the FormulaDefinition message directly (not wrapped).
     await page.route('**/xstockstrat.indicators.v1.IndicatorsService/GetFormula', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          formula: {
-            formulaId: 'sys-001',
-            name: 'Fundamentals Value+Quality Composite (v1)',
-            description: 'Built-in scoring formula',
-            source: 'result = {"value": 1.0}',
-            author: 'system',
-            isPublic: true,
-            parameters: [],
-            outputs: [],
-          },
+          formulaId: 'sys-001',
+          name: 'Fundamentals Value+Quality Composite (v1)',
+          description: 'Built-in scoring formula',
+          source: 'result = {"value": 1.0}',
+          author: 'system',
+          isPublic: true,
+          parameters: [],
+          outputs: [],
         }),
       });
     });
