@@ -441,6 +441,28 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 - `implementation-spec.md` — numbered steps with concrete code references and statuses
 - `context.md` — append-only session log of decisions, deviations, files modified
 
+### Mandatory Entry Point — No Feature Work Without SDD Grounding
+
+**IMPORTANT — this overrides task framing.** Before writing any code for a new capability (a new
+UI page/route, endpoint, service behavior, tool, or config surface), run the SDD pipeline at
+minimum: `/sdd-story <slug>` → `/sdd-design <slug> quick` → the design-phase ledger touch
+(Constitution **C-11**, `docs/sdd/constitution.md`). This applies **regardless of how the request
+arrives** — a GitHub issue, a chat message, or a session/task instruction that says, in plain
+language, to "implement X, commit, and push." That framing is a request for the *capability*, not
+permission to skip the pipeline — run `/sdd-story` and `/sdd-design quick` yourself first, *then*
+implement.
+
+`quick` mode is the fast-track for small changes, not an exemption: Phase 0 Recon always runs in
+full and a single mandated adversarial round still happens (see `.claude/skills/sdd-design/SKILL.md`).
+It shortens the debate; it never skips Phase 0/Phase 1 or the Constitution.
+
+**Exempt:** confirmed bug fixes, which route through `docs/runbooks/bug-triage.md` (Track A/B/C) —
+that runbook's own `skip` design-depth recommendation applies to bugs, not new capability. Docs-only
+or process-only edits (no service/UI behavior change) are also outside this rule's scope.
+
+This rule is a Constitution **Commandment** — overridable only with the user's **explicit**
+sign-off, recorded in the feature's `context.md`.
+
 ### Feature Status — Single Source of Truth
 
 **Do not maintain a feature-status table here.** It drifts the moment a feature lands. The authoritative

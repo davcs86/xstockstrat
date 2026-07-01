@@ -3,10 +3,25 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart2, TrendingUp, Settings, Menu, Activity, KeyRound, ChevronDown } from 'lucide-react';
+import {
+  BarChart2,
+  TrendingUp,
+  Settings,
+  Menu,
+  Activity,
+  KeyRound,
+  ChevronDown,
+} from 'lucide-react';
 import { cn } from '../ui/utils';
 import { Button } from '../ui/button';
-import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '../ui/sheet';
 import { Separator } from '../ui/separator';
 
 export type PlatformSegment = 'trader' | 'insights' | 'config' | 'accounts';
@@ -28,9 +43,24 @@ interface PlatformNavItem {
 
 const PLATFORM_NAV: PlatformNavItem[] = [
   { segment: 'trader', label: 'Trader', href: '/trader', icon: <TrendingUp className="h-4 w-4" /> },
-  { segment: 'insights', label: 'Insights', href: '/insights', icon: <BarChart2 className="h-4 w-4" /> },
-  { segment: 'config', label: 'Config', href: '/config-ui', icon: <Settings className="h-4 w-4" /> },
-  { segment: 'accounts', label: 'Accounts', href: '/accounts/authorized-apps', icon: <KeyRound className="h-4 w-4" /> },
+  {
+    segment: 'insights',
+    label: 'Insights',
+    href: '/insights',
+    icon: <BarChart2 className="h-4 w-4" />,
+  },
+  {
+    segment: 'config',
+    label: 'Config',
+    href: '/config-ui',
+    icon: <Settings className="h-4 w-4" />,
+  },
+  {
+    segment: 'accounts',
+    label: 'Accounts',
+    href: '/accounts/authorized-apps',
+    icon: <KeyRound className="h-4 w-4" />,
+  },
 ];
 
 const SEGMENT_HOME: Record<PlatformSegment, string> = {
@@ -56,13 +86,18 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
     { label: 'Dashboard', href: '/insights', match: 'exact' },
     { label: 'Strategies', href: '/insights/strategies' },
     { label: 'Formulas', href: '/insights/formulas' },
+    { label: 'Screener', href: '/insights/screener' },
+    { label: 'Watchlists', href: '/insights/watchlists' },
   ],
   config: [
     { label: 'Namespaces', href: '/config-ui', match: 'exact' },
     { label: 'Audit Log', href: '/config-ui/audit' },
     { label: 'Sources', href: '/config-ui/sources' },
   ],
-  accounts: [{ label: 'Authorized Apps', href: '/accounts/authorized-apps', match: 'exact' }],
+  accounts: [
+    { label: 'Authorized Apps', href: '/accounts/authorized-apps', match: 'exact' },
+    { label: 'MCP Tools', href: '/accounts/mcp-tools', match: 'exact' },
+  ],
 };
 
 function isItemActive(pathname: string | null, item: SubNavItem): boolean {
@@ -172,7 +207,11 @@ export function PlatformHeader({ segment, subNav, actions }: PlatformHeaderProps
                       <button
                         type="button"
                         aria-expanded={isOpen}
-                        onClick={() => setExpanded((prev) => (prev === item.segment ? ('' as PlatformSegment) : item.segment))}
+                        onClick={() =>
+                          setExpanded((prev) =>
+                            prev === item.segment ? ('' as PlatformSegment) : item.segment,
+                          )
+                        }
                         className={cn(
                           'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors text-left',
                           isActiveSegment

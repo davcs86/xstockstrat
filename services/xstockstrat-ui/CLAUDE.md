@@ -5,7 +5,8 @@
 Consolidated Next.js frontend serving all three UI segments under path prefixes:
 `/trader` (order execution, positions, accounts), `/insights` (strategy analytics, backtesting,
 formula authoring, backfills), and `/config-ui` (runtime config, signal sources, audit log). A fourth
-segment, `/accounts`, hosts the OAuth authorized-apps UI (feature 051).
+segment, `/accounts`, hosts the OAuth authorized-apps UI (feature 051) and the MCP tool catalog page
+(`/accounts/mcp-tools`).
 
 It is the platform's **Backend-for-Frontend (BFF)**: backend services are gRPC-only, so the UI exposes
 per-segment Connect-RPC routers that authenticate the request (JWT cookie), forward identity headers,
@@ -42,7 +43,7 @@ No gRPC server — this is a frontend. It is a gRPC *client* of the backend serv
 | `/trader` | `/trader` | Orders, positions, accounts, alert stream | `src/app/trader/{layout,providers}.tsx`, `src/app/trader/api/[...connect]/route.ts` |
 | `/insights` | `/insights` | Strategies, backtests, formulas, backfills | `src/app/insights/...` |
 | `/config-ui` | `/config-ui` | Config namespaces, signal sources, audit | `src/app/config-ui/...` |
-| `/accounts` | `/accounts` | OAuth authorized-apps (feature 051) | `src/app/accounts/...` |
+| `/accounts` | `/accounts` | OAuth authorized-apps (feature 051), MCP tool catalog | `src/app/accounts/...` |
 
 `next.config.js` redirects `/` → `/trader` (`permanent: false`).
 
@@ -144,6 +145,17 @@ OTel via `src/telemetry.ts`, gated by `OTEL_ENABLED`; init failures are warnings
 Playwright E2E in `e2e/`, organized by segment (`e2e/{trader,insights,config-ui,accounts}/`,
 `e2e/auth.spec.ts`) against a mock gRPC backend (`e2e/mock-backend.ts`, `e2e/global-setup.ts`,
 `e2e/helpers/`). Run `pnpm test:e2e` (or `pnpm test:e2e:ui`).
+
+**Browser resolution.** `@playwright/test` is pinned to an **exact** version (no `^`) so the
+managed browser build never drifts out from under a pre-baked sandbox. `playwright.config.ts`
+adapts to environments that pre-install browsers and block downloads (`PLAYWRIGHT_BROWSERS_PATH`
+with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`): it points chromium's `launchOptions.executablePath`
+(NOT a top-level `use.executablePath`, which Playwright silently ignores) at the pre-installed
+Chromium and drops the Firefox project when no Firefox build is present, so the suite runs on
+whatever is actually installed instead of failing at launch. When `PLAYWRIGHT_BROWSERS_PATH` is
+unset (normal CI / local), Playwright uses its own managed browsers and both projects run.
+When bumping the pinned version, run `pnpm exec playwright install chromium firefox` (CI does
+this in the `frontend-e2e` job) so the matching build is fetched.
 
 ## Running Locally
 

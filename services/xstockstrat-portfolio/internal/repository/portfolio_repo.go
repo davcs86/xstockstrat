@@ -104,11 +104,15 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 	args = append(args, pageSize+1)
 	limitIdx := len(args)
 
-	// day_pnl / day_pnl_pct are the broker's last-synced intraday P&L; carried through so the
-	// positions table can show "Today's P/L". The service's marketdata enrichment overwrites
-	// current_price / market_value / unrealized_pnl but leaves these intraday figures intact.
+	// Select the broker's mark-to-market valuation (current_price / market_value /
+	// unrealized_pnl / unrealized_pnl_pct) and intraday day_pnl figures via the shared
+	// positionColumns/scanPositionRow so broker-valued positions return authoritative figures.
+	// The service only falls back to marketdata mid-quote enrichment for positions the broker
+	// did not value (current_price <= 0) — previously this query omitted these columns, so the
+	// service always recomputed them from mid-quotes and the positions table diverged from the
+	// broker (e.g. market value / current price / P&L disagreeing with the Alpaca dashboard).
 	q := fmt.Sprintf(`
-		SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id, day_pnl, day_pnl_pct
+		SELECT `+positionColumns+`
 		FROM portfolio.positions
 		WHERE %s
 		ORDER BY symbol ASC LIMIT $%d`, strings.Join(conds, " AND "), limitIdx)
@@ -121,25 +125,11 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 
 	var positions []*portfoliov1.Position
 	for rows.Next() {
-		var (
-			symbol, modeStr, acctID  string
-			qty, avgEntry, costBasis float64
-			dayPnl, dayPnlPct        float64
-			openedAt                 time.Time
-		)
-		if err := rows.Scan(&symbol, &qty, &avgEntry, &costBasis, &openedAt, &modeStr, &acctID, &dayPnl, &dayPnlPct); err != nil {
-			return nil, "", fmt.Errorf("scan position: %w", err)
+		p, err := scanPositionRow(rows)
+		if err != nil {
+			return nil, "", err
 		}
-		positions = append(positions, &portfoliov1.Position{
-			Symbol:        symbol,
-			Qty:           qty,
-			AvgEntryPrice: avgEntry,
-			CostBasis:     costBasis,
-			OpenedAt:      timestamppb.New(openedAt),
-			AccountId:     acctID,
-			DayPnl:        dayPnl,
-			DayPnlPct:     dayPnlPct,
-		})
+		positions = append(positions, p)
 	}
 	if rows.Err() != nil {
 		return nil, "", rows.Err()
