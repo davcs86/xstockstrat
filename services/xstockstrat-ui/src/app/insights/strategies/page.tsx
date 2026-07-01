@@ -27,16 +27,18 @@ function scoreColor(score: number): string {
 
 export default function StrategiesPage() {
   const router = useRouter();
-  const { data, isLoading, error } = useStrategies();
   const { data: isAdmin } = useIsAdmin();
-  // Definitions (active/live state) — merged in by id so deactivated strategies
-  // can be visually distinguished and the Deactivate action can be hidden.
-  const { data: defsData } = useStrategyDefinitions(true);
+  // Registered strategy definitions drive the list — a strategy appears here as
+  // soon as it is registered, whether or not it has been backtested/scored yet.
+  // Admins additionally see inactive (deactivated) definitions.
+  const { data: defsData, isLoading, error } = useStrategyDefinitions(!!isAdmin);
+  // Scores are merged in by id; a definition without a score renders a
+  // "not scored yet" state instead of being hidden.
+  const { data: scoresData } = useStrategies();
   const manage = useManageStrategy();
 
-  const activeById = new Map(
-    (defsData?.definitions ?? []).map((d) => [d.strategyId, d.active]),
-  );
+  const scoreById = new Map((scoresData?.strategies ?? []).map((s) => [s.strategyId, s]));
+  const definitions = defsData?.definitions ?? [];
 
   function handleDeactivate(strategyId: string) {
     if (
@@ -70,38 +72,39 @@ export default function StrategiesPage() {
         {isLoading && <p className="text-sm text-muted-foreground">Loading strategies…</p>}
         {error && <p className="text-sm text-destructive">Failed to load strategies</p>}
 
-        {data && (
+        {defsData && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {(data.strategies ?? []).map((s: StrategyScore) => {
-              const isActive = activeById.get(s.strategyId);
+            {definitions.map((d) => {
+              const score: StrategyScore | undefined = scoreById.get(d.strategyId);
+              const isActive = d.active;
               return (
-                <div key={s.strategyId} className="space-y-2">
-                  <Link href={`/insights/strategies/${s.strategyId}`}>
+                <div key={d.strategyId} className="space-y-2">
+                  <Link href={`/insights/strategies/${d.strategyId}`}>
                     <Card className="h-full hover:border-primary/50 transition-colors cursor-pointer">
                       <CardContent className="pt-5">
                         <div className="flex items-start justify-between mb-3">
                           <p className="text-sm font-semibold font-mono text-foreground truncate mr-2">
-                            {s.strategyId}
+                            {d.displayName || d.strategyId}
                           </p>
                           <div className="flex items-center gap-1.5 shrink-0">
-                            {isActive === false && <Badge variant="secondary">inactive</Badge>}
-                            {s.rating && (
-                              <Badge variant={ratingVariant(s.rating)}>{s.rating}</Badge>
+                            {!isActive && <Badge variant="secondary">inactive</Badge>}
+                            {score?.rating && (
+                              <Badge variant={ratingVariant(score.rating)}>{score.rating}</Badge>
                             )}
                           </div>
                         </div>
-                        {s.overallScore !== undefined && (
+                        {score ? (
                           <div className="space-y-1.5">
                             <div className="flex justify-between text-xs">
                               <span className="text-muted-foreground">Overall Score</span>
                               <span
-                                className={`font-bold tabular-nums ${scoreColor(s.overallScore)}`}
+                                className={`font-bold tabular-nums ${scoreColor(score.overallScore)}`}
                               >
-                                {(s.overallScore * 100).toFixed(0)}%
+                                {(score.overallScore * 100).toFixed(0)}%
                               </span>
                             </div>
-                            {s.componentScores &&
-                              Object.entries(s.componentScores as Record<string, number>)
+                            {score.componentScores &&
+                              Object.entries(score.componentScores as Record<string, number>)
                                 .slice(0, 3)
                                 .map(([key, val]) => (
                                   <div key={key} className="flex justify-between text-xs">
@@ -112,6 +115,10 @@ export default function StrategiesPage() {
                                   </div>
                                 ))}
                           </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Not scored yet — run a backtest to generate a score.
+                          </p>
                         )}
                         <p className="text-xs text-muted-foreground mt-3">View details →</p>
                       </CardContent>
@@ -122,16 +129,16 @@ export default function StrategiesPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => router.push(`/insights/strategies/${s.strategyId}/edit`)}
+                        onClick={() => router.push(`/insights/strategies/${d.strategyId}/edit`)}
                       >
                         Edit
                       </Button>
-                      {isActive !== false && (
+                      {isActive && (
                         <Button
                           size="sm"
                           variant="ghost"
                           disabled={manage.isPending}
-                          onClick={() => handleDeactivate(s.strategyId)}
+                          onClick={() => handleDeactivate(d.strategyId)}
                         >
                           Deactivate
                         </Button>
@@ -141,9 +148,9 @@ export default function StrategiesPage() {
                 </div>
               );
             })}
-            {(data.strategies ?? []).length === 0 && (
+            {definitions.length === 0 && (
               <p className="text-sm text-muted-foreground col-span-3">
-                No strategies found. Run a backtest to register a strategy.
+                No strategies registered yet. Create one with “New Strategy”, or run a backtest.
               </p>
             )}
           </div>
