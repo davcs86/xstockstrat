@@ -58,7 +58,7 @@ test.describe('Accounts — MCP Tools', () => {
     await page.goto('/accounts/mcp-tools');
 
     await page.getByText('ingest_signal').click();
-    await expect(page.getByText('symbol')).toBeVisible();
+    await expect(page.getByText('symbol', { exact: true })).toBeVisible();
     await expect(page.getByText('required').first()).toBeVisible();
   });
 
