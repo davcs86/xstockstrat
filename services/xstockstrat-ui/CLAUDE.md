@@ -148,7 +148,7 @@ Playwright E2E in `e2e/`, organized by segment (`e2e/{trader,insights,config-ui,
 **Browser resolution.** `@playwright/test` is pinned to an **exact** version (no `^`) so the
 managed browser build never drifts out from under a pre-baked sandbox. `playwright.config.ts`
 adapts to environments that pre-install browsers and block downloads (`PLAYWRIGHT_BROWSERS_PATH`
-+ `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`): it points chromium's `launchOptions.executablePath`
+with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`): it points chromium's `launchOptions.executablePath`
 (NOT a top-level `use.executablePath`, which Playwright silently ignores) at the pre-installed
 Chromium and drops the Firefox project when no Firefox build is present, so the suite runs on
 whatever is actually installed instead of failing at launch. When `PLAYWRIGHT_BROWSERS_PATH` is
