@@ -38,6 +38,7 @@ of re-deriving the rule each time.
 | **C-07** | **Migration naming** is `NNN_description.up.sql` + `.down.sql`, `NNN` = last in that service's `migrations/` + 1. | `.claude/skills/sdd-spec/SKILL.md` Step 2; `docs/patterns/database.md` |
 | **C-08** | **Test-step pairing.** Every non-frontend `service` step has a paired `test` step whose verification meets the service's CI coverage threshold. | `.claude/skills/sdd-spec/reference/spec-template.md` § Test step pairing rule |
 | **C-09** | **Proto verification.** Every `proto` step runs `buf lint` and `buf breaking` against the feature branch; run `./scripts/buf-gen.sh` after any `.proto` change. | `.claude/skills/sdd-spec/SKILL.md` Step 2; root `CLAUDE.md` § Proto Contract Governance |
+| **C-10** | **No feature implementation without minimum SDD grounding.** Any request to add or change platform capability (a new UI page/route, endpoint, service behavior, tool, or config surface) — however it arrives (GitHub issue, chat message, or a direct task/session instruction to "implement X") — runs at minimum `/sdd-story` → `/sdd-design <slug> quick` → the design-phase ledger touch (read always; write when a pattern/trap surfaced) before any implementation write. `quick` mode is the fast-track: Phase 0 Recon runs in full and a single mandated grilling round still happens — it shortens the debate, it never skips Phase 0/Phase 1 entirely. Confirmed bug fixes are exempt — they route through `docs/runbooks/bug-triage.md` (Track A/B/C), whose own `skip` design-depth option applies to bugs, not new capability. | root `CLAUDE.md` § Feature Roadmap; `docs/runbooks/bug-triage.md` Track C |
 
 ---
 
@@ -89,3 +90,6 @@ phase** (see **F-11**).
   touch a Floor item.
 - **The Ledger** (`docs/roadmap/ledger/`) is where a recurring violation or a hard-won pattern is
   recorded; a `fails.md` entry may propose promoting its lesson into a new Constitution ID.
+- **root `CLAUDE.md` § Feature Roadmap** is where **C-10** is enforced at the point a request first
+  reaches any session — including one told, in plain language, to "just implement" a feature. That
+  framing requests the capability, not a license to skip the pipeline.

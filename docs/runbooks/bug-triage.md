@@ -3,6 +3,11 @@
 Defines how bug reports enter the xstockstrat workflow, how to classify severity, and which
 process path each severity takes.
 
+**This runbook is for confirmed bugs only.** A request for new capability (a new page, endpoint,
+service behavior, tool, or config surface) is a feature request, not a bug — it follows the SDD
+pipeline instead (root `CLAUDE.md` § Feature Roadmap "Mandatory Entry Point"; Constitution
+**C-10**). Track C's `skip` design-depth option below applies to bugs only.
+
 ---
 
 ## Quick-Start: Which Track?
