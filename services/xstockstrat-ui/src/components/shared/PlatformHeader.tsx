@@ -94,7 +94,10 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
     { label: 'Audit Log', href: '/config-ui/audit' },
     { label: 'Sources', href: '/config-ui/sources' },
   ],
-  accounts: [{ label: 'Authorized Apps', href: '/accounts/authorized-apps', match: 'exact' }],
+  accounts: [
+    { label: 'Authorized Apps', href: '/accounts/authorized-apps', match: 'exact' },
+    { label: 'MCP Tools', href: '/accounts/mcp-tools', match: 'exact' },
+  ],
 };
 
 function isItemActive(pathname: string | null, item: SubNavItem): boolean {

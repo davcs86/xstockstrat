@@ -58,7 +58,7 @@ def build_sse_app():
     from mcp.server.sse import SseServerTransport
     from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
     from starlette.applications import Starlette
-    from starlette.responses import Response
+    from starlette.responses import JSONResponse, Response
     from starlette.routing import Mount, Route
 
     from app.auth import validate_bearer_jwt
@@ -73,6 +73,27 @@ def build_sse_app():
 
     server = create_server()
     sse = SseServerTransport("/messages")
+
+    async def list_tools_metadata(_request):
+        """Tool catalog for the UI's "MCP Tools" page — name/description/inputSchema only.
+
+        Unauthenticated like the .well-known discovery routes: it describes capabilities (the
+        same data published in docs/runbooks/mcp-tools.md), never user data or credentials, and
+        the UI's BFF has no MCP-audience-bound token to present here anyway.
+        """
+        tools = await server.list_tools()
+        return JSONResponse(
+            {
+                "tools": [
+                    {
+                        "name": t.name,
+                        "description": t.description or "",
+                        "inputSchema": t.inputSchema,
+                    }
+                    for t in tools
+                ]
+            }
+        )
 
     # Streamable HTTP transport (MCP 2025-03-26). Claude.ai's remote connector speaks Streamable
     # HTTP against the connector URL itself — POST <url> for client→server JSON-RPC and GET <url>
@@ -156,6 +177,7 @@ def build_sse_app():
         Route("/oauth/authorize", endpoint=oauth_authorize, methods=["GET"]),
         Route("/oauth/callback", endpoint=oauth_callback, methods=["GET"]),
         Route("/oauth/token", endpoint=oauth_token, methods=["POST"]),
+        Route("/api/tools", endpoint=list_tools_metadata, methods=["GET"]),
         # Both MCP transports at the agent root. MUST be last — the specific routes above win.
         Mount("/", app=handle_mcp),
     ]
