@@ -51,6 +51,44 @@
 - Note (P-05): this feature deliberately reverses the Phase-3 in-memory-storage deviation
   (phase3-deviations.md) for scores only — not for self._backtests or screener state.
 
+## Session 2026-07-03 — sdd-spec
+
+- Generated implementation-spec.md with 6 steps. Status → implementation-ready.
+- Consumed recon.md + design.md (design-approved). Verified every design anchor directly in code —
+  all path:line references hold (C-01).
+- Key codebase findings:
+  - Last migration is `004_fundsignal_emitted`; next is `005_strategy_scores` (C-07). DDL/JSONB style
+    from `migrations/001_strategies.up.sql:1-10`; no `CREATE SCHEMA analysis` (schema pre-exists).
+  - Repo mirror target `StrategiesRepository` (`app/repositories/strategies.py:27`); `_to_dict` JSONB
+    decode idiom at `strategies.py:14-24` — new repo must decode the `component_scores` key, not
+    `definition_json` (P-03 copy-trap). No `ON CONFLICT` precedent — upsert is new-to-service.
+  - `ScoreStrategy` writes `self._strategies[id] = score` at `servicer.py:708`; FR-7 best-effort
+    template is the ledger emit `try/except → log.warning` at `servicer.py:717-728`. Components already
+    clamped `[0,1]` at `servicer.py:677-679`; `math` imported at `servicer.py:16` for the finite guard.
+  - Boot wiring site `main.py:84` `if db_pool is not None:`; servicer built at `main.py:52-61`.
+- Design refinement (faithful to design.md): hydrate logic encapsulated as a testable servicer method
+  `hydrate_scores()` (unit-tested in Step 5); `main.py` just makes the best-effort boot call. No
+  standalone `main.py` unit test — boot glue, consistent with existing loop wiring.
+- Steps 4/5 merged servicer.py + main.py into one `service` step + one paired `test` step (C-08).
+- Neither `docs/patterns/database.md` nor root CLAUDE.md enumerates analysis tables (grep-confirmed) —
+  docs work is a lightweight note in the analysis CLAUDE.md (Step 6).
+- Reviewers snapshot unchanged: DBA (migration) + xstockstrat-analysis owner (service/test); docs=none.
+
+## Session 2026-07-03 — sdd-review impl-spec (advisory)
+
+- Criteria: PASS WITH WARNINGS (spec-reviewer). 0 blockers, no Floor breach. C-08 test-pairing and
+  B3 ordering both satisfied; F-01/F-06/F-07 explicitly respected.
+- Warning (fixed pre-execute): Step 3 cited `tests/test_analysis_servicer.py:33` for a
+  `StrategiesRepository` import that doesn't exist there. Corrected the Codebase Evidence to point at
+  the real mockable-repo pattern (`svc._strategies_repo = AsyncMock()` at `:446`). Execution not yet
+  started, so F-09 (step-body immutability during execution) does not apply.
+- Informational notes (no change): `math.isfinite` correctly guards only the JSONB `component_scores`
+  path (overall_score → DOUBLE PRECISION accepts non-finite); Step 4 B2b `live` keyword is a
+  false-positive (strategy live-loop, not TRADING_MODE).
+- Overlap: CLEAN (feature-overlap). 064 is the only in-flight feature; migration 005_ free; no proto/
+  config/file-path collisions; no merge-order entry needed.
+- Status unchanged (advisory gate): implementation-ready.
+
 ## Open Threads (carried from design.md Open Risks)
 
 - Partial durability: backtests not persisted → post-restart GetStrategyReport returns latest_backtest=null

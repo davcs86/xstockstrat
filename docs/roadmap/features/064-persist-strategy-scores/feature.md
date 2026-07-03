@@ -1,6 +1,6 @@
 # Feature: persist-strategy-scores
 
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/persist-strategy-scores`
 **Created**: 2026-07-03
 **Last Updated**: 2026-07-03
@@ -14,6 +14,7 @@
 | 2026-07-03 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-07-03 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning: 3 open questions deferred to /sdd-design) |
 | 2026-07-03 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
+| 2026-07-03 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon](recon.md) — grounded codebase dossier (Phase 0)
 - [Design](design.md) — debated & approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec persist-strategy-scores`_
+- [Implementation Spec](implementation-spec.md) — 6 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -46,4 +47,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec persist-strategy-scores` — generate implementation spec from the approved design
+`/sdd-review persist-strategy-scores impl-spec` — validate implementation spec, then `/sdd-execute persist-strategy-scores`
