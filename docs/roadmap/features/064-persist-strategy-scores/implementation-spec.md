@@ -115,7 +115,7 @@ contractual, not surprises):
 
 ### Step 2 — service: `StrategyScoresRepository`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/strategy_scores.py` — create
@@ -175,7 +175,7 @@ contractual, not surprises):
 
 ### Step 3 — test: `StrategyScoresRepository` unit test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_strategy_scores_repo.py` — create

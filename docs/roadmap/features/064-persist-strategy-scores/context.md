@@ -112,3 +112,12 @@
   drops cleanly (AC-4). CI-equivalent fallback logged in Deviation Log.
 - Files modified: `services/xstockstrat-analysis/migrations/005_strategy_scores.{up,down}.sql`
 - Deviations: process (sequential/PR) + CI-equivalent migration verification — see Deviation Log.
+
+### Steps 2 & 3 — StrategyScoresRepository + unit test [done]
+- TDD (paired, C-08/P-06): wrote test first → RED (`ModuleNotFoundError: app.repositories.strategy_scores`)
+  → wrote repo → GREEN (7 passed). Repo mirrors StrategiesRepository (fetchrow/fetch, json.dumps(...)::jsonb);
+  `_to_dict` decodes the `component_scores` key (P-03 copy-trap avoided, not `definition_json`).
+  upsert = INSERT ... ON CONFLICT (strategy_id) DO UPDATE ... RETURNING *; get_by_id; list (no pagination).
+- Ruff: 1 import-order fix on the new test file (its own new code), then clean; format clean.
+- Files modified: `app/repositories/strategy_scores.py` (new), `tests/test_strategy_scores_repo.py` (new)
+- Deviations: none.
