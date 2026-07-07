@@ -82,6 +82,15 @@ async def serve():
 
     # ── Live strategy→alert evaluation loop (feature 048) ─────────────────
     if db_pool is not None:
+        # ── Hydrate persisted strategy scores (feature 064) ──────────────
+        # Best-effort so a hydrate failure never blocks startup. Reuses the existing
+        # asyncpg pool — no new pool; analysis stays at pool max 2 (F-06).
+        try:
+            await servicer.hydrate_scores()
+            log.info("strategy scores hydrated from DB")
+        except Exception as e:
+            log.warning("failed to hydrate strategy scores: %s", e)
+
         from app.engine.live_loop import LiveEvaluationLoop
         from app.services.evaluator import StrategyEvaluator
 

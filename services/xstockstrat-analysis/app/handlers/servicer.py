@@ -31,6 +31,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
 from app.repositories.strategies import StrategiesRepository
+from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring
 from app.services.evaluator import StrategyEvaluator, _validate_definition
 from app.services.screener import ScreenerEngine
@@ -85,6 +86,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._backtests: dict[str, analysis_pb2.BacktestResult] = {}
         self._strategies: dict[str, analysis_pb2.StrategyScore] = {}
         self._strategies_repo = StrategiesRepository(db_pool) if db_pool else None
+        # Durable backup for the in-memory _strategies dict (feature 064). Reads stay
+        # in-memory; this persists on score and hydrates it at boot. None in the no-DB
+        # test path so make_servicer()-based tests are unaffected.
+        self._scores_repo = StrategyScoresRepository(db_pool) if db_pool else None
         # Set by main.py after the fundamentals signal loop is constructed (feature 062);
         # RunFundamentalsScan invokes its shared run_once path.
         self._fundsignal_loop = None
@@ -707,6 +712,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
         self._strategies[request.strategy_id] = score
 
+        # Best-effort durable persist (feature 064). Reads serve from self._strategies,
+        # so a swallowed write never loses the caller's read-your-writes (FR-7). The
+        # math.isfinite filter guards the JSONB column against a future unclamped score
+        # (NaN/Infinity would make Postgres JSONB reject the upsert).
+        if self._scores_repo is not None:
+            try:
+                components = {
+                    k: v for k, v in dict(score.component_scores).items() if math.isfinite(v)
+                }
+                await self._scores_repo.upsert(request.strategy_id, overall, rating, components)
+            except Exception as e:
+                log.warning("failed to persist strategy score: %s", e)
+
         # Emit ledger event
         from google.protobuf.struct_pb2 import Struct
 
@@ -728,6 +746,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             log.warning("failed to emit ledger event for score: %s", e)
 
         return score
+
+    async def hydrate_scores(self) -> None:
+        """Load persisted scores from the DB into the in-memory serving dict at boot.
+
+        Feature 064: makes ListStrategies/GetStrategyReport survive a restart. No-op when
+        there is no DB pool (test path). Called best-effort from main.py; ListStrategies
+        and GetStrategyReport stay unchanged (they serve self._strategies).
+        """
+        if self._scores_repo is None:
+            return
+        rows = await self._scores_repo.list()
+        for r in rows:
+            self._strategies[r["strategy_id"]] = _row_to_score(r)
 
     async def ListStrategies(self, request, context):
         strategies = list(self._strategies.values())
@@ -935,6 +966,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _row_to_score(row: dict) -> "analysis_pb2.StrategyScore":
+    """Convert an analysis.strategy_scores row to a StrategyScore proto (feature 064).
+
+    Decodes the ``component_scores`` map (NOT ``definition_json`` — the copy-trap the design
+    called out); the repo's _to_dict already JSON-decodes the JSONB column to a plain dict.
+    """
+    return analysis_pb2.StrategyScore(
+        strategy_id=row["strategy_id"],
+        overall_score=row["overall_score"],
+        rating=row["rating"],
+        component_scores=row.get("component_scores") or {},
+    )
 
 
 def _row_to_strategy_definition(row: dict) -> "analysis_pb2.StrategyDefinition":

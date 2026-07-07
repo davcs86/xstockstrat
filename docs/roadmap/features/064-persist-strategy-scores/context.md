@@ -121,3 +121,17 @@
 - Ruff: 1 import-order fix on the new test file (its own new code), then clean; format clean.
 - Files modified: `app/repositories/strategy_scores.py` (new), `tests/test_strategy_scores_repo.py` (new)
 - Deviations: none.
+
+### Steps 4 & 5 — servicer persist + hydrate wiring + tests [done]
+- TDD (paired, C-08/P-06): appended TestScorePersistence to test_analysis_servicer.py → RED
+  (4 failed: ImportError `_row_to_score`, missing `_scores_repo`/`hydrate_scores`) → implemented Step 4
+  → GREEN (5 passed; full suite 152 passed, coverage 67.63% ≥ 40%).
+- servicer.py: import + inject `self._scores_repo` (None without db_pool); best-effort upsert in
+  ScoreStrategy after the in-memory write (FR-7 try/except → warning; math.isfinite JSONB guard);
+  new `hydrate_scores()` method (no-op without repo); module-level `_row_to_score` helper (decodes
+  component_scores map). ListStrategies/GetStrategyReport unchanged (serve self._strategies).
+- main.py: best-effort `await servicer.hydrate_scores()` inside the existing `if db_pool is not None:`
+  boot block — reuses the single asyncpg pool, no new pool (F-06). No env/config/proto change.
+- Ruff check clean; ruff format applied to servicer.py's own new lines only (file was format-clean before).
+- Files modified: `app/handlers/servicer.py`, `app/main.py`, `tests/test_analysis_servicer.py`
+- Deviations: none.

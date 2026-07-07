@@ -216,7 +216,7 @@ yet exist, so the import fails; then passes after Step 2).
 
 ### Step 4 — service: persist in `ScoreStrategy` + hydrate wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -317,7 +317,7 @@ persistence, hydrate correctness, pool-budget invariance (no new pool)
 
 ### Step 5 — test: `ScoreStrategy` persistence + FR-7 + hydrate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
