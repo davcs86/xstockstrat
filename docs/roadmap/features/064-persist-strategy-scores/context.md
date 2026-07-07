@@ -135,3 +135,20 @@
 - Ruff check clean; ruff format applied to servicer.py's own new lines only (file was format-clean before).
 - Files modified: `app/handlers/servicer.py`, `app/main.py`, `tests/test_analysis_servicer.py`
 - Deviations: none.
+
+### Step 6 — docs note in analysis CLAUDE.md [done]
+- Added "Strategy Score Persistence (feature 064)" subsection documenting the table, best-effort upsert,
+  hydrate-at-boot, no-new-pool, and the accepted limitations (no BacktestResult persistence, no
+  retention/pagination, math.isfinite guard). grep confirms `strategy_scores` present.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none.
+
+## Session 2026-07-03 — sdd-execute (sequential) — SESSION END
+**Steps this session**: 1, 2, 3, 4, 5, 6 (all)
+**Progress**: 6 done / 6 total — feature code-completed
+**Verification**: full analysis suite 152 passed, coverage 67.63% (≥40); ruff check+format clean;
+migration apply/upsert/rollback proven on a throwaway postgres:16 cluster.
+**Ledger**: appended a write-through+hydrate-at-boot insight to docs/roadmap/ledger/insights.md.
+**Integration PR**: #742 (feature/persist-strategy-scores → main-dev) — pre-existing; now carries the
+full implementation. CI to run on push.
+**Next**: merge PR #742 when CI passes + reviewers approve.

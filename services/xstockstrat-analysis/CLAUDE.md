@@ -6,6 +6,21 @@ Python gRPC service for strategy backtesting, scoring, and report generation. Re
 
 Beyond the gRPC server, the service runs an **asyncio live evaluation loop** (`app/engine/live_loop.py`, feature 048) that continuously evaluates `live_enabled` strategies via the shared evaluator (`app/services/evaluator.py`) and emits alerts to xstockstrat-notify on entry/exit transitions — guaranteeing backtest/live parity. The loop never places orders.
 
+### Strategy Score Persistence (feature 064)
+
+`ScoreStrategy` persists the latest `StrategyScore` per strategy to the `analysis.strategy_scores`
+table (migration `005`, upsert on the `strategy_id` primary key) in addition to the in-memory
+`self._strategies` dict. The write is **best-effort** (FR-7): it mirrors the ledger-emit `try/except →
+log.warning`, so a DB failure never fails scoring. Reads stay in-memory — `ListStrategies` /
+`GetStrategyReport` still serve `self._strategies`; at boot `main.py` calls `servicer.hydrate_scores()`
+(best-effort) to load persisted rows back into memory, so scores **survive a service restart**. Reuses
+the existing asyncpg pool — no new pool (budget stays 2).
+
+Accepted limitations: only the `StrategyScore` is persisted, **not** `BacktestResult` — after a restart
+`GetStrategyReport` returns the hydrated score with `latest_backtest = null` until a fresh `RunBacktest`
+is run. The table has no retention or pagination yet (deactivated and ad-hoc-`strategy_id` scores persist
+and hydrate); a `math.isfinite` guard drops non-finite component values before the JSONB write.
+
 ### Fundamentals Signal Producer (feature 062)
 
 A second asyncio background loop (`app/engine/fundsignal_loop.py`) runs a daily **fundamentals signal producer**. Each cycle it builds a deduplicated symbol universe, reads cached fundamentals **only** via marketdata `GetFundamentalsMulti` (never FMP directly — the single FMP chokepoint lives in marketdata, feature 059), scores each symbol (built-in deterministic default, or a 063 scoring formula when `analysis.fundsignal.scoring_formula_id` is set), maps the score to a `buy`/`sell`/`hold` direction by cross-sectional quantile, and emits an `ExternalSignal` per surviving symbol through ingest `IngestSignal`.

@@ -1,6 +1,6 @@
 # Implementation Spec: persist-strategy-scores
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-07-03
 **Feature**: `docs/roadmap/features/064-persist-strategy-scores/feature.md`
 **Total Steps**: 6
@@ -366,7 +366,7 @@ restart-survivability (hydrate) proof
 
 ### Step 6 — docs: record the `analysis.strategy_scores` table + persistence behavior
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (`xstockstrat-analysis` CLAUDE.md)
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
