@@ -1,6 +1,6 @@
 # Feature: persist-strategy-scores
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/persist-strategy-scores`
 **Created**: 2026-07-03
 **Last Updated**: 2026-07-03
@@ -15,6 +15,7 @@
 | 2026-07-03 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning: 3 open questions deferred to /sdd-design) |
 | 2026-07-03 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
 | 2026-07-03 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
+| 2026-07-03 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (migration 005_strategy_scores) done |
 
 ---
 

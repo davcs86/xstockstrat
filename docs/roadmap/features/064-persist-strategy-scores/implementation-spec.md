@@ -65,7 +65,7 @@ contractual, not surprises):
 
 ### Step 1 — migration: create `analysis.strategy_scores` table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/005_strategy_scores.up.sql` — create
@@ -399,4 +399,21 @@ restart-survivability (hydrate) proof
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### 2026-07-03 — process: sequential run without interactive gates + PR/verification env fallbacks
+- **Deviation**: (1) Sequential mode-entry and per-feature confirmation gates (§5.1b/§5.4) are
+  normally `AskUserQuestion`; that tool is unavailable in this non-interactive session, so the user's
+  explicit `/sdd-execute … sequential` invocation is taken as the standing authorization (per the
+  sequential-mode intro). (2) Stacked per-step PRs are replaced by per-step commits directly on the
+  feature branch `feature/persist-strategy-scores`; the already-open PR #742 (feature → main-dev) is
+  the integration PR. Reason: intermediate step-PR merges are impossible in one unattended run.
+- **Disposition**: process deviation, user-authorized (explicit sequential invocation).
+
+### 2026-07-03 — Step 1 — CI-equivalent migration verification (no docker / no db-migrate.sh)
+- **Deviation**: The Docker daemon is down and no live TimescaleDB is provisioned, so
+  `scripts/db-migrate.sh` (the spec's Verification) cannot run. Instead applied `005_*.up.sql` and
+  `005_*.down.sql` against a throwaway local `postgres:16` cluster (`initdb` + `pg_ctl`, run as the
+  unprivileged `postgres` user), pre-creating `CREATE SCHEMA analysis` (which the real DB already has
+  from migration `001`'s run-order). Proved: table shape + PK, upsert idempotency (2 inserts on the
+  same `strategy_id` → 1 row, latest wins — FR-2/AC-3), re-apply idempotence, and clean rollback (AC-4).
+- **Disposition**: CI-equivalent fallback (sequential-mode §"verification fallbacks" — `migrate`/DB
+  unavailable → throwaway postgres). Migration SQL unchanged.

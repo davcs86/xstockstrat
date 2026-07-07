@@ -97,3 +97,18 @@
   persist & hydrate. Target: note in spec Out-of-Scope/Open Questions; candidate follow-up feature.
 - NaN/Infinity JSONB rejection if a future 063 formula produces unclamped scores. Target: clamp/guard at
   the ScoreStrategy persist step.
+
+## Session 2026-07-03 — sdd-execute (sequential)
+
+- Running sequential mode. Interactive confirmation gates unavailable → explicit invocation taken as
+  authorization (logged in Deviation Log). PR strategy: per-step commits on feature branch; PR #742 is
+  the integration PR (logged in Deviation Log).
+
+### Step 1 — migration: create analysis.strategy_scores [done]
+- Created `005_strategy_scores.up.sql` / `.down.sql` (loose strategy_id PK, no FK; created_at/updated_at;
+  component_scores JSONB default '{}').
+- Verified via throwaway local postgres:16 cluster (docker down; db-migrate.sh needs live DB): apply →
+  correct shape + PK, upsert idempotency (1 row, latest wins — FR-2/AC-3), re-apply idempotent, down
+  drops cleanly (AC-4). CI-equivalent fallback logged in Deviation Log.
+- Files modified: `services/xstockstrat-analysis/migrations/005_strategy_scores.{up,down}.sql`
+- Deviations: process (sequential/PR) + CI-equivalent migration verification — see Deviation Log.
