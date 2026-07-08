@@ -29,3 +29,14 @@ reusing.
 ---
 
 <!-- Append entries below. Newest at the bottom. -->
+
+### 2026-07-03 — persist-strategy-scores — design
+- **Pattern**: To add DB durability to volatile in-memory service state without changing (and risking)
+  the read path, use **write-through + hydrate-at-boot**: keep the in-memory dict as the sole read
+  source, add a best-effort DB upsert on write, and hydrate the dict from the DB once at startup. Avoids
+  the false-success hazard of "best-effort write + read-from-DB" (a swallowed write then a DB read →
+  NOT_FOUND for a value the caller was just told succeeded).
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` (`hydrate_scores`, best-effort
+  upsert in `ScoreStrategy`), `app/main.py` boot call; design.md § Chosen Approach (feature 064).
+- **Rule it implies**: prefer write-through+hydrate over DB-direct reads when a best-effort write and a
+  durable read path must coexist; reuse the existing repo/pool (no new pool — F-06).

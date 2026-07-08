@@ -97,3 +97,58 @@
   persist & hydrate. Target: note in spec Out-of-Scope/Open Questions; candidate follow-up feature.
 - NaN/Infinity JSONB rejection if a future 063 formula produces unclamped scores. Target: clamp/guard at
   the ScoreStrategy persist step.
+
+## Session 2026-07-03 — sdd-execute (sequential)
+
+- Running sequential mode. Interactive confirmation gates unavailable → explicit invocation taken as
+  authorization (logged in Deviation Log). PR strategy: per-step commits on feature branch; PR #742 is
+  the integration PR (logged in Deviation Log).
+
+### Step 1 — migration: create analysis.strategy_scores [done]
+- Created `005_strategy_scores.up.sql` / `.down.sql` (loose strategy_id PK, no FK; created_at/updated_at;
+  component_scores JSONB default '{}').
+- Verified via throwaway local postgres:16 cluster (docker down; db-migrate.sh needs live DB): apply →
+  correct shape + PK, upsert idempotency (1 row, latest wins — FR-2/AC-3), re-apply idempotent, down
+  drops cleanly (AC-4). CI-equivalent fallback logged in Deviation Log.
+- Files modified: `services/xstockstrat-analysis/migrations/005_strategy_scores.{up,down}.sql`
+- Deviations: process (sequential/PR) + CI-equivalent migration verification — see Deviation Log.
+
+### Steps 2 & 3 — StrategyScoresRepository + unit test [done]
+- TDD (paired, C-08/P-06): wrote test first → RED (`ModuleNotFoundError: app.repositories.strategy_scores`)
+  → wrote repo → GREEN (7 passed). Repo mirrors StrategiesRepository (fetchrow/fetch, json.dumps(...)::jsonb);
+  `_to_dict` decodes the `component_scores` key (P-03 copy-trap avoided, not `definition_json`).
+  upsert = INSERT ... ON CONFLICT (strategy_id) DO UPDATE ... RETURNING *; get_by_id; list (no pagination).
+- Ruff: 1 import-order fix on the new test file (its own new code), then clean; format clean.
+- Files modified: `app/repositories/strategy_scores.py` (new), `tests/test_strategy_scores_repo.py` (new)
+- Deviations: none.
+
+### Steps 4 & 5 — servicer persist + hydrate wiring + tests [done]
+- TDD (paired, C-08/P-06): appended TestScorePersistence to test_analysis_servicer.py → RED
+  (4 failed: ImportError `_row_to_score`, missing `_scores_repo`/`hydrate_scores`) → implemented Step 4
+  → GREEN (5 passed; full suite 152 passed, coverage 67.63% ≥ 40%).
+- servicer.py: import + inject `self._scores_repo` (None without db_pool); best-effort upsert in
+  ScoreStrategy after the in-memory write (FR-7 try/except → warning; math.isfinite JSONB guard);
+  new `hydrate_scores()` method (no-op without repo); module-level `_row_to_score` helper (decodes
+  component_scores map). ListStrategies/GetStrategyReport unchanged (serve self._strategies).
+- main.py: best-effort `await servicer.hydrate_scores()` inside the existing `if db_pool is not None:`
+  boot block — reuses the single asyncpg pool, no new pool (F-06). No env/config/proto change.
+- Ruff check clean; ruff format applied to servicer.py's own new lines only (file was format-clean before).
+- Files modified: `app/handlers/servicer.py`, `app/main.py`, `tests/test_analysis_servicer.py`
+- Deviations: none.
+
+### Step 6 — docs note in analysis CLAUDE.md [done]
+- Added "Strategy Score Persistence (feature 064)" subsection documenting the table, best-effort upsert,
+  hydrate-at-boot, no-new-pool, and the accepted limitations (no BacktestResult persistence, no
+  retention/pagination, math.isfinite guard). grep confirms `strategy_scores` present.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none.
+
+## Session 2026-07-03 — sdd-execute (sequential) — SESSION END
+**Steps this session**: 1, 2, 3, 4, 5, 6 (all)
+**Progress**: 6 done / 6 total — feature code-completed
+**Verification**: full analysis suite 152 passed, coverage 67.63% (≥40); ruff check+format clean;
+migration apply/upsert/rollback proven on a throwaway postgres:16 cluster.
+**Ledger**: appended a write-through+hydrate-at-boot insight to docs/roadmap/ledger/insights.md.
+**Integration PR**: #742 (feature/persist-strategy-scores → main-dev) — pre-existing; now carries the
+full implementation. CI to run on push.
+**Next**: merge PR #742 when CI passes + reviewers approve.
