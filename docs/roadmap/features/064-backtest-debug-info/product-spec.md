@@ -41,14 +41,16 @@ for that bar (not a fabricated `0`), so warm-up is unambiguous.
 FR-4. Each per-bar row MUST carry a **warm-up marker** and the engine's **decision** for that bar,
 expressed as a closed enum action (warm-up / hold-flat / enter-long / exit-long / hold-long) together
 with the numeric `conviction` used and the per-bar `signal_score` (see FR-4a for its definition this
-version). The warm-up marker is **rule-referenced** (resolved per OQ-1): a bar is warm-up when any
-series that the strategy's active `entry_rule`/`exit_rule` reference is still unresolved at that bar —
-**not** merely "any computed component unresolved," so an unused long-lookback component cannot mark
-the whole range warm-up. The legacy SMA path (no rule trees) is warm-up until both the fast and slow
-SMA have resolved (its rule-referenced specialization). The referenced-series set is derived from the
-same rule-tree walk the evaluator already performs (`_validate_rule_refs`, union of entry+exit refs);
-a position-aware refinement (entry refs gate while flat, exit refs gate while long) is a deferred
-enhancement.
+version). The warm-up marker uses a **declared-lookback** definition (Option C, resolved per OQ-1): the
+strategy's warm-up length is the **maximum lookback of the components its active `entry_rule`/`exit_rule`
+reference**, computed up front, and bar *i* is warm-up when `i < warmup_length`. A component that the
+rules never reference does not contribute (so an unused long-lookback component cannot mark the whole
+range warm-up). Per-component lookback is:
+- **Built-in indicator**: derived from its parameters via a per-indicator lookback rule (e.g. `SMA`/`EMA`
+  → `period`; a longer rule for multi-stage indicators such as `MACD`/`STOCH`). See OQ-5.
+- **Custom formula**: the formula's **declared `warmup_period`** (see FR-4c).
+The legacy SMA-crossover path (no rule trees) uses `slow_period` as its warm-up length (the Option-C
+specialization). `SymbolDiagnostics.warmup_bars` (FR-6 / proto) reports this computed length.
 
 FR-4a. This version supports **no newsletter signals on the diagnostics-bearing paths beyond the
 legacy signal-weighted mode** (resolved per OQ-4). The evaluator path passes no signals, so its
@@ -65,6 +67,19 @@ response field needed). The `xstockstrat-ui` backtest form MUST constrain its St
 so a valid range cannot exceed the cap, and surface the same message if the backend rejects. This cap
 bounds diagnostics to ≈504 daily rows/symbol, which resolves the always-included response-size concern
 (OQ-2).
+
+FR-4c (**custom-formula warm-up declaration** — scope addition requested with the Option-C decision).
+A custom formula MUST be able to declare a **warm-up period** (integer bars) that it needs before its
+outputs are valid, so the Option-C lookback (FR-4) generalizes to custom-formula components:
+- `xstockstrat-indicators` `FormulaDefinition` gains a `warmup_period` field, settable via
+  `RegisterFormula`/`UpdateFormula` and returned by `GetFormula`/`ListFormulas`; persisted in
+  `indicators.formulas` (new migration adding a `warmup_period` column, default `0`).
+- The formula authoring UI (`insights/formulas/new` and `insights/formulas/[id]`) MUST expose a
+  numeric **Warm-up period (bars)** input (default `0`, non-negative).
+- `xstockstrat-analysis` MUST read a formula component's `warmup_period` via `GetFormula` (the servicer
+  already fetches formula metadata for validation) and use it as that component's lookback in FR-4.
+- Backward-compatible: existing formulas default `warmup_period = 0` (treated as "no declared warm-up";
+  the strategy's warm-up length then comes from its other referenced components, or 0).
 
 FR-5. Diagnostics MUST reflect exactly what the engine saw at bar *i* with **no look-ahead**: values
 and markers at bar *i* derive only from bars `0..i` (preserving the evaluator's existing guarantee).
@@ -102,14 +117,20 @@ insufficient bars yields a coverage gap, not diagnostics).
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `packages/proto` — additive fields/messages on `analysis/v1/analysis.proto` (`BacktestResult`).
+- `packages/proto` — additive fields/messages on `analysis/v1/analysis.proto` (`BacktestResult`) **and**
+  `indicators/v1/indicators.proto` (`FormulaDefinition`/`RegisterFormulaRequest`/`UpdateFormulaRequest`
+  gain `warmup_period`).
 - `xstockstrat-analysis` — collect per-bar diagnostics in both backtest paths
   (`app/handlers/servicer.py` `_backtest_symbol`, `_backtest_symbol_evaluated`) and expose the
   evaluator's component series (`app/services/evaluator.py` currently returns only `BarDecision`);
-  classify the per-symbol no-trade reason.
-- `xstockstrat-ui` — render the debug table on `src/app/insights/strategies/[id]/page.tsx`
-  (consumes the typed `BacktestResult` via `useRunBacktest`) and constrain the Start/End date pickers
-  to the ≤2-year range cap (FR-4b).
+  compute Option-C warm-up length (built-in indicator lookback + formula `warmup_period` via
+  `GetFormula`); classify the per-symbol no-trade reason; enforce the range cap (FR-4b).
+- `xstockstrat-indicators` — persist/return `warmup_period` on formulas (new migration on
+  `indicators.formulas`; `RegisterFormula`/`UpdateFormula`/`GetFormula`/`ListFormulas` handlers).
+- `xstockstrat-ui` — render the debug table on `src/app/insights/strategies/[id]/page.tsx` (consumes
+  the typed `BacktestResult` via `useRunBacktest`), constrain the Start/End date pickers to the
+  ≤2-year cap (FR-4b), and add a Warm-up period input to the formula authoring pages
+  (`src/app/insights/formulas/{new,[id]}/page.tsx`).
 - `xstockstrat-agent` — no functional change, but the `run_backtest` MCP tool response grows; verify
   it still serializes cleanly (`app/tools.py`, `app/client.py`).
 
@@ -128,6 +149,11 @@ Exact service names from CLAUDE.md Service Registry:
   - New message `SymbolDiagnostics` — `symbol`, `repeated BarDiagnostic bars`, `NoTradeReason
     no_trade_reason`, `int32 bars_total`, `int32 warmup_bars`.
   - `BacktestResult` gains `repeated SymbolDiagnostics diagnostics = <next-free-number>;`.
+- **`packages/proto/indicators/v1/indicators.proto`** (additive, for FR-4c):
+  - `FormulaDefinition` gains `int32 warmup_period = 12;`.
+  - `RegisterFormulaRequest` gains `int32 warmup_period = 9;`.
+  - `UpdateFormulaRequest` gains `int32 warmup_period = 9;` (renumber final field as needed at spec
+    time to keep numbers unique).
 - Regenerate stubs via `./scripts/buf-gen.sh` (TS/Python/Go) and commit `packages/proto/gen/`.
 - Passes `buf breaking` (additive only — no field removed, renumbered, or retyped).
 
@@ -147,17 +173,24 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Database Changes
 
-- [x] No schema changes. Diagnostics are computed on the fly and returned in the RPC response only.
+- Backtest diagnostics themselves add **no** schema (computed on the fly, returned in the RPC only).
+- **One new migration** for FR-4c on `xstockstrat-indicators` (next number after `003_`):
+  `services/xstockstrat-indicators/migrations/004_formula_warmup.{up,down}.sql` —
+  `ALTER TABLE indicators.formulas ADD COLUMN warmup_period INT NOT NULL DEFAULT 0;` (down drops it).
+  Mirrors the additive pattern of `002_formula_parameters` / `003_formula_outputs`. Requires DBA +
+  `xstockstrat-indicators` owner review.
 
 ## Feature Workflow Notes
 
 Branch to create: `feature/backtest-debug-info` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (non-breaking proto or config change) — additive proto + service work.
+- [x] Service owner approval (non-breaking proto + service work) — `xstockstrat-analysis`,
+  `xstockstrat-indicators`, `xstockstrat-ui`.
 - [ ] 2 service owners + platform lead (breaking proto change) — N/A (additive only).
-- [ ] DBA review + service owner (schema migration) — N/A (no migration).
-- Proto Reviewer sign-off required for the additive `analysis.proto` change (`buf lint`/`buf
-  breaking` green).
+- [x] DBA review + service owner (schema migration) — the `004_formula_warmup` indicators migration
+  (FR-4c).
+- Proto Reviewer sign-off required for the additive `analysis.proto` **and** `indicators.proto` changes
+  (`buf lint`/`buf breaking` green).
 
 ## Acceptance Criteria
 
@@ -179,18 +212,27 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 7. A `RunBacktest` request whose range span exceeds `analysis.backtest.max_range_days` (default 730)
    is rejected with `INVALID_ARGUMENT`; a request at or under the cap runs normally. The UI date
    pickers cannot submit a range wider than the cap.
-8. `buf lint` and `buf breaking` pass; regenerated stubs are committed; `xstockstrat-analysis` and
+8. A custom formula can be registered/updated with a `warmup_period`, it round-trips through
+   `GetFormula`, and a strategy that references that formula reports `warmup_bars` ≥ the formula's
+   declared warm-up; bars before `warmup_bars` are flagged `warmup=true`. Existing formulas
+   (`warmup_period = 0`) behave exactly as before.
+9. `buf lint` and `buf breaking` pass; regenerated stubs are committed; the `004_formula_warmup`
+   migration applies and rolls back cleanly; `xstockstrat-analysis`, `xstockstrat-indicators`, and
    `xstockstrat-ui` test suites pass at their existing coverage thresholds.
 
 ## Open Questions
 
-- [x] OQ-1 (**warm-up definition** — resolved 2026-07-08): warm-up is **rule-referenced** (Option B,
-      union of entry+exit refs) — a bar is warm-up when a series the active rules reference is still
-      unresolved, reusing the evaluator's existing rule-ref walk; the legacy SMA path is warm-up until
-      both SMAs resolve. Rejected: Option A ("any component unresolved" — false-positives when an
-      unused long-lookback component exists, misleading the exact debug case) and Option C ("declared
-      lookback" — doesn't generalize to custom formulas). Position-aware refinement deferred. See
-      FR-4. _(Confirm at /sdd-design if you prefer the simpler Option A.)_
+- [x] OQ-1 (**warm-up definition** — resolved 2026-07-08 via qq-1): **Option C (declared lookback)**.
+      Warm-up length = max lookback of the *referenced* components; bar `i` warm-up iff `i < length`.
+      To make C generalize to custom formulas (its original weakness), the feature adds a declared
+      `warmup_period` to custom formulas (FR-4c). Rejected: Option A ("any component unresolved" —
+      false-positives from unused long-lookback components) and Option B ("observe series resolution" —
+      viable but the user chose an explicit declared lookback). See FR-4 / FR-4c.
+- [ ] OQ-5 (**built-in indicator lookback derivation** — new, for `xstockstrat-analysis`): define the
+      per-indicator lookback used in FR-4 (a `_INDICATOR_WARMUP` map alongside `_INDICATOR_SERIES` in
+      `evaluator.py`). Simple cases: `SMA`/`EMA`/`RSI`/`BB`/`ATR`/`VWAP` → `period`. Multi-stage:
+      `MACD` → `slow + signal`, `STOCH` → `k + d`. Finalize the exact formulas at /sdd-design or
+      /sdd-spec.
 - [x] OQ-2 (**response size** — resolved 2026-07-08 via qq-2): all backtests are capped to 2 calendar
       years (`analysis.backtest.max_range_days`, default 730), bounding diagnostics to ≈504 rows/symbol.
       Requests over the cap are rejected (FR-4b). UI table still virtualized for smoothness.

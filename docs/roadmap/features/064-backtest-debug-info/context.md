@@ -61,3 +61,29 @@ User answered the four open questions; spec updated in place:
 Governance delta from this session: feature now adds 1 config key (was "no new config keys"). Reviewer
 set unchanged — the `config` category maps to the analysis service owner, already listed.
 
+## Session 2026-07-08 — OQ-1 → Option C + custom-formula warm-up (scope addition)
+
+User: "oq-1. Option C. Include in the scope to make custom formulas to set a warmup period."
+
+- **OQ-1 re-resolved to Option C (declared lookback)**, superseding the prior Option-B choice.
+  Warm-up length = max lookback of the *referenced* components; bar `i` warm-up iff `i < length`. →
+  FR-4 rewritten.
+- **Scope addition (FR-4c): custom formulas can declare a `warmup_period`** — this is the piece that
+  makes Option C generalize (its original weakness). Grounded against real contracts:
+  - `indicators.proto`: `FormulaDefinition` (field 12), `RegisterFormulaRequest`/`UpdateFormulaRequest`
+    gain `warmup_period` (additive).
+  - `indicators.formulas` is DB-backed (migrations `001_formulas`, `002_formula_parameters`,
+    `003_formula_outputs` add JSONB columns) → new **migration `004_formula_warmup`** (ADD COLUMN
+    `warmup_period INT NOT NULL DEFAULT 0`).
+  - Formula authoring UI at `services/xstockstrat-ui/src/app/insights/formulas/{new,[id]}/page.tsx`
+    gains a Warm-up period input.
+  - analysis reads it via `GetFormula` (servicer already fetches formula metadata for validation).
+- **New OQ-5**: define the per-built-in-indicator lookback (`_INDICATOR_WARMUP` alongside
+  `_INDICATOR_SERIES`): simple indicators → `period`; `MACD` → slow+signal; `STOCH` → k+d.
+- **Governance / scope-creep note**: feature grew from 3 areas (proto/analysis/ui) to 5
+  (adds `xstockstrat-indicators` service + a DB migration). Reviewers updated in feature.md to add the
+  indicators owner and DBA. This is a deliberate, user-requested expansion — flagged here so
+  /sdd-design weighs whether to split the formula-warmup piece into its own feature if it complicates
+  the review/merge.
+
+

@@ -37,9 +37,11 @@ re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| Proto Reviewer | Field number uniqueness per message, additive-only (no breaking changes without deprecation), `buf lint`/`buf breaking` pass |
-| `xstockstrat-analysis` (service owner) | Backtest reproducibility, strategy scoring determinism, **no look-ahead bias** in the emitted per-bar diagnostics |
-| `xstockstrat-ui` (service owner) | Analytics display accuracy, Connect-RPC call safety, no direct DB access, large-table render performance |
+| Proto Reviewer | Field number uniqueness per message, additive-only (no breaking changes without deprecation), `buf lint`/`buf breaking` pass — spans `analysis.proto` + `indicators.proto` |
+| `xstockstrat-analysis` (service owner) | Backtest reproducibility, strategy scoring determinism, **no look-ahead bias** in the emitted per-bar diagnostics; Option-C warm-up length correctness |
+| `xstockstrat-indicators` (service owner) | Formula `warmup_period` persistence/validation, no side-effects, numeric precision |
+| `xstockstrat-ui` (service owner) | Analytics display accuracy, Connect-RPC call safety, no direct DB access, large-table render performance, formula-authoring input correctness |
+| DBA | `004_formula_warmup` migration: NNN numbering, up+down pair, additive column default, run-order compliance |
 
 ## Next Action
 
