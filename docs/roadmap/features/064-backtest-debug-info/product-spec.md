@@ -38,11 +38,33 @@ that bar, keyed by series name:
 A series that has **not yet resolved** at a given bar (warm-up period) MUST be represented as absent
 for that bar (not a fabricated `0`), so warm-up is unambiguous.
 
-FR-4. Each per-bar row MUST carry a **warm-up marker** (true while any series the active rules depend
-on is still unresolved at that bar) and the engine's **decision** for that bar, expressed as a closed
-enum action (warm-up / hold-flat / enter-long / exit-long / hold-long) together with the numeric
-`conviction` used and, where applicable, the per-bar `signal_score` from newsletter signals (0 when
-the strategy uses no signal sources).
+FR-4. Each per-bar row MUST carry a **warm-up marker** and the engine's **decision** for that bar,
+expressed as a closed enum action (warm-up / hold-flat / enter-long / exit-long / hold-long) together
+with the numeric `conviction` used and the per-bar `signal_score` (see FR-4a for its definition this
+version). The warm-up marker is **rule-referenced** (resolved per OQ-1): a bar is warm-up when any
+series that the strategy's active `entry_rule`/`exit_rule` reference is still unresolved at that bar —
+**not** merely "any computed component unresolved," so an unused long-lookback component cannot mark
+the whole range warm-up. The legacy SMA path (no rule trees) is warm-up until both the fast and slow
+SMA have resolved (its rule-referenced specialization). The referenced-series set is derived from the
+same rule-tree walk the evaluator already performs (`_validate_rule_refs`, union of entry+exit refs);
+a position-aware refinement (entry refs gate while flat, exit refs gate while long) is a deferred
+enhancement.
+
+FR-4a. This version supports **no newsletter signals on the diagnostics-bearing paths beyond the
+legacy signal-weighted mode** (resolved per OQ-4). The evaluator path passes no signals, so its
+`signal_score` is always `0`; the legacy path reports the real per-bar `signal_score` only when the
+strategy declares `signal_sources`. The field is retained for forward-compatibility and documented as
+`0` when the strategy uses no signal sources.
+
+FR-4b (**range cap — applies to ALL backtests, not just diagnostics**). `RunBacktest` MUST enforce a
+maximum backtest range of **2 calendar years**, bounded by config key
+`analysis.backtest.max_range_days` (int, default `730`). A request whose `range` span exceeds the cap
+MUST be **rejected** with gRPC `INVALID_ARGUMENT` and a clear message stating the 2-year maximum and
+the requested span — the engine does NOT silently clamp (preserves reproducibility; no "was-clamped"
+response field needed). The `xstockstrat-ui` backtest form MUST constrain its Start/End date pickers
+so a valid range cannot exceed the cap, and surface the same message if the backend rejects. This cap
+bounds diagnostics to ≈504 daily rows/symbol, which resolves the always-included response-size concern
+(OQ-2).
 
 FR-5. Diagnostics MUST reflect exactly what the engine saw at bar *i* with **no look-ahead**: values
 and markers at bar *i* derive only from bars `0..i` (preserving the evaluator's existing guarantee).
@@ -86,7 +108,8 @@ Exact service names from CLAUDE.md Service Registry:
   evaluator's component series (`app/services/evaluator.py` currently returns only `BarDecision`);
   classify the per-symbol no-trade reason.
 - `xstockstrat-ui` — render the debug table on `src/app/insights/strategies/[id]/page.tsx`
-  (consumes the typed `BacktestResult` via `useRunBacktest`).
+  (consumes the typed `BacktestResult` via `useRunBacktest`) and constrain the Start/End date pickers
+  to the ≤2-year range cap (FR-4b).
 - `xstockstrat-agent` — no functional change, but the `run_backtest` MCP tool response grows; verify
   it still serializes cleanly (`app/tools.py`, `app/client.py`).
 
@@ -110,11 +133,17 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Config Key Changes
 
-- [x] No new config keys **required**.
-- Proposed safeguard (Open Question OQ-2): a bound on emitted rows per symbol, e.g.
-  `analysis.backtest.max_debug_bars_per_symbol` (int, default `0` = unbounded — mirrors the
-  `marketdata.backfill.max_delete_days` "0 = no cap" convention). This is a size safety valve, **not**
-  an opt-in gate, so it is consistent with the always-included decision. Deferred to design.
+- One new config key, owned by `xstockstrat-analysis`:
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.backtest.max_range_days` | int | `730` | Maximum backtest range span in days (≈2 calendar years). Requests exceeding this are rejected with `INVALID_ARGUMENT`; applies to all `RunBacktest` callers. |
+
+- Register per `docs/runbooks/config-rollout.md`, document in `services/xstockstrat-analysis/CLAUDE.md`
+  (Config Keys Consumed) and the root CLAUDE.md recently-added-keys list.
+- This is a **range cap** (resolves qq-2/OQ-2), not a per-symbol row cap and not an opt-in gate —
+  consistent with the always-included diagnostics decision. It also bounds diagnostics to ≈504
+  daily rows/symbol.
 
 ## Database Changes
 
@@ -147,24 +176,28 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 6. The strategy detail page renders a day-by-day debug table below the metrics for an `OK` result,
    shows the no-trade reason when present, and leaves the `INSUFFICIENT_DATA` coverage-gap/backfill
    card behavior unchanged.
-7. `buf lint` and `buf breaking` pass; regenerated stubs are committed; `xstockstrat-analysis` and
+7. A `RunBacktest` request whose range span exceeds `analysis.backtest.max_range_days` (default 730)
+   is rejected with `INVALID_ARGUMENT`; a request at or under the cap runs normally. The UI date
+   pickers cannot submit a range wider than the cap.
+8. `buf lint` and `buf breaking` pass; regenerated stubs are committed; `xstockstrat-analysis` and
    `xstockstrat-ui` test suites pass at their existing coverage thresholds.
 
 ## Open Questions
 
-- [ ] OQ-1 (**no look-ahead** — known risk for `xstockstrat-analysis`): the `warmup` flag in FR-4 must
-      key off the specific series the active rules reference, not merely "any component unresolved."
-      Confirm the warm-up definition at design time so a multi-component strategy isn't marked warm-up
-      forever by one slow series it never uses.
-- [ ] OQ-2 (**response size**): a multi-year, multi-symbol daily backtest emits hundreds of rows per
-      symbol, always included. Do we ship unbounded (accept the payload growth) or add the
-      `analysis.backtest.max_debug_bars_per_symbol` safeguard (default 0 = unbounded) plus UI
-      pagination/virtualization? Recommendation: add the config bound as a safety valve, default
-      unbounded, and virtualize the UI table.
+- [x] OQ-1 (**warm-up definition** — resolved 2026-07-08): warm-up is **rule-referenced** (Option B,
+      union of entry+exit refs) — a bar is warm-up when a series the active rules reference is still
+      unresolved, reusing the evaluator's existing rule-ref walk; the legacy SMA path is warm-up until
+      both SMAs resolve. Rejected: Option A ("any component unresolved" — false-positives when an
+      unused long-lookback component exists, misleading the exact debug case) and Option C ("declared
+      lookback" — doesn't generalize to custom formulas). Position-aware refinement deferred. See
+      FR-4. _(Confirm at /sdd-design if you prefer the simpler Option A.)_
+- [x] OQ-2 (**response size** — resolved 2026-07-08 via qq-2): all backtests are capped to 2 calendar
+      years (`analysis.backtest.max_range_days`, default 730), bounding diagnostics to ≈504 rows/symbol.
+      Requests over the cap are rejected (FR-4b). UI table still virtualized for smoothness.
 - [ ] OQ-3 (**agent tool**): confirm the `run_backtest` MCP tool's return mapping tolerates the larger
       response, or whether the agent should project diagnostics out of its tool result to keep agent
-      context small (agent is read-through only; no functional change intended).
-- [ ] OQ-4 (**signal_score on the evaluator path**): the evaluator path currently passes
-      `signals_map=None`, so `signal_score` is always 0 there. Decide whether to leave it 0 (signals
-      are a legacy-path concept) or thread signals through the evaluator — recommend leaving 0 and
-      documenting it.
+      context small (agent is read-through only; no functional change intended). Bounded by the 2-year
+      cap; likely fine — verify during /sdd-spec.
+- [x] OQ-4 (**signal_score** — resolved 2026-07-08 via qq-4): no newsletter signals in this version.
+      `signal_score` stays `0` on the evaluator path and reflects real values only on the legacy
+      signal-weighted path; the field is retained and documented as `0` otherwise. See FR-4a.

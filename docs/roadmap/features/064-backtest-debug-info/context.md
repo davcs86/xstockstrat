@@ -34,3 +34,30 @@
   OQ-1 (no look-ahead / warm-up definition) and OQ-2 (always-included response size).
 
 Next: `/sdd-review backtest-debug-info product-spec`.
+
+## Session 2026-07-08 — spec refinement (open-question resolution)
+
+User answered the four open questions; spec updated in place:
+
+- **OQ-1 (qq-1) — warm-up definition → RESOLVED (Option B, rule-referenced, union of entry+exit
+  refs).** Explained the tradeoffs: Option A ("any component unresolved") is cheapest but
+  false-flags warm-up when an unused long-lookback component exists — misleading the exact "why 0
+  trades" case; Option C ("declared lookback") is elegant for built-ins but doesn't generalize to
+  custom formulas. Chose B (reuses the evaluator's `_validate_rule_refs` walk; legacy SMA path is the
+  specialization "until both SMAs resolve"). Position-aware refinement deferred. User may still elect
+  simpler Option A at /sdd-design. → FR-4.
+- **OQ-2 (qq-2/qq-3) — response size → RESOLVED via a global range cap.** User: "Limit all backtests
+  to 2 calendar years" and confirmed 2y is acceptable (~504 daily rows/symbol). Added FR-4b + new
+  config key `analysis.backtest.max_range_days` (int, default 730), owned by xstockstrat-analysis.
+  Behavior = **reject** over-cap requests with `INVALID_ARGUMENT` (not silent clamp), UI constrains
+  date pickers. This is a broader contract change affecting ALL RunBacktest callers, not just
+  diagnostics.
+- **OQ-4 (qq-4) — signals → RESOLVED.** No newsletter signals this version; `signal_score` stays 0 on
+  the evaluator path, real only on the legacy signal-weighted path. Field retained + documented. →
+  FR-4a.
+- **OQ-3 (agent tool)** left open — verify at /sdd-spec that `run_backtest` MCP tool tolerates the
+  larger (now 2-year-bounded) response.
+
+Governance delta from this session: feature now adds 1 config key (was "no new config keys"). Reviewer
+set unchanged — the `config` category maps to the analysis service owner, already listed.
+
