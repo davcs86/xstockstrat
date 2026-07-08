@@ -102,4 +102,11 @@ User: "oq-1. Option C. Include in the scope to make custom formulas to set a war
   `032-walk-forward-backtesting` share the backtest theme but declare no concrete overlap (note only).
 - Warnings: none. Overlap findings: none.
 
+## Session 2026-07-08 — OQ-3 revised + sdd-design
+
+- User revised OQ-3: the agent `run_backtest` tool now **includes** the `diagnostics` array (was
+  "omit to stay lean") so the agent can reason over per-bar data and **suggest strategy/indicator
+  changes**. FR/Affected-Services + OQ-3 updated accordingly. This is a deliberate reversal for the
+  diagnostic-advisor use case; response bounded by the 2-year cap.
+
 

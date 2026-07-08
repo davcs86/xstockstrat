@@ -131,10 +131,12 @@ Exact service names from CLAUDE.md Service Registry:
   the typed `BacktestResult` via `useRunBacktest`), constrain the Start/End date pickers to the
   ≤2-year cap (FR-4b), and add a Warm-up period input to the formula authoring pages
   (`src/app/insights/formulas/{new,[id]}/page.tsx`).
-- `xstockstrat-agent` — the `run_backtest` MCP tool MUST **omit** the new `diagnostics` array from its
-  projected result (diagnostics are a UI-facing debug surface; the agent reasons over
-  metrics/trades/coverage-gaps, so it stays lean). No behavioral change beyond the projection
-  (`app/tools.py`, `app/client.py`); resolves OQ-3.
+- `xstockstrat-agent` — the `run_backtest` MCP tool MUST **include** the new `diagnostics` array in its
+  returned result so the agent can reason over per-bar OHLCV / indicator values / warm-up / decisions
+  and **suggest changes to the strategy or its indicators** (e.g. "your entry never fired because
+  `sma_fast` stayed below `sma_slow` the whole window — loosen the threshold or shorten the fast
+  period"). Bounded by the 2-year cap (~504 rows/symbol). Update the tool's return mapping/docstring to
+  surface the diagnostics (`app/tools.py`, `app/client.py`); resolves OQ-3.
 
 ## Proto Contract Changes
 
@@ -240,10 +242,12 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] OQ-2 (**response size** — resolved 2026-07-08 via qq-2): all backtests are capped to 2 calendar
       years (`analysis.backtest.max_range_days`, default 730), bounding diagnostics to ≈504 rows/symbol.
       Requests over the cap are rejected (FR-4b). UI table still virtualized for smoothness.
-- [x] OQ-3 (**agent tool** — resolved 2026-07-08): the `run_backtest` MCP tool **omits** the
-      `diagnostics` array from its projected result — diagnostics are UI-facing; the agent reasons over
-      metrics/trades/coverage-gaps and stays lean. No functional change otherwise. See Affected
-      Services. (Impl-spec adds a projection unit test.)
+- [x] OQ-3 (**agent tool** — resolved 2026-07-08, revised): the `run_backtest` MCP tool **includes**
+      the `diagnostics` array in its result so the agent can reason over the per-bar OHLCV / indicator
+      / decision data and **suggest strategy or indicator changes**. Bounded by the 2-year cap
+      (~504 rows/symbol). Supersedes the earlier "omit to stay lean" decision — the diagnostic-advisor
+      use case is worth the context. See Affected Services. (Impl-spec covers the tool's return
+      mapping + docstring.)
 - [x] OQ-4 (**signal_score** — resolved 2026-07-08 via qq-4): no newsletter signals in this version.
       `signal_score` stays `0` on the evaluator path and reflects real values only on the legacy
       signal-weighted path; the field is retained and documented as `0` otherwise. See FR-4a.
