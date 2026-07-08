@@ -1,6 +1,6 @@
 # Feature: backtest-debug-info
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/backtest-debug-info`
 **Created**: 2026-07-08
 **Last Updated**: 2026-07-08
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-08 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-07-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; OQ-3/OQ-5 resolved in-spec; overlap CLEAN) |
 
 ---
 
@@ -45,4 +46,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review backtest-debug-info product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design backtest-debug-info` — recon + adversarial design debate before /sdd-spec

@@ -86,4 +86,20 @@ User: "oq-1. Option C. Include in the scope to make custom formulas to set a war
   /sdd-design weighs whether to split the formula-warmup piece into its own feature if it complicates
   the review/merge.
 
+## Session 2026-07-08 — sdd-review product-spec
+
+- Product spec approved. Status: `draft` → `spec-ready`.
+- `spec-reviewer` verdict: all code-checkable claims verified (service names vs registry; config-key
+  format; proto field numbers — `indicators.proto` `warmup_period` 12/9/9 all free, `analysis.proto`
+  `diagnostics` = 14 additive; `_UNSPECIFIED=0` sentinels present per C-04; migration `004` correct
+  next number per F-01; all file paths resolve). Sole FAIL: criterion 9 (two unchecked open questions).
+- **Blocker resolved in-spec** (not deferred): OQ-3 → agent `run_backtest` omits `diagnostics` from
+  its projected result (UI-facing only; keeps agent context lean). OQ-5 → FR-4 built-in lookback uses
+  a declared `_INDICATOR_WARMUP` table (period-based → period; MACD → slow+signal; STOCH → k+d), exact
+  ±1 constants pinned by a unit test at /sdd-spec. All OQs now `[x]`.
+- `feature-overlap` verdict: CLEAN — no config-key/proto-field/migration-number collision; no
+  merge-order entry needed. Draft neighbors `031-strategy-performance-dashboard`,
+  `032-walk-forward-backtesting` share the backtest theme but declare no concrete overlap (note only).
+- Warnings: none. Overlap findings: none.
+
 

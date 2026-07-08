@@ -131,8 +131,10 @@ Exact service names from CLAUDE.md Service Registry:
   the typed `BacktestResult` via `useRunBacktest`), constrain the Start/End date pickers to the
   ≤2-year cap (FR-4b), and add a Warm-up period input to the formula authoring pages
   (`src/app/insights/formulas/{new,[id]}/page.tsx`).
-- `xstockstrat-agent` — no functional change, but the `run_backtest` MCP tool response grows; verify
-  it still serializes cleanly (`app/tools.py`, `app/client.py`).
+- `xstockstrat-agent` — the `run_backtest` MCP tool MUST **omit** the new `diagnostics` array from its
+  projected result (diagnostics are a UI-facing debug surface; the agent reasons over
+  metrics/trades/coverage-gaps, so it stays lean). No behavioral change beyond the projection
+  (`app/tools.py`, `app/client.py`); resolves OQ-3.
 
 ## Proto Contract Changes
 
@@ -228,18 +230,20 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
       `warmup_period` to custom formulas (FR-4c). Rejected: Option A ("any component unresolved" —
       false-positives from unused long-lookback components) and Option B ("observe series resolution" —
       viable but the user chose an explicit declared lookback). See FR-4 / FR-4c.
-- [ ] OQ-5 (**built-in indicator lookback derivation** — new, for `xstockstrat-analysis`): define the
-      per-indicator lookback used in FR-4 (a `_INDICATOR_WARMUP` map alongside `_INDICATOR_SERIES` in
-      `evaluator.py`). Simple cases: `SMA`/`EMA`/`RSI`/`BB`/`ATR`/`VWAP` → `period`. Multi-stage:
-      `MACD` → `slow + signal`, `STOCH` → `k + d`. Finalize the exact formulas at /sdd-design or
-      /sdd-spec.
+- [x] OQ-5 (**built-in indicator lookback derivation** — resolved 2026-07-08, approach fixed): FR-4's
+      built-in lookback comes from a **declared `_INDICATOR_WARMUP` map** alongside `_INDICATOR_SERIES`
+      in `evaluator.py`. Rule: period-based indicators (`SMA`/`EMA`/`RSI`/`BB`/`ATR`/`VWAP`) → their
+      period param; multi-stage → `MACD` = slow + signal, `STOCH` = k + d. The exact per-indicator
+      ±1 constants are an **impl detail finalized in /sdd-spec**, validated by a unit test asserting
+      each entry equals the indicators engine's actual count of leading unavailable points. (Decision
+      fixed here; only constant-tuning is deferred, with a test to pin it.)
 - [x] OQ-2 (**response size** — resolved 2026-07-08 via qq-2): all backtests are capped to 2 calendar
       years (`analysis.backtest.max_range_days`, default 730), bounding diagnostics to ≈504 rows/symbol.
       Requests over the cap are rejected (FR-4b). UI table still virtualized for smoothness.
-- [ ] OQ-3 (**agent tool**): confirm the `run_backtest` MCP tool's return mapping tolerates the larger
-      response, or whether the agent should project diagnostics out of its tool result to keep agent
-      context small (agent is read-through only; no functional change intended). Bounded by the 2-year
-      cap; likely fine — verify during /sdd-spec.
+- [x] OQ-3 (**agent tool** — resolved 2026-07-08): the `run_backtest` MCP tool **omits** the
+      `diagnostics` array from its projected result — diagnostics are UI-facing; the agent reasons over
+      metrics/trades/coverage-gaps and stays lean. No functional change otherwise. See Affected
+      Services. (Impl-spec adds a projection unit test.)
 - [x] OQ-4 (**signal_score** — resolved 2026-07-08 via qq-4): no newsletter signals in this version.
       `signal_score` stays `0` on the evaluator path and reflects real values only on the legacy
       signal-weighted path; the field is retained and documented as `0` otherwise. See FR-4a.
