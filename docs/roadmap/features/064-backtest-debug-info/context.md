@@ -250,3 +250,16 @@ Next: `/sdd-execute backtest-debug-info sequential` on the `feature/backtest-deb
 - TDD: RED (import error, evaluator reverted) → GREEN (35 evaluator+live_loop pass; full suite 145 pass,
   ruff clean, cov 67% ≥ 40).
 - Deviations: none.
+
+### Steps 8–11 — analysis per-bar diagnostics + hybrid warm-up + no_trade_reason [done]
+- Both backtest methods now return a 4-tuple with a `SymbolDiagnostics`; RunBacktest collects them into
+  `result.diagnostics`. Shared `_build_bar_diagnostic` (DRY), `_first_resolved_index`,
+  `_classify_no_trade_reason`, `_finalize_symbol_diagnostics` helpers.
+- `bar.timestamp` → `bar.time` fixed at all 6 sites (real proto field); TradeRecord times now correct.
+- Hybrid Option-C warm-up: legacy = observed first-both-SMA-resolved; evaluated = per-referenced-ref via
+  `referenced_refs` (built-in observed / custom-formula declared warmup_period via GetFormula cached per
+  run). Warm-up override pass sets warmup flag + WARMUP action; `no_trade_reason` classified.
+- `.value` alias dropped from the evaluated indicators map. signal_score 0 on evaluated path (FR-4a).
+- Files: `app/handlers/servicer.py`, `tests/test_analysis_servicer.py`
+- TDD: RED (5 diagnostics tests fail, servicer reverted) → GREEN (152 pass, ruff clean, cov 75% ≥ 40).
+- Deviations: Steps 8-11 combined into one PR (tightly coupled); tests in servicer file. See Deviation Log.

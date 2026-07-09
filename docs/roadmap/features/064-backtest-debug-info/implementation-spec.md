@@ -325,7 +325,7 @@ Confirm coverage ≥ 40% (analysis threshold).
 
 ### Step 8 — service: both-path per-bar diagnostics + bar.time fix
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -386,7 +386,7 @@ bias** in the per-bar diagnostics, action↔TradeRecord consistency.
 
 ### Step 9 — test: per-bar diagnostics incl. bar 0, action↔TradeRecord, no look-ahead
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -428,7 +428,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
 
 ### Step 10 — service: Option-C hybrid warm-up + no_trade_reason classifier
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -473,7 +473,7 @@ look-ahead bias, determinism.
 
 ### Step 11 — test: warm-up length + no_trade_reason classification
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
