@@ -238,3 +238,15 @@ Next: `/sdd-execute backtest-debug-info sequential` on the `feature/backtest-deb
 - Files: `app/handlers/servicer.py`, `app/services/formulas_repository.py`, `tests/test_formulas.py`
 - TDD: RED captured (5/6 fail with Step-4 code stashed) → GREEN (95 pass, ruff clean, cov 79.4% ≥ 50).
 - Deviations: none. (Combined the service+test pair into one stacked PR — red-green needs both together.)
+
+### Steps 6–7 — analysis evaluate_with_series + referenced_refs + test [done]
+- Step 6: split evaluate() → additive evaluate_with_series() returning (decisions, component_series);
+  evaluate() now delegates and still returns list[BarDecision] (feature-048 live loop + list-mocks
+  unaffected). Added non-raising referenced_refs(rule) + shared _iter_leaf_terms() traversal (dotted
+  refs collapsed to base) — no second parallel walker (DRY).
+- Step 7: TestEvaluateWithSeries (series shape incl. bare+dotted keys, empty-bars ([],{}), evaluate()==
+  evaluate_with_series()[0]) + TestReferencedRefs (nested AND/OR collection, non-raising on unknown).
+- Files: `app/services/evaluator.py`, `tests/test_strategy_evaluator.py`
+- TDD: RED (import error, evaluator reverted) → GREEN (35 evaluator+live_loop pass; full suite 145 pass,
+  ruff clean, cov 67% ≥ 40).
+- Deviations: none.

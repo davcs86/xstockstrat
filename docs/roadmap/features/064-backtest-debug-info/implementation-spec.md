@@ -252,7 +252,7 @@ Confirm coverage ≥ 50% (indicators threshold) and all new cases pass.
 
 ### Step 6 — service: analysis additive evaluate_with_series + referenced_refs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify
@@ -292,7 +292,7 @@ determinism, no look-ahead bias; Option-C warm-up length correctness.
 
 ### Step 7 — test: evaluate_with_series series + list back-compat + ref collection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_strategy_evaluator.py` — modify
