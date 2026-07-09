@@ -121,6 +121,7 @@ To change a language or tool version:
 | Python | `.github/workflows/ci.yml` (`python-version`), Python service Dockerfiles (`FROM python:X-slim`) |
 | Node.js | `.github/workflows/ci.yml` (`node-version`), Node/Next service Dockerfiles (`FROM node:X-alpine`) |
 | pnpm | `package.json` (`packageManager`), `.github/workflows/ci.yml` (`pnpm@X`), Node service Dockerfiles |
+| Proto plugins (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-connect-go`) | `Dockerfile.codegen` (§"Go proto plugins") **and** `.github/workflows/ci.yml` `proto-freshness` job's "Install Go proto plugins" step — these two are the *only* places these pins live and CI's `proto-freshness` job installs its own copies rather than building `Dockerfile.codegen`, so it will not catch a drift between them. Bump both in the same PR; verify with an empty `git diff packages/proto/gen/` after `./scripts/buf-gen.sh` (see `docs/runbooks/codegen-toolchain-host-setup.md`) |
 
 1. Open a PR — CI will catch any missed files.
 
