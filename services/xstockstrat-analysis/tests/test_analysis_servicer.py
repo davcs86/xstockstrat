@@ -1095,6 +1095,8 @@ class TestBacktestRangeCap:
         span = req.range.end.seconds - req.range.start.seconds
         assert span == 730 * 86_400
         assert req.range.end.seconds > 0
+
+
 # Score persistence + hydrate (feature 064 — persist-strategy-scores)
 # ---------------------------------------------------------------------------
 

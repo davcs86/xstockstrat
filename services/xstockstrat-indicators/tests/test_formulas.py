@@ -605,6 +605,8 @@ class TestFormulaWarmupPeriod:
         resp = await servicer.UpdateFormula(req, ctx)
         assert repo.update.await_args.kwargs["warmup_period"] == 21
         assert resp.formula.warmup_period == 21
+
+
 class TestSystemFormulaReadOnly:
     """System-authored (seeded, platform-managed) formulas are immutable via the RPCs —
     even an admin scope cannot edit or delete them, since feature 062 depends on the
