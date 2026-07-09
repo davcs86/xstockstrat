@@ -179,3 +179,17 @@ All four design.md Open Risks upgraded from routed-to-step to **resolved**; desi
 
 Next: `/sdd-review backtest-debug-info impl-spec`.
 
+## Session 2026-07-09 — sdd-review impl-spec (advisory) + fixes
+
+- `spec-reviewer`: **PASS WITH WARNINGS**, no Floor breach. All 17 steps' cited paths/symbols/line refs
+  resolve; proto numbers free; migration 004 correct; every non-frontend service step paired with a
+  red-green test step (C-08/P-06); frontend paired with e2e. B2b trading-domain keywords in Steps 6/8/10
+  ruled not-applicable (backtest engine places no broker orders).
+- `feature-overlap`: **CLEAN** — no migration/proto-field/config-key/dep collision; no merge-order entry.
+- Two advisory warnings **fixed pre-execution**: (1) Steps 6 & 8 mis-cited `F-05` for the DRY concern →
+  corrected to reference `docs/patterns/dry-guard-rail.md` (DRY guard rail is not a Floor rule); (2) Step 12
+  instruction used `self.watcher.get_int` → corrected to `self._cfg.get_int` (real servicer attr, `:72`,
+  used at `:898`).
+
+Next: `/sdd-execute backtest-debug-info sequential` on the `feature/backtest-debug-info` branch flow.
+

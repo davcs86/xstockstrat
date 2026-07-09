@@ -283,7 +283,8 @@ determinism, no look-ahead bias; Option-C warm-up length correctness.
 3. Add a **non-raising** `referenced_refs(rule) -> set[str]` helper by extracting the walk structure
    from `_validate_rule_refs` / `_validate_term_ref` (`:269` / `:231`) — it only gathers referenced
    ref names (collapsing dotted `bb.lower` → base `bb`); validation keeps raising. Do not duplicate the
-   walk (F-05 / DRY guard rail) — factor the shared traversal.
+   walk (DRY guard rail — `docs/patterns/dry-guard-rail.md`; jscpd pre-commit hook) — factor the shared
+   traversal.
 
 **Verification**: covered by Step 7 (paired test) plus its lint gate.
 
@@ -348,7 +349,7 @@ bias** in the per-bar diagnostics, action↔TradeRecord consistency.
 **Instructions**:
 1. Add a shared module-level helper `_build_bar_diagnostic(symbol, bar_index, bar, indicators,
    warmup, signal_score, conviction, action)` returning a `BarDiagnostic`, called from BOTH paths
-   (avoids the jscpd block-clone the pre-commit DRY gate / F-05 would reject). Map `bar.time` →
+   (avoids the jscpd block-clone the pre-commit DRY gate would reject — `docs/patterns/dry-guard-rail.md`). Map `bar.time` →
    `timestamp`, OHLCV from `bar.open/high/low/close/volume`, `vwap` from `bar.vwap`.
 2. In each helper, iterate `range(len(bars))` in a diagnostics pass **independent of the trade loop**
    (which starts at index 1) so **bar 0 is captured**.
@@ -534,8 +535,9 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
 **TDD**: `red-green required`
 
 **Instructions**:
-1. In `RunBacktest`, read `max_range_days = self.watcher.get_int("analysis.backtest.max_range_days",
-   730)`.
+1. In `RunBacktest`, read `max_range_days = self._cfg.get_int("analysis.backtest.max_range_days",
+   730)` (the servicer's config accessor is `self._cfg`, set at `servicer.py:72`; `self._cfg.get_int`
+   is already used at `servicer.py:898`).
 2. If both `request.range.start` and `request.range.end` are set and the span exceeds
    `max_range_days` → `await context.abort(grpc.StatusCode.INVALID_ARGUMENT, <message stating the
    2-year max and the requested span>)` (reject, do NOT clamp — preserves reproducibility, FR-4b).
