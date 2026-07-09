@@ -59,6 +59,7 @@ export interface FormulaWorkspaceProps {
   initialIsPublic?: boolean;
   initialParameters?: FormulaParameter[];
   initialOutputs?: FormulaOutput[];
+  initialWarmupPeriod?: number;
   author?: string;
   saving: boolean;
   saveError: string | null;
@@ -69,6 +70,7 @@ export interface FormulaWorkspaceProps {
     isPublic: boolean;
     parameters: FormulaParameterInit[];
     outputs: FormulaOutputInit[];
+    warmupPeriod: number;
   }) => void;
   onCancel: () => void;
   onDelete?: () => void;
@@ -92,6 +94,7 @@ export function FormulaWorkspace({
   initialIsPublic = false,
   initialParameters,
   initialOutputs,
+  initialWarmupPeriod = 0,
   author,
   saving,
   saveError,
@@ -104,6 +107,7 @@ export function FormulaWorkspace({
   const [description, setDescription] = useState(initialDescription);
   const [source, setSource] = useState(initialSource ?? BLANK_TEMPLATE.source);
   const [isPublic, setIsPublic] = useState(initialIsPublic);
+  const [warmupPeriod, setWarmupPeriod] = useState(String(initialWarmupPeriod));
   const [parameters, setParameters] = useState<ParameterDraft[]>(() =>
     (initialParameters ?? []).map(draftFromProto),
   );
@@ -207,6 +211,7 @@ export function FormulaWorkspace({
                   isPublic,
                   parameters: parameters.filter((p) => p.name.trim()).map(toParameterInit),
                   outputs: outputs.filter((o) => o.name.trim()).map(toOutputInit),
+                  warmupPeriod: Math.max(0, Math.floor(Number(warmupPeriod) || 0)),
                 })
               }
               disabled={saving || !name.trim()}
@@ -243,6 +248,23 @@ export function FormulaWorkspace({
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="What it computes and the inputs it expects"
                   />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    Warm-up period (bars)
+                  </label>
+                  <Input
+                    name="warmupPeriod"
+                    type="number"
+                    min={0}
+                    value={warmupPeriod}
+                    onChange={(e) => setWarmupPeriod(e.target.value)}
+                    placeholder="0"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Bars this formula needs before its outputs are valid. Used to mark warm-up rows
+                    in backtest diagnostics.
+                  </p>
                 </div>
                 <label className="flex items-center gap-2 text-sm">
                   <input

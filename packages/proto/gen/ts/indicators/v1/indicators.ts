@@ -302,6 +302,8 @@ export interface FormulaDefinition {
   parameters: FormulaParameter[];
   /** declared output series (beyond implicit "value") */
   outputs: FormulaOutput[];
+  /** bars of warm-up before this formula's outputs are valid (feature 064) */
+  warmupPeriod: number;
 }
 
 export interface FormulaDefinition_InputSchemaEntry {
@@ -334,6 +336,8 @@ export interface RegisterFormulaRequest {
   parameters: FormulaParameter[];
   /** declared output series (beyond implicit "value") */
   outputs: FormulaOutput[];
+  /** bars of warm-up before this formula's outputs are valid (feature 064) */
+  warmupPeriod: number;
 }
 
 export interface RegisterFormulaRequest_InputSchemaEntry {
@@ -376,6 +380,8 @@ export interface UpdateFormulaRequest {
   parameters: FormulaParameter[];
   /** declared output series (beyond implicit "value") */
   outputs: FormulaOutput[];
+  /** bars of warm-up before this formula's outputs are valid (feature 064) */
+  warmupPeriod: number;
 }
 
 export interface UpdateFormulaResponse {
@@ -1906,6 +1912,7 @@ function createBaseFormulaDefinition(): FormulaDefinition {
     inputSchema: {},
     parameters: [],
     outputs: [],
+    warmupPeriod: 0,
   };
 }
 
@@ -1943,6 +1950,9 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
     }
     for (const v of message.outputs) {
       FormulaOutput.encode(v!, writer.uint32(90).fork()).join();
+    }
+    if (message.warmupPeriod !== 0) {
+      writer.uint32(96).int32(message.warmupPeriod);
     }
     return writer;
   },
@@ -2045,6 +2055,14 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
           message.outputs.push(FormulaOutput.decode(reader, reader.uint32()));
           continue;
         }
+        case 12: {
+          if (tag !== 96) {
+            break;
+          }
+
+          message.warmupPeriod = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2103,6 +2121,11 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
       outputs: globalThis.Array.isArray(object?.outputs)
         ? object.outputs.map((e: any) => FormulaOutput.fromJSON(e))
         : [],
+      warmupPeriod: isSet(object.warmupPeriod)
+        ? globalThis.Number(object.warmupPeriod)
+        : isSet(object.warmup_period)
+        ? globalThis.Number(object.warmup_period)
+        : 0,
     };
   },
 
@@ -2147,6 +2170,9 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
     if (message.outputs?.length) {
       obj.outputs = message.outputs.map((e) => FormulaOutput.toJSON(e));
     }
+    if (message.warmupPeriod !== 0) {
+      obj.warmupPeriod = Math.round(message.warmupPeriod);
+    }
     return obj;
   },
 
@@ -2174,6 +2200,7 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
     );
     message.parameters = object.parameters?.map((e) => FormulaParameter.fromPartial(e)) || [];
     message.outputs = object.outputs?.map((e) => FormulaOutput.fromPartial(e)) || [];
+    message.warmupPeriod = object.warmupPeriod ?? 0;
     return message;
   },
 };
@@ -2489,6 +2516,7 @@ function createBaseRegisterFormulaRequest(): RegisterFormulaRequest {
     author: "",
     parameters: [],
     outputs: [],
+    warmupPeriod: 0,
   };
 }
 
@@ -2517,6 +2545,9 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
     }
     for (const v of message.outputs) {
       FormulaOutput.encode(v!, writer.uint32(66).fork()).join();
+    }
+    if (message.warmupPeriod !== 0) {
+      writer.uint32(72).int32(message.warmupPeriod);
     }
     return writer;
   },
@@ -2595,6 +2626,14 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
           message.outputs.push(FormulaOutput.decode(reader, reader.uint32()));
           continue;
         }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.warmupPeriod = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2638,6 +2677,11 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
       outputs: globalThis.Array.isArray(object?.outputs)
         ? object.outputs.map((e: any) => FormulaOutput.fromJSON(e))
         : [],
+      warmupPeriod: isSet(object.warmupPeriod)
+        ? globalThis.Number(object.warmupPeriod)
+        : isSet(object.warmup_period)
+        ? globalThis.Number(object.warmup_period)
+        : 0,
     };
   },
 
@@ -2673,6 +2717,9 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
     if (message.outputs?.length) {
       obj.outputs = message.outputs.map((e) => FormulaOutput.toJSON(e));
     }
+    if (message.warmupPeriod !== 0) {
+      obj.warmupPeriod = Math.round(message.warmupPeriod);
+    }
     return obj;
   },
 
@@ -2697,6 +2744,7 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
     message.author = object.author ?? "";
     message.parameters = object.parameters?.map((e) => FormulaParameter.fromPartial(e)) || [];
     message.outputs = object.outputs?.map((e) => FormulaOutput.fromPartial(e)) || [];
+    message.warmupPeriod = object.warmupPeriod ?? 0;
     return message;
   },
 };
@@ -3125,6 +3173,7 @@ function createBaseUpdateFormulaRequest(): UpdateFormulaRequest {
     isPublic: false,
     parameters: [],
     outputs: [],
+    warmupPeriod: 0,
   };
 }
 
@@ -3153,6 +3202,9 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
     }
     for (const v of message.outputs) {
       FormulaOutput.encode(v!, writer.uint32(66).fork()).join();
+    }
+    if (message.warmupPeriod !== 0) {
+      writer.uint32(72).int32(message.warmupPeriod);
     }
     return writer;
   },
@@ -3228,6 +3280,14 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
           message.outputs.push(FormulaOutput.decode(reader, reader.uint32()));
           continue;
         }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.warmupPeriod = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3263,6 +3323,11 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
       outputs: globalThis.Array.isArray(object?.outputs)
         ? object.outputs.map((e: any) => FormulaOutput.fromJSON(e))
         : [],
+      warmupPeriod: isSet(object.warmupPeriod)
+        ? globalThis.Number(object.warmupPeriod)
+        : isSet(object.warmup_period)
+        ? globalThis.Number(object.warmup_period)
+        : 0,
     };
   },
 
@@ -3292,6 +3357,9 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
     if (message.outputs?.length) {
       obj.outputs = message.outputs.map((e) => FormulaOutput.toJSON(e));
     }
+    if (message.warmupPeriod !== 0) {
+      obj.warmupPeriod = Math.round(message.warmupPeriod);
+    }
     return obj;
   },
 
@@ -3308,6 +3376,7 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
     message.isPublic = object.isPublic ?? false;
     message.parameters = object.parameters?.map((e) => FormulaParameter.fromPartial(e)) || [];
     message.outputs = object.outputs?.map((e) => FormulaOutput.fromPartial(e)) || [];
+    message.warmupPeriod = object.warmupPeriod ?? 0;
     return message;
   },
 };

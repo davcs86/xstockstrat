@@ -11,6 +11,39 @@ export declare enum BacktestStatus {
 export declare function backtestStatusFromJSON(object: any): BacktestStatus;
 export declare function backtestStatusToJSON(object: BacktestStatus): string;
 export declare function backtestStatusToNumber(object: BacktestStatus): number;
+/** The engine's decision for a single bar. Closed set → enum (C-04). */
+export declare enum BarAction {
+    BAR_ACTION_UNSPECIFIED = "BAR_ACTION_UNSPECIFIED",
+    /** BAR_ACTION_WARMUP - bar within the strategy's warm-up window */
+    BAR_ACTION_WARMUP = "BAR_ACTION_WARMUP",
+    /** BAR_ACTION_HOLD_FLAT - flat, no entry this bar */
+    BAR_ACTION_HOLD_FLAT = "BAR_ACTION_HOLD_FLAT",
+    /** BAR_ACTION_ENTER_LONG - opened a long position this bar */
+    BAR_ACTION_ENTER_LONG = "BAR_ACTION_ENTER_LONG",
+    /** BAR_ACTION_EXIT_LONG - closed a long position this bar */
+    BAR_ACTION_EXIT_LONG = "BAR_ACTION_EXIT_LONG",
+    /** BAR_ACTION_HOLD_LONG - holding an existing long, no exit this bar */
+    BAR_ACTION_HOLD_LONG = "BAR_ACTION_HOLD_LONG",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function barActionFromJSON(object: any): BarAction;
+export declare function barActionToJSON(object: BarAction): string;
+export declare function barActionToNumber(object: BarAction): number;
+/** Why a symbol produced zero trades. Closed set → enum (C-04). */
+export declare enum NoTradeReason {
+    /** NO_TRADE_REASON_UNSPECIFIED - symbol traded, or not classified */
+    NO_TRADE_REASON_UNSPECIFIED = "NO_TRADE_REASON_UNSPECIFIED",
+    /** NO_TRADE_REASON_ENTIRE_RANGE_WARMUP - the whole range was warm-up */
+    NO_TRADE_REASON_ENTIRE_RANGE_WARMUP = "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP",
+    /** NO_TRADE_REASON_ENTRY_NEVER_TRUE - entry condition never satisfied */
+    NO_TRADE_REASON_ENTRY_NEVER_TRUE = "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
+    /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
+    NO_TRADE_REASON_INSUFFICIENT_CAPITAL = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function noTradeReasonFromJSON(object: any): NoTradeReason;
+export declare function noTradeReasonToJSON(object: NoTradeReason): string;
+export declare function noTradeReasonToNumber(object: NoTradeReason): number;
 export declare enum ComponentKind {
     COMPONENT_KIND_UNSPECIFIED = "COMPONENT_KIND_UNSPECIFIED",
     COMPONENT_KIND_BUILTIN_INDICATOR = "COMPONENT_KIND_BUILTIN_INDICATOR",
@@ -106,6 +139,8 @@ export interface BacktestResult {
     status: BacktestStatus;
     /** populated per-symbol when status == INSUFFICIENT_DATA */
     coverageGaps: CoverageGap[];
+    /** per-bar debug data for every simulated symbol (feature 064) */
+    diagnostics: SymbolDiagnostics[];
 }
 export interface TradeRecord {
     symbol: string;
@@ -116,6 +151,38 @@ export interface TradeRecord {
     pnl: number;
     entryTime?: Date | undefined;
     exitTime?: Date | undefined;
+}
+/** One row of day-by-day backtest diagnostics for a single bar. */
+export interface BarDiagnostic {
+    symbol: string;
+    barIndex: number;
+    timestamp?: Date | undefined;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    vwap: number;
+    /** present-only: a series is absent during its warm-up */
+    indicators: {
+        [key: string]: number;
+    };
+    warmup: boolean;
+    signalScore: number;
+    conviction: number;
+    action: BarAction;
+}
+export interface BarDiagnostic_IndicatorsEntry {
+    key: string;
+    value: number;
+}
+/** Per-symbol diagnostics bundle attached to a BacktestResult. */
+export interface SymbolDiagnostics {
+    symbol: string;
+    bars: BarDiagnostic[];
+    noTradeReason: NoTradeReason;
+    barsTotal: number;
+    warmupBars: number;
 }
 export interface ScoreStrategyRequest {
     strategyId: string;
@@ -276,6 +343,9 @@ export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
 export declare const CoverageGap: MessageFns<CoverageGap>;
 export declare const BacktestResult: MessageFns<BacktestResult>;
 export declare const TradeRecord: MessageFns<TradeRecord>;
+export declare const BarDiagnostic: MessageFns<BarDiagnostic>;
+export declare const BarDiagnostic_IndicatorsEntry: MessageFns<BarDiagnostic_IndicatorsEntry>;
+export declare const SymbolDiagnostics: MessageFns<SymbolDiagnostics>;
 export declare const ScoreStrategyRequest: MessageFns<ScoreStrategyRequest>;
 export declare const StrategyScore: MessageFns<StrategyScore>;
 export declare const StrategyScore_ComponentScoresEntry: MessageFns<StrategyScore_ComponentScoresEntry>;

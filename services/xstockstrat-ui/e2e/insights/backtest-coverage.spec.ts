@@ -28,4 +28,17 @@ test.describe('Backtest data coverage', () => {
       timeout: 10000,
     });
   });
+
+  // feature 064 — an OK backtest renders the day-by-day debug diagnostics table + no-trade reason.
+  test('OK backtest renders day-by-day debug diagnostics', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/strategies/strat-diag-001');
+
+    await page.getByRole('button', { name: 'Run Backtest' }).click();
+
+    await expect(page.getByTestId('diagnostics-table')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('no-trade-reason')).toContainText(
+      'entry condition was never satisfied',
+    );
+  });
 });

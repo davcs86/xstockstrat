@@ -142,6 +142,12 @@ export type BacktestResult = Message<"xstockstrat.analysis.v1.BacktestResult"> &
      * @generated from field: repeated xstockstrat.analysis.v1.CoverageGap coverage_gaps = 13;
      */
     coverageGaps: CoverageGap[];
+    /**
+     * per-bar debug data for every simulated symbol (feature 064)
+     *
+     * @generated from field: repeated xstockstrat.analysis.v1.SymbolDiagnostics diagnostics = 14;
+     */
+    diagnostics: SymbolDiagnostics[];
 };
 /**
  * Describes the message xstockstrat.analysis.v1.BacktestResult.
@@ -190,6 +196,110 @@ export type TradeRecord = Message<"xstockstrat.analysis.v1.TradeRecord"> & {
  * Use `create(TradeRecordSchema)` to create a new message.
  */
 export declare const TradeRecordSchema: GenMessage<TradeRecord>;
+/**
+ * One row of day-by-day backtest diagnostics for a single bar.
+ *
+ * @generated from message xstockstrat.analysis.v1.BarDiagnostic
+ */
+export type BarDiagnostic = Message<"xstockstrat.analysis.v1.BarDiagnostic"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: int32 bar_index = 2;
+     */
+    barIndex: number;
+    /**
+     * @generated from field: google.protobuf.Timestamp timestamp = 3;
+     */
+    timestamp?: Timestamp | undefined;
+    /**
+     * @generated from field: double open = 4;
+     */
+    open: number;
+    /**
+     * @generated from field: double high = 5;
+     */
+    high: number;
+    /**
+     * @generated from field: double low = 6;
+     */
+    low: number;
+    /**
+     * @generated from field: double close = 7;
+     */
+    close: number;
+    /**
+     * @generated from field: int64 volume = 8;
+     */
+    volume: bigint;
+    /**
+     * @generated from field: double vwap = 9;
+     */
+    vwap: number;
+    /**
+     * present-only: a series is absent during its warm-up
+     *
+     * @generated from field: map<string, double> indicators = 10;
+     */
+    indicators: {
+        [key: string]: number;
+    };
+    /**
+     * @generated from field: bool warmup = 11;
+     */
+    warmup: boolean;
+    /**
+     * @generated from field: double signal_score = 12;
+     */
+    signalScore: number;
+    /**
+     * @generated from field: double conviction = 13;
+     */
+    conviction: number;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.BarAction action = 14;
+     */
+    action: BarAction;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.BarDiagnostic.
+ * Use `create(BarDiagnosticSchema)` to create a new message.
+ */
+export declare const BarDiagnosticSchema: GenMessage<BarDiagnostic>;
+/**
+ * Per-symbol diagnostics bundle attached to a BacktestResult.
+ *
+ * @generated from message xstockstrat.analysis.v1.SymbolDiagnostics
+ */
+export type SymbolDiagnostics = Message<"xstockstrat.analysis.v1.SymbolDiagnostics"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.BarDiagnostic bars = 2;
+     */
+    bars: BarDiagnostic[];
+    /**
+     * @generated from field: xstockstrat.analysis.v1.NoTradeReason no_trade_reason = 3;
+     */
+    noTradeReason: NoTradeReason;
+    /**
+     * @generated from field: int32 bars_total = 4;
+     */
+    barsTotal: number;
+    /**
+     * @generated from field: int32 warmup_bars = 5;
+     */
+    warmupBars: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SymbolDiagnostics.
+ * Use `create(SymbolDiagnosticsSchema)` to create a new message.
+ */
+export declare const SymbolDiagnosticsSchema: GenMessage<SymbolDiagnostics>;
 /**
  * @generated from message xstockstrat.analysis.v1.ScoreStrategyRequest
  */
@@ -751,6 +861,86 @@ export declare enum BacktestStatus {
  * Describes the enum xstockstrat.analysis.v1.BacktestStatus.
  */
 export declare const BacktestStatusSchema: GenEnum<BacktestStatus>;
+/**
+ * The engine's decision for a single bar. Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.analysis.v1.BarAction
+ */
+export declare enum BarAction {
+    /**
+     * @generated from enum value: BAR_ACTION_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * bar within the strategy's warm-up window
+     *
+     * @generated from enum value: BAR_ACTION_WARMUP = 1;
+     */
+    WARMUP = 1,
+    /**
+     * flat, no entry this bar
+     *
+     * @generated from enum value: BAR_ACTION_HOLD_FLAT = 2;
+     */
+    HOLD_FLAT = 2,
+    /**
+     * opened a long position this bar
+     *
+     * @generated from enum value: BAR_ACTION_ENTER_LONG = 3;
+     */
+    ENTER_LONG = 3,
+    /**
+     * closed a long position this bar
+     *
+     * @generated from enum value: BAR_ACTION_EXIT_LONG = 4;
+     */
+    EXIT_LONG = 4,
+    /**
+     * holding an existing long, no exit this bar
+     *
+     * @generated from enum value: BAR_ACTION_HOLD_LONG = 5;
+     */
+    HOLD_LONG = 5
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.BarAction.
+ */
+export declare const BarActionSchema: GenEnum<BarAction>;
+/**
+ * Why a symbol produced zero trades. Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.analysis.v1.NoTradeReason
+ */
+export declare enum NoTradeReason {
+    /**
+     * symbol traded, or not classified
+     *
+     * @generated from enum value: NO_TRADE_REASON_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * the whole range was warm-up
+     *
+     * @generated from enum value: NO_TRADE_REASON_ENTIRE_RANGE_WARMUP = 1;
+     */
+    ENTIRE_RANGE_WARMUP = 1,
+    /**
+     * entry condition never satisfied
+     *
+     * @generated from enum value: NO_TRADE_REASON_ENTRY_NEVER_TRUE = 2;
+     */
+    ENTRY_NEVER_TRUE = 2,
+    /**
+     * reserved; not emitted this version
+     *
+     * @generated from enum value: NO_TRADE_REASON_INSUFFICIENT_CAPITAL = 3;
+     */
+    INSUFFICIENT_CAPITAL = 3
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.NoTradeReason.
+ */
+export declare const NoTradeReasonSchema: GenEnum<NoTradeReason>;
 /**
  * @generated from enum xstockstrat.analysis.v1.ComponentKind
  */

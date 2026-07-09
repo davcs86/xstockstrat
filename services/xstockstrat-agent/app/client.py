@@ -153,15 +153,16 @@ async def run_backtest(
             ),
             metadata=_metadata(),
         )
-    return {
-        "backtest_id": resp.backtest_id,
-        "strategy_id": resp.strategy_id,
-        "total_return": resp.total_return,
-        "sharpe_ratio": resp.sharpe_ratio,
-        "max_drawdown": resp.max_drawdown,
-        "win_rate": resp.win_rate,
-        "total_trades": resp.total_trades,
-    }
+    # feature 064: return the full BacktestResult (including the per-bar `diagnostics`) so the
+    # agent can reason over the day-by-day OHLCV/indicator/decision data and suggest strategy or
+    # indicator changes. `preserving_proto_field_name` keeps the snake_case keys existing consumers
+    # expect; `always_print_fields_with_no_presence` keeps zero-valued metrics (e.g. total_return=0,
+    # the exact "0 trades / 0% return" case being debugged) present rather than omitted.
+    return MessageToDict(
+        resp,
+        preserving_proto_field_name=True,
+        always_print_fields_with_no_presence=True,
+    )
 
 
 async def screen_symbols(

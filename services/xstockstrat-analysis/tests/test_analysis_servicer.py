@@ -25,6 +25,7 @@ def make_servicer() -> AnalysisServicer:
     # Make get_float return the default argument (mirrors real watcher behaviour)
     cfg.get_float = MagicMock(side_effect=lambda key, default=0.0: default)
     cfg.get_str = MagicMock(side_effect=lambda key, default="": default)
+    cfg.get_int = MagicMock(side_effect=lambda key, default=0: default)
     return AnalysisServicer(
         cfg,
         marketdata_channel=MagicMock(),
@@ -822,6 +823,280 @@ class TestRunFundamentalsScan:
 
 
 # ---------------------------------------------------------------------------
+# Per-bar diagnostics (feature 064-backtest-debug-info) — Steps 8-11
+# ---------------------------------------------------------------------------
+
+from types import SimpleNamespace  # noqa: E402
+
+from gen.indicators.v1 import indicators_pb2  # noqa: E402
+from gen.marketdata.v1 import marketdata_pb2  # noqa: E402
+
+
+def _bar(sec, close, o=None, h=None, low=None, vol=100):
+    b = marketdata_pb2.Bar(
+        open=o if o is not None else close,
+        high=h if h is not None else close,
+        low=low if low is not None else close,
+        close=close,
+        volume=vol,
+        vwap=close,
+    )
+    b.time.seconds = sec
+    return b
+
+
+def _points(values):
+    # servicer builds fast/slow dicts from points whose .value != 0
+    return SimpleNamespace(result=[SimpleNamespace(value=v) for v in values])
+
+
+class TestBacktestDiagnostics:
+    def _svc_with(self, bars, fast_series, slow_series):
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            side_effect=[_points(fast_series), _points(slow_series)]
+        )
+        return svc
+
+    def _legacy_req(self, symbols=("AAPL",), fast=2, slow=3):
+        req = analysis_pb2.RunBacktestRequest(
+            strategy_id="s1", symbols=list(symbols), initial_capital=100_000.0
+        )
+        req.strategy_params.update({"fast_period": fast, "slow_period": slow})
+        req.range.CopyFrom(common_pb2.TimeRange())
+        return req
+
+    @pytest.mark.asyncio
+    async def test_legacy_diagnostics_full_backtest(self):
+        # 6 bars; fast=2, slow=3. Golden cross at bar 3 (entry), death cross at bar 5 (exit).
+        bars = [_bar(1000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 9])]
+        fast = [0, 9, 10, 12, 13, 9]  # value 0 at idx0 = warm-up (excluded)
+        slow = [0, 0, 11, 11, 11, 11]
+        svc = self._svc_with(bars, fast, slow)
+
+        result = await svc.RunBacktest(self._legacy_req(), context=MagicMock())
+
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK
+        assert len(result.diagnostics) == 1
+        sd = result.diagnostics[0]
+        # FR-1/2: one row per bar, bar 0 captured with correct OHLCV + timestamp
+        assert sd.bars_total == 6
+        assert len(sd.bars) == 6
+        assert sd.bars[0].bar_index == 0
+        assert sd.bars[0].close == 10.0
+        assert sd.bars[0].timestamp.seconds == 1000
+        # warm-up: warmup_bars = first bar where BOTH SMAs resolve (max(1, 2) = 2)
+        assert sd.warmup_bars == 2
+        assert sd.bars[0].warmup is True
+        assert sd.bars[0].action == analysis_pb2.BAR_ACTION_WARMUP
+        assert sd.bars[2].warmup is False
+        # present-only indicators: bar 1 has sma_fast (idx1 resolved) but NOT sma_slow
+        assert dict(sd.bars[1].indicators) == {"sma_fast": 9.0}
+        assert dict(sd.bars[3].indicators) == {"sma_fast": 12.0, "sma_slow": 11.0}
+        # AC-3: ENTER/EXIT bars match the TradeRecord entry/exit times
+        assert len(result.trades) == 1
+        trade = result.trades[0]
+        assert sd.bars[3].action == analysis_pb2.BAR_ACTION_ENTER_LONG
+        assert sd.bars[3].timestamp.seconds == trade.entry_time.seconds
+        assert sd.bars[5].action == analysis_pb2.BAR_ACTION_EXIT_LONG
+        assert sd.bars[5].timestamp.seconds == trade.exit_time.seconds
+        assert sd.bars[4].action == analysis_pb2.BAR_ACTION_HOLD_LONG
+        # traded symbol → no_trade_reason UNSPECIFIED
+        assert sd.no_trade_reason == analysis_pb2.NO_TRADE_REASON_UNSPECIFIED
+
+    @pytest.mark.asyncio
+    async def test_no_trade_reason_entry_never_true(self):
+        # fast never crosses above slow → 0 trades, past warm-up → ENTRY_NEVER_TRUE
+        bars = [_bar(2000 + i, c) for i, c in enumerate([10, 10, 10, 10, 10])]
+        fast = [0, 8, 8, 8, 8]
+        slow = [0, 0, 11, 11, 11]
+        svc = self._svc_with(bars, fast, slow)
+        result = await svc.RunBacktest(self._legacy_req(), context=MagicMock())
+        assert result.total_trades == 0
+        sd = result.diagnostics[0]
+        assert sd.warmup_bars < sd.bars_total
+        assert sd.no_trade_reason == analysis_pb2.NO_TRADE_REASON_ENTRY_NEVER_TRUE
+
+    @pytest.mark.asyncio
+    async def test_ledger_completed_event_has_no_diagnostics(self):
+        # AC-5: the completion ledger payload carries only summary metrics, never diagnostics.
+        bars = [_bar(3000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 9])]
+        svc = self._svc_with(bars, [0, 9, 10, 12, 13, 9], [0, 0, 11, 11, 11, 11])
+        await svc.RunBacktest(self._legacy_req(), context=MagicMock())
+        completed = svc._ledger.AppendEvent.await_args_list[-1].args[0]
+        assert completed.event_type == "analysis.backtest.completed"
+        assert "diagnostics" not in dict(completed.payload.fields)
+
+    @pytest.mark.asyncio
+    async def test_no_look_ahead_warmup_and_series(self):
+        # AC-4: a bar's warmup flag + indicators are identical whether the range ends there
+        # or extends beyond it.
+        full = [_bar(4000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 9])]
+        svc_full = self._svc_with(full, [0, 9, 10, 12, 13, 9], [0, 0, 11, 11, 11, 11])
+        r_full = await svc_full.RunBacktest(self._legacy_req(), context=MagicMock())
+        trunc = full[:5]
+        svc_tr = self._svc_with(trunc, [0, 9, 10, 12, 13], [0, 0, 11, 11, 11])
+        r_tr = await svc_tr.RunBacktest(self._legacy_req(), context=MagicMock())
+        for i in range(5):
+            a, b = r_full.diagnostics[0].bars[i], r_tr.diagnostics[0].bars[i]
+            assert a.warmup == b.warmup
+            assert dict(a.indicators) == dict(b.indicators)
+
+    @pytest.mark.asyncio
+    async def test_insufficient_data_yields_no_diagnostics_mislabel(self):
+        # FR-9: insufficient-data symbols become CoverageGap, never a no_trade_reason mislabel.
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(
+            return_value=SimpleNamespace(bars=[_bar(1, 10), _bar(2, 11), _bar(3, 12)])
+        )
+        result = await svc.RunBacktest(self._legacy_req(), context=MagicMock())
+        assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
+        assert len(result.coverage_gaps) == 1
+        assert len(result.diagnostics) == 0  # never entered the bar loop
+
+    def _def_req(self, definition):
+        req = analysis_pb2.RunBacktestRequest(
+            strategy_id="s1", symbols=["AAPL"], initial_capital=100_000.0
+        )
+        req.inline_definition.CopyFrom(definition)
+        req.range.CopyFrom(common_pb2.TimeRange())
+        return req
+
+    @pytest.mark.asyncio
+    async def test_evaluated_indicators_drops_value_alias(self):
+        bars = [_bar(5000 + i, c) for i, c in enumerate([10, 20, 30])]
+        definition = analysis_pb2.StrategyDefinition(
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="bb",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="BB",
+                    params={"period": 2.0},
+                )
+            ],
+            entry_rule=json.dumps({"fn": ">", "lhs": "bb.upper", "rhs": 100}),
+        )
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            return_value=SimpleNamespace(
+                result=[
+                    SimpleNamespace(value=10.0, extra={"upper": 15.0, "lower": 5.0}),
+                    SimpleNamespace(value=20.0, extra={"upper": 25.0, "lower": 15.0}),
+                    SimpleNamespace(value=30.0, extra={"upper": 35.0, "lower": 25.0}),
+                ]
+            )
+        )
+        result = await svc.RunBacktest(self._def_req(definition), context=MagicMock())
+        keys = set(dict(result.diagnostics[0].bars[2].indicators))
+        assert "bb" in keys and "bb.upper" in keys and "bb.lower" in keys
+        assert "bb.value" not in keys  # redundant alias dropped
+
+    @pytest.mark.asyncio
+    async def test_formula_warmup_uses_declared_not_observed(self):
+        # An all-None formula primary series must NOT inflate warmup to len(bars); the declared
+        # warmup_period (via GetFormula) is used → ENTRY_NEVER_TRUE, not ENTIRE_RANGE_WARMUP.
+        bars = [_bar(6000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 15])]
+        definition = analysis_pb2.StrategyDefinition(
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="ff",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="f-1",
+                )
+            ],
+            entry_rule=json.dumps({"fn": ">", "lhs": "ff", "rhs": 0}),
+        )
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+        svc._indicators = MagicMock()
+        # formula execution "fails" → primary series is all None
+        svc._indicators.ExecuteFormula = AsyncMock(
+            return_value=SimpleNamespace(success=False, output={}, error="boom")
+        )
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(formula_id="f-1", warmup_period=3)
+        )
+        result = await svc.RunBacktest(self._def_req(definition), context=MagicMock())
+        sd = result.diagnostics[0]
+        assert sd.warmup_bars == 3  # declared, not len(bars)=6
+        assert result.total_trades == 0
+        assert sd.no_trade_reason == analysis_pb2.NO_TRADE_REASON_ENTRY_NEVER_TRUE
+        svc._indicators.GetFormula.assert_awaited()
+
+
+class TestBacktestRangeCap:
+    def _svc(self):
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._marketdata = MagicMock()
+        # enough bars so the legacy path runs (>= slow_period(3)+2); values irrelevant here
+        svc._marketdata.GetBars = AsyncMock(
+            return_value=SimpleNamespace(bars=[_bar(1000 + i, 10) for i in range(6)])
+        )
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            side_effect=lambda *a, **k: _points([0, 9, 10, 11, 12, 13])
+        )
+        return svc
+
+    def _req(self, start_sec, end_sec):
+        req = analysis_pb2.RunBacktestRequest(
+            strategy_id="s1", symbols=["AAPL"], initial_capital=100_000.0
+        )
+        req.strategy_params.update({"fast_period": 2, "slow_period": 3})
+        if start_sec is not None:
+            req.range.start.seconds = start_sec
+        if end_sec is not None:
+            req.range.end.seconds = end_sec
+        return req
+
+    @pytest.mark.asyncio
+    async def test_over_cap_range_rejected(self):
+        # span 800 days > 730-day cap → INVALID_ARGUMENT (AC-7)
+        svc = self._svc()
+        ctx = MagicMock()
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        req = self._req(1, 800 * 86_400)
+        with pytest.raises(Exception):
+            await svc.RunBacktest(req, ctx)
+        assert ctx.abort.await_args.args[0].name == "INVALID_ARGUMENT"
+
+    @pytest.mark.asyncio
+    async def test_at_cap_range_runs(self):
+        svc = self._svc()
+        req = self._req(1, 700 * 86_400)  # 700 days < 730 cap
+        result = await svc.RunBacktest(req, MagicMock())
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK
+
+    @pytest.mark.asyncio
+    async def test_unset_range_defaulted_to_cap_window(self):
+        svc = self._svc()
+        req = self._req(None, None)  # both unset (agent case)
+        result = await svc.RunBacktest(req, MagicMock())
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK
+        # the range was defaulted in place to a ~730-day window ending "now"
+        span = req.range.end.seconds - req.range.start.seconds
+        assert span == 730 * 86_400
+        assert req.range.end.seconds > 0
+
+
 # Score persistence + hydrate (feature 064 — persist-strategy-scores)
 # ---------------------------------------------------------------------------
 
