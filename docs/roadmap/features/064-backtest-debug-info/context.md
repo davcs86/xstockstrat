@@ -193,3 +193,28 @@ Next: `/sdd-review backtest-debug-info impl-spec`.
 
 Next: `/sdd-execute backtest-debug-info sequential` on the `feature/backtest-debug-info` branch flow.
 
+
+## Session 2026-07-09 — sdd-execute (sequential) — toolchain + Steps 1–2
+
+- **Toolchain provisioned on host** (replicating Dockerfile.codegen, per user direction; GitHub releases
+  egress-blocked so buf installed via `go install github.com/bufbuild/buf/cmd/buf@latest`; Go plugins,
+  npm TS plugins, pip grpcio-tools all via allowlisted registries). Validated: regenerating unmodified
+  protos produced an **empty diff** after aligning `protoc-gen-go-grpc` to `v1.6.2` (repo is one patch
+  ahead of the Dockerfile's v1.6.1 pin). Docker daemon down / no DB — Postgres handled as the sanctioned
+  exception at the migration step.
+- Created + pushed integration branch `feature/backtest-debug-info` (seeded from the SDD-docs branch).
+
+### Step 1 — proto: additive diagnostics + warmup_period fields [done]
+- Added `BarAction`/`NoTradeReason` enums (both with `_UNSPECIFIED=0`), `BarDiagnostic` (14 fields),
+  `SymbolDiagnostics`, and `BacktestResult.diagnostics = 14` to `analysis.proto`; `warmup_period` to
+  `FormulaDefinition=12` / `RegisterFormulaRequest=9` / `UpdateFormulaRequest=9` in `indicators.proto`.
+- Files modified: `packages/proto/analysis/v1/analysis.proto`, `packages/proto/indicators/v1/indicators.proto`
+- Verification: `buf lint` PASS; `buf breaking --against feature/backtest-debug-info` PASS (additive-only).
+- Deviations: none.
+
+### Step 2 — proto-gen: regenerate + commit stubs [done]
+- Ran `./scripts/buf-gen.sh`; regenerated Go/Python/TS stubs + tsc dist. Diff scoped exactly to
+  `analysis` + `indicators` stub dirs; new symbols present in all three languages. Bundled into the
+  Step 1 PR per the step's own instruction (C-09).
+- Files modified: `packages/proto/gen/**`
+- Deviations: none.

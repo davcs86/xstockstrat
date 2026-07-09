@@ -65,6 +65,7 @@ message BacktestResult {
   repeated TradeRecord trades = 11;
   BacktestStatus status = 12;
   repeated CoverageGap coverage_gaps = 13; // populated per-symbol when status == INSUFFICIENT_DATA
+  repeated SymbolDiagnostics diagnostics = 14; // per-bar debug data for every simulated symbol (feature 064)
 }
 
 message TradeRecord {
@@ -76,6 +77,53 @@ message TradeRecord {
   double pnl = 6;
   google.protobuf.Timestamp entry_time = 7;
   google.protobuf.Timestamp exit_time = 8;
+}
+
+// ── Backtest per-bar diagnostics (feature 064-backtest-debug-info) ────────────
+
+// The engine's decision for a single bar. Closed set → enum (C-04).
+enum BarAction {
+  BAR_ACTION_UNSPECIFIED = 0;
+  BAR_ACTION_WARMUP = 1;      // bar within the strategy's warm-up window
+  BAR_ACTION_HOLD_FLAT = 2;   // flat, no entry this bar
+  BAR_ACTION_ENTER_LONG = 3;  // opened a long position this bar
+  BAR_ACTION_EXIT_LONG = 4;   // closed a long position this bar
+  BAR_ACTION_HOLD_LONG = 5;   // holding an existing long, no exit this bar
+}
+
+// Why a symbol produced zero trades. Closed set → enum (C-04).
+enum NoTradeReason {
+  NO_TRADE_REASON_UNSPECIFIED = 0;          // symbol traded, or not classified
+  NO_TRADE_REASON_ENTIRE_RANGE_WARMUP = 1;  // the whole range was warm-up
+  NO_TRADE_REASON_ENTRY_NEVER_TRUE = 2;     // entry condition never satisfied
+  NO_TRADE_REASON_INSUFFICIENT_CAPITAL = 3; // reserved; not emitted this version
+}
+
+// One row of day-by-day backtest diagnostics for a single bar.
+message BarDiagnostic {
+  string symbol = 1;
+  int32 bar_index = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  double open = 4;
+  double high = 5;
+  double low = 6;
+  double close = 7;
+  int64 volume = 8;
+  double vwap = 9;
+  map<string, double> indicators = 10; // present-only: a series is absent during its warm-up
+  bool warmup = 11;
+  double signal_score = 12;
+  double conviction = 13;
+  BarAction action = 14;
+}
+
+// Per-symbol diagnostics bundle attached to a BacktestResult.
+message SymbolDiagnostics {
+  string symbol = 1;
+  repeated BarDiagnostic bars = 2;
+  NoTradeReason no_trade_reason = 3;
+  int32 bars_total = 4;
+  int32 warmup_bars = 5;
 }
 
 message ScoreStrategyRequest {

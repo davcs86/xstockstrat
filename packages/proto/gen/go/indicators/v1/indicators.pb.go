@@ -765,7 +765,8 @@ type FormulaDefinition struct {
 	IsPublic      bool                   `protobuf:"varint,8,opt,name=is_public,json=isPublic,proto3" json:"is_public,omitempty"`
 	InputSchema   map[string]string      `protobuf:"bytes,9,rep,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // expected input keys and types
 	Parameters    []*FormulaParameter    `protobuf:"bytes,10,rep,name=parameters,proto3" json:"parameters,omitempty"`
-	Outputs       []*FormulaOutput       `protobuf:"bytes,11,rep,name=outputs,proto3" json:"outputs,omitempty"` // declared output series (beyond implicit "value")
+	Outputs       []*FormulaOutput       `protobuf:"bytes,11,rep,name=outputs,proto3" json:"outputs,omitempty"`                                // declared output series (beyond implicit "value")
+	WarmupPeriod  int32                  `protobuf:"varint,12,opt,name=warmup_period,json=warmupPeriod,proto3" json:"warmup_period,omitempty"` // bars of warm-up before this formula's outputs are valid (feature 064)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -875,6 +876,13 @@ func (x *FormulaDefinition) GetOutputs() []*FormulaOutput {
 		return x.Outputs
 	}
 	return nil
+}
+
+func (x *FormulaDefinition) GetWarmupPeriod() int32 {
+	if x != nil {
+		return x.WarmupPeriod
+	}
+	return 0
 }
 
 type ListIndicatorsRequest struct {
@@ -1034,7 +1042,8 @@ type RegisterFormulaRequest struct {
 	InputSchema   map[string]string      `protobuf:"bytes,5,rep,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Author        string                 `protobuf:"bytes,6,opt,name=author,proto3" json:"author,omitempty"` // set by BFF from JWT claims; stored immutably
 	Parameters    []*FormulaParameter    `protobuf:"bytes,7,rep,name=parameters,proto3" json:"parameters,omitempty"`
-	Outputs       []*FormulaOutput       `protobuf:"bytes,8,rep,name=outputs,proto3" json:"outputs,omitempty"` // declared output series (beyond implicit "value")
+	Outputs       []*FormulaOutput       `protobuf:"bytes,8,rep,name=outputs,proto3" json:"outputs,omitempty"`                                // declared output series (beyond implicit "value")
+	WarmupPeriod  int32                  `protobuf:"varint,9,opt,name=warmup_period,json=warmupPeriod,proto3" json:"warmup_period,omitempty"` // bars of warm-up before this formula's outputs are valid (feature 064)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1123,6 +1132,13 @@ func (x *RegisterFormulaRequest) GetOutputs() []*FormulaOutput {
 		return x.Outputs
 	}
 	return nil
+}
+
+func (x *RegisterFormulaRequest) GetWarmupPeriod() int32 {
+	if x != nil {
+		return x.WarmupPeriod
+	}
+	return 0
 }
 
 type RegisterFormulaResponse struct {
@@ -1342,7 +1358,8 @@ type UpdateFormulaRequest struct {
 	Source        string                 `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
 	IsPublic      bool                   `protobuf:"varint,6,opt,name=is_public,json=isPublic,proto3" json:"is_public,omitempty"`
 	Parameters    []*FormulaParameter    `protobuf:"bytes,7,rep,name=parameters,proto3" json:"parameters,omitempty"`
-	Outputs       []*FormulaOutput       `protobuf:"bytes,8,rep,name=outputs,proto3" json:"outputs,omitempty"` // declared output series (beyond implicit "value")
+	Outputs       []*FormulaOutput       `protobuf:"bytes,8,rep,name=outputs,proto3" json:"outputs,omitempty"`                                // declared output series (beyond implicit "value")
+	WarmupPeriod  int32                  `protobuf:"varint,9,opt,name=warmup_period,json=warmupPeriod,proto3" json:"warmup_period,omitempty"` // bars of warm-up before this formula's outputs are valid (feature 064)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1431,6 +1448,13 @@ func (x *UpdateFormulaRequest) GetOutputs() []*FormulaOutput {
 		return x.Outputs
 	}
 	return nil
+}
+
+func (x *UpdateFormulaRequest) GetWarmupPeriod() int32 {
+	if x != nil {
+		return x.WarmupPeriod
+	}
+	return 0
 }
 
 type UpdateFormulaResponse struct {
@@ -1646,7 +1670,7 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\"F\n" +
 	"\x18ParameterValidationError\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xde\x04\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x83\x05\n" +
 	"\x11FormulaDefinition\x12\x1d\n" +
 	"\n" +
 	"formula_id\x18\x01 \x01(\tR\tformulaId\x12\x12\n" +
@@ -1664,7 +1688,8 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	"parameters\x18\n" +
 	" \x03(\v2+.xstockstrat.indicators.v1.FormulaParameterR\n" +
 	"parameters\x12B\n" +
-	"\aoutputs\x18\v \x03(\v2(.xstockstrat.indicators.v1.FormulaOutputR\aoutputs\x1a>\n" +
+	"\aoutputs\x18\v \x03(\v2(.xstockstrat.indicators.v1.FormulaOutputR\aoutputs\x12#\n" +
+	"\rwarmup_period\x18\f \x01(\x05R\fwarmupPeriod\x1a>\n" +
 	"\x10InputSchemaEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x17\n" +
@@ -1677,7 +1702,7 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12'\n" +
 	"\x0frequired_params\x18\x03 \x03(\tR\x0erequiredParams\x12'\n" +
-	"\x0foptional_params\x18\x04 \x03(\tR\x0eoptionalParams\"\xd3\x03\n" +
+	"\x0foptional_params\x18\x04 \x03(\tR\x0eoptionalParams\"\xf8\x03\n" +
 	"\x16RegisterFormulaRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x16\n" +
@@ -1688,7 +1713,8 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	"\n" +
 	"parameters\x18\a \x03(\v2+.xstockstrat.indicators.v1.FormulaParameterR\n" +
 	"parameters\x12B\n" +
-	"\aoutputs\x18\b \x03(\v2(.xstockstrat.indicators.v1.FormulaOutputR\aoutputs\x1a>\n" +
+	"\aoutputs\x18\b \x03(\v2(.xstockstrat.indicators.v1.FormulaOutputR\aoutputs\x12#\n" +
+	"\rwarmup_period\x18\t \x01(\x05R\fwarmupPeriod\x1a>\n" +
 	"\x10InputSchemaEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"8\n" +
@@ -1707,7 +1733,7 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	"\x14ListFormulasResponse\x12H\n" +
 	"\bformulas\x18\x01 \x03(\v2,.xstockstrat.indicators.v1.FormulaDefinitionR\bformulas\x12\x1f\n" +
 	"\vtotal_count\x18\x02 \x01(\x05R\n" +
-	"totalCount\"\xca\x02\n" +
+	"totalCount\"\xef\x02\n" +
 	"\x14UpdateFormulaRequest\x12\x1d\n" +
 	"\n" +
 	"formula_id\x18\x01 \x01(\tR\tformulaId\x12\x17\n" +
@@ -1719,7 +1745,8 @@ const file_indicators_v1_indicators_proto_rawDesc = "" +
 	"\n" +
 	"parameters\x18\a \x03(\v2+.xstockstrat.indicators.v1.FormulaParameterR\n" +
 	"parameters\x12B\n" +
-	"\aoutputs\x18\b \x03(\v2(.xstockstrat.indicators.v1.FormulaOutputR\aoutputs\"_\n" +
+	"\aoutputs\x18\b \x03(\v2(.xstockstrat.indicators.v1.FormulaOutputR\aoutputs\x12#\n" +
+	"\rwarmup_period\x18\t \x01(\x05R\fwarmupPeriod\"_\n" +
 	"\x15UpdateFormulaResponse\x12F\n" +
 	"\aformula\x18\x01 \x01(\v2,.xstockstrat.indicators.v1.FormulaDefinitionR\aformula\"N\n" +
 	"\x14DeleteFormulaRequest\x12\x1d\n" +

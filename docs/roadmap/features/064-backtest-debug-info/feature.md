@@ -1,6 +1,6 @@
 # Feature: backtest-debug-info
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/backtest-debug-info`
 **Created**: 2026-07-08
 **Last Updated**: 2026-07-09
@@ -15,6 +15,7 @@
 | 2026-07-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; OQ-3/OQ-5 resolved in-spec; overlap CLEAN) |
 | 2026-07-08 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-07-09 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps |
+| 2026-07-09 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Steps 1–2: proto + codegen) |
 
 ---
 

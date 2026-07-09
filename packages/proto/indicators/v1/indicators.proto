@@ -140,6 +140,7 @@ message FormulaDefinition {
   map<string, string> input_schema = 9;  // expected input keys and types
   repeated FormulaParameter parameters = 10;
   repeated FormulaOutput outputs = 11;    // declared output series (beyond implicit "value")
+  int32 warmup_period = 12;               // bars of warm-up before this formula's outputs are valid (feature 064)
 }
 
 message ListIndicatorsRequest {}
@@ -164,6 +165,7 @@ message RegisterFormulaRequest {
   string author = 6;  // set by BFF from JWT claims; stored immutably
   repeated FormulaParameter parameters = 7;
   repeated FormulaOutput outputs = 8;  // declared output series (beyond implicit "value")
+  int32 warmup_period = 9;             // bars of warm-up before this formula's outputs are valid (feature 064)
 }
 
 message RegisterFormulaResponse {
@@ -195,6 +197,7 @@ message UpdateFormulaRequest {
   bool is_public = 6;
   repeated FormulaParameter parameters = 7;
   repeated FormulaOutput outputs = 8;  // declared output series (beyond implicit "value")
+  int32 warmup_period = 9;             // bars of warm-up before this formula's outputs are valid (feature 064)
 }
 
 message UpdateFormulaResponse {

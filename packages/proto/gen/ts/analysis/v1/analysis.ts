@@ -85,6 +85,155 @@ export function backtestStatusToNumber(object: BacktestStatus): number {
   }
 }
 
+/** The engine's decision for a single bar. Closed set → enum (C-04). */
+export enum BarAction {
+  BAR_ACTION_UNSPECIFIED = "BAR_ACTION_UNSPECIFIED",
+  /** BAR_ACTION_WARMUP - bar within the strategy's warm-up window */
+  BAR_ACTION_WARMUP = "BAR_ACTION_WARMUP",
+  /** BAR_ACTION_HOLD_FLAT - flat, no entry this bar */
+  BAR_ACTION_HOLD_FLAT = "BAR_ACTION_HOLD_FLAT",
+  /** BAR_ACTION_ENTER_LONG - opened a long position this bar */
+  BAR_ACTION_ENTER_LONG = "BAR_ACTION_ENTER_LONG",
+  /** BAR_ACTION_EXIT_LONG - closed a long position this bar */
+  BAR_ACTION_EXIT_LONG = "BAR_ACTION_EXIT_LONG",
+  /** BAR_ACTION_HOLD_LONG - holding an existing long, no exit this bar */
+  BAR_ACTION_HOLD_LONG = "BAR_ACTION_HOLD_LONG",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function barActionFromJSON(object: any): BarAction {
+  switch (object) {
+    case 0:
+    case "BAR_ACTION_UNSPECIFIED":
+      return BarAction.BAR_ACTION_UNSPECIFIED;
+    case 1:
+    case "BAR_ACTION_WARMUP":
+      return BarAction.BAR_ACTION_WARMUP;
+    case 2:
+    case "BAR_ACTION_HOLD_FLAT":
+      return BarAction.BAR_ACTION_HOLD_FLAT;
+    case 3:
+    case "BAR_ACTION_ENTER_LONG":
+      return BarAction.BAR_ACTION_ENTER_LONG;
+    case 4:
+    case "BAR_ACTION_EXIT_LONG":
+      return BarAction.BAR_ACTION_EXIT_LONG;
+    case 5:
+    case "BAR_ACTION_HOLD_LONG":
+      return BarAction.BAR_ACTION_HOLD_LONG;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return BarAction.UNRECOGNIZED;
+  }
+}
+
+export function barActionToJSON(object: BarAction): string {
+  switch (object) {
+    case BarAction.BAR_ACTION_UNSPECIFIED:
+      return "BAR_ACTION_UNSPECIFIED";
+    case BarAction.BAR_ACTION_WARMUP:
+      return "BAR_ACTION_WARMUP";
+    case BarAction.BAR_ACTION_HOLD_FLAT:
+      return "BAR_ACTION_HOLD_FLAT";
+    case BarAction.BAR_ACTION_ENTER_LONG:
+      return "BAR_ACTION_ENTER_LONG";
+    case BarAction.BAR_ACTION_EXIT_LONG:
+      return "BAR_ACTION_EXIT_LONG";
+    case BarAction.BAR_ACTION_HOLD_LONG:
+      return "BAR_ACTION_HOLD_LONG";
+    case BarAction.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function barActionToNumber(object: BarAction): number {
+  switch (object) {
+    case BarAction.BAR_ACTION_UNSPECIFIED:
+      return 0;
+    case BarAction.BAR_ACTION_WARMUP:
+      return 1;
+    case BarAction.BAR_ACTION_HOLD_FLAT:
+      return 2;
+    case BarAction.BAR_ACTION_ENTER_LONG:
+      return 3;
+    case BarAction.BAR_ACTION_EXIT_LONG:
+      return 4;
+    case BarAction.BAR_ACTION_HOLD_LONG:
+      return 5;
+    case BarAction.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
+/** Why a symbol produced zero trades. Closed set → enum (C-04). */
+export enum NoTradeReason {
+  /** NO_TRADE_REASON_UNSPECIFIED - symbol traded, or not classified */
+  NO_TRADE_REASON_UNSPECIFIED = "NO_TRADE_REASON_UNSPECIFIED",
+  /** NO_TRADE_REASON_ENTIRE_RANGE_WARMUP - the whole range was warm-up */
+  NO_TRADE_REASON_ENTIRE_RANGE_WARMUP = "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP",
+  /** NO_TRADE_REASON_ENTRY_NEVER_TRUE - entry condition never satisfied */
+  NO_TRADE_REASON_ENTRY_NEVER_TRUE = "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
+  /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
+  NO_TRADE_REASON_INSUFFICIENT_CAPITAL = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function noTradeReasonFromJSON(object: any): NoTradeReason {
+  switch (object) {
+    case 0:
+    case "NO_TRADE_REASON_UNSPECIFIED":
+      return NoTradeReason.NO_TRADE_REASON_UNSPECIFIED;
+    case 1:
+    case "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP":
+      return NoTradeReason.NO_TRADE_REASON_ENTIRE_RANGE_WARMUP;
+    case 2:
+    case "NO_TRADE_REASON_ENTRY_NEVER_TRUE":
+      return NoTradeReason.NO_TRADE_REASON_ENTRY_NEVER_TRUE;
+    case 3:
+    case "NO_TRADE_REASON_INSUFFICIENT_CAPITAL":
+      return NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return NoTradeReason.UNRECOGNIZED;
+  }
+}
+
+export function noTradeReasonToJSON(object: NoTradeReason): string {
+  switch (object) {
+    case NoTradeReason.NO_TRADE_REASON_UNSPECIFIED:
+      return "NO_TRADE_REASON_UNSPECIFIED";
+    case NoTradeReason.NO_TRADE_REASON_ENTIRE_RANGE_WARMUP:
+      return "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP";
+    case NoTradeReason.NO_TRADE_REASON_ENTRY_NEVER_TRUE:
+      return "NO_TRADE_REASON_ENTRY_NEVER_TRUE";
+    case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
+      return "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
+    case NoTradeReason.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function noTradeReasonToNumber(object: NoTradeReason): number {
+  switch (object) {
+    case NoTradeReason.NO_TRADE_REASON_UNSPECIFIED:
+      return 0;
+    case NoTradeReason.NO_TRADE_REASON_ENTIRE_RANGE_WARMUP:
+      return 1;
+    case NoTradeReason.NO_TRADE_REASON_ENTRY_NEVER_TRUE:
+      return 2;
+    case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
+      return 3;
+    case NoTradeReason.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export enum ComponentKind {
   COMPONENT_KIND_UNSPECIFIED = "COMPONENT_KIND_UNSPECIFIED",
   COMPONENT_KIND_BUILTIN_INDICATOR = "COMPONENT_KIND_BUILTIN_INDICATOR",
@@ -444,6 +593,8 @@ export interface BacktestResult {
   status: BacktestStatus;
   /** populated per-symbol when status == INSUFFICIENT_DATA */
   coverageGaps: CoverageGap[];
+  /** per-bar debug data for every simulated symbol (feature 064) */
+  diagnostics: SymbolDiagnostics[];
 }
 
 export interface TradeRecord {
@@ -455,6 +606,39 @@ export interface TradeRecord {
   pnl: number;
   entryTime?: Date | undefined;
   exitTime?: Date | undefined;
+}
+
+/** One row of day-by-day backtest diagnostics for a single bar. */
+export interface BarDiagnostic {
+  symbol: string;
+  barIndex: number;
+  timestamp?: Date | undefined;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  vwap: number;
+  /** present-only: a series is absent during its warm-up */
+  indicators: { [key: string]: number };
+  warmup: boolean;
+  signalScore: number;
+  conviction: number;
+  action: BarAction;
+}
+
+export interface BarDiagnostic_IndicatorsEntry {
+  key: string;
+  value: number;
+}
+
+/** Per-symbol diagnostics bundle attached to a BacktestResult. */
+export interface SymbolDiagnostics {
+  symbol: string;
+  bars: BarDiagnostic[];
+  noTradeReason: NoTradeReason;
+  barsTotal: number;
+  warmupBars: number;
 }
 
 export interface ScoreStrategyRequest {
@@ -989,6 +1173,7 @@ function createBaseBacktestResult(): BacktestResult {
     trades: [],
     status: BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
     coverageGaps: [],
+    diagnostics: [],
   };
 }
 
@@ -1032,6 +1217,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     }
     for (const v of message.coverageGaps) {
       CoverageGap.encode(v!, writer.uint32(106).fork()).join();
+    }
+    for (const v of message.diagnostics) {
+      SymbolDiagnostics.encode(v!, writer.uint32(114).fork()).join();
     }
     return writer;
   },
@@ -1147,6 +1335,14 @@ export const BacktestResult: MessageFns<BacktestResult> = {
           message.coverageGaps.push(CoverageGap.decode(reader, reader.uint32()));
           continue;
         }
+        case 14: {
+          if (tag !== 114) {
+            break;
+          }
+
+          message.diagnostics.push(SymbolDiagnostics.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1217,6 +1413,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
         : globalThis.Array.isArray(object?.coverage_gaps)
         ? object.coverage_gaps.map((e: any) => CoverageGap.fromJSON(e))
         : [],
+      diagnostics: globalThis.Array.isArray(object?.diagnostics)
+        ? object.diagnostics.map((e: any) => SymbolDiagnostics.fromJSON(e))
+        : [],
     };
   },
 
@@ -1261,6 +1460,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     if (message.coverageGaps?.length) {
       obj.coverageGaps = message.coverageGaps.map((e) => CoverageGap.toJSON(e));
     }
+    if (message.diagnostics?.length) {
+      obj.diagnostics = message.diagnostics.map((e) => SymbolDiagnostics.toJSON(e));
+    }
     return obj;
   },
 
@@ -1282,6 +1484,7 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     message.trades = object.trades?.map((e) => TradeRecord.fromPartial(e)) || [];
     message.status = object.status ?? BacktestStatus.BACKTEST_STATUS_UNSPECIFIED;
     message.coverageGaps = object.coverageGaps?.map((e) => CoverageGap.fromPartial(e)) || [];
+    message.diagnostics = object.diagnostics?.map((e) => SymbolDiagnostics.fromPartial(e)) || [];
     return message;
   },
 };
@@ -1479,6 +1682,542 @@ export const TradeRecord: MessageFns<TradeRecord> = {
     message.pnl = object.pnl ?? 0;
     message.entryTime = object.entryTime ?? undefined;
     message.exitTime = object.exitTime ?? undefined;
+    return message;
+  },
+};
+
+function createBaseBarDiagnostic(): BarDiagnostic {
+  return {
+    symbol: "",
+    barIndex: 0,
+    timestamp: undefined,
+    open: 0,
+    high: 0,
+    low: 0,
+    close: 0,
+    volume: 0,
+    vwap: 0,
+    indicators: {},
+    warmup: false,
+    signalScore: 0,
+    conviction: 0,
+    action: BarAction.BAR_ACTION_UNSPECIFIED,
+  };
+}
+
+export const BarDiagnostic: MessageFns<BarDiagnostic> = {
+  encode(message: BarDiagnostic, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.barIndex !== 0) {
+      writer.uint32(16).int32(message.barIndex);
+    }
+    if (message.timestamp !== undefined) {
+      Timestamp.encode(toTimestamp(message.timestamp), writer.uint32(26).fork()).join();
+    }
+    if (message.open !== 0) {
+      writer.uint32(33).double(message.open);
+    }
+    if (message.high !== 0) {
+      writer.uint32(41).double(message.high);
+    }
+    if (message.low !== 0) {
+      writer.uint32(49).double(message.low);
+    }
+    if (message.close !== 0) {
+      writer.uint32(57).double(message.close);
+    }
+    if (message.volume !== 0) {
+      writer.uint32(64).int64(message.volume);
+    }
+    if (message.vwap !== 0) {
+      writer.uint32(73).double(message.vwap);
+    }
+    globalThis.Object.entries(message.indicators).forEach(([key, value]: [string, number]) => {
+      BarDiagnostic_IndicatorsEntry.encode({ key: key as any, value }, writer.uint32(82).fork()).join();
+    });
+    if (message.warmup !== false) {
+      writer.uint32(88).bool(message.warmup);
+    }
+    if (message.signalScore !== 0) {
+      writer.uint32(97).double(message.signalScore);
+    }
+    if (message.conviction !== 0) {
+      writer.uint32(105).double(message.conviction);
+    }
+    if (message.action !== BarAction.BAR_ACTION_UNSPECIFIED) {
+      writer.uint32(112).int32(barActionToNumber(message.action));
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): BarDiagnostic {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseBarDiagnostic();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.barIndex = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.timestamp = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.open = reader.double();
+          continue;
+        }
+        case 5: {
+          if (tag !== 41) {
+            break;
+          }
+
+          message.high = reader.double();
+          continue;
+        }
+        case 6: {
+          if (tag !== 49) {
+            break;
+          }
+
+          message.low = reader.double();
+          continue;
+        }
+        case 7: {
+          if (tag !== 57) {
+            break;
+          }
+
+          message.close = reader.double();
+          continue;
+        }
+        case 8: {
+          if (tag !== 64) {
+            break;
+          }
+
+          message.volume = longToNumber(reader.int64());
+          continue;
+        }
+        case 9: {
+          if (tag !== 73) {
+            break;
+          }
+
+          message.vwap = reader.double();
+          continue;
+        }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          const entry10 = BarDiagnostic_IndicatorsEntry.decode(reader, reader.uint32());
+          if (entry10.value !== undefined) {
+            message.indicators[entry10.key] = entry10.value;
+          }
+          continue;
+        }
+        case 11: {
+          if (tag !== 88) {
+            break;
+          }
+
+          message.warmup = reader.bool();
+          continue;
+        }
+        case 12: {
+          if (tag !== 97) {
+            break;
+          }
+
+          message.signalScore = reader.double();
+          continue;
+        }
+        case 13: {
+          if (tag !== 105) {
+            break;
+          }
+
+          message.conviction = reader.double();
+          continue;
+        }
+        case 14: {
+          if (tag !== 112) {
+            break;
+          }
+
+          message.action = barActionFromJSON(reader.int32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): BarDiagnostic {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      barIndex: isSet(object.barIndex)
+        ? globalThis.Number(object.barIndex)
+        : isSet(object.bar_index)
+        ? globalThis.Number(object.bar_index)
+        : 0,
+      timestamp: isSet(object.timestamp) ? fromJsonTimestamp(object.timestamp) : undefined,
+      open: isSet(object.open) ? globalThis.Number(object.open) : 0,
+      high: isSet(object.high) ? globalThis.Number(object.high) : 0,
+      low: isSet(object.low) ? globalThis.Number(object.low) : 0,
+      close: isSet(object.close) ? globalThis.Number(object.close) : 0,
+      volume: isSet(object.volume) ? globalThis.Number(object.volume) : 0,
+      vwap: isSet(object.vwap) ? globalThis.Number(object.vwap) : 0,
+      indicators: isObject(object.indicators)
+        ? (globalThis.Object.entries(object.indicators) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : {},
+      warmup: isSet(object.warmup) ? globalThis.Boolean(object.warmup) : false,
+      signalScore: isSet(object.signalScore)
+        ? globalThis.Number(object.signalScore)
+        : isSet(object.signal_score)
+        ? globalThis.Number(object.signal_score)
+        : 0,
+      conviction: isSet(object.conviction) ? globalThis.Number(object.conviction) : 0,
+      action: isSet(object.action) ? barActionFromJSON(object.action) : BarAction.BAR_ACTION_UNSPECIFIED,
+    };
+  },
+
+  toJSON(message: BarDiagnostic): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.barIndex !== 0) {
+      obj.barIndex = Math.round(message.barIndex);
+    }
+    if (message.timestamp !== undefined) {
+      obj.timestamp = message.timestamp.toISOString();
+    }
+    if (message.open !== 0) {
+      obj.open = message.open;
+    }
+    if (message.high !== 0) {
+      obj.high = message.high;
+    }
+    if (message.low !== 0) {
+      obj.low = message.low;
+    }
+    if (message.close !== 0) {
+      obj.close = message.close;
+    }
+    if (message.volume !== 0) {
+      obj.volume = Math.round(message.volume);
+    }
+    if (message.vwap !== 0) {
+      obj.vwap = message.vwap;
+    }
+    if (message.indicators) {
+      const entries = globalThis.Object.entries(message.indicators) as [string, number][];
+      if (entries.length > 0) {
+        obj.indicators = {};
+        entries.forEach(([k, v]) => {
+          obj.indicators[k] = v;
+        });
+      }
+    }
+    if (message.warmup !== false) {
+      obj.warmup = message.warmup;
+    }
+    if (message.signalScore !== 0) {
+      obj.signalScore = message.signalScore;
+    }
+    if (message.conviction !== 0) {
+      obj.conviction = message.conviction;
+    }
+    if (message.action !== BarAction.BAR_ACTION_UNSPECIFIED) {
+      obj.action = barActionToJSON(message.action);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<BarDiagnostic>, I>>(base?: I): BarDiagnostic {
+    return BarDiagnostic.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<BarDiagnostic>, I>>(object: I): BarDiagnostic {
+    const message = createBaseBarDiagnostic();
+    message.symbol = object.symbol ?? "";
+    message.barIndex = object.barIndex ?? 0;
+    message.timestamp = object.timestamp ?? undefined;
+    message.open = object.open ?? 0;
+    message.high = object.high ?? 0;
+    message.low = object.low ?? 0;
+    message.close = object.close ?? 0;
+    message.volume = object.volume ?? 0;
+    message.vwap = object.vwap ?? 0;
+    message.indicators = (globalThis.Object.entries(object.indicators ?? {}) as [string, number][]).reduce(
+      (acc: { [key: string]: number }, [key, value]: [string, number]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.Number(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    message.warmup = object.warmup ?? false;
+    message.signalScore = object.signalScore ?? 0;
+    message.conviction = object.conviction ?? 0;
+    message.action = object.action ?? BarAction.BAR_ACTION_UNSPECIFIED;
+    return message;
+  },
+};
+
+function createBaseBarDiagnostic_IndicatorsEntry(): BarDiagnostic_IndicatorsEntry {
+  return { key: "", value: 0 };
+}
+
+export const BarDiagnostic_IndicatorsEntry: MessageFns<BarDiagnostic_IndicatorsEntry> = {
+  encode(message: BarDiagnostic_IndicatorsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== 0) {
+      writer.uint32(17).double(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): BarDiagnostic_IndicatorsEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseBarDiagnostic_IndicatorsEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.value = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): BarDiagnostic_IndicatorsEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+    };
+  },
+
+  toJSON(message: BarDiagnostic_IndicatorsEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== 0) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<BarDiagnostic_IndicatorsEntry>, I>>(base?: I): BarDiagnostic_IndicatorsEntry {
+    return BarDiagnostic_IndicatorsEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<BarDiagnostic_IndicatorsEntry>, I>>(
+    object: I,
+  ): BarDiagnostic_IndicatorsEntry {
+    const message = createBaseBarDiagnostic_IndicatorsEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? 0;
+    return message;
+  },
+};
+
+function createBaseSymbolDiagnostics(): SymbolDiagnostics {
+  return {
+    symbol: "",
+    bars: [],
+    noTradeReason: NoTradeReason.NO_TRADE_REASON_UNSPECIFIED,
+    barsTotal: 0,
+    warmupBars: 0,
+  };
+}
+
+export const SymbolDiagnostics: MessageFns<SymbolDiagnostics> = {
+  encode(message: SymbolDiagnostics, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    for (const v of message.bars) {
+      BarDiagnostic.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.noTradeReason !== NoTradeReason.NO_TRADE_REASON_UNSPECIFIED) {
+      writer.uint32(24).int32(noTradeReasonToNumber(message.noTradeReason));
+    }
+    if (message.barsTotal !== 0) {
+      writer.uint32(32).int32(message.barsTotal);
+    }
+    if (message.warmupBars !== 0) {
+      writer.uint32(40).int32(message.warmupBars);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SymbolDiagnostics {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSymbolDiagnostics();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.bars.push(BarDiagnostic.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.noTradeReason = noTradeReasonFromJSON(reader.int32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.barsTotal = reader.int32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.warmupBars = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SymbolDiagnostics {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      bars: globalThis.Array.isArray(object?.bars) ? object.bars.map((e: any) => BarDiagnostic.fromJSON(e)) : [],
+      noTradeReason: isSet(object.noTradeReason)
+        ? noTradeReasonFromJSON(object.noTradeReason)
+        : isSet(object.no_trade_reason)
+        ? noTradeReasonFromJSON(object.no_trade_reason)
+        : NoTradeReason.NO_TRADE_REASON_UNSPECIFIED,
+      barsTotal: isSet(object.barsTotal)
+        ? globalThis.Number(object.barsTotal)
+        : isSet(object.bars_total)
+        ? globalThis.Number(object.bars_total)
+        : 0,
+      warmupBars: isSet(object.warmupBars)
+        ? globalThis.Number(object.warmupBars)
+        : isSet(object.warmup_bars)
+        ? globalThis.Number(object.warmup_bars)
+        : 0,
+    };
+  },
+
+  toJSON(message: SymbolDiagnostics): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.bars?.length) {
+      obj.bars = message.bars.map((e) => BarDiagnostic.toJSON(e));
+    }
+    if (message.noTradeReason !== NoTradeReason.NO_TRADE_REASON_UNSPECIFIED) {
+      obj.noTradeReason = noTradeReasonToJSON(message.noTradeReason);
+    }
+    if (message.barsTotal !== 0) {
+      obj.barsTotal = Math.round(message.barsTotal);
+    }
+    if (message.warmupBars !== 0) {
+      obj.warmupBars = Math.round(message.warmupBars);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SymbolDiagnostics>, I>>(base?: I): SymbolDiagnostics {
+    return SymbolDiagnostics.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SymbolDiagnostics>, I>>(object: I): SymbolDiagnostics {
+    const message = createBaseSymbolDiagnostics();
+    message.symbol = object.symbol ?? "";
+    message.bars = object.bars?.map((e) => BarDiagnostic.fromPartial(e)) || [];
+    message.noTradeReason = object.noTradeReason ?? NoTradeReason.NO_TRADE_REASON_UNSPECIFIED;
+    message.barsTotal = object.barsTotal ?? 0;
+    message.warmupBars = object.warmupBars ?? 0;
     return message;
   },
 };

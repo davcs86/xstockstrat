@@ -1,6 +1,6 @@
 # Implementation Spec: backtest-debug-info
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-07-09
 **Feature**: `docs/roadmap/features/064-backtest-debug-info/feature.md`
 **Total Steps**: 17
@@ -43,7 +43,7 @@ red-before-green test step (C-08 / P-06).
 
 ### Step 1 — proto: additive diagnostics + warmup_period fields
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -104,7 +104,7 @@ Both must pass (additive-only). If the feature branch has no prior committed pro
 
 ### Step 2 — proto-gen: regenerate + commit stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/` — modify (regenerated TS/Python/Go stubs; commit the diff)
