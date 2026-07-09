@@ -29,3 +29,11 @@ reusing.
 ---
 
 <!-- Append entries below. Newest at the bottom. -->
+
+### 2026-07-08 — backtest-debug-info — design
+- **Pattern**: To add a per-bar/observability read to an engine consumed by a live loop, keep the
+  hot method's return type frozen and add a sibling (`evaluate_with_series()` beside `evaluate()`),
+  the wrapped one delegating — protects mocking tests and the feature-048 caller from a blast-radius
+  change while surfacing the extra data.
+- **Evidence**: `services/xstockstrat-analysis/app/services/evaluator.py:74`; caller `app/engine/live_loop.py:119`; design.md § Chosen Approach.
+- **Rule it implies**: prefer an additive sibling over widening a shared return contract (reinforces C-04/P-03; no new ID needed).

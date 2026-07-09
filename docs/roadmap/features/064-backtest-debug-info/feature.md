@@ -1,6 +1,6 @@
 # Feature: backtest-debug-info
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/backtest-debug-info`
 **Created**: 2026-07-08
 **Last Updated**: 2026-07-08
@@ -13,12 +13,15 @@
 |---|---|---|---|
 | 2026-07-08 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-07-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; OQ-3/OQ-5 resolved in-spec; overlap CLEAN) |
+| 2026-07-08 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon Dossier](recon.md) — grounded codebase map (Phase 0)
+- [Design](design.md) — debated, approved architecture (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec backtest-debug-info`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -46,4 +49,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design backtest-debug-info` — recon + adversarial design debate before /sdd-spec
+`/sdd-spec backtest-debug-info` — generate the implementation spec from the approved design

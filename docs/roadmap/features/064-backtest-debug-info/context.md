@@ -109,4 +109,27 @@ User: "oq-1. Option C. Include in the scope to make custom formulas to set a war
   changes**. FR/Affected-Services + OQ-3 updated accordingly. This is a deliberate reversal for the
   diagnostic-advisor use case; response bounded by the 2-year cap.
 
+## Session 2026-07-08 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: proto, analysis, indicators, ui, agent). Key reuse patterns:
+  the `outputs`/`is_public` column pattern for `warmup_period`; shared shadcn `Table` + `FormulaWorkspace`;
+  `MessageToDict` for the agent; extract `referenced_refs()` from the existing rule-walk.
+- Phase 1 Grilling: **2 rounds (full)**. Chosen approach: bundled/ordered feature; both backtest helpers
+  return a 4-tuple with `SymbolDiagnostics` built by a shared `_build_bar_diagnostic`; additive
+  `evaluate_with_series()`; hybrid warm-up (observe built-ins / declare formulas); 2-year cap defaulting
+  unset bounds. Rejected: pure declared-lookback map (off-by-one), Option B, `return_series` kwarg,
+  reading action from `decisions[i]`, `react-window`, splitting FR-4c.
+- User-locked decisions (round-1 gate): hybrid warm-up; keep `INSUFFICIENT_CAPITAL` unreachable-but-present;
+  add `@tanstack/react-virtual`; bundle strictly ordered.
+- Constitution rules touched: C-01, C-04, C-05, C-07, C-08, C-09, P-03, P-06, F-01, F-05, F-06, F-07.
+  Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+### Open Threads (from design.md Open Risks — resolve at /sdd-spec / execute)
+
+- `vwap != 0` presence heuristic vs `optional double vwap` → decide at **step 3b**.
+- All-`None` formula series warm-up ambiguity → formulas always use declared `warmup_period` (**step 3c**).
+- `bar.time` fix rewrites existing `TradeRecord` times → real `Bar` fixture (**step 3b**).
+- Range-unset defaulting changes agent's range-less coverage → verify (**step 3d**).
+
 
