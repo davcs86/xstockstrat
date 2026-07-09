@@ -43,8 +43,11 @@ HTTP/Connect-RPC server on `8054` was removed.
     (`FormulaParameter`: `name`, `type`, `default_value`, `required`, `min`/`max`, `description`)
   - `outputs JSONB` (default `'[]'`) — ordered list of declared output series
     (`FormulaOutput`: `name`, `description`); the primary `value` series is implicit
+  - `warmup_period INTEGER` (default `0`) — bars this formula needs before its outputs are valid
+    (feature 064); read by `xstockstrat-analysis` for the Option-C backtest warm-up length
 - Migrations: `migrations/001_formulas.*` (table); `migrations/002_formula_parameters.*` (adds the
-  `parameters` JSONB column); `migrations/003_formula_outputs.*` (adds the `outputs` JSONB column)
+  `parameters` JSONB column); `migrations/003_formula_outputs.*` (adds the `outputs` JSONB column);
+  `migrations/004_formula_warmup.*` (adds the `warmup_period` INTEGER column)
 - Pool: `asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)` created in `app/main.py`
 
 ## Config Keys Consumed

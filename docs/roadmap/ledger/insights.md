@@ -37,3 +37,20 @@ reusing.
   change while surfacing the extra data.
 - **Evidence**: `services/xstockstrat-analysis/app/services/evaluator.py:74`; caller `app/engine/live_loop.py:119`; design.md § Chosen Approach.
 - **Rule it implies**: prefer an additive sibling over widening a shared return contract (reinforces C-04/P-03; no new ID needed).
+
+### 2026-07-09 — backtest-debug-info — reuse
+- **Pattern**: When a diagnostics/observability read spans two engine paths, funnel per-row assembly
+  through one shared builder (`_build_bar_diagnostic`) and a shared finalize pass — both paths satisfy
+  the DRY pre-commit (jscpd) gate and the enum-default (C-04) init happens in exactly one place.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` `_build_bar_diagnostic` /
+  `_finalize_symbol_diagnostics`; PR #750.
+- **Rule it implies**: a cross-path per-item transform gets one builder, not a copy per path.
+
+### 2026-07-09 — backtest-debug-info — ordering
+- **Pattern**: A proto→codegen→DB→service→UI feature executes cleanly as stacked step branches
+  (`feature-steps/<slug>-step-N` each based on the prior) so the tip carries the cumulative diff and the
+  feature branch fast-forwards to it for one integration PR. Provision the codegen toolchain on the host
+  from the module proxy (`go install …/buf`) when GitHub-releases egress is blocked, and validate it
+  reproduces committed stubs byte-for-byte before touching any `.proto`.
+- **Evidence**: PRs #746–753; `Dockerfile.codegen` version pins.
+- **Rule it implies**: verify the codegen toolchain against the committed stubs (empty diff) before the first proto edit.

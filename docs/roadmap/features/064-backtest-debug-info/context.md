@@ -295,3 +295,13 @@ Next: `/sdd-execute backtest-debug-info sequential` on the `feature/backtest-deb
   e2e test + mock branch committed for CI). Deviation logged.
 - Used a virtualized div-grid (not shadcn `<Table>`) because row virtualization needs absolute positioning
   incompatible with native table layout; keeps semantic header/cells + a11y count.
+
+## Session 2026-07-09 — sdd-execute (sequential) — ALL 17 STEPS DONE
+
+- All 17 steps executed + verified as 8 stacked per-step PRs (#746–753), each with red-green TDD
+  (backend) or tsc+lint (UI); every backend suite green above threshold; proto stubs byte-match CI.
+- Feature branch `feature/backtest-debug-info` fast-forwarded to the cumulative stack tip; integration
+  PR → main-dev opened. Status: in-progress → code-completed. No merge-order gate for 064.
+- Env notes: codegen toolchain provisioned on host (buf via `go install`, egress-blocked GitHub
+  releases); Docker+Postgres used under user exception for the migration test; Playwright browsers
+  unavailable → tsc+lint fallback for the UI e2e (test committed for CI). Two ledger insights recorded.

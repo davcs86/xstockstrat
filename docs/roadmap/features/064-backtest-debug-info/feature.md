@@ -1,6 +1,6 @@
 # Feature: backtest-debug-info
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/backtest-debug-info`
 **Created**: 2026-07-08
 **Last Updated**: 2026-07-09
@@ -16,6 +16,7 @@
 | 2026-07-08 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-07-09 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps |
 | 2026-07-09 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Steps 1–2: proto + codegen) |
+| 2026-07-09 | `in-progress` → `code-completed` | /sdd-execute | All 17 steps done + verified (8 stacked PRs #746–753); integration PR opened |
 
 ---
 
@@ -50,4 +51,4 @@ implementation-spec.md. Stable unless /sdd-spec re-runs.)_
 
 ## Next Action
 
-`/sdd-review backtest-debug-info impl-spec` — validate implementation spec, then `/sdd-execute backtest-debug-info`
+Merge the integration PR (`feature/backtest-debug-info` → `main-dev`); CI validates on merge. Then `/promote` to production once validated on dev.
