@@ -218,3 +218,13 @@ Next: `/sdd-execute backtest-debug-info sequential` on the `feature/backtest-deb
   Step 1 PR per the step's own instruction (C-09).
 - Files modified: `packages/proto/gen/**`
 - Deviations: none.
+
+### Step 3 — migration: 004_formula_warmup [done]
+- Created `004_formula_warmup.{up,down}.sql` (ADD/DROP COLUMN warmup_period INTEGER NOT NULL DEFAULT 0),
+  mirroring the additive 003_formula_outputs pattern.
+- Files: `services/xstockstrat-indicators/migrations/004_formula_warmup.up.sql`, `.down.sql`
+- Verification (CI-equivalent fallback — Docker exception, `migrate`/DB not on host): applied 001→004 in
+  a throwaway `postgres:16` container; asserted `warmup_period` = integer/NOT NULL/default 0; `down 004`
+  drops it (0 cols); re-up clean. Deviation Log: CI-equivalent fallback (no golang-migrate on host).
+- Deviations: verification via postgres:16 container + psql instead of ./scripts/db-migrate.sh (host has
+  no `migrate` binary / running DB); SQL and behavior identical.

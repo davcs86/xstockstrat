@@ -140,7 +140,7 @@ must be clean after regeneration.
 
 ### Step 3 — migration: 004_formula_warmup on indicators.formulas
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/migrations/004_formula_warmup.up.sql` — create
@@ -749,4 +749,10 @@ threshold, match `.github/workflows/ci.yml` at execute time.)
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 3 (migration) — CI-equivalent verification fallback.** The host has no `golang-migrate`
+  binary or running TimescaleDB, so `./scripts/db-migrate.sh` could not run as written. **Disposition:
+  CI-equivalent fallback** (sequential-mode sanctioned): applied migrations `001→004` in a throwaway
+  `postgres:16` Docker container via `psql -v ON_ERROR_STOP=1`, asserted `warmup_period` is
+  `integer NOT NULL DEFAULT 0`, ran `004.down.sql` (column dropped), and re-applied `004.up.sql`
+  cleanly. The SQL and the up/down reversibility proven are identical to what `db-migrate.sh` would
+  apply. Docker + Postgres used under the user's explicit exception.
