@@ -1095,3 +1095,94 @@ class TestBacktestRangeCap:
         span = req.range.end.seconds - req.range.start.seconds
         assert span == 730 * 86_400
         assert req.range.end.seconds > 0
+# Score persistence + hydrate (feature 064 — persist-strategy-scores)
+# ---------------------------------------------------------------------------
+
+
+class TestScorePersistence:
+    @pytest.mark.asyncio
+    async def test_score_persists_via_upsert(self):
+        svc = make_servicer()
+        svc._backtests["s"] = _make_backtest("s", sharpe=1.5, drawdown=0.05, win_rate=0.65)
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._scores_repo = AsyncMock()
+
+        req = MagicMock()
+        req.strategy_id = "s"
+        score = await svc.ScoreStrategy(req, context=MagicMock())
+
+        svc._scores_repo.upsert.assert_awaited_once()
+        args = svc._scores_repo.upsert.await_args.args
+        assert args[0] == "s"
+        assert args[1] == pytest.approx(score.overall_score)
+        assert args[2] == score.rating
+        assert set(args[3].keys()) == {"sharpe", "drawdown", "win_rate"}
+
+    @pytest.mark.asyncio
+    async def test_fr7_persist_failure_does_not_lose_read(self):
+        """A swallowed DB write still returns the score AND keeps it readable (AC-6)."""
+        svc = make_servicer()
+        svc._backtests["s"] = _make_backtest("s", sharpe=1.5, drawdown=0.05, win_rate=0.65)
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._scores_repo = AsyncMock()
+        svc._scores_repo.upsert.side_effect = Exception("db down")
+
+        req = MagicMock()
+        req.strategy_id = "s"
+        score = await svc.ScoreStrategy(req, context=MagicMock())
+
+        # No abort/raise — the score is returned despite the write failure.
+        assert score.strategy_id == "s"
+        # Reads serve from memory, so the caller reads its own write back.
+        resp = await svc.ListStrategies(MagicMock(), context=MagicMock())
+        assert any(s.strategy_id == "s" for s in resp.strategies)
+
+    @pytest.mark.asyncio
+    async def test_hydrate_scores_populates_memory_from_db(self):
+        """Restart-survivability proof (AC-1/AC-7): DB rows -> in-memory dict."""
+        svc = make_servicer()
+        svc._scores_repo = AsyncMock()
+        svc._scores_repo.list = AsyncMock(
+            return_value=[
+                {
+                    "strategy_id": "s1",
+                    "overall_score": 0.82,
+                    "rating": "A",
+                    "component_scores": {"sharpe": 0.9, "drawdown": 0.7, "win_rate": 0.6},
+                }
+            ]
+        )
+
+        await svc.hydrate_scores()
+
+        assert "s1" in svc._strategies
+        got = svc._strategies["s1"]
+        assert got.overall_score == pytest.approx(0.82)
+        assert got.rating == "A"
+        assert dict(got.component_scores) == pytest.approx(
+            {"sharpe": 0.9, "drawdown": 0.7, "win_rate": 0.6}
+        )
+
+    @pytest.mark.asyncio
+    async def test_hydrate_scores_noop_without_repo(self):
+        svc = make_servicer()  # no db_pool -> _scores_repo is None
+        assert svc._scores_repo is None
+        await svc.hydrate_scores()  # must not raise
+        assert svc._strategies == {}
+
+    def test_row_to_score_roundtrip(self):
+        from app.handlers.servicer import _row_to_score
+
+        row = {
+            "strategy_id": "s1",
+            "overall_score": 0.5,
+            "rating": "C",
+            "component_scores": {"sharpe": 0.4, "drawdown": 0.6},
+        }
+        score = _row_to_score(row)
+        assert score.strategy_id == "s1"
+        assert score.overall_score == pytest.approx(0.5)
+        assert score.rating == "C"
+        assert dict(score.component_scores) == pytest.approx({"sharpe": 0.4, "drawdown": 0.6})
