@@ -32,6 +32,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | CI job matrix, coverage thresholds, deploys | `docs/patterns/ci-overview.md` |
 | DRY guard rail (no repeated constants/literals/types/helpers) — pre-commit hook, jscpd tool, `dry-reviewer` subagent | `docs/patterns/dry-guard-rail.md` |
 | Proto / buf changes | `docs/runbooks/proto-versioning.md` |
+| Provisioning the codegen toolchain on a host (Docker unavailable / GitHub-releases egress blocked) | `docs/runbooks/codegen-toolchain-host-setup.md` |
 | Adding a data source (Polygon, Tiingo, etc.) | `docs/runbooks/add-data-source.md` |
 | Building a custom indicator formula | `docs/runbooks/indicator-builder.md` |
 | Bug triage / hotfix | `docs/runbooks/bug-triage.md` |
