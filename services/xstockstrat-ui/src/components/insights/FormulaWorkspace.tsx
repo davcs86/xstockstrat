@@ -43,6 +43,14 @@ import {
   type FormulaTemplate,
 } from './formulaReference';
 
+/**
+ * Reserved author marking a platform-managed, built-in formula (mirrors the indicators
+ * service's SYSTEM_AUTHOR). These are seeded at startup and depended on by other services
+ * (e.g. the fundamentals scoring formula referenced by feature 062), so the editor renders
+ * them read-only and the backend rejects every UpdateFormula/DeleteFormula on them.
+ */
+export const SYSTEM_FORMULA_AUTHOR = 'system';
+
 export interface FormulaWorkspaceProps {
   mode: 'create' | 'edit';
   initialName?: string;
@@ -107,6 +115,10 @@ export function FormulaWorkspace({
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [showReference, setShowReference] = useState(true);
 
+  // Built-in system formulas are immutable: hide Save/Delete and disable every editor input.
+  // The Run cell stays enabled so the formula can still be inspected/executed.
+  const readOnly = author === SYSTEM_FORMULA_AUTHOR;
+
   const executeMut = useExecuteFormula();
 
   function handleRun() {
@@ -169,99 +181,106 @@ export function FormulaWorkspace({
           </h1>
           {author && <span className="text-xs text-muted-foreground">by {author}</span>}
           <Badge variant={isPublic ? 'info' : 'warning'}>{isPublic ? 'Public' : 'Private'}</Badge>
+          {readOnly && <Badge variant="info">Read-only · system formula</Badge>}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => setShowReference((s) => !s)}>
             <BookOpen className="mr-1.5 h-4 w-4" />
             {showReference ? 'Hide reference' : 'Reference'}
           </Button>
-          {onDelete && (
+          {onDelete && !readOnly && (
             <Button variant="destructive" size="sm" onClick={onDelete} disabled={deleting}>
               {deleting ? 'Deleting…' : 'Delete'}
             </Button>
           )}
           <Button variant="ghost" size="sm" onClick={onCancel}>
-            Cancel
+            {readOnly ? 'Back' : 'Cancel'}
           </Button>
-          <Button
-            size="sm"
-            onClick={() =>
-              onSave({
-                name: name.trim(),
-                description,
-                source,
-                isPublic,
-                parameters: parameters.filter((p) => p.name.trim()).map(toParameterInit),
-                outputs: outputs.filter((o) => o.name.trim()).map(toOutputInit),
-              })
-            }
-            disabled={saving || !name.trim()}
-          >
-            {saving ? 'Saving…' : mode === 'create' ? 'Create formula' : 'Save'}
-          </Button>
+          {!readOnly && (
+            <Button
+              size="sm"
+              onClick={() =>
+                onSave({
+                  name: name.trim(),
+                  description,
+                  source,
+                  isPublic,
+                  parameters: parameters.filter((p) => p.name.trim()).map(toParameterInit),
+                  outputs: outputs.filter((o) => o.name.trim()).map(toOutputInit),
+                })
+              }
+              disabled={saving || !name.trim()}
+            >
+              {saving ? 'Saving…' : mode === 'create' ? 'Create formula' : 'Save'}
+            </Button>
+          )}
         </div>
       </div>
 
       <div className={showReference ? 'grid gap-4 lg:grid-cols-[1fr_340px]' : ''}>
         {/* Notebook column */}
         <div className="min-w-0 space-y-4">
-          {/* Metadata cell */}
-          <Card>
-            <CardContent className="space-y-4 pt-5">
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Name</label>
-                <Input
-                  name="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="My RSI variant"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Description</label>
-                <textarea
-                  className="flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What it computes and the inputs it expects"
-                />
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={isPublic}
-                  onChange={(e) => setIsPublic(e.target.checked)}
-                />
-                Public (visible to all users)
-              </label>
-            </CardContent>
-          </Card>
+          {/* Metadata, Parameters and Outputs inputs are locked for read-only system formulas
+              via a native disabled fieldset; the Monaco editor is locked via its readOnly prop. */}
+          <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-4 border-0 p-0">
+            {/* Metadata cell */}
+            <Card>
+              <CardContent className="space-y-4 pt-5">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Name</label>
+                  <Input
+                    name="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="My RSI variant"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Description</label>
+                  <textarea
+                    className="flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="What it computes and the inputs it expects"
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={isPublic}
+                    onChange={(e) => setIsPublic(e.target.checked)}
+                  />
+                  Public (visible to all users)
+                </label>
+              </CardContent>
+            </Card>
 
-          {/* Parameters cell */}
-          <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
-              <CardTitle>Parameters</CardTitle>
-              <span className="text-[11px] text-muted-foreground">
-                typed inputs, read via <code className="text-foreground">params</code>
-              </span>
-            </CardHeader>
-            <CardContent>
-              <ParameterEditor value={parameters} onChange={setParameters} />
-            </CardContent>
-          </Card>
+            {/* Parameters cell */}
+            <Card>
+              <CardHeader className="flex-row items-center justify-between space-y-0">
+                <CardTitle>Parameters</CardTitle>
+                <span className="text-[11px] text-muted-foreground">
+                  typed inputs, read via <code className="text-foreground">params</code>
+                </span>
+              </CardHeader>
+              <CardContent>
+                <ParameterEditor value={parameters} onChange={setParameters} />
+              </CardContent>
+            </Card>
 
-          {/* Outputs cell */}
-          <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
-              <CardTitle>Outputs</CardTitle>
-              <span className="text-[11px] text-muted-foreground">
-                series in <code className="text-foreground">result</code>, used in rules
-              </span>
-            </CardHeader>
-            <CardContent>
-              <OutputEditor value={outputs} onChange={setOutputs} />
-            </CardContent>
-          </Card>
+            {/* Outputs cell */}
+            <Card>
+              <CardHeader className="flex-row items-center justify-between space-y-0">
+                <CardTitle>Outputs</CardTitle>
+                <span className="text-[11px] text-muted-foreground">
+                  series in <code className="text-foreground">result</code>, used in rules
+                </span>
+              </CardHeader>
+              <CardContent>
+                <OutputEditor value={outputs} onChange={setOutputs} />
+              </CardContent>
+            </Card>
+          </fieldset>
 
           {/* Code cell */}
           <Card>
@@ -274,7 +293,12 @@ export function FormulaWorkspace({
             </CardHeader>
             <CardContent>
               <div className="overflow-hidden rounded-md border border-border">
-                <FormulaEditor value={source} onChange={setSource} height="320px" />
+                <FormulaEditor
+                  value={source}
+                  onChange={setSource}
+                  readOnly={readOnly}
+                  height="320px"
+                />
               </div>
             </CardContent>
           </Card>

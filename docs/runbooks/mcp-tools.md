@@ -26,6 +26,12 @@ directly on port 9000.
 
 **Direct SSE (local):** `http://localhost:9000/sse`
 
+**Tool catalog (UI display).** `GET /api/tools` returns the same eleven tools' `name`,
+`description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
+capabilities (the same data documented below), never user data or credentials. It powers the
+`xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
+can see what the agent can do without connecting a client first.
+
 ---
 
 ## Authentication

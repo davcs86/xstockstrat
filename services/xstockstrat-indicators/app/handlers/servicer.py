@@ -10,6 +10,7 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.struct_pb2 import Struct
 
 from app.config.watcher import ConfigWatcher
+from app.formulas import SYSTEM_AUTHOR
 from app.services import indicators_engine, sandbox
 from app.services import parameters as params_validation
 from app.services.formulas_repository import FormulasRepository
@@ -297,6 +298,12 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
             )
             return
+        if row["author"] == SYSTEM_AUTHOR:
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED,
+                "system formulas are read-only and cannot be modified",
+            )
+            return
         if row["author"] != request.user_id and not self._has_admin_scope(context):
             await context.abort(
                 grpc.StatusCode.PERMISSION_DENIED, "user_id does not match formula author"
@@ -328,6 +335,12 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         if row is None:
             await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
+            )
+            return
+        if row["author"] == SYSTEM_AUTHOR:
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED,
+                "system formulas are read-only and cannot be deleted",
             )
             return
         if row["author"] != request.user_id and not self._has_admin_scope(context):

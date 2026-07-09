@@ -494,3 +494,35 @@ class TestFormulaAdminOverride:
         with pytest.raises(Exception):
             await servicer.DeleteFormula(req, ctx)
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+
+
+class TestSystemFormulaReadOnly:
+    """System-authored (seeded, platform-managed) formulas are immutable via the RPCs —
+    even an admin scope cannot edit or delete them, since feature 062 depends on the
+    seeded fundamentals scoring formula by id."""
+
+    async def test_update_system_formula_denied_even_for_admin(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        from app.formulas import SYSTEM_AUTHOR
+
+        servicer = _repo_servicer(author=SYSTEM_AUTHOR)
+        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="admin", name="n")
+        ctx = _ctx([("x-access-scope", "7")])  # admin scope present
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.UpdateFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+
+    async def test_delete_system_formula_denied_even_for_admin(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        from app.formulas import SYSTEM_AUTHOR
+
+        servicer = _repo_servicer(author=SYSTEM_AUTHOR)
+        req = indicators_pb2.DeleteFormulaRequest(formula_id="f", user_id="admin")
+        ctx = _ctx([("x-access-scope", "7")])  # admin scope present
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.DeleteFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
