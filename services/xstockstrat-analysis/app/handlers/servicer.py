@@ -33,7 +33,7 @@ from app.config.watcher import ConfigWatcher
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring
-from app.services.evaluator import StrategyEvaluator, _validate_definition
+from app.services.evaluator import StrategyEvaluator, _validate_definition, referenced_refs
 from app.services.screener import ScreenerEngine
 
 # Backward-compat alias: the source-weighted signal math moved to app.services.scoring
@@ -226,16 +226,45 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     )
                     return
 
+        # feature 064 (FR-4b): cap every backtest to `analysis.backtest.max_range_days` (~2 years).
+        # Both bounds set + span over the cap → reject (reproducibility, not silent clamp). An unset
+        # bound (e.g. the agent sends no range) is defaulted so ALL backtests stay bounded.
+        max_range_days = self._cfg.get_int("analysis.backtest.max_range_days", 730)
+        cap_seconds = max_range_days * 86_400
+        start_set = request.range.start.seconds > 0
+        end_set = request.range.end.seconds > 0
+        if start_set and end_set:
+            span_seconds = request.range.end.seconds - request.range.start.seconds
+            if span_seconds > cap_seconds:
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    f"backtest range span {span_seconds // 86_400} days exceeds the "
+                    f"{max_range_days}-day (~2 year) maximum",
+                )
+                return
+        else:
+            now_ts = Timestamp()
+            now_ts.GetCurrentTime()
+            end_sec = request.range.end.seconds if end_set else now_ts.seconds
+            start_sec = request.range.start.seconds if start_set else max(end_sec - cap_seconds, 0)
+            request.range.start.seconds = start_sec
+            request.range.start.nanos = 0
+            request.range.end.seconds = end_sec
+            request.range.end.nanos = 0
+
         all_trades: list[analysis_pb2.TradeRecord] = []
         equity = float(request.initial_capital) if request.initial_capital > 0 else 100_000.0
         initial_equity = equity
         daily_equity: list[float] = [equity]
         coverage_gaps: list[analysis_pb2.CoverageGap] = []
+        all_diagnostics: list[analysis_pb2.SymbolDiagnostics] = []  # feature 064
+        # feature 064: declared formula warm-ups fetched once per run, reused across symbols.
+        formula_warmup_cache: dict[str, int] = {}
 
         for symbol in request.symbols:
             try:
                 if active_definition is not None:
-                    trades, equity, daily_eq = await self._backtest_symbol_evaluated(
+                    trades, equity, daily_eq, sym_diag = await self._backtest_symbol_evaluated(
                         symbol=symbol,
                         range_msg=request.range,
                         definition=active_definition,
@@ -243,9 +272,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         commission=commission,
                         slippage=slippage,
                         propagation_meta=propagation_meta,
+                        formula_warmup_cache=formula_warmup_cache,
                     )
                 else:
-                    trades, equity, daily_eq = await self._backtest_symbol(
+                    trades, equity, daily_eq, sym_diag = await self._backtest_symbol(
                         symbol=symbol,
                         range_msg=request.range,
                         fast_period=fast_period,
@@ -262,6 +292,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     )
                 all_trades.extend(trades)
                 daily_equity.extend(daily_eq)
+                all_diagnostics.append(sym_diag)
             except _InsufficientData as ins:
                 # FR-2: surface a structured coverage gap instead of faking flat equity.
                 log.warning(
@@ -316,6 +347,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             result.status = analysis_pb2.BACKTEST_STATUS_OK
         if coverage_gaps:
             result.coverage_gaps.extend(coverage_gaps)
+        if all_diagnostics:  # feature 064 — per-bar diagnostics for every simulated symbol
+            result.diagnostics.extend(all_diagnostics)
         self._backtests[backtest_id] = result
         # Index by strategy_id for ScoreStrategy lookup
         self._backtests[request.strategy_id] = result
@@ -361,7 +394,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     ):
         """Run SMA crossover backtest for a single symbol.
 
-        Returns (trades, final_equity, daily_equity).
+        Returns (trades, final_equity, daily_equity, diagnostics) — feature 064.
         """
 
         # 1. Fetch OHLCV bars from marketdata
@@ -431,6 +464,32 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "QuerySignals failed for %s: %s — proceeding without signals", symbol, e
                 )
 
+        n = len(bars)
+        # feature 064: warm-up = first bar where BOTH SMAs are resolved (observed Option-C).
+        warmup_bars = max(min(fast_values, default=n - 1), min(slow_values, default=n - 1))
+
+        # feature 064: one diagnostic row per bar, iterated independently of the trade loop
+        # (which starts at index 1) so bar 0 is captured. Present-only indicators map.
+        diags = []
+        for i in range(n):
+            indicators = {}
+            if i in fast_values:
+                indicators["sma_fast"] = fast_values[i]
+            if i in slow_values:
+                indicators["sma_slow"] = slow_values[i]
+            diags.append(
+                _build_bar_diagnostic(
+                    symbol=symbol,
+                    bar_index=i,
+                    bar=bars[i],
+                    indicators=indicators,
+                    signal_score=0.0,
+                    conviction=0.0,
+                    action=analysis_pb2.BAR_ACTION_HOLD_FLAT,
+                    warmup=False,
+                )
+            )
+
         # 4. Simulate trades bar by bar
         trades = []
         equity = initial_equity
@@ -438,12 +497,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         entry_price = 0.0
         entry_time = None
         daily_equity = [equity]
+        buy_threshold = scoring.buy_threshold(min_conviction)
+        sell_threshold = scoring.sell_threshold()
 
-        for i in range(1, len(bars)):
+        for i in range(1, n):
             bar = bars[i]
             price = bar.close
 
-            # Skip until both SMAs are available
+            # Skip until both SMAs are available (these are warm-up bars — labelled below)
             if i not in fast_values or i not in slow_values:
                 daily_equity.append(equity + position * price)
                 continue
@@ -478,10 +539,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 technical_weight,
                 signals_present=bool(signals_map),
             )
-
-            # Entry: no position + combined above threshold → buy
-            buy_threshold = scoring.buy_threshold(min_conviction)
-            sell_threshold = scoring.sell_threshold()
+            diags[i].signal_score = signal_score
+            diags[i].conviction = combined
+            bar_action = (
+                analysis_pb2.BAR_ACTION_HOLD_LONG
+                if position > 0.0
+                else analysis_pb2.BAR_ACTION_HOLD_FLAT
+            )
 
             if position == 0.0 and combined >= buy_threshold:
                 # Buy: use 95% of equity (keep 5% as buffer)
@@ -491,8 +555,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 if cost <= equity:
                     position = shares
                     entry_price = fill_price
-                    entry_time = bar.timestamp
+                    entry_time = bar.time
                     equity -= cost
+                    # feature 064: label ENTER only when the fill actually happens
+                    bar_action = analysis_pb2.BAR_ACTION_ENTER_LONG
 
             elif position > 0.0 and combined <= sell_threshold:
                 # Sell: close position
@@ -501,7 +567,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 pnl = proceeds - (position * entry_price * (1 + commission))
 
                 exit_ts = Timestamp()
-                exit_ts.CopyFrom(bar.timestamp)
+                exit_ts.CopyFrom(bar.time)
                 entry_ts = Timestamp()
                 entry_ts.CopyFrom(entry_time)
 
@@ -521,7 +587,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 position = 0.0
                 entry_price = 0.0
                 entry_time = None
+                bar_action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
+            diags[i].action = bar_action
             portfolio_value = equity + position * price
             daily_equity.append(portfolio_value)
 
@@ -532,7 +600,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             proceeds = position * fill_price * (1 - commission)
             pnl = proceeds - (position * entry_price * (1 + commission))
             now_ts = Timestamp()
-            now_ts.CopyFrom(last_bar.timestamp)
+            now_ts.CopyFrom(last_bar.time)
             entry_ts2 = Timestamp()
             entry_ts2.CopyFrom(entry_time)
             trades.append(
@@ -549,8 +617,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             equity += proceeds
             daily_equity[-1] = equity
+            # feature 064: the forced close labels the last bar an exit (AC-3)
+            diags[-1].action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
-        return trades, equity, daily_equity
+        symbol_diag = _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades)
+        return trades, equity, daily_equity, symbol_diag
 
     async def _backtest_symbol_evaluated(
         self,
@@ -561,11 +632,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         commission,
         slippage,
         propagation_meta=(),
+        formula_warmup_cache=None,
     ):
         """Run a stored/inline StrategyDefinition for one symbol via the shared evaluator.
 
         Drives entry/exit from StrategyEvaluator decisions (backtest/live parity).
-        Returns (trades, final_equity, daily_equity).
+        Returns (trades, final_equity, daily_equity, diagnostics) — feature 064.
         """
         bars_resp = await self._marketdata.GetBars(
             marketdata_pb2.GetBarsRequest(
@@ -582,7 +654,36 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             raise _InsufficientData(symbol, len(bars), 2)
 
         evaluator = StrategyEvaluator(self._indicators, propagation_meta)
-        decisions = await evaluator.evaluate(definition, bars, None)
+        # feature 064: also capture the computed component series for diagnostics.
+        decisions, component_series = await evaluator.evaluate_with_series(definition, bars, None)
+
+        n = len(bars)
+        warmup_bars = await self._compute_evaluated_warmup(
+            definition, component_series, n, formula_warmup_cache, propagation_meta
+        )
+
+        # feature 064: per-bar diagnostics (independent of the trade loop → bar 0 captured).
+        # Present-only indicators map, dropping the redundant "<ref>.value" alias (the bare
+        # ref_name already carries the primary series).
+        diags = []
+        for i in range(n):
+            indicators = {
+                key: series[i]
+                for key, series in component_series.items()
+                if not key.endswith(".value") and i < len(series) and series[i] is not None
+            }
+            diags.append(
+                _build_bar_diagnostic(
+                    symbol=symbol,
+                    bar_index=i,
+                    bar=bars[i],
+                    indicators=indicators,
+                    signal_score=0.0,  # evaluator path carries no newsletter signals (FR-4a)
+                    conviction=decisions[i].conviction,
+                    action=analysis_pb2.BAR_ACTION_HOLD_FLAT,
+                    warmup=False,
+                )
+            )
 
         trades = []
         equity = initial_equity
@@ -591,10 +692,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         entry_time = None
         daily_equity = [equity]
 
-        for i in range(1, len(bars)):
+        for i in range(1, n):
             bar = bars[i]
             price = bar.close
             decision = decisions[i]
+            bar_action = (
+                analysis_pb2.BAR_ACTION_HOLD_LONG
+                if position > 0.0
+                else analysis_pb2.BAR_ACTION_HOLD_FLAT
+            )
 
             if position == 0.0 and decision.entry:
                 fill_price = price * (1 + slippage)
@@ -603,14 +709,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 if cost <= equity:
                     position = shares
                     entry_price = fill_price
-                    entry_time = bar.timestamp
+                    entry_time = bar.time
                     equity -= cost
+                    bar_action = analysis_pb2.BAR_ACTION_ENTER_LONG
             elif position > 0.0 and decision.exit:
                 fill_price = price * (1 - slippage)
                 proceeds = position * fill_price * (1 - commission)
                 pnl = proceeds - (position * entry_price * (1 + commission))
                 exit_ts = Timestamp()
-                exit_ts.CopyFrom(bar.timestamp)
+                exit_ts.CopyFrom(bar.time)
                 entry_ts = Timestamp()
                 entry_ts.CopyFrom(entry_time)
                 trades.append(
@@ -629,7 +736,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 position = 0.0
                 entry_price = 0.0
                 entry_time = None
+                bar_action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
+            diags[i].action = bar_action
             daily_equity.append(equity + position * price)
 
         # Close any open position at the last bar price
@@ -639,7 +748,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             proceeds = position * fill_price * (1 - commission)
             pnl = proceeds - (position * entry_price * (1 + commission))
             now_ts = Timestamp()
-            now_ts.CopyFrom(last_bar.timestamp)
+            now_ts.CopyFrom(last_bar.time)
             entry_ts2 = Timestamp()
             entry_ts2.CopyFrom(entry_time)
             trades.append(
@@ -656,8 +765,47 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             equity += proceeds
             daily_equity[-1] = equity
+            diags[-1].action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
-        return trades, equity, daily_equity
+        symbol_diag = _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades)
+        return trades, equity, daily_equity, symbol_diag
+
+    async def _compute_evaluated_warmup(
+        self, definition, component_series, n, formula_warmup_cache, propagation_meta
+    ):
+        """Option-C hybrid warm-up length for the evaluator path: the max lookback over the
+        components the active entry/exit rules reference. Built-in → observed first-resolved
+        index (capped n-1). Custom formula → its *declared* warmup_period via GetFormula
+        (cached by formula_id across symbols; never observed, so an all-None formula series
+        can't inflate the warm-up — design.md Open Risk mitigation)."""
+        entry_rule = json.loads(definition.entry_rule) if definition.entry_rule else None
+        exit_rule = json.loads(definition.exit_rule) if definition.exit_rule else None
+        refs = referenced_refs(entry_rule) | referenced_refs(exit_rule)
+        if not refs:
+            return 0
+        if formula_warmup_cache is None:
+            formula_warmup_cache = {}
+        ref_to_comp = {c.ref_name: c for c in definition.components}
+        warmup = 0
+        for ref in refs:
+            comp = ref_to_comp.get(ref)
+            if comp is None:
+                continue
+            if comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
+                fid = comp.formula_id
+                if fid not in formula_warmup_cache:
+                    try:
+                        formula = await self._indicators.GetFormula(
+                            indicators_pb2.GetFormulaRequest(formula_id=fid),
+                            metadata=propagation_meta,
+                        )
+                        formula_warmup_cache[fid] = int(getattr(formula, "warmup_period", 0) or 0)
+                    except grpc.RpcError:
+                        formula_warmup_cache[fid] = 0
+                warmup = max(warmup, formula_warmup_cache[fid])
+            else:
+                warmup = max(warmup, _first_resolved_index(component_series.get(ref, []), n))
+        return warmup
 
     async def ScoreStrategy(self, request, context):
         propagation_meta = [
@@ -966,6 +1114,71 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+# ── Backtest per-bar diagnostics helpers (feature 064-backtest-debug-info) ───────
+
+
+def _build_bar_diagnostic(
+    symbol, bar_index, bar, indicators, signal_score, conviction, action, warmup
+):
+    """Assemble one BarDiagnostic row. Shared by both backtest paths (DRY — avoids the
+    jscpd block-clone). ``bar.time`` (the marketdata Bar timestamp field) is copied into
+    ``timestamp``; ``indicators`` is present-only (unresolved series omitted)."""
+    diag = analysis_pb2.BarDiagnostic(
+        symbol=symbol,
+        bar_index=bar_index,
+        open=bar.open,
+        high=bar.high,
+        low=bar.low,
+        close=bar.close,
+        volume=bar.volume,
+        vwap=bar.vwap,
+        signal_score=signal_score,
+        conviction=conviction,
+        action=action,
+        warmup=warmup,
+    )
+    diag.timestamp.CopyFrom(bar.time)
+    for key, value in indicators.items():
+        diag.indicators[key] = value
+    return diag
+
+
+def _first_resolved_index(series, n) -> int:
+    """First index where ``series`` has a non-None value (observed built-in warm-up length),
+    capped at ``n-1``. An all-None series yields ``n-1``."""
+    for i, v in enumerate(series):
+        if v is not None:
+            return min(i, max(n - 1, 0))
+    return max(n - 1, 0)
+
+
+def _classify_no_trade_reason(trades, warmup_bars, n):
+    """FR-6: reason a symbol produced 0 trades. Only meaningful when ``trades`` is empty;
+    a traded symbol is UNSPECIFIED. INSUFFICIENT_CAPITAL is defined but not emitted (design.md)."""
+    if trades:
+        return analysis_pb2.NO_TRADE_REASON_UNSPECIFIED
+    if warmup_bars >= n:
+        return analysis_pb2.NO_TRADE_REASON_ENTIRE_RANGE_WARMUP
+    return analysis_pb2.NO_TRADE_REASON_ENTRY_NEVER_TRUE
+
+
+def _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades):
+    """Apply the Option-C warm-up override pass (bar < warmup_bars → warmup=True, action=WARMUP)
+    and classify no_trade_reason, then wrap the rows in a SymbolDiagnostics."""
+    n = len(diags)
+    for i in range(n):
+        if i < warmup_bars:
+            diags[i].warmup = True
+            diags[i].action = analysis_pb2.BAR_ACTION_WARMUP
+    return analysis_pb2.SymbolDiagnostics(
+        symbol=symbol,
+        bars=diags,
+        no_trade_reason=_classify_no_trade_reason(trades, warmup_bars, n),
+        bars_total=n,
+        warmup_bars=warmup_bars,
+    )
 
 
 def _row_to_score(row: dict) -> "analysis_pb2.StrategyScore":

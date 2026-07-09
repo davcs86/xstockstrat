@@ -16,6 +16,7 @@ from app.services.evaluator import (
     StrategyEvaluator,
     _eval_condition,
     _validate_definition,
+    referenced_refs,
 )
 
 
@@ -340,3 +341,91 @@ class TestEvaluate:
         req = stub.ExecuteFormula.await_args.args[0]
         assert dict(req.input_params)["period"] == 14.0
         assert "close" in dict(req.input_data)
+
+
+# ---------------------------------------------------------------------------
+# evaluate_with_series + referenced_refs (feature 064-backtest-debug-info)
+# ---------------------------------------------------------------------------
+
+
+class TestEvaluateWithSeries:
+    @pytest.mark.asyncio
+    async def test_returns_decisions_and_component_series(self):
+        closes = [10.0, 20.0, 30.0]
+        bars = [SimpleNamespace(close=c, timestamp=None) for c in closes]
+        result_points = [
+            SimpleNamespace(value=10.0, extra={"upper": 15.0, "lower": 5.0}),
+            SimpleNamespace(value=20.0, extra={"upper": 25.0, "lower": 15.0}),
+            SimpleNamespace(value=30.0, extra={"upper": 35.0, "lower": 25.0}),
+        ]
+        stub = AsyncMock()
+        stub.ComputeIndicator = AsyncMock(return_value=SimpleNamespace(result=result_points))
+        definition = analysis_pb2.StrategyDefinition(
+            components=[_builtin(ref_name="bb", indicator="BB")],
+            entry_rule=json.dumps({"fn": ">", "lhs": "bb.upper", "rhs": 24}),
+        )
+        evaluator = StrategyEvaluator(stub, propagation_meta=())
+        decisions, series = await evaluator.evaluate_with_series(definition, bars, None)
+        assert len(decisions) == len(bars)
+        # bare ref (primary) + dotted secondary keys are exposed
+        assert {"bb", "bb.value", "bb.upper", "bb.lower"} <= set(series)
+        assert series["bb"] == [10.0, 20.0, 30.0]  # primary "value" series
+        assert series["bb.upper"] == [15.0, 25.0, 35.0]
+
+    @pytest.mark.asyncio
+    async def test_evaluate_matches_evaluate_with_series_decisions(self):
+        closes = [90.0, 95.0, 105.0, 110.0]
+        bars = [SimpleNamespace(close=c, timestamp=None) for c in closes]
+        result_points = [SimpleNamespace(value=c) for c in closes]
+
+        def _stub():
+            s = AsyncMock()
+            s.ComputeIndicator = AsyncMock(return_value=SimpleNamespace(result=result_points))
+            return s
+
+        definition = analysis_pb2.StrategyDefinition(
+            components=[_builtin(ref_name="fast")],
+            entry_rule=json.dumps({"fn": ">", "lhs": "fast", "rhs": 100}),
+            exit_rule=json.dumps({"fn": "<", "lhs": "fast", "rhs": 100}),
+        )
+        # evaluate() must still return a bare list, identical to evaluate_with_series()[0]
+        list_only = await StrategyEvaluator(_stub(), ()).evaluate(definition, bars, None)
+        decisions, _series = await StrategyEvaluator(_stub(), ()).evaluate_with_series(
+            definition, bars, None
+        )
+        assert isinstance(list_only, list)
+        assert [(d.entry, d.exit, d.conviction) for d in list_only] == [
+            (d.entry, d.exit, d.conviction) for d in decisions
+        ]
+
+    @pytest.mark.asyncio
+    async def test_evaluate_with_series_empty_bars(self):
+        evaluator = StrategyEvaluator(AsyncMock(), propagation_meta=())
+        definition = analysis_pb2.StrategyDefinition(components=[_builtin()])
+        assert await evaluator.evaluate_with_series(definition, [], None) == ([], {})
+
+
+class TestReferencedRefs:
+    def test_collects_refs_from_nested_tree_dotted_collapsed(self):
+        rule = {
+            "op": "AND",
+            "conditions": [
+                {"fn": "crosses_above", "lhs": "sma_fast", "rhs": "sma_slow"},
+                {
+                    "op": "OR",
+                    "conditions": [
+                        {"fn": ">", "lhs": "bb.upper", "rhs": 100},  # numeric rhs skipped
+                        {"fn": "<", "lhs": "rsi", "rhs": "bb.lower"},  # dotted → base "bb"
+                    ],
+                },
+            ],
+        }
+        assert referenced_refs(rule) == {"sma_fast", "sma_slow", "bb", "rsi"}
+
+    def test_non_raising_on_unknown_ref_and_empty(self):
+        # unknown ref is NOT validated here (non-raising contract, unlike _validate_rule_refs)
+        assert referenced_refs({"fn": ">", "lhs": "not_a_component", "rhs": 1}) == {
+            "not_a_component"
+        }
+        assert referenced_refs(None) == set()
+        assert referenced_refs({}) == set()

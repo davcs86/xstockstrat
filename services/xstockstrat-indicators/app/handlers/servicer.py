@@ -222,6 +222,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         try:
             params_validation.validate_definitions(request.parameters)
             params_validation.validate_outputs(request.outputs)
+            if request.warmup_period < 0:
+                raise ValueError("warmup_period must be >= 0")
         except ValueError as e:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
             return
@@ -240,6 +242,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             input_schema=dict(request.input_schema),
             parameters=list(request.parameters),
             outputs=list(request.outputs),
+            warmup_period=request.warmup_period,
         )
         self._formulas[formula_id] = formula
         if self._repo is not None:
@@ -253,6 +256,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 input_schema=dict(request.input_schema),
                 parameters=param_dicts,
                 outputs=output_dicts,
+                warmup_period=request.warmup_period,
             )
         return indicators_pb2.RegisterFormulaResponse(formula_id=formula_id)
 
@@ -312,6 +316,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         try:
             params_validation.validate_definitions(request.parameters)
             params_validation.validate_outputs(request.outputs)
+            if request.warmup_period < 0:
+                raise ValueError("warmup_period must be >= 0")
         except ValueError as e:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
             return
@@ -323,6 +329,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             is_public=request.is_public,
             parameters=[MessageToDict(p) for p in request.parameters],
             outputs=[MessageToDict(o) for o in request.outputs],
+            warmup_period=request.warmup_period,
         )
         self._formulas.pop(request.formula_id, None)
         return indicators_pb2.UpdateFormulaResponse(formula=_row_to_formula(updated))
@@ -379,4 +386,5 @@ def _row_to_formula(row: dict) -> "indicators_pb2.FormulaDefinition":
             ParseDict(p, indicators_pb2.FormulaParameter()) for p in (row.get("parameters") or [])
         ],
         outputs=[ParseDict(o, indicators_pb2.FormulaOutput()) for o in (row.get("outputs") or [])],
+        warmup_period=row.get("warmup_period", 0) or 0,
     )
