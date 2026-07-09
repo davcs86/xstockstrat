@@ -119,16 +119,20 @@ formula series); 3d range cap + config key (over-cap→INVALID_ARGUMENT, at-cap 
 
 ## Open Risks
 
-- [ ] `vwap` presence heuristic — `Bar.vwap` is a proto3 scalar (no presence); "carries it" is
-      approximated as `vwap != 0`, mislabeling a genuine `0.0` as absent. Decide at **step 3b** whether
-      to accept the heuristic or make FR-2 `optional double vwap`.
-- [ ] All-`None` formula primary series would push `warmup_bars` to `len(bars)` → `ENTIRE_RANGE_WARMUP`
-      instead of `ENTRY_NEVER_TRUE`. Mitigation (adopt at **step 3c**): custom-formula components always
-      use the **declared** `warmup_period`, never the observed series; test an all-`None` formula.
-- [ ] The `bar.time` fix also rewrites existing `TradeRecord` entry/exit times; MagicMock tests that
-      assert on `.timestamp` need a **real `Bar` fixture** — address at **step 3b**.
-- [ ] Range-unset defaulting changes the agent's currently range-less backtest coverage (now bounded to
-      the last `max_range_days`). Acceptable per the "cap all backtests" objective; verify at **step 3d**.
+All four risks were resolved into concrete impl-spec steps at `/sdd-spec` (no longer open):
+
+- [x] `vwap` presence — **RESOLVED (impl Step 8)**: `BarDiagnostic.vwap` is a plain scalar (not in the
+      presence-sensitive `indicators` map), so it is **always copied** from `bar.vwap` with no heuristic
+      — a `0.0` honestly means the source carried no vwap. No mislabeling; no `optional double vwap`.
+- [x] All-`None` formula series → `ENTIRE_RANGE_WARMUP` mislabel — **RESOLVED (impl Step 10/11)**:
+      custom-formula components always use the **declared** `warmup_period` (via `GetFormula`), never the
+      observed series; Step 11 tests an all-`None` formula.
+- [x] `bar.time` fix also rewrites existing `TradeRecord` times — **RESOLVED (impl Step 9)**: the paired
+      test mandates **real `marketdata_pb2.Bar` fixtures** (not `MagicMock`) so the fix and corrected
+      `TradeRecord` times are actually asserted.
+- [x] Range-unset defaulting changes the agent's range-less coverage — **RESOLVED (impl Step 12/13)**:
+      unset bounds default to the last `max_range_days` (end→now, start→end−cap), bounding all backtests;
+      Step 13 asserts it.
 
 ## Constitution Rules Touched
 

@@ -132,4 +132,50 @@ User: "oq-1. Option C. Include in the scope to make custom formulas to set a war
 - `bar.time` fix rewrites existing `TradeRecord` times → real `Bar` fixture (**step 3b**).
 - Range-unset defaulting changes agent's range-less coverage → verify (**step 3d**).
 
+## Session 2026-07-09 — sdd-spec
+
+- Generated implementation-spec.md with **17 steps**. Status → `implementation-ready`.
+- Consumed recon.md + design.md; spot-verified all load-bearing evidence against the live tree
+  (no invented refs — C-01/F-04).
+- Step map: 1 proto, 2 proto-gen, 3 migration, 4–5 indicators (service+test), 6–13 analysis
+  (four service/test pairs: `evaluate_with_series`+`referenced_refs`; diagnostics+`bar.time`;
+  warm-up+`no_trade_reason`; range-cap+config), 14–15 ui (service+e2e), 16–17 agent (service+test).
+  Every non-frontend service step has a paired red-before-green test step (C-08/P-06).
+- Key codebase findings (confirmed this session):
+  - Proto field numbers free & assigned: `analysis.proto` `BacktestResult` max = `coverage_gaps=13`
+    (`:67`) → `diagnostics=14`; `indicators.proto` `FormulaDefinition` max=11 → `warmup_period=12`,
+    `RegisterFormulaRequest`/`UpdateFormulaRequest` max=8 → `warmup_period=9`/`9`. `Bar.volume` is
+    `int64` (`marketdata.proto:51`) → `BarDiagnostic.volume` typed `int64`.
+  - Indicators last migration is `003_formula_outputs` → next is **004** (F-01); repos
+    `create`/`upsert`/`update` use `SELECT *`/`RETURNING *` so the new scalar column auto-flows; only
+    `_row_to_formula` (`servicer.py:343`) needs explicit mapping.
+  - **Confirmed the latent `bar.timestamp` bug**: analysis `servicer.py` reads `bar.timestamp` at
+    `:489/:499/:530/:601/:608/:637` but the marketdata `Bar` field is `time` (`marketdata.proto:46`);
+    tests pass only because bars are MagicMock → Step 8 fixes all six + Step 9 mandates a real `Bar`
+    fixture.
+  - `evaluate()` (`evaluator.py:74`) returns `list[BarDecision]`, sole hot caller `live_loop.py:119`
+    uses `decisions[-1]` → additive `evaluate_with_series()` sibling (insights.md pattern), no
+    contract widening.
+  - UI has the shared shadcn `Table` (`ui/table.tsx:4`) and `FormulaWorkspace` single-source form
+    (`FormulaWorkspace.tsx:46`); `package.json` has NO virtualization dep → `@tanstack/react-virtual`
+    is a new dependency (Step 14).
+  - Agent `client.run_backtest` (`client.py:138`) hand-builds a 7-field dict dropping
+    trades/status/coverage_gaps; `MessageToDict` already imported (`:12`) and used by siblings
+    (`:294+`) → switch to `MessageToDict(resp, preserving_proto_field_name=True)` (Step 16).
+- Open Risks routed into steps: `vwap != 0` heuristic accepted at Step 8 (deviation-logged);
+  all-`None` formula uses declared `warmup_period` at Step 10; real `Bar` fixture at Step 9;
+  range-unset defaulting verified at Step 13.
+
+### Post-spec — open risks fixed (user: "fix the open risks in the meantime")
+
+All four design.md Open Risks upgraded from routed-to-step to **resolved**; design.md Open Risks now `[x]`:
+- **vwap** — *improved beyond the spec's "accept the heuristic":* `BarDiagnostic.vwap` is a plain scalar
+  (not in the presence-sensitive `indicators` map), so Step 8 now **always copies** `bar.vwap` with no
+  presence heuristic (0.0 = source carried none). Risk eliminated, not accepted.
+- **all-`None` formula** — declared `warmup_period` only (Step 10/11); tested.
+- **`bar.time` fix** — real `marketdata_pb2.Bar` fixtures mandated (Step 9); asserts the fix + corrected
+  `TradeRecord` times.
+- **range-unset** — defaults to last `max_range_days` (Step 12/13); tested.
+
+Next: `/sdd-review backtest-debug-info impl-spec`.
 
