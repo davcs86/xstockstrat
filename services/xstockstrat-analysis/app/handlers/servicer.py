@@ -221,6 +221,32 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     )
                     return
 
+        # feature 064 (FR-4b): cap every backtest to `analysis.backtest.max_range_days` (~2 years).
+        # Both bounds set + span over the cap → reject (reproducibility, not silent clamp). An unset
+        # bound (e.g. the agent sends no range) is defaulted so ALL backtests stay bounded.
+        max_range_days = self._cfg.get_int("analysis.backtest.max_range_days", 730)
+        cap_seconds = max_range_days * 86_400
+        start_set = request.range.start.seconds > 0
+        end_set = request.range.end.seconds > 0
+        if start_set and end_set:
+            span_seconds = request.range.end.seconds - request.range.start.seconds
+            if span_seconds > cap_seconds:
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    f"backtest range span {span_seconds // 86_400} days exceeds the "
+                    f"{max_range_days}-day (~2 year) maximum",
+                )
+                return
+        else:
+            now_ts = Timestamp()
+            now_ts.GetCurrentTime()
+            end_sec = request.range.end.seconds if end_set else now_ts.seconds
+            start_sec = request.range.start.seconds if start_set else max(end_sec - cap_seconds, 0)
+            request.range.start.seconds = start_sec
+            request.range.start.nanos = 0
+            request.range.end.seconds = end_sec
+            request.range.end.nanos = 0
+
         all_trades: list[analysis_pb2.TradeRecord] = []
         equity = float(request.initial_capital) if request.initial_capital > 0 else 100_000.0
         initial_equity = equity

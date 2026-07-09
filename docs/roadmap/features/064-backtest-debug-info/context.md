@@ -263,3 +263,12 @@ Next: `/sdd-execute backtest-debug-info sequential` on the `feature/backtest-deb
 - Files: `app/handlers/servicer.py`, `tests/test_analysis_servicer.py`
 - TDD: RED (5 diagnostics tests fail, servicer reverted) → GREEN (152 pass, ruff clean, cov 75% ≥ 40).
 - Deviations: Steps 8-11 combined into one PR (tightly coupled); tests in servicer file. See Deviation Log.
+
+### Steps 12–13 — 2-year range cap + config key [done]
+- RunBacktest reads `analysis.backtest.max_range_days` (self._cfg.get_int, default 730). Both bounds set
+  + span over cap → INVALID_ARGUMENT (reject, not clamp). Unset bound → defaulted (end→now,
+  start→end−cap) so all backtests (incl. the range-less agent call) stay bounded.
+- Config key declared in analysis/CLAUDE.md + root CLAUDE.md recently-added-keys.
+- Files: `app/handlers/servicer.py`, `services/xstockstrat-analysis/CLAUDE.md`, `CLAUDE.md`, `tests/test_analysis_servicer.py`
+- TDD: RED (over-cap runs / unset not defaulted) → GREEN (3 pass; full suite green, cov ≥ 40).
+- Deviations: none.

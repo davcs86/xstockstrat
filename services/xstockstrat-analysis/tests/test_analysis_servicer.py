@@ -25,6 +25,7 @@ def make_servicer() -> AnalysisServicer:
     # Make get_float return the default argument (mirrors real watcher behaviour)
     cfg.get_float = MagicMock(side_effect=lambda key, default=0.0: default)
     cfg.get_str = MagicMock(side_effect=lambda key, default="": default)
+    cfg.get_int = MagicMock(side_effect=lambda key, default=0: default)
     return AnalysisServicer(
         cfg,
         marketdata_channel=MagicMock(),
@@ -1037,3 +1038,60 @@ class TestBacktestDiagnostics:
         assert result.total_trades == 0
         assert sd.no_trade_reason == analysis_pb2.NO_TRADE_REASON_ENTRY_NEVER_TRUE
         svc._indicators.GetFormula.assert_awaited()
+
+
+class TestBacktestRangeCap:
+    def _svc(self):
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._marketdata = MagicMock()
+        # enough bars so the legacy path runs (>= slow_period(3)+2); values irrelevant here
+        svc._marketdata.GetBars = AsyncMock(
+            return_value=SimpleNamespace(bars=[_bar(1000 + i, 10) for i in range(6)])
+        )
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            side_effect=lambda *a, **k: _points([0, 9, 10, 11, 12, 13])
+        )
+        return svc
+
+    def _req(self, start_sec, end_sec):
+        req = analysis_pb2.RunBacktestRequest(
+            strategy_id="s1", symbols=["AAPL"], initial_capital=100_000.0
+        )
+        req.strategy_params.update({"fast_period": 2, "slow_period": 3})
+        if start_sec is not None:
+            req.range.start.seconds = start_sec
+        if end_sec is not None:
+            req.range.end.seconds = end_sec
+        return req
+
+    @pytest.mark.asyncio
+    async def test_over_cap_range_rejected(self):
+        # span 800 days > 730-day cap → INVALID_ARGUMENT (AC-7)
+        svc = self._svc()
+        ctx = MagicMock()
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        req = self._req(1, 800 * 86_400)
+        with pytest.raises(Exception):
+            await svc.RunBacktest(req, ctx)
+        assert ctx.abort.await_args.args[0].name == "INVALID_ARGUMENT"
+
+    @pytest.mark.asyncio
+    async def test_at_cap_range_runs(self):
+        svc = self._svc()
+        req = self._req(1, 700 * 86_400)  # 700 days < 730 cap
+        result = await svc.RunBacktest(req, MagicMock())
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK
+
+    @pytest.mark.asyncio
+    async def test_unset_range_defaulted_to_cap_window(self):
+        svc = self._svc()
+        req = self._req(None, None)  # both unset (agent case)
+        result = await svc.RunBacktest(req, MagicMock())
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK
+        # the range was defaulted in place to a ~730-day window ending "now"
+        span = req.range.end.seconds - req.range.start.seconds
+        assert span == 730 * 86_400
+        assert req.range.end.seconds > 0

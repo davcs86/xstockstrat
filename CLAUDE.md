@@ -210,6 +210,12 @@ Recently added keys (Alpaca API compliance audit — PR #699 "Audit and fix Alpa
 |---|---|---|---|
 | `marketdata.alpaca.adjustment` | string | `all` | Corporate-action adjustment for historical bars (`raw`/`split`/`dividend`/`all`); sent as `adjustment=` on every Alpaca bars request so splits/dividends do not distort backtest OHLCV. |
 
+Recently added keys (feature 064 — backtest debug diagnostics, owned by `xstockstrat-analysis`):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.backtest.max_range_days` | int | `730` | Max backtest range span in days (≈2 years). A `RunBacktest` whose `range` exceeds it is rejected with `INVALID_ARGUMENT`; an unset bound is defaulted to the last `max_range_days`. Applies to all callers. Bounds the always-included per-bar diagnostics to ~504 rows/symbol. |
+
 ---
 
 ## Environment Variable Naming Convention

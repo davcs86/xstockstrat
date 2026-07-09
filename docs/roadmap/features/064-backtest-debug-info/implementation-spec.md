@@ -511,7 +511,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
 
 ### Step 12 — config + service: analysis.backtest.max_range_days 2-year cap
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -560,7 +560,7 @@ grep -n "analysis.backtest.max_range_days" services/xstockstrat-analysis/CLAUDE.
 
 ### Step 13 — test: range cap reject / at-cap / unset-defaulting
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
