@@ -178,7 +178,7 @@ psql "$DATABASE_URL" -c "\d+ indicators.formulas" | grep warmup_period
 
 ### Step 4 — service: indicators warmup_period plumbing + validation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/handlers/servicer.py` — modify
@@ -217,7 +217,7 @@ no side-effects, numeric precision.
 
 ### Step 5 — test: indicators warmup_period round-trip + validation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_formulas.py` — modify

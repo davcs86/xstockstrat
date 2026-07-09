@@ -228,3 +228,13 @@ Next: `/sdd-execute backtest-debug-info sequential` on the `feature/backtest-deb
   drops it (0 cols); re-up clean. Deviation Log: CI-equivalent fallback (no golang-migrate on host).
 - Deviations: verification via postgres:16 container + psql instead of ./scripts/db-migrate.sh (host has
   no `migrate` binary / running DB); SQL and behavior identical.
+
+### Steps 4–5 — indicators warmup_period plumbing + test [done]
+- Step 4: RegisterFormula/UpdateFormula read `request.warmup_period`, reject `<0` with INVALID_ARGUMENT
+  (reusing the existing validation try/abort), pass it to repo create/upsert/update ($10 / $8 binding),
+  and `_row_to_formula` maps `warmup_period`. Mirrors the `is_public`/`outputs` scalar-column pattern.
+- Step 5: added `TestFormulaWarmupPeriod` — repo round-trip (binding + decode), servicer register→get
+  round-trip, default-0 backward compat, and negative-value INVALID_ARGUMENT on both Register and Update.
+- Files: `app/handlers/servicer.py`, `app/services/formulas_repository.py`, `tests/test_formulas.py`
+- TDD: RED captured (5/6 fail with Step-4 code stashed) → GREEN (95 pass, ruff clean, cov 79.4% ≥ 50).
+- Deviations: none. (Combined the service+test pair into one stacked PR — red-green needs both together.)

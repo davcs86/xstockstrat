@@ -494,3 +494,114 @@ class TestFormulaAdminOverride:
         with pytest.raises(Exception):
             await servicer.DeleteFormula(req, ctx)
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+
+
+# ---------------------------------------------------------------------------
+# Custom-formula warm-up period (feature 064-backtest-debug-info)
+# ---------------------------------------------------------------------------
+
+
+class TestFormulaWarmupPeriod:
+    def _servicer(self):
+        return IndicatorsServicer(config_watcher=MagicMock())
+
+    async def test_create_round_trips_warmup_period(self):
+        pool = MagicMock()
+        pool.fetchrow = AsyncMock(
+            return_value={
+                "formula_id": "11111111-1111-1111-1111-111111111111",
+                "name": "F",
+                "input_schema": "{}",
+                "warmup_period": 14,
+            }
+        )
+        repo = FormulasRepository(pool)
+        result = await repo.create(
+            formula_id="11111111-1111-1111-1111-111111111111",
+            name="F",
+            description="",
+            source="x = 1",
+            author="u",
+            is_public=False,
+            input_schema={},
+            warmup_period=14,
+        )
+        # warmup_period is bound as the 10th positional arg to the INSERT
+        assert pool.fetchrow.await_args.args[-1] == 14
+        assert result["warmup_period"] == 14
+
+    async def test_register_get_round_trips_warmup_period(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = self._servicer()  # in-memory path
+        req = indicators_pb2.RegisterFormulaRequest(
+            name="f", source="x = 1", author="u", warmup_period=14
+        )
+        resp = await servicer.RegisterFormula(req, _ctx([("x-user-id", "u")]))
+        got = await servicer.GetFormula(
+            indicators_pb2.GetFormulaRequest(formula_id=resp.formula_id), MagicMock()
+        )
+        assert got.warmup_period == 14
+
+    async def test_warmup_period_defaults_to_zero(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = self._servicer()
+        req = indicators_pb2.RegisterFormulaRequest(name="f", source="x = 1", author="u")
+        resp = await servicer.RegisterFormula(req, _ctx([("x-user-id", "u")]))
+        assert servicer._formulas[resp.formula_id].warmup_period == 0
+
+    async def test_register_rejects_negative_warmup_period(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = self._servicer()
+        req = indicators_pb2.RegisterFormulaRequest(
+            name="f", source="x = 1", author="u", warmup_period=-1
+        )
+        ctx = _ctx([("x-user-id", "u")])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.RegisterFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+
+    async def test_update_rejects_negative_warmup_period(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = _repo_servicer("u")
+        req = indicators_pb2.UpdateFormulaRequest(
+            formula_id="f", user_id="u", name="n", source="x = 1", warmup_period=-1
+        )
+        ctx = MagicMock()
+        ctx.invocation_metadata = MagicMock(return_value=[])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.UpdateFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+
+    async def test_update_round_trips_warmup_period(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=MagicMock())
+        repo = MagicMock()
+        repo.get_by_id = AsyncMock(return_value={"author": "u"})
+        repo.update = AsyncMock(
+            return_value={
+                "formula_id": "f",
+                "name": "n",
+                "description": "",
+                "source": "x = 1",
+                "author": "u",
+                "is_public": False,
+                "input_schema": {},
+                "warmup_period": 21,
+            }
+        )
+        servicer._repo = repo
+        req = indicators_pb2.UpdateFormulaRequest(
+            formula_id="f", user_id="u", name="n", source="x = 1", warmup_period=21
+        )
+        ctx = MagicMock()
+        ctx.invocation_metadata = MagicMock(return_value=[])
+        resp = await servicer.UpdateFormula(req, ctx)
+        assert repo.update.await_args.kwargs["warmup_period"] == 21
+        assert resp.formula.warmup_period == 21
