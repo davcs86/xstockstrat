@@ -272,3 +272,11 @@ Next: `/sdd-execute backtest-debug-info sequential` on the `feature/backtest-deb
 - Files: `app/handlers/servicer.py`, `services/xstockstrat-analysis/CLAUDE.md`, `CLAUDE.md`, `tests/test_analysis_servicer.py`
 - TDD: RED (over-cap runs / unset not defaulted) → GREEN (3 pass; full suite green, cov ≥ 40).
 - Deviations: none.
+
+### Steps 16–17 — agent run_backtest includes diagnostics [done]
+- client.run_backtest now returns MessageToDict(resp, preserving_proto_field_name=True,
+  always_print_fields_with_no_presence=True) — full result incl. per-bar diagnostics, snake_case keys,
+  zero-valued metrics preserved (the 0-trades case), readable enum names. Tool docstring updated.
+- Files: `app/client.py`, `app/tools.py`, `tests/test_tools.py`
+- TDD: RED (KeyError, diagnostics absent) → GREEN (50 pass, ruff clean, cov 61% ≥ 40).
+- protobuf 6.33.6 → kwarg is `always_print_fields_with_no_presence` (not the old including_default_value_fields).

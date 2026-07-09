@@ -682,7 +682,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e
 
 ### Step 16 — service: agent run_backtest MessageToDict projection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -717,7 +717,7 @@ governs the RunBacktest contract this step surfaces.)
 
 ### Step 17 — test: agent run_backtest projection includes diagnostics
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify

@@ -1,7 +1,7 @@
 """Tests for app/tools.py — all six MCP tool definitions."""
 
 import base64
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -426,3 +426,51 @@ class TestSetStrategyLiveTool:
         assert result == returned
         assert m.call_args.kwargs["strategy_id"] == "s1"
         assert m.call_args.kwargs["live_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_backtest_projects_full_result_with_diagnostics():
+    """feature 064: client.run_backtest returns the full result (snake_case keys, zero-valued
+    metrics preserved, per-bar diagnostics with readable enum names)."""
+    from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc
+
+    result = analysis_pb2.BacktestResult(
+        backtest_id="bt-9", strategy_id="s", total_return=0.0, total_trades=0
+    )
+    sd = result.diagnostics.add()
+    sd.symbol = "AAPL"
+    sd.no_trade_reason = analysis_pb2.NO_TRADE_REASON_ENTRY_NEVER_TRUE
+    bar = sd.bars.add()
+    bar.symbol = "AAPL"
+    bar.bar_index = 0
+    bar.close = 10.0
+    bar.warmup = True
+    bar.action = analysis_pb2.BAR_ACTION_WARMUP
+
+    class _Chan:
+        async def __aenter__(self):
+            return MagicMock()
+
+        async def __aexit__(self, *a):
+            return False
+
+    stub = MagicMock()
+    stub.RunBacktest = AsyncMock(return_value=result)
+    with (
+        patch.object(client.grpc.aio, "insecure_channel", return_value=_Chan()),
+        patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=stub),
+    ):
+        out = await client.run_backtest(
+            strategy_id="s", symbols=["AAPL"], initial_capital=100000.0
+        )
+
+    assert out["backtest_id"] == "bt-9"
+    # zero-valued metrics stay present (the "0 trades / 0% return" debugging case)
+    assert out["total_return"] == 0.0
+    assert out["total_trades"] == 0
+    # per-bar diagnostics surfaced with snake_case keys + readable enum names
+    diag = out["diagnostics"][0]
+    assert diag["symbol"] == "AAPL"
+    assert diag["no_trade_reason"] == "NO_TRADE_REASON_ENTRY_NEVER_TRUE"
+    assert diag["bars"][0]["action"] == "BAR_ACTION_WARMUP"
+    assert diag["bars"][0]["bar_index"] == 0
