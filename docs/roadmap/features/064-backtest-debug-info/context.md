@@ -280,3 +280,18 @@ Next: `/sdd-execute backtest-debug-info sequential` on the `feature/backtest-deb
 - Files: `app/client.py`, `app/tools.py`, `tests/test_tools.py`
 - TDD: RED (KeyError, diagnostics absent) → GREEN (50 pass, ruff clean, cov 61% ≥ 40).
 - protobuf 6.33.6 → kwarg is `always_print_fields_with_no_presence` (not the old including_default_value_fields).
+
+### Steps 14–15 — UI virtualized debug table + date cap + formula warm-up input [done]
+- New `BacktestDiagnostics` component: per-symbol card with the no-trade reason + a `@tanstack/react-virtual`
+  virtualized day-by-day table (date, close, volume, dynamic indicator columns, warm-up, action, conviction).
+  Rendered below the equity curve on the strategy page. Date pickers capped to a 2-year span (min/max).
+- `FormulaWorkspace` gains a "Warm-up period (bars)" numeric input, threaded through `useFormulas`
+  register/update payloads; edit page pre-fills `initialWarmupPeriod`.
+- Added dep `@tanstack/react-virtual@^3.10.0` (pnpm-lock.yaml updated).
+- Files: `src/components/insights/BacktestDiagnostics.tsx` (new), `src/app/insights/strategies/[id]/page.tsx`,
+  `src/components/insights/FormulaWorkspace.tsx`, `src/app/insights/formulas/{new,[id]}/page.tsx`,
+  `src/hooks/useFormulas.ts`, `e2e/mock-backend.ts`, `e2e/insights/backtest-coverage.spec.ts`, `package.json`.
+- Verification: tsc --noEmit ✓, next lint ✓ (CI-equivalent fallback — pinned Playwright browsers absent;
+  e2e test + mock branch committed for CI). Deviation logged.
+- Used a virtualized div-grid (not shadcn `<Table>`) because row virtualization needs absolute positioning
+  incompatible with native table layout; keeps semantic header/cells + a11y count.

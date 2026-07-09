@@ -590,7 +590,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
 
 ### Step 14 — service: UI debug table + date-picker cap + formula warm-up input
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` — modify
@@ -649,7 +649,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run build
 
 ### Step 15 — test: UI e2e debug table + date cap + formula warm-up
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts` — modify
