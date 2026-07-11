@@ -495,8 +495,61 @@ export async function startMockBackend(): Promise<void> {
           };
         },
         async getStrategyReport(req) {
+          if (req.strategyId === 'strat-history-001') {
+            // A strategy with a persisted score (the run-history rows come from ListBacktests).
+            return {
+              strategyId: req.strategyId,
+              score: {
+                strategyId: req.strategyId,
+                overallScore: 0.72,
+                rating: 'B',
+                componentScores: { sharpe: 0.75, drawdown: 0.7, win_rate: 0.6 },
+              },
+            };
+          }
           // No prior backtest — the page falls back to the run-backtest flow above.
           return { strategyId: req.strategyId };
+        },
+        async listBacktests(req) {
+          if (req.strategyId === 'strat-history-001') {
+            return {
+              runs: [
+                {
+                  backtestId: 'bt-hist-2',
+                  strategyId: req.strategyId,
+                  status: 1, // BACKTEST_STATUS_OK
+                  totalReturn: 0.15,
+                  annualizedReturn: 0.12,
+                  sharpeRatio: 1.6,
+                  maxDrawdown: 0.08,
+                  winRate: 0.62,
+                  totalTrades: 5,
+                  profitFactor: 1.4,
+                  symbols: ['AAPL'],
+                  overallScore: 0.72,
+                  rating: 'B',
+                  completedAt: { seconds: BigInt(1717286400), nanos: 0 }, // 2024-06-02
+                },
+                {
+                  backtestId: 'bt-hist-1',
+                  strategyId: req.strategyId,
+                  status: 1,
+                  totalReturn: -0.03,
+                  annualizedReturn: -0.02,
+                  sharpeRatio: 0.4,
+                  maxDrawdown: 0.2,
+                  winRate: 0.45,
+                  totalTrades: 3,
+                  profitFactor: 0.9,
+                  symbols: ['MSFT'],
+                  overallScore: 0.41,
+                  rating: 'D',
+                  completedAt: { seconds: BigInt(1717200000), nanos: 0 }, // 2024-06-01
+                },
+              ],
+            };
+          }
+          return { runs: [] };
         },
         // Feature 060: deterministic ranked screen result — 3 results, score-ordered,
         // one with INSUFFICIENT_DATA + a coverage gap.

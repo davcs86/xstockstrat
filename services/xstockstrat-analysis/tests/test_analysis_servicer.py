@@ -282,6 +282,174 @@ class TestGetStrategyReport:
 
 
 # ---------------------------------------------------------------------------
+# RunBacktest auto-scoring + run-history persistence
+# ---------------------------------------------------------------------------
+
+
+class TestRunBacktestPersistence:
+    def _empty_req(self, strategy_id="s1", symbols=None):
+        req = MagicMock()
+        req.strategy_id = strategy_id
+        req.symbols = symbols if symbols is not None else []
+        req.initial_capital = 100_000.0
+        req.strategy_id_ref = ""
+        req.HasField = MagicMock(return_value=False)
+        req.range = common_pb2.TimeRange()
+        return req
+
+    @pytest.mark.asyncio
+    async def test_ok_run_scores_and_persists_score(self):
+        """An OK backtest auto-scores the strategy so the score is persisted without a
+        separate ScoreStrategy call (fixes 'strategy score is not persisted')."""
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._scores_repo = AsyncMock()
+
+        result = await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK
+        # In-memory serving dict now carries a score for the strategy…
+        assert "s1" in svc._strategies
+        assert svc._strategies["s1"].rating in ("A", "B", "C", "D", "F")
+        # …and it was durably upserted.
+        svc._scores_repo.upsert.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_ok_run_appends_history_row(self):
+        """Every OK run is appended to the durable history table with its score."""
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_runs_repo = AsyncMock()
+
+        result = await svc.RunBacktest(self._empty_req("s1", ["AAPL"]), context=MagicMock())
+
+        svc._backtest_runs_repo.insert.assert_awaited_once()
+        kwargs = svc._backtest_runs_repo.insert.await_args.kwargs
+        assert kwargs["backtest_id"] == result.backtest_id
+        assert kwargs["strategy_id"] == "s1"
+        assert kwargs["status"] == "BACKTEST_STATUS_OK"
+        assert kwargs["symbols"] == ["AAPL"]
+        assert kwargs["overall_score"] is not None
+        assert kwargs["rating"] in ("A", "B", "C", "D", "F")
+
+    @pytest.mark.asyncio
+    async def test_insufficient_run_records_history_without_score(self):
+        """An INSUFFICIENT_DATA run is still recorded in history, but earns no score."""
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._scores_repo = AsyncMock()
+        svc._backtest_runs_repo = AsyncMock()
+        bars_resp = MagicMock()
+        bars_resp.bars = [MagicMock(), MagicMock(), MagicMock()]  # too few → INSUFFICIENT_DATA
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
+
+        req = self._empty_req("s1", ["AAPL"])
+        result = await svc.RunBacktest(req, context=MagicMock())
+
+        assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
+        svc._scores_repo.upsert.assert_not_awaited()  # no score for an unusable run
+        svc._backtest_runs_repo.insert.assert_awaited_once()
+        kwargs = svc._backtest_runs_repo.insert.await_args.kwargs
+        assert kwargs["status"] == "BACKTEST_STATUS_INSUFFICIENT_DATA"
+        assert kwargs["overall_score"] is None
+        assert kwargs["rating"] is None
+
+    @pytest.mark.asyncio
+    async def test_score_persist_failure_never_fails_run(self):
+        """A DB error while persisting the score/history is swallowed — the run still returns."""
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._scores_repo = AsyncMock()
+        svc._scores_repo.upsert = AsyncMock(side_effect=Exception("db down"))
+        svc._backtest_runs_repo = AsyncMock()
+        svc._backtest_runs_repo.insert = AsyncMock(side_effect=Exception("db down"))
+
+        result = await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+        assert result.strategy_id == "s1"
+
+
+class TestListBacktests:
+    def _row(self, backtest_id="bt-1", status="BACKTEST_STATUS_OK", overall=0.72, rating="B"):
+        return {
+            "backtest_id": backtest_id,
+            "strategy_id": "s1",
+            "status": status,
+            "completed_at": None,
+            "symbols": ["AAPL"],
+            "total_return": 0.12,
+            "annualized_return": 0.1,
+            "sharpe_ratio": 1.5,
+            "max_drawdown": 0.08,
+            "win_rate": 0.6,
+            "total_trades": 4,
+            "profit_factor": 1.3,
+            "overall_score": overall,
+            "rating": rating,
+        }
+
+    @pytest.mark.asyncio
+    async def test_returns_typed_summaries(self):
+        svc = make_servicer()
+        svc._backtest_runs_repo = AsyncMock()
+        svc._backtest_runs_repo.list_by_strategy = AsyncMock(
+            return_value=[self._row("bt-2"), self._row("bt-1")]
+        )
+        req = MagicMock()
+        req.strategy_id = "s1"
+        req.limit = 0  # → server default
+        resp = await svc.ListBacktests(req, context=MagicMock())
+
+        assert [r.backtest_id for r in resp.runs] == ["bt-2", "bt-1"]
+        assert resp.runs[0].status == analysis_pb2.BACKTEST_STATUS_OK
+        assert resp.runs[0].rating == "B"
+        assert resp.runs[0].symbols == ["AAPL"]
+        # limit 0 defaults to 20 at the servicer.
+        assert svc._backtest_runs_repo.list_by_strategy.await_args.kwargs["limit"] == 20
+
+    @pytest.mark.asyncio
+    async def test_honours_explicit_limit(self):
+        svc = make_servicer()
+        svc._backtest_runs_repo = AsyncMock()
+        svc._backtest_runs_repo.list_by_strategy = AsyncMock(return_value=[])
+        req = MagicMock()
+        req.strategy_id = "s1"
+        req.limit = 5
+        await svc.ListBacktests(req, context=MagicMock())
+        assert svc._backtest_runs_repo.list_by_strategy.await_args.kwargs["limit"] == 5
+
+    @pytest.mark.asyncio
+    async def test_insufficient_run_maps_to_zero_score(self):
+        svc = make_servicer()
+        svc._backtest_runs_repo = AsyncMock()
+        svc._backtest_runs_repo.list_by_strategy = AsyncMock(
+            return_value=[
+                self._row(status="BACKTEST_STATUS_INSUFFICIENT_DATA", overall=None, rating=None)
+            ]
+        )
+        req = MagicMock()
+        req.strategy_id = "s1"
+        req.limit = 0
+        resp = await svc.ListBacktests(req, context=MagicMock())
+        assert resp.runs[0].status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
+        assert resp.runs[0].overall_score == 0.0
+        assert resp.runs[0].rating == ""
+
+    @pytest.mark.asyncio
+    async def test_no_repo_returns_empty(self):
+        svc = make_servicer()  # no DB → _backtest_runs_repo is None
+        req = MagicMock()
+        req.strategy_id = "s1"
+        req.limit = 0
+        resp = await svc.ListBacktests(req, context=MagicMock())
+        assert list(resp.runs) == []
+
+
+# ---------------------------------------------------------------------------
 # ConfigWatcher getters (same _StubWatcher pattern as ingest)
 # ---------------------------------------------------------------------------
 

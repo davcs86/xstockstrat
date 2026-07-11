@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BacktestResult, FundamentalsScanSummary, GetStrategyReportRequest, GetStrategyRequest, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
+import { BacktestResult, FundamentalsScanSummary, GetStrategyReportRequest, GetStrategyRequest, ListBacktestsRequest, ListBacktestsResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -46,6 +46,17 @@ export const AnalysisService = {
       name: "GetStrategyReport",
       I: GetStrategyReportRequest,
       O: StrategyReport,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * List past backtest runs (summary metrics + earned score) for a strategy, newest first.
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ListBacktests
+     */
+    listBacktests: {
+      name: "ListBacktests",
+      I: ListBacktestsRequest,
+      O: ListBacktestsResponse,
       kind: MethodKind.Unary,
     },
     /**
