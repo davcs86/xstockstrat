@@ -13,6 +13,8 @@ service AnalysisService {
   rpc ScoreStrategy(ScoreStrategyRequest) returns (StrategyScore);
   rpc ListStrategies(ListStrategiesRequest) returns (ListStrategiesResponse);
   rpc GetStrategyReport(GetStrategyReportRequest) returns (StrategyReport);
+  // List past backtest runs (summary metrics + earned score) for a strategy, newest first.
+  rpc ListBacktests(ListBacktestsRequest) returns (ListBacktestsResponse);
   rpc ManageStrategy(ManageStrategyRequest) returns (StrategyDefinition);
   rpc GetStrategy(GetStrategyRequest) returns (StrategyDefinition);
   rpc ListStrategyDefinitions(ListStrategyDefinitionsRequest) returns (ListStrategyDefinitionsResponse);
@@ -143,6 +145,36 @@ message StrategyReport {
   BacktestResult latest_backtest = 2;
   StrategyScore score = 3;
   google.protobuf.Struct metadata = 4;
+}
+
+// ── Backtest run history ─────────────────────────────────────────────────────
+// One summary row per completed RunBacktest, persisted so past runs survive a
+// restart (the full trades/diagnostics live only on the latest in-memory result).
+
+message ListBacktestsRequest {
+  string strategy_id = 1;
+  int32 limit = 2; // 0 → server default (most recent 20)
+}
+
+message BacktestRunSummary {
+  string backtest_id = 1;
+  string strategy_id = 2;
+  BacktestStatus status = 3;
+  double total_return = 4;
+  double annualized_return = 5;
+  double sharpe_ratio = 6;
+  double max_drawdown = 7;
+  double win_rate = 8;
+  int32 total_trades = 9;
+  double profit_factor = 10;
+  repeated string symbols = 11;
+  double overall_score = 12; // 0 when the run earned no score (e.g. INSUFFICIENT_DATA)
+  string rating = 13;        // "" when the run earned no score
+  google.protobuf.Timestamp completed_at = 14;
+}
+
+message ListBacktestsResponse {
+  repeated BacktestRunSummary runs = 1;
 }
 
 message ListStrategiesRequest {

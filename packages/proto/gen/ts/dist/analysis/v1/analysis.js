@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -2224,6 +2224,440 @@ exports.StrategyReport = {
         return message;
     },
 };
+function createBaseListBacktestsRequest() {
+    return { strategyId: "", limit: 0 };
+}
+exports.ListBacktestsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.strategyId !== "") {
+            writer.uint32(10).string(message.strategyId);
+        }
+        if (message.limit !== 0) {
+            writer.uint32(16).int32(message.limit);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListBacktestsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.limit = reader.int32();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+            limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        if (message.limit !== 0) {
+            obj.limit = Math.round(message.limit);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListBacktestsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListBacktestsRequest();
+        message.strategyId = object.strategyId ?? "";
+        message.limit = object.limit ?? 0;
+        return message;
+    },
+};
+function createBaseBacktestRunSummary() {
+    return {
+        backtestId: "",
+        strategyId: "",
+        status: BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
+        totalReturn: 0,
+        annualizedReturn: 0,
+        sharpeRatio: 0,
+        maxDrawdown: 0,
+        winRate: 0,
+        totalTrades: 0,
+        profitFactor: 0,
+        symbols: [],
+        overallScore: 0,
+        rating: "",
+        completedAt: undefined,
+    };
+}
+exports.BacktestRunSummary = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.backtestId !== "") {
+            writer.uint32(10).string(message.backtestId);
+        }
+        if (message.strategyId !== "") {
+            writer.uint32(18).string(message.strategyId);
+        }
+        if (message.status !== BacktestStatus.BACKTEST_STATUS_UNSPECIFIED) {
+            writer.uint32(24).int32(backtestStatusToNumber(message.status));
+        }
+        if (message.totalReturn !== 0) {
+            writer.uint32(33).double(message.totalReturn);
+        }
+        if (message.annualizedReturn !== 0) {
+            writer.uint32(41).double(message.annualizedReturn);
+        }
+        if (message.sharpeRatio !== 0) {
+            writer.uint32(49).double(message.sharpeRatio);
+        }
+        if (message.maxDrawdown !== 0) {
+            writer.uint32(57).double(message.maxDrawdown);
+        }
+        if (message.winRate !== 0) {
+            writer.uint32(65).double(message.winRate);
+        }
+        if (message.totalTrades !== 0) {
+            writer.uint32(72).int32(message.totalTrades);
+        }
+        if (message.profitFactor !== 0) {
+            writer.uint32(81).double(message.profitFactor);
+        }
+        for (const v of message.symbols) {
+            writer.uint32(90).string(v);
+        }
+        if (message.overallScore !== 0) {
+            writer.uint32(97).double(message.overallScore);
+        }
+        if (message.rating !== "") {
+            writer.uint32(106).string(message.rating);
+        }
+        if (message.completedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.completedAt), writer.uint32(114).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseBacktestRunSummary();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.backtestId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.status = backtestStatusFromJSON(reader.int32());
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 33) {
+                        break;
+                    }
+                    message.totalReturn = reader.double();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 41) {
+                        break;
+                    }
+                    message.annualizedReturn = reader.double();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 49) {
+                        break;
+                    }
+                    message.sharpeRatio = reader.double();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 57) {
+                        break;
+                    }
+                    message.maxDrawdown = reader.double();
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 65) {
+                        break;
+                    }
+                    message.winRate = reader.double();
+                    continue;
+                }
+                case 9: {
+                    if (tag !== 72) {
+                        break;
+                    }
+                    message.totalTrades = reader.int32();
+                    continue;
+                }
+                case 10: {
+                    if (tag !== 81) {
+                        break;
+                    }
+                    message.profitFactor = reader.double();
+                    continue;
+                }
+                case 11: {
+                    if (tag !== 90) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+                case 12: {
+                    if (tag !== 97) {
+                        break;
+                    }
+                    message.overallScore = reader.double();
+                    continue;
+                }
+                case 13: {
+                    if (tag !== 106) {
+                        break;
+                    }
+                    message.rating = reader.string();
+                    continue;
+                }
+                case 14: {
+                    if (tag !== 114) {
+                        break;
+                    }
+                    message.completedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            backtestId: isSet(object.backtestId)
+                ? globalThis.String(object.backtestId)
+                : isSet(object.backtest_id)
+                    ? globalThis.String(object.backtest_id)
+                    : "",
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+            status: isSet(object.status) ? backtestStatusFromJSON(object.status) : BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
+            totalReturn: isSet(object.totalReturn)
+                ? globalThis.Number(object.totalReturn)
+                : isSet(object.total_return)
+                    ? globalThis.Number(object.total_return)
+                    : 0,
+            annualizedReturn: isSet(object.annualizedReturn)
+                ? globalThis.Number(object.annualizedReturn)
+                : isSet(object.annualized_return)
+                    ? globalThis.Number(object.annualized_return)
+                    : 0,
+            sharpeRatio: isSet(object.sharpeRatio)
+                ? globalThis.Number(object.sharpeRatio)
+                : isSet(object.sharpe_ratio)
+                    ? globalThis.Number(object.sharpe_ratio)
+                    : 0,
+            maxDrawdown: isSet(object.maxDrawdown)
+                ? globalThis.Number(object.maxDrawdown)
+                : isSet(object.max_drawdown)
+                    ? globalThis.Number(object.max_drawdown)
+                    : 0,
+            winRate: isSet(object.winRate)
+                ? globalThis.Number(object.winRate)
+                : isSet(object.win_rate)
+                    ? globalThis.Number(object.win_rate)
+                    : 0,
+            totalTrades: isSet(object.totalTrades)
+                ? globalThis.Number(object.totalTrades)
+                : isSet(object.total_trades)
+                    ? globalThis.Number(object.total_trades)
+                    : 0,
+            profitFactor: isSet(object.profitFactor)
+                ? globalThis.Number(object.profitFactor)
+                : isSet(object.profit_factor)
+                    ? globalThis.Number(object.profit_factor)
+                    : 0,
+            symbols: globalThis.Array.isArray(object?.symbols)
+                ? object.symbols.map((e) => globalThis.String(e))
+                : [],
+            overallScore: isSet(object.overallScore)
+                ? globalThis.Number(object.overallScore)
+                : isSet(object.overall_score)
+                    ? globalThis.Number(object.overall_score)
+                    : 0,
+            rating: isSet(object.rating) ? globalThis.String(object.rating) : "",
+            completedAt: isSet(object.completedAt)
+                ? fromJsonTimestamp(object.completedAt)
+                : isSet(object.completed_at)
+                    ? fromJsonTimestamp(object.completed_at)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.backtestId !== "") {
+            obj.backtestId = message.backtestId;
+        }
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        if (message.status !== BacktestStatus.BACKTEST_STATUS_UNSPECIFIED) {
+            obj.status = backtestStatusToJSON(message.status);
+        }
+        if (message.totalReturn !== 0) {
+            obj.totalReturn = message.totalReturn;
+        }
+        if (message.annualizedReturn !== 0) {
+            obj.annualizedReturn = message.annualizedReturn;
+        }
+        if (message.sharpeRatio !== 0) {
+            obj.sharpeRatio = message.sharpeRatio;
+        }
+        if (message.maxDrawdown !== 0) {
+            obj.maxDrawdown = message.maxDrawdown;
+        }
+        if (message.winRate !== 0) {
+            obj.winRate = message.winRate;
+        }
+        if (message.totalTrades !== 0) {
+            obj.totalTrades = Math.round(message.totalTrades);
+        }
+        if (message.profitFactor !== 0) {
+            obj.profitFactor = message.profitFactor;
+        }
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        if (message.overallScore !== 0) {
+            obj.overallScore = message.overallScore;
+        }
+        if (message.rating !== "") {
+            obj.rating = message.rating;
+        }
+        if (message.completedAt !== undefined) {
+            obj.completedAt = message.completedAt.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.BacktestRunSummary.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseBacktestRunSummary();
+        message.backtestId = object.backtestId ?? "";
+        message.strategyId = object.strategyId ?? "";
+        message.status = object.status ?? BacktestStatus.BACKTEST_STATUS_UNSPECIFIED;
+        message.totalReturn = object.totalReturn ?? 0;
+        message.annualizedReturn = object.annualizedReturn ?? 0;
+        message.sharpeRatio = object.sharpeRatio ?? 0;
+        message.maxDrawdown = object.maxDrawdown ?? 0;
+        message.winRate = object.winRate ?? 0;
+        message.totalTrades = object.totalTrades ?? 0;
+        message.profitFactor = object.profitFactor ?? 0;
+        message.symbols = object.symbols?.map((e) => e) || [];
+        message.overallScore = object.overallScore ?? 0;
+        message.rating = object.rating ?? "";
+        message.completedAt = object.completedAt ?? undefined;
+        return message;
+    },
+};
+function createBaseListBacktestsResponse() {
+    return { runs: [] };
+}
+exports.ListBacktestsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.runs) {
+            exports.BacktestRunSummary.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListBacktestsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.runs.push(exports.BacktestRunSummary.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            runs: globalThis.Array.isArray(object?.runs) ? object.runs.map((e) => exports.BacktestRunSummary.fromJSON(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.runs?.length) {
+            obj.runs = message.runs.map((e) => exports.BacktestRunSummary.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListBacktestsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListBacktestsResponse();
+        message.runs = object.runs?.map((e) => exports.BacktestRunSummary.fromPartial(e)) || [];
+        return message;
+    },
+};
 function createBaseListStrategiesRequest() {
     return { page: undefined, userId: "" };
 }
@@ -4252,6 +4686,16 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.GetStrategyReportRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.StrategyReport.encode(value).finish()),
         responseDeserialize: (value) => exports.StrategyReport.decode(value),
+    },
+    /** List past backtest runs (summary metrics + earned score) for a strategy, newest first. */
+    listBacktests: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/ListBacktests",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListBacktestsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListBacktestsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListBacktestsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListBacktestsResponse.decode(value),
     },
     manageStrategy: {
         path: "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy",

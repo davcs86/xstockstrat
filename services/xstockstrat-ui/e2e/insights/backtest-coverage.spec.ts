@@ -41,4 +41,21 @@ test.describe('Backtest data coverage', () => {
       'entry condition was never satisfied',
     );
   });
+
+  // Score persistence + run history: a strategy with prior runs shows the persisted score
+  // and a Past Runs table without needing to re-run a backtest.
+  test('persisted score + past runs render from report metadata', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/strategies/strat-history-001');
+
+    // Persisted score card (no Run Backtest click needed).
+    await expect(page.getByText('Strategy Score')).toBeVisible({ timeout: 10000 });
+
+    // Past Runs history table lists both persisted runs, newest first.
+    const pastRuns = page.getByTestId('past-runs');
+    await expect(pastRuns).toBeVisible();
+    await expect(pastRuns).toContainText('AAPL');
+    await expect(pastRuns).toContainText('MSFT');
+    await expect(pastRuns).toContainText('15.00%');
+  });
 });

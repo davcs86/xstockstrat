@@ -1,5 +1,6 @@
 'use client';
 import { useState, use } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   LineChart,
   Line,
@@ -15,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/components/ui/utils';
 import { ConnectError } from '@connectrpc/connect';
-import { useStrategyReport } from '@/hooks/useStrategies';
+import { useStrategyReport, useBacktestHistory } from '@/hooks/useStrategies';
 import { useRunBacktest, useTriggerBackfill } from '@/hooks/useBacktest';
 import { useGetStrategy, useSetStrategyLiveInsights } from '@/hooks/useStrategyDefinitions';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
@@ -40,7 +41,9 @@ interface BacktestFormState {
 
 export default function StrategyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const queryClient = useQueryClient();
   const { data: report, isLoading } = useStrategyReport(id);
+  const { data: history } = useBacktestHistory(id);
   const { data: isAdmin } = useIsAdmin();
   const { data: definition } = useGetStrategy(id);
   const setLive = useSetStrategyLiveInsights();
@@ -74,15 +77,26 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
       const ms = new Date(iso).getTime();
       return { seconds: BigInt(Math.floor(ms / 1000)), nanos: (ms % 1000) * 1_000_000 };
     };
-    runBacktestMutate({
-      strategyId: id,
-      symbols: form.symbol ? [form.symbol] : [],
-      initialCapital: parseFloat(form.initial_capital),
-      range: { start: isoToTimestamp(form.start), end: isoToTimestamp(form.end) },
-    });
+    runBacktestMutate(
+      {
+        strategyId: id,
+        symbols: form.symbol ? [form.symbol] : [],
+        initialCapital: parseFloat(form.initial_capital),
+        range: { start: isoToTimestamp(form.start), end: isoToTimestamp(form.end) },
+      },
+      {
+        // The run now persists a score + a history row server-side; refetch the report and
+        // the history so the Strategy Score card and Past Runs list reflect the new run.
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['analysis-report', id] });
+          queryClient.invalidateQueries({ queryKey: ['analysis-backtests', id] });
+        },
+      },
+    );
   }
 
   const result = backtestResult ?? report?.latestBacktest;
+  const pastRuns = history?.runs ?? [];
 
   const equityCurve = (() => {
     if (!result?.trades?.length) return [];
@@ -365,6 +379,66 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
               </>
             )}
 
+            {/* Past runs — durable backtest history for this strategy */}
+            {pastRuns.length > 0 && (
+              <Card data-testid="past-runs">
+                <CardHeader>
+                  <CardTitle>Past Runs</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs text-muted-foreground">
+                          <th className="py-1.5 pr-3 font-medium">When</th>
+                          <th className="py-1.5 pr-3 font-medium">Symbols</th>
+                          <th className="py-1.5 pr-3 font-medium text-right">Return</th>
+                          <th className="py-1.5 pr-3 font-medium text-right">Sharpe</th>
+                          <th className="py-1.5 pr-3 font-medium text-right">Trades</th>
+                          <th className="py-1.5 font-medium text-right">Score</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pastRuns.map((run) => (
+                          <tr key={run.backtestId} className="border-t border-border">
+                            <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
+                              {run.completedAt
+                                ? new Date(Number(run.completedAt.seconds) * 1000).toLocaleString()
+                                : '—'}
+                            </td>
+                            <td className="py-1.5 pr-3 font-mono text-xs">
+                              {run.symbols.join(', ') || '—'}
+                            </td>
+                            <td
+                              className={cn(
+                                'py-1.5 pr-3 text-right tabular-nums',
+                                (run.totalReturn ?? 0) >= 0 ? 'text-buy' : 'text-destructive',
+                              )}
+                            >
+                              {((run.totalReturn ?? 0) * 100).toFixed(2)}%
+                            </td>
+                            <td className="py-1.5 pr-3 text-right tabular-nums">
+                              {(run.sharpeRatio ?? 0).toFixed(2)}
+                            </td>
+                            <td className="py-1.5 pr-3 text-right tabular-nums">
+                              {String(run.totalTrades ?? 0)}
+                            </td>
+                            <td className="py-1.5 text-right tabular-nums">
+                              {run.rating ? (
+                                <span className="font-semibold text-buy">{run.rating}</span>
+                              ) : (
+                                '—'
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {isLoading && !result && (
               <Card>
                 <CardContent className="pt-5">
@@ -372,7 +446,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                 </CardContent>
               </Card>
             )}
-            {!isLoading && !result && (
+            {!isLoading && !result && pastRuns.length === 0 && (
               <Card>
                 <CardContent className="pt-5">
                   <p className="text-sm text-muted-foreground">

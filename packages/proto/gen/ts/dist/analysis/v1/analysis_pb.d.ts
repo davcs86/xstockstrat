@@ -377,6 +377,110 @@ export type StrategyReport = Message<"xstockstrat.analysis.v1.StrategyReport"> &
  */
 export declare const StrategyReportSchema: GenMessage<StrategyReport>;
 /**
+ * @generated from message xstockstrat.analysis.v1.ListBacktestsRequest
+ */
+export type ListBacktestsRequest = Message<"xstockstrat.analysis.v1.ListBacktestsRequest"> & {
+    /**
+     * @generated from field: string strategy_id = 1;
+     */
+    strategyId: string;
+    /**
+     * 0 → server default (most recent 20)
+     *
+     * @generated from field: int32 limit = 2;
+     */
+    limit: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ListBacktestsRequest.
+ * Use `create(ListBacktestsRequestSchema)` to create a new message.
+ */
+export declare const ListBacktestsRequestSchema: GenMessage<ListBacktestsRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.BacktestRunSummary
+ */
+export type BacktestRunSummary = Message<"xstockstrat.analysis.v1.BacktestRunSummary"> & {
+    /**
+     * @generated from field: string backtest_id = 1;
+     */
+    backtestId: string;
+    /**
+     * @generated from field: string strategy_id = 2;
+     */
+    strategyId: string;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.BacktestStatus status = 3;
+     */
+    status: BacktestStatus;
+    /**
+     * @generated from field: double total_return = 4;
+     */
+    totalReturn: number;
+    /**
+     * @generated from field: double annualized_return = 5;
+     */
+    annualizedReturn: number;
+    /**
+     * @generated from field: double sharpe_ratio = 6;
+     */
+    sharpeRatio: number;
+    /**
+     * @generated from field: double max_drawdown = 7;
+     */
+    maxDrawdown: number;
+    /**
+     * @generated from field: double win_rate = 8;
+     */
+    winRate: number;
+    /**
+     * @generated from field: int32 total_trades = 9;
+     */
+    totalTrades: number;
+    /**
+     * @generated from field: double profit_factor = 10;
+     */
+    profitFactor: number;
+    /**
+     * @generated from field: repeated string symbols = 11;
+     */
+    symbols: string[];
+    /**
+     * 0 when the run earned no score (e.g. INSUFFICIENT_DATA)
+     *
+     * @generated from field: double overall_score = 12;
+     */
+    overallScore: number;
+    /**
+     * "" when the run earned no score
+     *
+     * @generated from field: string rating = 13;
+     */
+    rating: string;
+    /**
+     * @generated from field: google.protobuf.Timestamp completed_at = 14;
+     */
+    completedAt?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.BacktestRunSummary.
+ * Use `create(BacktestRunSummarySchema)` to create a new message.
+ */
+export declare const BacktestRunSummarySchema: GenMessage<BacktestRunSummary>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ListBacktestsResponse
+ */
+export type ListBacktestsResponse = Message<"xstockstrat.analysis.v1.ListBacktestsResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.BacktestRunSummary runs = 1;
+     */
+    runs: BacktestRunSummary[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ListBacktestsResponse.
+ * Use `create(ListBacktestsResponseSchema)` to create a new message.
+ */
+export declare const ListBacktestsResponseSchema: GenMessage<ListBacktestsResponse>;
+/**
  * @generated from message xstockstrat.analysis.v1.ListStrategiesRequest
  */
 export type ListStrategiesRequest = Message<"xstockstrat.analysis.v1.ListStrategiesRequest"> & {
@@ -1119,6 +1223,16 @@ export declare const AnalysisService: GenService<{
         methodKind: "unary";
         input: typeof GetStrategyReportRequestSchema;
         output: typeof StrategyReportSchema;
+    };
+    /**
+     * List past backtest runs (summary metrics + earned score) for a strategy, newest first.
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ListBacktests
+     */
+    listBacktests: {
+        methodKind: "unary";
+        input: typeof ListBacktestsRequestSchema;
+        output: typeof ListBacktestsResponseSchema;
     };
     /**
      * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ManageStrategy

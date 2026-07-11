@@ -16,10 +16,26 @@ log.warning`, so a DB failure never fails scoring. Reads stay in-memory — `Lis
 (best-effort) to load persisted rows back into memory, so scores **survive a service restart**. Reuses
 the existing asyncpg pool — no new pool (budget stays 2).
 
-Accepted limitations: only the `StrategyScore` is persisted, **not** `BacktestResult` — after a restart
-`GetStrategyReport` returns the hydrated score with `latest_backtest = null` until a fresh `RunBacktest`
-is run. The table has no retention or pagination yet (deactivated and ad-hoc-`strategy_id` scores persist
-and hydrate); a `math.isfinite` guard drops non-finite component values before the JSONB write.
+A `math.isfinite` guard drops non-finite component values before the JSONB write. The `strategy_scores`
+table has no retention or pagination yet (deactivated and ad-hoc-`strategy_id` scores persist and hydrate).
+
+### Backtest Auto-Scoring & Run History
+
+`RunBacktest` **auto-scores** on every OK run: after the result is built it computes the `StrategyScore`
+via the shared `_score_from_result` helper (the same math `ScoreStrategy` uses — one code path, no drift)
+and persists it through `_persist_strategy_score` (in-memory dict + best-effort `strategy_scores` upsert).
+This fixes the bug where a score was never persisted after a backtest — previously nothing invoked scoring,
+because the UI only called `RunBacktest`, never the separate `ScoreStrategy` RPC.
+
+Every completed run (OK **and** INSUFFICIENT_DATA) is also appended to `analysis.backtest_runs`
+(migration `006`, `BacktestRunsRepository`) — a lightweight, durable **run history** of summary metrics
+plus the score the run earned (INSUFFICIENT runs record history with a 0 score / empty rating). The
+`ListBacktests(strategy_id, limit)` RPC reads the latest rows back (newest first; `limit` 0 → server
+default of 20) as typed `BacktestRunSummary`s, so past run results survive a restart and are visible in
+the UI's "Past Runs" table. Full trades/diagnostics are **not** copied into history — those remain on the
+in-memory `latest_backtest`; the history table stays a compact summary. All persistence is best-effort
+(`try/except → log.warning`) so a DB failure never fails a run. Reuses the existing asyncpg pool
+(no new pool — budget stays 2).
 
 ### Fundamentals Signal Producer (feature 062)
 

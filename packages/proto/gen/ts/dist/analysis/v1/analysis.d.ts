@@ -210,6 +210,32 @@ export interface StrategyReport {
         [key: string]: any;
     } | undefined;
 }
+export interface ListBacktestsRequest {
+    strategyId: string;
+    /** 0 → server default (most recent 20) */
+    limit: number;
+}
+export interface BacktestRunSummary {
+    backtestId: string;
+    strategyId: string;
+    status: BacktestStatus;
+    totalReturn: number;
+    annualizedReturn: number;
+    sharpeRatio: number;
+    maxDrawdown: number;
+    winRate: number;
+    totalTrades: number;
+    profitFactor: number;
+    symbols: string[];
+    /** 0 when the run earned no score (e.g. INSUFFICIENT_DATA) */
+    overallScore: number;
+    /** "" when the run earned no score */
+    rating: string;
+    completedAt?: Date | undefined;
+}
+export interface ListBacktestsResponse {
+    runs: BacktestRunSummary[];
+}
 export interface ListStrategiesRequest {
     page?: PageRequest | undefined;
     userId: string;
@@ -350,6 +376,9 @@ export declare const ScoreStrategyRequest: MessageFns<ScoreStrategyRequest>;
 export declare const StrategyScore: MessageFns<StrategyScore>;
 export declare const StrategyScore_ComponentScoresEntry: MessageFns<StrategyScore_ComponentScoresEntry>;
 export declare const StrategyReport: MessageFns<StrategyReport>;
+export declare const ListBacktestsRequest: MessageFns<ListBacktestsRequest>;
+export declare const BacktestRunSummary: MessageFns<BacktestRunSummary>;
+export declare const ListBacktestsResponse: MessageFns<ListBacktestsResponse>;
 export declare const ListStrategiesRequest: MessageFns<ListStrategiesRequest>;
 export declare const ListStrategiesResponse: MessageFns<ListStrategiesResponse>;
 export declare const GetStrategyReportRequest: MessageFns<GetStrategyReportRequest>;
@@ -406,6 +435,16 @@ export declare const AnalysisServiceService: {
         readonly requestDeserialize: (value: Buffer) => GetStrategyReportRequest;
         readonly responseSerialize: (value: StrategyReport) => Buffer;
         readonly responseDeserialize: (value: Buffer) => StrategyReport;
+    };
+    /** List past backtest runs (summary metrics + earned score) for a strategy, newest first. */
+    readonly listBacktests: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/ListBacktests";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListBacktestsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListBacktestsRequest;
+        readonly responseSerialize: (value: ListBacktestsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListBacktestsResponse;
     };
     readonly manageStrategy: {
         readonly path: "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy";
@@ -469,6 +508,8 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
     scoreStrategy: handleUnaryCall<ScoreStrategyRequest, StrategyScore>;
     listStrategies: handleUnaryCall<ListStrategiesRequest, ListStrategiesResponse>;
     getStrategyReport: handleUnaryCall<GetStrategyReportRequest, StrategyReport>;
+    /** List past backtest runs (summary metrics + earned score) for a strategy, newest first. */
+    listBacktests: handleUnaryCall<ListBacktestsRequest, ListBacktestsResponse>;
     manageStrategy: handleUnaryCall<ManageStrategyRequest, StrategyDefinition>;
     getStrategy: handleUnaryCall<GetStrategyRequest, StrategyDefinition>;
     listStrategyDefinitions: handleUnaryCall<ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse>;
@@ -491,6 +532,10 @@ export interface AnalysisServiceClient extends Client {
     getStrategyReport(request: GetStrategyReportRequest, callback: (error: ServiceError | null, response: StrategyReport) => void): ClientUnaryCall;
     getStrategyReport(request: GetStrategyReportRequest, metadata: Metadata, callback: (error: ServiceError | null, response: StrategyReport) => void): ClientUnaryCall;
     getStrategyReport(request: GetStrategyReportRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: StrategyReport) => void): ClientUnaryCall;
+    /** List past backtest runs (summary metrics + earned score) for a strategy, newest first. */
+    listBacktests(request: ListBacktestsRequest, callback: (error: ServiceError | null, response: ListBacktestsResponse) => void): ClientUnaryCall;
+    listBacktests(request: ListBacktestsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListBacktestsResponse) => void): ClientUnaryCall;
+    listBacktests(request: ListBacktestsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListBacktestsResponse) => void): ClientUnaryCall;
     manageStrategy(request: ManageStrategyRequest, callback: (error: ServiceError | null, response: StrategyDefinition) => void): ClientUnaryCall;
     manageStrategy(request: ManageStrategyRequest, metadata: Metadata, callback: (error: ServiceError | null, response: StrategyDefinition) => void): ClientUnaryCall;
     manageStrategy(request: ManageStrategyRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: StrategyDefinition) => void): ClientUnaryCall;

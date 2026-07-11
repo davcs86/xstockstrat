@@ -30,6 +30,7 @@ from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
+from app.repositories.backtest_runs import BacktestRunsRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring
@@ -90,6 +91,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # in-memory; this persists on score and hydrates it at boot. None in the no-DB
         # test path so make_servicer()-based tests are unaffected.
         self._scores_repo = StrategyScoresRepository(db_pool) if db_pool else None
+        # Durable backtest-run history (fixes "cannot see past run results"). RunBacktest
+        # appends a summary row here; the ListBacktests RPC reads it back. None in the no-DB
+        # test path so make_servicer()-based tests are unaffected.
+        self._backtest_runs_repo = BacktestRunsRepository(db_pool) if db_pool else None
         # Set by main.py after the fundamentals signal loop is constructed (feature 062);
         # RunFundamentalsScan invokes its shared run_once path.
         self._fundsignal_loop = None
@@ -352,6 +357,21 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._backtests[backtest_id] = result
         # Index by strategy_id for ScoreStrategy lookup
         self._backtests[request.strategy_id] = result
+
+        # Score the strategy from this run and persist both the score and a run-history row.
+        # Fixes two bugs: (1) the score was never persisted because nothing invoked scoring
+        # after a backtest, and (2) past run results were unrecoverable (in-memory only).
+        # OK runs earn a score; INSUFFICIENT_DATA runs still record history but score = None.
+        score = None
+        if result.status == analysis_pb2.BACKTEST_STATUS_OK:
+            sharpe_weight = self._cfg.get_float("analysis.scoring.sharpe_weight", 0.4)
+            drawdown_weight = self._cfg.get_float("analysis.scoring.drawdown_weight", 0.3)
+            winrate_weight = self._cfg.get_float("analysis.scoring.win_rate_weight", 0.3)
+            score = _score_from_result(
+                request.strategy_id, result, sharpe_weight, drawdown_weight, winrate_weight
+            )
+            await self._persist_strategy_score(score)
+        await self._persist_backtest_run(result, list(request.symbols), score)
 
         # Emit completion event
         payload2 = Struct()
@@ -826,59 +846,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             return
 
-        # Normalize each metric to 0.0–1.0
-        sharpe_component = min(max(result.sharpe_ratio / 2.0, 0.0), 1.0)
-        drawdown_component = max(1.0 - (result.max_drawdown / 0.5), 0.0)
-        winrate_component = min(max(result.win_rate, 0.0), 1.0)
-
-        overall = (
-            sharpe_weight * sharpe_component
-            + drawdown_weight * drawdown_component
-            + winrate_weight * winrate_component
+        score = _score_from_result(
+            request.strategy_id, result, sharpe_weight, drawdown_weight, winrate_weight
         )
-
-        if overall >= 0.8:
-            rating = "A"
-        elif overall >= 0.65:
-            rating = "B"
-        elif overall >= 0.5:
-            rating = "C"
-        elif overall >= 0.35:
-            rating = "D"
-        else:
-            rating = "F"
-
-        score = analysis_pb2.StrategyScore(
-            strategy_id=request.strategy_id,
-            overall_score=overall,
-            rating=rating,
-            component_scores={
-                "sharpe": sharpe_component,
-                "drawdown": drawdown_component,
-                "win_rate": winrate_component,
-            },
-        )
-        self._strategies[request.strategy_id] = score
-
-        # Best-effort durable persist (feature 064). Reads serve from self._strategies,
-        # so a swallowed write never loses the caller's read-your-writes (FR-7). The
-        # math.isfinite filter guards the JSONB column against a future unclamped score
-        # (NaN/Infinity would make Postgres JSONB reject the upsert).
-        if self._scores_repo is not None:
-            try:
-                components = {
-                    k: v for k, v in dict(score.component_scores).items() if math.isfinite(v)
-                }
-                await self._scores_repo.upsert(request.strategy_id, overall, rating, components)
-            except Exception as e:
-                log.warning("failed to persist strategy score: %s", e)
+        # Update the in-memory serving dict + best-effort durable persist (feature 064).
+        await self._persist_strategy_score(score)
 
         # Emit ledger event
         from google.protobuf.struct_pb2 import Struct
 
         payload = Struct()
         payload.update(
-            {"strategy_id": request.strategy_id, "overall_score": overall, "rating": rating}
+            {
+                "strategy_id": request.strategy_id,
+                "overall_score": score.overall_score,
+                "rating": score.rating,
+            }
         )
         try:
             await self._ledger.AppendEvent(
@@ -894,6 +877,55 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             log.warning("failed to emit ledger event for score: %s", e)
 
         return score
+
+    async def _persist_strategy_score(self, score) -> None:
+        """Update the in-memory serving dict and best-effort durably persist a score.
+
+        Reads serve from ``self._strategies``, so a swallowed write never loses the caller's
+        read-your-writes (feature 064, FR-7). The ``math.isfinite`` filter guards the JSONB
+        column against a non-finite component (NaN/Infinity would make Postgres reject it).
+        Shared by ScoreStrategy and RunBacktest's auto-scoring so the two never diverge.
+        """
+        self._strategies[score.strategy_id] = score
+        if self._scores_repo is None:
+            return
+        try:
+            components = {k: v for k, v in dict(score.component_scores).items() if math.isfinite(v)}
+            await self._scores_repo.upsert(
+                score.strategy_id, score.overall_score, score.rating, components
+            )
+        except Exception as e:
+            log.warning("failed to persist strategy score: %s", e)
+
+    async def _persist_backtest_run(self, result, symbols, score) -> None:
+        """Best-effort append of a completed backtest to the durable run-history table.
+
+        Fixes "cannot see past run results": the in-memory ``_backtests`` dict only holds
+        the latest run per strategy and is lost on restart, so every run is also recorded
+        here (summary metrics + the score it earned). No-op in the no-DB test path.
+        """
+        if self._backtest_runs_repo is None:
+            return
+        try:
+            await self._backtest_runs_repo.insert(
+                backtest_id=result.backtest_id,
+                strategy_id=result.strategy_id,
+                status=analysis_pb2.BacktestStatus.Name(result.status),
+                metrics={
+                    "total_return": result.total_return,
+                    "annualized_return": result.annualized_return,
+                    "sharpe_ratio": result.sharpe_ratio,
+                    "max_drawdown": result.max_drawdown,
+                    "win_rate": result.win_rate,
+                    "total_trades": result.total_trades,
+                    "profit_factor": result.profit_factor,
+                },
+                symbols=symbols,
+                overall_score=score.overall_score if score is not None else None,
+                rating=score.rating if score is not None else None,
+            )
+        except Exception as e:
+            log.warning("failed to persist backtest run history: %s", e)
 
     async def hydrate_scores(self) -> None:
         """Load persisted scores from the DB into the in-memory serving dict at boot.
@@ -925,6 +957,24 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             score=score,
             latest_backtest=result,
         )
+
+    async def ListBacktests(self, request, context):
+        """Return past backtest-run summaries for a strategy, newest first.
+
+        Reads the durable ``analysis.backtest_runs`` table so past run results survive a
+        restart (the in-memory ``_backtests`` dict only holds the latest per strategy). The
+        full trades/diagnostics are intentionally not returned — history is a compact summary.
+        Returns an empty list in the no-DB test path or on any read error.
+        """
+        if self._backtest_runs_repo is None:
+            return analysis_pb2.ListBacktestsResponse()
+        limit = request.limit if request.limit > 0 else 20
+        try:
+            rows = await self._backtest_runs_repo.list_by_strategy(request.strategy_id, limit=limit)
+        except Exception as e:
+            log.warning("failed to read backtest run history: %s", e)
+            return analysis_pb2.ListBacktestsResponse()
+        return analysis_pb2.ListBacktestsResponse(runs=[_row_to_backtest_summary(r) for r in rows])
 
     async def ManageStrategy(self, request, context):
         # Role check only — authn/authz is owned by the entry points (UI BFF / MCP agent).
@@ -1179,6 +1229,84 @@ def _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades):
         bars_total=n,
         warmup_bars=warmup_bars,
     )
+
+
+def _score_from_result(
+    strategy_id: str,
+    result: "analysis_pb2.BacktestResult",
+    sharpe_weight: float,
+    drawdown_weight: float,
+    winrate_weight: float,
+) -> "analysis_pb2.StrategyScore":
+    """Grade a backtest into a StrategyScore (Sharpe / drawdown / win-rate blend).
+
+    Shared by ScoreStrategy (explicit RPC) and RunBacktest (auto-score on every run) so the
+    scoring math and letter-grade thresholds live in exactly one place.
+    """
+    sharpe_component = min(max(result.sharpe_ratio / 2.0, 0.0), 1.0)
+    drawdown_component = max(1.0 - (result.max_drawdown / 0.5), 0.0)
+    winrate_component = min(max(result.win_rate, 0.0), 1.0)
+
+    overall = (
+        sharpe_weight * sharpe_component
+        + drawdown_weight * drawdown_component
+        + winrate_weight * winrate_component
+    )
+
+    if overall >= 0.8:
+        rating = "A"
+    elif overall >= 0.65:
+        rating = "B"
+    elif overall >= 0.5:
+        rating = "C"
+    elif overall >= 0.35:
+        rating = "D"
+    else:
+        rating = "F"
+
+    return analysis_pb2.StrategyScore(
+        strategy_id=strategy_id,
+        overall_score=overall,
+        rating=rating,
+        component_scores={
+            "sharpe": sharpe_component,
+            "drawdown": drawdown_component,
+            "win_rate": winrate_component,
+        },
+    )
+
+
+def _row_to_backtest_summary(row: dict) -> "analysis_pb2.BacktestRunSummary":
+    """Convert an analysis.backtest_runs row to a BacktestRunSummary proto.
+
+    ``status`` is stored as the enum name (e.g. "BACKTEST_STATUS_OK"); an unknown/blank value
+    maps to UNSPECIFIED. A null score persists as 0 / "" (proto3 scalars have no null).
+    """
+    try:
+        status = analysis_pb2.BacktestStatus.Value(row.get("status") or "")
+    except ValueError:
+        status = analysis_pb2.BACKTEST_STATUS_UNSPECIFIED
+    summary = analysis_pb2.BacktestRunSummary(
+        backtest_id=row.get("backtest_id", ""),
+        strategy_id=row.get("strategy_id", ""),
+        status=status,
+        total_return=float(row.get("total_return") or 0.0),
+        annualized_return=float(row.get("annualized_return") or 0.0),
+        sharpe_ratio=float(row.get("sharpe_ratio") or 0.0),
+        max_drawdown=float(row.get("max_drawdown") or 0.0),
+        win_rate=float(row.get("win_rate") or 0.0),
+        total_trades=int(row.get("total_trades") or 0),
+        profit_factor=float(row.get("profit_factor") or 0.0),
+        symbols=list(row.get("symbols") or []),
+        overall_score=float(row["overall_score"]) if row.get("overall_score") is not None else 0.0,
+        rating=row.get("rating") or "",
+    )
+    completed = row.get("completed_at")
+    if completed is not None:
+        ts = Timestamp()
+        ts.FromDatetime(completed)
+        summary.completed_at.CopyFrom(ts)
+    return summary
 
 
 def _row_to_score(row: dict) -> "analysis_pb2.StrategyScore":
