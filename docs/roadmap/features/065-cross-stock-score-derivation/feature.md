@@ -1,6 +1,6 @@
 # Feature: cross-stock-score-derivation
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/cross-stock-score-derivation`
 **Created**: 2026-07-12
 **Last Updated**: 2026-07-12
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-12 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-07-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings) |
 
 ---
 
@@ -47,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review cross-stock-score-derivation product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design cross-stock-score-derivation quick` — recon + design debate (Constitution C-11 mandatory entry point), then `/sdd-spec cross-stock-score-derivation`

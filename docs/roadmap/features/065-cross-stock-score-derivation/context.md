@@ -69,3 +69,20 @@
   NOT_FOUND for unregistered ids. Out of Scope updated accordingly (existing ad-hoc
   `strategy_scores` rows are not cleaned up here; OQ-2 decision noted).
 - Next: `/sdd-review cross-stock-score-derivation product-spec`.
+
+## Session 2026-07-12 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: none (criteria pass: PASS, 0 blockers, 0 warnings, 3 notes).
+- Overlap findings: none (CLEAN — analysis migration 007 free; StrategyScore proto fields 5–7
+  free, BacktestRunSummary 15+ free; new `analysis.scoring.*` keys unclaimed; no in-flight
+  feature touches these tables/files).
+- Notes carried forward for /sdd-spec:
+  1. Resolve the "optional, decide at spec time" `BacktestRunSummary.range_start/range_end`
+     proto addition (field numbers 15+ are free).
+  2. Include Config-Keys-Consumed table registration in `services/xstockstrat-analysis/CLAUDE.md`
+     for the three new `analysis.scoring.*` keys (routine per config governance).
+  3. If seeding the config keys via a config-service seed migration (pattern of 058/059/062),
+     the next free number in `services/xstockstrat-config/migrations/` is `009`.
+  4. FR-9 UX cliff acknowledged by review as documented-behavior-not-gap: a legacy broad grade
+     can drop sharply on first post-deploy recompute (cells-only evidence).
