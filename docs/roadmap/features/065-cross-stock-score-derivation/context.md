@@ -38,3 +38,24 @@
   - fail 2026-07-01 / C-10(b) (056-open-positions-ui): two read paths surfacing one value —
     here the divergence between per-run score and derived grade is *intentional*; spec
     requires explicit labeling + test instead of parity (FR-8, Open Questions).
+
+## Session 2026-07-12 (later) — open-questions expansion
+
+- On user request, expanded the spec's Open Questions into OQ-1…OQ-6, each with candidate
+  resolutions, pros/trade-offs, and a recommendation. Checkboxes remain open pending user
+  confirmation (to be recorded here when given). Recommended resolutions:
+  - OQ-1: keep `shrinkage_days=250` + floor 3 symbols/500 days; documented the closed-form
+    calibration anchors (perfect-evidence A ⇔ W ≥ 1.5k symbol-days; B ⇔ W ≥ 0.43k).
+  - OQ-2: keep the three-component blend; no return component (defer; opt-in
+    `return_weight=0.0` key is the retrofit path if rankings mislead post-launch).
+  - OQ-3: headline-score **registered definitions only**; ad-hoc strategy_ids keep run
+    history + per-run scores but get no headline (also fixes the pre-existing
+    strategy_scores pollution gap). If confirmed → FR-2a/FR-6 deltas noted in the spec.
+  - OQ-4: in-request recompute only (RunBacktest / UPDATE / ScoreStrategy triggers); hydrate
+    unchanged; documented staleness semantics — ScoreStrategy is the manual refresh after a
+    scoring-config change.
+  - OQ-5: close the C-10(b) trap with copy ("Strategy Grade" card vs "Run score" column) +
+    a Playwright both-labels-render assertion.
+  - OQ-6: accept correlated-symbol breadth inflation for v1 with a named revisit trigger;
+    sector-capped weights (via feature-059 fundamentals sector data) is the designated
+    follow-up if needed.

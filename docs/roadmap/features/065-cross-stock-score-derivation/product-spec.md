@@ -184,21 +184,111 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] Default calibration: is `shrinkage_days=250` the right skepticism level, and are
-      `min_evidence_symbols=3` / `min_evidence_days=500` the right provisional floor?
-      (Product decision; safe to tune later via config without code changes.)
-- [ ] Should total return join the component blend as a fourth weighted component (it
-      currently affects nothing in the score)? Deferred out of scope by default.
-- [ ] Ad-hoc (unregistered) `strategy_id`s have no `updated_at` — confirm "all cells
-      eligible" is acceptable for them, or exclude ad-hoc ids from scoring entirely.
-- [ ] Where should the headline recompute run — in-request after each backtest (adds one
-      indexed query per run) vs. also exposed as a bulk recompute at boot? In-request only is
-      the default proposal.
-- [ ] **Known trap (ledger, C-10(b) 056-open-positions-ui):** two read paths will surface a
-      "score" with different meanings (per-run score in Past Runs vs derived strategy grade).
-      Parity is *intentionally* not wanted here — the design phase must instead specify
-      labeling/copy so the divergence is legible, and a test asserting both surfaces render
-      their distinct labels.
-- [ ] **Known caveat:** correlated symbols (e.g. 12 mega-cap tech names over the same bull
-      window) inflate effective breadth; v1 accepts this and documents it. Revisit only if
-      observed rankings mislead.
+Each question is expanded with candidate resolutions, their trade-offs, and a recommended
+resolution. Checkboxes stay open until the recommendations are confirmed (or overridden) at
+design time; confirmations are recorded in `context.md`. Where a resolution alters an FR, the
+delta is stated explicitly.
+
+### OQ-1. Default calibration (`shrinkage_days`, provisional floor)
+
+- [ ] Confirm `shrinkage_days=250`, `min_evidence_symbols=3`, `min_evidence_days=500`.
+
+The shrinkage formula gives closed-form calibration anchors: for a strategy whose cells all
+score `s`, the headline is `(W·s + 0.5k)/(W + k)` where `W` = total symbol trading days. So
+with *perfect* cells (`s=1.0`), grade B (≥0.65) requires `W ≥ 0.43k` and grade A (≥0.8)
+requires `W ≥ 1.5k`. Calibrate `k` by choosing how much perfect evidence an A should cost.
+
+| Option | Pros | Trade-offs |
+|---|---|---|
+| **(a) `k=250` (proposed)** — A needs ≥375 perfect symbol-days (~1.5 symbol-years); B needs ~107 | Interpretable ("one symbol-year of agnosticism"); an A is genuinely hard to fluke; at the 500-day floor an A is *just* reachable, so floor and prior are coherent | New strategies live near C for their first symbol-year; may feel sluggish to users exploring |
+| (b) `k=60` (fast grades) | Grades respond quickly to early evidence | A single lucky 90-day run mints a B+/A — reintroduces exactly the failure this feature exists to fix |
+| (c) `k=500` (very skeptical) | Nearly fluke-proof | A requires 3 perfect symbol-years; most real strategies plateau at C/B; discourages use of the grade |
+
+**Recommendation: (a)**, and document the calibration rule (`A ⇔ W ≥ 1.5k` at perfect
+metrics) in the service CLAUDE.md so future tuning is principled, not vibes. All three values
+are config keys — wrong guesses are correctable per environment without a code change.
+
+### OQ-2. Total return as a fourth score component
+
+- [ ] Decide: keep the three-component blend (recommended) or add an opt-in return component.
+
+Today `total_return` affects nothing in the score (Sharpe/drawdown/win-rate only), so a
+high-Sharpe, tiny-absolute-return strategy can grade A.
+
+| Option | Pros | Trade-offs |
+|---|---|---|
+| **(a) Keep three components (proposed)** | One statistical change at a time — grade drift after this feature is attributable to the derivation change alone; return magnitude already leaks into Sharpe's numerator | The "profitable but only barely" A remains possible |
+| (b) Add `analysis.scoring.return_weight` defaulting to `0.0` | Closes the question permanently with a knob; zero behavior change until opted in | Needs a normalization constant (e.g. clip annualized return at 30% → [0,1]) — a new magic number; speculative config surface (scope-creep ledger category) for a knob nobody has asked to turn |
+| (c) Add it weighted now (e.g. 0.2, renormalize others) | Grade reflects economic outcome, not just risk-adjusted shape | Changes every existing grade at deploy simultaneously with the derivation change — two confounded changes; weight redistribution needs a config migration |
+
+**Recommendation: (a)** — defer, keep in Out of Scope. Revisit only if post-launch rankings
+surface the barely-profitable-A problem in practice; (b) is the cheap retrofit if so.
+
+### OQ-3. Ad-hoc (unregistered) `strategy_id`s
+
+- [ ] Decide whether unregistered ids get a headline at all.
+
+`RunBacktest` accepts any `strategy_id` string; unregistered ids have no
+`analysis.strategies` row, hence no `updated_at` for the eligibility filter — and today they
+pollute `strategy_scores` with rows the UI never shows (pre-existing gap noted in the service
+CLAUDE.md).
+
+| Option | Pros | Trade-offs |
+|---|---|---|
+| (a) All cells eligible (no reset semantics) | Preserves current behavior for MCP-agent ad-hoc backtests; `GetStrategyReport` keeps returning a score | Grade has no definition to describe — "evidence for what, exactly?"; pollution/retention gap grows a second table (cells) |
+| **(b) Registered definitions only (proposed)** — ad-hoc runs still record history + per-run scores, but no headline; `ScoreStrategy` on an ad-hoc id → NOT_FOUND | The grade means one thing: "how the current registered definition performs"; fixes the pollution gap instead of extending it; UI unaffected (the list is definitions-driven already) | Small behavior change for agent flows that call `ScoreStrategy`/`GetStrategyReport` on ad-hoc ids (they keep `RunBacktest`'s full result, so nothing of substance is lost) |
+| (c) Synthesize `updated_at` from first-seen cell | Keeps ad-hoc scoring with pseudo-reset semantics | Complexity for a value nobody displays; first-seen is not a meaningful reset boundary |
+
+**Recommendation: (b)**. FR delta if confirmed: FR-2a drops its ad-hoc clause ("ad-hoc ids
+use all their cells" → "unregistered ids are not headline-scored"), and FR-6's NOT_FOUND
+covers unregistered ids explicitly.
+
+### OQ-4. Recompute placement
+
+- [ ] Confirm in-request recompute only (no boot-time bulk recompute).
+
+| Option | Pros | Trade-offs |
+|---|---|---|
+| **(a) In-request only (proposed)** — recompute after each `RunBacktest`, on `ManageStrategy UPDATE`, and on `ScoreStrategy`; boot keeps hydrating the materialized rows | Simplest; one indexed query per trigger; preserves the write-through+hydrate pattern verbatim (ledger insight 2026-07-03); no boot-time cost | A scoring-config change (weights, `shrinkage_days`) doesn't re-grade a strategy until its next trigger — grades are "policy at last recompute", not "current policy" |
+| (b) Recompute-all at boot instead of hydrate | Policy changes propagate on every restart | O(strategies × cells) boot work; replaces the proven hydrate read path (contradicts the ledger insight); config changes still stale between restarts |
+| (c) (a) + admin bulk-recompute RPC/loop | Full freshness control | New RPC + admin surface for a rare operation — scope creep; `ScoreStrategy` already *is* the per-strategy manual refresh |
+
+**Recommendation: (a)**, with the staleness semantics documented in the service CLAUDE.md:
+`ScoreStrategy` is the manual refresh after a scoring-config change. If bulk refresh is ever
+needed, it's a follow-up, not this feature.
+
+### OQ-5. C-10(b) labeling — run score vs strategy grade (known trap)
+
+- [ ] Confirm labeling copy + test as the closure (parity is intentionally not wanted).
+
+Ledger fail 2026-07-01 (056-open-positions-ui): two read paths surfacing one value diverge
+silently. Here the divergence is *by design* — the Past Runs table shows what each run earned
+alone; the headline is derived from cells. The closure is legibility, not parity:
+
+- Score card title becomes **"Strategy Grade"** with the evidence line (FR-7) as its caption
+  ("Derived from N symbols · X symbol-years — individual runs are graded separately").
+- Past Runs `Score` column header becomes **"Run score"**.
+- A Playwright assertion checks both labels render on the strategy detail page (the
+  reachability-test analogue that C-10 entries keep flagging as the missing enforcement).
+
+**Recommendation: adopt as stated** — this resolves into concrete FR-7/FR-8 copy at design
+time; the alternative (forcing the headline to equal the last run's score) is the status quo
+this feature removes.
+
+### OQ-6. Correlated-symbol breadth inflation (known caveat)
+
+- [ ] Confirm accept-and-document for v1, with a named revisit trigger.
+
+Twelve mega-cap tech cells over the same bull window are not twelve independent observations;
+symbol-day weighting can't see that.
+
+| Option | Pros | Trade-offs |
+|---|---|---|
+| **(a) Accept + document (proposed)** | Zero added complexity; honest via the provenance line (users see *which* breadth backs a grade via their own run inputs) | An all-one-sector A overstates robustness |
+| (b) Sector-capped effective weight (sector via the FMP fundamentals cache, feature 059) | Principled discount; data source already exists in-platform | Couples scoring to fundamentals coverage (marketdata `GetFundamentalsMulti`, cache TTLs, symbols missing sector data); meaningful design surface — wrong size for v1 |
+| (c) Time-window overlap discount | Attacks the same-regime problem directly | Requires pairwise window-overlap math per recompute; hard to explain in the UI |
+
+**Recommendation: (a)** for v1, with the revisit trigger written down: if launched grades are
+observed to reward single-sector/single-window breadth misleadingly, open a follow-up feature
+for (b) — (b) is the natural successor because the sector data already flows through
+marketdata. Record the caveat in the service CLAUDE.md scoring section.
