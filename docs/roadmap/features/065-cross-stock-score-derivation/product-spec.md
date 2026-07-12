@@ -33,8 +33,10 @@ status is not OK contribute no cells.
 FR-2. **Headline derivation.** The strategy's headline score is derived from eligible cells:
 
   a. *Eligible*: cells from OK runs whose `completed_at` postdates the strategy definition's
-     `updated_at` (registered strategies; ad-hoc `strategy_id`s have no definition row and use
-     all their cells).
+     `updated_at`. Only **registered** strategies (rows in `analysis.strategies`) are
+     headline-scored; unregistered/ad-hoc `strategy_id`s record cells and run history but
+     earn no headline and write no `strategy_scores` row (OQ-3 resolution — also stops the
+     pre-existing `strategy_scores` pollution by ad-hoc ids).
   b. *Dedup*: exactly one cell per symbol — the cell with the most trading days wins;
      tie-break newest `completed_at`. Re-running the same window adds no weight; a shorter run
      can never displace a longer one for the same symbol.
@@ -67,7 +69,7 @@ additive fields on the `StrategyScore` proto message.
 FR-6. **`ScoreStrategy` repurposed.** The RPC recomputes the headline from cells under the
 current scoring config and persists it (its current behavior — re-scoring the latest
 in-memory backtest — is redundant now that `RunBacktest` auto-scores). Callers unchanged;
-NOT_FOUND when the strategy has no eligible cells.
+NOT_FOUND when the strategy is unregistered (OQ-3) or has no eligible cells.
 
 FR-7. **UI provenance display.** The score card (strategy detail) and the strategies-list
 card show the evidence line (e.g. "B · 74% · 12 symbols · 8.4 symbol-years") and a distinct
@@ -96,10 +98,11 @@ and would poison the evidence base).
 - Pinned per-strategy benchmark configurations ("official evaluation run").
 - Changing the per-run aggregate metrics or the sequential cross-symbol equity compounding in
   the backtest engine.
-- Retention/pagination for `strategy_scores` or ad-hoc-strategy_id cleanup (pre-existing gap,
-  noted in service CLAUDE.md).
-- Adding total return as a fourth score component (open question; default is the existing
-  three-component blend).
+- Retention/pagination for `strategy_scores` (pre-existing gap, noted in service CLAUDE.md;
+  new pollution is stopped by the OQ-3 resolution, but existing ad-hoc rows are not cleaned
+  up here).
+- Adding total return as a fourth score component (decided OQ-2: not in v1; opt-in
+  `return_weight` key is the documented retrofit path).
 
 ## Affected Services
 
@@ -185,13 +188,13 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 ## Open Questions
 
 Each question is expanded with candidate resolutions, their trade-offs, and a recommended
-resolution. Checkboxes stay open until the recommendations are confirmed (or overridden) at
-design time; confirmations are recorded in `context.md`. Where a resolution alters an FR, the
-delta is stated explicitly.
+resolution. **All six recommendations were confirmed by the user on 2026-07-12** (recorded in
+`context.md`); the OQ-3 FR deltas are folded into FR-2a and FR-6. The analyses are retained
+below as the decision record.
 
 ### OQ-1. Default calibration (`shrinkage_days`, provisional floor)
 
-- [ ] Confirm `shrinkage_days=250`, `min_evidence_symbols=3`, `min_evidence_days=500`.
+- [x] **Resolved 2026-07-12**: option (a) confirmed — `shrinkage_days=250`, floor 3 symbols / 500 days.
 
 The shrinkage formula gives closed-form calibration anchors: for a strategy whose cells all
 score `s`, the headline is `(W·s + 0.5k)/(W + k)` where `W` = total symbol trading days. So
@@ -210,7 +213,7 @@ are config keys — wrong guesses are correctable per environment without a code
 
 ### OQ-2. Total return as a fourth score component
 
-- [ ] Decide: keep the three-component blend (recommended) or add an opt-in return component.
+- [x] **Resolved 2026-07-12**: option (a) confirmed — keep the three-component blend.
 
 Today `total_return` affects nothing in the score (Sharpe/drawdown/win-rate only), so a
 high-Sharpe, tiny-absolute-return strategy can grade A.
@@ -226,7 +229,7 @@ surface the barely-profitable-A problem in practice; (b) is the cheap retrofit i
 
 ### OQ-3. Ad-hoc (unregistered) `strategy_id`s
 
-- [ ] Decide whether unregistered ids get a headline at all.
+- [x] **Resolved 2026-07-12**: option (b) confirmed — registered definitions only (FR-2a/FR-6 updated).
 
 `RunBacktest` accepts any `strategy_id` string; unregistered ids have no
 `analysis.strategies` row, hence no `updated_at` for the eligibility filter — and today they
@@ -245,7 +248,7 @@ covers unregistered ids explicitly.
 
 ### OQ-4. Recompute placement
 
-- [ ] Confirm in-request recompute only (no boot-time bulk recompute).
+- [x] **Resolved 2026-07-12**: option (a) confirmed — in-request recompute only.
 
 | Option | Pros | Trade-offs |
 |---|---|---|
@@ -259,7 +262,7 @@ needed, it's a follow-up, not this feature.
 
 ### OQ-5. C-10(b) labeling — run score vs strategy grade (known trap)
 
-- [ ] Confirm labeling copy + test as the closure (parity is intentionally not wanted).
+- [x] **Resolved 2026-07-12**: confirmed — labeling copy + both-labels-render test.
 
 Ledger fail 2026-07-01 (056-open-positions-ui): two read paths surfacing one value diverge
 silently. Here the divergence is *by design* — the Past Runs table shows what each run earned
@@ -277,7 +280,7 @@ this feature removes.
 
 ### OQ-6. Correlated-symbol breadth inflation (known caveat)
 
-- [ ] Confirm accept-and-document for v1, with a named revisit trigger.
+- [x] **Resolved 2026-07-12**: option (a) confirmed — accept for v1; sector-capped weights (via feature-059 sector data) is the named follow-up.
 
 Twelve mega-cap tech cells over the same bull window are not twelve independent observations;
 symbol-day weighting can't see that.

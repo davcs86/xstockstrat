@@ -59,3 +59,13 @@
   - OQ-6: accept correlated-symbol breadth inflation for v1 with a named revisit trigger;
     sector-capped weights (via feature-059 fundamentals sector data) is the designated
     follow-up if needed.
+
+## Session 2026-07-12 (later) — OQ resolutions confirmed
+
+- **User confirmed all six recommendations as-is** ("go with your recs"). All OQ checkboxes
+  marked resolved in product-spec.md; the analyses are retained there as the decision record.
+- OQ-3 FR deltas applied: FR-2a now scopes headline scoring to registered strategies only
+  (ad-hoc ids record cells + history, no headline, no `strategy_scores` write); FR-6 returns
+  NOT_FOUND for unregistered ids. Out of Scope updated accordingly (existing ad-hoc
+  `strategy_scores` rows are not cleaned up here; OQ-2 decision noted).
+- Next: `/sdd-review cross-stock-score-derivation product-spec`.
