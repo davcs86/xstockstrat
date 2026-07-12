@@ -1,6 +1,8 @@
 # Feature: persist-strategy-scores
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 6fab9e323637aa00e0ad5fc09bb68a1ab6c5a529
+**Launched date**: 2026-07-12
 **Development Branch**: `feature/persist-strategy-scores`
 **Created**: 2026-07-03
 **Last Updated**: 2026-07-03
@@ -18,6 +20,7 @@
 | 2026-07-03 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (migration 005_strategy_scores) done |
 | 2026-07-03 | `in-progress` → `code-completed` | /sdd-execute | All 6 steps done (152 tests pass, 67.63% cov); integration PR #742 |
 
+| 2026-07-12 | `code-completed` → `launched` | CI workflow | Promoted via PR #759; committed 6fab9e323637aa00e0ad5fc09bb68a1ab6c5a529 |
 ---
 
 ## Artifacts

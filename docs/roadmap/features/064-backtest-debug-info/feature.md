@@ -1,6 +1,8 @@
 # Feature: backtest-debug-info
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 6fab9e323637aa00e0ad5fc09bb68a1ab6c5a529
+**Launched date**: 2026-07-12
 **Development Branch**: `feature/backtest-debug-info`
 **Created**: 2026-07-08
 **Last Updated**: 2026-07-09
@@ -18,6 +20,7 @@
 | 2026-07-09 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Steps 1–2: proto + codegen) |
 | 2026-07-09 | `in-progress` → `code-completed` | /sdd-execute | All 17 steps done + verified (8 stacked PRs #746–753); integration PR opened |
 
+| 2026-07-12 | `code-completed` → `launched` | CI workflow | Promoted via PR #759; committed 6fab9e323637aa00e0ad5fc09bb68a1ab6c5a529 |
 ---
 
 ## Artifacts

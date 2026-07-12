@@ -305,3 +305,10 @@ Next: `/sdd-execute backtest-debug-info sequential` on the `feature/backtest-deb
 - Env notes: codegen toolchain provisioned on host (buf via `go install`, egress-blocked GitHub
   releases); Docker+Postgres used under user exception for the migration test; Playwright browsers
   unavailable → tsc+lint fallback for the UI e2e (test committed for CI). Two ledger insights recorded.
+
+## Session 2026-07-12 (CI: feature status automation)
+
+- Promotion PR #759 merged to main
+- Feature promoted and committed: 6fab9e323637aa00e0ad5fc09bb68a1ab6c5a529
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-12

@@ -152,3 +152,10 @@ migration apply/upsert/rollback proven on a throwaway postgres:16 cluster.
 **Integration PR**: #742 (feature/persist-strategy-scores → main-dev) — pre-existing; now carries the
 full implementation. CI to run on push.
 **Next**: merge PR #742 when CI passes + reviewers approve.
+
+## Session 2026-07-12 (CI: feature status automation)
+
+- Promotion PR #759 merged to main
+- Feature promoted and committed: 6fab9e323637aa00e0ad5fc09bb68a1ab6c5a529
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-12
