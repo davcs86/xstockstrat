@@ -5,10 +5,16 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
+exports.barActionFromJSON = barActionFromJSON;
+exports.barActionToJSON = barActionToJSON;
+exports.barActionToNumber = barActionToNumber;
+exports.noTradeReasonFromJSON = noTradeReasonFromJSON;
+exports.noTradeReasonToJSON = noTradeReasonToJSON;
+exports.noTradeReasonToNumber = noTradeReasonToNumber;
 exports.componentKindFromJSON = componentKindFromJSON;
 exports.componentKindToJSON = componentKindToJSON;
 exports.componentKindToNumber = componentKindToNumber;
@@ -77,6 +83,149 @@ function backtestStatusToNumber(object) {
         case BacktestStatus.BACKTEST_STATUS_INSUFFICIENT_DATA:
             return 2;
         case BacktestStatus.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** The engine's decision for a single bar. Closed set → enum (C-04). */
+var BarAction;
+(function (BarAction) {
+    BarAction["BAR_ACTION_UNSPECIFIED"] = "BAR_ACTION_UNSPECIFIED";
+    /** BAR_ACTION_WARMUP - bar within the strategy's warm-up window */
+    BarAction["BAR_ACTION_WARMUP"] = "BAR_ACTION_WARMUP";
+    /** BAR_ACTION_HOLD_FLAT - flat, no entry this bar */
+    BarAction["BAR_ACTION_HOLD_FLAT"] = "BAR_ACTION_HOLD_FLAT";
+    /** BAR_ACTION_ENTER_LONG - opened a long position this bar */
+    BarAction["BAR_ACTION_ENTER_LONG"] = "BAR_ACTION_ENTER_LONG";
+    /** BAR_ACTION_EXIT_LONG - closed a long position this bar */
+    BarAction["BAR_ACTION_EXIT_LONG"] = "BAR_ACTION_EXIT_LONG";
+    /** BAR_ACTION_HOLD_LONG - holding an existing long, no exit this bar */
+    BarAction["BAR_ACTION_HOLD_LONG"] = "BAR_ACTION_HOLD_LONG";
+    BarAction["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(BarAction || (exports.BarAction = BarAction = {}));
+function barActionFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "BAR_ACTION_UNSPECIFIED":
+            return BarAction.BAR_ACTION_UNSPECIFIED;
+        case 1:
+        case "BAR_ACTION_WARMUP":
+            return BarAction.BAR_ACTION_WARMUP;
+        case 2:
+        case "BAR_ACTION_HOLD_FLAT":
+            return BarAction.BAR_ACTION_HOLD_FLAT;
+        case 3:
+        case "BAR_ACTION_ENTER_LONG":
+            return BarAction.BAR_ACTION_ENTER_LONG;
+        case 4:
+        case "BAR_ACTION_EXIT_LONG":
+            return BarAction.BAR_ACTION_EXIT_LONG;
+        case 5:
+        case "BAR_ACTION_HOLD_LONG":
+            return BarAction.BAR_ACTION_HOLD_LONG;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return BarAction.UNRECOGNIZED;
+    }
+}
+function barActionToJSON(object) {
+    switch (object) {
+        case BarAction.BAR_ACTION_UNSPECIFIED:
+            return "BAR_ACTION_UNSPECIFIED";
+        case BarAction.BAR_ACTION_WARMUP:
+            return "BAR_ACTION_WARMUP";
+        case BarAction.BAR_ACTION_HOLD_FLAT:
+            return "BAR_ACTION_HOLD_FLAT";
+        case BarAction.BAR_ACTION_ENTER_LONG:
+            return "BAR_ACTION_ENTER_LONG";
+        case BarAction.BAR_ACTION_EXIT_LONG:
+            return "BAR_ACTION_EXIT_LONG";
+        case BarAction.BAR_ACTION_HOLD_LONG:
+            return "BAR_ACTION_HOLD_LONG";
+        case BarAction.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function barActionToNumber(object) {
+    switch (object) {
+        case BarAction.BAR_ACTION_UNSPECIFIED:
+            return 0;
+        case BarAction.BAR_ACTION_WARMUP:
+            return 1;
+        case BarAction.BAR_ACTION_HOLD_FLAT:
+            return 2;
+        case BarAction.BAR_ACTION_ENTER_LONG:
+            return 3;
+        case BarAction.BAR_ACTION_EXIT_LONG:
+            return 4;
+        case BarAction.BAR_ACTION_HOLD_LONG:
+            return 5;
+        case BarAction.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** Why a symbol produced zero trades. Closed set → enum (C-04). */
+var NoTradeReason;
+(function (NoTradeReason) {
+    /** NO_TRADE_REASON_UNSPECIFIED - symbol traded, or not classified */
+    NoTradeReason["NO_TRADE_REASON_UNSPECIFIED"] = "NO_TRADE_REASON_UNSPECIFIED";
+    /** NO_TRADE_REASON_ENTIRE_RANGE_WARMUP - the whole range was warm-up */
+    NoTradeReason["NO_TRADE_REASON_ENTIRE_RANGE_WARMUP"] = "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP";
+    /** NO_TRADE_REASON_ENTRY_NEVER_TRUE - entry condition never satisfied */
+    NoTradeReason["NO_TRADE_REASON_ENTRY_NEVER_TRUE"] = "NO_TRADE_REASON_ENTRY_NEVER_TRUE";
+    /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
+    NoTradeReason["NO_TRADE_REASON_INSUFFICIENT_CAPITAL"] = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
+    NoTradeReason["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(NoTradeReason || (exports.NoTradeReason = NoTradeReason = {}));
+function noTradeReasonFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "NO_TRADE_REASON_UNSPECIFIED":
+            return NoTradeReason.NO_TRADE_REASON_UNSPECIFIED;
+        case 1:
+        case "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP":
+            return NoTradeReason.NO_TRADE_REASON_ENTIRE_RANGE_WARMUP;
+        case 2:
+        case "NO_TRADE_REASON_ENTRY_NEVER_TRUE":
+            return NoTradeReason.NO_TRADE_REASON_ENTRY_NEVER_TRUE;
+        case 3:
+        case "NO_TRADE_REASON_INSUFFICIENT_CAPITAL":
+            return NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return NoTradeReason.UNRECOGNIZED;
+    }
+}
+function noTradeReasonToJSON(object) {
+    switch (object) {
+        case NoTradeReason.NO_TRADE_REASON_UNSPECIFIED:
+            return "NO_TRADE_REASON_UNSPECIFIED";
+        case NoTradeReason.NO_TRADE_REASON_ENTIRE_RANGE_WARMUP:
+            return "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP";
+        case NoTradeReason.NO_TRADE_REASON_ENTRY_NEVER_TRUE:
+            return "NO_TRADE_REASON_ENTRY_NEVER_TRUE";
+        case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
+            return "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
+        case NoTradeReason.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function noTradeReasonToNumber(object) {
+    switch (object) {
+        case NoTradeReason.NO_TRADE_REASON_UNSPECIFIED:
+            return 0;
+        case NoTradeReason.NO_TRADE_REASON_ENTIRE_RANGE_WARMUP:
+            return 1;
+        case NoTradeReason.NO_TRADE_REASON_ENTRY_NEVER_TRUE:
+            return 2;
+        case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
+            return 3;
+        case NoTradeReason.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -725,6 +874,7 @@ function createBaseBacktestResult() {
         trades: [],
         status: BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
         coverageGaps: [],
+        diagnostics: [],
     };
 }
 exports.BacktestResult = {
@@ -767,6 +917,9 @@ exports.BacktestResult = {
         }
         for (const v of message.coverageGaps) {
             exports.CoverageGap.encode(v, writer.uint32(106).fork()).join();
+        }
+        for (const v of message.diagnostics) {
+            exports.SymbolDiagnostics.encode(v, writer.uint32(114).fork()).join();
         }
         return writer;
     },
@@ -868,6 +1021,13 @@ exports.BacktestResult = {
                     message.coverageGaps.push(exports.CoverageGap.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 14: {
+                    if (tag !== 114) {
+                        break;
+                    }
+                    message.diagnostics.push(exports.SymbolDiagnostics.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -937,6 +1097,9 @@ exports.BacktestResult = {
                 : globalThis.Array.isArray(object?.coverage_gaps)
                     ? object.coverage_gaps.map((e) => exports.CoverageGap.fromJSON(e))
                     : [],
+            diagnostics: globalThis.Array.isArray(object?.diagnostics)
+                ? object.diagnostics.map((e) => exports.SymbolDiagnostics.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -980,6 +1143,9 @@ exports.BacktestResult = {
         if (message.coverageGaps?.length) {
             obj.coverageGaps = message.coverageGaps.map((e) => exports.CoverageGap.toJSON(e));
         }
+        if (message.diagnostics?.length) {
+            obj.diagnostics = message.diagnostics.map((e) => exports.SymbolDiagnostics.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -1000,6 +1166,7 @@ exports.BacktestResult = {
         message.trades = object.trades?.map((e) => exports.TradeRecord.fromPartial(e)) || [];
         message.status = object.status ?? BacktestStatus.BACKTEST_STATUS_UNSPECIFIED;
         message.coverageGaps = object.coverageGaps?.map((e) => exports.CoverageGap.fromPartial(e)) || [];
+        message.diagnostics = object.diagnostics?.map((e) => exports.SymbolDiagnostics.fromPartial(e)) || [];
         return message;
     },
 };
@@ -1183,6 +1350,495 @@ exports.TradeRecord = {
         message.pnl = object.pnl ?? 0;
         message.entryTime = object.entryTime ?? undefined;
         message.exitTime = object.exitTime ?? undefined;
+        return message;
+    },
+};
+function createBaseBarDiagnostic() {
+    return {
+        symbol: "",
+        barIndex: 0,
+        timestamp: undefined,
+        open: 0,
+        high: 0,
+        low: 0,
+        close: 0,
+        volume: 0,
+        vwap: 0,
+        indicators: {},
+        warmup: false,
+        signalScore: 0,
+        conviction: 0,
+        action: BarAction.BAR_ACTION_UNSPECIFIED,
+    };
+}
+exports.BarDiagnostic = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.barIndex !== 0) {
+            writer.uint32(16).int32(message.barIndex);
+        }
+        if (message.timestamp !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.timestamp), writer.uint32(26).fork()).join();
+        }
+        if (message.open !== 0) {
+            writer.uint32(33).double(message.open);
+        }
+        if (message.high !== 0) {
+            writer.uint32(41).double(message.high);
+        }
+        if (message.low !== 0) {
+            writer.uint32(49).double(message.low);
+        }
+        if (message.close !== 0) {
+            writer.uint32(57).double(message.close);
+        }
+        if (message.volume !== 0) {
+            writer.uint32(64).int64(message.volume);
+        }
+        if (message.vwap !== 0) {
+            writer.uint32(73).double(message.vwap);
+        }
+        globalThis.Object.entries(message.indicators).forEach(([key, value]) => {
+            exports.BarDiagnostic_IndicatorsEntry.encode({ key: key, value }, writer.uint32(82).fork()).join();
+        });
+        if (message.warmup !== false) {
+            writer.uint32(88).bool(message.warmup);
+        }
+        if (message.signalScore !== 0) {
+            writer.uint32(97).double(message.signalScore);
+        }
+        if (message.conviction !== 0) {
+            writer.uint32(105).double(message.conviction);
+        }
+        if (message.action !== BarAction.BAR_ACTION_UNSPECIFIED) {
+            writer.uint32(112).int32(barActionToNumber(message.action));
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseBarDiagnostic();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.barIndex = reader.int32();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.timestamp = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 33) {
+                        break;
+                    }
+                    message.open = reader.double();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 41) {
+                        break;
+                    }
+                    message.high = reader.double();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 49) {
+                        break;
+                    }
+                    message.low = reader.double();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 57) {
+                        break;
+                    }
+                    message.close = reader.double();
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 64) {
+                        break;
+                    }
+                    message.volume = longToNumber(reader.int64());
+                    continue;
+                }
+                case 9: {
+                    if (tag !== 73) {
+                        break;
+                    }
+                    message.vwap = reader.double();
+                    continue;
+                }
+                case 10: {
+                    if (tag !== 82) {
+                        break;
+                    }
+                    const entry10 = exports.BarDiagnostic_IndicatorsEntry.decode(reader, reader.uint32());
+                    if (entry10.value !== undefined) {
+                        message.indicators[entry10.key] = entry10.value;
+                    }
+                    continue;
+                }
+                case 11: {
+                    if (tag !== 88) {
+                        break;
+                    }
+                    message.warmup = reader.bool();
+                    continue;
+                }
+                case 12: {
+                    if (tag !== 97) {
+                        break;
+                    }
+                    message.signalScore = reader.double();
+                    continue;
+                }
+                case 13: {
+                    if (tag !== 105) {
+                        break;
+                    }
+                    message.conviction = reader.double();
+                    continue;
+                }
+                case 14: {
+                    if (tag !== 112) {
+                        break;
+                    }
+                    message.action = barActionFromJSON(reader.int32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            barIndex: isSet(object.barIndex)
+                ? globalThis.Number(object.barIndex)
+                : isSet(object.bar_index)
+                    ? globalThis.Number(object.bar_index)
+                    : 0,
+            timestamp: isSet(object.timestamp) ? fromJsonTimestamp(object.timestamp) : undefined,
+            open: isSet(object.open) ? globalThis.Number(object.open) : 0,
+            high: isSet(object.high) ? globalThis.Number(object.high) : 0,
+            low: isSet(object.low) ? globalThis.Number(object.low) : 0,
+            close: isSet(object.close) ? globalThis.Number(object.close) : 0,
+            volume: isSet(object.volume) ? globalThis.Number(object.volume) : 0,
+            vwap: isSet(object.vwap) ? globalThis.Number(object.vwap) : 0,
+            indicators: isObject(object.indicators)
+                ? globalThis.Object.entries(object.indicators).reduce((acc, [key, value]) => {
+                    acc[key] = globalThis.Number(value);
+                    return acc;
+                }, {})
+                : {},
+            warmup: isSet(object.warmup) ? globalThis.Boolean(object.warmup) : false,
+            signalScore: isSet(object.signalScore)
+                ? globalThis.Number(object.signalScore)
+                : isSet(object.signal_score)
+                    ? globalThis.Number(object.signal_score)
+                    : 0,
+            conviction: isSet(object.conviction) ? globalThis.Number(object.conviction) : 0,
+            action: isSet(object.action) ? barActionFromJSON(object.action) : BarAction.BAR_ACTION_UNSPECIFIED,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.barIndex !== 0) {
+            obj.barIndex = Math.round(message.barIndex);
+        }
+        if (message.timestamp !== undefined) {
+            obj.timestamp = message.timestamp.toISOString();
+        }
+        if (message.open !== 0) {
+            obj.open = message.open;
+        }
+        if (message.high !== 0) {
+            obj.high = message.high;
+        }
+        if (message.low !== 0) {
+            obj.low = message.low;
+        }
+        if (message.close !== 0) {
+            obj.close = message.close;
+        }
+        if (message.volume !== 0) {
+            obj.volume = Math.round(message.volume);
+        }
+        if (message.vwap !== 0) {
+            obj.vwap = message.vwap;
+        }
+        if (message.indicators) {
+            const entries = globalThis.Object.entries(message.indicators);
+            if (entries.length > 0) {
+                obj.indicators = {};
+                entries.forEach(([k, v]) => {
+                    obj.indicators[k] = v;
+                });
+            }
+        }
+        if (message.warmup !== false) {
+            obj.warmup = message.warmup;
+        }
+        if (message.signalScore !== 0) {
+            obj.signalScore = message.signalScore;
+        }
+        if (message.conviction !== 0) {
+            obj.conviction = message.conviction;
+        }
+        if (message.action !== BarAction.BAR_ACTION_UNSPECIFIED) {
+            obj.action = barActionToJSON(message.action);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.BarDiagnostic.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseBarDiagnostic();
+        message.symbol = object.symbol ?? "";
+        message.barIndex = object.barIndex ?? 0;
+        message.timestamp = object.timestamp ?? undefined;
+        message.open = object.open ?? 0;
+        message.high = object.high ?? 0;
+        message.low = object.low ?? 0;
+        message.close = object.close ?? 0;
+        message.volume = object.volume ?? 0;
+        message.vwap = object.vwap ?? 0;
+        message.indicators = globalThis.Object.entries(object.indicators ?? {}).reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = globalThis.Number(value);
+            }
+            return acc;
+        }, {});
+        message.warmup = object.warmup ?? false;
+        message.signalScore = object.signalScore ?? 0;
+        message.conviction = object.conviction ?? 0;
+        message.action = object.action ?? BarAction.BAR_ACTION_UNSPECIFIED;
+        return message;
+    },
+};
+function createBaseBarDiagnostic_IndicatorsEntry() {
+    return { key: "", value: 0 };
+}
+exports.BarDiagnostic_IndicatorsEntry = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.key !== "") {
+            writer.uint32(10).string(message.key);
+        }
+        if (message.value !== 0) {
+            writer.uint32(17).double(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseBarDiagnostic_IndicatorsEntry();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.key = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.value = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            key: isSet(object.key) ? globalThis.String(object.key) : "",
+            value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.key !== "") {
+            obj.key = message.key;
+        }
+        if (message.value !== 0) {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.BarDiagnostic_IndicatorsEntry.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseBarDiagnostic_IndicatorsEntry();
+        message.key = object.key ?? "";
+        message.value = object.value ?? 0;
+        return message;
+    },
+};
+function createBaseSymbolDiagnostics() {
+    return {
+        symbol: "",
+        bars: [],
+        noTradeReason: NoTradeReason.NO_TRADE_REASON_UNSPECIFIED,
+        barsTotal: 0,
+        warmupBars: 0,
+    };
+}
+exports.SymbolDiagnostics = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        for (const v of message.bars) {
+            exports.BarDiagnostic.encode(v, writer.uint32(18).fork()).join();
+        }
+        if (message.noTradeReason !== NoTradeReason.NO_TRADE_REASON_UNSPECIFIED) {
+            writer.uint32(24).int32(noTradeReasonToNumber(message.noTradeReason));
+        }
+        if (message.barsTotal !== 0) {
+            writer.uint32(32).int32(message.barsTotal);
+        }
+        if (message.warmupBars !== 0) {
+            writer.uint32(40).int32(message.warmupBars);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSymbolDiagnostics();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.bars.push(exports.BarDiagnostic.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.noTradeReason = noTradeReasonFromJSON(reader.int32());
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.barsTotal = reader.int32();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.warmupBars = reader.int32();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            bars: globalThis.Array.isArray(object?.bars) ? object.bars.map((e) => exports.BarDiagnostic.fromJSON(e)) : [],
+            noTradeReason: isSet(object.noTradeReason)
+                ? noTradeReasonFromJSON(object.noTradeReason)
+                : isSet(object.no_trade_reason)
+                    ? noTradeReasonFromJSON(object.no_trade_reason)
+                    : NoTradeReason.NO_TRADE_REASON_UNSPECIFIED,
+            barsTotal: isSet(object.barsTotal)
+                ? globalThis.Number(object.barsTotal)
+                : isSet(object.bars_total)
+                    ? globalThis.Number(object.bars_total)
+                    : 0,
+            warmupBars: isSet(object.warmupBars)
+                ? globalThis.Number(object.warmupBars)
+                : isSet(object.warmup_bars)
+                    ? globalThis.Number(object.warmup_bars)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.bars?.length) {
+            obj.bars = message.bars.map((e) => exports.BarDiagnostic.toJSON(e));
+        }
+        if (message.noTradeReason !== NoTradeReason.NO_TRADE_REASON_UNSPECIFIED) {
+            obj.noTradeReason = noTradeReasonToJSON(message.noTradeReason);
+        }
+        if (message.barsTotal !== 0) {
+            obj.barsTotal = Math.round(message.barsTotal);
+        }
+        if (message.warmupBars !== 0) {
+            obj.warmupBars = Math.round(message.warmupBars);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SymbolDiagnostics.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSymbolDiagnostics();
+        message.symbol = object.symbol ?? "";
+        message.bars = object.bars?.map((e) => exports.BarDiagnostic.fromPartial(e)) || [];
+        message.noTradeReason = object.noTradeReason ?? NoTradeReason.NO_TRADE_REASON_UNSPECIFIED;
+        message.barsTotal = object.barsTotal ?? 0;
+        message.warmupBars = object.warmupBars ?? 0;
         return message;
     },
 };
@@ -1565,6 +2221,440 @@ exports.StrategyReport = {
             ? exports.StrategyScore.fromPartial(object.score)
             : undefined;
         message.metadata = object.metadata ?? undefined;
+        return message;
+    },
+};
+function createBaseListBacktestsRequest() {
+    return { strategyId: "", limit: 0 };
+}
+exports.ListBacktestsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.strategyId !== "") {
+            writer.uint32(10).string(message.strategyId);
+        }
+        if (message.limit !== 0) {
+            writer.uint32(16).int32(message.limit);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListBacktestsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.limit = reader.int32();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+            limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        if (message.limit !== 0) {
+            obj.limit = Math.round(message.limit);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListBacktestsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListBacktestsRequest();
+        message.strategyId = object.strategyId ?? "";
+        message.limit = object.limit ?? 0;
+        return message;
+    },
+};
+function createBaseBacktestRunSummary() {
+    return {
+        backtestId: "",
+        strategyId: "",
+        status: BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
+        totalReturn: 0,
+        annualizedReturn: 0,
+        sharpeRatio: 0,
+        maxDrawdown: 0,
+        winRate: 0,
+        totalTrades: 0,
+        profitFactor: 0,
+        symbols: [],
+        overallScore: 0,
+        rating: "",
+        completedAt: undefined,
+    };
+}
+exports.BacktestRunSummary = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.backtestId !== "") {
+            writer.uint32(10).string(message.backtestId);
+        }
+        if (message.strategyId !== "") {
+            writer.uint32(18).string(message.strategyId);
+        }
+        if (message.status !== BacktestStatus.BACKTEST_STATUS_UNSPECIFIED) {
+            writer.uint32(24).int32(backtestStatusToNumber(message.status));
+        }
+        if (message.totalReturn !== 0) {
+            writer.uint32(33).double(message.totalReturn);
+        }
+        if (message.annualizedReturn !== 0) {
+            writer.uint32(41).double(message.annualizedReturn);
+        }
+        if (message.sharpeRatio !== 0) {
+            writer.uint32(49).double(message.sharpeRatio);
+        }
+        if (message.maxDrawdown !== 0) {
+            writer.uint32(57).double(message.maxDrawdown);
+        }
+        if (message.winRate !== 0) {
+            writer.uint32(65).double(message.winRate);
+        }
+        if (message.totalTrades !== 0) {
+            writer.uint32(72).int32(message.totalTrades);
+        }
+        if (message.profitFactor !== 0) {
+            writer.uint32(81).double(message.profitFactor);
+        }
+        for (const v of message.symbols) {
+            writer.uint32(90).string(v);
+        }
+        if (message.overallScore !== 0) {
+            writer.uint32(97).double(message.overallScore);
+        }
+        if (message.rating !== "") {
+            writer.uint32(106).string(message.rating);
+        }
+        if (message.completedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.completedAt), writer.uint32(114).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseBacktestRunSummary();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.backtestId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.status = backtestStatusFromJSON(reader.int32());
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 33) {
+                        break;
+                    }
+                    message.totalReturn = reader.double();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 41) {
+                        break;
+                    }
+                    message.annualizedReturn = reader.double();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 49) {
+                        break;
+                    }
+                    message.sharpeRatio = reader.double();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 57) {
+                        break;
+                    }
+                    message.maxDrawdown = reader.double();
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 65) {
+                        break;
+                    }
+                    message.winRate = reader.double();
+                    continue;
+                }
+                case 9: {
+                    if (tag !== 72) {
+                        break;
+                    }
+                    message.totalTrades = reader.int32();
+                    continue;
+                }
+                case 10: {
+                    if (tag !== 81) {
+                        break;
+                    }
+                    message.profitFactor = reader.double();
+                    continue;
+                }
+                case 11: {
+                    if (tag !== 90) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+                case 12: {
+                    if (tag !== 97) {
+                        break;
+                    }
+                    message.overallScore = reader.double();
+                    continue;
+                }
+                case 13: {
+                    if (tag !== 106) {
+                        break;
+                    }
+                    message.rating = reader.string();
+                    continue;
+                }
+                case 14: {
+                    if (tag !== 114) {
+                        break;
+                    }
+                    message.completedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            backtestId: isSet(object.backtestId)
+                ? globalThis.String(object.backtestId)
+                : isSet(object.backtest_id)
+                    ? globalThis.String(object.backtest_id)
+                    : "",
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+            status: isSet(object.status) ? backtestStatusFromJSON(object.status) : BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
+            totalReturn: isSet(object.totalReturn)
+                ? globalThis.Number(object.totalReturn)
+                : isSet(object.total_return)
+                    ? globalThis.Number(object.total_return)
+                    : 0,
+            annualizedReturn: isSet(object.annualizedReturn)
+                ? globalThis.Number(object.annualizedReturn)
+                : isSet(object.annualized_return)
+                    ? globalThis.Number(object.annualized_return)
+                    : 0,
+            sharpeRatio: isSet(object.sharpeRatio)
+                ? globalThis.Number(object.sharpeRatio)
+                : isSet(object.sharpe_ratio)
+                    ? globalThis.Number(object.sharpe_ratio)
+                    : 0,
+            maxDrawdown: isSet(object.maxDrawdown)
+                ? globalThis.Number(object.maxDrawdown)
+                : isSet(object.max_drawdown)
+                    ? globalThis.Number(object.max_drawdown)
+                    : 0,
+            winRate: isSet(object.winRate)
+                ? globalThis.Number(object.winRate)
+                : isSet(object.win_rate)
+                    ? globalThis.Number(object.win_rate)
+                    : 0,
+            totalTrades: isSet(object.totalTrades)
+                ? globalThis.Number(object.totalTrades)
+                : isSet(object.total_trades)
+                    ? globalThis.Number(object.total_trades)
+                    : 0,
+            profitFactor: isSet(object.profitFactor)
+                ? globalThis.Number(object.profitFactor)
+                : isSet(object.profit_factor)
+                    ? globalThis.Number(object.profit_factor)
+                    : 0,
+            symbols: globalThis.Array.isArray(object?.symbols)
+                ? object.symbols.map((e) => globalThis.String(e))
+                : [],
+            overallScore: isSet(object.overallScore)
+                ? globalThis.Number(object.overallScore)
+                : isSet(object.overall_score)
+                    ? globalThis.Number(object.overall_score)
+                    : 0,
+            rating: isSet(object.rating) ? globalThis.String(object.rating) : "",
+            completedAt: isSet(object.completedAt)
+                ? fromJsonTimestamp(object.completedAt)
+                : isSet(object.completed_at)
+                    ? fromJsonTimestamp(object.completed_at)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.backtestId !== "") {
+            obj.backtestId = message.backtestId;
+        }
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        if (message.status !== BacktestStatus.BACKTEST_STATUS_UNSPECIFIED) {
+            obj.status = backtestStatusToJSON(message.status);
+        }
+        if (message.totalReturn !== 0) {
+            obj.totalReturn = message.totalReturn;
+        }
+        if (message.annualizedReturn !== 0) {
+            obj.annualizedReturn = message.annualizedReturn;
+        }
+        if (message.sharpeRatio !== 0) {
+            obj.sharpeRatio = message.sharpeRatio;
+        }
+        if (message.maxDrawdown !== 0) {
+            obj.maxDrawdown = message.maxDrawdown;
+        }
+        if (message.winRate !== 0) {
+            obj.winRate = message.winRate;
+        }
+        if (message.totalTrades !== 0) {
+            obj.totalTrades = Math.round(message.totalTrades);
+        }
+        if (message.profitFactor !== 0) {
+            obj.profitFactor = message.profitFactor;
+        }
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        if (message.overallScore !== 0) {
+            obj.overallScore = message.overallScore;
+        }
+        if (message.rating !== "") {
+            obj.rating = message.rating;
+        }
+        if (message.completedAt !== undefined) {
+            obj.completedAt = message.completedAt.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.BacktestRunSummary.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseBacktestRunSummary();
+        message.backtestId = object.backtestId ?? "";
+        message.strategyId = object.strategyId ?? "";
+        message.status = object.status ?? BacktestStatus.BACKTEST_STATUS_UNSPECIFIED;
+        message.totalReturn = object.totalReturn ?? 0;
+        message.annualizedReturn = object.annualizedReturn ?? 0;
+        message.sharpeRatio = object.sharpeRatio ?? 0;
+        message.maxDrawdown = object.maxDrawdown ?? 0;
+        message.winRate = object.winRate ?? 0;
+        message.totalTrades = object.totalTrades ?? 0;
+        message.profitFactor = object.profitFactor ?? 0;
+        message.symbols = object.symbols?.map((e) => e) || [];
+        message.overallScore = object.overallScore ?? 0;
+        message.rating = object.rating ?? "";
+        message.completedAt = object.completedAt ?? undefined;
+        return message;
+    },
+};
+function createBaseListBacktestsResponse() {
+    return { runs: [] };
+}
+exports.ListBacktestsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.runs) {
+            exports.BacktestRunSummary.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListBacktestsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.runs.push(exports.BacktestRunSummary.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            runs: globalThis.Array.isArray(object?.runs) ? object.runs.map((e) => exports.BacktestRunSummary.fromJSON(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.runs?.length) {
+            obj.runs = message.runs.map((e) => exports.BacktestRunSummary.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListBacktestsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListBacktestsResponse();
+        message.runs = object.runs?.map((e) => exports.BacktestRunSummary.fromPartial(e)) || [];
         return message;
     },
 };
@@ -3596,6 +4686,16 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.GetStrategyReportRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.StrategyReport.encode(value).finish()),
         responseDeserialize: (value) => exports.StrategyReport.decode(value),
+    },
+    /** List past backtest runs (summary metrics + earned score) for a strategy, newest first. */
+    listBacktests: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/ListBacktests",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListBacktestsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListBacktestsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListBacktestsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListBacktestsResponse.decode(value),
     },
     manageStrategy: {
         path: "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy",

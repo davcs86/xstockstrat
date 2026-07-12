@@ -350,6 +350,12 @@ export type FormulaDefinition = Message<"xstockstrat.indicators.v1.FormulaDefini
      * @generated from field: repeated xstockstrat.indicators.v1.FormulaOutput outputs = 11;
      */
     outputs: FormulaOutput[];
+    /**
+     * bars of warm-up before this formula's outputs are valid (feature 064)
+     *
+     * @generated from field: int32 warmup_period = 12;
+     */
+    warmupPeriod: number;
 };
 /**
  * Describes the message xstockstrat.indicators.v1.FormulaDefinition.
@@ -447,6 +453,12 @@ export type RegisterFormulaRequest = Message<"xstockstrat.indicators.v1.Register
      * @generated from field: repeated xstockstrat.indicators.v1.FormulaOutput outputs = 8;
      */
     outputs: FormulaOutput[];
+    /**
+     * bars of warm-up before this formula's outputs are valid (feature 064)
+     *
+     * @generated from field: int32 warmup_period = 9;
+     */
+    warmupPeriod: number;
 };
 /**
  * Describes the message xstockstrat.indicators.v1.RegisterFormulaRequest.
@@ -573,6 +585,12 @@ export type UpdateFormulaRequest = Message<"xstockstrat.indicators.v1.UpdateForm
      * @generated from field: repeated xstockstrat.indicators.v1.FormulaOutput outputs = 8;
      */
     outputs: FormulaOutput[];
+    /**
+     * bars of warm-up before this formula's outputs are valid (feature 064)
+     *
+     * @generated from field: int32 warmup_period = 9;
+     */
+    warmupPeriod: number;
 };
 /**
  * Describes the message xstockstrat.indicators.v1.UpdateFormulaRequest.

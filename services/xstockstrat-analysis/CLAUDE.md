@@ -6,6 +6,37 @@ Python gRPC service for strategy backtesting, scoring, and report generation. Re
 
 Beyond the gRPC server, the service runs an **asyncio live evaluation loop** (`app/engine/live_loop.py`, feature 048) that continuously evaluates `live_enabled` strategies via the shared evaluator (`app/services/evaluator.py`) and emits alerts to xstockstrat-notify on entry/exit transitions — guaranteeing backtest/live parity. The loop never places orders.
 
+### Strategy Score Persistence (feature 064)
+
+`ScoreStrategy` persists the latest `StrategyScore` per strategy to the `analysis.strategy_scores`
+table (migration `005`, upsert on the `strategy_id` primary key) in addition to the in-memory
+`self._strategies` dict. The write is **best-effort** (FR-7): it mirrors the ledger-emit `try/except →
+log.warning`, so a DB failure never fails scoring. Reads stay in-memory — `ListStrategies` /
+`GetStrategyReport` still serve `self._strategies`; at boot `main.py` calls `servicer.hydrate_scores()`
+(best-effort) to load persisted rows back into memory, so scores **survive a service restart**. Reuses
+the existing asyncpg pool — no new pool (budget stays 2).
+
+A `math.isfinite` guard drops non-finite component values before the JSONB write. The `strategy_scores`
+table has no retention or pagination yet (deactivated and ad-hoc-`strategy_id` scores persist and hydrate).
+
+### Backtest Auto-Scoring & Run History
+
+`RunBacktest` **auto-scores** on every OK run: after the result is built it computes the `StrategyScore`
+via the shared `_score_from_result` helper (the same math `ScoreStrategy` uses — one code path, no drift)
+and persists it through `_persist_strategy_score` (in-memory dict + best-effort `strategy_scores` upsert).
+This fixes the bug where a score was never persisted after a backtest — previously nothing invoked scoring,
+because the UI only called `RunBacktest`, never the separate `ScoreStrategy` RPC.
+
+Every completed run (OK **and** INSUFFICIENT_DATA) is also appended to `analysis.backtest_runs`
+(migration `006`, `BacktestRunsRepository`) — a lightweight, durable **run history** of summary metrics
+plus the score the run earned (INSUFFICIENT runs record history with a 0 score / empty rating). The
+`ListBacktests(strategy_id, limit)` RPC reads the latest rows back (newest first; `limit` 0 → server
+default of 20) as typed `BacktestRunSummary`s, so past run results survive a restart and are visible in
+the UI's "Past Runs" table. Full trades/diagnostics are **not** copied into history — those remain on the
+in-memory `latest_backtest`; the history table stays a compact summary. All persistence is best-effort
+(`try/except → log.warning`) so a DB failure never fails a run. Reuses the existing asyncpg pool
+(no new pool — budget stays 2).
+
 ### Fundamentals Signal Producer (feature 062)
 
 A second asyncio background loop (`app/engine/fundsignal_loop.py`) runs a daily **fundamentals signal producer**. Each cycle it builds a deduplicated symbol universe, reads cached fundamentals **only** via marketdata `GetFundamentalsMulti` (never FMP directly — the single FMP chokepoint lives in marketdata, feature 059), scores each symbol (built-in deterministic default, or a 063 scoring formula when `analysis.fundsignal.scoring_formula_id` is set), maps the score to a `buy`/`sell`/`hold` direction by cross-sectional quantile, and emits an `ExternalSignal` per surviving symbol through ingest `IngestSignal`.
@@ -114,6 +145,7 @@ Namespace: `analysis`
 | `analysis.backtest.max_duration_seconds` | int | `300` | Max backtest run time |
 | `analysis.backtest.default_commission_pct` | float | `0.001` | Assumed commission per trade |
 | `analysis.backtest.default_slippage_pct` | float | `0.0005` | Assumed slippage |
+| `analysis.backtest.max_range_days` | int | `730` | Max backtest range span in days (≈2 years, feature 064); a request whose `range` exceeds it is rejected with `INVALID_ARGUMENT`, an unset bound is defaulted to the last `max_range_days`. Applies to all `RunBacktest` callers. |
 | `analysis.scoring.sharpe_weight` | float | `0.4` | Weight of Sharpe in overall score |
 | `analysis.scoring.drawdown_weight` | float | `0.3` | Weight of max drawdown |
 | `analysis.scoring.win_rate_weight` | float | `0.3` | Weight of win rate |

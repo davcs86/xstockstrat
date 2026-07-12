@@ -237,7 +237,11 @@ def register_tools(server: FastMCP) -> None:
         """Trigger a backtest via xstockstrat-analysis.
         strategy_id: identifies the strategy (e.g. 'sma_crossover').
         symbols: list of ticker symbols e.g. ['NVDA', 'AAPL'].
-        initial_capital: starting capital in USD (default 100000)."""
+        initial_capital: starting capital in USD (default 100000).
+        Returns the full backtest result including per-symbol `diagnostics`: a day-by-day list of
+        bars (OHLCV, computed indicator values, warm-up flag, entry/exit/conviction decision) and a
+        `no_trade_reason` per symbol — use these to explain why a strategy produced 0 trades and to
+        suggest changes to the strategy or its indicators."""
         return await client.run_backtest(
             strategy_id=strategy_id,
             symbols=symbols,

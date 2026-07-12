@@ -17,14 +17,17 @@ import uuid
 from gen.indicators.v1 import indicators_pb2
 from google.protobuf.struct_pb2 import Value
 
+from app.formulas import SYSTEM_AUTHOR
+
 # Deterministic id → re-seeding is idempotent and 062 can hardcode the reference.
 FORMULA_ID = str(
     uuid.uuid5(uuid.NAMESPACE_URL, "xstockstrat:formula:fundamentals-value-quality-v1")
 )
 
 NAME = "Fundamentals Value+Quality Composite (v1)"
-# "system" sentinel author — no system-author convention existed before this feature.
-AUTHOR = "system"
+# Reserved system author (see app/formulas/SYSTEM_AUTHOR) — marks this as a platform-managed,
+# read-only formula that UpdateFormula/DeleteFormula refuse to mutate.
+AUTHOR = SYSTEM_AUTHOR
 IS_PUBLIC = True
 DESCRIPTION = (
     "Per-symbol value+quality composite over fundamental metrics. Value sub-score blends "

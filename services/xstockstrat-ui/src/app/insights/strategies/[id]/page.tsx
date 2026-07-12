@@ -1,18 +1,36 @@
 'use client';
 import { useState, use } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/components/ui/utils';
 import { ConnectError } from '@connectrpc/connect';
-import { useStrategyReport } from '@/hooks/useStrategies';
+import { useStrategyReport, useBacktestHistory } from '@/hooks/useStrategies';
 import { useRunBacktest, useTriggerBackfill } from '@/hooks/useBacktest';
 import { useGetStrategy, useSetStrategyLiveInsights } from '@/hooks/useStrategyDefinitions';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
 import type { TradeRecord } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { BacktestStatus } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { BacktestDiagnostics } from '@/components/insights/BacktestDiagnostics';
+
+// feature 064: cap the backtest range to 2 calendar years (matches the analysis service cap).
+const MAX_RANGE_DAYS = 730;
+function shiftDay(iso: string, days: number): string {
+  const ms = new Date(iso).getTime();
+  if (Number.isNaN(ms)) return iso;
+  return new Date(ms + days * 86_400_000).toISOString().slice(0, 10);
+}
 
 interface BacktestFormState {
   symbol: string;
@@ -23,12 +41,24 @@ interface BacktestFormState {
 
 export default function StrategyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const queryClient = useQueryClient();
   const { data: report, isLoading } = useStrategyReport(id);
+  const { data: history } = useBacktestHistory(id);
   const { data: isAdmin } = useIsAdmin();
   const { data: definition } = useGetStrategy(id);
   const setLive = useSetStrategyLiveInsights();
-  const { mutate: runBacktestMutate, data: backtestResult, isPending: running, error: runErrorObj } = useRunBacktest();
-  const { mutate: triggerBackfillMutate, data: backfillData, isPending: backfilling, error: backfillErrorObj } = useTriggerBackfill();
+  const {
+    mutate: runBacktestMutate,
+    data: backtestResult,
+    isPending: running,
+    error: runErrorObj,
+  } = useRunBacktest();
+  const {
+    mutate: triggerBackfillMutate,
+    data: backfillData,
+    isPending: backfilling,
+    error: backfillErrorObj,
+  } = useTriggerBackfill();
 
   const [form, setForm] = useState<BacktestFormState>({
     symbol: 'AAPL',
@@ -37,24 +67,36 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
     initial_capital: '100000',
   });
 
-  const runError = runErrorObj instanceof ConnectError
-    ? (runErrorObj as ConnectError).rawMessage
-    : (runErrorObj?.message ?? null);
+  const runError =
+    runErrorObj instanceof ConnectError
+      ? (runErrorObj as ConnectError).rawMessage
+      : (runErrorObj?.message ?? null);
 
   function handleRunBacktest() {
     const isoToTimestamp = (iso: string) => {
       const ms = new Date(iso).getTime();
       return { seconds: BigInt(Math.floor(ms / 1000)), nanos: (ms % 1000) * 1_000_000 };
     };
-    runBacktestMutate({
-      strategyId: id,
-      symbols: form.symbol ? [form.symbol] : [],
-      initialCapital: parseFloat(form.initial_capital),
-      range: { start: isoToTimestamp(form.start), end: isoToTimestamp(form.end) },
-    });
+    runBacktestMutate(
+      {
+        strategyId: id,
+        symbols: form.symbol ? [form.symbol] : [],
+        initialCapital: parseFloat(form.initial_capital),
+        range: { start: isoToTimestamp(form.start), end: isoToTimestamp(form.end) },
+      },
+      {
+        // The run now persists a score + a history row server-side; refetch the report and
+        // the history so the Strategy Score card and Past Runs list reflect the new run.
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['analysis-report', id] });
+          queryClient.invalidateQueries({ queryKey: ['analysis-backtests', id] });
+        },
+      },
+    );
   }
 
   const result = backtestResult ?? report?.latestBacktest;
+  const pastRuns = history?.runs ?? [];
 
   const equityCurve = (() => {
     if (!result?.trades?.length) return [];
@@ -94,7 +136,9 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                     ).map(([key, val]) => (
                       <div key={key} className="flex justify-between text-xs">
                         <span className="text-muted-foreground capitalize">{key}</span>
-                        <span className="text-foreground tabular-nums">{(val * 100).toFixed(0)}</span>
+                        <span className="text-foreground tabular-nums">
+                          {(val * 100).toFixed(0)}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -163,6 +207,8 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                     <Input
                       type="date"
                       value={form.start}
+                      max={form.end}
+                      min={shiftDay(form.end, -MAX_RANGE_DAYS)}
                       onChange={(e) => setForm({ ...form, start: e.target.value })}
                     />
                   </div>
@@ -171,21 +217,22 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                     <Input
                       type="date"
                       value={form.end}
+                      min={form.start}
+                      max={shiftDay(form.start, MAX_RANGE_DAYS)}
                       onChange={(e) => setForm({ ...form, end: e.target.value })}
                     />
+                    <p className="mt-1 text-xs text-muted-foreground">Max range 2 years.</p>
                   </div>
                   <div>
-                    <label className="block text-xs text-muted-foreground mb-1">Initial Capital ($)</label>
+                    <label className="block text-xs text-muted-foreground mb-1">
+                      Initial Capital ($)
+                    </label>
                     <Input
                       value={form.initial_capital}
                       onChange={(e) => setForm({ ...form, initial_capital: e.target.value })}
                     />
                   </div>
-                  <Button
-                    onClick={handleRunBacktest}
-                    disabled={running}
-                    className="w-full"
-                  >
+                  <Button onClick={handleRunBacktest} disabled={running} className="w-full">
                     {running ? 'Running…' : 'Run Backtest'}
                   </Button>
                   {runError && <p className="text-xs text-destructive">{runError}</p>}
@@ -196,45 +243,51 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
 
           {/* Right: results */}
           <div className="flex-1 min-w-0 space-y-4">
-            {result && result.status === BacktestStatus.INSUFFICIENT_DATA && result.coverageGaps[0] && (
-              <Card data-testid="insufficient-data">
-                <CardHeader>
-                  <CardTitle>Insufficient data for this backtest</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    {result.coverageGaps[0].symbol} has {String(result.coverageGaps[0].barsHave)} bars
-                    stored, but this backtest needs at least {String(result.coverageGaps[0].barsNeed)}.
-                    Backfill the missing range to run it.
-                  </p>
-                  <Button
-                    data-testid="backfill-action"
-                    disabled={backfilling}
-                    onClick={() => {
-                      const gap = result.coverageGaps[0];
-                      triggerBackfillMutate({
-                        symbols: [gap.symbol],
-                        timeframeEnum: gap.timeframe,
-                        range: gap.gap,
-                        overwrite: false,
-                      });
-                    }}
-                  >
-                    {backfilling ? 'Starting backfill…' : 'Backfill this range'}
-                  </Button>
-                  {backfillData && (
-                    <p data-testid="backfill-confirmation" className="text-sm text-[hsl(163_100%_44%)]">
-                      Backfill started — job {backfillData.jobId}
+            {result &&
+              result.status === BacktestStatus.INSUFFICIENT_DATA &&
+              result.coverageGaps[0] && (
+                <Card data-testid="insufficient-data">
+                  <CardHeader>
+                    <CardTitle>Insufficient data for this backtest</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      {result.coverageGaps[0].symbol} has {String(result.coverageGaps[0].barsHave)}{' '}
+                      bars stored, but this backtest needs at least{' '}
+                      {String(result.coverageGaps[0].barsNeed)}. Backfill the missing range to run
+                      it.
                     </p>
-                  )}
-                  {backfillErrorObj && (
-                    <p className="text-sm text-destructive">
-                      Could not start backfill: {backfillErrorObj.message}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+                    <Button
+                      data-testid="backfill-action"
+                      disabled={backfilling}
+                      onClick={() => {
+                        const gap = result.coverageGaps[0];
+                        triggerBackfillMutate({
+                          symbols: [gap.symbol],
+                          timeframeEnum: gap.timeframe,
+                          range: gap.gap,
+                          overwrite: false,
+                        });
+                      }}
+                    >
+                      {backfilling ? 'Starting backfill…' : 'Backfill this range'}
+                    </Button>
+                    {backfillData && (
+                      <p
+                        data-testid="backfill-confirmation"
+                        className="text-sm text-[hsl(163_100%_44%)]"
+                      >
+                        Backfill started — job {backfillData.jobId}
+                      </p>
+                    )}
+                    {backfillErrorObj && (
+                      <p className="text-sm text-destructive">
+                        Could not start backfill: {backfillErrorObj.message}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
             {result && result.status !== BacktestStatus.INSUFFICIENT_DATA && (
               <>
@@ -288,7 +341,12 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                           <XAxis
                             dataKey="trade"
                             tick={{ fill: 'hsl(215 16% 47%)', fontSize: 11 }}
-                            label={{ value: 'Trade #', position: 'insideBottom', fill: 'hsl(215 16% 47%)', fontSize: 11 }}
+                            label={{
+                              value: 'Trade #',
+                              position: 'insideBottom',
+                              fill: 'hsl(215 16% 47%)',
+                              fontSize: 11,
+                            }}
                           />
                           <YAxis tick={{ fill: 'hsl(215 16% 47%)', fontSize: 11 }} />
                           <Tooltip
@@ -298,7 +356,10 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                               borderRadius: 8,
                             }}
                             labelStyle={{ color: 'hsl(215 16% 47%)' }}
-                            formatter={(v: unknown) => [`$${typeof v === 'number' ? v.toLocaleString() : '0'}`, 'Equity']}
+                            formatter={(v: unknown) => [
+                              `$${typeof v === 'number' ? v.toLocaleString() : '0'}`,
+                              'Equity',
+                            ]}
                           />
                           <Line
                             type="monotone"
@@ -312,7 +373,70 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                     </CardContent>
                   </Card>
                 )}
+
+                {/* Day-by-day debug diagnostics (feature 064) */}
+                <BacktestDiagnostics diagnostics={result.diagnostics} />
               </>
+            )}
+
+            {/* Past runs — durable backtest history for this strategy */}
+            {pastRuns.length > 0 && (
+              <Card data-testid="past-runs">
+                <CardHeader>
+                  <CardTitle>Past Runs</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs text-muted-foreground">
+                          <th className="py-1.5 pr-3 font-medium">When</th>
+                          <th className="py-1.5 pr-3 font-medium">Symbols</th>
+                          <th className="py-1.5 pr-3 font-medium text-right">Return</th>
+                          <th className="py-1.5 pr-3 font-medium text-right">Sharpe</th>
+                          <th className="py-1.5 pr-3 font-medium text-right">Trades</th>
+                          <th className="py-1.5 font-medium text-right">Score</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pastRuns.map((run) => (
+                          <tr key={run.backtestId} className="border-t border-border">
+                            <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
+                              {run.completedAt
+                                ? new Date(Number(run.completedAt.seconds) * 1000).toLocaleString()
+                                : '—'}
+                            </td>
+                            <td className="py-1.5 pr-3 font-mono text-xs">
+                              {run.symbols.join(', ') || '—'}
+                            </td>
+                            <td
+                              className={cn(
+                                'py-1.5 pr-3 text-right tabular-nums',
+                                (run.totalReturn ?? 0) >= 0 ? 'text-buy' : 'text-destructive',
+                              )}
+                            >
+                              {((run.totalReturn ?? 0) * 100).toFixed(2)}%
+                            </td>
+                            <td className="py-1.5 pr-3 text-right tabular-nums">
+                              {(run.sharpeRatio ?? 0).toFixed(2)}
+                            </td>
+                            <td className="py-1.5 pr-3 text-right tabular-nums">
+                              {String(run.totalTrades ?? 0)}
+                            </td>
+                            <td className="py-1.5 text-right tabular-nums">
+                              {run.rating ? (
+                                <span className="font-semibold text-buy">{run.rating}</span>
+                              ) : (
+                                '—'
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
             )}
 
             {isLoading && !result && (
@@ -322,7 +446,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                 </CardContent>
               </Card>
             )}
-            {!isLoading && !result && (
+            {!isLoading && !result && pastRuns.length === 0 && (
               <Card>
                 <CardContent className="pt-5">
                   <p className="text-sm text-muted-foreground">
