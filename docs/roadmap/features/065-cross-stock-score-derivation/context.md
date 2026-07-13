@@ -216,3 +216,8 @@
 - Files modified: `packages/proto/analysis/v1/analysis.proto`
 - Deviations: buf breaking baseline used `origin/main-dev` (feature branch never pushed) — full detail in Deviation Log.
 - TDD: N/A (proto)
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh` (host toolchain, CI-pinned versions). Diff scoped to analysis/v1 only (Go/Python/TS + compiled dist). New fields present in all three languages. Re-run produced empty diff (idempotent).
+- Files modified: `packages/proto/gen/go/analysis/v1/analysis.pb.go`, `packages/proto/gen/python/analysis/v1/analysis_pb2.py`, `packages/proto/gen/ts/analysis/v1/*`, `packages/proto/gen/ts/dist/analysis/v1/*`
+- Deviations: none. TDD: N/A (proto-gen)

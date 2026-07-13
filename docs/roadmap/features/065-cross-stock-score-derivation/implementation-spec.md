@@ -85,7 +85,7 @@ repo root; precedent `scripts/buf-gen.sh:41`)
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/**` — modify (generated)
