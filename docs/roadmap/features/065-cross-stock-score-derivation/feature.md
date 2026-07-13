@@ -15,6 +15,7 @@
 | 2026-07-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings) |
 | 2026-07-13 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-07-13 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
+| 2026-07-13 | `implementation-ready` (unchanged) | /sdd-spec | Amended to 14 steps — user-directed test-infra scope addition (FR-10: UI vitest seed + agent/UI CI wiring) |
 
 ---
 
@@ -23,7 +24,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon Dossier](recon.md) — grounded codebase map (design phase 0)
 - [Design](design.md) — debated, approved architecture (design phase 1)
-- [Implementation Spec](implementation-spec.md) — 12 numbered steps with codebase evidence
+- [Implementation Spec](implementation-spec.md) — 14 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

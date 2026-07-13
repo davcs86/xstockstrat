@@ -160,3 +160,25 @@
 - Step layout: proto → proto-gen → migration 007 → cells+fingerprint (service+test) →
   derivation+triggers (service+test) → agent parity (service+test) → UI (service+e2e) → docs.
   Migration explicitly ordered before service deploys (extended upsert references new columns).
+
+## Session 2026-07-13 (later) — sdd-spec amendment: test-infrastructure scope addition
+
+- **User-directed scope addition** (P-04 sign-off = user message 2026-07-13: "we need to seed
+  UI unit testing with vitest and agent unit testing as part of this project"). Product spec
+  gains FR-10; implementation spec amended 12 → 14 steps (no execution had started, so F-09
+  immutability was not yet in force).
+- New Step 10 (test): seed vitest in xstockstrat-ui — node-environment logic tests, coverage
+  scoped to `src/lib/**` at 40 (whole-src unearnable at seed time), lcov reporter matching the
+  node-test job's artifact contract (`ci.yml:511-521`); component/jsdom testing explicitly out
+  of scope. Ordered BEFORE the UI service step so scoreDisplay.ts + the NotFound retry
+  predicate get true red-green unit gates (old Step 10/11 renumbered to 11/12; Step 12 now
+  carries the vitest suites + e2e).
+- New Step 13 (test): CI wiring. Grounded finding: **xstockstrat-agent is entirely absent
+  from ci.yml** — no `changes` path filter (`ci.yml:36-70`), no python-lint (`:281-287`) or
+  python-test (`:322-331`) entries; its `pyproject.toml:19-20` dev extra is already compatible
+  with the job's `pip install -e ".[dev]"` pattern (`:344-345`). Adds agent filter+lint+test
+  (threshold 40) and xstockstrat-ui to node-test (`:465-487`).
+- Step 14 (docs) expanded: UI CLAUDE.md § Testing (vitest layer), agent CLAUDE.md § Running
+  Tests (now CI-enforced), root CLAUDE.md tooling table (vitest row).
+- Risk noted for execute: the agent suite has never run in CI — environmental failures
+  surface at Step 13's PR; local pre-check mirrors the CI command exactly.

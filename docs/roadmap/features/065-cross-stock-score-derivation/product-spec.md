@@ -89,6 +89,15 @@ recompute (new run, definition update, or explicit `ScoreStrategy`); the first r
 derives from cells only. No cell backfill from run-level aggregates (they are not per-symbol
 and would poison the evidence base).
 
+FR-10. **Test-infrastructure seeding** *(scope addition 2026-07-13, user-directed — recorded
+in context.md)*. (a) Seed a vitest unit-test layer in `xstockstrat-ui` (node-environment
+logic tests; coverage scoped to `src/lib/**` at the 40% platform floor; component/jsdom
+testing out of scope) so UI logic introduced by this feature (`scoreDisplay.ts`, the NotFound
+retry predicate) carries a true red-green unit gate instead of e2e-only coverage. (b) Wire
+the existing `xstockstrat-agent` test suite into CI (`changes` filter + `python-lint`/
+`python-test` matrix entries, threshold 40) — today the agent has tests but no CI job — and
+add `xstockstrat-ui` to the `node-test` job so the new unit suite runs on every PR.
+
 ## Out of Scope
 
 - Correlation/sector-aware effective-weight adjustments (correlated symbols still count as

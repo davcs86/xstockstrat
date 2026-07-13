@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-07-13
 **Feature**: `docs/roadmap/features/065-cross-stock-score-derivation/feature.md`
-**Total Steps**: 12
+**Total Steps**: 14
 **Feature Branch**: `feature/cross-stock-score-derivation`
 
 ---
@@ -16,7 +16,10 @@ upsert references the new columns, so schema must exist before service code depl
 service work is split into two service+test pairs matching design.md's step boundaries:
 (cells + fingerprint capture) then (derivation + recompute triggers) — the second depends on
 the first's repo and helper. The agent caller-parity fix and the UI changes are independent of
-each other but both depend on the generated stubs; docs land last.
+each other but both depend on the generated stubs. Two test-infrastructure steps (user-directed
+scope addition, 2026-07-13, recorded in context.md) seed vitest in the UI **before** the UI
+service step — so the UI logic changes get a true red-green unit gate — and wire the agent and
+UI unit suites into CI; docs land last.
 
 ## Step Dependencies
 
@@ -31,10 +34,13 @@ each other but both depend on the generated stubs; docs land last.
 - Step 8 (service: agent parity) requires Step 2 only (field exists in stubs since 060-era;
   no regen strictly needed, but keep ordering for one stub version).
 - Step 9 (test) covers Step 8.
-- Step 10 (service: UI) requires Step 2 (new `StrategyScore`/`BacktestRunSummary` fields in
-  the TS package).
-- Step 11 (test) covers Step 10 (frontend — e2e, no unit runner exists).
-- Step 12 (docs) last; captures final key defaults and semantics.
+- Step 10 (test: vitest seed) requires nothing; MUST precede Step 11 so the UI step's unit
+  tests can run red-before-green.
+- Step 11 (service: UI) requires Steps 2 (new proto fields in the TS package) and 10.
+- Step 12 (test) covers Step 11 (vitest unit + Playwright e2e).
+- Step 13 (test: CI wiring) requires Steps 9, 10, 12 conceptually (the suites it wires must
+  exist and pass); file-wise touches only `.github/workflows/ci.yml`.
+- Step 14 (docs) last; captures final key defaults, semantics, and the new test tooling.
 - Design deviations already user-signed in `context.md` (2026-07-13): fingerprint eligibility,
   zero-trade cells counted with traded-first dedup, clear-then-NOT_FOUND, shrunk+renormalized
   components, agent parity in scope, revert-resurrection.
@@ -299,7 +305,7 @@ Author these to FAIL against the pre-Step-4 tree (P-06):
 - **Not found**: no `asyncio.Lock` in `servicer.py` — net-new; precedent uses at
   `app/engine/live_loop.py:56`, `app/engine/fundsignal_loop.py:76`.
 - Config read pattern: `servicer.py:836-838` (`get_float(key, default)`); `get_int` falsy-zero
-  trap `app/config/watcher.py:68-74` (documented in Step 12, not fought).
+  trap `app/config/watcher.py:68-74` (documented in Step 14, not fought).
 - `ScoreStrategyRequest.range = 2` exists (`analysis.proto:131-134`) — documented as ignored.
 
 **TDD**: red-green required
@@ -466,7 +472,52 @@ projection test green.
 
 ---
 
-### Step 10 — service: UI — strategyIdRef, shared score display, provenance + labels
+### Step 10 — test: seed vitest unit-test infrastructure in xstockstrat-ui
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/package.json` — modify
+- `services/xstockstrat-ui/vitest.config.ts` — create
+- `pnpm-lock.yaml` — modify (workspace install)
+
+**Reviewers**: `xstockstrat-ui` owner — analytics display accuracy, Connect-RPC call safety, no direct DB access
+
+**Codebase Evidence**:
+- **Not found (confirmed)**: no vitest/jest anywhere — `package.json:51-67` devDependencies
+  list only Playwright/lint/type tooling; no `vitest*`/`jest*` config file exists; scripts
+  (`package.json:6-17`) have `test:e2e` only, no `test:unit`/`test:coverage`.
+- CI contract to satisfy later (Step 13): the `node-test` job runs each service's own
+  `pnpm run test:coverage` (`ci.yml:511-513`) and uploads `coverage/lcov.info`
+  (`ci.yml:519-520`) — thresholds live in service config, not the CI matrix.
+- Node version 22 / pnpm 9.15.0 (root CLAUDE.md § Language Versions; `ci.yml:386-392`).
+
+**TDD**: N/A (test tooling seed — no product behavior; the first red-green consumer is Step 11)
+
+**Instructions**:
+1. Add devDependencies to `services/xstockstrat-ui/package.json`: `vitest` and
+   `@vitest/coverage-v8` (matching majors). Run `pnpm install` at the repo root to update
+   `pnpm-lock.yaml`.
+2. Add scripts: `"test:unit": "vitest run"`, `"test:unit:watch": "vitest"`,
+   `"test:coverage": "vitest run --coverage"`.
+3. Create `services/xstockstrat-ui/vitest.config.ts`: `environment: 'node'` (logic tests
+   only — component/jsdom testing is explicitly out of scope for this seed); include
+   `src/**/*.test.ts`; coverage provider `v8`, reporter `lcov` + `text`, and coverage
+   **scoped to `src/lib/**`** with thresholds `lines/functions/statements: 40` — a
+   whole-`src` threshold over the untested UI codebase would be unearnable at seed time;
+   scoping to `src/lib` matches where unit-testable logic lives and the 40% platform floor.
+   Exclude `src/lib/*Bff.ts`, `src/lib/connectClients.ts`, `src/lib/identity.ts` from
+   coverage (Node-runtime gRPC plumbing exercised only by e2e; comment this in the config).
+4. Ensure `tsconfig.json` needs no change for vitest type resolution (vitest runs TS
+   natively via esbuild; do not add `types: ["vitest"]` unless the lint step requires it).
+
+**Verification**:
+`cd services/xstockstrat-ui && pnpm run test:unit -- --passWithNoTests && pnpm run lint`
+(runner executes with zero tests; Step 12 adds the suites and drops `--passWithNoTests`)
+
+---
+
+### Step 11 — service: UI — strategyIdRef, shared score display, provenance + labels
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -499,8 +550,9 @@ projection test green.
 - Proto fields available after Step 2 via `@xstockstrat/proto/analysis/v1/analysis_pb`
   (import precedent `strategies/page.tsx:13`).
 
-**TDD**: N/A for red-green unit gate (frontend — no unit runner exists; `package.json:6-17`
-has Playwright only). Behavior is asserted by Step 11's e2e specs.
+**TDD**: red-green required (vitest seeded by Step 10: `scoreDisplay.ts` and the NotFound
+retry predicate get failing unit tests first — Step 12 authors them; e2e covers the rendered
+surfaces)
 
 **Instructions**:
 1. Create `src/lib/scoreDisplay.ts` exporting `ratingVariant`, `scoreColor` (bodies moved
@@ -528,17 +580,22 @@ has Playwright only). Behavior is asserted by Step 11's e2e specs.
    (`:91-93`); keep the `:118-122` empty state.
 6. Insights dashboard (`insights/page.tsx:121-132`): consume the shared helpers and show the
    compact "Provisional" badge beside the rating badge (C-10 — third render surface).
+7. Structure the NotFound retry predicate as an exported pure function (e.g.
+   `isNotFoundError(err): boolean` in `scoreDisplay.ts` or beside the hook) so Step 12 can
+   unit-test it without mounting React Query.
 
 **Verification**:
-`cd services/xstockstrat-ui && pnpm run lint` (behavioral verification in Step 11's e2e run)
+`cd services/xstockstrat-ui && pnpm run test:unit && pnpm run lint` (unit suites from Step 12
+pass; full behavioral verification in Step 12's e2e run)
 
 ---
 
-### Step 11 — test: UI e2e — fixtures, both-labels, cleared state, provisional
+### Step 12 — test: UI unit (vitest) + e2e — fixtures, both-labels, cleared state, provisional
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
+- `services/xstockstrat-ui/src/lib/scoreDisplay.test.ts` — create
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify
 - `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts` — modify
 - `services/xstockstrat-ui/e2e/insights/dashboard.spec.ts` — modify
@@ -558,9 +615,16 @@ has Playwright only). Behavior is asserted by Step 11's e2e specs.
 - No unit runner exists; `pnpm test:e2e` is the UI verification path (spec-template frontend
   row).
 
-**TDD**: red-green required (e2e-level: new assertions fail against the pre-Step-10 UI)
+**TDD**: red-green required (unit tests fail against the pre-Step-11 tree — `scoreDisplay.ts`
+does not exist yet; e2e assertions fail against the pre-Step-11 UI)
 
 **Instructions**:
+0. `src/lib/scoreDisplay.test.ts` (vitest, from Step 10's runner): `formatSymbolYears`
+   (252 → "1.0 symbol-years", 2100 → "8.3", 0 → "0.0"); `ratingVariant`/`scoreColor`
+   contract tables (A→buy, B→info, C→warning, else destructive; 0.8/0.6 color boundaries —
+   bodies moved verbatim from `strategies/page.tsx:15-26`, tests pin the contract);
+   `TRADING_DAYS_PER_YEAR === 252`; `isNotFoundError` true only for `ConnectError` with
+   `Code.NotFound`.
 1. Extend mock `StrategyScore` fixtures with `evidenceSymbols`, `evidenceDays`, `provisional`
    (at least one provisional=true strategy and one well-evidenced one); extend
    `BacktestRunSummary` fixtures with `rangeStart`/`rangeEnd` on one run and unset on the
@@ -578,16 +642,65 @@ has Playwright only). Behavior is asserted by Step 11's e2e specs.
    for the evidenced one.
 
 **Verification**:
-`cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e`
+`cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage && pnpm test:e2e`
+(vitest coverage thresholds from Step 10's config enforce the `src/lib` 40% floor)
 
 ---
 
-### Step 12 — docs: config keys + scoring semantics
+### Step 13 — test: wire agent + UI unit suites into CI
 
 **Status**: `pending`
-**Service**: `docs` (`services/xstockstrat-analysis/CLAUDE.md`, root `CLAUDE.md`)
+**Service**: `.github/workflows` (repo CI)
+**Files**:
+- `.github/workflows/ci.yml` — modify
+
+**Reviewers**: `xstockstrat-analysis` owner — scoring determinism (agent suite guards the parity change); `xstockstrat-ui` owner — analytics display accuracy (unit suite guards scoreDisplay)
+
+**Codebase Evidence**:
+- **Not found (confirmed)**: `xstockstrat-agent` appears nowhere in `ci.yml` — no `changes`
+  path filter (filter block `ci.yml:36-70` lists every other service), no `python-lint`
+  matrix entry (`:281-287`: indicators/ingest/analysis only), no `python-test` matrix entry
+  (`:322-331`) nor gate line (`:312-317`).
+- `python-test` install pattern is `pip install -e ".[dev]"` (`ci.yml:344-345`); the agent's
+  `pyproject.toml:19-20` already declares the `dev` extra (pytest, pytest-cov,
+  pytest-asyncio, respx) and `[tool.pytest.ini_options]` (`:29-31`) — compatible as-is.
+- `node-test` job: gate `ci.yml:468-476` (no `xstockstrat-ui`), matrix `include` with
+  `coverage_threshold` entries (`:478-487`), runs `pnpm run test:coverage` in the service dir
+  (`:511-513`), uploads `coverage/lcov.info` (`:515-521`) — vitest's lcov reporter (Step 10)
+  matches the artifact path.
+
+**TDD**: N/A (CI wiring — the suites themselves are Steps 9 and 12)
+
+**Instructions**:
+1. `changes` filter block (`ci.yml:36-70`): add
+   `xstockstrat-agent:  ['services/xstockstrat-agent/**']` alongside the other service filters.
+2. `python-lint` (`:271-287`): add `xstockstrat-agent` to the `if:` gate and the matrix
+   `service` list (ruff config exists — agent `pyproject.toml:33-38`).
+3. `python-test` (`:309-331`): add `contains(...'xstockstrat-agent')` to the `if:` gate and a
+   matrix entry `- service: xstockstrat-agent / coverage_threshold: 40 / cov_source: app`
+   (matches the agent CLAUDE.md's documented local convention).
+4. `node-test` (`:465-487`): add `xstockstrat-ui` to the `if:` gate and a matrix entry
+   `- service: xstockstrat-ui / coverage_threshold: 40` (informational — the actual gate is
+   vitest's own scoped thresholds from Step 10; the job just runs `pnpm run test:coverage`).
+5. Do NOT touch the required `Proto lint and breaking check` job or branch-protection names.
+
+**Verification**:
+Push the step branch and confirm in the PR checks: `Python test and coverage
+(xstockstrat-agent)` and `Node test and coverage (xstockstrat-ui)` both appear and pass.
+Local pre-check: `cd services/xstockstrat-agent && pip install -e ".[dev]" && pytest
+--cov=app --cov-fail-under=40` (mirrors the CI command exactly) and
+`cd services/xstockstrat-ui && pnpm run test:coverage`.
+
+---
+
+### Step 14 — docs: config keys + scoring semantics + test tooling
+
+**Status**: `pending`
+**Service**: `docs` (service CLAUDE.md files, root `CLAUDE.md`)
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
+- `services/xstockstrat-ui/CLAUDE.md` — modify
+- `services/xstockstrat-agent/CLAUDE.md` — modify
 - `CLAUDE.md` — modify
 
 **Reviewers**: none
@@ -615,11 +728,21 @@ has Playwright only). Behavior is asserted by Step 11's e2e specs.
    table trigger wording), `backtest_run_symbols` retention gap, single-process lock note,
    OQ-6 correlated-breadth caveat, FR-9 first-recompute grade-drop note.
 2. Root CLAUDE.md: append a "Recently added keys (feature 065 — cross-stock score derivation,
-   owned by `xstockstrat-analysis`)" block with the three keys.
+   owned by `xstockstrat-analysis`)" block with the three keys; update the § Language
+   Versions & Tooling table's test-tooling row(s) to note vitest (UI unit tests) alongside
+   Playwright.
+3. UI CLAUDE.md § Testing: document the seeded vitest unit layer (`pnpm run test:unit` /
+   `test:coverage`; node-environment logic tests, coverage scoped to `src/lib/**` at 40%,
+   component/jsdom testing intentionally not included) alongside the existing Playwright e2e
+   paragraphs.
+4. Agent CLAUDE.md § Running Tests: replace the local-only convention note — the agent test
+   suite now runs in CI (`python-lint` + `python-test` matrix entries, threshold 40), added
+   by feature 065 step 13.
 
 **Verification**:
-`grep -n "shrinkage_days" CLAUDE.md services/xstockstrat-analysis/CLAUDE.md` — both files list
-the key with matching defaults.
+`grep -n "shrinkage_days" CLAUDE.md services/xstockstrat-analysis/CLAUDE.md` — both list the
+key with matching defaults; `grep -n "test:unit\|vitest" services/xstockstrat-ui/CLAUDE.md`
+and `grep -n "python-test\|CI" services/xstockstrat-agent/CLAUDE.md` — tooling documented.
 
 ---
 
