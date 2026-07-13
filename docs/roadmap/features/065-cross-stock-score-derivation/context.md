@@ -128,3 +128,35 @@
   - Correlated-breadth inflation → post-launch observation (OQ-6).
   - Per-strategy lock is single-process-only protection → docs note.
 - Status: spec-ready → design-approved.
+
+## Session 2026-07-13 — sdd-spec
+
+- Generated implementation-spec.md with 12 steps. Status → implementation-ready.
+- Anchor verification (two discovery agents) confirmed recon/design citations and surfaced
+  spec-shaping corrections, all folded into the steps:
+  - **No `strategy_id == strategy_id_ref` comparison exists** in RunBacktest today — the
+    fingerprint stamp guard is net-new (Step 4).
+  - **No asyncio.Lock in servicer.py** (precedents only in live_loop.py:56 /
+    fundsignal_loop.py:76) and **no `delete` on StrategyScoresRepository** — both net-new
+    (Step 6).
+  - `_compute_metrics` uses a **literal 252** (servicer.py:1379, :1383) — no named constant;
+    the UI's `TRADING_DAYS_PER_YEAR` mirrors it with a comment (Step 10).
+  - **Agent has no CI test job** (ci.yml python-test matrix covers indicators/ingest/analysis
+    only) — Step 9 verification is local-only, noted for reviewers.
+  - **UI has no unit-test runner** (Playwright only) — Step 10 carries no unit red-green;
+    behavior asserted by Step 11 e2e (new assertions fail pre-implementation).
+  - Global react-query `retry: 1` (queryClient.ts:14) — the NotFound retry predicate in
+    useStrategyReport must override it (Step 10).
+  - Dashboard duplicates **both** helpers (`scoreColor` insights/page.tsx:213-217 and
+    `ratingVariant` :219) — both extracted to scoreDisplay.ts (Step 10).
+  - Detail page has NO score empty state today (card hidden by `report?.score &&` guard) —
+    cleared-state card is net-new (Step 10); mock getStrategyReport returns bare
+    `{strategyId}` for unknown ids (mock-backend.ts:511) — hook for the NOT_FOUND e2e case.
+  - Ledger completion emit at servicer.py:387-395 confirmed unguarded — recompute ordered
+    before it (Step 6).
+  - `ScoreStrategyRequest.range = 2` exists and is unused — documented as ignored (Steps 6, 12).
+  - No env-var or deployment-file changes needed (analysis endpoints already present in
+    docker-compose and both app specs).
+- Step layout: proto → proto-gen → migration 007 → cells+fingerprint (service+test) →
+  derivation+triggers (service+test) → agent parity (service+test) → UI (service+e2e) → docs.
+  Migration explicitly ordered before service deploys (extended upsert references new columns).
