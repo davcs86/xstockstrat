@@ -77,7 +77,9 @@ UI unit suites into CI; docs land last.
 3. No enum additions (all new fields are scalars/Timestamps — C-04 not implicated).
 
 **Verification**:
-`cd packages/proto && buf lint && buf breaking --against "../../.git#branch=feature/cross-stock-score-derivation"`
+`cd packages/proto && buf lint && buf breaking --against "../../.git#branch=feature/cross-stock-score-derivation,subdir=packages/proto"`
+(the `subdir` component is required — the buf module is rooted at `packages/proto`, not the
+repo root; precedent `scripts/buf-gen.sh:41`)
 
 ---
 
@@ -462,9 +464,13 @@ Author to FAIL pre-Step-6:
 **TDD**: red-green required
 
 **Instructions**:
-Extend `test_run_backtest_calls_grpc` (`:232`) — author to FAIL pre-Step-8: assert the
-captured `RunBacktestRequest` carries `strategy_id_ref == strategy_id`. Keep the `:432`
-projection test green.
+Author to FAIL pre-Step-8: add the `strategy_id_ref == strategy_id` assertion at the
+**stub-capture level** — the `tests/test_tools.py:432-464` pattern (stubs `stub.RunBacktest`
+at `:458` and can inspect the constructed `RunBacktestRequest`). Do NOT put it in
+`test_run_backtest_calls_grpc` (`:232`): that test mocks `client.run_backtest` wholesale
+(`:235`), so no request object is ever constructed there (impl-spec review finding,
+2026-07-13). Either extend the `:432` test with the request assertion or add a sibling
+client-level test using the same stub pattern. Keep both existing tests green.
 
 **Verification**:
 `cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 && uv run ruff check . && uv run ruff format --check .`

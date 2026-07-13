@@ -182,3 +182,19 @@
   Tests (now CI-enforced), root CLAUDE.md tooling table (vitest row).
 - Risk noted for execute: the agent suite has never run in CI — environmental failures
   surface at Step 13's PR; local pre-check mirrors the CI command exactly.
+
+## Session 2026-07-13 — sdd-review impl-spec (advisory)
+
+- **PASS WITH WARNINGS** (0 blockers, 2 warnings, 4 notes; 14/14 steps otherwise clean).
+  Overlap scan CLEAN (migration 007, proto 5-7/15-16, config keys, CI/UI/agent file set all
+  unclaimed; no merge-order entry needed). No Floor risk (F-01/F-06/F-07 assessed clean;
+  the UI 252 constant judged a mirrored domain constant, not an F-07 breach).
+- Both advisory warnings fixed in the spec pre-execution (F-09 not yet in force):
+  1. Step 1 `buf breaking` verification now includes `,subdir=packages/proto`
+     (buf module root ≠ repo root; precedent scripts/buf-gen.sh:41).
+  2. Step 9 retargeted: the `strategy_id_ref` assertion goes in the stub-capture pattern
+     (test_tools.py:432-464), not test_run_backtest_calls_grpc (:232 mocks
+     client.run_backtest wholesale — no request object exists there).
+- Notes accepted as-is: minor line-anchor drift in Steps 2/13 (content claims verified);
+  Step 10's coverage threshold enforced via Step 12's test:coverage.
+- Next: /sdd-execute cross-stock-score-derivation.
