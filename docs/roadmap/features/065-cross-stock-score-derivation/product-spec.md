@@ -113,6 +113,9 @@ Exact service names from CLAUDE.md Service Registry:
   run-score vs strategy-grade labeling
 - `packages/proto` — additive fields on `StrategyScore` (evidence provenance, provisional);
   no breaking changes
+- `xstockstrat-agent` — *(added at design phase, user-signed)* one-line caller-parity fix:
+  the agent backtest client sends `strategy_id_ref=strategy_id` so agent-triggered runs
+  execute the registered definition and contribute evidence (see design.md § Callers)
 
 ## Proto Contract Changes
 

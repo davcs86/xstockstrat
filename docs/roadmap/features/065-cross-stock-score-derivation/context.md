@@ -86,3 +86,45 @@
      the next free number in `services/xstockstrat-config/migrations/` is `009`.
   4. FR-9 UX cliff acknowledged by review as documented-behavior-not-gap: a legacy broad grade
      can drop sharply on first post-deploy recompute (cells-only evidence).
+
+## Session 2026-07-13 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-analysis, xstockstrat-ui,
+  packages/proto; key reuse patterns: `_compute_metrics` per symbol at the `servicer.py:298`
+  insertion point, write-through+hydrate preserved). Extra finds: third UI score render
+  surface (insights dashboard, duplicated `ratingVariant`), `updated_at` bumped by
+  live-toggle/deactivate, no config seed migration needed (fallback-only precedent).
+- Phase 1 Grilling: **2 rounds (full)**. Round 1 found blocking B1 (cells carried no
+  executed-definition identity: UI button runs legacy SMA, inline forgery, mid-run UPDATE
+  race). Round 2 refined to per-cell definition fingerprints and was verified sound.
+  Chosen approach: fingerprint-stamped per-symbol evidence cells + traded-first DISTINCT ON
+  dedup + shrinkage aggregation in Python, materialized via the existing score write funnel;
+  full detail in design.md. Rejected (headline items): timestamp eligibility,
+  definition_updated_at column, definition_version counter, zero-trade exclusion,
+  pure-prior ScoreStrategy response, unshrunk components.
+- **User-signed decisions (P-03/P-04), all via interactive gate 2026-07-13**:
+  1. B1 fix = fingerprint + UI detail page sends `strategyIdRef` (UI runs now execute the
+     registered definition — engine switch acknowledged).
+  2. **Zero-trade cells COUNT as evidence** (≈0.30 F-ish score), with traded-cells-first
+     dedup so non-participation can never shadow traded evidence. (Overrides the earlier
+     working steer of "exclude" — that steer was never user-confirmed; the original
+     interactive gate failed to deliver.)
+  3. ScoreStrategy on zero eligible cells: clear stale grade (in-memory pop + NON-best-effort
+     DB delete on this path), then NOT_FOUND.
+  4. Components shrunk identically to overall with weights renormalized wᵢ/Σw.
+  5. MCP agent caller parity IN SCOPE (`strategy_id_ref=strategy_id` in agent client);
+     product-spec Affected Services amended.
+  6. FR-3 deviations signed: renames don't reset evidence; definition REVERTS RESURRECT the
+     prior evidence base (evidence describes definition content, not a timeline).
+  7. Side-effectful NOT_FOUND on ScoreStrategy sanctioned; `analysis.strategy.scored` event
+     stays ScoreStrategy-only (documented asymmetry).
+- Constitution rules touched: C-01, C-02, C-04, C-05, C-07, C-08, C-09, C-10, C-11, P-01..P-06,
+  F-01, F-02/03, F-04, F-06, F-07, F-11. Floor breaches: **none** (both rounds clean).
+- Open Threads (mirrored from design.md § Open Risks):
+  - Fingerprint canonicalization sensitivity (entry/exit rule strings) → fingerprint-stability
+    unit tests in the service-cells step.
+  - Zero-trade grade semantics = visible behavior shift → docs step.
+  - `backtest_run_symbols` retention gap → docs step.
+  - Correlated-breadth inflation → post-launch observation (OQ-6).
+  - Per-strategy lock is single-process-only protection → docs note.
+- Status: spec-ready → design-approved.

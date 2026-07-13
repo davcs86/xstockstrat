@@ -1,6 +1,6 @@
 # Feature: cross-stock-score-derivation
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/cross-stock-score-derivation`
 **Created**: 2026-07-12
 **Last Updated**: 2026-07-12
@@ -13,12 +13,15 @@
 |---|---|---|---|
 | 2026-07-12 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-07-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings) |
+| 2026-07-13 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon Dossier](recon.md) — grounded codebase map (design phase 0)
+- [Design](design.md) — debated, approved architecture (design phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec cross-stock-score-derivation`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -48,4 +51,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design cross-stock-score-derivation quick` — recon + design debate (Constitution C-11 mandatory entry point), then `/sdd-spec cross-stock-score-derivation`
+`/sdd-spec cross-stock-score-derivation` — generate implementation spec from the approved design
