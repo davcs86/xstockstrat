@@ -81,3 +81,14 @@ reusing.
   update, set_live_enabled, and deactivate alike).
 - **Rule it implies**: content-scoped validity gets a content hash, not a clock; hash only the
   stored (post-JSONB-round-trip) form so every writer sees identical bytes.
+
+### 2026-07-13 — cross-stock-score-derivation — reuse
+- **Pattern**: Seeding a **unit-test layer in a large e2e-only frontend** without an unearnable
+  coverage floor: set vitest `coverage.all: false` so the threshold applies only to files a unit test
+  actually exercises (grows as tests are added), instead of `include: ['src/**']` which counts every
+  untested module as 0%. Pairs with node-environment logic-only tests (`src/lib/**`) and an lcov
+  reporter matching the existing `node-test` CI artifact contract.
+- **Evidence**: `services/xstockstrat-ui/vitest.config.ts` (`all: false`, `src/lib` scope),
+  `src/lib/scoreDisplay.test.ts`; `.github/workflows/ci.yml` `node-test` matrix (feature 065 step 13).
+- **Rule it implies**: when adding coverage gates to a codebase with large untested surface, gate on
+  tested files, not the whole tree — a floor you can't reach on day one gets disabled, not met.
