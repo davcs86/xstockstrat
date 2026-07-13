@@ -278,3 +278,9 @@
 - e2e: mock-backend provenance + range fixtures + strat-notfound-001 NOT_FOUND; backtest-coverage.spec both-labels (Strategy Grade + Run score) + evidence caption + range placeholder + strategyIdRef network-capture + cleared-state; dashboard.spec Provisional badge (one provisional, not the evidenced).
 - Verification: lint clean, tsc --noEmit clean, test:coverage green. e2e run via CI-equivalent static gates (Deviation Log); runs in CI frontend-e2e on the PR.
 - Deviations: vitest coverage all:false (earnable floor); e2e static-gate fallback — both in Deviation Log. TDD: red → green (vitest).
+
+### Step 13 — test: wire agent + UI unit suites into CI [done]
+- ci.yml: added `xstockstrat-agent` changes filter + python-lint gate/matrix + python-test gate/matrix (threshold 40, cov_source app); added `xstockstrat-ui` to node-test gate/matrix (threshold 40; vitest's scoped src/lib threshold is the real gate). Did not touch the Proto lint/breaking job or branch-protection names.
+- Verified: ci.yml parses as valid YAML; local CI-equivalent pre-checks green (agent pytest 54 passed/61%, ui test:coverage 100% scoreDisplay). CI job appearance confirmed on the PR.
+- Files modified: `.github/workflows/ci.yml`
+- Deviations: none. TDD: N/A (CI wiring).

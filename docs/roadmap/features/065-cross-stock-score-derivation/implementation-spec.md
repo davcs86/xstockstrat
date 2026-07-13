@@ -655,7 +655,7 @@ does not exist yet; e2e assertions fail against the pre-Step-11 UI)
 
 ### Step 13 — test: wire agent + UI unit suites into CI
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows` (repo CI)
 **Files**:
 - `.github/workflows/ci.yml` — modify
