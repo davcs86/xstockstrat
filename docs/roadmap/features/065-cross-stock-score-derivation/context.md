@@ -198,3 +198,21 @@
 - Notes accepted as-is: minor line-anchor drift in Steps 2/13 (content claims verified);
   Step 10's coverage threshold enforced via Step 12's test:coverage.
 - Next: /sdd-execute cross-stock-score-derivation.
+
+## Session 2026-07-13 — sdd-execute (sequential, single-PR)
+
+- Resumed on designated branch `claude/cross-stock-score-derivation-94k11z`, rebuilt from
+  `origin/main-dev` (user: "use main-dev"). Feature dir loaded from main-dev (065).
+- **Workflow deviation (user-directed)**: single integration PR for the whole feature instead of
+  sequential mode's default stacked per-step PRs ("all that but only one single PR, no stacked
+  PRs"). All 14 steps commit sequentially to the one branch; one PR → main-dev at the end.
+- Toolchain: buf/protoc/grpc_tools/migrate missing + Docker daemon down. Installed the codegen
+  toolchain on the host pinned to CI proto-freshness versions (buf 1.69.0, protoc-gen-go v1.36.11,
+  protoc-gen-go-grpc v1.6.2, protoc-gen-connect-go v1.19.2, grpcio-tools 1.80.0, pnpm workspace).
+
+### Step 1 — proto: additive StrategyScore provenance + BacktestRunSummary range fields [done]
+- Added `StrategyScore.evidence_symbols=5`, `evidence_days=6`, `provisional=7`; `BacktestRunSummary.range_start=15`, `range_end=16`. All additive scalars/Timestamps (no enums, C-04 N/A).
+- Verified: `buf lint` OK; `buf breaking` against `origin/main-dev` OK (non-breaking).
+- Files modified: `packages/proto/analysis/v1/analysis.proto`
+- Deviations: buf breaking baseline used `origin/main-dev` (feature branch never pushed) — full detail in Deviation Log.
+- TDD: N/A (proto)

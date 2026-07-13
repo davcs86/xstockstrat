@@ -1,6 +1,6 @@
 # Implementation Spec: cross-stock-score-derivation
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-07-13
 **Feature**: `docs/roadmap/features/065-cross-stock-score-derivation/feature.md`
 **Total Steps**: 14
@@ -49,7 +49,7 @@ UI unit suites into CI; docs land last.
 
 ### Step 1 — proto: additive StrategyScore provenance + BacktestRunSummary range fields
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -754,4 +754,17 @@ and `grep -n "python-test\|CI" services/xstockstrat-agent/CLAUDE.md` — tooling
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: execution workflow — single integration PR (no stacked step PRs)
+**Spec said**: sequential mode default is stacked per-step PRs (each based on the prior step branch).
+**Actual**: user directed a single integration PR for the whole feature (2026-07-13, in response to
+the mode-entry confirmation: "all that but only one single PR, no stacked PRs"). All 14 steps are
+committed sequentially to the designated branch `claude/cross-stock-score-derivation-94k11z` (rebuilt
+from `origin/main-dev` per the user's "use main-dev"), with one PR → `main-dev` at the end.
+**Reason**: explicit user instruction. `**Disposition**`: user-directed workflow change.
+
+### Deviation: Step 1 — buf breaking baseline branch
+**Spec said**: `buf breaking --against "../../.git#branch=feature/cross-stock-score-derivation,subdir=packages/proto"`.
+**Actual**: ran `buf breaking --against "../../.git#ref=origin/main-dev,subdir=packages/proto"`.
+**Reason**: the feature branch was never pushed (single-PR flow on the designated branch); the correct
+pre-change baseline for an additive-only check is `origin/main-dev` (the PR target). Result: no breaking
+changes. `**Disposition**`: CI-equivalent fallback (mirrors CI proto baseline).

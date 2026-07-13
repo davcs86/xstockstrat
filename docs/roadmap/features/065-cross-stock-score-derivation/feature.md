@@ -1,9 +1,9 @@
 # Feature: cross-stock-score-derivation
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/cross-stock-score-derivation`
 **Created**: 2026-07-12
-**Last Updated**: 2026-07-12
+**Last Updated**: 2026-07-13
 
 ---
 
@@ -16,6 +16,7 @@
 | 2026-07-13 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written |
 | 2026-07-13 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 | 2026-07-13 | `implementation-ready` (unchanged) | /sdd-spec | Amended to 14 steps — user-directed test-infra scope addition (FR-10: UI vitest seed + agent/UI CI wiring) |
+| 2026-07-13 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (proto additive fields); sequential run, single-PR (user-directed) on branch claude/cross-stock-score-derivation-94k11z |
 
 ---
 
