@@ -239,3 +239,15 @@
 - Covers: insert_many SQL/params, fetch_eligible DISTINCT ON + traded-first ordering, fingerprint stability (rename/toggle same, rule-change differs, key-order-invariant, None/{}), OK run buffers one cell/symbol incl zero-trade, registered-own-run stamps fingerprint, id-mismatch → None, INSUFFICIENT flushes nothing, cells-flush failure never fails run, range passthrough to history insert.
 - Files modified: `tests/test_backtest_run_symbols_repo.py` (new), `tests/test_analysis_servicer.py`
 - Deviations: none. TDD: red → green.
+
+### Step 6 — service: headline derivation, recompute triggers, ScoreStrategy repurpose [done]
+- Extracted `_score_from_metrics`/`_grade` from `_score_from_result` (delegates); added pure `_aggregate_cells` (evidence-day weights + EB shrinkage toward 0.5, components shrunk identically, non-finite filtered, Σw==0→None); `StrategyScoresRepository.delete` + provenance columns on upsert; per-strategy `_recompute_locks` + `_recompute_headline`/`_recompute_headline_locked` + `_fetch_and_aggregate`/`_derive_score_from_cells`.
+- RunBacktest: removed per-run headline upsert; recompute from cells before completion emit. ManageStrategy UPDATE: unconditional in-memory pop + best-effort inner recompute under lock. ScoreStrategy: repurposed to cell-derived recompute (UNAVAILABLE/NOT_FOUND/clear-then-NOT_FOUND paths; range ignored). `_row_to_score`/hydrate read provenance with pre-007 defaults.
+- Files modified: `app/handlers/servicer.py`, `app/repositories/strategy_scores.py`
+- TDD: red → green (Step 7).
+
+### Step 7 — test: derivation + trigger coverage [done]
+- red: 9 tests failed against the new behavior (old ScoreStrategy grade-from-backtest + :301 per-run upsert). green: 220 passed, coverage 77.70% (≥40), ruff clean.
+- Revised `:301` (no per-run headline upsert), `TestScorePersistence` (cell-derived ScoreStrategy path); replaced obsolete `TestScoreStrategy` grade tests with `_score_from_metrics`/`_grade` unit tests. Added: `_aggregate_cells` OQ-1 anchors (W=375→A; 60-day→0.597 C), Σw==0→None, renormalization, non-finite filter, zero-trade drag; triggers (OK run derives from cells not run; UPDATE unconditional pop even when delete raises; UPDATE→recompute no deadlock via wait_for); ScoreStrategy paths (UNAVAILABLE/NOT_FOUND/clear+NOT_FOUND/cells-read-fail no-mutation/success provenance+ledger/range ignored); hydrate provenance + pre-007 defaults; strategy_scores repo new columns + delete SQL.
+- Files modified: `tests/test_analysis_servicer.py`, `tests/test_strategy_scores_repo.py`
+- Deviations: none. TDD: red → green.

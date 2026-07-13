@@ -285,7 +285,7 @@ Author these to FAIL against the pre-Step-4 tree (P-06):
 
 ### Step 6 — service: headline derivation, recompute triggers, ScoreStrategy repurpose
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -365,7 +365,7 @@ Author these to FAIL against the pre-Step-4 tree (P-06):
 
 ### Step 7 — test: derivation + trigger coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify

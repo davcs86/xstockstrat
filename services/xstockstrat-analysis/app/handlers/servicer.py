@@ -101,6 +101,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # buffers one cell per symbol on an OK run and flushes here; _recompute_headline reads
         # them back. None in the no-DB test path.
         self._backtest_run_symbols_repo = BacktestRunSymbolsRepository(db_pool) if db_pool else None
+        # Per-strategy recompute serialization (feature 065). asyncio.Lock is non-reentrant, so
+        # a trigger already holding the lock calls only _recompute_headline_locked. Single-process
+        # protection only (documented). Keyed by strategy_id, created lazily.
+        self._recompute_locks: dict[str, asyncio.Lock] = {}
         # Set by main.py after the fundamentals signal loop is constructed (feature 062);
         # RunFundamentalsScan invokes its shared run_once path.
         self._fundsignal_loop = None
@@ -420,10 +424,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 range_end=range_end_dt,
             )
 
-        # Score the strategy from this run and persist both the score and a run-history row.
-        # Fixes two bugs: (1) the score was never persisted because nothing invoked scoring
-        # after a backtest, and (2) past run results were unrecoverable (in-memory only).
-        # OK runs earn a score; INSUFFICIENT_DATA runs still record history but score = None.
+        # Grade THIS run for the run-history row only (feature 065: the headline grade is no
+        # longer last-run-wins — it is derived from the strategy's full evidence base below).
+        # OK runs earn a per-run score; INSUFFICIENT_DATA runs record history with score = None.
         score = None
         if result.status == analysis_pb2.BACKTEST_STATUS_OK:
             sharpe_weight = self._cfg.get_float("analysis.scoring.sharpe_weight", 0.4)
@@ -432,7 +435,6 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             score = _score_from_result(
                 request.strategy_id, result, sharpe_weight, drawdown_weight, winrate_weight
             )
-            await self._persist_strategy_score(score)
         await self._persist_backtest_run(
             result,
             list(request.symbols),
@@ -440,6 +442,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             range_start=range_start_dt,
             range_end=range_end_dt,
         )
+
+        # feature 065: recompute the headline grade from the strategy's full evidence base (all
+        # eligible cells) now that this run's cells have landed. Best-effort — a recompute failure
+        # never fails the run — and ordered BEFORE the completion emit so a subscriber that reads
+        # the grade on completion sees the post-run value.
+        if result.status == analysis_pb2.BACKTEST_STATUS_OK:
+            try:
+                await self._recompute_headline(request.strategy_id)
+            except Exception as e:
+                log.warning("failed to recompute headline score: %s", e)
 
         # Emit completion event
         payload2 = Struct()
@@ -896,29 +908,53 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return warmup
 
     async def ScoreStrategy(self, request, context):
+        """Manually recompute a strategy's headline grade from its evidence cells (feature 065).
+
+        Repurposed from the old "re-score the latest in-memory backtest": the headline grade is
+        now derived from the strategy's full (symbol × window) evidence base, so this RPC is the
+        manual refresh after a scoring-config change (RunBacktest / ManageStrategy UPDATE recompute
+        automatically). ``ScoreStrategyRequest.range`` is IGNORED — the evidence base is the whole
+        eligible cell set, not a window. Unlike the best-effort trigger path, this RPC surfaces
+        errors: unregistered → NOT_FOUND, no eligible evidence → clear stale grade + NOT_FOUND,
+        cells/store error → UNAVAILABLE.
+        """
         propagation_meta = [
             (k, v)
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
-        sharpe_weight = self._cfg.get_float("analysis.scoring.sharpe_weight", 0.4)
-        drawdown_weight = self._cfg.get_float("analysis.scoring.drawdown_weight", 0.3)
-        winrate_weight = self._cfg.get_float("analysis.scoring.win_rate_weight", 0.3)
-
-        # Find most recent backtest for this strategy
-        result = self._backtests.get(request.strategy_id)
-        if result is None:
-            await context.abort(
-                grpc.StatusCode.NOT_FOUND,
-                f"no backtest found for strategy {request.strategy_id}; run RunBacktest first",
-            )
+        if self._strategies_repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
+            return
+        row = await self._strategies_repo.get_by_id(request.strategy_id)
+        if row is None:
+            await context.abort(grpc.StatusCode.NOT_FOUND, "strategy not registered")
             return
 
-        score = _score_from_result(
-            request.strategy_id, result, sharpe_weight, drawdown_weight, winrate_weight
-        )
-        # Update the in-memory serving dict + best-effort durable persist (feature 064).
-        await self._persist_strategy_score(score)
+        async with self._lock_for(request.strategy_id):
+            try:
+                score = await self._fetch_and_aggregate(request.strategy_id, row)
+            except Exception as e:
+                log.warning("failed to read evidence cells for score: %s", e)
+                await context.abort(grpc.StatusCode.UNAVAILABLE, "evidence store unavailable")
+                return
+            if score is None:
+                # No eligible evidence: clear any stale grade. Unlike the trigger path this delete
+                # is NON-best-effort — a delete failure aborts UNAVAILABLE rather than silently
+                # leaving a stale grade behind.
+                self._strategies.pop(request.strategy_id, None)
+                if self._scores_repo is not None:
+                    try:
+                        await self._scores_repo.delete(request.strategy_id)
+                    except Exception as e:
+                        log.warning("failed to clear stale score: %s", e)
+                        await context.abort(grpc.StatusCode.UNAVAILABLE, "score store unavailable")
+                        return
+                await context.abort(
+                    grpc.StatusCode.NOT_FOUND, "no eligible evidence — run a backtest"
+                )
+                return
+            await self._persist_strategy_score(score)
 
         # Emit ledger event
         from google.protobuf.struct_pb2 import Struct
@@ -960,10 +996,109 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         try:
             components = {k: v for k, v in dict(score.component_scores).items() if math.isfinite(v)}
             await self._scores_repo.upsert(
-                score.strategy_id, score.overall_score, score.rating, components
+                score.strategy_id,
+                score.overall_score,
+                score.rating,
+                components,
+                n_symbols=score.evidence_symbols,
+                total_trading_days=score.evidence_days,
+                provisional=score.provisional,
             )
         except Exception as e:
             log.warning("failed to persist strategy score: %s", e)
+
+    def _lock_for(self, strategy_id: str) -> asyncio.Lock:
+        """Return the (lazily created) per-strategy recompute lock."""
+        lock = self._recompute_locks.get(strategy_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._recompute_locks[strategy_id] = lock
+        return lock
+
+    def _derive_score_from_cells(self, strategy_id, strategy_row, cells):
+        """Pure: score each eligible cell and aggregate into a headline StrategyScore.
+
+        Returns the (unpersisted) StrategyScore with evidence provenance, or ``None`` when the
+        cells carry zero evidence weight (``Σ trading_days == 0``). Does not touch the DB.
+        """
+        sharpe_weight = self._cfg.get_float("analysis.scoring.sharpe_weight", 0.4)
+        drawdown_weight = self._cfg.get_float("analysis.scoring.drawdown_weight", 0.3)
+        winrate_weight = self._cfg.get_float("analysis.scoring.win_rate_weight", 0.3)
+        scored: list[tuple[int, float, dict]] = []
+        for c in cells:
+            overall, comps = _score_from_metrics(
+                c["sharpe_ratio"],
+                c["max_drawdown"],
+                c["win_rate"],
+                sharpe_weight,
+                drawdown_weight,
+                winrate_weight,
+            )
+            scored.append((int(c["trading_days"]), overall, comps))
+        k = self._cfg.get_int("analysis.scoring.shrinkage_days", 250)
+        agg = _aggregate_cells(scored, k)
+        if agg is None:
+            return None
+        overall, components, n_symbols, total_days = agg
+        min_symbols = self._cfg.get_int("analysis.scoring.min_evidence_symbols", 3)
+        min_days = self._cfg.get_int("analysis.scoring.min_evidence_days", 500)
+        provisional = n_symbols < min_symbols or total_days < min_days
+        return analysis_pb2.StrategyScore(
+            strategy_id=strategy_id,
+            overall_score=overall,
+            rating=_grade(overall),
+            component_scores=components,
+            evidence_symbols=n_symbols,
+            evidence_days=total_days,
+            provisional=provisional,
+        )
+
+    async def _fetch_and_aggregate(self, strategy_id, strategy_row):
+        """Read eligible cells for the strategy's CURRENT fingerprint and derive a score.
+
+        Returns the derived (unpersisted) StrategyScore, or ``None`` when there is zero eligible
+        evidence. Raises on a cells-read error so callers can choose best-effort vs. abort. Does
+        NOT mutate in-memory or DB state — pure read + compute.
+        """
+        fingerprint = _definition_fingerprint(strategy_row["definition_json"])
+        cells = await self._backtest_run_symbols_repo.fetch_eligible(strategy_id, fingerprint)
+        if not cells:
+            return None
+        return self._derive_score_from_cells(strategy_id, strategy_row, cells)
+
+    async def _recompute_headline(self, strategy_id: str):
+        """Derive + persist a strategy's headline grade from its full evidence base.
+
+        Resolves the strategy row BEFORE taking the lock (no lock leak from ad-hoc/unregistered
+        ids → returns None). Best-effort trigger path (RunBacktest / ManageStrategy UPDATE);
+        callers wrap it in try/except. Returns the new StrategyScore or None.
+        """
+        if self._strategies_repo is None:
+            return None
+        row = await self._strategies_repo.get_by_id(strategy_id)
+        if row is None:
+            return None
+        async with self._lock_for(strategy_id):
+            return await self._recompute_headline_locked(strategy_id, row)
+
+    async def _recompute_headline_locked(self, strategy_id, strategy_row):
+        """Recompute the headline grade; the caller MUST already hold the strategy's lock.
+
+        Zero eligible evidence → clear any stale grade (in-memory pop + best-effort DB delete),
+        return None. Otherwise derive, persist via the shared score funnel, return the score.
+        asyncio.Lock is non-reentrant, so triggers already inside the lock call ONLY this variant.
+        """
+        score = await self._fetch_and_aggregate(strategy_id, strategy_row)
+        if score is None:
+            self._strategies.pop(strategy_id, None)
+            if self._scores_repo is not None:
+                try:
+                    await self._scores_repo.delete(strategy_id)
+                except Exception as e:
+                    log.warning("failed to clear stale strategy score: %s", e)
+            return None
+        await self._persist_strategy_score(score)
+        return score
 
     async def _persist_backtest_run(
         self, result, symbols, score, range_start=None, range_end=None
@@ -1118,6 +1253,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     f"strategy '{definition.strategy_id}' not found",
                 )
                 return
+            # feature 065: a definition change usually changes the fingerprint, so the old
+            # evidence base no longer applies. Under the strategy's lock, unconditionally clear
+            # the stale in-memory grade FIRST, then best-effort recompute against the NEW
+            # fingerprint (typically empty until a fresh backtest → grade cleared). The UPDATE
+            # response never fails on a recompute error. (A display-name-only edit keeps the same
+            # fingerprint, so recompute simply reinstates the same grade.)
+            sid = definition.strategy_id
+            async with self._lock_for(sid):
+                self._strategies.pop(sid, None)
+                try:
+                    await self._recompute_headline_locked(sid, row)
+                except Exception as e:
+                    log.warning("failed to recompute headline after update: %s", e)
             return _row_to_strategy_definition(row)
         if op == analysis_pb2.STRATEGY_OPERATION_DEACTIVATE:
             row = await self._strategies_repo.deactivate(definition.strategy_id)
@@ -1338,6 +1486,90 @@ def _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades):
     )
 
 
+def _score_from_metrics(
+    sharpe_ratio: float,
+    max_drawdown: float,
+    win_rate: float,
+    sharpe_weight: float,
+    drawdown_weight: float,
+    winrate_weight: float,
+) -> tuple[float, dict]:
+    """Blend raw performance metrics into ``(overall, component_scores)``.
+
+    Extracted from ``_score_from_result`` (feature 065) so a single BacktestResult and a
+    per-symbol evidence cell grade through exactly one code path — the derived headline scores
+    each cell with this before aggregating.
+    """
+    sharpe_component = min(max(sharpe_ratio / 2.0, 0.0), 1.0)
+    drawdown_component = max(1.0 - (max_drawdown / 0.5), 0.0)
+    winrate_component = min(max(win_rate, 0.0), 1.0)
+    overall = (
+        sharpe_weight * sharpe_component
+        + drawdown_weight * drawdown_component
+        + winrate_weight * winrate_component
+    )
+    return overall, {
+        "sharpe": sharpe_component,
+        "drawdown": drawdown_component,
+        "win_rate": winrate_component,
+    }
+
+
+def _grade(overall: float) -> str:
+    """Map an overall score in [0, 1] to a letter grade (A/B/C/D/F)."""
+    if overall >= 0.8:
+        return "A"
+    if overall >= 0.65:
+        return "B"
+    if overall >= 0.5:
+        return "C"
+    if overall >= 0.35:
+        return "D"
+    return "F"
+
+
+def _aggregate_cells(
+    scored_cells: list[tuple[int, float, dict]], k: int
+) -> tuple[float, dict, int, int] | None:
+    """Aggregate per-symbol scored evidence cells into a shrunk headline score.
+
+    ``scored_cells`` is ``[(trading_days, cell_overall, cell_components), ...]``. Evidence
+    weights are ``wᵢ = trading_days`` (weight by evidence, never by outcome). The overall is an
+    empirical-Bayes shrinkage toward a neutral 0.5 prior:
+    ``overall = (Σ wᵢ·sᵢ + 0.5·k) / (Σ wᵢ + k)`` where ``k`` (``analysis.scoring.shrinkage_days``)
+    is the pseudo-count in trading days. Each component is shrunk identically (same k, same 0.5
+    prior) over its weighted mean (weights renormalized wᵢ/Σw), and non-finite aggregated
+    components are dropped (mirrors ``_persist_strategy_score``'s isfinite guard). ``Σw == 0``
+    (zero evidence) → ``None`` — never an equal-weighted fallback. Returns
+    ``(overall, components, n_symbols, total_days)``.
+    """
+    total_w = sum(days for days, _s, _c in scored_cells)
+    if total_w <= 0:
+        return None
+    kf = float(k)
+    prior = 0.5
+    denom = total_w + kf
+
+    weighted_overall = sum(days * s for days, s, _c in scored_cells)
+    overall = (weighted_overall + prior * kf) / denom
+
+    comp_keys: set[str] = set()
+    for _d, _s, comps in scored_cells:
+        comp_keys.update(comps.keys())
+    components: dict[str, float] = {}
+    for key in comp_keys:
+        weighted_c = sum(
+            days * comps[key]
+            for days, _s, comps in scored_cells
+            if key in comps and math.isfinite(comps[key])
+        )
+        shrunk = (weighted_c + prior * kf) / denom
+        if math.isfinite(shrunk):
+            components[key] = shrunk
+
+    return overall, components, len(scored_cells), int(total_w)
+
+
 def _score_from_result(
     strategy_id: str,
     result: "analysis_pb2.BacktestResult",
@@ -1345,41 +1577,24 @@ def _score_from_result(
     drawdown_weight: float,
     winrate_weight: float,
 ) -> "analysis_pb2.StrategyScore":
-    """Grade a backtest into a StrategyScore (Sharpe / drawdown / win-rate blend).
+    """Grade a single backtest into a StrategyScore (Sharpe / drawdown / win-rate blend).
 
-    Shared by ScoreStrategy (explicit RPC) and RunBacktest (auto-score on every run) so the
-    scoring math and letter-grade thresholds live in exactly one place.
+    Keeps its signature and delegates to ``_score_from_metrics`` / ``_grade`` (feature 065) so
+    the per-run history score and the derived headline share one scoring code path.
     """
-    sharpe_component = min(max(result.sharpe_ratio / 2.0, 0.0), 1.0)
-    drawdown_component = max(1.0 - (result.max_drawdown / 0.5), 0.0)
-    winrate_component = min(max(result.win_rate, 0.0), 1.0)
-
-    overall = (
-        sharpe_weight * sharpe_component
-        + drawdown_weight * drawdown_component
-        + winrate_weight * winrate_component
+    overall, components = _score_from_metrics(
+        result.sharpe_ratio,
+        result.max_drawdown,
+        result.win_rate,
+        sharpe_weight,
+        drawdown_weight,
+        winrate_weight,
     )
-
-    if overall >= 0.8:
-        rating = "A"
-    elif overall >= 0.65:
-        rating = "B"
-    elif overall >= 0.5:
-        rating = "C"
-    elif overall >= 0.35:
-        rating = "D"
-    else:
-        rating = "F"
-
     return analysis_pb2.StrategyScore(
         strategy_id=strategy_id,
         overall_score=overall,
-        rating=rating,
-        component_scores={
-            "sharpe": sharpe_component,
-            "drawdown": drawdown_component,
-            "win_rate": winrate_component,
-        },
+        rating=_grade(overall),
+        component_scores=components,
     )
 
 
@@ -1449,6 +1664,10 @@ def _row_to_score(row: dict) -> "analysis_pb2.StrategyScore":
         overall_score=row["overall_score"],
         rating=row["rating"],
         component_scores=row.get("component_scores") or {},
+        # Evidence provenance (feature 065); pre-007 rows lack these keys → defaults.
+        evidence_symbols=int(row.get("n_symbols") or 0),
+        evidence_days=int(row.get("total_trading_days") or 0),
+        provisional=bool(row.get("provisional") or False),
     )
 
 
