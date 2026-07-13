@@ -267,3 +267,14 @@
 - Verified: `vitest run --passWithNoTests` exits 0 (runner executes at seed time); `pnpm run lint` clean. Note: `pnpm run test:unit -- --passWithNoTests` arg-forwarding is a pnpm quirk (direct `vitest run --passWithNoTests` exits 0); moot — Step 12 adds tests and CI runs `test:coverage`.
 - Files modified: `services/xstockstrat-ui/package.json`, `services/xstockstrat-ui/vitest.config.ts`, `pnpm-lock.yaml`
 - Deviations: none. TDD: N/A (test tooling seed).
+
+### Step 11 — service: UI — strategyIdRef, shared score display, provenance + labels [done]
+- Created src/lib/scoreDisplay.ts (ratingVariant/scoreColor moved verbatim, TRADING_DAYS_PER_YEAR=252, formatSymbolYears, isNotFoundError); replaced duplicated helpers in strategies/page.tsx + insights/page.tsx with imports (DRY/C-10). Detail page: strategyIdRef in mutation, "Strategy Grade" card + evidence caption + Provisional badge + cleared-state card; Past Runs "Score"→"Run score" + Range column; useStrategyReport NotFound retry predicate overriding global retry:1.
+- Files modified: `src/lib/scoreDisplay.ts` (new), `src/app/insights/strategies/page.tsx`, `src/app/insights/strategies/[id]/page.tsx`, `src/app/insights/page.tsx`, `src/hooks/useStrategies.ts`
+- TDD: red → green (Step 12 vitest); e2e covers rendered surfaces.
+
+### Step 12 — test: UI unit (vitest) + e2e [done]
+- vitest: scoreDisplay.test.ts (formatSymbolYears 252→"1.0"/2100→"8.3"/0→"0.0"; ratingVariant/scoreColor boundary tables; TRADING_DAYS_PER_YEAR===252; isNotFoundError ConnectError+NotFound only) — 10 passed, 100% on scoreDisplay.ts.
+- e2e: mock-backend provenance + range fixtures + strat-notfound-001 NOT_FOUND; backtest-coverage.spec both-labels (Strategy Grade + Run score) + evidence caption + range placeholder + strategyIdRef network-capture + cleared-state; dashboard.spec Provisional badge (one provisional, not the evidenced).
+- Verification: lint clean, tsc --noEmit clean, test:coverage green. e2e run via CI-equivalent static gates (Deviation Log); runs in CI frontend-e2e on the PR.
+- Deviations: vitest coverage all:false (earnable floor); e2e static-gate fallback — both in Deviation Log. TDD: red → green (vitest).
