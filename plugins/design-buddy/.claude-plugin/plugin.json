@@ -1,8 +1,8 @@
 {
   "name": "design-buddy",
   "displayName": "Design Buddy",
-  "version": "0.1.0",
-  "description": "A repo-agnostic design partner: adversarially debated designs (recon + mediated proposer-vs-adversary rounds, depth-scaled from bug fix to rearchitecture) and evidence-grounded implementation plans.",
+  "version": "0.2.0",
+  "description": "A repo-agnostic design partner: adversarially debated designs (recon + mediated proposer-vs-adversary rounds, depth-scaled from bug fix to rearchitecture), evidence-grounded implementation plans, and a strict plan-review gate.",
   "author": {
     "name": "davcs86",
     "email": "davcs86@gmail.com"

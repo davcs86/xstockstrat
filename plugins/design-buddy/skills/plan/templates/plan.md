@@ -12,6 +12,7 @@ only `**Status**` flips, and divergence lands in `## Deviation Log`.
 **Design**: <relative link to design.md | "none — planned without a design doc">
 **Test harness**: <detected command, cited path:line | "none detected — steps carry manual verification">
 **Total Steps**: N
+**Review**: `not-reviewed`
 
 ---
 
@@ -63,3 +64,8 @@ here with the step number, what changed, and why._
 
 Step statuses: `pending` → `in-progress` → `done` | `blocked`. A `blocked` step names what
 unblocks it.
+
+The `**Review**` field is owned by `/design-buddy:review` (**DN-6**): it flips `not-reviewed` →
+`passed | passed-with-warnings | failed @ <date>`, and that skill appends a `## Review Log`
+section recording blockers, waivers, and any pre-execution amendments. A `failed` plan must not
+be executed.

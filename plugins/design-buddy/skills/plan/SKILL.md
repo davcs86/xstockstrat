@@ -82,11 +82,12 @@ session execute it step by step.
 ### 7. Report
 
 ```
-Implementation plan written to <path> (<N> steps).
+Implementation plan written to <path> (<N> steps). Review: not-reviewed.
 Design doc: <path | "none — planned from scratch">
 Test harness: <detected command | "none detected">
-A future session can execute this plan step-by-step — flip each step's Status as it goes;
-step bodies stay immutable (deviations → Deviation Log).
+Next: /design-buddy:review <slug> — the plan gates on its review verdict (DN-6) before
+execution. Once passed, a future session executes it step-by-step — statuses flip; step
+bodies stay immutable (deviations → Deviation Log).
 ```
 
 ## HARD CONSTRAINTS — never violate

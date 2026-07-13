@@ -43,4 +43,10 @@ the user at a gate. A waiver is recorded in the artifact, never implied.
   novelty — a schema migration is not debated like a typo fix.
 - **DN-5 — Plan steps are immutable during execution.** Once a plan is being executed, step bodies
   are never rewritten; only each step's `**Status**` changes, and divergence is recorded in the
-  plan's `## Deviation Log`.
+  plan's `## Deviation Log`. (Amendments made by a pre-execution review are allowed and are
+  recorded in the plan's `## Review Log`.)
+- **DN-6 — Plans are reviewed before execution.** The review verdict is recorded in the plan
+  header. A plan whose review found unresolved BLOCKER findings (floor-tied defects — invented
+  references, host hard-rule violations, contradiction of the approved design) is `failed` and
+  must not be executed until fixed and re-reviewed; BLOCKERs cannot be waived. Warnings must be
+  addressed or explicitly waived at a gate.

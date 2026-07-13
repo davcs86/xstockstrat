@@ -5,7 +5,9 @@ Python 3 stdlib only (plugin script policy: Python, never Bash). Checks:
   1. plugin.json (and the repo marketplace.json, when present) parse and carry required fields;
   2. every skill SKILL.md and agent .md has YAML frontmatter with the required keys;
   3. every reference/... and templates/... path named in a skill's markdown resolves to a file;
-  4. no host-repo-specific strings leak into the plugin (portability guard).
+  4. no host-repo-specific strings leak into the plugin (portability guard);
+  5. shared reference files duplicated across skills (principles.md, config-protocol.md) are
+     byte-identical — the skills are self-contained, so copies must never drift.
 
 Usage:
   python3 validate.py [--plugin-root PATH]   # validate (default root: this script's parent dir)
@@ -28,6 +30,7 @@ LEAK_PATTERNS = ("xstockstrat", "docs/roadmap", "docs/sdd", "services/")
 LEAK_ALLOWED_LINE_RE = re.compile(r"davcs86/xstockstrat|@xstockstrat")
 SKILL_REQUIRED_KEYS = ("name", "description")
 AGENT_REQUIRED_KEYS = ("name", "description", "tools", "model")
+SHARED_REFERENCE_FILES = ("principles.md", "config-protocol.md")
 
 
 def frontmatter_keys(text):
@@ -89,6 +92,17 @@ def check_leakage(plugin_root, findings):
                     findings.append(f"LEAK: {path}:{lineno} contains host-repo string '{pattern}'")
 
 
+def check_shared_copies(plugin_root, findings):
+    for name in SHARED_REFERENCE_FILES:
+        copies = sorted((plugin_root / "skills").glob(f"*/reference/{name}"))
+        if len(copies) < 2:
+            continue
+        baseline = copies[0].read_text(encoding="utf-8")
+        for copy in copies[1:]:
+            if copy.read_text(encoding="utf-8") != baseline:
+                findings.append(f"DRIFT: {copy} differs from {copies[0]} — shared reference copies must be identical")
+
+
 def validate(plugin_root):
     findings = []
     check_manifest(plugin_root / ".claude-plugin" / "plugin.json", ("name", "description", "version"), findings)
@@ -112,6 +126,7 @@ def validate(plugin_root):
         check_frontmatter(agent_file, AGENT_REQUIRED_KEYS, findings)
 
     check_leakage(plugin_root, findings)
+    check_shared_copies(plugin_root, findings)
 
     # Marketplace entry (only when the plugin sits inside a marketplace repo).
     marketplace = plugin_root.parent.parent / ".claude-plugin" / "marketplace.json"
@@ -147,12 +162,19 @@ def self_test():
         )
         (root / "agents").mkdir()
         (root / "agents" / "bare.md").write_text("No frontmatter here.\n", encoding="utf-8")
+        # Drifted shared reference copies across two skills:
+        (skill / "reference" / "principles.md").write_text("version A\n", encoding="utf-8")
+        skill2 = root / "skills" / "demo2"
+        (skill2 / "reference").mkdir(parents=True)
+        (skill2 / "SKILL.md").write_text("---\nname: demo2\ndescription: d\n---\nBody.\n", encoding="utf-8")
+        (skill2 / "reference" / "principles.md").write_text("version B\n", encoding="utf-8")
         findings = validate(root)
         expect("missing manifest field", findings, "lacks required field 'name'")
         expect("missing frontmatter key", findings, "frontmatter lacks 'description'")
         expect("dangling internal ref", findings, "references 'reference/missing.md'")
         expect("agent frontmatter", findings, "bare.md has no YAML frontmatter")
         expect("leakage", findings, "host-repo string 'services/'")
+        expect("shared copy drift", findings, "DRIFT:")
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp) / "bad-json-plugin"

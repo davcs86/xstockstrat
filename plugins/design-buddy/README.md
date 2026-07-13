@@ -22,6 +22,7 @@ approved design into numbered, verifiable, statused steps a future session can e
 |---|---|
 | `/design-buddy:design <change description or issue ref> [quick\|full\|deep]` | Recon (repo scout + parallel area discovery → `recon.md`) then a depth-scaled adversarial debate → `design.md` with the chosen approach, rejected alternatives, and open risks. |
 | `/design-buddy:plan <design.md path \| slug \| change description>` | Consumes the design doc (or warns and discovers from scratch) and writes `plan.md`: numbered steps, each with Files / Evidence / Instructions / Verification / Test, executable step-by-step by a later session. |
+| `/design-buddy:review <plan.md path \| slug>` | Review gate for the plan — **stricter than advisory**. A reviewer subagent checks every step (evidence resolves, design fidelity, host hard rules, ordering); the verdict is recorded in the plan header. Any floor-tied BLOCKER fails the review and blocks execution readiness — BLOCKERs cannot be waived; warnings are addressed or explicitly waived, with everything logged in `## Review Log`. |
 
 ### Debate depths
 
@@ -38,10 +39,11 @@ states about itself) blocks approval outright.
 
 ## Subagents
 
-Four read-only agents do the heavy lifting so the orchestrating session stays lean:
+Five read-only agents do the heavy lifting so the orchestrating session stays lean:
 `repo-scout` (once-per-run repo orientation), `area-discovery` (per-area evidence digests),
-`proposer` (one cited design per round), and `adversary` (attacks it, citing rules by ID).
-Proposer and adversary never see each other's raw output — the skill mediates every round.
+`proposer` (one cited design per round), `adversary` (attacks it, citing rules by ID), and
+`reviewer` (verdicts the finished plan against the review criteria). Proposer and adversary
+never see each other's raw output — the skill mediates every round.
 
 ## First run & configuration
 
@@ -61,13 +63,14 @@ The config file is committable, so a team shares one setting; gitignore it if yo
 
 ## Governance
 
-`skills/*/reference/principles.md` ships the portable rule seed the adversary cites: **Floor
-rules** `DF-1..6` (never invent paths/symbols; no silent deviation; single orchestrator writes;
-mediated debate; floor blocks approval; host hard rules are floor-equivalent) and **Norms**
-`DN-1..5` (evidence-cited claims; reuse over rebuild; recorded gates; depth scales with the
-change; plan steps immutable during execution). Your repo's own absolute rules — "never …",
-"must not …" in CLAUDE.md/CONTRIBUTING/docs — are discovered during recon, quoted verbatim, and
-enforced like floor rules.
+`skills/*/reference/principles.md` ships the portable rule seed the adversary and reviewer cite:
+**Floor rules** `DF-1..6` (never invent paths/symbols; no silent deviation; single orchestrator
+writes; mediated debate; floor blocks approval; host hard rules are floor-equivalent) and
+**Norms** `DN-1..6` (evidence-cited claims; reuse over rebuild; recorded gates; depth scales
+with the change; plan steps immutable during execution; plans reviewed before execution — a
+failed review blocks it). Your repo's own absolute rules — "never …", "must not …" in
+CLAUDE.md/CONTRIBUTING/docs — are discovered during recon, quoted verbatim, and enforced like
+floor rules.
 
 ## Development
 
