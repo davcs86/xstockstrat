@@ -1,0 +1,27 @@
+{
+  "name": "xstockstrat",
+  "owner": {
+    "name": "davcs86",
+    "email": "davcs86@gmail.com"
+  },
+  "description": "Plugins exported from the xstockstrat repository.",
+  "version": "1.0.0",
+  "metadata": {
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "design-buddy",
+      "displayName": "Design Buddy",
+      "source": "./plugins/design-buddy",
+      "description": "A repo-agnostic design partner: adversarially debated designs and evidence-grounded implementation plans, from bug fixes to rearchitectures.",
+      "version": "0.1.0",
+      "author": {
+        "name": "davcs86",
+        "email": "davcs86@gmail.com"
+      },
+      "license": "MIT",
+      "keywords": ["design", "architecture", "planning", "debate", "adversarial"]
+    }
+  ]
+}

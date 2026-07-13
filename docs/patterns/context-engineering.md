@@ -135,3 +135,6 @@ procedure, and stale history respectively.
 
 When you extend the tooling, ask the context-engineering question first: *what needs to be in the
 window when this decision is made, and how do I keep everything else out?*
+
+> **Portable export:** the sdd-design/sdd-spec methodology (recon → mediated debate → evidence-cited
+> plan) is exported as a repo-agnostic Claude Code plugin at `plugins/design-buddy/` — see its README.

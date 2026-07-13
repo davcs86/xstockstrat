@@ -45,6 +45,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | Adding/refactoring a skill, subagent, or `CLAUDE.md`; how the AI tooling curates context (subagent delegation, progressive disclosure, structured `context.md` memory) | `docs/patterns/context-engineering.md` |
 | SDD binding rules — Constitution constraint IDs (`C-*`/`P-*`/`F-*`) cited by review/design/execute | `docs/sdd/constitution.md` |
 | Cross-feature SDD memory — insights (patterns that worked) and fails (mistakes that recurred) | `docs/roadmap/ledger/insights.md`, `docs/roadmap/ledger/fails.md` |
+| Using or developing the portable design-buddy plugin (exported sdd-design/sdd-spec) | `plugins/design-buddy/README.md` |
 
 ---
 
@@ -529,6 +530,8 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | Feature merge order | `docs/roadmap/features/merge-order.md` |
 | Implementation roadmap | `docs/roadmap/implementation-roadmap.md` |
 | Phase deviation notes | `docs/roadmap/phase[3-7]-deviations.md` |
+| Design-buddy plugin (portable design partner) | `plugins/design-buddy/` |
+| Plugin marketplace manifest | `.claude-plugin/marketplace.json` |
 
 ---
 
