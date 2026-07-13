@@ -113,7 +113,7 @@ committed; re-running produces an empty diff.
 
 ### Step 3 — migration: analysis 007 — evidence cells + range + provenance columns
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/007_backtest_run_symbols.up.sql` — create
@@ -768,3 +768,11 @@ from `origin/main-dev` per the user's "use main-dev"), with one PR → `main-dev
 **Reason**: the feature branch was never pushed (single-PR flow on the designated branch); the correct
 pre-change baseline for an additive-only check is `origin/main-dev` (the PR target). Result: no breaking
 changes. `**Disposition**`: CI-equivalent fallback (mirrors CI proto baseline).
+
+### Deviation: Step 3 — migration verified via throwaway Postgres (no migrate/Docker)
+**Spec said**: `./scripts/db-migrate.sh && ./scripts/db-migrate.sh version` … then apply down + re-up.
+**Actual**: `migrate` binary missing and Docker daemon down. Started the host's Postgres 16 cluster,
+created a throwaway DB, applied 001→007 up, then 007 down (confirmed table/index/5 columns dropped,
+prereq tables intact), then re-applied 007 up. Reversibility proven.
+**Reason**: db-migrate.sh needs golang-migrate + a DB. `**Disposition**`: CI-equivalent fallback
+(sequential-mode "migrate/DB unavailable" fallback).

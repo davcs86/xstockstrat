@@ -221,3 +221,9 @@
 - Ran `./scripts/buf-gen.sh` (host toolchain, CI-pinned versions). Diff scoped to analysis/v1 only (Go/Python/TS + compiled dist). New fields present in all three languages. Re-run produced empty diff (idempotent).
 - Files modified: `packages/proto/gen/go/analysis/v1/analysis.pb.go`, `packages/proto/gen/python/analysis/v1/analysis_pb2.py`, `packages/proto/gen/ts/analysis/v1/*`, `packages/proto/gen/ts/dist/analysis/v1/*`
 - Deviations: none. TDD: N/A (proto-gen)
+
+### Step 3 — migration: analysis 007 evidence cells + range + provenance columns [done]
+- Created backtest_run_symbols table (PK backtest_id,symbol) + idx_brs_eligibility (traded-first DISTINCT ON); ALTER backtest_runs +range_start/range_end; ALTER strategy_scores +n_symbols/total_trading_days/provisional. No strategies ALTER.
+- Verified reversibility on throwaway Postgres 16 (migrate/Docker unavailable): 001→007 up, 007 down (clean), 007 re-up. CI-equivalent fallback, logged in Deviation Log.
+- Files modified: `services/xstockstrat-analysis/migrations/007_backtest_run_symbols.up.sql`, `.../007_backtest_run_symbols.down.sql`
+- Deviations: throwaway-postgres verification — full detail in Deviation Log. TDD: N/A (migration)
