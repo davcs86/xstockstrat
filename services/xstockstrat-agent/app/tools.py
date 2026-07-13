@@ -235,7 +235,10 @@ def register_tools(server: FastMCP) -> None:
         initial_capital: float = 100000.0,
     ) -> dict:
         """Trigger a backtest via xstockstrat-analysis.
-        strategy_id: identifies the strategy (e.g. 'sma_crossover').
+        strategy_id: identifies the strategy (e.g. 'sma_crossover'). Must be a REGISTERED strategy
+          definition — the run executes that definition and earns evidence toward its derived
+          headline grade (feature 065). An unregistered id returns NOT_FOUND (the legacy ad-hoc
+          SMA-crossback path is no longer reachable from the agent).
         symbols: list of ticker symbols e.g. ['NVDA', 'AAPL'].
         initial_capital: starting capital in USD (default 100000).
         Returns the full backtest result including per-symbol `diagnostics`: a day-by-day list of

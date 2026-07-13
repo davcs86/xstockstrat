@@ -410,7 +410,7 @@ Author to FAIL pre-Step-6:
 
 ### Step 8 — service: MCP agent caller parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -447,7 +447,7 @@ Author to FAIL pre-Step-6:
 
 ### Step 9 — test: agent parity coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify

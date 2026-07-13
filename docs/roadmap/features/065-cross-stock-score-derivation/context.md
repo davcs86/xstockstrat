@@ -251,3 +251,13 @@
 - Revised `:301` (no per-run headline upsert), `TestScorePersistence` (cell-derived ScoreStrategy path); replaced obsolete `TestScoreStrategy` grade tests with `_score_from_metrics`/`_grade` unit tests. Added: `_aggregate_cells` OQ-1 anchors (W=375→A; 60-day→0.597 C), Σw==0→None, renormalization, non-finite filter, zero-trade drag; triggers (OK run derives from cells not run; UPDATE unconditional pop even when delete raises; UPDATE→recompute no deadlock via wait_for); ScoreStrategy paths (UNAVAILABLE/NOT_FOUND/clear+NOT_FOUND/cells-read-fail no-mutation/success provenance+ledger/range ignored); hydrate provenance + pre-007 defaults; strategy_scores repo new columns + delete SQL.
 - Files modified: `tests/test_analysis_servicer.py`, `tests/test_strategy_scores_repo.py`
 - Deviations: none. TDD: red → green.
+
+### Step 8 — service: MCP agent caller parity [done]
+- `client.run_backtest` now sends `strategy_id_ref=strategy_id` so agent-triggered runs execute the registered definition and earn fingerprinted evidence; unregistered ids now return NOT_FOUND. Updated the `run_backtest` tool docstring + mcp-tools.md runbook.
+- Files modified: `services/xstockstrat-agent/app/client.py`, `.../app/tools.py`, `docs/runbooks/mcp-tools.md`
+- TDD: red → green (Step 9).
+
+### Step 9 — test: agent parity coverage [done]
+- red: `test_run_backtest_sends_strategy_id_ref_for_registered_definition` failed pre-Step-8 (`'' == 'sma'`). green: 54 passed, coverage 61.32% (≥40), ruff clean. Assertion at stub-capture level (constructed RunBacktestRequest), not the wholesale-mocked `test_run_backtest_calls_grpc`.
+- Files modified: `services/xstockstrat-agent/tests/test_tools.py`
+- Deviations: none (agent has no CI job yet — verified locally; Step 13 wires it). TDD: red → green.
