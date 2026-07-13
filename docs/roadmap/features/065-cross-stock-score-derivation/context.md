@@ -284,3 +284,17 @@
 - Verified: ci.yml parses as valid YAML; local CI-equivalent pre-checks green (agent pytest 54 passed/61%, ui test:coverage 100% scoreDisplay). CI job appearance confirmed on the PR.
 - Files modified: `.github/workflows/ci.yml`
 - Deviations: none. TDD: N/A (CI wiring).
+
+### Step 14 — docs: config keys + scoring semantics + test tooling [done]
+- analysis CLAUDE.md: added 3 `analysis.scoring.*` keys; new "Cross-Stock Score Derivation (feature 065)" section (evidence cells, fingerprint eligibility + canonicalization, traded-first dedup with zero-trade counted, shrinkage + renormalized components, OQ-1 anchors, recompute triggers + OQ-4 staleness/range-ignored, rename-no-reset/revert-resurrect, ScoreStrategy-only ledger event, retention gap, single-process lock, OQ-6, FR-9 grade-drop); amended auto-scoring paragraph + 064 persistence pointer + ledger events row.
+- root CLAUDE.md: feature-065 "Recently added keys" block + vitest row in Language Versions table. ui CLAUDE.md: vitest unit layer under § Testing. agent CLAUDE.md: § Running Tests now CI-enforced.
+- Verified: greps for shrinkage_days (root+analysis), test:unit/vitest (ui), python-test/CI (agent).
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `services/xstockstrat-ui/CLAUDE.md`, `services/xstockstrat-agent/CLAUDE.md`, `CLAUDE.md`
+- Deviations: none. TDD: N/A (docs).
+
+## Session 2026-07-13 — sdd-execute (sequential, single-PR) — COMPLETE
+**Steps this session**: 1–14 (all)
+**Progress**: 14 done / 14 total → feature `code-completed`
+**Verification**: proto buf lint+breaking; codegen idempotent; migration 007 up/down/re-up reversible (throwaway PG); analysis 220 tests / 77.7% cov / ruff clean; agent 54 tests / 61% cov / ruff clean; ui vitest 10 tests / 100% scoreDisplay + tsc --noEmit + lint + prettier clean; ci.yml valid YAML.
+**Deviations (Deviation Log)**: single-PR workflow (user-directed); buf-breaking baseline origin/main-dev; migration via throwaway PG; vitest coverage all:false (earnable floor); e2e via CI-equivalent static gates. All CI-equivalent or user-directed.
+**Next**: integration PR → main-dev (merge-order gate: no entry for this slug).

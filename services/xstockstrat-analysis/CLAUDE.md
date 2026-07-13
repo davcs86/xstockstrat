@@ -8,6 +8,12 @@ Beyond the gRPC server, the service runs an **asyncio live evaluation loop** (`a
 
 ### Strategy Score Persistence (feature 064)
 
+> **Feature 065 update**: the headline `StrategyScore` is now **derived** from per-symbol evidence
+> cells rather than the latest run (see **Cross-Stock Score Derivation** below). The write-through +
+> hydrate-at-boot mechanics described here are unchanged; `strategy_scores` stays a materialized cache
+> (now with `n_symbols`/`total_trading_days`/`provisional` provenance columns and a `delete` for
+> clearing a stale grade). `ScoreStrategy` is repurposed as the manual recompute-from-cells refresh.
+
 `ScoreStrategy` persists the latest `StrategyScore` per strategy to the `analysis.strategy_scores`
 table (migration `005`, upsert on the `strategy_id` primary key) in addition to the in-memory
 `self._strategies` dict. The write is **best-effort** (FR-7): it mirrors the ledger-emit `try/except →
@@ -21,11 +27,12 @@ table has no retention or pagination yet (deactivated and ad-hoc-`strategy_id` s
 
 ### Backtest Auto-Scoring & Run History
 
-`RunBacktest` **auto-scores** on every OK run: after the result is built it computes the `StrategyScore`
-via the shared `_score_from_result` helper (the same math `ScoreStrategy` uses — one code path, no drift)
-and persists it through `_persist_strategy_score` (in-memory dict + best-effort `strategy_scores` upsert).
-This fixes the bug where a score was never persisted after a backtest — previously nothing invoked scoring,
-because the UI only called `RunBacktest`, never the separate `ScoreStrategy` RPC.
+Each OK `RunBacktest` computes a **per-run** `StrategyScore` (via the shared `_score_from_metrics` /
+`_grade` helpers that `_score_from_result` delegates to) and stores it only on the run-history row
+(`backtest_runs.overall_score`/`rating`). **As of feature 065 the run's own aggregate is no longer the
+headline grade** — the per-strategy headline is *derived* from the strategy's whole evidence base (see
+**Cross-Stock Score Derivation** below), so a throwaway single-symbol run can never overwrite a
+well-evidenced grade. The prior per-run headline upsert was removed.
 
 Every completed run (OK **and** INSUFFICIENT_DATA) is also appended to `analysis.backtest_runs`
 (migration `006`, `BacktestRunsRepository`) — a lightweight, durable **run history** of summary metrics
@@ -48,6 +55,59 @@ A second asyncio background loop (`app/engine/fundsignal_loop.py`) runs a daily 
 - **Manual trigger**: the admin-scoped `RunFundamentalsScan` RPC invokes the same `run_once` code path (`force`, `dry_run`, explicit `symbols` override) so the scheduled loop and manual trigger never diverge.
 
 New dependency edges: **analysis → ingest write** (`IngestSignal` / `ManageSignalSource`, gRPC not DB) and **analysis → portfolio read** (watchlist universe; requires `PORTFOLIO_ENDPOINT`). The loop reuses the existing asyncpg pool (no new pool — budget stays 2).
+
+### Cross-Stock Score Derivation (feature 065)
+
+The headline `StrategyScore` (served by `ListStrategies`/`GetStrategyReport`, materialized in
+`strategy_scores`) is **derived from per-symbol evidence, not the last run**. The unit of evidence is
+the **(symbol × window) cell** (`analysis.backtest_run_symbols`, migration `007`): every OK
+`RunBacktest` buffers one cell per traded symbol (per-symbol Sharpe/drawdown/win-rate over that symbol's
+own equity curve, plus `trading_days`, `total_trades`, the run's range, and a **definition
+fingerprint**).
+
+- **Fingerprint eligibility.** A cell is stamped with `_definition_fingerprint(definition_json)` — a
+  sha256 over the DB `strategies` row's `definition_json` **excluding** `display_name`/`active`/
+  `live_enabled` — only when the run executed the strategy's **own registered definition**
+  (`strategy_id == strategy_id_ref`). Inline runs, the legacy-SMA fallback, id-mismatches, and
+  unregistered ids leave the fingerprint `NULL` and never contribute to a headline. **Always hash a
+  DB-returned `definition_json`, never a request proto dict** (column-authoritative fields are overlaid
+  at read time — a request dict would not canonicalize identically). The fingerprint is sensitive to the
+  exact `entry_rule`/`exit_rule` string encoding.
+- **Traded-first dedup.** `fetch_eligible` returns one cell per symbol for a `(strategy, fingerprint)`
+  via `DISTINCT ON (symbol) … ORDER BY (total_trades > 0) DESC, trading_days DESC, completed_at DESC` —
+  traded evidence wins over a zero-trade cell, then most trading days, then newest. **Zero-trade cells
+  ARE counted as evidence** (≈0.30 F-ish score); traded-first dedup ensures non-participation can never
+  shadow real traded evidence, but a symbol with only zero-trade cells still contributes one. (Visible
+  behavior shift vs. the old last-run headline.)
+- **Aggregation.** `_aggregate_cells` weights each cell by `trading_days` and applies empirical-Bayes
+  shrinkage toward a neutral 0.5 prior: `overall = (Σ wᵢ·sᵢ + 0.5·k) / (Σ wᵢ + k)`, `k =
+  analysis.scoring.shrinkage_days`. Components are shrunk identically (weighted mean renormalized
+  `wᵢ/Σw`, then the same shrinkage), non-finite components dropped. `Σw == 0` → no grade (never an
+  equal-weighted fallback). **OQ-1 calibration anchors**: perfect evidence earns an A once total
+  evidence `W ≥ 1.5·k` (`W = 375, k = 250 → 0.8`); a single 60-day perfect cell shrinks to
+  `(60 + 125)/310 ≈ 0.597` (a provisional C). The grade is `provisional` below
+  `min_evidence_symbols` (3) or `min_evidence_days` (500).
+- **Recompute triggers (OQ-4 — in-request only; no background recompute).** The headline is recomputed,
+  best-effort, after an OK `RunBacktest` (before the completion emit) and after a `ManageStrategy`
+  UPDATE (which first **unconditionally clears** the in-memory grade — a definition change usually
+  changes the fingerprint, so old evidence no longer applies; usually cleared until a fresh backtest).
+  `ScoreStrategy` is the **manual refresh** (e.g. after a scoring-config change): it recomputes from
+  cells and, on zero eligible evidence, clears the stale grade (in-memory pop + non-best-effort DB
+  delete) then returns `NOT_FOUND "no eligible evidence — run a backtest"`; unregistered →
+  `NOT_FOUND`; store/cells error → `UNAVAILABLE`. **`ScoreStrategyRequest.range` is ignored** (the
+  evidence base is the whole eligible cell set, not a window).
+- **Rename / revert semantics (FR-3).** Because the fingerprint excludes `display_name`/`active`/
+  `live_enabled`, a **rename or live-toggle does not reset** evidence; reverting a definition to a prior
+  content **resurrects** that content's evidence base (evidence describes definition content, not a
+  timeline).
+- **`analysis.strategy.scored` ledger event** stays **`ScoreStrategy`-only** (documented asymmetry — the
+  RunBacktest/UPDATE recompute paths do not emit it).
+- **Caveats.** `backtest_run_symbols` has **no retention/pruning** yet (evidence accumulates). The
+  per-strategy `asyncio.Lock` serializing recompute is **single-process protection only** (no
+  cross-instance guard). **OQ-6**: correlated symbols can inflate apparent breadth (accepted for v1;
+  sector-capped weights via feature-059 fundamentals is the designated follow-up). **FR-9**: on first
+  post-deploy recompute a legacy broad grade can **drop sharply** (cells-only evidence) — documented,
+  not a regression.
 
 As of Phase 3, RunBacktest executes a real SMA crossover engine (no more synthetic stubs) that:
 
@@ -149,6 +209,9 @@ Namespace: `analysis`
 | `analysis.scoring.sharpe_weight` | float | `0.4` | Weight of Sharpe in overall score |
 | `analysis.scoring.drawdown_weight` | float | `0.3` | Weight of max drawdown |
 | `analysis.scoring.win_rate_weight` | float | `0.3` | Weight of win rate |
+| `analysis.scoring.shrinkage_days` | int | `250` | Empirical-Bayes shrinkage pseudo-count `k` (in trading days) for the derived headline grade (feature 065). `overall = (Σ wᵢ·sᵢ + 0.5·k) / (Σ wᵢ + k)`; larger `k` → stronger pull toward the neutral 0.5 prior, so a strong grade needs more evidence. `get_int` zero-trap: a config value of `0` reads as the default 250. |
+| `analysis.scoring.min_evidence_symbols` | int | `3` | Below this many distinct evidence symbols the derived grade is flagged `provisional`. |
+| `analysis.scoring.min_evidence_days` | int | `500` | Below this many total evidence trading-days the derived grade is flagged `provisional`. |
 | `analysis.signals.source_weights` | string (JSON) | `"{}"` | JSON object mapping source name to reliability weight in [0.0, 1.0]. Empty → all sources use 1.0 (neutral). Values outside [0.0, 1.0] are clamped at read time. |
 | `analysis.engine.eval_interval_seconds` | int | `60` | Live evaluation polling cadence in seconds |
 | `analysis.engine.max_strategies_per_cycle` | int | `50` | Max (strategy × symbol) pairs evaluated per cycle |
@@ -176,7 +239,7 @@ Namespace: `analysis`
 |---|---|
 | `analysis.backtest.started` | Backtest begins |
 | `analysis.backtest.completed` | Backtest done |
-| `analysis.strategy.scored` | Strategy scored |
+| `analysis.strategy.scored` | `ScoreStrategy` RPC only (feature 065 — the RunBacktest/UPDATE recompute paths do **not** emit it) |
 | `analysis.strategy.triggered` | Live loop detected an entry or exit transition |
 | `analysis.strategy.live_toggled` | `SetStrategyLive` enabled/disabled live evaluation |
 | `analysis.fundsignal.run_started` | Fundamentals signal producer cycle started |

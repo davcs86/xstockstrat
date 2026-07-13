@@ -1,6 +1,6 @@
 # Implementation Spec: cross-stock-score-derivation
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-07-13
 **Feature**: `docs/roadmap/features/065-cross-stock-score-derivation/feature.md`
 **Total Steps**: 14
@@ -701,7 +701,7 @@ Local pre-check: `cd services/xstockstrat-agent && pip install -e ".[dev]" && py
 
 ### Step 14 — docs: config keys + scoring semantics + test tooling
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (service CLAUDE.md files, root `CLAUDE.md`)
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
