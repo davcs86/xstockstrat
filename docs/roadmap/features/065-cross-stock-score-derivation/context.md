@@ -261,3 +261,9 @@
 - red: `test_run_backtest_sends_strategy_id_ref_for_registered_definition` failed pre-Step-8 (`'' == 'sma'`). green: 54 passed, coverage 61.32% (≥40), ruff clean. Assertion at stub-capture level (constructed RunBacktestRequest), not the wholesale-mocked `test_run_backtest_calls_grpc`.
 - Files modified: `services/xstockstrat-agent/tests/test_tools.py`
 - Deviations: none (agent has no CI job yet — verified locally; Step 13 wires it). TDD: red → green.
+
+### Step 10 — test: seed vitest unit-test infrastructure in xstockstrat-ui [done]
+- Added devDeps vitest ^3.2.4 + @vitest/coverage-v8; scripts test:unit / test:unit:watch / test:coverage; vitest.config.ts (node env, include src/**/*.test.ts, v8 coverage lcov+text scoped to src/lib/** at 40%, excludes *Bff.ts/connectClients.ts/identity.ts). Updated pnpm-lock.yaml.
+- Verified: `vitest run --passWithNoTests` exits 0 (runner executes at seed time); `pnpm run lint` clean. Note: `pnpm run test:unit -- --passWithNoTests` arg-forwarding is a pnpm quirk (direct `vitest run --passWithNoTests` exits 0); moot — Step 12 adds tests and CI runs `test:coverage`.
+- Files modified: `services/xstockstrat-ui/package.json`, `services/xstockstrat-ui/vitest.config.ts`, `pnpm-lock.yaml`
+- Deviations: none. TDD: N/A (test tooling seed).

@@ -480,7 +480,7 @@ client-level test using the same stub pattern. Keep both existing tests green.
 
 ### Step 10 — test: seed vitest unit-test infrastructure in xstockstrat-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/package.json` — modify
