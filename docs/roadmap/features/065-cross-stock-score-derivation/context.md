@@ -227,3 +227,15 @@
 - Verified reversibility on throwaway Postgres 16 (migrate/Docker unavailable): 001→007 up, 007 down (clean), 007 re-up. CI-equivalent fallback, logged in Deviation Log.
 - Files modified: `services/xstockstrat-analysis/migrations/007_backtest_run_symbols.up.sql`, `.../007_backtest_run_symbols.down.sql`
 - Deviations: throwaway-postgres verification — full detail in Deviation Log. TDD: N/A (migration)
+
+### Step 4 — service: per-symbol evidence cells + definition fingerprint capture [done]
+- Added `_definition_fingerprint` (sha256 of DB definition_json minus display_name/active/live_enabled), `BacktestRunSymbolsRepository` (insert_many + traded-first fetch_eligible), per-symbol cell buffering in RunBacktest (zero-trade cells buffered), OK-run cells flush stamping fingerprint + range, and range_start/range_end on the run-history insert.
+- Fingerprint stamped only when strategy_id == strategy_id_ref AND registered row present (inline/legacy/id-mismatch/unregistered → None).
+- Files modified: `app/repositories/backtest_run_symbols.py` (new), `app/repositories/backtest_runs.py`, `app/handlers/servicer.py`
+- TDD: red → green (see Step 5).
+
+### Step 5 — test: cells + fingerprint coverage [done]
+- red: `test_backtest_run_symbols_repo.py` + servicer cell/fingerprint tests failed pre-Step-4 (`No module named 'app.repositories.backtest_run_symbols'`; `_definition_fingerprint` absent). green: 195 passed, coverage 77.10% (≥40 floor), ruff clean.
+- Covers: insert_many SQL/params, fetch_eligible DISTINCT ON + traded-first ordering, fingerprint stability (rename/toggle same, rule-change differs, key-order-invariant, None/{}), OK run buffers one cell/symbol incl zero-trade, registered-own-run stamps fingerprint, id-mismatch → None, INSUFFICIENT flushes nothing, cells-flush failure never fails run, range passthrough to history insert.
+- Files modified: `tests/test_backtest_run_symbols_repo.py` (new), `tests/test_analysis_servicer.py`
+- Deviations: none. TDD: red → green.

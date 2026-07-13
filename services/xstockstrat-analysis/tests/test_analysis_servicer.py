@@ -1356,3 +1356,190 @@ class TestScorePersistence:
         assert score.overall_score == pytest.approx(0.5)
         assert score.rating == "C"
         assert dict(score.component_scores) == pytest.approx({"sharpe": 0.4, "drawdown": 0.6})
+
+
+# ---------------------------------------------------------------------------
+# feature 065 — definition fingerprint (module-level, no DB)
+# ---------------------------------------------------------------------------
+
+
+class TestDefinitionFingerprint:
+    def test_display_name_active_live_excluded(self):
+        from app.handlers.servicer import _definition_fingerprint
+
+        base = {"strategy_id": "s1", "entry_rule": '{"op":"AND"}', "display_name": "A"}
+        renamed = {**base, "display_name": "Totally Different Name"}
+        toggled = {**base, "active": False, "live_enabled": True}
+        assert _definition_fingerprint(base) == _definition_fingerprint(renamed)
+        assert _definition_fingerprint(base) == _definition_fingerprint(toggled)
+
+    def test_entry_rule_change_changes_hash(self):
+        from app.handlers.servicer import _definition_fingerprint
+
+        a = {"strategy_id": "s1", "entry_rule": '{"op":"AND"}'}
+        b = {"strategy_id": "s1", "entry_rule": '{"op":"OR"}'}
+        assert _definition_fingerprint(a) != _definition_fingerprint(b)
+
+    def test_key_order_shuffle_same_hash(self):
+        from app.handlers.servicer import _definition_fingerprint
+
+        a = {"strategy_id": "s1", "entry_rule": "x", "exit_rule": "y"}
+        b = {"exit_rule": "y", "entry_rule": "x", "strategy_id": "s1"}
+        assert _definition_fingerprint(a) == _definition_fingerprint(b)
+
+    def test_none_and_empty_handled(self):
+        from app.handlers.servicer import _definition_fingerprint
+
+        assert _definition_fingerprint(None) == _definition_fingerprint({})
+        assert isinstance(_definition_fingerprint({}), str)
+
+
+# ---------------------------------------------------------------------------
+# feature 065 — per-symbol evidence cell buffering + fingerprint stamping
+# ---------------------------------------------------------------------------
+
+
+class TestRunBacktestCells:
+    def _req(self, strategy_id="s1", strategy_id_ref="", symbols=("AAPL", "MSFT")):
+        req = MagicMock()
+        req.strategy_id = strategy_id
+        req.strategy_id_ref = strategy_id_ref
+        req.symbols = list(symbols)
+        req.initial_capital = 100_000.0
+        req.HasField = MagicMock(return_value=False)
+        req.range = common_pb2.TimeRange()
+        return req
+
+    def _wire(self, svc):
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_run_symbols_repo = AsyncMock()
+
+    @staticmethod
+    def _fake_sma():
+        # AAPL: 2 winning trades over 10 trading days; MSFT: zero trades over 5 days.
+        trade = analysis_pb2.TradeRecord(pnl=1.0)
+        diag = analysis_pb2.SymbolDiagnostics()
+
+        def fake_symbol(symbol=None, **kwargs):
+            if symbol == "AAPL":
+                return ([trade, trade], 101_000.0, [100_000.0] * 11, diag)
+            return ([], 101_000.0, [101_000.0] * 6, diag)
+
+        return fake_symbol
+
+    @pytest.mark.asyncio
+    async def test_ok_run_buffers_one_cell_per_symbol_incl_zero_trade(self):
+        svc = make_servicer()
+        self._wire(svc)
+        svc._backtest_symbol = AsyncMock(side_effect=self._fake_sma())
+
+        result = await svc.RunBacktest(self._req(), context=MagicMock())
+
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK
+        svc._backtest_run_symbols_repo.insert_many.assert_awaited_once()
+        cells = svc._backtest_run_symbols_repo.insert_many.await_args.args[0]
+        by_symbol = {c["symbol"]: c for c in cells}
+        assert set(by_symbol) == {"AAPL", "MSFT"}
+        assert by_symbol["AAPL"]["total_trades"] == 2
+        assert by_symbol["AAPL"]["trading_days"] == 10
+        # Zero-trade cell IS buffered — non-participation counts as evidence.
+        assert by_symbol["MSFT"]["total_trades"] == 0
+        assert by_symbol["MSFT"]["trading_days"] == 5
+        # bare strategy_id (no ref) → no fingerprint on any cell.
+        assert all(c["definition_fingerprint"] is None for c in cells)
+
+    @pytest.mark.asyncio
+    async def test_registered_own_run_stamps_fingerprint(self):
+        from app.handlers.servicer import _definition_fingerprint
+
+        svc = make_servicer()
+        self._wire(svc)
+        definition_json = {"strategy_id": "s1", "entry_rule": '{"op":"AND"}'}
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(
+            return_value={
+                "strategy_id": "s1",
+                "display_name": "S1",
+                "active": True,
+                "live_enabled": False,
+                "definition_json": definition_json,
+            }
+        )
+        diag = analysis_pb2.SymbolDiagnostics()
+        curve = [100_000.0, 100_100.0, 100_200.0]
+        svc._backtest_symbol_evaluated = AsyncMock(
+            side_effect=lambda symbol=None, **kw: ([], 100_000.0, curve, diag)
+        )
+
+        req = self._req(strategy_id="s1", strategy_id_ref="s1", symbols=("AAPL",))
+        await svc.RunBacktest(req, context=MagicMock())
+
+        cells = svc._backtest_run_symbols_repo.insert_many.await_args.args[0]
+        expected = _definition_fingerprint(definition_json)
+        assert cells and all(c["definition_fingerprint"] == expected for c in cells)
+
+    @pytest.mark.asyncio
+    async def test_id_mismatch_stamps_none(self):
+        svc = make_servicer()
+        self._wire(svc)
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(
+            return_value={
+                "strategy_id": "other",
+                "display_name": "Other",
+                "active": True,
+                "live_enabled": False,
+                "definition_json": {"entry_rule": "x"},
+            }
+        )
+        diag = analysis_pb2.SymbolDiagnostics()
+        svc._backtest_symbol_evaluated = AsyncMock(
+            side_effect=lambda symbol=None, **kw: ([], 100_000.0, [100_000.0, 100_100.0], diag)
+        )
+        # strategy_id "s1" differs from strategy_id_ref "other" → cells carry no fingerprint.
+        req = self._req(strategy_id="s1", strategy_id_ref="other", symbols=("AAPL",))
+        await svc.RunBacktest(req, context=MagicMock())
+
+        cells = svc._backtest_run_symbols_repo.insert_many.await_args.args[0]
+        assert cells and all(c["definition_fingerprint"] is None for c in cells)
+
+    @pytest.mark.asyncio
+    async def test_insufficient_run_flushes_no_cells(self):
+        svc = make_servicer()
+        self._wire(svc)
+        bars_resp = MagicMock()
+        bars_resp.bars = [MagicMock(), MagicMock(), MagicMock()]  # too few → INSUFFICIENT
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
+
+        result = await svc.RunBacktest(self._req(symbols=("AAPL",)), context=MagicMock())
+
+        assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
+        svc._backtest_run_symbols_repo.insert_many.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_cells_flush_failure_never_fails_run(self):
+        svc = make_servicer()
+        self._wire(svc)
+        svc._backtest_run_symbols_repo.insert_many = AsyncMock(side_effect=Exception("db down"))
+        svc._backtest_symbol = AsyncMock(side_effect=self._fake_sma())
+
+        result = await svc.RunBacktest(self._req(), context=MagicMock())
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK  # swallowed
+
+    @pytest.mark.asyncio
+    async def test_range_passed_to_run_history_insert(self):
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_runs_repo = AsyncMock()
+        req = self._req(symbols=())
+        req.range.start.seconds = 1_600_000_000
+        req.range.end.seconds = 1_600_864_000  # 10 days, within cap
+
+        await svc.RunBacktest(req, context=MagicMock())
+
+        kwargs = svc._backtest_runs_repo.insert.await_args.kwargs
+        assert kwargs["range_start"] is not None
+        assert kwargs["range_end"] is not None

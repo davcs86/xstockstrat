@@ -160,7 +160,7 @@ then apply the down + re-up locally to prove reversibility.
 
 ### Step 4 — service: per-symbol evidence cells + definition fingerprint capture
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/backtest_run_symbols.py` — create
@@ -242,7 +242,7 @@ then apply the down + re-up locally to prove reversibility.
 
 ### Step 5 — test: cells + fingerprint coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_backtest_run_symbols_repo.py` — create

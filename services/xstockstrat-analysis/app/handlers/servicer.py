@@ -11,6 +11,7 @@ ScoreStrategy grades backtests using Sharpe ratio, max drawdown, and win rate.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import math
@@ -30,6 +31,7 @@ from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
+from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
@@ -95,6 +97,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # appends a summary row here; the ListBacktests RPC reads it back. None in the no-DB
         # test path so make_servicer()-based tests are unaffected.
         self._backtest_runs_repo = BacktestRunsRepository(db_pool) if db_pool else None
+        # Per-symbol evidence cells for the derived headline grade (feature 065). RunBacktest
+        # buffers one cell per symbol on an OK run and flushes here; _recompute_headline reads
+        # them back. None in the no-DB test path.
+        self._backtest_run_symbols_repo = BacktestRunSymbolsRepository(db_pool) if db_pool else None
         # Set by main.py after the fundamentals signal loop is constructed (feature 062);
         # RunFundamentalsScan invokes its shared run_once path.
         self._fundsignal_loop = None
@@ -217,6 +223,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Resolve strategy definition: inline takes precedence over strategy_id_ref (FR-7).
         # If neither is supplied, fall through to the legacy SMA-crossover path (FR-8).
         active_definition = None
+        executed_row = None
         if request.HasField("inline_definition"):
             active_definition = request.inline_definition
         elif request.strategy_id_ref:
@@ -224,12 +231,27 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 row = await self._strategies_repo.get_by_id(request.strategy_id_ref)
                 if row:
                     active_definition = _row_to_strategy_definition(row)
+                    executed_row = row
                 else:
                     await context.abort(
                         grpc.StatusCode.NOT_FOUND,
                         f"strategy '{request.strategy_id_ref}' not found",
                     )
                     return
+
+        # feature 065: fingerprint the executed definition only when the run executes the
+        # strategy's OWN registered definition (strategy_id == strategy_id_ref). Inline runs,
+        # the legacy-SMA fallback, id-mismatches, and unregistered ids leave the cells'
+        # fingerprint NULL so they never contribute to that strategy's headline grade. The hash
+        # is taken from the DB-returned definition_json (post-_to_dict), never a request dict
+        # (design.md § fingerprint — the canonicalization rule the fingerprint fn documents).
+        run_fingerprint = None
+        if (
+            request.strategy_id_ref
+            and request.strategy_id == request.strategy_id_ref
+            and executed_row is not None
+        ):
+            run_fingerprint = _definition_fingerprint(executed_row["definition_json"])
 
         # feature 064 (FR-4b): cap every backtest to `analysis.backtest.max_range_days` (~2 years).
         # Both bounds set + span over the cap → reject (reproducibility, not silent clamp). An unset
@@ -263,6 +285,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         daily_equity: list[float] = [equity]
         coverage_gaps: list[analysis_pb2.CoverageGap] = []
         all_diagnostics: list[analysis_pb2.SymbolDiagnostics] = []  # feature 064
+        # feature 065: one per-symbol evidence cell buffered per traded symbol; flushed on OK.
+        symbol_cells: list[dict] = []
         # feature 064: declared formula warm-ups fetched once per run, reused across symbols.
         formula_warmup_cache: dict[str, int] = {}
 
@@ -294,6 +318,24 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         slippage=slippage,
                         source_weights=source_weights,
                         propagation_meta=propagation_meta,
+                    )
+                # feature 065: buffer one evidence cell for this symbol before merging into the
+                # aggregate curve. daily_eq[0] is the symbol's own (compounded) starting equity,
+                # so the cell metrics are per-symbol, not aggregate. Symbols with no usable curve
+                # (<= the seed point) contribute nothing. Zero-trade cells ARE buffered —
+                # non-participation is evidence (traded-first dedup keeps it from shadowing).
+                if len(daily_eq) > 1:
+                    cell_m = _compute_metrics(daily_eq, trades, daily_eq[0])
+                    symbol_cells.append(
+                        {
+                            "symbol": symbol,
+                            "sharpe_ratio": cell_m["sharpe_ratio"],
+                            "max_drawdown": cell_m["max_drawdown"],
+                            "win_rate": cell_m["win_rate"],
+                            "total_return": cell_m["total_return"],
+                            "total_trades": len(trades),
+                            "trading_days": len(daily_eq) - 1,
+                        }
                     )
                 all_trades.extend(trades)
                 daily_equity.extend(daily_eq)
@@ -358,6 +400,26 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Index by strategy_id for ScoreStrategy lookup
         self._backtests[request.strategy_id] = result
 
+        # feature 065: the backtest range (always fully set after the defaulting block above) is
+        # stamped on the run-history row and on every evidence cell.
+        range_start_dt = (
+            request.range.start.ToDatetime() if request.range.start.seconds > 0 else None
+        )
+        range_end_dt = request.range.end.ToDatetime() if request.range.end.seconds > 0 else None
+
+        # feature 065: persist per-symbol evidence cells for OK runs — the breadth+duration base
+        # the derived headline grade aggregates over. Best-effort (mirrors the score/history
+        # persists): a cells-flush failure never fails the run.
+        if result.status == analysis_pb2.BACKTEST_STATUS_OK:
+            await self._persist_symbol_cells(
+                symbol_cells,
+                backtest_id=backtest_id,
+                strategy_id=request.strategy_id,
+                fingerprint=run_fingerprint,
+                range_start=range_start_dt,
+                range_end=range_end_dt,
+            )
+
         # Score the strategy from this run and persist both the score and a run-history row.
         # Fixes two bugs: (1) the score was never persisted because nothing invoked scoring
         # after a backtest, and (2) past run results were unrecoverable (in-memory only).
@@ -371,7 +433,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 request.strategy_id, result, sharpe_weight, drawdown_weight, winrate_weight
             )
             await self._persist_strategy_score(score)
-        await self._persist_backtest_run(result, list(request.symbols), score)
+        await self._persist_backtest_run(
+            result,
+            list(request.symbols),
+            score,
+            range_start=range_start_dt,
+            range_end=range_end_dt,
+        )
 
         # Emit completion event
         payload2 = Struct()
@@ -897,12 +965,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         except Exception as e:
             log.warning("failed to persist strategy score: %s", e)
 
-    async def _persist_backtest_run(self, result, symbols, score) -> None:
+    async def _persist_backtest_run(
+        self, result, symbols, score, range_start=None, range_end=None
+    ) -> None:
         """Best-effort append of a completed backtest to the durable run-history table.
 
         Fixes "cannot see past run results": the in-memory ``_backtests`` dict only holds
         the latest run per strategy and is lost on restart, so every run is also recorded
-        here (summary metrics + the score it earned). No-op in the no-DB test path.
+        here (summary metrics + the score it earned). No-op in the no-DB test path. The
+        ``range_start``/``range_end`` (feature 065) record the window each run covered.
         """
         if self._backtest_runs_repo is None:
             return
@@ -923,9 +994,45 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 symbols=symbols,
                 overall_score=score.overall_score if score is not None else None,
                 rating=score.rating if score is not None else None,
+                range_start=range_start,
+                range_end=range_end,
             )
         except Exception as e:
             log.warning("failed to persist backtest run history: %s", e)
+
+    async def _persist_symbol_cells(
+        self, cells, *, backtest_id, strategy_id, fingerprint, range_start, range_end
+    ) -> None:
+        """Best-effort flush of per-symbol evidence cells for an OK run (feature 065).
+
+        One row per traded symbol; stamps the shared backtest_id, strategy_id, definition
+        fingerprint, and range. No-op in the no-DB test path or when the buffer is empty. A DB
+        error is swallowed (mirrors the score/history persists) so a cells-flush failure never
+        fails the run.
+        """
+        if self._backtest_run_symbols_repo is None or not cells:
+            return
+        try:
+            rows = [
+                {
+                    "backtest_id": backtest_id,
+                    "strategy_id": strategy_id,
+                    "symbol": c["symbol"],
+                    "sharpe_ratio": c["sharpe_ratio"],
+                    "max_drawdown": c["max_drawdown"],
+                    "win_rate": c["win_rate"],
+                    "total_return": c["total_return"],
+                    "total_trades": c["total_trades"],
+                    "trading_days": c["trading_days"],
+                    "definition_fingerprint": fingerprint,
+                    "range_start": range_start,
+                    "range_end": range_end,
+                }
+                for c in cells
+            ]
+            await self._backtest_run_symbols_repo.insert_many(rows)
+        except Exception as e:
+            log.warning("failed to persist backtest symbol cells: %s", e)
 
     async def hydrate_scores(self) -> None:
         """Load persisted scores from the DB into the in-memory serving dict at boot.
@@ -1307,6 +1414,28 @@ def _row_to_backtest_summary(row: dict) -> "analysis_pb2.BacktestRunSummary":
         ts.FromDatetime(completed)
         summary.completed_at.CopyFrom(ts)
     return summary
+
+
+_FINGERPRINT_EXCLUDED_KEYS = frozenset({"display_name", "active", "live_enabled"})
+
+
+def _definition_fingerprint(definition_json: dict) -> str:
+    """sha256 of a strategy's scoring-relevant definition — the evidence-cell eligibility key.
+
+    Canonicalization rule (design.md § fingerprint, open-risk mitigation): only ever hash a
+    DB-returned ``strategies`` row's ``definition_json`` (post-``StrategiesRepository._to_dict``),
+    never a request proto dict — ``_row_to_strategy_definition`` overlays the column-authoritative
+    fields (strategy_id/display_name/active/live_enabled) at read time, so a request dict would not
+    canonicalize to the same bytes. ``display_name``/``active``/``live_enabled`` are excluded so a
+    rename or a live-toggle never invalidates a strategy's accumulated evidence; a change to the
+    entry/exit rules or components (which DO change scoring behavior) yields a new fingerprint and a
+    fresh evidence base. ``None``/``{}`` hash identically.
+    """
+    filtered = {
+        k: v for k, v in (definition_json or {}).items() if k not in _FINGERPRINT_EXCLUDED_KEYS
+    }
+    canonical = json.dumps(filtered, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _row_to_score(row: dict) -> "analysis_pb2.StrategyScore":

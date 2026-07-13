@@ -32,14 +32,16 @@ class BacktestRunsRepository:
         symbols: list[str],
         overall_score: float | None,
         rating: str | None,
+        range_start=None,
+        range_end=None,
     ) -> dict:
         row = await self._db.fetchrow(
             """
             INSERT INTO analysis.backtest_runs
                 (backtest_id, strategy_id, status, total_return, annualized_return,
                  sharpe_ratio, max_drawdown, win_rate, total_trades, profit_factor,
-                 symbols, overall_score, rating)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                 symbols, overall_score, rating, range_start, range_end)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             ON CONFLICT (backtest_id) DO NOTHING
             RETURNING *
             """,
@@ -56,6 +58,8 @@ class BacktestRunsRepository:
             list(symbols),
             overall_score,
             rating,
+            range_start,
+            range_end,
         )
         return _to_dict(row)
 
