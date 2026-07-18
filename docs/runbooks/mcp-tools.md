@@ -240,7 +240,7 @@ Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or
 
 ### `run_backtest`
 
-Triggers a backtest via `xstockstrat-analysis`. The default strategy is SMA crossover (fast=20, slow=50).
+Triggers a backtest via `xstockstrat-analysis`. `strategy_id` must be a **registered** strategy definition — the run executes that definition (the client sends `strategy_id_ref == strategy_id`) so it earns fingerprinted evidence toward the strategy's derived headline grade (feature 065). An unregistered id returns `NOT_FOUND`; the legacy ad-hoc SMA-crossover path is no longer reachable from the agent.
 
 **Parameters**
 

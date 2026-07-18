@@ -65,3 +65,30 @@ reusing.
   reproduces committed stubs byte-for-byte before touching any `.proto`.
 - **Evidence**: PRs #746–753; `Dockerfile.codegen` version pins.
 - **Rule it implies**: verify the codegen toolchain against the committed stubs (empty diff) before the first proto edit.
+
+### 2026-07-13 — cross-stock-score-derivation — design
+- **Pattern**: When derived data must stay valid only for the *content* that produced it (here:
+  backtest evidence valid only for the strategy definition it executed), stamp each row with a
+  **canonical content fingerprint** (sha256 of the stored JSONB, non-behavioral keys excluded,
+  always hashed from the DB-returned form) and make eligibility a fingerprint-equality predicate —
+  not an `updated_at`-style timestamp comparison. Timestamps failed three ways the design debate
+  proved concretely: unrelated writers bump them (live-toggle/deactivate), they can't tell *which*
+  content an in-flight writer executed (mid-update race), and they can't reject look-alike callers
+  (a run keyed to the right id but executing different content).
+- **Evidence**: `docs/roadmap/features/065-cross-stock-score-derivation/design.md` § Chosen
+  Approach (fingerprint mechanics verified by the round-2 design-adversary);
+  `services/xstockstrat-analysis/app/repositories/strategies.py:54-93` (`updated_at` bumped by
+  update, set_live_enabled, and deactivate alike).
+- **Rule it implies**: content-scoped validity gets a content hash, not a clock; hash only the
+  stored (post-JSONB-round-trip) form so every writer sees identical bytes.
+
+### 2026-07-13 — cross-stock-score-derivation — reuse
+- **Pattern**: Seeding a **unit-test layer in a large e2e-only frontend** without an unearnable
+  coverage floor: set vitest `coverage.all: false` so the threshold applies only to files a unit test
+  actually exercises (grows as tests are added), instead of `include: ['src/**']` which counts every
+  untested module as 0%. Pairs with node-environment logic-only tests (`src/lib/**`) and an lcov
+  reporter matching the existing `node-test` CI artifact contract.
+- **Evidence**: `services/xstockstrat-ui/vitest.config.ts` (`all: false`, `src/lib` scope),
+  `src/lib/scoreDisplay.test.ts`; `.github/workflows/ci.yml` `node-test` matrix (feature 065 step 13).
+- **Rule it implies**: when adding coverage gates to a codebase with large untested surface, gate on
+  tested files, not the whole tree — a floor you can't reach on day one gets disabled, not met.

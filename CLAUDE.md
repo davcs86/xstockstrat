@@ -95,6 +95,7 @@ Next.js   → xstockstrat-ui
 | golangci-lint | v2.5.0 | Go lint; run via `golangci-lint-action@v6` |
 | ruff | latest | Python lint + format |
 | Playwright | — | E2E tests for all three Next.js frontends |
+| Vitest | ^3 | Unit (logic) tests for `xstockstrat-ui` — node-environment `src/**/*.test.ts`, coverage scoped to `src/lib/**` (feature 065); complements Playwright e2e |
 
 **Python uv lock rule**: After any change to a Python service's `pyproject.toml` (adding, removing, or updating a dependency), run `uv lock` inside that service directory and commit the updated `uv.lock` in the same PR. Never leave `uv.lock` out of sync with `pyproject.toml` — `uv lock --check` enforces this in CI.
 
@@ -148,6 +149,14 @@ See `docs/runbooks/approval-flow.md`. Breaking proto: 2 owners + platform lead. 
 Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key rules: no hardcoded values in source; naming is `<service>.<category>.<key>`; all services subscribe at startup; sensitive keys use `secret.*` prefix; defaults declared in each service's `CLAUDE.md`.
 
 **Full rules, global key table, and the per-feature registered-keys log** → `docs/patterns/config-governance.md`.
+
+Recently added keys (feature 065 — cross-stock score derivation, owned by `xstockstrat-analysis`). The headline strategy grade is derived from per-symbol (symbol × window) evidence cells (`analysis.backtest_run_symbols`, migration `007`) via trading-day evidence weighting + empirical-Bayes shrinkage toward a neutral 0.5 prior — so high grades are earnable only through breadth + duration across stocks, and a throwaway single-symbol run can never overwrite a well-evidenced grade:
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.scoring.shrinkage_days` | int | `250` | Empirical-Bayes shrinkage pseudo-count `k` (trading days) toward the 0.5 prior; perfect evidence earns an A once total evidence `W ≥ 1.5·k`. `get_int` zero-trap: `0` reads as the default. |
+| `analysis.scoring.min_evidence_symbols` | int | `3` | Below this many distinct evidence symbols the grade is flagged `provisional`. |
+| `analysis.scoring.min_evidence_days` | int | `500` | Below this many total evidence trading-days the grade is flagged `provisional`. |
 
 ---
 
