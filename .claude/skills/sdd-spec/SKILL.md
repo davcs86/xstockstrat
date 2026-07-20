@@ -39,11 +39,37 @@ If status is `draft` (`/sdd-review product-spec` has not been run):
 > to advance to `spec-ready`. Proceed anyway? (yes / no)"
 Only continue on `yes`.
 
+If status is `spec-ready` (the `/sdd-design` design phase has not been run):
+> "No debated design found — `/sdd-design $ARGUMENTS[0]` has not run, so there is no `recon.md`
+> or `design.md` to plan against. Run it first for a grounded, adversarially-reviewed design.
+> Proceed without a design anyway? (yes / no)"
+Only continue on `yes`. (When you proceed without a design, you do all discovery yourself in Step 3.)
+
+### 1.5. Consume the design phase (recon.md + design.md)
+
+Check for the `/sdd-design` artifacts:
+```bash
+ls $FEATURE_DIR/recon.md $FEATURE_DIR/design.md 2>/dev/null
+```
+
+- **Both present** (status `design-approved`): read them. They are authoritative inputs:
+  - `design.md` → the **Chosen Approach** the implementation spec MUST follow; its **Rejected
+    Alternatives** are off the table; its **Open Risks** become explicit step coverage or
+    `## Step Dependencies` notes; its **Constitution Rules Touched** tell you which `C-*`/`P-*`/`F-*`
+    each affected step must honor.
+  - `recon.md` → the grounded codebase dossier. Its **Patterns to REUSE** are mandatory reuse targets
+    (do not re-create an existing helper/type), and its **Codebase Map** is pre-confirmed evidence you
+    can cite directly. In Step 3 you only re-discover what `recon.md` does **not** already cover.
+- **Absent** (the user chose to proceed from `spec-ready` at the Step 1 guard): note "No design phase
+  artifacts — discovering from scratch." and do full discovery in Step 3.
+
 ### 2. Read governance docs (always — no exceptions for base docs)
 
 Always read before writing anything:
 
 - `CLAUDE.md` — service registry, port map, inter-service dependency graph, config governance
+- `docs/sdd/constitution.md` — the binding `C-*`/`P-*`/`F-*` rules; each step must honor them, and the spec must never propose a Floor (`F-*`) violation
+- `docs/roadmap/ledger/insights.md` and `docs/roadmap/ledger/fails.md` — reusable patterns to apply and recurring mistakes to avoid for the affected services
 - `docs/runbooks/reviewer-registry.md` — service review focus, role reviewers, step-category governance matrix
 
 Apply these static conventions from feature-workflow.md without reading it:
@@ -62,12 +88,17 @@ Then read only the phase deviation files whose services appear in "Affected Serv
 If the spec mentions **config key changes**, also read `docs/runbooks/config-rollout.md`.
 If the spec mentions **proto changes**, also read `docs/runbooks/proto-versioning.md`.
 
-### 3. Discover each affected service (delegate — keep this window lean)
+### 3. Discover each affected service (reuse recon.md first; delegate the rest)
 
-For every service in "Affected Services", spawn a **`codebase-discovery`** subagent (one per
-service, in parallel via the Task tool) and hand it the checklist in
-`reference/discovery-checklist.md` — tailored with the specific symbols, config keys, env
-vars, and ports this feature introduces. Each subagent returns a condensed digest of real
+**If `recon.md` is present** (from Step 1.5): its **Codebase Map** is already grounded
+`path:line` evidence — reuse it directly as `**Codebase Evidence**`. Only spawn discovery for
+symbols, config keys, env vars, or ports that the feature needs but `recon.md` does **not** already
+cover (e.g. detail below the dossier's altitude). Do not re-discover what recon already confirmed.
+
+**If `recon.md` is absent**: for every service in "Affected Services", spawn a
+**`codebase-discovery`** subagent (one per service, in parallel via the Task tool) and hand it the
+checklist in `reference/discovery-checklist.md` — tailored with the specific symbols, config keys,
+env vars, and ports this feature introduces. Each subagent returns a condensed digest of real
 `path:line` evidence; collect those digests as the `**Codebase Evidence**` for the steps that
 touch that service.
 
@@ -103,7 +134,9 @@ table). Load it now.
 ### 7. Update feature.md status
 
 Edit `$FEATURE_DIR/feature.md`:
-- Change `**Lifecycle Status**: \`draft\`` (or `spec-ready`) to `**Lifecycle Status**: \`implementation-ready\``
+- Change `**Lifecycle Status**` to `**Lifecycle Status**: \`implementation-ready\`` (the prior value is
+  normally `design-approved`; it is `spec-ready` when the design phase was skipped, or `draft` if both
+  gates were skipped)
 - Append a Status History row: `| <ISO date> | <prev> → \`implementation-ready\` | /sdd-spec | Implementation spec generated with N steps |`
 - Update Artifacts: replace `_not yet generated_` with `[Implementation Spec](implementation-spec.md)`
 - Finalize the `## Reviewers` table: collect all distinct `**Reviewers**` values from all

@@ -3,14 +3,14 @@
 // @generated from file analysis/v1/analysis.proto (package xstockstrat.analysis.v1, syntax proto3)
 /* eslint-disable */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AnalysisService = exports.ScreenResultStatusSchema = exports.ScreenResultStatus = exports.ScreenKindSchema = exports.ScreenKind = exports.ComparatorSchema = exports.Comparator = exports.StrategyOperationSchema = exports.StrategyOperation = exports.ComponentKindSchema = exports.ComponentKind = exports.BacktestStatusSchema = exports.BacktestStatus = exports.FundamentalsScanSummarySchema = exports.RunFundamentalsScanRequestSchema = exports.ScreenSymbolsResponseSchema = exports.ScreenSymbolsRequestSchema = exports.ScreenResultSchema = exports.ScreenCriterionSchema = exports.SetStrategyLiveResponseSchema = exports.SetStrategyLiveRequestSchema = exports.ListStrategyDefinitionsResponseSchema = exports.ListStrategyDefinitionsRequestSchema = exports.GetStrategyRequestSchema = exports.ManageStrategyRequestSchema = exports.StrategyDefinitionSchema = exports.StrategyComponentSchema = exports.GetStrategyReportRequestSchema = exports.ListStrategiesResponseSchema = exports.ListStrategiesRequestSchema = exports.StrategyReportSchema = exports.StrategyScoreSchema = exports.ScoreStrategyRequestSchema = exports.TradeRecordSchema = exports.BacktestResultSchema = exports.CoverageGapSchema = exports.RunBacktestRequestSchema = exports.file_analysis_v1_analysis = void 0;
+exports.AnalysisService = exports.ScreenResultStatusSchema = exports.ScreenResultStatus = exports.ScreenKindSchema = exports.ScreenKind = exports.ComparatorSchema = exports.Comparator = exports.StrategyOperationSchema = exports.StrategyOperation = exports.ComponentKindSchema = exports.ComponentKind = exports.NoTradeReasonSchema = exports.NoTradeReason = exports.BarActionSchema = exports.BarAction = exports.BacktestStatusSchema = exports.BacktestStatus = exports.FundamentalsScanSummarySchema = exports.RunFundamentalsScanRequestSchema = exports.ScreenSymbolsResponseSchema = exports.ScreenSymbolsRequestSchema = exports.ScreenResultSchema = exports.ScreenCriterionSchema = exports.SetStrategyLiveResponseSchema = exports.SetStrategyLiveRequestSchema = exports.ListStrategyDefinitionsResponseSchema = exports.ListStrategyDefinitionsRequestSchema = exports.GetStrategyRequestSchema = exports.ManageStrategyRequestSchema = exports.StrategyDefinitionSchema = exports.StrategyComponentSchema = exports.GetStrategyReportRequestSchema = exports.ListStrategiesResponseSchema = exports.ListStrategiesRequestSchema = exports.ListBacktestsResponseSchema = exports.BacktestRunSummarySchema = exports.ListBacktestsRequestSchema = exports.StrategyReportSchema = exports.StrategyScoreSchema = exports.ScoreStrategyRequestSchema = exports.SymbolDiagnosticsSchema = exports.BarDiagnosticSchema = exports.TradeRecordSchema = exports.BacktestResultSchema = exports.CoverageGapSchema = exports.RunBacktestRequestSchema = exports.file_analysis_v1_analysis = void 0;
 const codegenv2_1 = require("@bufbuild/protobuf/codegenv2");
 const wkt_1 = require("@bufbuild/protobuf/wkt");
 const common_pb_1 = require("../../common/v1/common_pb");
 /**
  * Describes the file analysis/v1/analysis.proto.
  */
-exports.file_analysis_v1_analysis = (0, codegenv2_1.fileDesc)("ChphbmFseXNpcy92MS9hbmFseXNpcy5wcm90bxIXeHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEilwIKElJ1bkJhY2t0ZXN0UmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCRIvCgVyYW5nZRgCIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USDwoHc3ltYm9scxgDIAMoCRIXCg9pbml0aWFsX2NhcGl0YWwYBCABKAESMAoPc3RyYXRlZ3lfcGFyYW1zGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIXCg9zdHJhdGVneV9pZF9yZWYYBiABKAkSRgoRaW5saW5lX2RlZmluaXRpb24YByABKAsyKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneURlZmluaXRpb24i4gEKC0NvdmVyYWdlR2FwEg4KBnN5bWJvbBgBIAEoCRIzCgl0aW1lZnJhbWUYAiABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEjkKD3JlcXVlc3RlZF9yYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USEQoJYmFyc19oYXZlGAQgASgDEhEKCWJhcnNfbmVlZBgFIAEoAxItCgNnYXAYBiABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlIrQDCg5CYWNrdGVzdFJlc3VsdBITCgtiYWNrdGVzdF9pZBgBIAEoCRITCgtzdHJhdGVneV9pZBgCIAEoCRIUCgx0b3RhbF9yZXR1cm4YAyABKAESGQoRYW5udWFsaXplZF9yZXR1cm4YBCABKAESFAoMc2hhcnBlX3JhdGlvGAUgASgBEhQKDG1heF9kcmF3ZG93bhgGIAEoARIQCgh3aW5fcmF0ZRgHIAEoARIUCgx0b3RhbF90cmFkZXMYCCABKAUSFQoNcHJvZml0X2ZhY3RvchgJIAEoARIwCgxjb21wbGV0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKBnRyYWRlcxgLIAMoCzIkLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlRyYWRlUmVjb3JkEjcKBnN0YXR1cxgMIAEoDjInLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhY2t0ZXN0U3RhdHVzEjsKDWNvdmVyYWdlX2dhcHMYDSADKAsyJC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5Db3ZlcmFnZUdhcCLNAQoLVHJhZGVSZWNvcmQSDgoGc3ltYm9sGAEgASgJEgwKBHNpZGUYAiABKAkSCwoDcXR5GAMgASgBEhMKC2VudHJ5X3ByaWNlGAQgASgBEhIKCmV4aXRfcHJpY2UYBSABKAESCwoDcG5sGAYgASgBEi4KCmVudHJ5X3RpbWUYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi0KCWV4aXRfdGltZRgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiXAoUU2NvcmVTdHJhdGVneVJlcXVlc3QSEwoLc3RyYXRlZ3lfaWQYASABKAkSLwoFcmFuZ2UYAiABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlItoBCg1TdHJhdGVneVNjb3JlEhMKC3N0cmF0ZWd5X2lkGAEgASgJEhUKDW92ZXJhbGxfc2NvcmUYAiABKAESVQoQY29tcG9uZW50X3Njb3JlcxgDIAMoCzI7LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5U2NvcmUuQ29tcG9uZW50U2NvcmVzRW50cnkSDgoGcmF0aW5nGAQgASgJGjYKFENvbXBvbmVudFNjb3Jlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEiyQEKDlN0cmF0ZWd5UmVwb3J0EhMKC3N0cmF0ZWd5X2lkGAEgASgJEkAKD2xhdGVzdF9iYWNrdGVzdBgCIAEoCzInLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhY2t0ZXN0UmVzdWx0EjUKBXNjb3JlGAMgASgLMiYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lTY29yZRIpCghtZXRhZGF0YRgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiWgoVTGlzdFN0cmF0ZWdpZXNSZXF1ZXN0EjAKBHBhZ2UYASABKAsyIi54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlcXVlc3QSDwoHdXNlcl9pZBgCIAEoCSKHAQoWTGlzdFN0cmF0ZWdpZXNSZXNwb25zZRI6CgpzdHJhdGVnaWVzGAEgAygLMiYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lTY29yZRIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIvChhHZXRTdHJhdGVneVJlcG9ydFJlcXVlc3QSEwoLc3RyYXRlZ3lfaWQYASABKAki+QEKEVN0cmF0ZWd5Q29tcG9uZW50EhAKCHJlZl9uYW1lGAEgASgJEjQKBGtpbmQYAiABKA4yJi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5Db21wb25lbnRLaW5kEhEKCWluZGljYXRvchgDIAEoCRISCgpmb3JtdWxhX2lkGAQgASgJEkYKBnBhcmFtcxgFIAMoCzI2LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5Q29tcG9uZW50LlBhcmFtc0VudHJ5Gi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEi/AEKElN0cmF0ZWd5RGVmaW5pdGlvbhITCgtzdHJhdGVneV9pZBgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSPgoKY29tcG9uZW50cxgDIAMoCzIqLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5Q29tcG9uZW50EhIKCmVudHJ5X3J1bGUYBCABKAkSEQoJZXhpdF9ydWxlGAUgASgJEi4KDXNpZ25hbF9wYXJhbXMYBiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Eg4KBmFjdGl2ZRgHIAEoCBIUCgxsaXZlX2VuYWJsZWQYCCABKAgilwEKFU1hbmFnZVN0cmF0ZWd5UmVxdWVzdBI9CglvcGVyYXRpb24YASABKA4yKi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneU9wZXJhdGlvbhI/CgpkZWZpbml0aW9uGAIgASgLMisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uIikKEkdldFN0cmF0ZWd5UmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCSJiCh5MaXN0U3RyYXRlZ3lEZWZpbml0aW9uc1JlcXVlc3QSGAoQaW5jbHVkZV9pbmFjdGl2ZRgBIAEoCBIRCglwYWdlX3NpemUYAiABKAUSEwoLcGFnZV9vZmZzZXQYAyABKAUieAofTGlzdFN0cmF0ZWd5RGVmaW5pdGlvbnNSZXNwb25zZRJACgtkZWZpbml0aW9ucxgBIAMoCzIrLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5RGVmaW5pdGlvbhITCgt0b3RhbF9jb3VudBgCIAEoBSJDChZTZXRTdHJhdGVneUxpdmVSZXF1ZXN0EhMKC3N0cmF0ZWd5X2lkGAEgASgJEhQKDGxpdmVfZW5hYmxlZBgCIAEoCCJaChdTZXRTdHJhdGVneUxpdmVSZXNwb25zZRI/CgpkZWZpbml0aW9uGAEgASgLMisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uIqsCCg9TY3JlZW5Dcml0ZXJpb24SEAoIcmVmX25hbWUYASABKAkSMQoEa2luZBgCIAEoDjIjLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNjcmVlbktpbmQSEwoLbWV0cmljX25hbWUYAyABKAkSPQoJY29tcG9uZW50GAQgASgLMioueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lDb21wb25lbnQSLwoCb3AYBSABKA4yIy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5Db21wYXJhdG9yEhEKCXRocmVzaG9sZBgGIAEoARIWCg50aHJlc2hvbGRfaGlnaBgHIAEoARIOCgZ3ZWlnaHQYCCABKAESEwoLaGFyZF9maWx0ZXIYCSABKAgiuwIKDFNjcmVlblJlc3VsdBIOCgZzeW1ib2wYASABKAkSDQoFc2NvcmUYAiABKAESVAoQY3JpdGVyaW9uX3Njb3JlcxgDIAMoCzI6LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNjcmVlblJlc3VsdC5Dcml0ZXJpb25TY29yZXNFbnRyeRIOCgZwYXNzZWQYBCABKAgSOwoGc3RhdHVzGAUgASgOMisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU2NyZWVuUmVzdWx0U3RhdHVzEjEKA2dhcBgGIAEoCzIkLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkNvdmVyYWdlR2FwGjYKFENyaXRlcmlvblNjb3Jlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEilQIKFFNjcmVlblN5bWJvbHNSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSOgoIY3JpdGVyaWEYAiADKAsyKC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TY3JlZW5Dcml0ZXJpb24SFgoOc2lnbmFsX3NvdXJjZXMYAyADKAkSFQoNc2lnbmFsX3dlaWdodBgEIAEoARIYChB0ZWNobmljYWxfd2VpZ2h0GAUgASgBEhYKDm1pbl9jb252aWN0aW9uGAYgASgBEhIKCnJhbmtfbGltaXQYByABKAUSOwoRZXZhbHVhdGlvbl93aW5kb3cYCCABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlIowBChVTY3JlZW5TeW1ib2xzUmVzcG9uc2USNgoHcmVzdWx0cxgBIAMoCzIlLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNjcmVlblJlc3VsdBI7Cg1jb3ZlcmFnZV9nYXBzGAIgAygLMiQueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuQ292ZXJhZ2VHYXAiTQoaUnVuRnVuZGFtZW50YWxzU2NhblJlcXVlc3QSDQoFZm9yY2UYASABKAgSDwoHZHJ5X3J1bhgCIAEoCBIPCgdzeW1ib2xzGAMgAygJIssBChdGdW5kYW1lbnRhbHNTY2FuU3VtbWFyeRIOCgZydW5faWQYASABKAkSGQoRc3ltYm9sc19wcm9jZXNzZWQYAiABKAUSFwoPc2lnbmFsc19lbWl0dGVkGAMgASgFEhMKC2NhbGxzX3NwZW50GAQgASgFEhYKDmRlZmVycmVkX2NvdW50GAUgASgFEg4KBnN0YXR1cxgGIAEoCRIvCgtmaW5pc2hlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAqcAoOQmFja3Rlc3RTdGF0dXMSHwobQkFDS1RFU1RfU1RBVFVTX1VOU1BFQ0lGSUVEEAASFgoSQkFDS1RFU1RfU1RBVFVTX09LEAESJQohQkFDS1RFU1RfU1RBVFVTX0lOU1VGRklDSUVOVF9EQVRBEAIqeAoNQ29tcG9uZW50S2luZBIeChpDT01QT05FTlRfS0lORF9VTlNQRUNJRklFRBAAEiQKIENPTVBPTkVOVF9LSU5EX0JVSUxUSU5fSU5ESUNBVE9SEAESIQodQ09NUE9ORU5UX0tJTkRfQ1VTVE9NX0ZPUk1VTEEQAiqaAQoRU3RyYXRlZ3lPcGVyYXRpb24SIgoeU1RSQVRFR1lfT1BFUkFUSU9OX1VOU1BFQ0lGSUVEEAASHwobU1RSQVRFR1lfT1BFUkFUSU9OX1JFR0lTVEVSEAESHQoZU1RSQVRFR1lfT1BFUkFUSU9OX1VQREFURRACEiEKHVNUUkFURUdZX09QRVJBVElPTl9ERUFDVElWQVRFEAMqjgEKCkNvbXBhcmF0b3ISGgoWQ09NUEFSQVRPUl9VTlNQRUNJRklFRBAAEhEKDUNPTVBBUkFUT1JfTFQQARISCg5DT01QQVJBVE9SX0xURRACEhEKDUNPTVBBUkFUT1JfR1QQAxISCg5DT01QQVJBVE9SX0dURRAEEhYKEkNPTVBBUkFUT1JfQkVUV0VFThAFKqYBCgpTY3JlZW5LaW5kEhsKF1NDUkVFTl9LSU5EX1VOU1BFQ0lGSUVEEAASGwoXU0NSRUVOX0tJTkRfRlVOREFNRU5UQUwQARIhCh1TQ1JFRU5fS0lORF9URUNITklDQUxfRk9STVVMQRACEiMKH1NDUkVFTl9LSU5EX1RFQ0hOSUNBTF9JTkRJQ0FUT1IQAxIWChJTQ1JFRU5fS0lORF9TSUdOQUwQBCqDAQoSU2NyZWVuUmVzdWx0U3RhdHVzEiQKIFNDUkVFTl9SRVNVTFRfU1RBVFVTX1VOU1BFQ0lGSUVEEAASGwoXU0NSRUVOX1JFU1VMVF9TVEFUVVNfT0sQARIqCiZTQ1JFRU5fUkVTVUxUX1NUQVRVU19JTlNVRkZJQ0lFTlRfREFUQRACMo0JCg9BbmFseXNpc1NlcnZpY2USYwoLUnVuQmFja3Rlc3QSKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5SdW5CYWNrdGVzdFJlcXVlc3QaJy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5CYWNrdGVzdFJlc3VsdBJmCg1TY29yZVN0cmF0ZWd5Ei0ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU2NvcmVTdHJhdGVneVJlcXVlc3QaJi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneVNjb3JlEnEKDkxpc3RTdHJhdGVnaWVzEi4ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuTGlzdFN0cmF0ZWdpZXNSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuTGlzdFN0cmF0ZWdpZXNSZXNwb25zZRJvChFHZXRTdHJhdGVneVJlcG9ydBIxLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkdldFN0cmF0ZWd5UmVwb3J0UmVxdWVzdBonLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5UmVwb3J0Em0KDk1hbmFnZVN0cmF0ZWd5Ei4ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuTWFuYWdlU3RyYXRlZ3lSZXF1ZXN0GisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uEmcKC0dldFN0cmF0ZWd5EisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuR2V0U3RyYXRlZ3lSZXF1ZXN0GisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uEowBChdMaXN0U3RyYXRlZ3lEZWZpbml0aW9ucxI3LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RTdHJhdGVneURlZmluaXRpb25zUmVxdWVzdBo4LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RTdHJhdGVneURlZmluaXRpb25zUmVzcG9uc2USdAoPU2V0U3RyYXRlZ3lMaXZlEi8ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU2V0U3RyYXRlZ3lMaXZlUmVxdWVzdBowLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNldFN0cmF0ZWd5TGl2ZVJlc3BvbnNlEm4KDVNjcmVlblN5bWJvbHMSLS54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TY3JlZW5TeW1ib2xzUmVxdWVzdBouLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNjcmVlblN5bWJvbHNSZXNwb25zZRJ8ChNSdW5GdW5kYW1lbnRhbHNTY2FuEjMueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuUnVuRnVuZGFtZW50YWxzU2NhblJlcXVlc3QaMC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5GdW5kYW1lbnRhbHNTY2FuU3VtbWFyeUJAWj5naXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vYW5hbHlzaXMvdjE7YW5hbHlzaXN2MWIGcHJvdG8z", [wkt_1.file_google_protobuf_timestamp, wkt_1.file_google_protobuf_struct, common_pb_1.file_common_v1_common]);
+exports.file_analysis_v1_analysis = (0, codegenv2_1.fileDesc)("ChphbmFseXNpcy92MS9hbmFseXNpcy5wcm90bxIXeHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEilwIKElJ1bkJhY2t0ZXN0UmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCRIvCgVyYW5nZRgCIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USDwoHc3ltYm9scxgDIAMoCRIXCg9pbml0aWFsX2NhcGl0YWwYBCABKAESMAoPc3RyYXRlZ3lfcGFyYW1zGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIXCg9zdHJhdGVneV9pZF9yZWYYBiABKAkSRgoRaW5saW5lX2RlZmluaXRpb24YByABKAsyKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneURlZmluaXRpb24i4gEKC0NvdmVyYWdlR2FwEg4KBnN5bWJvbBgBIAEoCRIzCgl0aW1lZnJhbWUYAiABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEjkKD3JlcXVlc3RlZF9yYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USEQoJYmFyc19oYXZlGAQgASgDEhEKCWJhcnNfbmVlZBgFIAEoAxItCgNnYXAYBiABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlIvUDCg5CYWNrdGVzdFJlc3VsdBITCgtiYWNrdGVzdF9pZBgBIAEoCRITCgtzdHJhdGVneV9pZBgCIAEoCRIUCgx0b3RhbF9yZXR1cm4YAyABKAESGQoRYW5udWFsaXplZF9yZXR1cm4YBCABKAESFAoMc2hhcnBlX3JhdGlvGAUgASgBEhQKDG1heF9kcmF3ZG93bhgGIAEoARIQCgh3aW5fcmF0ZRgHIAEoARIUCgx0b3RhbF90cmFkZXMYCCABKAUSFQoNcHJvZml0X2ZhY3RvchgJIAEoARIwCgxjb21wbGV0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKBnRyYWRlcxgLIAMoCzIkLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlRyYWRlUmVjb3JkEjcKBnN0YXR1cxgMIAEoDjInLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhY2t0ZXN0U3RhdHVzEjsKDWNvdmVyYWdlX2dhcHMYDSADKAsyJC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5Db3ZlcmFnZUdhcBI/CgtkaWFnbm9zdGljcxgOIAMoCzIqLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN5bWJvbERpYWdub3N0aWNzIs0BCgtUcmFkZVJlY29yZBIOCgZzeW1ib2wYASABKAkSDAoEc2lkZRgCIAEoCRILCgNxdHkYAyABKAESEwoLZW50cnlfcHJpY2UYBCABKAESEgoKZXhpdF9wcmljZRgFIAEoARILCgNwbmwYBiABKAESLgoKZW50cnlfdGltZRgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLQoJZXhpdF90aW1lGAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKkAwoNQmFyRGlhZ25vc3RpYxIOCgZzeW1ib2wYASABKAkSEQoJYmFyX2luZGV4GAIgASgFEi0KCXRpbWVzdGFtcBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDAoEb3BlbhgEIAEoARIMCgRoaWdoGAUgASgBEgsKA2xvdxgGIAEoARINCgVjbG9zZRgHIAEoARIOCgZ2b2x1bWUYCCABKAMSDAoEdndhcBgJIAEoARJKCgppbmRpY2F0b3JzGAogAygLMjYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuQmFyRGlhZ25vc3RpYy5JbmRpY2F0b3JzRW50cnkSDgoGd2FybXVwGAsgASgIEhQKDHNpZ25hbF9zY29yZRgMIAEoARISCgpjb252aWN0aW9uGA0gASgBEjIKBmFjdGlvbhgOIAEoDjIiLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhckFjdGlvbhoxCg9JbmRpY2F0b3JzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASLDAQoRU3ltYm9sRGlhZ25vc3RpY3MSDgoGc3ltYm9sGAEgASgJEjQKBGJhcnMYAiADKAsyJi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5CYXJEaWFnbm9zdGljEj8KD25vX3RyYWRlX3JlYXNvbhgDIAEoDjImLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLk5vVHJhZGVSZWFzb24SEgoKYmFyc190b3RhbBgEIAEoBRITCgt3YXJtdXBfYmFycxgFIAEoBSJcChRTY29yZVN0cmF0ZWd5UmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCRIvCgVyYW5nZRgCIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2Ui2gEKDVN0cmF0ZWd5U2NvcmUSEwoLc3RyYXRlZ3lfaWQYASABKAkSFQoNb3ZlcmFsbF9zY29yZRgCIAEoARJVChBjb21wb25lbnRfc2NvcmVzGAMgAygLMjsueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lTY29yZS5Db21wb25lbnRTY29yZXNFbnRyeRIOCgZyYXRpbmcYBCABKAkaNgoUQ29tcG9uZW50U2NvcmVzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASLJAQoOU3RyYXRlZ3lSZXBvcnQSEwoLc3RyYXRlZ3lfaWQYASABKAkSQAoPbGF0ZXN0X2JhY2t0ZXN0GAIgASgLMicueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuQmFja3Rlc3RSZXN1bHQSNQoFc2NvcmUYAyABKAsyJi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneVNjb3JlEikKCG1ldGFkYXRhGAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCI6ChRMaXN0QmFja3Rlc3RzUmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCRINCgVsaW1pdBgCIAEoBSL9AgoSQmFja3Rlc3RSdW5TdW1tYXJ5EhMKC2JhY2t0ZXN0X2lkGAEgASgJEhMKC3N0cmF0ZWd5X2lkGAIgASgJEjcKBnN0YXR1cxgDIAEoDjInLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhY2t0ZXN0U3RhdHVzEhQKDHRvdGFsX3JldHVybhgEIAEoARIZChFhbm51YWxpemVkX3JldHVybhgFIAEoARIUCgxzaGFycGVfcmF0aW8YBiABKAESFAoMbWF4X2RyYXdkb3duGAcgASgBEhAKCHdpbl9yYXRlGAggASgBEhQKDHRvdGFsX3RyYWRlcxgJIAEoBRIVCg1wcm9maXRfZmFjdG9yGAogASgBEg8KB3N5bWJvbHMYCyADKAkSFQoNb3ZlcmFsbF9zY29yZRgMIAEoARIOCgZyYXRpbmcYDSABKAkSMAoMY29tcGxldGVkX2F0GA4gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJSChVMaXN0QmFja3Rlc3RzUmVzcG9uc2USOQoEcnVucxgBIAMoCzIrLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhY2t0ZXN0UnVuU3VtbWFyeSJaChVMaXN0U3RyYXRlZ2llc1JlcXVlc3QSMAoEcGFnZRgBIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdBIPCgd1c2VyX2lkGAIgASgJIocBChZMaXN0U3RyYXRlZ2llc1Jlc3BvbnNlEjoKCnN0cmF0ZWdpZXMYASADKAsyJi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneVNjb3JlEjEKBHBhZ2UYAiABKAsyIy54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlc3BvbnNlIi8KGEdldFN0cmF0ZWd5UmVwb3J0UmVxdWVzdBITCgtzdHJhdGVneV9pZBgBIAEoCSL5AQoRU3RyYXRlZ3lDb21wb25lbnQSEAoIcmVmX25hbWUYASABKAkSNAoEa2luZBgCIAEoDjImLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkNvbXBvbmVudEtpbmQSEQoJaW5kaWNhdG9yGAMgASgJEhIKCmZvcm11bGFfaWQYBCABKAkSRgoGcGFyYW1zGAUgAygLMjYueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lDb21wb25lbnQuUGFyYW1zRW50cnkaLQoLUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASL8AQoSU3RyYXRlZ3lEZWZpbml0aW9uEhMKC3N0cmF0ZWd5X2lkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRI+Cgpjb21wb25lbnRzGAMgAygLMioueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lDb21wb25lbnQSEgoKZW50cnlfcnVsZRgEIAEoCRIRCglleGl0X3J1bGUYBSABKAkSLgoNc2lnbmFsX3BhcmFtcxgGIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSDgoGYWN0aXZlGAcgASgIEhQKDGxpdmVfZW5hYmxlZBgIIAEoCCKXAQoVTWFuYWdlU3RyYXRlZ3lSZXF1ZXN0Ej0KCW9wZXJhdGlvbhgBIAEoDjIqLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5T3BlcmF0aW9uEj8KCmRlZmluaXRpb24YAiABKAsyKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneURlZmluaXRpb24iKQoSR2V0U3RyYXRlZ3lSZXF1ZXN0EhMKC3N0cmF0ZWd5X2lkGAEgASgJImIKHkxpc3RTdHJhdGVneURlZmluaXRpb25zUmVxdWVzdBIYChBpbmNsdWRlX2luYWN0aXZlGAEgASgIEhEKCXBhZ2Vfc2l6ZRgCIAEoBRITCgtwYWdlX29mZnNldBgDIAEoBSJ4Ch9MaXN0U3RyYXRlZ3lEZWZpbml0aW9uc1Jlc3BvbnNlEkAKC2RlZmluaXRpb25zGAEgAygLMisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uEhMKC3RvdGFsX2NvdW50GAIgASgFIkMKFlNldFN0cmF0ZWd5TGl2ZVJlcXVlc3QSEwoLc3RyYXRlZ3lfaWQYASABKAkSFAoMbGl2ZV9lbmFibGVkGAIgASgIIloKF1NldFN0cmF0ZWd5TGl2ZVJlc3BvbnNlEj8KCmRlZmluaXRpb24YASABKAsyKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneURlZmluaXRpb24iqwIKD1NjcmVlbkNyaXRlcmlvbhIQCghyZWZfbmFtZRgBIAEoCRIxCgRraW5kGAIgASgOMiMueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU2NyZWVuS2luZBITCgttZXRyaWNfbmFtZRgDIAEoCRI9Cgljb21wb25lbnQYBCABKAsyKi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TdHJhdGVneUNvbXBvbmVudBIvCgJvcBgFIAEoDjIjLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkNvbXBhcmF0b3ISEQoJdGhyZXNob2xkGAYgASgBEhYKDnRocmVzaG9sZF9oaWdoGAcgASgBEg4KBndlaWdodBgIIAEoARITCgtoYXJkX2ZpbHRlchgJIAEoCCK7AgoMU2NyZWVuUmVzdWx0Eg4KBnN5bWJvbBgBIAEoCRINCgVzY29yZRgCIAEoARJUChBjcml0ZXJpb25fc2NvcmVzGAMgAygLMjoueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU2NyZWVuUmVzdWx0LkNyaXRlcmlvblNjb3Jlc0VudHJ5Eg4KBnBhc3NlZBgEIAEoCBI7CgZzdGF0dXMYBSABKA4yKy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TY3JlZW5SZXN1bHRTdGF0dXMSMQoDZ2FwGAYgASgLMiQueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuQ292ZXJhZ2VHYXAaNgoUQ3JpdGVyaW9uU2NvcmVzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgBOgI4ASKVAgoUU2NyZWVuU3ltYm9sc1JlcXVlc3QSDwoHc3ltYm9scxgBIAMoCRI6Cghjcml0ZXJpYRgCIAMoCzIoLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNjcmVlbkNyaXRlcmlvbhIWCg5zaWduYWxfc291cmNlcxgDIAMoCRIVCg1zaWduYWxfd2VpZ2h0GAQgASgBEhgKEHRlY2huaWNhbF93ZWlnaHQYBSABKAESFgoObWluX2NvbnZpY3Rpb24YBiABKAESEgoKcmFua19saW1pdBgHIAEoBRI7ChFldmFsdWF0aW9uX3dpbmRvdxgIIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UijAEKFVNjcmVlblN5bWJvbHNSZXNwb25zZRI2CgdyZXN1bHRzGAEgAygLMiUueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU2NyZWVuUmVzdWx0EjsKDWNvdmVyYWdlX2dhcHMYAiADKAsyJC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5Db3ZlcmFnZUdhcCJNChpSdW5GdW5kYW1lbnRhbHNTY2FuUmVxdWVzdBINCgVmb3JjZRgBIAEoCBIPCgdkcnlfcnVuGAIgASgIEg8KB3N5bWJvbHMYAyADKAkiywEKF0Z1bmRhbWVudGFsc1NjYW5TdW1tYXJ5Eg4KBnJ1bl9pZBgBIAEoCRIZChFzeW1ib2xzX3Byb2Nlc3NlZBgCIAEoBRIXCg9zaWduYWxzX2VtaXR0ZWQYAyABKAUSEwoLY2FsbHNfc3BlbnQYBCABKAUSFgoOZGVmZXJyZWRfY291bnQYBSABKAUSDgoGc3RhdHVzGAYgASgJEi8KC2ZpbmlzaGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCpwCg5CYWNrdGVzdFN0YXR1cxIfChtCQUNLVEVTVF9TVEFUVVNfVU5TUEVDSUZJRUQQABIWChJCQUNLVEVTVF9TVEFUVVNfT0sQARIlCiFCQUNLVEVTVF9TVEFUVVNfSU5TVUZGSUNJRU5UX0RBVEEQAiqnAQoJQmFyQWN0aW9uEhoKFkJBUl9BQ1RJT05fVU5TUEVDSUZJRUQQABIVChFCQVJfQUNUSU9OX1dBUk1VUBABEhgKFEJBUl9BQ1RJT05fSE9MRF9GTEFUEAISGQoVQkFSX0FDVElPTl9FTlRFUl9MT05HEAMSGAoUQkFSX0FDVElPTl9FWElUX0xPTkcQBBIYChRCQVJfQUNUSU9OX0hPTERfTE9ORxAFKqkBCg1Ob1RyYWRlUmVhc29uEh8KG05PX1RSQURFX1JFQVNPTl9VTlNQRUNJRklFRBAAEicKI05PX1RSQURFX1JFQVNPTl9FTlRJUkVfUkFOR0VfV0FSTVVQEAESJAogTk9fVFJBREVfUkVBU09OX0VOVFJZX05FVkVSX1RSVUUQAhIoCiROT19UUkFERV9SRUFTT05fSU5TVUZGSUNJRU5UX0NBUElUQUwQAyp4Cg1Db21wb25lbnRLaW5kEh4KGkNPTVBPTkVOVF9LSU5EX1VOU1BFQ0lGSUVEEAASJAogQ09NUE9ORU5UX0tJTkRfQlVJTFRJTl9JTkRJQ0FUT1IQARIhCh1DT01QT05FTlRfS0lORF9DVVNUT01fRk9STVVMQRACKpoBChFTdHJhdGVneU9wZXJhdGlvbhIiCh5TVFJBVEVHWV9PUEVSQVRJT05fVU5TUEVDSUZJRUQQABIfChtTVFJBVEVHWV9PUEVSQVRJT05fUkVHSVNURVIQARIdChlTVFJBVEVHWV9PUEVSQVRJT05fVVBEQVRFEAISIQodU1RSQVRFR1lfT1BFUkFUSU9OX0RFQUNUSVZBVEUQAyqOAQoKQ29tcGFyYXRvchIaChZDT01QQVJBVE9SX1VOU1BFQ0lGSUVEEAASEQoNQ09NUEFSQVRPUl9MVBABEhIKDkNPTVBBUkFUT1JfTFRFEAISEQoNQ09NUEFSQVRPUl9HVBADEhIKDkNPTVBBUkFUT1JfR1RFEAQSFgoSQ09NUEFSQVRPUl9CRVRXRUVOEAUqpgEKClNjcmVlbktpbmQSGwoXU0NSRUVOX0tJTkRfVU5TUEVDSUZJRUQQABIbChdTQ1JFRU5fS0lORF9GVU5EQU1FTlRBTBABEiEKHVNDUkVFTl9LSU5EX1RFQ0hOSUNBTF9GT1JNVUxBEAISIwofU0NSRUVOX0tJTkRfVEVDSE5JQ0FMX0lORElDQVRPUhADEhYKElNDUkVFTl9LSU5EX1NJR05BTBAEKoMBChJTY3JlZW5SZXN1bHRTdGF0dXMSJAogU0NSRUVOX1JFU1VMVF9TVEFUVVNfVU5TUEVDSUZJRUQQABIbChdTQ1JFRU5fUkVTVUxUX1NUQVRVU19PSxABEioKJlNDUkVFTl9SRVNVTFRfU1RBVFVTX0lOU1VGRklDSUVOVF9EQVRBEAIy/QkKD0FuYWx5c2lzU2VydmljZRJjCgtSdW5CYWNrdGVzdBIrLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlJ1bkJhY2t0ZXN0UmVxdWVzdBonLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkJhY2t0ZXN0UmVzdWx0EmYKDVNjb3JlU3RyYXRlZ3kSLS54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TY29yZVN0cmF0ZWd5UmVxdWVzdBomLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlN0cmF0ZWd5U2NvcmUScQoOTGlzdFN0cmF0ZWdpZXMSLi54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5MaXN0U3RyYXRlZ2llc1JlcXVlc3QaLy54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5MaXN0U3RyYXRlZ2llc1Jlc3BvbnNlEm8KEUdldFN0cmF0ZWd5UmVwb3J0EjEueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuR2V0U3RyYXRlZ3lSZXBvcnRSZXF1ZXN0GicueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lSZXBvcnQSbgoNTGlzdEJhY2t0ZXN0cxItLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RCYWNrdGVzdHNSZXF1ZXN0Gi4ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuTGlzdEJhY2t0ZXN0c1Jlc3BvbnNlEm0KDk1hbmFnZVN0cmF0ZWd5Ei4ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuTWFuYWdlU3RyYXRlZ3lSZXF1ZXN0GisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uEmcKC0dldFN0cmF0ZWd5EisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuR2V0U3RyYXRlZ3lSZXF1ZXN0GisueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU3RyYXRlZ3lEZWZpbml0aW9uEowBChdMaXN0U3RyYXRlZ3lEZWZpbml0aW9ucxI3LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RTdHJhdGVneURlZmluaXRpb25zUmVxdWVzdBo4LnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLkxpc3RTdHJhdGVneURlZmluaXRpb25zUmVzcG9uc2USdAoPU2V0U3RyYXRlZ3lMaXZlEi8ueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuU2V0U3RyYXRlZ3lMaXZlUmVxdWVzdBowLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNldFN0cmF0ZWd5TGl2ZVJlc3BvbnNlEm4KDVNjcmVlblN5bWJvbHMSLS54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5TY3JlZW5TeW1ib2xzUmVxdWVzdBouLnhzdG9ja3N0cmF0LmFuYWx5c2lzLnYxLlNjcmVlblN5bWJvbHNSZXNwb25zZRJ8ChNSdW5GdW5kYW1lbnRhbHNTY2FuEjMueHN0b2Nrc3RyYXQuYW5hbHlzaXMudjEuUnVuRnVuZGFtZW50YWxzU2NhblJlcXVlc3QaMC54c3RvY2tzdHJhdC5hbmFseXNpcy52MS5GdW5kYW1lbnRhbHNTY2FuU3VtbWFyeUJAWj5naXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vYW5hbHlzaXMvdjE7YW5hbHlzaXN2MWIGcHJvdG8z", [wkt_1.file_google_protobuf_timestamp, wkt_1.file_google_protobuf_struct, common_pb_1.file_common_v1_common]);
 /**
  * Describes the message xstockstrat.analysis.v1.RunBacktestRequest.
  * Use `create(RunBacktestRequestSchema)` to create a new message.
@@ -32,105 +32,130 @@ exports.BacktestResultSchema = (0, codegenv2_1.messageDesc)(exports.file_analysi
  */
 exports.TradeRecordSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 3);
 /**
+ * Describes the message xstockstrat.analysis.v1.BarDiagnostic.
+ * Use `create(BarDiagnosticSchema)` to create a new message.
+ */
+exports.BarDiagnosticSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 4);
+/**
+ * Describes the message xstockstrat.analysis.v1.SymbolDiagnostics.
+ * Use `create(SymbolDiagnosticsSchema)` to create a new message.
+ */
+exports.SymbolDiagnosticsSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 5);
+/**
  * Describes the message xstockstrat.analysis.v1.ScoreStrategyRequest.
  * Use `create(ScoreStrategyRequestSchema)` to create a new message.
  */
-exports.ScoreStrategyRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 4);
+exports.ScoreStrategyRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 6);
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyScore.
  * Use `create(StrategyScoreSchema)` to create a new message.
  */
-exports.StrategyScoreSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 5);
+exports.StrategyScoreSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 7);
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyReport.
  * Use `create(StrategyReportSchema)` to create a new message.
  */
-exports.StrategyReportSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 6);
+exports.StrategyReportSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 8);
+/**
+ * Describes the message xstockstrat.analysis.v1.ListBacktestsRequest.
+ * Use `create(ListBacktestsRequestSchema)` to create a new message.
+ */
+exports.ListBacktestsRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 9);
+/**
+ * Describes the message xstockstrat.analysis.v1.BacktestRunSummary.
+ * Use `create(BacktestRunSummarySchema)` to create a new message.
+ */
+exports.BacktestRunSummarySchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 10);
+/**
+ * Describes the message xstockstrat.analysis.v1.ListBacktestsResponse.
+ * Use `create(ListBacktestsResponseSchema)` to create a new message.
+ */
+exports.ListBacktestsResponseSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 11);
 /**
  * Describes the message xstockstrat.analysis.v1.ListStrategiesRequest.
  * Use `create(ListStrategiesRequestSchema)` to create a new message.
  */
-exports.ListStrategiesRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 7);
+exports.ListStrategiesRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 12);
 /**
  * Describes the message xstockstrat.analysis.v1.ListStrategiesResponse.
  * Use `create(ListStrategiesResponseSchema)` to create a new message.
  */
-exports.ListStrategiesResponseSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 8);
+exports.ListStrategiesResponseSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 13);
 /**
  * Describes the message xstockstrat.analysis.v1.GetStrategyReportRequest.
  * Use `create(GetStrategyReportRequestSchema)` to create a new message.
  */
-exports.GetStrategyReportRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 9);
+exports.GetStrategyReportRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 14);
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyComponent.
  * Use `create(StrategyComponentSchema)` to create a new message.
  */
-exports.StrategyComponentSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 10);
+exports.StrategyComponentSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 15);
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyDefinition.
  * Use `create(StrategyDefinitionSchema)` to create a new message.
  */
-exports.StrategyDefinitionSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 11);
+exports.StrategyDefinitionSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 16);
 /**
  * Describes the message xstockstrat.analysis.v1.ManageStrategyRequest.
  * Use `create(ManageStrategyRequestSchema)` to create a new message.
  */
-exports.ManageStrategyRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 12);
+exports.ManageStrategyRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 17);
 /**
  * Describes the message xstockstrat.analysis.v1.GetStrategyRequest.
  * Use `create(GetStrategyRequestSchema)` to create a new message.
  */
-exports.GetStrategyRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 13);
+exports.GetStrategyRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 18);
 /**
  * Describes the message xstockstrat.analysis.v1.ListStrategyDefinitionsRequest.
  * Use `create(ListStrategyDefinitionsRequestSchema)` to create a new message.
  */
-exports.ListStrategyDefinitionsRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 14);
+exports.ListStrategyDefinitionsRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 19);
 /**
  * Describes the message xstockstrat.analysis.v1.ListStrategyDefinitionsResponse.
  * Use `create(ListStrategyDefinitionsResponseSchema)` to create a new message.
  */
-exports.ListStrategyDefinitionsResponseSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 15);
+exports.ListStrategyDefinitionsResponseSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 20);
 /**
  * Describes the message xstockstrat.analysis.v1.SetStrategyLiveRequest.
  * Use `create(SetStrategyLiveRequestSchema)` to create a new message.
  */
-exports.SetStrategyLiveRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 16);
+exports.SetStrategyLiveRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 21);
 /**
  * Describes the message xstockstrat.analysis.v1.SetStrategyLiveResponse.
  * Use `create(SetStrategyLiveResponseSchema)` to create a new message.
  */
-exports.SetStrategyLiveResponseSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 17);
+exports.SetStrategyLiveResponseSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 22);
 /**
  * Describes the message xstockstrat.analysis.v1.ScreenCriterion.
  * Use `create(ScreenCriterionSchema)` to create a new message.
  */
-exports.ScreenCriterionSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 18);
+exports.ScreenCriterionSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 23);
 /**
  * Describes the message xstockstrat.analysis.v1.ScreenResult.
  * Use `create(ScreenResultSchema)` to create a new message.
  */
-exports.ScreenResultSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 19);
+exports.ScreenResultSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 24);
 /**
  * Describes the message xstockstrat.analysis.v1.ScreenSymbolsRequest.
  * Use `create(ScreenSymbolsRequestSchema)` to create a new message.
  */
-exports.ScreenSymbolsRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 20);
+exports.ScreenSymbolsRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 25);
 /**
  * Describes the message xstockstrat.analysis.v1.ScreenSymbolsResponse.
  * Use `create(ScreenSymbolsResponseSchema)` to create a new message.
  */
-exports.ScreenSymbolsResponseSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 21);
+exports.ScreenSymbolsResponseSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 26);
 /**
  * Describes the message xstockstrat.analysis.v1.RunFundamentalsScanRequest.
  * Use `create(RunFundamentalsScanRequestSchema)` to create a new message.
  */
-exports.RunFundamentalsScanRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 22);
+exports.RunFundamentalsScanRequestSchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 27);
 /**
  * Describes the message xstockstrat.analysis.v1.FundamentalsScanSummary.
  * Use `create(FundamentalsScanSummarySchema)` to create a new message.
  */
-exports.FundamentalsScanSummarySchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 23);
+exports.FundamentalsScanSummarySchema = (0, codegenv2_1.messageDesc)(exports.file_analysis_v1_analysis, 28);
 /**
  * @generated from enum xstockstrat.analysis.v1.BacktestStatus
  */
@@ -154,6 +179,88 @@ var BacktestStatus;
  */
 exports.BacktestStatusSchema = (0, codegenv2_1.enumDesc)(exports.file_analysis_v1_analysis, 0);
 /**
+ * The engine's decision for a single bar. Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.analysis.v1.BarAction
+ */
+var BarAction;
+(function (BarAction) {
+    /**
+     * @generated from enum value: BAR_ACTION_UNSPECIFIED = 0;
+     */
+    BarAction[BarAction["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+    /**
+     * bar within the strategy's warm-up window
+     *
+     * @generated from enum value: BAR_ACTION_WARMUP = 1;
+     */
+    BarAction[BarAction["WARMUP"] = 1] = "WARMUP";
+    /**
+     * flat, no entry this bar
+     *
+     * @generated from enum value: BAR_ACTION_HOLD_FLAT = 2;
+     */
+    BarAction[BarAction["HOLD_FLAT"] = 2] = "HOLD_FLAT";
+    /**
+     * opened a long position this bar
+     *
+     * @generated from enum value: BAR_ACTION_ENTER_LONG = 3;
+     */
+    BarAction[BarAction["ENTER_LONG"] = 3] = "ENTER_LONG";
+    /**
+     * closed a long position this bar
+     *
+     * @generated from enum value: BAR_ACTION_EXIT_LONG = 4;
+     */
+    BarAction[BarAction["EXIT_LONG"] = 4] = "EXIT_LONG";
+    /**
+     * holding an existing long, no exit this bar
+     *
+     * @generated from enum value: BAR_ACTION_HOLD_LONG = 5;
+     */
+    BarAction[BarAction["HOLD_LONG"] = 5] = "HOLD_LONG";
+})(BarAction || (exports.BarAction = BarAction = {}));
+/**
+ * Describes the enum xstockstrat.analysis.v1.BarAction.
+ */
+exports.BarActionSchema = (0, codegenv2_1.enumDesc)(exports.file_analysis_v1_analysis, 1);
+/**
+ * Why a symbol produced zero trades. Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.analysis.v1.NoTradeReason
+ */
+var NoTradeReason;
+(function (NoTradeReason) {
+    /**
+     * symbol traded, or not classified
+     *
+     * @generated from enum value: NO_TRADE_REASON_UNSPECIFIED = 0;
+     */
+    NoTradeReason[NoTradeReason["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+    /**
+     * the whole range was warm-up
+     *
+     * @generated from enum value: NO_TRADE_REASON_ENTIRE_RANGE_WARMUP = 1;
+     */
+    NoTradeReason[NoTradeReason["ENTIRE_RANGE_WARMUP"] = 1] = "ENTIRE_RANGE_WARMUP";
+    /**
+     * entry condition never satisfied
+     *
+     * @generated from enum value: NO_TRADE_REASON_ENTRY_NEVER_TRUE = 2;
+     */
+    NoTradeReason[NoTradeReason["ENTRY_NEVER_TRUE"] = 2] = "ENTRY_NEVER_TRUE";
+    /**
+     * reserved; not emitted this version
+     *
+     * @generated from enum value: NO_TRADE_REASON_INSUFFICIENT_CAPITAL = 3;
+     */
+    NoTradeReason[NoTradeReason["INSUFFICIENT_CAPITAL"] = 3] = "INSUFFICIENT_CAPITAL";
+})(NoTradeReason || (exports.NoTradeReason = NoTradeReason = {}));
+/**
+ * Describes the enum xstockstrat.analysis.v1.NoTradeReason.
+ */
+exports.NoTradeReasonSchema = (0, codegenv2_1.enumDesc)(exports.file_analysis_v1_analysis, 2);
+/**
  * @generated from enum xstockstrat.analysis.v1.ComponentKind
  */
 var ComponentKind;
@@ -174,7 +281,7 @@ var ComponentKind;
 /**
  * Describes the enum xstockstrat.analysis.v1.ComponentKind.
  */
-exports.ComponentKindSchema = (0, codegenv2_1.enumDesc)(exports.file_analysis_v1_analysis, 1);
+exports.ComponentKindSchema = (0, codegenv2_1.enumDesc)(exports.file_analysis_v1_analysis, 3);
 /**
  * @generated from enum xstockstrat.analysis.v1.StrategyOperation
  */
@@ -200,7 +307,7 @@ var StrategyOperation;
 /**
  * Describes the enum xstockstrat.analysis.v1.StrategyOperation.
  */
-exports.StrategyOperationSchema = (0, codegenv2_1.enumDesc)(exports.file_analysis_v1_analysis, 2);
+exports.StrategyOperationSchema = (0, codegenv2_1.enumDesc)(exports.file_analysis_v1_analysis, 4);
 /**
  * Comparator for a screen criterion's threshold test (closed set → enum).
  *
@@ -238,7 +345,7 @@ var Comparator;
 /**
  * Describes the enum xstockstrat.analysis.v1.Comparator.
  */
-exports.ComparatorSchema = (0, codegenv2_1.enumDesc)(exports.file_analysis_v1_analysis, 3);
+exports.ComparatorSchema = (0, codegenv2_1.enumDesc)(exports.file_analysis_v1_analysis, 5);
 /**
  * What a screen criterion evaluates.
  *
@@ -278,7 +385,7 @@ var ScreenKind;
 /**
  * Describes the enum xstockstrat.analysis.v1.ScreenKind.
  */
-exports.ScreenKindSchema = (0, codegenv2_1.enumDesc)(exports.file_analysis_v1_analysis, 4);
+exports.ScreenKindSchema = (0, codegenv2_1.enumDesc)(exports.file_analysis_v1_analysis, 6);
 /**
  * @generated from enum xstockstrat.analysis.v1.ScreenResultStatus
  */
@@ -300,7 +407,7 @@ var ScreenResultStatus;
 /**
  * Describes the enum xstockstrat.analysis.v1.ScreenResultStatus.
  */
-exports.ScreenResultStatusSchema = (0, codegenv2_1.enumDesc)(exports.file_analysis_v1_analysis, 5);
+exports.ScreenResultStatusSchema = (0, codegenv2_1.enumDesc)(exports.file_analysis_v1_analysis, 7);
 /**
  * @generated from service xstockstrat.analysis.v1.AnalysisService
  */

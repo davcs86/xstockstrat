@@ -43,6 +43,11 @@ For `docs` steps: write "none".)
 - Confirmed via: `grep -n "SymbolName" services/.../file.ext` → line N
 - Existing pattern: `<direct quote or close paraphrase of actual code found>`
 
+**TDD**: `red-green required` (code-bearing `service`/`test` steps) | `N/A (<reason>)` for
+non-code-bearing categories (`proto`, `proto-gen`, `migration`, `config`, `docs`). When red-green is
+required, `/sdd-execute` proves the paired test fails before implementation, then passes after — see
+`.claude/skills/sdd-execute/reference/tdd-gate.md`.
+
 **Instructions**:
 <Precise, actionable steps that cite real file paths and real symbol names confirmed above>
 
@@ -64,12 +69,20 @@ Categories to use for step naming: `proto`, `proto-gen`, `migration`, `service`,
 
 ## Test step pairing rule
 
-Every `service` step for a non-frontend service must have a corresponding `test` step. Place
-it immediately after the `service` step, or declare it in `## Step Dependencies` (e.g.
-"Step 5 [test] covers Step 4 [service]"). The `test` step's `**Verification**` must be a
+Every `service` step for a non-frontend service must have a corresponding `test` step (Constitution
+**C-08**). Place it immediately after the `service` step, or declare it in `## Step Dependencies`
+(e.g. "Step 5 [test] covers Step 4 [service]"). The `test` step's `**Verification**` must be a
 runnable bash command enforcing the CI coverage threshold, and must also include the
 language's lint command per `reference/step-constraints.md` §B (lint + coverage together
-satisfy the code-quality gate):
+satisfy the code-quality gate).
+
+**Author the paired test to fail first (red-before-green, Constitution P-06).** The `test` step must
+be written so that, run against the pre-implementation tree, it **fails** — it asserts the new
+behavior, not a tautology. `/sdd-execute` enforces this: for code-bearing steps it captures the
+failing run before the implementation step and the passing run after (`reference/tdd-gate.md`). Both
+the `service` step and its `test` step carry `**TDD**: red-green required`.
+
+Coverage thresholds and verification commands:
 
 | Service | Threshold | Verification command |
 |---|---|---|

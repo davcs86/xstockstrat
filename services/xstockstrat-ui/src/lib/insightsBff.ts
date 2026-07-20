@@ -36,6 +36,7 @@ router.service(AnalysisService, {
   runBacktest: forward((req, opts) => analysisClient.runBacktest(req, opts)),
   screenSymbols: forward((req, opts) => analysisClient.screenSymbols(req, opts)),
   getStrategyReport: forward((req, opts) => analysisClient.getStrategyReport(req, opts)),
+  listBacktests: forward((req, opts) => analysisClient.listBacktests(req, opts)),
   async manageStrategy(req, ctx) {
     const claims = await requireSession(ctx);
     // Mutations (register/update/deactivate) are admin-only per FR-8 — enforced

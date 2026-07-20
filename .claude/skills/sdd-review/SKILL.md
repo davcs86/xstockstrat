@@ -73,8 +73,9 @@ First confirm `PRODUCT_SPEC` exists (`ls`); if absent stop — "No product-spec.
 > "Review `$PRODUCT_SPEC` in mode `product-spec`. Apply every criterion in
 > `.claude/skills/sdd-review/reference/product-spec-criteria.md` (core criteria + trading-domain
 > table). Verify code-checkable claims (service names vs CLAUDE.md registry, config-key format,
-> proto field numbers). Return the structured per-criterion verdict and an overall
-> PASS / PASS WITH WARNINGS / FAIL."
+> proto field numbers). Tag each finding with the Constitution ID it maps to
+> (`docs/sdd/constitution.md`); a Floor (`F-*`) breach is a blocking FAIL. Return the structured
+> per-criterion verdict and an overall PASS / PASS WITH WARNINGS / FAIL."
 
 Hold the returned verdict — do not re-derive the criteria yourself.
 
@@ -123,8 +124,9 @@ Confirm `IMPL_SPEC` exists; if absent stop — "No implementation-spec.md found.
 $ARGUMENTS[0] first." Spawn a **`spec-reviewer`** subagent via Task:
 > "Review `$IMPL_SPEC` in mode `impl-spec`. Apply every per-step criterion in
 > `.claude/skills/sdd-review/reference/impl-spec-criteria.md` (B2 quality, B2b trading-domain,
-> B3 ordering). Verify referenced symbols/paths actually exist in the codebase. Return the
-> per-step verdict and a summary count. This mode is advisory — never block."
+> B3 ordering). Verify referenced symbols/paths actually exist in the codebase. Tag findings with
+> the Constitution ID they map to (`docs/sdd/constitution.md`) and surface any Floor (`F-*`) risk
+> prominently. Return the per-step verdict and a summary count. This mode is advisory — never block."
 
 ### B2. Overlap pass (delegate to `feature-overlap`)
 Spawn a **`feature-overlap`** subagent via Task:

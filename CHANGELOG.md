@@ -13,6 +13,32 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-07-12
+
+### Features
+- phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
+- backtest-debug-info: Surface full day-by-day backtest diagnostics — per-bar OHLCV, computed indicator series, warm-up
+- persist-strategy-scores: Persist strategy scores computed by `ScoreStrategy` in `xstockstrat-analysis` to a DB-backed
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- indicators/v1/indicators.proto
+
+### Summary
+11 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-06-30
+
+### Features
+- phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
+
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-06-30
 
 ### Features

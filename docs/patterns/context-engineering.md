@@ -22,6 +22,8 @@ so the orchestrator's window holds conclusions, not raw file dumps. The fleet:
 | `spec-reviewer` | Apply review criteria to a spec | Structured pass/warn/fail verdict per criterion | `/sdd-review` Modes A & B |
 | `feature-overlap` | Scan other feature dirs for config-key / proto-field / migration / file collisions | Collision report | `/sdd-review` overlap checks |
 | `service-briefing` | Distill a service's `CLAUDE.md` + relevant patterns | Compact service briefing | `/sdd-spec`, `/sdd-execute` when entering an unfamiliar service |
+| `design-proposer` | Propose ONE concrete architecture grounded in `recon.md` | Structured proposal (decisions + reuses + assumptions) | `/sdd-design` Phase 1 (grilling) |
+| `design-adversary` | Attack a proposed design; cite Constitution IDs it would violate | Structured objections + rejected-alternative trade-offs | `/sdd-design` Phase 1 (grilling) |
 
 **When to delegate:** the work reads many files or runs many greps, *and* the orchestrator only
 needs the conclusion. **When not to:** a single-file read, or work that must interleave with
@@ -109,6 +111,17 @@ structured header (fast to scan, the current state) and an append-only session l
 - **Backward compatible.** The header is additive: features created before this schema keep their
   plain session logs and remain valid. Adopt the header when a feature accumulates decisions worth
   scanning at a glance.
+
+### Cross-feature memory — the Ledger
+
+`context.md` is scoped to **one** feature. The **Ledger** (`docs/roadmap/ledger/insights.md` +
+`fails.md`) is the cross-feature counterpart: lessons that should inform *every* future feature, not
+just the one that produced them. `/sdd-story`, `/sdd-design`, and `/sdd-spec` **read** it to reuse
+what worked and avoid known traps; `/sdd-execute` **writes** to it (a `fails.md` entry at a recurring
+deviation, an `insights.md` entry at integration). It is append-only, like the session log, and is
+the durable complement to the `dry-reviewer` agent (which detects duplication live but persists
+nothing). A recurring `fails.md` entry is a candidate to promote into a binding rule in
+`docs/sdd/constitution.md`.
 
 ---
 

@@ -18,3 +18,9 @@
 Active and in-progress feature SDD artifacts live in [`features/`](features/CLAUDE.md).
 Each feature tracks lifecycle status from `idea` through `launched` or `demoted/canceled`.
 Run `/sdd-status` for a summary table, or read `features/<slug>/feature.md` for a specific feature.
+
+## Institutional Ledger
+
+Cross-feature SDD memory lives in [`ledger/`](ledger/CLAUDE.md): `insights.md` (patterns that worked)
+and `fails.md` (mistakes that recurred). Read by `/sdd-story`, `/sdd-design`, and `/sdd-spec`; written
+by `/sdd-execute`. The cross-feature complement to each feature's `context.md`.

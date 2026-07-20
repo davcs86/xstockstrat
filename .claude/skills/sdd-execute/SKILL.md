@@ -14,6 +14,7 @@ when their path activates — do not read them up front:
 - `reference/sequential-mode.md` — read **only** when `$ARGUMENTS[1] == sequential`.
 - `reference/deviation-handling.md` — read when a deviation or in-scope-unresolvable gap arises.
 - `reference/repo-conventions.md` — read when a step touches proto / migrations / config keys / lint / header propagation.
+- `reference/tdd-gate.md` — read in Phase 3 when the step is **code-bearing** (`service`/`test`), to run red-before-green.
 
 ## Arguments
 
@@ -228,14 +229,24 @@ Proceed? (yes / no / adjust: <instruction>)
 
 ### PHASE 3: Execution
 
+**TDD gate (code-bearing steps).** If this step's category is `service` or `test`, read
+`reference/tdd-gate.md` and follow red-before-green: confirm the paired test **fails** first (capture
+red), then implement, then confirm it **passes** (capture green). Record both in the PR body and
+`context.md` — never by editing the immutable step body (**F-09**). Non-code-bearing steps
+(`docs`/`config`/`proto`/`proto-gen`/`migration`) skip the gate and record `TDD: N/A`.
+
 1. Read each target file fully before editing (never overwrite blindly).
 2. Apply **only** the changes described in the confirmed plan — no cleanup, no refactoring, no extra improvements.
-3. Run the step's `**Verification**` command. Report the exact output.
+3. Run the step's `**Verification**` command. Report the exact output. (For a code-bearing step this is the green run of the TDD gate.)
 4. If verification **passes**:
    - Update **only** the step's `**Status**` field in implementation-spec.md: `**Status**: \`pending\`` → `**Status**: \`done\``
    - **Do NOT modify any other part of the step** — `**Instructions**`, `**Codebase Evidence**`, `**Verification**`, `**Files**`, and `**Reviewers**` are immutable records of the original plan. Deviations go in the `## Deviation Log` only.
    - If this is the **first step completed** in the feature: update `feature.md` status to `in-progress`, append status history row.
    - If **all steps are now done**: update `feature.md` status to `code-completed`, append status history row.
+     Then, if the feature surfaced a **reusable pattern** worth carrying to future features (a clean
+     abstraction, an ordering that paid off, a perf win), append a one-line entry to
+     `docs/roadmap/ledger/insights.md` using its schema. Skip if nothing generalizes — do not invent a
+     lesson.
 5. If verification **fails**:
    - Diagnose the failure.
    - If the fix is clear and stays within the step's scope: apply it, re-run verification, report.
@@ -312,6 +323,13 @@ format and the mandatory A/B/C "no vague deferrals" gap protocol (with its seque
 `AskUserQuestion` override). Never write "deferred" without a specific target step or explicit user
 sign-off.
 
+**Ledger write (cross-feature memory).** If a deviation reveals a mistake that has recurred — or that
+future features in these services would likely hit (a wrong assumption, a duplication, a migration/
+config/header misstep, scope creep) — append a one-line entry to `docs/roadmap/ledger/fails.md` using
+its schema. This is the durable arm of Constitution **P-03** (a recurring ambiguity is logged, not
+silently worked around). A one-off, spec-specific deviation stays in the `## Deviation Log` only; the
+ledger is for lessons that generalize.
+
 ---
 
 ## CONTEXT.MD — Per-step entry format
@@ -361,11 +379,18 @@ After the last step in the requested range (or on any stop):
 
 ## HARD CONSTRAINTS — Never violate
 
+These rails are the per-step enforcement arm of `docs/sdd/constitution.md`. The Floor items (`F-*`)
+below are **non-overridable** — no "proceed anyway" or sequential-mode carve-out bypasses them.
+
+- **Never mark a code-bearing (`service`/`test`) step `done` without a recorded failing-then-passing
+  test** (red before green — Constitution **P-06**/**C-08**; see `reference/tdd-gate.md`). The red and
+  green outputs go in the PR body + `context.md`, never by editing the step body. Non-code-bearing
+  steps record `TDD: N/A`.
 - **Never write or edit any file before Phase 2 user confirmation.**
 - **Never guess a file path or symbol name.** If not found in Phase 1 discovery, block the step.
 - **Never commit before Phase 3 verification passes.** All commits happen in STEP COMMIT + PR, after verification.
 - **Never target `main-dev` or `main` in a step PR.** Always target the `**Development Branch**` from `feature.md`.
-- **Never stage files outside the step's `**Files**` section plus `implementation-spec.md`, `feature.md`, and `context.md`.**
+- **Never stage files outside the step's `**Files**` section plus `implementation-spec.md`, `feature.md`, and `context.md`** (and, when a ledger write is due, `docs/roadmap/ledger/insights.md` or `fails.md`) — Constitution **F-08**.
 - **Never edit a `.up.sql` migration that has been committed to `main-dev`.** Add a new numbered migration instead.
 - **Never make changes outside the current step's scope** — no opportunistic cleanup, no refactoring, no extra files. (Exception: making the code the step *itself* introduced pass the step's lint/format Verification — e.g. `ruff format`, gofmt, or fixing a `golangci-lint`/`pnpm run lint` finding on the step's own changed lines — is in scope, not cleanup. Do not reformat or lint-fix code the step did not touch.)
 - **`implementation-spec.md` step bodies are immutable during execution.** The only permitted change to a step entry is flipping `**Status**` from `pending` to `done` (or `blocked`/`skipped`). The `**Instructions**`, `**Codebase Evidence**`, `**Verification**`, `**Files**`, and `**Reviewers**` fields must never be edited — they are the permanent record of the original plan. All divergence from that plan belongs exclusively in the `## Deviation Log` section.

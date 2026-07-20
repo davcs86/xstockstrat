@@ -4,6 +4,11 @@ These are the per-step criteria a `spec-reviewer` subagent applies to an impleme
 The agent reads this file, reads `implementation-spec.md`, verifies code-checkable claims, and
 returns a per-step verdict. **Mode B is advisory — it never changes lifecycle state.**
 
+**Tag findings with the Constitution.** Where a step finding maps to a binding rule in
+`docs/sdd/constitution.md`, cite the ID — e.g. `C-01` (evidence-cited), `C-07`/`F-01` (migration
+naming / immutability), `C-08`/`P-06` (test pairing / red-before-green), `C-09` (proto verification).
+Even in advisory mode, surface any Floor (`F-*`) risk prominently.
+
 ## B2. Per-step quality check
 
 For each numbered step, apply:
@@ -22,6 +27,7 @@ For each numbered step, apply:
 | `test` steps: threshold explicit | A `test` step's `**Verification**` is absent, is prose-only with no bash command, or does not state the specific coverage threshold (`--cov-fail-under=N` for Python/Node, or `≥ N%` assertion for Go) |
 | `service` steps: lint gate | A `service` step that creates/modifies source has no lint command (`golangci-lint run` for Go, `ruff check`/`ruff format --check` for Python, `pnpm run lint` for Node/Next) in its own or its paired `test` step's `**Verification**` |
 | Outbound gRPC: header propagation | A step adds a new outbound gRPC call to another backend service (Instructions mention a new client stub call, `grpc.Dial`/`NewClient`, or a new RPC on an existing client) but neither `**Codebase Evidence**` nor `**Instructions**` addresses forwarding `x-user-id` / `x-access-scope` / `x-trace-id` |
+| Integration completeness (`C-10`) | A step adds a new UI page/route but no step registers it in the shared nav (`PLATFORM_SUBNAV` in `PlatformHeader.tsx`) with a reachability test; OR a step changes how an authoritative-sourced value (broker mark-to-market) is read on one RPC path with no companion step/note bringing every other path that surfaces it to parity (e.g. `ListPositions` ↔ `ListPortfolios`) plus a parity test; OR a step seeds/depends on a shared resource other services use without a mutation-protection guard (RPC + read-only UI) |
 
 WARN (advisory):
 - `**Instructions**` are verbose but complete

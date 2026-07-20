@@ -32,6 +32,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | CI job matrix, coverage thresholds, deploys | `docs/patterns/ci-overview.md` |
 | DRY guard rail (no repeated constants/literals/types/helpers) — pre-commit hook, jscpd tool, `dry-reviewer` subagent | `docs/patterns/dry-guard-rail.md` |
 | Proto / buf changes | `docs/runbooks/proto-versioning.md` |
+| Provisioning the codegen toolchain on a host (Docker unavailable / GitHub-releases egress blocked) | `docs/runbooks/codegen-toolchain-host-setup.md` |
 | Adding a data source (Polygon, Tiingo, etc.) | `docs/runbooks/add-data-source.md` |
 | Building a custom indicator formula | `docs/runbooks/indicator-builder.md` |
 | Bug triage / hotfix | `docs/runbooks/bug-triage.md` |
@@ -42,6 +43,8 @@ This file covers always-needed platform conventions. For larger reference sectio
 | Feature workflow (branch, PR, promote) | `docs/runbooks/feature-workflow.md` |
 | Using or troubleshooting the agent MCP tools | `docs/runbooks/mcp-tools.md` |
 | Adding/refactoring a skill, subagent, or `CLAUDE.md`; how the AI tooling curates context (subagent delegation, progressive disclosure, structured `context.md` memory) | `docs/patterns/context-engineering.md` |
+| SDD binding rules — Constitution constraint IDs (`C-*`/`P-*`/`F-*`) cited by review/design/execute | `docs/sdd/constitution.md` |
+| Cross-feature SDD memory — insights (patterns that worked) and fails (mistakes that recurred) | `docs/roadmap/ledger/insights.md`, `docs/roadmap/ledger/fails.md` |
 
 ---
 
@@ -118,6 +121,7 @@ To change a language or tool version:
 | Python | `.github/workflows/ci.yml` (`python-version`), Python service Dockerfiles (`FROM python:X-slim`) |
 | Node.js | `.github/workflows/ci.yml` (`node-version`), Node/Next service Dockerfiles (`FROM node:X-alpine`) |
 | pnpm | `package.json` (`packageManager`), `.github/workflows/ci.yml` (`pnpm@X`), Node service Dockerfiles |
+| Proto plugins (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-connect-go`) | `Dockerfile.codegen` (§"Go proto plugins") **and** `.github/workflows/ci.yml` `proto-freshness` job's "Install Go proto plugins" step — these two are the *only* places these pins live and CI's `proto-freshness` job installs its own copies rather than building `Dockerfile.codegen`, so it will not catch a drift between them. Bump both in the same PR; verify with an empty `git diff packages/proto/gen/` after `./scripts/buf-gen.sh` (see `docs/runbooks/codegen-toolchain-host-setup.md`) |
 
 1. Open a PR — CI will catch any missed files.
 
@@ -207,6 +211,12 @@ Recently added keys (Alpaca API compliance audit — PR #699 "Audit and fix Alpa
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `marketdata.alpaca.adjustment` | string | `all` | Corporate-action adjustment for historical bars (`raw`/`split`/`dividend`/`all`); sent as `adjustment=` on every Alpaca bars request so splits/dividends do not distort backtest OHLCV. |
+
+Recently added keys (feature 064 — backtest debug diagnostics, owned by `xstockstrat-analysis`):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.backtest.max_range_days` | int | `730` | Max backtest range span in days (≈2 years). A `RunBacktest` whose `range` exceeds it is rejected with `INVALID_ARGUMENT`; an unset bound is defaulted to the last `max_range_days`. Applies to all callers. Bounds the always-included per-bar diagnostics to ~504 rows/symbol. |
 
 ---
 
@@ -439,6 +449,28 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 - `implementation-spec.md` — numbered steps with concrete code references and statuses
 - `context.md` — append-only session log of decisions, deviations, files modified
 
+### Mandatory Entry Point — No Feature Work Without SDD Grounding
+
+**IMPORTANT — this overrides task framing.** Before writing any code for a new capability (a new
+UI page/route, endpoint, service behavior, tool, or config surface), run the SDD pipeline at
+minimum: `/sdd-story <slug>` → `/sdd-design <slug> quick` → the design-phase ledger touch
+(Constitution **C-11**, `docs/sdd/constitution.md`). This applies **regardless of how the request
+arrives** — a GitHub issue, a chat message, or a session/task instruction that says, in plain
+language, to "implement X, commit, and push." That framing is a request for the *capability*, not
+permission to skip the pipeline — run `/sdd-story` and `/sdd-design quick` yourself first, *then*
+implement.
+
+`quick` mode is the fast-track for small changes, not an exemption: Phase 0 Recon always runs in
+full and a single mandated adversarial round still happens (see `.claude/skills/sdd-design/SKILL.md`).
+It shortens the debate; it never skips Phase 0/Phase 1 or the Constitution.
+
+**Exempt:** confirmed bug fixes, which route through `docs/runbooks/bug-triage.md` (Track A/B/C) —
+that runbook's own `skip` design-depth recommendation applies to bugs, not new capability. Docs-only
+or process-only edits (no service/UI behavior change) are also outside this rule's scope.
+
+This rule is a Constitution **Commandment** — overridable only with the user's **explicit**
+sign-off, recorded in the feature's `context.md`.
+
 ### Feature Status — Single Source of Truth
 
 **Do not maintain a feature-status table here.** It drifts the moment a feature lands. The authoritative
@@ -451,7 +483,7 @@ Run `/sdd-status` for a live, computed view across all features, or `/sdd-status
 2. Read `docs/roadmap/features/<NNN-slug>/context.md` before touching any related files — it contains critical decisions from prior sessions.
 3. Do NOT rely on conversation context from a previous session. Always re-read context.md.
 
-SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime) | `/sdd-sync` (sync spec files from feature branches to main-dev)
+SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon + design debate) → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime) | `/sdd-sync` (sync spec files from feature branches to main-dev)
 
 ---
 

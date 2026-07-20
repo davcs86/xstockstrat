@@ -32,6 +32,7 @@
     "@radix-ui/react-separator": "^1.1.0",
     "@radix-ui/react-slot": "^1.1.0",
     "@tanstack/react-query": "^5.62.0",
+    "@tanstack/react-virtual": "^3.10.0",
     "@xstockstrat/proto": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -48,7 +49,7 @@
     "zustand": "^4.5.2"
   },
   "devDependencies": {
-    "@playwright/test": "^1.44.0",
+    "@playwright/test": "1.59.1",
     "@types/node": "^20",
     "@types/pg": "^8.11.0",
     "@types/react": "^18",

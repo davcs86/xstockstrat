@@ -1,6 +1,6 @@
 # SDD Feature Lifecycle — Status Transitions
 
-Companion reference to `sdd-flow.pdf`. Where the flow document covers the five phases at a narrative level, this document is the **state machine**: every lifecycle status, every legal transition, the skill or CI workflow that performs the flip, and what gets written to `feature.md` at each step.
+Companion reference to `sdd-flow.pdf`. Where the flow document covers the phases at a narrative level, this document is the **state machine**: every lifecycle status, every legal transition, the skill or CI workflow that performs the flip, and what gets written to `feature.md` at each step.
 
 This is the structure that lets a new agent session — or a new human contributor — reconstruct exactly where a feature stands without reading any conversation history.
 
@@ -24,6 +24,9 @@ This is the structure that lets a new agent session — or a new human contribut
         │  /sdd-review product-spec  (gate)
         ▼
    spec-ready
+        │  /sdd-design  (recon + grilling debate, gate)
+        ▼
+ design-approved
         │  /sdd-spec
         ▼
 implementation-ready
@@ -46,7 +49,7 @@ implementation-ready
 
 ---
 
-## The Nine Statuses
+## The Ten Statuses
 
 Every feature lives in exactly one of these states. The status is the single source of truth — CI workflows, the `/sdd-status` skill, and the GitHub PR description all read it from `feature.md`.
 
@@ -54,8 +57,9 @@ Every feature lives in exactly one of these states. The status is the single sou
 |---|---|---|---|
 | `idea` | Story captured, no spec yet. Rare — most features go straight to `draft`. | `feature.md` (cover sheet only) | Manual or `/sdd-story` |
 | `draft` | Product spec written; awaiting AI review. | `feature.md` + `product-spec.md` | `/sdd-story` |
-| `spec-ready` | Product spec approved by `/sdd-review`. Ready for implementation planning. | Same as `draft` | `/sdd-review product-spec` (gate) |
-| `implementation-ready` | Implementation spec generated with numbered steps and grep-cited file paths. | `feature.md` + `product-spec.md` + `implementation-spec.md` | `/sdd-spec` |
+| `spec-ready` | Product spec approved by `/sdd-review`. Ready for the design phase. | Same as `draft` | `/sdd-review product-spec` (gate) |
+| `design-approved` | Design debated and approved by `/sdd-design`. Recon dossier + chosen architecture on disk; ready for implementation planning. | `feature.md` + `product-spec.md` + `recon.md` + `design.md` | `/sdd-design` (gate) |
+| `implementation-ready` | Implementation spec generated with numbered steps and grep-cited file paths. | Adds `implementation-spec.md` | `/sdd-spec` |
 | `in-progress` | Execution started — at least one step done, at least one step pending. | All four files (`feature.md`, `product-spec.md`, `implementation-spec.md`, `context.md`) | `/sdd-execute` (first step completion) |
 | `code-completed` | All steps done. Awaiting final integration PR and promotion. | All four files | `/sdd-execute` (last step completion) |
 | `launched` | Live in production. Promotion PR merged to `main`. | All four files + `**Committed to main**` SHA + `**Launched date**` | CI: `ci-validate-feature-status.yml` |
@@ -66,7 +70,7 @@ Every feature lives in exactly one of these states. The status is the single sou
 
 ## Bug-Specific Fields
 
-Bugs use the same nine statuses but `feature.md` carries extra headers:
+Bugs use the same ten statuses but `feature.md` carries extra headers:
 
 | Field | Values | Set by |
 |---|---|---|
@@ -77,7 +81,7 @@ Bugs use the same nine statuses but `feature.md` carries extra headers:
 `/sdd-triage` routes bugs into one of three tracks:
 - **Track A — Hotfix.** SEV-1. Branches from `main`, PRs to `main`, back-merged to `main-dev`. Bypasses the SDD lifecycle entirely; appended to `docs/runbooks/hotfix-log.md` instead.
 - **Track B — Config-only.** SEV-2 or SEV-3 that's fixable by changing a config value. Follows `docs/runbooks/config-rollout.md`. No feature.md created.
-- **Track C — SDD path.** Anything else. Creates a feature directory and follows the standard nine-state lifecycle below, with `**Type**: bug` set on `feature.md`.
+- **Track C — SDD path.** Anything else. Creates a feature directory and follows the standard ten-state lifecycle below, with `**Type**: bug` set on `feature.md`.
 
 The state machine that follows applies to features and Track-C bugs identically.
 
@@ -115,14 +119,31 @@ The state machine that follows applies to features and Track-C bugs identically.
 
 ---
 
-## Transition 3: `spec-ready` → `implementation-ready`
+## Transition 2.5: `spec-ready` → `design-approved`
+
+| Field | Value |
+|---|---|
+| **Trigger skill** | `/sdd-design <slug>` |
+| **Type** | **Gate** — the design phase. Phase 0 (Recon) produces `recon.md`; Phase 1 (Grilling) runs a bounded proposer-vs-adversary debate, gated by user approval each round (min 2, max 5). |
+| **Side effects** | Writes `recon.md` and `design.md`. Flips lifecycle and appends a status history row. Appends a `context.md` session entry; may append a Ledger insight/fail. |
+| **Files read** | `product-spec.md`, `docs/sdd/constitution.md`, `docs/roadmap/ledger/{insights,fails}.md`, `context.md`, plus the affected-services subtree (via `codebase-discovery` subagents). |
+| **Files written** | `recon.md` (grounded dossier — codebase map, **Patterns to REUSE**, dependencies, risks, recommended scope), `design.md` (chosen approach, **rejected alternatives**, open risks, Constitution rules touched). |
+| **Decision criteria** | The design-adversary attacks the proposed approach and cites any Constitution `C-*`/`P-*`/`F-*` it would violate. An unresolved **Floor** (`F-*`) breach blocks approval (`F-11`). |
+| **On approval** | Lifecycle flips to `design-approved`. Status history row: `\| YYYY-MM-DD \| spec-ready → design-approved \| /sdd-design \| Design debated (N rounds) and approved \|` |
+| **Re-run safety** | If lifecycle is already `design-approved` or later, the skill asks before re-running. The phase is **skippable** — `/sdd-spec` warns if it runs while status is still `spec-ready`, but does not hard-block. |
+
+**Why a debate before planning.** `/sdd-spec` is expensive (a `general-purpose` sub-agent at high effort) and `/sdd-execute` is more so. Grounding a chosen architecture — and recording the alternatives that lost — before either runs catches design dead-ends cheaply and gives the planner a decided approach to follow instead of inventing one.
+
+---
+
+## Transition 3: `design-approved` → `implementation-ready`
 
 | Field | Value |
 |---|---|
 | **Trigger skill** | `/sdd-spec <slug>` |
-| **Side effects** | Creates `implementation-spec.md` with numbered steps. Each step cites concrete file paths and symbol names found via grep. Updates `feature.md` Reviewers snapshot (per-step Reviewers attached based on step categories). |
-| **Status History row appended** | `\| YYYY-MM-DD \| spec-ready → implementation-ready \| /sdd-spec \| Implementation spec generated with N steps \|` |
-| **Files read** | `product-spec.md`, `docs/runbooks/reviewer-registry.md`, the entire affected-services subtree |
+| **Side effects** | Creates `implementation-spec.md` with numbered steps. Each step cites concrete file paths and symbol names found via grep — consuming `recon.md`/`design.md` rather than re-discovering from scratch. Updates `feature.md` Reviewers snapshot (per-step Reviewers attached based on step categories). |
+| **Status History row appended** | `\| YYYY-MM-DD \| design-approved → implementation-ready \| /sdd-spec \| Implementation spec generated with N steps \|` |
+| **Files read** | `product-spec.md`, `recon.md`, `design.md`, `docs/sdd/constitution.md`, `docs/roadmap/ledger/{insights,fails}.md`, `docs/runbooks/reviewer-registry.md`, the entire affected-services subtree |
 | **Files written** | `implementation-spec.md` — numbered steps with `**Status**: pending`, file paths, symbol names, line ranges, verification commands |
 | **Hard rule (prompt-enforced)** | "Every step you write must cite evidence found in the codebase via Read, find, or grep. Never invent a file path, function name, struct name, or line number." |
 | **Optional gate** | `/sdd-review <slug> impl-spec` — advisory only (does not flip lifecycle). Useful for overlap checks against other in-progress features. |
@@ -313,7 +334,7 @@ The pattern is portable. To apply this lifecycle to another spine-pattern monore
 1. **Copy `.claude/skills/sdd-*`** into the target repo.
 2. **Adapt the reviewer registry** (`docs/runbooks/reviewer-registry.md`) to your team and services.
 3. **Adapt the governance gates** in `/sdd-story`'s product-spec template to the breaking-change classes your platform cares about (proto, schema, config, API).
-4. **Adopt the same nine-state lifecycle** — `idea` through `launched` with two manual exits. The transitions and audit trail format work as-is.
+4. **Adopt the same ten-state lifecycle** — `idea` through `launched` with two manual exits. The transitions and audit trail format work as-is.
 5. **Wire `ci-validate-feature-status.yml`** to your promotion convention. The pattern detects merge commits whose messages match a regex; adjust the regex.
 
 The result: the same property holds — every feature has a directory, every directory has an auditable lifecycle, every promotion updates statuses automatically, and any new agent or contributor can reconstruct exactly where things stand from the checked-in artifacts alone.
