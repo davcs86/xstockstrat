@@ -1,4 +1,4 @@
-"""Tests for app/tools.py — all six MCP tool definitions."""
+"""Tests for app/tools.py — MCP tool definitions."""
 
 import base64
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -506,3 +506,63 @@ async def test_run_backtest_sends_strategy_id_ref_for_registered_definition():
     sent = stub.RunBacktest.call_args.args[0]
     assert sent.strategy_id == "sma"
     assert sent.strategy_id_ref == "sma"
+
+
+# ── backfill tools (feature 066) ───────────────────────────────────────────
+
+
+class TestTriggerBackfillTool:
+    @pytest.mark.asyncio
+    async def test_delegates_to_client_and_passes_result_through(self):
+        server = _make_server()
+        payload = {"job_id": "j-1", "status": "BACKFILL_STATUS_QUEUED"}
+        with patch.object(client, "trigger_backfill", AsyncMock(return_value=payload)) as m:
+            result = await _tool_fn(server, "trigger_backfill")(
+                symbols=["AAPL"],
+                timeframe="1d",
+                start="2020-01-01T00:00:00Z",
+                end="2024-12-31T00:00:00Z",
+            )
+        assert result == payload
+        kwargs = m.call_args.kwargs
+        assert kwargs["symbols"] == ["AAPL"]
+        assert kwargs["timeframe"] == "1d"
+        assert kwargs["start"] == "2020-01-01T00:00:00Z"
+        assert kwargs["end"] == "2024-12-31T00:00:00Z"
+
+    @pytest.mark.asyncio
+    async def test_any_grpc_error_maps_through_grpc_error_message(self):
+        import grpc  # noqa: PLC0415
+
+        server = _make_server()
+        err = _rpc_error(grpc.StatusCode.UNAVAILABLE, "boom")
+        with patch.object(client, "trigger_backfill", AsyncMock(side_effect=err)):
+            with pytest.raises(RuntimeError, match="boom"):
+                await _tool_fn(server, "trigger_backfill")(symbols=["AAPL"])
+
+
+class TestGetBackfillStatusTool:
+    @pytest.mark.asyncio
+    async def test_delegates_both_modes_kwargs(self):
+        server = _make_server()
+        with patch.object(client, "get_backfill_status", AsyncMock(return_value={"job": {}})) as m:
+            await _tool_fn(server, "get_backfill_status")(job_id="j-1")
+            assert m.call_args.kwargs["job_id"] == "j-1"
+            await _tool_fn(server, "get_backfill_status")(
+                status_filter="completed", symbol="AAPL", limit=5, page_token="10"
+            )
+        kwargs = m.call_args.kwargs
+        assert kwargs["status_filter"] == "completed"
+        assert kwargs["symbol"] == "AAPL"
+        assert kwargs["limit"] == 5
+        assert kwargs["page_token"] == "10"
+
+    @pytest.mark.asyncio
+    async def test_not_found_maps_to_backfill_job_not_found(self):
+        import grpc  # noqa: PLC0415
+
+        server = _make_server()
+        err = _rpc_error(grpc.StatusCode.NOT_FOUND, "nope")
+        with patch.object(client, "get_backfill_status", AsyncMock(side_effect=err)):
+            with pytest.raises(RuntimeError, match="backfill job not found"):
+                await _tool_fn(server, "get_backfill_status")(job_id="missing")
