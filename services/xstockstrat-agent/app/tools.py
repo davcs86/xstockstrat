@@ -147,7 +147,13 @@ def register_tools(server: FastMCP) -> None:
             # Credentials are stored in config under the conventional key source.<slug>.credentials
             password = await client.get_config_value(f"source.{source_slug}.credentials")
 
-        text = await _fetch_url(url, password=password)
+        # Optional per-source request headers (e.g. SEC EDGAR rejects requests
+        # without a declared User-Agent identifying the caller).
+        request_headers = config_json.get("request_headers")
+        if not isinstance(request_headers, dict):
+            request_headers = None
+
+        text = await _fetch_url(url, password=password, headers=request_headers)
         return {"raw_text": text}
 
     @server.tool()
@@ -488,12 +494,15 @@ def _extract_from_bytes(data: bytes, password: str | None = None) -> str:
             raise ValueError(f"Cannot extract text from attachment: {e}") from e
 
 
-async def _fetch_url(url: str, password: str | None = None) -> str:
+async def _fetch_url(
+    url: str, password: str | None = None, headers: dict[str, str] | None = None
+) -> str:
     """Fetch URL content. For authenticated sources, passes password as Bearer token.
+    headers: optional extra request headers; Authorization from password wins.
     Returns raw text."""
     import httpx  # noqa: PLC0415
 
-    headers: dict[str, str] = {}
+    headers = {str(k): str(v) for k, v in (headers or {}).items()}
     if password:
         headers["Authorization"] = f"Bearer {password}"
 

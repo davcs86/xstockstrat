@@ -136,6 +136,35 @@ async def test_extract_website_content_fetches_url():
 
 
 @pytest.mark.asyncio
+async def test_extract_website_content_sends_request_headers():
+    """extract_website_content forwards config_json.request_headers on the fetch
+    (e.g. the User-Agent SEC EDGAR requires)."""
+    sources_with_headers = [
+        {
+            "slug": "edgar",
+            "display_name": "EDGAR",
+            "source_type": "mediated_simple_website",
+            "config_json": {
+                "url": "https://example.com/",
+                "scrape_selector": "entry",
+                "request_headers": {"User-Agent": "xstockstrat contact@example.com"},
+            },
+            "has_credentials": False,
+        },
+    ]
+    with patch.object(client, "list_signal_sources", AsyncMock(return_value=sources_with_headers)):
+        with respx.mock(base_url="https://example.com") as site_mock:
+            route = site_mock.get("/").mock(
+                return_value=httpx.Response(200, text="<entry>8-K</entry>")
+            )
+            server = _make_server()
+            result = await _tool_fn(server, "extract_website_content")(source_slug="edgar")
+            assert "8-K" in result["raw_text"]
+            sent = route.calls.last.request.headers
+            assert sent["User-Agent"] == "xstockstrat contact@example.com"
+
+
+@pytest.mark.asyncio
 async def test_extract_website_content_no_url_raises():
     """extract_website_content raises if config_json has no url."""
     sources_no_url = [
