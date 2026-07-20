@@ -1,6 +1,6 @@
 # Feature: trigger-backfill-mcp-tool
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/trigger-backfill-mcp-tool`
 **Created**: 2026-07-20
 **Last Updated**: 2026-07-20
@@ -15,6 +15,7 @@
 | 2026-07-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning, fixed inline) |
 | 2026-07-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
 | 2026-07-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
+| 2026-07-20 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1) |
 
 ---
 

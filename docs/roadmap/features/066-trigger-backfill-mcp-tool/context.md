@@ -104,3 +104,27 @@
   Recorded here per P-03 (no silent deviation).
 - Branch deviation continues per the sdd-story session note: steps execute directly on
   `claude/custom-indicators-strategies-g38b18` (PR #769 → main-dev), no per-step branches/PRs.
+
+## Session 2026-07-20T19:00Z — sdd-execute (sequential)
+
+Mode-entry + per-feature confirmation satisfied by the user's standing instruction
+("run the SDD pipeline and build trigger_backfill") recorded in the sdd-story session note;
+branch deviation continues (direct commits to claude/custom-indicators-strategies-g38b18,
+PR #769 = integration PR).
+
+### Step 1 — app/client.py backfill client functions + _admin_metadata [done]
+- Added `_admin_metadata()`, refactored the 3 inline admin-scope sites; added `trigger_backfill`
+  (fail-fast validation, alias canonicalization + dual-field send, one-sided TimeRange, admin
+  metadata) and dual-mode `get_backfill_status` (one-key envelopes, friendly status_filter errors,
+  page_token). TDD red: 9 new tests failed with AttributeError pre-implementation; green: 22/22.
+- Files modified: `services/xstockstrat-agent/app/client.py`
+- Deviations: none
+
+### Step 2 — client tests [done]
+- Appended TestTriggerBackfillClient/TestGetBackfillStatusClient (9 tests) mirroring the
+  _channel_cm/stub-patch recipes; full suite 63 passed, coverage 64% (≥40 gate), ruff clean.
+- Two test-authoring fixes during green (not deviations from spec intent): int64 proto fields
+  serialize as strings in MessageToDict (asserted "0" not 0 — matches run_backtest precedent);
+  local `import grpc` needed in the NOT_FOUND test (module has no top-level grpc import).
+- Files modified: `services/xstockstrat-agent/tests/test_client.py`
+- Deviations: none

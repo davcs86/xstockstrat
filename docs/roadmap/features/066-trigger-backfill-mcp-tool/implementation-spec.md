@@ -1,6 +1,6 @@
 # Implementation Spec: trigger-backfill-mcp-tool
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-07-20
 **Feature**: `docs/roadmap/features/066-trigger-backfill-mcp-tool/feature.md`
 **Total Steps**: 5
@@ -33,7 +33,7 @@ existing `xstockstrat-agent → xstockstrat-ingest` gRPC edge.
 
 ### Step 1 — service: `app/client.py` backfill client functions + `_admin_metadata()` extraction
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -92,7 +92,7 @@ Behavioral verification is Step 2 (paired test step).
 
 ### Step 2 — test: client tests for `trigger_backfill` / `get_backfill_status`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify
