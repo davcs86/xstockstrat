@@ -16,6 +16,7 @@ from app.services.evaluator import (
     StrategyEvaluator,
     _eval_condition,
     _validate_definition,
+    align_indicator_points,
     referenced_refs,
 )
 
@@ -233,6 +234,48 @@ class TestEvaluate:
         # exit (fast < 100) at indices 0 and 1
         assert decisions[0].exit is True
         assert decisions[2].exit is False
+
+    @pytest.mark.asyncio
+    async def test_warmup_shortened_result_is_tail_aligned(self):
+        """ComputeIndicator omits warm-up rows; the evaluator must tail-align the rest.
+
+        Regression: head-aligning a shortened SMA result shifted every series left by
+        its warm-up length, so cross/compare rules fired on the wrong bars.
+        """
+        closes = [10.0, 20.0, 30.0, 40.0, 50.0]
+        bars = [SimpleNamespace(close=c, timestamp=None) for c in closes]
+        # SMA(3)-like: first 2 rows are warm-up and omitted → 3 points for bars 2..4.
+        result_points = [SimpleNamespace(value=v) for v in [20.0, 30.0, 40.0]]
+        stub = AsyncMock()
+        stub.ComputeIndicator = AsyncMock(return_value=SimpleNamespace(result=result_points))
+
+        definition = analysis_pb2.StrategyDefinition(
+            strategy_id="s",
+            display_name="S",
+            components=[_builtin(ref_name="sma", period=3.0)],
+            entry_rule=json.dumps({"fn": ">", "lhs": "sma", "rhs": 25}),
+        )
+
+        evaluator = StrategyEvaluator(stub, propagation_meta=())
+        decisions, series = await evaluator.evaluate_with_series(definition, bars, None)
+
+        # Values land on the LAST three bars; warm-up head stays unresolved.
+        assert series["sma"] == [None, None, 20.0, 30.0, 40.0]
+        assert [d.entry for d in decisions] == [False, False, False, True, True]
+
+    def test_align_indicator_points_helper(self):
+        # Full-length result → unchanged positions; extras follow their point.
+        full = [SimpleNamespace(value=v, extra={"u": v + 1}) for v in [1.0, 2.0, 3.0]]
+        s = align_indicator_points(full, 3)
+        assert s["value"] == [1.0, 2.0, 3.0]
+        assert s["u"] == [2.0, 3.0, 4.0]
+        # Shortened result → tail-aligned with a None warm-up head.
+        short = [SimpleNamespace(value=v, extra={"u": v + 1}) for v in [2.0, 3.0]]
+        s = align_indicator_points(short, 4)
+        assert s["value"] == [None, None, 2.0, 3.0]
+        assert s["u"] == [None, None, 3.0, 4.0]
+        # Empty result → all-None primary series.
+        assert align_indicator_points([], 2) == {"value": [None, None]}
 
     @pytest.mark.asyncio
     async def test_evaluate_resolves_dotted_output_series(self):

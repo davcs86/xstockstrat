@@ -45,6 +45,12 @@ when `analysis.fundsignal.enabled` is flipped on.
 
 ## Bug 1 — evaluator misaligns built-in indicator series (code bug, reproducible from source)
 
+> **Status: FIXED in this PR.** `align_indicator_points` (`app/services/evaluator.py`) tail-aligns
+> `ComputeIndicator` results onto the input bars (`offset = n - len(result)`), and both consumers —
+> the definition-based evaluator and the legacy SMA-crossover path in `servicer.py` — now use it.
+> The screener needs no change (it only reads the latest value). Regression tests cover shortened,
+> full-length, and empty results plus extras alignment. The description below is kept for the record.
+
 `ComputeIndicator` (`services/xstockstrat-indicators/app/handlers/servicer.py`) **drops warm-up
 points** (`if r.get("value") is None: continue`) even though `indicators_engine._sma`/`_rsi`/… return
 full-length series with a `None` head. The evaluator (`_compute_component`,
@@ -92,5 +98,6 @@ data, so the actual `exit_reason`/stderr is unconfirmed. Next step: read the
    (`docs/runbooks/historical-backfill.md`).
 2. Register the `unusual_whales` signal source and enable `analysis.fundsignal.enabled` to activate
    the signal-weighted halves of `golden_cross_conviction` / `fundamentals_macd_blend`.
-3. Route both bugs through `/sdd-triage` (Track C for Bug 1; Bug 2 needs staging log access first).
-   Re-run the five backtests after Bug 1/2 fixes land.
+3. Bug 1 is fixed in this PR. Bug 2 still needs staging log access (read the
+   `indicators.formula.executed` ledger events or the indicators RUN logs) before it can be routed.
+   Re-run the five backtests after the Bug 2 fix lands and this PR deploys.

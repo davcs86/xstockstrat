@@ -160,17 +160,7 @@ class StrategyEvaluator:
                 ),
                 metadata=self._meta,
             )
-            # Build aligned series — None for warm-up bars where the result is absent.
-            # Each IndicatorPoint carries the primary `.value` plus an `.extra` map of
-            # secondary series (upper/lower/signal/…). Capture them all.
-            series: dict[str, list[float | None]] = {"value": [None] * n}
-            for i, p in enumerate(resp.result):
-                if i >= n:
-                    break
-                series["value"][i] = p.value
-                for k, v in dict(getattr(p, "extra", {}) or {}).items():
-                    series.setdefault(k, [None] * n)[i] = v
-            return series
+            return align_indicator_points(resp.result, n)
         elif comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
             input_struct = Struct()
             input_struct.update({"close": closes})
@@ -200,6 +190,31 @@ class StrategyEvaluator:
             series.setdefault("value", [None] * n)
             return series
         return {"value": [None] * n}
+
+
+def align_indicator_points(result_points, n: int) -> dict[str, list[float | None]]:
+    """Tail-align ``ComputeIndicatorResponse.result`` points to the ``n`` input bars.
+
+    The indicators servicer omits warm-up rows (the engine's contiguous NaN head)
+    from its result without preserving indices, so a shorter result describes the
+    LAST ``len(result_points)`` bars. Placing point ``i`` at bar
+    ``i + (n - len(result_points))`` restores bar alignment; the leading bars stay
+    ``None`` as warm-up. Relies on the invariant that the only absent rows are that
+    contiguous head — true for every built-in engine (rolling-window NaN heads).
+
+    Each ``IndicatorPoint`` carries the primary ``.value`` plus an ``.extra`` map of
+    secondary series (upper/lower/signal/…); all are captured and aligned.
+    """
+    series: dict[str, list[float | None]] = {"value": [None] * n}
+    offset = max(0, n - len(result_points))
+    for i, p in enumerate(result_points):
+        idx = i + offset
+        if idx >= n:
+            break
+        series["value"][idx] = p.value
+        for k, v in dict(getattr(p, "extra", {}) or {}).items():
+            series.setdefault(k, [None] * n)[idx] = v
+    return series
 
 
 def _validate_definition(definition, formula_outputs: dict | None = None) -> None:

@@ -34,7 +34,12 @@ from app.repositories.backtest_runs import BacktestRunsRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring
-from app.services.evaluator import StrategyEvaluator, _validate_definition, referenced_refs
+from app.services.evaluator import (
+    StrategyEvaluator,
+    _validate_definition,
+    align_indicator_points,
+    referenced_refs,
+)
 from app.services.screener import ScreenerEngine
 
 # Backward-compat alias: the source-weighted signal math moved to app.services.scoring
@@ -458,9 +463,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             metadata=propagation_meta,
         )
 
-        # Build aligned SMA arrays (points only available after warm-up period)
-        fast_values = {i: p.value for i, p in enumerate(fast_resp.result) if p.value != 0}
-        slow_values = {i: p.value for i, p in enumerate(slow_resp.result) if p.value != 0}
+        # Build bar-aligned SMA maps (points only available after warm-up period).
+        # ComputeIndicator omits warm-up rows without preserving indices, so tail-align
+        # the shortened result back onto the bars (same helper as the evaluator path).
+        n = len(bars)
+        fast_values = {
+            i: v
+            for i, v in enumerate(align_indicator_points(fast_resp.result, n)["value"])
+            if v is not None
+        }
+        slow_values = {
+            i: v
+            for i, v in enumerate(align_indicator_points(slow_resp.result, n)["value"])
+            if v is not None
+        }
 
         # 3. Fetch newsletter signals if signal_sources specified
         signals_map: dict[str, list] = {}
@@ -484,7 +500,6 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "QuerySignals failed for %s: %s — proceeding without signals", symbol, e
                 )
 
-        n = len(bars)
         # feature 064: warm-up = first bar where BOTH SMAs are resolved (observed Option-C).
         warmup_bars = max(min(fast_values, default=n - 1), min(slow_values, default=n - 1))
 

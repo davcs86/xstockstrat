@@ -1014,7 +1014,8 @@ def _bar(sec, close, o=None, h=None, low=None, vol=100):
 
 
 def _points(values):
-    # servicer builds fast/slow dicts from points whose .value != 0
+    # Real ComputeIndicator contract: warm-up rows are omitted from the result, so a
+    # shorter list describes the LAST len(values) bars (the servicer tail-aligns it).
     return SimpleNamespace(result=[SimpleNamespace(value=v) for v in values])
 
 
@@ -1043,8 +1044,8 @@ class TestBacktestDiagnostics:
     async def test_legacy_diagnostics_full_backtest(self):
         # 6 bars; fast=2, slow=3. Golden cross at bar 3 (entry), death cross at bar 5 (exit).
         bars = [_bar(1000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 9])]
-        fast = [0, 9, 10, 12, 13, 9]  # value 0 at idx0 = warm-up (excluded)
-        slow = [0, 0, 11, 11, 11, 11]
+        fast = [9, 10, 12, 13, 9]  # 5 points → warm-up row dropped, tail-aligned to bars 1..5
+        slow = [11, 11, 11, 11]  # 4 points → bars 2..5
         svc = self._svc_with(bars, fast, slow)
 
         result = await svc.RunBacktest(self._legacy_req(), context=MagicMock())
@@ -1081,8 +1082,8 @@ class TestBacktestDiagnostics:
     async def test_no_trade_reason_entry_never_true(self):
         # fast never crosses above slow → 0 trades, past warm-up → ENTRY_NEVER_TRUE
         bars = [_bar(2000 + i, c) for i, c in enumerate([10, 10, 10, 10, 10])]
-        fast = [0, 8, 8, 8, 8]
-        slow = [0, 0, 11, 11, 11]
+        fast = [8, 8, 8, 8]
+        slow = [11, 11, 11]
         svc = self._svc_with(bars, fast, slow)
         result = await svc.RunBacktest(self._legacy_req(), context=MagicMock())
         assert result.total_trades == 0
@@ -1094,7 +1095,7 @@ class TestBacktestDiagnostics:
     async def test_ledger_completed_event_has_no_diagnostics(self):
         # AC-5: the completion ledger payload carries only summary metrics, never diagnostics.
         bars = [_bar(3000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 9])]
-        svc = self._svc_with(bars, [0, 9, 10, 12, 13, 9], [0, 0, 11, 11, 11, 11])
+        svc = self._svc_with(bars, [9, 10, 12, 13, 9], [11, 11, 11, 11])
         await svc.RunBacktest(self._legacy_req(), context=MagicMock())
         completed = svc._ledger.AppendEvent.await_args_list[-1].args[0]
         assert completed.event_type == "analysis.backtest.completed"
@@ -1105,10 +1106,10 @@ class TestBacktestDiagnostics:
         # AC-4: a bar's warmup flag + indicators are identical whether the range ends there
         # or extends beyond it.
         full = [_bar(4000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 9])]
-        svc_full = self._svc_with(full, [0, 9, 10, 12, 13, 9], [0, 0, 11, 11, 11, 11])
+        svc_full = self._svc_with(full, [9, 10, 12, 13, 9], [11, 11, 11, 11])
         r_full = await svc_full.RunBacktest(self._legacy_req(), context=MagicMock())
         trunc = full[:5]
-        svc_tr = self._svc_with(trunc, [0, 9, 10, 12, 13], [0, 0, 11, 11, 11])
+        svc_tr = self._svc_with(trunc, [9, 10, 12, 13], [11, 11, 11])
         r_tr = await svc_tr.RunBacktest(self._legacy_req(), context=MagicMock())
         for i in range(5):
             a, b = r_full.diagnostics[0].bars[i], r_tr.diagnostics[0].bars[i]
@@ -1220,7 +1221,7 @@ class TestBacktestRangeCap:
         )
         svc._indicators = MagicMock()
         svc._indicators.ComputeIndicator = AsyncMock(
-            side_effect=lambda *a, **k: _points([0, 9, 10, 11, 12, 13])
+            side_effect=lambda *a, **k: _points([9, 10, 11, 12, 13])
         )
         return svc
 
