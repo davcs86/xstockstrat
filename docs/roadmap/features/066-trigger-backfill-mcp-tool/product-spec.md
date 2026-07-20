@@ -22,17 +22,20 @@ private-network `grpcurl` access.
 
 ## Functional Requirements
 
-FR-1. A new MCP tool on `xstockstrat-agent` triggers a backfill via ingest `TriggerBackfill`:
-      `symbols` (list, required), `timeframe` (default `1d`), optional `start`/`end` date range,
-      `overwrite` (default `false`), `fill_mode` (default gaps-only is NOT assumed — server
-      default `FILL_MODE_FULL` applies when omitted). Returns `{job_id, status}`.
+FR-1. A new `trigger_backfill` MCP tool on `xstockstrat-agent` triggers a backfill via ingest
+      `TriggerBackfill`: `symbols` (list, required), `timeframe` (default `1d`), optional
+      `start`/`end` date range, `overwrite` (default `false`), and `fill_mode`
+      (`"full"` \| `"gaps_only"`; omitted → field left `FILL_MODE_UNSPECIFIED`, which the server
+      treats as FULL). `fill_mode` is exposed so agents can avoid re-fetching existing bars
+      (cheaper Alpaca usage). Returns `{job_id, status}`.
 FR-2. The request must populate `timeframe_enum` (canonical enum) alongside the canonical `"1d"`
       string form; the deprecated `TriggerBackfillRequest.timeframe` string field must not be the
       only carrier (mirrors the 053 `"1Day"`-vs-`"1d"` mismatch fix).
-FR-3. Agents can check job progress: given a `job_id`, return the `BackfillJob` fields
-      (`status`, `bars_processed`, `bars_total`, `chunks_completed`/`chunks_total`,
-      `failed_symbols`, `error`); without a `job_id`, list recent jobs (optional
-      `status_filter`, `symbol` filter) via `ListBackfillJobs`.
+FR-3. A separate read-only `get_backfill_status` MCP tool checks job progress: given a `job_id`,
+      it returns the `BackfillJob` fields (`status`, `bars_processed`, `bars_total`,
+      `chunks_completed`/`chunks_total`, `failed_symbols`, `error`) via `GetBackfillStatus`;
+      without a `job_id`, it lists recent jobs (optional `status_filter`, `symbol` filter) via
+      `ListBackfillJobs`.
 FR-4. Authorization follows the established split: the trigger path is a **write/management** op —
       it sends `x-mcp-secret` and forwards the hardcoded admin `x-access-scope` (same pattern as
       `manage_strategy`/`manage_formula`); status/list reads send `x-mcp-secret` only (same as
@@ -95,11 +98,14 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] Tool shape: one `trigger_backfill` tool plus a separate `get_backfill_status` read tool
-      (matches the write/read scope split cleanly), or a single tool with an `operation`
-      parameter (`trigger`/`status`/`list`) like the `manage_*` family? To be settled in
-      `/sdd-design quick`.
-- [ ] Should `fill_mode` be exposed (`full`/`gaps_only`) or pinned to server default? Exposing it
-      lets agents avoid re-fetching existing bars (cheaper Alpaca usage).
-- [ ] Reviewer registry has no `xstockstrat-agent` Service Owners row — add one (registry update is
-      docs-only, out of this feature's code scope but flagged).
+- [x] **Resolved** — Tool shape: two tools — `trigger_backfill` (write; admin `x-access-scope` +
+      `x-mcp-secret`) and `get_backfill_status` (read-only; `x-mcp-secret` only). Chosen over a
+      single `operation`-parameter tool because the auth scopes differ per operation (FR-4): the
+      `manage_*` family is admin-scoped throughout, whereas status polling should not carry the
+      admin bit. FR-1/FR-3 updated to name both tools. Subject to the mandated adversarial round
+      in `/sdd-design quick`.
+- [x] **Resolved** — `fill_mode` is exposed (`"full"`/`"gaps_only"`, omitted → server default
+      FULL); lets agents avoid re-fetching existing bars. FR-1 updated to state this plainly.
+- [x] **Resolved (deferred)** — Reviewer registry's missing `xstockstrat-agent` Service Owners row
+      is a docs-only registry follow-up outside this feature's code scope; the feature.md
+      Reviewers table carries an inline focus description meanwhile.
