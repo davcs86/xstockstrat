@@ -70,3 +70,37 @@
   - [ ] historical-backfill.md:105 stale 8055 webhook — pre-existing; fix in docs step if
         trivial, else flag.
 - Status: spec-ready → design-approved.
+
+## Session 2026-07-20T18:30Z — sdd-spec
+
+- Generated implementation-spec.md with 5 steps (1 client service + test pair, 1 tools service +
+  test pair, 1 docs step across the five surfaces). Status → implementation-ready.
+- Consumed recon.md + design.md as authoritative; only sub-dossier detail re-discovered (exact
+  proto field numbers, docs-surface line anchors, test helper locations).
+- Key codebase findings (beyond recon):
+  - `common_pb2` is NOT yet imported anywhere in `app/client.py` — the new `trigger_backfill` /
+    `get_backfill_status` add the agent's first `gen.common.v1` import (function-local, safe:
+    `ingest.proto:8` already imports common/v1 so the stub module ships with the package).
+  - `tests/test_tools.py:299-302` has an existing `_rpc_error(code, details)` AioRpcError fake —
+    reuse it for the tool error-mapping tests (no new helper needed).
+  - **Pre-existing docs gap found (out of scope, flagged in Step 5 evidence)**: `set_strategy_live`
+    has no `###` section in `docs/runbooks/mcp-tools.md` despite the "eleven tools" header count —
+    feature-048 debt; this feature only appends its two sections and bumps counts to thirteen.
+  - `tests/test_tools.py:1` module docstring still says "all six MCP tool definitions" — Step 4
+    fixes it to a countless form while the file is already staged (avoids recurring count drift).
+  - Ingest `ListBackfillJobs` pagination confirmed real (servicer.py:514-540: offset-token,
+    page_size<=0 → 100) — `limit`/`page_token` params are wired through as designed.
+- Resolution of design Open Risks: Risk 1 (alias drift) → mirrored-map comment in Step 1 +
+  docstring enumeration in Step 3; Risk 2 (admin "7" on cost-incurring op) → 50-symbol client cap
+  (`_BACKFILL_MAX_SYMBOLS`) in Step 1; Risk 3 (stale 8055 webhook block) → Step 5 replaces
+  `### Via Webhook` (historical-backfill.md:103-115) with a `### Via MCP tool (AI agents)` section.
+- Reviewers snapshot finalized in feature.md (agent owner steps 1–4, ingest owner step 1, docs none).
+
+## Session 2026-07-20T18:40Z — pipeline routing note
+
+- Skipping the advisory `/sdd-review impl-spec` pass (non-gating by definition): the impl spec was
+  generated minutes ago from the twice-reviewed product spec + adversarially-debated design, and
+  `/sdd-execute` re-verifies each step's codebase evidence via mandatory discovery before writing.
+  Recorded here per P-03 (no silent deviation).
+- Branch deviation continues per the sdd-story session note: steps execute directly on
+  `claude/custom-indicators-strategies-g38b18` (PR #769 → main-dev), no per-step branches/PRs.

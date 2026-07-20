@@ -1,6 +1,6 @@
 # Feature: trigger-backfill-mcp-tool
 
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/trigger-backfill-mcp-tool`
 **Created**: 2026-07-20
 **Last Updated**: 2026-07-20
@@ -14,6 +14,7 @@
 | 2026-07-20 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-07-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning, fixed inline) |
 | 2026-07-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
+| 2026-07-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon Dossier](recon.md) — grounded codebase facts (Phase 0)
 - [Design](design.md) — debated architecture (Phase 1, approved)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec trigger-backfill-mcp-tool`_
+- [Implementation Spec](implementation-spec.md) — 5 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -36,15 +37,15 @@ the browser UI or private-network `grpcurl` access.
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_(Canonical snapshot finalized by /sdd-spec on 2026-07-20 from the distinct per-step
+**Reviewers** values in implementation-spec.md. Stable unless /sdd-spec re-runs. Steps 1–4
+carry the agent owner; Step 1 also carries the ingest owner; Step 5 is docs — none.)_
 
 | Role | Review Focus |
 |---|---|
-| `xstockstrat-agent` owner | MCP tool surface consistency (params/returns/errors per `docs/runbooks/mcp-tools.md`), `x-mcp-secret` on outbound calls, admin `x-access-scope` only on write ops. _Note: the agent has no row in the reviewer registry's Service Owners table — flagged for registry update._ |
-| `xstockstrat-ingest` owner | Correct use of `TriggerBackfill`/`GetBackfillStatus`/`ListBackfillJobs` (timeframe_enum not the deprecated string; idempotent job semantics untouched) |
+| `xstockstrat-agent` owner | MCP tool surface consistency (params/returns/errors per `docs/runbooks/mcp-tools.md`), `x-mcp-secret` on outbound calls, admin `x-access-scope` only on write ops; catalog name-set test as C-10 reachability proof. _Note: the agent has no row in the reviewer registry's Service Owners table — flagged for registry update (docs-only follow-up, see product-spec Open Questions)._ |
+| `xstockstrat-ingest` owner | Correct use of `TriggerBackfill`/`GetBackfillStatus`/`ListBackfillJobs` (timeframe_enum populated alongside the deprecated string, never string-only; idempotent job semantics untouched; no server-side changes) |
 
 ## Next Action
 
-`/sdd-spec trigger-backfill-mcp-tool` — generate implementation spec from the approved design
+`/sdd-review trigger-backfill-mcp-tool impl-spec` — validate implementation spec, then `/sdd-execute trigger-backfill-mcp-tool`
