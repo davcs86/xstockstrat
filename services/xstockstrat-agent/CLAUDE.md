@@ -106,3 +106,7 @@ AGENT_PUBLIC_URL=http://localhost:9000   # ${APP_URL}/agent in DO
 uv sync --extra dev
 uv run pytest --cov=app --cov-fail-under=40
 ```
+
+**CI (feature 065):** the agent suite now runs in CI — `python-lint` (ruff) and `python-test`
+(`pytest --cov=app`, threshold **40**) matrix entries in `.github/workflows/ci.yml`, gated by a
+`services/xstockstrat-agent/**` changes filter. It is no longer local-only.

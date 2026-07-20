@@ -124,3 +124,52 @@ async def test_get_by_id_decodes_row():
     row = await repo.get_by_id("s1")
     assert row["strategy_id"] == "s1"
     assert row["component_scores"] == {"sharpe": 0.9}
+
+
+@pytest.mark.asyncio
+async def test_upsert_binds_provenance_columns():
+    """feature 065: upsert also writes n_symbols / total_trading_days / provisional."""
+    db_pool = AsyncMock()
+    db_pool.fetchrow = AsyncMock(
+        return_value={
+            "strategy_id": "s1",
+            "overall_score": 0.7,
+            "rating": "B",
+            "component_scores": {},
+            "n_symbols": 4,
+            "total_trading_days": 900,
+            "provisional": True,
+        }
+    )
+    repo = StrategyScoresRepository(db_pool)
+    await repo.upsert(
+        "s1",
+        0.7,
+        "B",
+        {"sharpe": 0.5},
+        n_symbols=4,
+        total_trading_days=900,
+        provisional=True,
+    )
+    sql = db_pool.fetchrow.call_args.args[0]
+    assert "n_symbols" in sql
+    assert "total_trading_days" in sql
+    assert "provisional" in sql
+    args = db_pool.fetchrow.call_args.args
+    # Positional binds after the JSONB component_scores ($4): n_symbols, days, provisional.
+    assert args[5] == 4
+    assert args[6] == 900
+    assert args[7] is True
+
+
+@pytest.mark.asyncio
+async def test_delete_issues_delete_sql():
+    """feature 065: delete clears a strategy's materialized grade."""
+    db_pool = AsyncMock()
+    db_pool.execute = AsyncMock(return_value=None)
+    repo = StrategyScoresRepository(db_pool)
+    await repo.delete("s1")
+    sql, sid = db_pool.execute.call_args.args
+    assert "DELETE FROM analysis.strategy_scores" in sql
+    assert "WHERE strategy_id = $1" in sql
+    assert sid == "s1"
