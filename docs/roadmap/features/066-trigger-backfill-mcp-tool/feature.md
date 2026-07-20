@@ -1,6 +1,6 @@
 # Feature: trigger-backfill-mcp-tool
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/trigger-backfill-mcp-tool`
 **Created**: 2026-07-20
 **Last Updated**: 2026-07-20
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-20 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-07-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning, fixed inline) |
 
 ---
 
@@ -43,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review trigger-backfill-mcp-tool product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design trigger-backfill-mcp-tool quick` — grounded design (recon + single adversarial round) before /sdd-spec

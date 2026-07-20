@@ -38,15 +38,19 @@ FR-3. A separate read-only `get_backfill_status` MCP tool checks job progress: g
       `ListBackfillJobs`.
 FR-4. Authorization follows the established split: the trigger path is a **write/management** op —
       it sends `x-mcp-secret` and forwards the hardcoded admin `x-access-scope` (same pattern as
-      `manage_strategy`/`manage_formula`); status/list reads send `x-mcp-secret` only (same as
-      `screen_symbols`).
+      `manage_strategy`/`manage_signal_source`/`set_strategy_live`; note `manage_formula` sends no
+      admin scope — it relies on the indicators ownership check); status/list reads send
+      `x-mcp-secret` only (same as `screen_symbols`).
 FR-5. Tool docs registered everywhere the MCP tool surface is described: `docs/runbooks/mcp-tools.md`
       (parameter/return/error tables) and `services/xstockstrat-agent/CLAUDE.md` tool table, with
       the tool-count wording ("eleven tools") updated. (Analog of ledger C-10(a): a new tool must be
       registered on the shared discovery surfaces, not just implemented.)
-FR-6. Errors surface faithfully: ingest `INVALID_ARGUMENT` (bad timeframe/range) and `NOT_FOUND`
-      (unknown `job_id`) propagate as tool errors with the backend message, consistent with the
-      existing tools' error tables.
+FR-6. Errors surface faithfully: backend gRPC errors propagate as tool errors with the backend
+      message (`NOT_FOUND` for an unknown `job_id` is the concrete synchronous case —
+      ingest `GetBackfillStatus`). Note ingest's `TriggerBackfill` performs no synchronous
+      input validation — it queues unconditionally and bad input surfaces as a terminal
+      `FAILED`/`PARTIAL` job status, observable via `get_backfill_status`; tests must not
+      expect a synchronous `INVALID_ARGUMENT` from the trigger path.
 
 ## Out of Scope
 

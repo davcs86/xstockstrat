@@ -21,3 +21,21 @@
   `claude/custom-indicators-strategies-g38b18` (PR #769 → main-dev); the user asked to run the SDD
   pipeline and build the tool in-session, so artifacts and implementation land on that branch
   instead of `feature/trigger-backfill-mcp-tool`.
+
+## Session 2026-07-20T16:10Z — sdd-review product-spec
+
+- Round 1: FAIL on A3.9 (three unchecked Open Questions; P-03). Resolved: two-tool shape
+  (`trigger_backfill` admin-scoped write, `get_backfill_status` secret-only read — chosen because
+  auth scopes differ per operation), `fill_mode` exposed (`full`/`gaps_only`, omitted → server
+  FULL), reviewer-registry agent row deferred as docs-only follow-up.
+- Round 2: **PASS WITH WARNINGS** → status draft → spec-ready. Both advisory items fixed inline:
+  - FR-6 reworded — ingest `TriggerBackfill` queues unconditionally (no synchronous
+    `INVALID_ARGUMENT`; bad input → terminal `FAILED` job, per ingest servicer.py:142-167).
+    Tests must not expect a synchronous trigger error.
+  - FR-4 precedent corrected — admin-scope precedents are `manage_strategy`/
+    `manage_signal_source`/`set_strategy_live`; `manage_formula` sends no admin scope.
+- Overlap scan: CLEAN (no config/proto/migration collisions; no merge-order entry needed;
+  065's agent edits already on main-dev and are base-code reality).
+- Noted for design: ingest `TriggerBackfill` currently has no `_has_admin_scope` gate (only
+  `CancelBackfill`/`ManageSignalSource` enforce it) — the tool still sends the admin bit
+  defensively per FR-4.
