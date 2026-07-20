@@ -2,42 +2,18 @@
 
 import { useAccountContext } from '@/context/AccountContext';
 import { usePortfolios } from '@/hooks/usePortfolio';
-import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
-
-function brokerLabel(brokerType: BrokerType): string {
-  return brokerType === BrokerType.IBKR ? 'IBKR' : 'Alpaca';
-}
-
-function Stat({ label, value, valueClass = 'text-foreground' }: { label: string; value: string; valueClass?: string }) {
-  return (
-    <div className="flex justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`font-medium tabular-nums ${valueClass}`}>{value}</span>
-    </div>
-  );
-}
+import { Stat } from '../shared/Stat';
+import { CardNotice } from '../shared/CardNotice';
+import { brokerLabel } from '@/lib/brokers';
 
 export function PortfolioPanel() {
   const { accounts, selectedAccountId } = useAccountContext();
   const { data, isLoading, error } = usePortfolios(selectedAccountId);
 
-  if (isLoading) return (
-    <Card>
-      <CardContent className="pt-5">
-        <p className="text-sm text-muted-foreground">Loading portfolio…</p>
-      </CardContent>
-    </Card>
-  );
-
-  if (error || !data) return (
-    <Card>
-      <CardContent className="pt-5">
-        <p className="text-sm text-destructive">Portfolio unavailable</p>
-      </CardContent>
-    </Card>
-  );
+  if (isLoading) return <CardNotice>Loading portfolio…</CardNotice>;
+  if (error || !data) return <CardNotice variant="error">Portfolio unavailable</CardNotice>;
 
   const portfolios = data.portfolios ?? [];
 
@@ -61,9 +37,18 @@ export function PortfolioPanel() {
         {portfolio ? (
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Stat label="Equity" value={`$${Number(portfolio.equity).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />
-              <Stat label="Cash" value={`$${Number(portfolio.cash).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />
-              <Stat label="Buying Power" value={`$${Number(portfolio.buyingPower).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />
+              <Stat
+                label="Equity"
+                value={`$${Number(portfolio.equity).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+              />
+              <Stat
+                label="Cash"
+                value={`$${Number(portfolio.cash).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+              />
+              <Stat
+                label="Buying Power"
+                value={`$${Number(portfolio.buyingPower).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+              />
               <Stat
                 label="Day P&L"
                 value={`${pnlPositive ? '+' : ''}$${Number(portfolio.dayPnl).toFixed(2)} (${Number(portfolio.dayPnlPct * 100).toFixed(2)}%)`}
@@ -73,13 +58,18 @@ export function PortfolioPanel() {
             </div>
             {portfolio.positions?.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Positions</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  Positions
+                </p>
                 <div className="space-y-1.5">
                   {portfolio.positions.map((pos) => (
                     <div key={pos.symbol} className="flex justify-between text-xs">
                       <span className="font-mono font-semibold">{pos.symbol}</span>
-                      <span className={Number(pos.unrealizedPnl) >= 0 ? 'text-buy' : 'text-destructive'}>
-                        {Number(pos.unrealizedPnl) >= 0 ? '+' : ''}${Number(pos.unrealizedPnl).toFixed(2)}
+                      <span
+                        className={Number(pos.unrealizedPnl) >= 0 ? 'text-buy' : 'text-destructive'}
+                      >
+                        {Number(pos.unrealizedPnl) >= 0 ? '+' : ''}$
+                        {Number(pos.unrealizedPnl).toFixed(2)}
                       </span>
                     </div>
                   ))}
@@ -115,7 +105,9 @@ export function PortfolioPanel() {
           <Card key={portfolio.portfolioId ?? portfolio.accountId}>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm">{account?.displayName ?? portfolio.accountId}</CardTitle>
+                <CardTitle className="text-sm">
+                  {account?.displayName ?? portfolio.accountId}
+                </CardTitle>
                 {account && (
                   <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
                     {brokerLabel(account.brokerType)}

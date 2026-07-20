@@ -63,7 +63,16 @@ export interface AppendEventRequest {
   streamKey: string;
   payload?: { [key: string]: any } | undefined;
   metadata: { [key: string]: string };
-  occurredAt?: Date | undefined;
+  occurredAt?:
+    | Date
+    | undefined;
+  /**
+   * Optional caller-supplied dedup key. When set, the ledger appends the event at most
+   * once for this key: a retried AppendEvent (e.g. after a transient transport failure)
+   * returns the originally-stored event instead of inserting a duplicate. Empty = no
+   * dedup (every call inserts), preserving the prior behavior.
+   */
+  idempotencyKey: string;
 }
 
 export interface AppendEventRequest_MetadataEntry {
@@ -461,6 +470,7 @@ function createBaseAppendEventRequest(): AppendEventRequest {
     payload: undefined,
     metadata: {},
     occurredAt: undefined,
+    idempotencyKey: "",
   };
 }
 
@@ -486,6 +496,9 @@ export const AppendEventRequest: MessageFns<AppendEventRequest> = {
     });
     if (message.occurredAt !== undefined) {
       Timestamp.encode(toTimestamp(message.occurredAt), writer.uint32(58).fork()).join();
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(66).string(message.idempotencyKey);
     }
     return writer;
   },
@@ -556,6 +569,14 @@ export const AppendEventRequest: MessageFns<AppendEventRequest> = {
           message.occurredAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.idempotencyKey = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -602,6 +623,11 @@ export const AppendEventRequest: MessageFns<AppendEventRequest> = {
         : isSet(object.occurred_at)
         ? fromJsonTimestamp(object.occurred_at)
         : undefined,
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
     };
   },
 
@@ -634,6 +660,9 @@ export const AppendEventRequest: MessageFns<AppendEventRequest> = {
     if (message.occurredAt !== undefined) {
       obj.occurredAt = message.occurredAt.toISOString();
     }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
     return obj;
   },
 
@@ -657,6 +686,7 @@ export const AppendEventRequest: MessageFns<AppendEventRequest> = {
       {},
     );
     message.occurredAt = object.occurredAt ?? undefined;
+    message.idempotencyKey = object.idempotencyKey ?? "";
     return message;
   },
 };

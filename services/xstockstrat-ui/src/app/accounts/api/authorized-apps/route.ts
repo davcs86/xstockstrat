@@ -2,16 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ConnectError } from '@connectrpc/connect';
 import { identityClient, connectCodeToHttp } from '@/lib/connectClients';
 import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/lib/auth';
+import { HEADER_USER_ID, HEADER_ACCESS_SCOPE, HEADER_TRACE_ID } from '@/lib/headers';
 
-// Platform-internal propagation headers, built exactly like configUiBff.ts:backendHeaders
-// (x-user-id / x-access-scope / x-trace-id). The userId is always derived from the verified
-// session — never from the request body — so a caller can only ever list/revoke their own
-// authorized apps (FR-3 IDOR).
+// Platform-internal propagation headers, built like bffShared.ts:backendHeaders but for a
+// plain Next.js route (NextRequest, not a Connect HandlerContext). The userId is always
+// derived from the verified session — never from the request body — so a caller can only
+// ever list/revoke their own authorized apps (FR-3 IDOR).
 function backendHeaders(req: NextRequest, userId: string, roles: string[]): Headers {
   return new Headers({
-    'x-user-id': userId,
-    'x-access-scope': String(rolesToAccessScope(roles)),
-    'x-trace-id': req.headers.get('x-trace-id') ?? generateTraceId(),
+    [HEADER_USER_ID]: userId,
+    [HEADER_ACCESS_SCOPE]: String(rolesToAccessScope(roles)),
+    [HEADER_TRACE_ID]: req.headers.get(HEADER_TRACE_ID) ?? generateTraceId(),
   });
 }
 

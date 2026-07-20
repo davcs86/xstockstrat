@@ -85,6 +85,155 @@ export function backtestStatusToNumber(object: BacktestStatus): number {
   }
 }
 
+/** The engine's decision for a single bar. Closed set → enum (C-04). */
+export enum BarAction {
+  BAR_ACTION_UNSPECIFIED = "BAR_ACTION_UNSPECIFIED",
+  /** BAR_ACTION_WARMUP - bar within the strategy's warm-up window */
+  BAR_ACTION_WARMUP = "BAR_ACTION_WARMUP",
+  /** BAR_ACTION_HOLD_FLAT - flat, no entry this bar */
+  BAR_ACTION_HOLD_FLAT = "BAR_ACTION_HOLD_FLAT",
+  /** BAR_ACTION_ENTER_LONG - opened a long position this bar */
+  BAR_ACTION_ENTER_LONG = "BAR_ACTION_ENTER_LONG",
+  /** BAR_ACTION_EXIT_LONG - closed a long position this bar */
+  BAR_ACTION_EXIT_LONG = "BAR_ACTION_EXIT_LONG",
+  /** BAR_ACTION_HOLD_LONG - holding an existing long, no exit this bar */
+  BAR_ACTION_HOLD_LONG = "BAR_ACTION_HOLD_LONG",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function barActionFromJSON(object: any): BarAction {
+  switch (object) {
+    case 0:
+    case "BAR_ACTION_UNSPECIFIED":
+      return BarAction.BAR_ACTION_UNSPECIFIED;
+    case 1:
+    case "BAR_ACTION_WARMUP":
+      return BarAction.BAR_ACTION_WARMUP;
+    case 2:
+    case "BAR_ACTION_HOLD_FLAT":
+      return BarAction.BAR_ACTION_HOLD_FLAT;
+    case 3:
+    case "BAR_ACTION_ENTER_LONG":
+      return BarAction.BAR_ACTION_ENTER_LONG;
+    case 4:
+    case "BAR_ACTION_EXIT_LONG":
+      return BarAction.BAR_ACTION_EXIT_LONG;
+    case 5:
+    case "BAR_ACTION_HOLD_LONG":
+      return BarAction.BAR_ACTION_HOLD_LONG;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return BarAction.UNRECOGNIZED;
+  }
+}
+
+export function barActionToJSON(object: BarAction): string {
+  switch (object) {
+    case BarAction.BAR_ACTION_UNSPECIFIED:
+      return "BAR_ACTION_UNSPECIFIED";
+    case BarAction.BAR_ACTION_WARMUP:
+      return "BAR_ACTION_WARMUP";
+    case BarAction.BAR_ACTION_HOLD_FLAT:
+      return "BAR_ACTION_HOLD_FLAT";
+    case BarAction.BAR_ACTION_ENTER_LONG:
+      return "BAR_ACTION_ENTER_LONG";
+    case BarAction.BAR_ACTION_EXIT_LONG:
+      return "BAR_ACTION_EXIT_LONG";
+    case BarAction.BAR_ACTION_HOLD_LONG:
+      return "BAR_ACTION_HOLD_LONG";
+    case BarAction.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function barActionToNumber(object: BarAction): number {
+  switch (object) {
+    case BarAction.BAR_ACTION_UNSPECIFIED:
+      return 0;
+    case BarAction.BAR_ACTION_WARMUP:
+      return 1;
+    case BarAction.BAR_ACTION_HOLD_FLAT:
+      return 2;
+    case BarAction.BAR_ACTION_ENTER_LONG:
+      return 3;
+    case BarAction.BAR_ACTION_EXIT_LONG:
+      return 4;
+    case BarAction.BAR_ACTION_HOLD_LONG:
+      return 5;
+    case BarAction.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
+/** Why a symbol produced zero trades. Closed set → enum (C-04). */
+export enum NoTradeReason {
+  /** NO_TRADE_REASON_UNSPECIFIED - symbol traded, or not classified */
+  NO_TRADE_REASON_UNSPECIFIED = "NO_TRADE_REASON_UNSPECIFIED",
+  /** NO_TRADE_REASON_ENTIRE_RANGE_WARMUP - the whole range was warm-up */
+  NO_TRADE_REASON_ENTIRE_RANGE_WARMUP = "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP",
+  /** NO_TRADE_REASON_ENTRY_NEVER_TRUE - entry condition never satisfied */
+  NO_TRADE_REASON_ENTRY_NEVER_TRUE = "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
+  /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
+  NO_TRADE_REASON_INSUFFICIENT_CAPITAL = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function noTradeReasonFromJSON(object: any): NoTradeReason {
+  switch (object) {
+    case 0:
+    case "NO_TRADE_REASON_UNSPECIFIED":
+      return NoTradeReason.NO_TRADE_REASON_UNSPECIFIED;
+    case 1:
+    case "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP":
+      return NoTradeReason.NO_TRADE_REASON_ENTIRE_RANGE_WARMUP;
+    case 2:
+    case "NO_TRADE_REASON_ENTRY_NEVER_TRUE":
+      return NoTradeReason.NO_TRADE_REASON_ENTRY_NEVER_TRUE;
+    case 3:
+    case "NO_TRADE_REASON_INSUFFICIENT_CAPITAL":
+      return NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return NoTradeReason.UNRECOGNIZED;
+  }
+}
+
+export function noTradeReasonToJSON(object: NoTradeReason): string {
+  switch (object) {
+    case NoTradeReason.NO_TRADE_REASON_UNSPECIFIED:
+      return "NO_TRADE_REASON_UNSPECIFIED";
+    case NoTradeReason.NO_TRADE_REASON_ENTIRE_RANGE_WARMUP:
+      return "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP";
+    case NoTradeReason.NO_TRADE_REASON_ENTRY_NEVER_TRUE:
+      return "NO_TRADE_REASON_ENTRY_NEVER_TRUE";
+    case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
+      return "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
+    case NoTradeReason.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function noTradeReasonToNumber(object: NoTradeReason): number {
+  switch (object) {
+    case NoTradeReason.NO_TRADE_REASON_UNSPECIFIED:
+      return 0;
+    case NoTradeReason.NO_TRADE_REASON_ENTIRE_RANGE_WARMUP:
+      return 1;
+    case NoTradeReason.NO_TRADE_REASON_ENTRY_NEVER_TRUE:
+      return 2;
+    case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
+      return 3;
+    case NoTradeReason.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export enum ComponentKind {
   COMPONENT_KIND_UNSPECIFIED = "COMPONENT_KIND_UNSPECIFIED",
   COMPONENT_KIND_BUILTIN_INDICATOR = "COMPONENT_KIND_BUILTIN_INDICATOR",
@@ -199,6 +348,212 @@ export function strategyOperationToNumber(object: StrategyOperation): number {
   }
 }
 
+/** Comparator for a screen criterion's threshold test (closed set → enum). */
+export enum Comparator {
+  COMPARATOR_UNSPECIFIED = "COMPARATOR_UNSPECIFIED",
+  COMPARATOR_LT = "COMPARATOR_LT",
+  COMPARATOR_LTE = "COMPARATOR_LTE",
+  COMPARATOR_GT = "COMPARATOR_GT",
+  COMPARATOR_GTE = "COMPARATOR_GTE",
+  /** COMPARATOR_BETWEEN - threshold <= x <= threshold_high */
+  COMPARATOR_BETWEEN = "COMPARATOR_BETWEEN",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function comparatorFromJSON(object: any): Comparator {
+  switch (object) {
+    case 0:
+    case "COMPARATOR_UNSPECIFIED":
+      return Comparator.COMPARATOR_UNSPECIFIED;
+    case 1:
+    case "COMPARATOR_LT":
+      return Comparator.COMPARATOR_LT;
+    case 2:
+    case "COMPARATOR_LTE":
+      return Comparator.COMPARATOR_LTE;
+    case 3:
+    case "COMPARATOR_GT":
+      return Comparator.COMPARATOR_GT;
+    case 4:
+    case "COMPARATOR_GTE":
+      return Comparator.COMPARATOR_GTE;
+    case 5:
+    case "COMPARATOR_BETWEEN":
+      return Comparator.COMPARATOR_BETWEEN;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return Comparator.UNRECOGNIZED;
+  }
+}
+
+export function comparatorToJSON(object: Comparator): string {
+  switch (object) {
+    case Comparator.COMPARATOR_UNSPECIFIED:
+      return "COMPARATOR_UNSPECIFIED";
+    case Comparator.COMPARATOR_LT:
+      return "COMPARATOR_LT";
+    case Comparator.COMPARATOR_LTE:
+      return "COMPARATOR_LTE";
+    case Comparator.COMPARATOR_GT:
+      return "COMPARATOR_GT";
+    case Comparator.COMPARATOR_GTE:
+      return "COMPARATOR_GTE";
+    case Comparator.COMPARATOR_BETWEEN:
+      return "COMPARATOR_BETWEEN";
+    case Comparator.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function comparatorToNumber(object: Comparator): number {
+  switch (object) {
+    case Comparator.COMPARATOR_UNSPECIFIED:
+      return 0;
+    case Comparator.COMPARATOR_LT:
+      return 1;
+    case Comparator.COMPARATOR_LTE:
+      return 2;
+    case Comparator.COMPARATOR_GT:
+      return 3;
+    case Comparator.COMPARATOR_GTE:
+      return 4;
+    case Comparator.COMPARATOR_BETWEEN:
+      return 5;
+    case Comparator.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
+/** What a screen criterion evaluates. */
+export enum ScreenKind {
+  SCREEN_KIND_UNSPECIFIED = "SCREEN_KIND_UNSPECIFIED",
+  /** SCREEN_KIND_FUNDAMENTAL - a fundamental metric (metric_name) */
+  SCREEN_KIND_FUNDAMENTAL = "SCREEN_KIND_FUNDAMENTAL",
+  /** SCREEN_KIND_TECHNICAL_FORMULA - a custom formula (component) */
+  SCREEN_KIND_TECHNICAL_FORMULA = "SCREEN_KIND_TECHNICAL_FORMULA",
+  /** SCREEN_KIND_TECHNICAL_INDICATOR - a built-in indicator (component) */
+  SCREEN_KIND_TECHNICAL_INDICATOR = "SCREEN_KIND_TECHNICAL_INDICATOR",
+  /** SCREEN_KIND_SIGNAL - source-weighted signal blend */
+  SCREEN_KIND_SIGNAL = "SCREEN_KIND_SIGNAL",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function screenKindFromJSON(object: any): ScreenKind {
+  switch (object) {
+    case 0:
+    case "SCREEN_KIND_UNSPECIFIED":
+      return ScreenKind.SCREEN_KIND_UNSPECIFIED;
+    case 1:
+    case "SCREEN_KIND_FUNDAMENTAL":
+      return ScreenKind.SCREEN_KIND_FUNDAMENTAL;
+    case 2:
+    case "SCREEN_KIND_TECHNICAL_FORMULA":
+      return ScreenKind.SCREEN_KIND_TECHNICAL_FORMULA;
+    case 3:
+    case "SCREEN_KIND_TECHNICAL_INDICATOR":
+      return ScreenKind.SCREEN_KIND_TECHNICAL_INDICATOR;
+    case 4:
+    case "SCREEN_KIND_SIGNAL":
+      return ScreenKind.SCREEN_KIND_SIGNAL;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return ScreenKind.UNRECOGNIZED;
+  }
+}
+
+export function screenKindToJSON(object: ScreenKind): string {
+  switch (object) {
+    case ScreenKind.SCREEN_KIND_UNSPECIFIED:
+      return "SCREEN_KIND_UNSPECIFIED";
+    case ScreenKind.SCREEN_KIND_FUNDAMENTAL:
+      return "SCREEN_KIND_FUNDAMENTAL";
+    case ScreenKind.SCREEN_KIND_TECHNICAL_FORMULA:
+      return "SCREEN_KIND_TECHNICAL_FORMULA";
+    case ScreenKind.SCREEN_KIND_TECHNICAL_INDICATOR:
+      return "SCREEN_KIND_TECHNICAL_INDICATOR";
+    case ScreenKind.SCREEN_KIND_SIGNAL:
+      return "SCREEN_KIND_SIGNAL";
+    case ScreenKind.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function screenKindToNumber(object: ScreenKind): number {
+  switch (object) {
+    case ScreenKind.SCREEN_KIND_UNSPECIFIED:
+      return 0;
+    case ScreenKind.SCREEN_KIND_FUNDAMENTAL:
+      return 1;
+    case ScreenKind.SCREEN_KIND_TECHNICAL_FORMULA:
+      return 2;
+    case ScreenKind.SCREEN_KIND_TECHNICAL_INDICATOR:
+      return 3;
+    case ScreenKind.SCREEN_KIND_SIGNAL:
+      return 4;
+    case ScreenKind.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
+export enum ScreenResultStatus {
+  SCREEN_RESULT_STATUS_UNSPECIFIED = "SCREEN_RESULT_STATUS_UNSPECIFIED",
+  SCREEN_RESULT_STATUS_OK = "SCREEN_RESULT_STATUS_OK",
+  SCREEN_RESULT_STATUS_INSUFFICIENT_DATA = "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function screenResultStatusFromJSON(object: any): ScreenResultStatus {
+  switch (object) {
+    case 0:
+    case "SCREEN_RESULT_STATUS_UNSPECIFIED":
+      return ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED;
+    case 1:
+    case "SCREEN_RESULT_STATUS_OK":
+      return ScreenResultStatus.SCREEN_RESULT_STATUS_OK;
+    case 2:
+    case "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA":
+      return ScreenResultStatus.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return ScreenResultStatus.UNRECOGNIZED;
+  }
+}
+
+export function screenResultStatusToJSON(object: ScreenResultStatus): string {
+  switch (object) {
+    case ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED:
+      return "SCREEN_RESULT_STATUS_UNSPECIFIED";
+    case ScreenResultStatus.SCREEN_RESULT_STATUS_OK:
+      return "SCREEN_RESULT_STATUS_OK";
+    case ScreenResultStatus.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA:
+      return "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA";
+    case ScreenResultStatus.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function screenResultStatusToNumber(object: ScreenResultStatus): number {
+  switch (object) {
+    case ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED:
+      return 0;
+    case ScreenResultStatus.SCREEN_RESULT_STATUS_OK:
+      return 1;
+    case ScreenResultStatus.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA:
+      return 2;
+    case ScreenResultStatus.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export interface RunBacktestRequest {
   strategyId: string;
   range?: TimeRange | undefined;
@@ -238,6 +593,8 @@ export interface BacktestResult {
   status: BacktestStatus;
   /** populated per-symbol when status == INSUFFICIENT_DATA */
   coverageGaps: CoverageGap[];
+  /** per-bar debug data for every simulated symbol (feature 064) */
+  diagnostics: SymbolDiagnostics[];
 }
 
 export interface TradeRecord {
@@ -249,6 +606,39 @@ export interface TradeRecord {
   pnl: number;
   entryTime?: Date | undefined;
   exitTime?: Date | undefined;
+}
+
+/** One row of day-by-day backtest diagnostics for a single bar. */
+export interface BarDiagnostic {
+  symbol: string;
+  barIndex: number;
+  timestamp?: Date | undefined;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  vwap: number;
+  /** present-only: a series is absent during its warm-up */
+  indicators: { [key: string]: number };
+  warmup: boolean;
+  signalScore: number;
+  conviction: number;
+  action: BarAction;
+}
+
+export interface BarDiagnostic_IndicatorsEntry {
+  key: string;
+  value: number;
+}
+
+/** Per-symbol diagnostics bundle attached to a BacktestResult. */
+export interface SymbolDiagnostics {
+  symbol: string;
+  bars: BarDiagnostic[];
+  noTradeReason: NoTradeReason;
+  barsTotal: number;
+  warmupBars: number;
 }
 
 export interface ScoreStrategyRequest {
@@ -275,6 +665,35 @@ export interface StrategyReport {
   latestBacktest?: BacktestResult | undefined;
   score?: StrategyScore | undefined;
   metadata?: { [key: string]: any } | undefined;
+}
+
+export interface ListBacktestsRequest {
+  strategyId: string;
+  /** 0 → server default (most recent 20) */
+  limit: number;
+}
+
+export interface BacktestRunSummary {
+  backtestId: string;
+  strategyId: string;
+  status: BacktestStatus;
+  totalReturn: number;
+  annualizedReturn: number;
+  sharpeRatio: number;
+  maxDrawdown: number;
+  winRate: number;
+  totalTrades: number;
+  profitFactor: number;
+  symbols: string[];
+  /** 0 when the run earned no score (e.g. INSUFFICIENT_DATA) */
+  overallScore: number;
+  /** "" when the run earned no score */
+  rating: string;
+  completedAt?: Date | undefined;
+}
+
+export interface ListBacktestsResponse {
+  runs: BacktestRunSummary[];
 }
 
 export interface ListStrategiesRequest {
@@ -346,6 +765,77 @@ export interface SetStrategyLiveRequest {
 
 export interface SetStrategyLiveResponse {
   definition?: StrategyDefinition | undefined;
+}
+
+export interface ScreenCriterion {
+  refName: string;
+  kind: ScreenKind;
+  /** FUNDAMENTAL only (e.g. "pe_ratio") */
+  metricName: string;
+  /** reused, for TECHNICAL_* kinds */
+  component?: StrategyComponent | undefined;
+  op: Comparator;
+  threshold: number;
+  /** for COMPARATOR_BETWEEN */
+  thresholdHigh: number;
+  /** contribution to the blended score */
+  weight: number;
+  /** true → failing this excludes the symbol */
+  hardFilter: boolean;
+}
+
+export interface ScreenResult {
+  symbol: string;
+  score: number;
+  /** per ref_name; skipped criteria are absent */
+  criterionScores: { [key: string]: number };
+  passed: boolean;
+  status: ScreenResultStatus;
+  /** populated when status == INSUFFICIENT_DATA */
+  gap?: CoverageGap | undefined;
+}
+
+export interface ScreenResult_CriterionScoresEntry {
+  key: string;
+  value: number;
+}
+
+export interface ScreenSymbolsRequest {
+  symbols: string[];
+  criteria: ScreenCriterion[];
+  /** Blend params — same names the extracted scoring module reads (kept consistent with backtest). */
+  signalSources: string[];
+  signalWeight: number;
+  technicalWeight: number;
+  minConviction: number;
+  rankLimit: number;
+  /** Reserved/optional — historical as-of is deferred (OQ-060-e); latest bar is the default. */
+  evaluationWindow?: TimeRange | undefined;
+}
+
+export interface ScreenSymbolsResponse {
+  results: ScreenResult[];
+  coverageGaps: CoverageGap[];
+}
+
+export interface RunFundamentalsScanRequest {
+  /** ignore the day's idempotency guard / re-emit */
+  force: boolean;
+  /** score + report but do not emit or spend cache calls */
+  dryRun: boolean;
+  /** optional explicit override of the computed universe */
+  symbols: string[];
+}
+
+export interface FundamentalsScanSummary {
+  runId: string;
+  symbolsProcessed: number;
+  signalsEmitted: number;
+  callsSpent: number;
+  deferredCount: number;
+  /** "completed" | "budget_deferred" | "failed" */
+  status: string;
+  finishedAt?: Date | undefined;
 }
 
 function createBaseRunBacktestRequest(): RunBacktestRequest {
@@ -712,6 +1202,7 @@ function createBaseBacktestResult(): BacktestResult {
     trades: [],
     status: BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
     coverageGaps: [],
+    diagnostics: [],
   };
 }
 
@@ -755,6 +1246,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     }
     for (const v of message.coverageGaps) {
       CoverageGap.encode(v!, writer.uint32(106).fork()).join();
+    }
+    for (const v of message.diagnostics) {
+      SymbolDiagnostics.encode(v!, writer.uint32(114).fork()).join();
     }
     return writer;
   },
@@ -870,6 +1364,14 @@ export const BacktestResult: MessageFns<BacktestResult> = {
           message.coverageGaps.push(CoverageGap.decode(reader, reader.uint32()));
           continue;
         }
+        case 14: {
+          if (tag !== 114) {
+            break;
+          }
+
+          message.diagnostics.push(SymbolDiagnostics.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -940,6 +1442,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
         : globalThis.Array.isArray(object?.coverage_gaps)
         ? object.coverage_gaps.map((e: any) => CoverageGap.fromJSON(e))
         : [],
+      diagnostics: globalThis.Array.isArray(object?.diagnostics)
+        ? object.diagnostics.map((e: any) => SymbolDiagnostics.fromJSON(e))
+        : [],
     };
   },
 
@@ -984,6 +1489,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     if (message.coverageGaps?.length) {
       obj.coverageGaps = message.coverageGaps.map((e) => CoverageGap.toJSON(e));
     }
+    if (message.diagnostics?.length) {
+      obj.diagnostics = message.diagnostics.map((e) => SymbolDiagnostics.toJSON(e));
+    }
     return obj;
   },
 
@@ -1005,6 +1513,7 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     message.trades = object.trades?.map((e) => TradeRecord.fromPartial(e)) || [];
     message.status = object.status ?? BacktestStatus.BACKTEST_STATUS_UNSPECIFIED;
     message.coverageGaps = object.coverageGaps?.map((e) => CoverageGap.fromPartial(e)) || [];
+    message.diagnostics = object.diagnostics?.map((e) => SymbolDiagnostics.fromPartial(e)) || [];
     return message;
   },
 };
@@ -1202,6 +1711,542 @@ export const TradeRecord: MessageFns<TradeRecord> = {
     message.pnl = object.pnl ?? 0;
     message.entryTime = object.entryTime ?? undefined;
     message.exitTime = object.exitTime ?? undefined;
+    return message;
+  },
+};
+
+function createBaseBarDiagnostic(): BarDiagnostic {
+  return {
+    symbol: "",
+    barIndex: 0,
+    timestamp: undefined,
+    open: 0,
+    high: 0,
+    low: 0,
+    close: 0,
+    volume: 0,
+    vwap: 0,
+    indicators: {},
+    warmup: false,
+    signalScore: 0,
+    conviction: 0,
+    action: BarAction.BAR_ACTION_UNSPECIFIED,
+  };
+}
+
+export const BarDiagnostic: MessageFns<BarDiagnostic> = {
+  encode(message: BarDiagnostic, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.barIndex !== 0) {
+      writer.uint32(16).int32(message.barIndex);
+    }
+    if (message.timestamp !== undefined) {
+      Timestamp.encode(toTimestamp(message.timestamp), writer.uint32(26).fork()).join();
+    }
+    if (message.open !== 0) {
+      writer.uint32(33).double(message.open);
+    }
+    if (message.high !== 0) {
+      writer.uint32(41).double(message.high);
+    }
+    if (message.low !== 0) {
+      writer.uint32(49).double(message.low);
+    }
+    if (message.close !== 0) {
+      writer.uint32(57).double(message.close);
+    }
+    if (message.volume !== 0) {
+      writer.uint32(64).int64(message.volume);
+    }
+    if (message.vwap !== 0) {
+      writer.uint32(73).double(message.vwap);
+    }
+    globalThis.Object.entries(message.indicators).forEach(([key, value]: [string, number]) => {
+      BarDiagnostic_IndicatorsEntry.encode({ key: key as any, value }, writer.uint32(82).fork()).join();
+    });
+    if (message.warmup !== false) {
+      writer.uint32(88).bool(message.warmup);
+    }
+    if (message.signalScore !== 0) {
+      writer.uint32(97).double(message.signalScore);
+    }
+    if (message.conviction !== 0) {
+      writer.uint32(105).double(message.conviction);
+    }
+    if (message.action !== BarAction.BAR_ACTION_UNSPECIFIED) {
+      writer.uint32(112).int32(barActionToNumber(message.action));
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): BarDiagnostic {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseBarDiagnostic();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.barIndex = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.timestamp = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.open = reader.double();
+          continue;
+        }
+        case 5: {
+          if (tag !== 41) {
+            break;
+          }
+
+          message.high = reader.double();
+          continue;
+        }
+        case 6: {
+          if (tag !== 49) {
+            break;
+          }
+
+          message.low = reader.double();
+          continue;
+        }
+        case 7: {
+          if (tag !== 57) {
+            break;
+          }
+
+          message.close = reader.double();
+          continue;
+        }
+        case 8: {
+          if (tag !== 64) {
+            break;
+          }
+
+          message.volume = longToNumber(reader.int64());
+          continue;
+        }
+        case 9: {
+          if (tag !== 73) {
+            break;
+          }
+
+          message.vwap = reader.double();
+          continue;
+        }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          const entry10 = BarDiagnostic_IndicatorsEntry.decode(reader, reader.uint32());
+          if (entry10.value !== undefined) {
+            message.indicators[entry10.key] = entry10.value;
+          }
+          continue;
+        }
+        case 11: {
+          if (tag !== 88) {
+            break;
+          }
+
+          message.warmup = reader.bool();
+          continue;
+        }
+        case 12: {
+          if (tag !== 97) {
+            break;
+          }
+
+          message.signalScore = reader.double();
+          continue;
+        }
+        case 13: {
+          if (tag !== 105) {
+            break;
+          }
+
+          message.conviction = reader.double();
+          continue;
+        }
+        case 14: {
+          if (tag !== 112) {
+            break;
+          }
+
+          message.action = barActionFromJSON(reader.int32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): BarDiagnostic {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      barIndex: isSet(object.barIndex)
+        ? globalThis.Number(object.barIndex)
+        : isSet(object.bar_index)
+        ? globalThis.Number(object.bar_index)
+        : 0,
+      timestamp: isSet(object.timestamp) ? fromJsonTimestamp(object.timestamp) : undefined,
+      open: isSet(object.open) ? globalThis.Number(object.open) : 0,
+      high: isSet(object.high) ? globalThis.Number(object.high) : 0,
+      low: isSet(object.low) ? globalThis.Number(object.low) : 0,
+      close: isSet(object.close) ? globalThis.Number(object.close) : 0,
+      volume: isSet(object.volume) ? globalThis.Number(object.volume) : 0,
+      vwap: isSet(object.vwap) ? globalThis.Number(object.vwap) : 0,
+      indicators: isObject(object.indicators)
+        ? (globalThis.Object.entries(object.indicators) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : {},
+      warmup: isSet(object.warmup) ? globalThis.Boolean(object.warmup) : false,
+      signalScore: isSet(object.signalScore)
+        ? globalThis.Number(object.signalScore)
+        : isSet(object.signal_score)
+        ? globalThis.Number(object.signal_score)
+        : 0,
+      conviction: isSet(object.conviction) ? globalThis.Number(object.conviction) : 0,
+      action: isSet(object.action) ? barActionFromJSON(object.action) : BarAction.BAR_ACTION_UNSPECIFIED,
+    };
+  },
+
+  toJSON(message: BarDiagnostic): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.barIndex !== 0) {
+      obj.barIndex = Math.round(message.barIndex);
+    }
+    if (message.timestamp !== undefined) {
+      obj.timestamp = message.timestamp.toISOString();
+    }
+    if (message.open !== 0) {
+      obj.open = message.open;
+    }
+    if (message.high !== 0) {
+      obj.high = message.high;
+    }
+    if (message.low !== 0) {
+      obj.low = message.low;
+    }
+    if (message.close !== 0) {
+      obj.close = message.close;
+    }
+    if (message.volume !== 0) {
+      obj.volume = Math.round(message.volume);
+    }
+    if (message.vwap !== 0) {
+      obj.vwap = message.vwap;
+    }
+    if (message.indicators) {
+      const entries = globalThis.Object.entries(message.indicators) as [string, number][];
+      if (entries.length > 0) {
+        obj.indicators = {};
+        entries.forEach(([k, v]) => {
+          obj.indicators[k] = v;
+        });
+      }
+    }
+    if (message.warmup !== false) {
+      obj.warmup = message.warmup;
+    }
+    if (message.signalScore !== 0) {
+      obj.signalScore = message.signalScore;
+    }
+    if (message.conviction !== 0) {
+      obj.conviction = message.conviction;
+    }
+    if (message.action !== BarAction.BAR_ACTION_UNSPECIFIED) {
+      obj.action = barActionToJSON(message.action);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<BarDiagnostic>, I>>(base?: I): BarDiagnostic {
+    return BarDiagnostic.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<BarDiagnostic>, I>>(object: I): BarDiagnostic {
+    const message = createBaseBarDiagnostic();
+    message.symbol = object.symbol ?? "";
+    message.barIndex = object.barIndex ?? 0;
+    message.timestamp = object.timestamp ?? undefined;
+    message.open = object.open ?? 0;
+    message.high = object.high ?? 0;
+    message.low = object.low ?? 0;
+    message.close = object.close ?? 0;
+    message.volume = object.volume ?? 0;
+    message.vwap = object.vwap ?? 0;
+    message.indicators = (globalThis.Object.entries(object.indicators ?? {}) as [string, number][]).reduce(
+      (acc: { [key: string]: number }, [key, value]: [string, number]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.Number(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    message.warmup = object.warmup ?? false;
+    message.signalScore = object.signalScore ?? 0;
+    message.conviction = object.conviction ?? 0;
+    message.action = object.action ?? BarAction.BAR_ACTION_UNSPECIFIED;
+    return message;
+  },
+};
+
+function createBaseBarDiagnostic_IndicatorsEntry(): BarDiagnostic_IndicatorsEntry {
+  return { key: "", value: 0 };
+}
+
+export const BarDiagnostic_IndicatorsEntry: MessageFns<BarDiagnostic_IndicatorsEntry> = {
+  encode(message: BarDiagnostic_IndicatorsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== 0) {
+      writer.uint32(17).double(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): BarDiagnostic_IndicatorsEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseBarDiagnostic_IndicatorsEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.value = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): BarDiagnostic_IndicatorsEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+    };
+  },
+
+  toJSON(message: BarDiagnostic_IndicatorsEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== 0) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<BarDiagnostic_IndicatorsEntry>, I>>(base?: I): BarDiagnostic_IndicatorsEntry {
+    return BarDiagnostic_IndicatorsEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<BarDiagnostic_IndicatorsEntry>, I>>(
+    object: I,
+  ): BarDiagnostic_IndicatorsEntry {
+    const message = createBaseBarDiagnostic_IndicatorsEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? 0;
+    return message;
+  },
+};
+
+function createBaseSymbolDiagnostics(): SymbolDiagnostics {
+  return {
+    symbol: "",
+    bars: [],
+    noTradeReason: NoTradeReason.NO_TRADE_REASON_UNSPECIFIED,
+    barsTotal: 0,
+    warmupBars: 0,
+  };
+}
+
+export const SymbolDiagnostics: MessageFns<SymbolDiagnostics> = {
+  encode(message: SymbolDiagnostics, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    for (const v of message.bars) {
+      BarDiagnostic.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.noTradeReason !== NoTradeReason.NO_TRADE_REASON_UNSPECIFIED) {
+      writer.uint32(24).int32(noTradeReasonToNumber(message.noTradeReason));
+    }
+    if (message.barsTotal !== 0) {
+      writer.uint32(32).int32(message.barsTotal);
+    }
+    if (message.warmupBars !== 0) {
+      writer.uint32(40).int32(message.warmupBars);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SymbolDiagnostics {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSymbolDiagnostics();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.bars.push(BarDiagnostic.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.noTradeReason = noTradeReasonFromJSON(reader.int32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.barsTotal = reader.int32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.warmupBars = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SymbolDiagnostics {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      bars: globalThis.Array.isArray(object?.bars) ? object.bars.map((e: any) => BarDiagnostic.fromJSON(e)) : [],
+      noTradeReason: isSet(object.noTradeReason)
+        ? noTradeReasonFromJSON(object.noTradeReason)
+        : isSet(object.no_trade_reason)
+        ? noTradeReasonFromJSON(object.no_trade_reason)
+        : NoTradeReason.NO_TRADE_REASON_UNSPECIFIED,
+      barsTotal: isSet(object.barsTotal)
+        ? globalThis.Number(object.barsTotal)
+        : isSet(object.bars_total)
+        ? globalThis.Number(object.bars_total)
+        : 0,
+      warmupBars: isSet(object.warmupBars)
+        ? globalThis.Number(object.warmupBars)
+        : isSet(object.warmup_bars)
+        ? globalThis.Number(object.warmup_bars)
+        : 0,
+    };
+  },
+
+  toJSON(message: SymbolDiagnostics): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.bars?.length) {
+      obj.bars = message.bars.map((e) => BarDiagnostic.toJSON(e));
+    }
+    if (message.noTradeReason !== NoTradeReason.NO_TRADE_REASON_UNSPECIFIED) {
+      obj.noTradeReason = noTradeReasonToJSON(message.noTradeReason);
+    }
+    if (message.barsTotal !== 0) {
+      obj.barsTotal = Math.round(message.barsTotal);
+    }
+    if (message.warmupBars !== 0) {
+      obj.warmupBars = Math.round(message.warmupBars);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SymbolDiagnostics>, I>>(base?: I): SymbolDiagnostics {
+    return SymbolDiagnostics.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SymbolDiagnostics>, I>>(object: I): SymbolDiagnostics {
+    const message = createBaseSymbolDiagnostics();
+    message.symbol = object.symbol ?? "";
+    message.bars = object.bars?.map((e) => BarDiagnostic.fromPartial(e)) || [];
+    message.noTradeReason = object.noTradeReason ?? NoTradeReason.NO_TRADE_REASON_UNSPECIFIED;
+    message.barsTotal = object.barsTotal ?? 0;
+    message.warmupBars = object.warmupBars ?? 0;
     return message;
   },
 };
@@ -1633,6 +2678,475 @@ export const StrategyReport: MessageFns<StrategyReport> = {
       ? StrategyScore.fromPartial(object.score)
       : undefined;
     message.metadata = object.metadata ?? undefined;
+    return message;
+  },
+};
+
+function createBaseListBacktestsRequest(): ListBacktestsRequest {
+  return { strategyId: "", limit: 0 };
+}
+
+export const ListBacktestsRequest: MessageFns<ListBacktestsRequest> = {
+  encode(message: ListBacktestsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.strategyId !== "") {
+      writer.uint32(10).string(message.strategyId);
+    }
+    if (message.limit !== 0) {
+      writer.uint32(16).int32(message.limit);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListBacktestsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListBacktestsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.limit = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListBacktestsRequest {
+    return {
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+      limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
+    };
+  },
+
+  toJSON(message: ListBacktestsRequest): unknown {
+    const obj: any = {};
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    if (message.limit !== 0) {
+      obj.limit = Math.round(message.limit);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListBacktestsRequest>, I>>(base?: I): ListBacktestsRequest {
+    return ListBacktestsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListBacktestsRequest>, I>>(object: I): ListBacktestsRequest {
+    const message = createBaseListBacktestsRequest();
+    message.strategyId = object.strategyId ?? "";
+    message.limit = object.limit ?? 0;
+    return message;
+  },
+};
+
+function createBaseBacktestRunSummary(): BacktestRunSummary {
+  return {
+    backtestId: "",
+    strategyId: "",
+    status: BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
+    totalReturn: 0,
+    annualizedReturn: 0,
+    sharpeRatio: 0,
+    maxDrawdown: 0,
+    winRate: 0,
+    totalTrades: 0,
+    profitFactor: 0,
+    symbols: [],
+    overallScore: 0,
+    rating: "",
+    completedAt: undefined,
+  };
+}
+
+export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
+  encode(message: BacktestRunSummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.backtestId !== "") {
+      writer.uint32(10).string(message.backtestId);
+    }
+    if (message.strategyId !== "") {
+      writer.uint32(18).string(message.strategyId);
+    }
+    if (message.status !== BacktestStatus.BACKTEST_STATUS_UNSPECIFIED) {
+      writer.uint32(24).int32(backtestStatusToNumber(message.status));
+    }
+    if (message.totalReturn !== 0) {
+      writer.uint32(33).double(message.totalReturn);
+    }
+    if (message.annualizedReturn !== 0) {
+      writer.uint32(41).double(message.annualizedReturn);
+    }
+    if (message.sharpeRatio !== 0) {
+      writer.uint32(49).double(message.sharpeRatio);
+    }
+    if (message.maxDrawdown !== 0) {
+      writer.uint32(57).double(message.maxDrawdown);
+    }
+    if (message.winRate !== 0) {
+      writer.uint32(65).double(message.winRate);
+    }
+    if (message.totalTrades !== 0) {
+      writer.uint32(72).int32(message.totalTrades);
+    }
+    if (message.profitFactor !== 0) {
+      writer.uint32(81).double(message.profitFactor);
+    }
+    for (const v of message.symbols) {
+      writer.uint32(90).string(v!);
+    }
+    if (message.overallScore !== 0) {
+      writer.uint32(97).double(message.overallScore);
+    }
+    if (message.rating !== "") {
+      writer.uint32(106).string(message.rating);
+    }
+    if (message.completedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.completedAt), writer.uint32(114).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): BacktestRunSummary {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseBacktestRunSummary();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.backtestId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.status = backtestStatusFromJSON(reader.int32());
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.totalReturn = reader.double();
+          continue;
+        }
+        case 5: {
+          if (tag !== 41) {
+            break;
+          }
+
+          message.annualizedReturn = reader.double();
+          continue;
+        }
+        case 6: {
+          if (tag !== 49) {
+            break;
+          }
+
+          message.sharpeRatio = reader.double();
+          continue;
+        }
+        case 7: {
+          if (tag !== 57) {
+            break;
+          }
+
+          message.maxDrawdown = reader.double();
+          continue;
+        }
+        case 8: {
+          if (tag !== 65) {
+            break;
+          }
+
+          message.winRate = reader.double();
+          continue;
+        }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.totalTrades = reader.int32();
+          continue;
+        }
+        case 10: {
+          if (tag !== 81) {
+            break;
+          }
+
+          message.profitFactor = reader.double();
+          continue;
+        }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+        case 12: {
+          if (tag !== 97) {
+            break;
+          }
+
+          message.overallScore = reader.double();
+          continue;
+        }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          message.rating = reader.string();
+          continue;
+        }
+        case 14: {
+          if (tag !== 114) {
+            break;
+          }
+
+          message.completedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): BacktestRunSummary {
+    return {
+      backtestId: isSet(object.backtestId)
+        ? globalThis.String(object.backtestId)
+        : isSet(object.backtest_id)
+        ? globalThis.String(object.backtest_id)
+        : "",
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+      status: isSet(object.status) ? backtestStatusFromJSON(object.status) : BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
+      totalReturn: isSet(object.totalReturn)
+        ? globalThis.Number(object.totalReturn)
+        : isSet(object.total_return)
+        ? globalThis.Number(object.total_return)
+        : 0,
+      annualizedReturn: isSet(object.annualizedReturn)
+        ? globalThis.Number(object.annualizedReturn)
+        : isSet(object.annualized_return)
+        ? globalThis.Number(object.annualized_return)
+        : 0,
+      sharpeRatio: isSet(object.sharpeRatio)
+        ? globalThis.Number(object.sharpeRatio)
+        : isSet(object.sharpe_ratio)
+        ? globalThis.Number(object.sharpe_ratio)
+        : 0,
+      maxDrawdown: isSet(object.maxDrawdown)
+        ? globalThis.Number(object.maxDrawdown)
+        : isSet(object.max_drawdown)
+        ? globalThis.Number(object.max_drawdown)
+        : 0,
+      winRate: isSet(object.winRate)
+        ? globalThis.Number(object.winRate)
+        : isSet(object.win_rate)
+        ? globalThis.Number(object.win_rate)
+        : 0,
+      totalTrades: isSet(object.totalTrades)
+        ? globalThis.Number(object.totalTrades)
+        : isSet(object.total_trades)
+        ? globalThis.Number(object.total_trades)
+        : 0,
+      profitFactor: isSet(object.profitFactor)
+        ? globalThis.Number(object.profitFactor)
+        : isSet(object.profit_factor)
+        ? globalThis.Number(object.profit_factor)
+        : 0,
+      symbols: globalThis.Array.isArray(object?.symbols)
+        ? object.symbols.map((e: any) => globalThis.String(e))
+        : [],
+      overallScore: isSet(object.overallScore)
+        ? globalThis.Number(object.overallScore)
+        : isSet(object.overall_score)
+        ? globalThis.Number(object.overall_score)
+        : 0,
+      rating: isSet(object.rating) ? globalThis.String(object.rating) : "",
+      completedAt: isSet(object.completedAt)
+        ? fromJsonTimestamp(object.completedAt)
+        : isSet(object.completed_at)
+        ? fromJsonTimestamp(object.completed_at)
+        : undefined,
+    };
+  },
+
+  toJSON(message: BacktestRunSummary): unknown {
+    const obj: any = {};
+    if (message.backtestId !== "") {
+      obj.backtestId = message.backtestId;
+    }
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    if (message.status !== BacktestStatus.BACKTEST_STATUS_UNSPECIFIED) {
+      obj.status = backtestStatusToJSON(message.status);
+    }
+    if (message.totalReturn !== 0) {
+      obj.totalReturn = message.totalReturn;
+    }
+    if (message.annualizedReturn !== 0) {
+      obj.annualizedReturn = message.annualizedReturn;
+    }
+    if (message.sharpeRatio !== 0) {
+      obj.sharpeRatio = message.sharpeRatio;
+    }
+    if (message.maxDrawdown !== 0) {
+      obj.maxDrawdown = message.maxDrawdown;
+    }
+    if (message.winRate !== 0) {
+      obj.winRate = message.winRate;
+    }
+    if (message.totalTrades !== 0) {
+      obj.totalTrades = Math.round(message.totalTrades);
+    }
+    if (message.profitFactor !== 0) {
+      obj.profitFactor = message.profitFactor;
+    }
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    if (message.overallScore !== 0) {
+      obj.overallScore = message.overallScore;
+    }
+    if (message.rating !== "") {
+      obj.rating = message.rating;
+    }
+    if (message.completedAt !== undefined) {
+      obj.completedAt = message.completedAt.toISOString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<BacktestRunSummary>, I>>(base?: I): BacktestRunSummary {
+    return BacktestRunSummary.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<BacktestRunSummary>, I>>(object: I): BacktestRunSummary {
+    const message = createBaseBacktestRunSummary();
+    message.backtestId = object.backtestId ?? "";
+    message.strategyId = object.strategyId ?? "";
+    message.status = object.status ?? BacktestStatus.BACKTEST_STATUS_UNSPECIFIED;
+    message.totalReturn = object.totalReturn ?? 0;
+    message.annualizedReturn = object.annualizedReturn ?? 0;
+    message.sharpeRatio = object.sharpeRatio ?? 0;
+    message.maxDrawdown = object.maxDrawdown ?? 0;
+    message.winRate = object.winRate ?? 0;
+    message.totalTrades = object.totalTrades ?? 0;
+    message.profitFactor = object.profitFactor ?? 0;
+    message.symbols = object.symbols?.map((e) => e) || [];
+    message.overallScore = object.overallScore ?? 0;
+    message.rating = object.rating ?? "";
+    message.completedAt = object.completedAt ?? undefined;
+    return message;
+  },
+};
+
+function createBaseListBacktestsResponse(): ListBacktestsResponse {
+  return { runs: [] };
+}
+
+export const ListBacktestsResponse: MessageFns<ListBacktestsResponse> = {
+  encode(message: ListBacktestsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.runs) {
+      BacktestRunSummary.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListBacktestsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListBacktestsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.runs.push(BacktestRunSummary.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListBacktestsResponse {
+    return {
+      runs: globalThis.Array.isArray(object?.runs) ? object.runs.map((e: any) => BacktestRunSummary.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: ListBacktestsResponse): unknown {
+    const obj: any = {};
+    if (message.runs?.length) {
+      obj.runs = message.runs.map((e) => BacktestRunSummary.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListBacktestsResponse>, I>>(base?: I): ListBacktestsResponse {
+    return ListBacktestsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListBacktestsResponse>, I>>(object: I): ListBacktestsResponse {
+    const message = createBaseListBacktestsResponse();
+    message.runs = object.runs?.map((e) => BacktestRunSummary.fromPartial(e)) || [];
     return message;
   },
 };
@@ -2783,6 +4297,1059 @@ export const SetStrategyLiveResponse: MessageFns<SetStrategyLiveResponse> = {
   },
 };
 
+function createBaseScreenCriterion(): ScreenCriterion {
+  return {
+    refName: "",
+    kind: ScreenKind.SCREEN_KIND_UNSPECIFIED,
+    metricName: "",
+    component: undefined,
+    op: Comparator.COMPARATOR_UNSPECIFIED,
+    threshold: 0,
+    thresholdHigh: 0,
+    weight: 0,
+    hardFilter: false,
+  };
+}
+
+export const ScreenCriterion: MessageFns<ScreenCriterion> = {
+  encode(message: ScreenCriterion, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.refName !== "") {
+      writer.uint32(10).string(message.refName);
+    }
+    if (message.kind !== ScreenKind.SCREEN_KIND_UNSPECIFIED) {
+      writer.uint32(16).int32(screenKindToNumber(message.kind));
+    }
+    if (message.metricName !== "") {
+      writer.uint32(26).string(message.metricName);
+    }
+    if (message.component !== undefined) {
+      StrategyComponent.encode(message.component, writer.uint32(34).fork()).join();
+    }
+    if (message.op !== Comparator.COMPARATOR_UNSPECIFIED) {
+      writer.uint32(40).int32(comparatorToNumber(message.op));
+    }
+    if (message.threshold !== 0) {
+      writer.uint32(49).double(message.threshold);
+    }
+    if (message.thresholdHigh !== 0) {
+      writer.uint32(57).double(message.thresholdHigh);
+    }
+    if (message.weight !== 0) {
+      writer.uint32(65).double(message.weight);
+    }
+    if (message.hardFilter !== false) {
+      writer.uint32(72).bool(message.hardFilter);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ScreenCriterion {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseScreenCriterion();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.refName = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.kind = screenKindFromJSON(reader.int32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.metricName = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.component = StrategyComponent.decode(reader, reader.uint32());
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.op = comparatorFromJSON(reader.int32());
+          continue;
+        }
+        case 6: {
+          if (tag !== 49) {
+            break;
+          }
+
+          message.threshold = reader.double();
+          continue;
+        }
+        case 7: {
+          if (tag !== 57) {
+            break;
+          }
+
+          message.thresholdHigh = reader.double();
+          continue;
+        }
+        case 8: {
+          if (tag !== 65) {
+            break;
+          }
+
+          message.weight = reader.double();
+          continue;
+        }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.hardFilter = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ScreenCriterion {
+    return {
+      refName: isSet(object.refName)
+        ? globalThis.String(object.refName)
+        : isSet(object.ref_name)
+        ? globalThis.String(object.ref_name)
+        : "",
+      kind: isSet(object.kind) ? screenKindFromJSON(object.kind) : ScreenKind.SCREEN_KIND_UNSPECIFIED,
+      metricName: isSet(object.metricName)
+        ? globalThis.String(object.metricName)
+        : isSet(object.metric_name)
+        ? globalThis.String(object.metric_name)
+        : "",
+      component: isSet(object.component) ? StrategyComponent.fromJSON(object.component) : undefined,
+      op: isSet(object.op) ? comparatorFromJSON(object.op) : Comparator.COMPARATOR_UNSPECIFIED,
+      threshold: isSet(object.threshold) ? globalThis.Number(object.threshold) : 0,
+      thresholdHigh: isSet(object.thresholdHigh)
+        ? globalThis.Number(object.thresholdHigh)
+        : isSet(object.threshold_high)
+        ? globalThis.Number(object.threshold_high)
+        : 0,
+      weight: isSet(object.weight) ? globalThis.Number(object.weight) : 0,
+      hardFilter: isSet(object.hardFilter)
+        ? globalThis.Boolean(object.hardFilter)
+        : isSet(object.hard_filter)
+        ? globalThis.Boolean(object.hard_filter)
+        : false,
+    };
+  },
+
+  toJSON(message: ScreenCriterion): unknown {
+    const obj: any = {};
+    if (message.refName !== "") {
+      obj.refName = message.refName;
+    }
+    if (message.kind !== ScreenKind.SCREEN_KIND_UNSPECIFIED) {
+      obj.kind = screenKindToJSON(message.kind);
+    }
+    if (message.metricName !== "") {
+      obj.metricName = message.metricName;
+    }
+    if (message.component !== undefined) {
+      obj.component = StrategyComponent.toJSON(message.component);
+    }
+    if (message.op !== Comparator.COMPARATOR_UNSPECIFIED) {
+      obj.op = comparatorToJSON(message.op);
+    }
+    if (message.threshold !== 0) {
+      obj.threshold = message.threshold;
+    }
+    if (message.thresholdHigh !== 0) {
+      obj.thresholdHigh = message.thresholdHigh;
+    }
+    if (message.weight !== 0) {
+      obj.weight = message.weight;
+    }
+    if (message.hardFilter !== false) {
+      obj.hardFilter = message.hardFilter;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ScreenCriterion>, I>>(base?: I): ScreenCriterion {
+    return ScreenCriterion.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ScreenCriterion>, I>>(object: I): ScreenCriterion {
+    const message = createBaseScreenCriterion();
+    message.refName = object.refName ?? "";
+    message.kind = object.kind ?? ScreenKind.SCREEN_KIND_UNSPECIFIED;
+    message.metricName = object.metricName ?? "";
+    message.component = (object.component !== undefined && object.component !== null)
+      ? StrategyComponent.fromPartial(object.component)
+      : undefined;
+    message.op = object.op ?? Comparator.COMPARATOR_UNSPECIFIED;
+    message.threshold = object.threshold ?? 0;
+    message.thresholdHigh = object.thresholdHigh ?? 0;
+    message.weight = object.weight ?? 0;
+    message.hardFilter = object.hardFilter ?? false;
+    return message;
+  },
+};
+
+function createBaseScreenResult(): ScreenResult {
+  return {
+    symbol: "",
+    score: 0,
+    criterionScores: {},
+    passed: false,
+    status: ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED,
+    gap: undefined,
+  };
+}
+
+export const ScreenResult: MessageFns<ScreenResult> = {
+  encode(message: ScreenResult, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.score !== 0) {
+      writer.uint32(17).double(message.score);
+    }
+    globalThis.Object.entries(message.criterionScores).forEach(([key, value]: [string, number]) => {
+      ScreenResult_CriterionScoresEntry.encode({ key: key as any, value }, writer.uint32(26).fork()).join();
+    });
+    if (message.passed !== false) {
+      writer.uint32(32).bool(message.passed);
+    }
+    if (message.status !== ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED) {
+      writer.uint32(40).int32(screenResultStatusToNumber(message.status));
+    }
+    if (message.gap !== undefined) {
+      CoverageGap.encode(message.gap, writer.uint32(50).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ScreenResult {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseScreenResult();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.score = reader.double();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          const entry3 = ScreenResult_CriterionScoresEntry.decode(reader, reader.uint32());
+          if (entry3.value !== undefined) {
+            message.criterionScores[entry3.key] = entry3.value;
+          }
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.passed = reader.bool();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.status = screenResultStatusFromJSON(reader.int32());
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.gap = CoverageGap.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ScreenResult {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      score: isSet(object.score) ? globalThis.Number(object.score) : 0,
+      criterionScores: isObject(object.criterionScores)
+        ? (globalThis.Object.entries(object.criterionScores) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : isObject(object.criterion_scores)
+        ? (globalThis.Object.entries(object.criterion_scores) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : {},
+      passed: isSet(object.passed) ? globalThis.Boolean(object.passed) : false,
+      status: isSet(object.status)
+        ? screenResultStatusFromJSON(object.status)
+        : ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED,
+      gap: isSet(object.gap) ? CoverageGap.fromJSON(object.gap) : undefined,
+    };
+  },
+
+  toJSON(message: ScreenResult): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.score !== 0) {
+      obj.score = message.score;
+    }
+    if (message.criterionScores) {
+      const entries = globalThis.Object.entries(message.criterionScores) as [string, number][];
+      if (entries.length > 0) {
+        obj.criterionScores = {};
+        entries.forEach(([k, v]) => {
+          obj.criterionScores[k] = v;
+        });
+      }
+    }
+    if (message.passed !== false) {
+      obj.passed = message.passed;
+    }
+    if (message.status !== ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED) {
+      obj.status = screenResultStatusToJSON(message.status);
+    }
+    if (message.gap !== undefined) {
+      obj.gap = CoverageGap.toJSON(message.gap);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ScreenResult>, I>>(base?: I): ScreenResult {
+    return ScreenResult.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ScreenResult>, I>>(object: I): ScreenResult {
+    const message = createBaseScreenResult();
+    message.symbol = object.symbol ?? "";
+    message.score = object.score ?? 0;
+    message.criterionScores = (globalThis.Object.entries(object.criterionScores ?? {}) as [string, number][]).reduce(
+      (acc: { [key: string]: number }, [key, value]: [string, number]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.Number(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    message.passed = object.passed ?? false;
+    message.status = object.status ?? ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED;
+    message.gap = (object.gap !== undefined && object.gap !== null) ? CoverageGap.fromPartial(object.gap) : undefined;
+    return message;
+  },
+};
+
+function createBaseScreenResult_CriterionScoresEntry(): ScreenResult_CriterionScoresEntry {
+  return { key: "", value: 0 };
+}
+
+export const ScreenResult_CriterionScoresEntry: MessageFns<ScreenResult_CriterionScoresEntry> = {
+  encode(message: ScreenResult_CriterionScoresEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== 0) {
+      writer.uint32(17).double(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ScreenResult_CriterionScoresEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseScreenResult_CriterionScoresEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.value = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ScreenResult_CriterionScoresEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+    };
+  },
+
+  toJSON(message: ScreenResult_CriterionScoresEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== 0) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ScreenResult_CriterionScoresEntry>, I>>(
+    base?: I,
+  ): ScreenResult_CriterionScoresEntry {
+    return ScreenResult_CriterionScoresEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ScreenResult_CriterionScoresEntry>, I>>(
+    object: I,
+  ): ScreenResult_CriterionScoresEntry {
+    const message = createBaseScreenResult_CriterionScoresEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? 0;
+    return message;
+  },
+};
+
+function createBaseScreenSymbolsRequest(): ScreenSymbolsRequest {
+  return {
+    symbols: [],
+    criteria: [],
+    signalSources: [],
+    signalWeight: 0,
+    technicalWeight: 0,
+    minConviction: 0,
+    rankLimit: 0,
+    evaluationWindow: undefined,
+  };
+}
+
+export const ScreenSymbolsRequest: MessageFns<ScreenSymbolsRequest> = {
+  encode(message: ScreenSymbolsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.symbols) {
+      writer.uint32(10).string(v!);
+    }
+    for (const v of message.criteria) {
+      ScreenCriterion.encode(v!, writer.uint32(18).fork()).join();
+    }
+    for (const v of message.signalSources) {
+      writer.uint32(26).string(v!);
+    }
+    if (message.signalWeight !== 0) {
+      writer.uint32(33).double(message.signalWeight);
+    }
+    if (message.technicalWeight !== 0) {
+      writer.uint32(41).double(message.technicalWeight);
+    }
+    if (message.minConviction !== 0) {
+      writer.uint32(49).double(message.minConviction);
+    }
+    if (message.rankLimit !== 0) {
+      writer.uint32(56).int32(message.rankLimit);
+    }
+    if (message.evaluationWindow !== undefined) {
+      TimeRange.encode(message.evaluationWindow, writer.uint32(66).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ScreenSymbolsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseScreenSymbolsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.criteria.push(ScreenCriterion.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.signalSources.push(reader.string());
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.signalWeight = reader.double();
+          continue;
+        }
+        case 5: {
+          if (tag !== 41) {
+            break;
+          }
+
+          message.technicalWeight = reader.double();
+          continue;
+        }
+        case 6: {
+          if (tag !== 49) {
+            break;
+          }
+
+          message.minConviction = reader.double();
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.rankLimit = reader.int32();
+          continue;
+        }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.evaluationWindow = TimeRange.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ScreenSymbolsRequest {
+    return {
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+      criteria: globalThis.Array.isArray(object?.criteria)
+        ? object.criteria.map((e: any) => ScreenCriterion.fromJSON(e))
+        : [],
+      signalSources: globalThis.Array.isArray(object?.signalSources)
+        ? object.signalSources.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.signal_sources)
+        ? object.signal_sources.map((e: any) => globalThis.String(e))
+        : [],
+      signalWeight: isSet(object.signalWeight)
+        ? globalThis.Number(object.signalWeight)
+        : isSet(object.signal_weight)
+        ? globalThis.Number(object.signal_weight)
+        : 0,
+      technicalWeight: isSet(object.technicalWeight)
+        ? globalThis.Number(object.technicalWeight)
+        : isSet(object.technical_weight)
+        ? globalThis.Number(object.technical_weight)
+        : 0,
+      minConviction: isSet(object.minConviction)
+        ? globalThis.Number(object.minConviction)
+        : isSet(object.min_conviction)
+        ? globalThis.Number(object.min_conviction)
+        : 0,
+      rankLimit: isSet(object.rankLimit)
+        ? globalThis.Number(object.rankLimit)
+        : isSet(object.rank_limit)
+        ? globalThis.Number(object.rank_limit)
+        : 0,
+      evaluationWindow: isSet(object.evaluationWindow)
+        ? TimeRange.fromJSON(object.evaluationWindow)
+        : isSet(object.evaluation_window)
+        ? TimeRange.fromJSON(object.evaluation_window)
+        : undefined,
+    };
+  },
+
+  toJSON(message: ScreenSymbolsRequest): unknown {
+    const obj: any = {};
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    if (message.criteria?.length) {
+      obj.criteria = message.criteria.map((e) => ScreenCriterion.toJSON(e));
+    }
+    if (message.signalSources?.length) {
+      obj.signalSources = message.signalSources;
+    }
+    if (message.signalWeight !== 0) {
+      obj.signalWeight = message.signalWeight;
+    }
+    if (message.technicalWeight !== 0) {
+      obj.technicalWeight = message.technicalWeight;
+    }
+    if (message.minConviction !== 0) {
+      obj.minConviction = message.minConviction;
+    }
+    if (message.rankLimit !== 0) {
+      obj.rankLimit = Math.round(message.rankLimit);
+    }
+    if (message.evaluationWindow !== undefined) {
+      obj.evaluationWindow = TimeRange.toJSON(message.evaluationWindow);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ScreenSymbolsRequest>, I>>(base?: I): ScreenSymbolsRequest {
+    return ScreenSymbolsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ScreenSymbolsRequest>, I>>(object: I): ScreenSymbolsRequest {
+    const message = createBaseScreenSymbolsRequest();
+    message.symbols = object.symbols?.map((e) => e) || [];
+    message.criteria = object.criteria?.map((e) => ScreenCriterion.fromPartial(e)) || [];
+    message.signalSources = object.signalSources?.map((e) => e) || [];
+    message.signalWeight = object.signalWeight ?? 0;
+    message.technicalWeight = object.technicalWeight ?? 0;
+    message.minConviction = object.minConviction ?? 0;
+    message.rankLimit = object.rankLimit ?? 0;
+    message.evaluationWindow = (object.evaluationWindow !== undefined && object.evaluationWindow !== null)
+      ? TimeRange.fromPartial(object.evaluationWindow)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseScreenSymbolsResponse(): ScreenSymbolsResponse {
+  return { results: [], coverageGaps: [] };
+}
+
+export const ScreenSymbolsResponse: MessageFns<ScreenSymbolsResponse> = {
+  encode(message: ScreenSymbolsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.results) {
+      ScreenResult.encode(v!, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.coverageGaps) {
+      CoverageGap.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ScreenSymbolsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseScreenSymbolsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.results.push(ScreenResult.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.coverageGaps.push(CoverageGap.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ScreenSymbolsResponse {
+    return {
+      results: globalThis.Array.isArray(object?.results)
+        ? object.results.map((e: any) => ScreenResult.fromJSON(e))
+        : [],
+      coverageGaps: globalThis.Array.isArray(object?.coverageGaps)
+        ? object.coverageGaps.map((e: any) => CoverageGap.fromJSON(e))
+        : globalThis.Array.isArray(object?.coverage_gaps)
+        ? object.coverage_gaps.map((e: any) => CoverageGap.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ScreenSymbolsResponse): unknown {
+    const obj: any = {};
+    if (message.results?.length) {
+      obj.results = message.results.map((e) => ScreenResult.toJSON(e));
+    }
+    if (message.coverageGaps?.length) {
+      obj.coverageGaps = message.coverageGaps.map((e) => CoverageGap.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ScreenSymbolsResponse>, I>>(base?: I): ScreenSymbolsResponse {
+    return ScreenSymbolsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ScreenSymbolsResponse>, I>>(object: I): ScreenSymbolsResponse {
+    const message = createBaseScreenSymbolsResponse();
+    message.results = object.results?.map((e) => ScreenResult.fromPartial(e)) || [];
+    message.coverageGaps = object.coverageGaps?.map((e) => CoverageGap.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseRunFundamentalsScanRequest(): RunFundamentalsScanRequest {
+  return { force: false, dryRun: false, symbols: [] };
+}
+
+export const RunFundamentalsScanRequest: MessageFns<RunFundamentalsScanRequest> = {
+  encode(message: RunFundamentalsScanRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.force !== false) {
+      writer.uint32(8).bool(message.force);
+    }
+    if (message.dryRun !== false) {
+      writer.uint32(16).bool(message.dryRun);
+    }
+    for (const v of message.symbols) {
+      writer.uint32(26).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RunFundamentalsScanRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRunFundamentalsScanRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.force = reader.bool();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.dryRun = reader.bool();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RunFundamentalsScanRequest {
+    return {
+      force: isSet(object.force) ? globalThis.Boolean(object.force) : false,
+      dryRun: isSet(object.dryRun)
+        ? globalThis.Boolean(object.dryRun)
+        : isSet(object.dry_run)
+        ? globalThis.Boolean(object.dry_run)
+        : false,
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: RunFundamentalsScanRequest): unknown {
+    const obj: any = {};
+    if (message.force !== false) {
+      obj.force = message.force;
+    }
+    if (message.dryRun !== false) {
+      obj.dryRun = message.dryRun;
+    }
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RunFundamentalsScanRequest>, I>>(base?: I): RunFundamentalsScanRequest {
+    return RunFundamentalsScanRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RunFundamentalsScanRequest>, I>>(object: I): RunFundamentalsScanRequest {
+    const message = createBaseRunFundamentalsScanRequest();
+    message.force = object.force ?? false;
+    message.dryRun = object.dryRun ?? false;
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseFundamentalsScanSummary(): FundamentalsScanSummary {
+  return {
+    runId: "",
+    symbolsProcessed: 0,
+    signalsEmitted: 0,
+    callsSpent: 0,
+    deferredCount: 0,
+    status: "",
+    finishedAt: undefined,
+  };
+}
+
+export const FundamentalsScanSummary: MessageFns<FundamentalsScanSummary> = {
+  encode(message: FundamentalsScanSummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.runId !== "") {
+      writer.uint32(10).string(message.runId);
+    }
+    if (message.symbolsProcessed !== 0) {
+      writer.uint32(16).int32(message.symbolsProcessed);
+    }
+    if (message.signalsEmitted !== 0) {
+      writer.uint32(24).int32(message.signalsEmitted);
+    }
+    if (message.callsSpent !== 0) {
+      writer.uint32(32).int32(message.callsSpent);
+    }
+    if (message.deferredCount !== 0) {
+      writer.uint32(40).int32(message.deferredCount);
+    }
+    if (message.status !== "") {
+      writer.uint32(50).string(message.status);
+    }
+    if (message.finishedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.finishedAt), writer.uint32(58).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FundamentalsScanSummary {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFundamentalsScanSummary();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.runId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.symbolsProcessed = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.signalsEmitted = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.callsSpent = reader.int32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.deferredCount = reader.int32();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.status = reader.string();
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.finishedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FundamentalsScanSummary {
+    return {
+      runId: isSet(object.runId)
+        ? globalThis.String(object.runId)
+        : isSet(object.run_id)
+        ? globalThis.String(object.run_id)
+        : "",
+      symbolsProcessed: isSet(object.symbolsProcessed)
+        ? globalThis.Number(object.symbolsProcessed)
+        : isSet(object.symbols_processed)
+        ? globalThis.Number(object.symbols_processed)
+        : 0,
+      signalsEmitted: isSet(object.signalsEmitted)
+        ? globalThis.Number(object.signalsEmitted)
+        : isSet(object.signals_emitted)
+        ? globalThis.Number(object.signals_emitted)
+        : 0,
+      callsSpent: isSet(object.callsSpent)
+        ? globalThis.Number(object.callsSpent)
+        : isSet(object.calls_spent)
+        ? globalThis.Number(object.calls_spent)
+        : 0,
+      deferredCount: isSet(object.deferredCount)
+        ? globalThis.Number(object.deferredCount)
+        : isSet(object.deferred_count)
+        ? globalThis.Number(object.deferred_count)
+        : 0,
+      status: isSet(object.status) ? globalThis.String(object.status) : "",
+      finishedAt: isSet(object.finishedAt)
+        ? fromJsonTimestamp(object.finishedAt)
+        : isSet(object.finished_at)
+        ? fromJsonTimestamp(object.finished_at)
+        : undefined,
+    };
+  },
+
+  toJSON(message: FundamentalsScanSummary): unknown {
+    const obj: any = {};
+    if (message.runId !== "") {
+      obj.runId = message.runId;
+    }
+    if (message.symbolsProcessed !== 0) {
+      obj.symbolsProcessed = Math.round(message.symbolsProcessed);
+    }
+    if (message.signalsEmitted !== 0) {
+      obj.signalsEmitted = Math.round(message.signalsEmitted);
+    }
+    if (message.callsSpent !== 0) {
+      obj.callsSpent = Math.round(message.callsSpent);
+    }
+    if (message.deferredCount !== 0) {
+      obj.deferredCount = Math.round(message.deferredCount);
+    }
+    if (message.status !== "") {
+      obj.status = message.status;
+    }
+    if (message.finishedAt !== undefined) {
+      obj.finishedAt = message.finishedAt.toISOString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FundamentalsScanSummary>, I>>(base?: I): FundamentalsScanSummary {
+    return FundamentalsScanSummary.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FundamentalsScanSummary>, I>>(object: I): FundamentalsScanSummary {
+    const message = createBaseFundamentalsScanSummary();
+    message.runId = object.runId ?? "";
+    message.symbolsProcessed = object.symbolsProcessed ?? 0;
+    message.signalsEmitted = object.signalsEmitted ?? 0;
+    message.callsSpent = object.callsSpent ?? 0;
+    message.deferredCount = object.deferredCount ?? 0;
+    message.status = object.status ?? "";
+    message.finishedAt = object.finishedAt ?? undefined;
+    return message;
+  },
+};
+
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export const AnalysisServiceService = {
   runBacktest: {
@@ -2823,6 +5390,17 @@ export const AnalysisServiceService = {
     requestDeserialize: (value: Buffer): GetStrategyReportRequest => GetStrategyReportRequest.decode(value),
     responseSerialize: (value: StrategyReport): Buffer => Buffer.from(StrategyReport.encode(value).finish()),
     responseDeserialize: (value: Buffer): StrategyReport => StrategyReport.decode(value),
+  },
+  /** List past backtest runs (summary metrics + earned score) for a strategy, newest first. */
+  listBacktests: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/ListBacktests" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListBacktestsRequest): Buffer => Buffer.from(ListBacktestsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListBacktestsRequest => ListBacktestsRequest.decode(value),
+    responseSerialize: (value: ListBacktestsResponse): Buffer =>
+      Buffer.from(ListBacktestsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListBacktestsResponse => ListBacktestsResponse.decode(value),
   },
   manageStrategy: {
     path: "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy" as const,
@@ -2866,6 +5444,29 @@ export const AnalysisServiceService = {
       Buffer.from(SetStrategyLiveResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): SetStrategyLiveResponse => SetStrategyLiveResponse.decode(value),
   },
+  /** Screen a symbol universe against weighted criteria (feature 060) */
+  screenSymbols: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ScreenSymbolsRequest): Buffer => Buffer.from(ScreenSymbolsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ScreenSymbolsRequest => ScreenSymbolsRequest.decode(value),
+    responseSerialize: (value: ScreenSymbolsResponse): Buffer =>
+      Buffer.from(ScreenSymbolsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ScreenSymbolsResponse => ScreenSymbolsResponse.decode(value),
+  },
+  /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+  runFundamentalsScan: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RunFundamentalsScanRequest): Buffer =>
+      Buffer.from(RunFundamentalsScanRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RunFundamentalsScanRequest => RunFundamentalsScanRequest.decode(value),
+    responseSerialize: (value: FundamentalsScanSummary): Buffer =>
+      Buffer.from(FundamentalsScanSummary.encode(value).finish()),
+    responseDeserialize: (value: Buffer): FundamentalsScanSummary => FundamentalsScanSummary.decode(value),
+  },
 } as const;
 
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
@@ -2873,10 +5474,16 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
   scoreStrategy: handleUnaryCall<ScoreStrategyRequest, StrategyScore>;
   listStrategies: handleUnaryCall<ListStrategiesRequest, ListStrategiesResponse>;
   getStrategyReport: handleUnaryCall<GetStrategyReportRequest, StrategyReport>;
+  /** List past backtest runs (summary metrics + earned score) for a strategy, newest first. */
+  listBacktests: handleUnaryCall<ListBacktestsRequest, ListBacktestsResponse>;
   manageStrategy: handleUnaryCall<ManageStrategyRequest, StrategyDefinition>;
   getStrategy: handleUnaryCall<GetStrategyRequest, StrategyDefinition>;
   listStrategyDefinitions: handleUnaryCall<ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse>;
   setStrategyLive: handleUnaryCall<SetStrategyLiveRequest, SetStrategyLiveResponse>;
+  /** Screen a symbol universe against weighted criteria (feature 060) */
+  screenSymbols: handleUnaryCall<ScreenSymbolsRequest, ScreenSymbolsResponse>;
+  /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+  runFundamentalsScan: handleUnaryCall<RunFundamentalsScanRequest, FundamentalsScanSummary>;
 }
 
 export interface AnalysisServiceClient extends Client {
@@ -2940,6 +5547,22 @@ export interface AnalysisServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: StrategyReport) => void,
   ): ClientUnaryCall;
+  /** List past backtest runs (summary metrics + earned score) for a strategy, newest first. */
+  listBacktests(
+    request: ListBacktestsRequest,
+    callback: (error: ServiceError | null, response: ListBacktestsResponse) => void,
+  ): ClientUnaryCall;
+  listBacktests(
+    request: ListBacktestsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListBacktestsResponse) => void,
+  ): ClientUnaryCall;
+  listBacktests(
+    request: ListBacktestsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListBacktestsResponse) => void,
+  ): ClientUnaryCall;
   manageStrategy(
     request: ManageStrategyRequest,
     callback: (error: ServiceError | null, response: StrategyDefinition) => void,
@@ -2999,6 +5622,38 @@ export interface AnalysisServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void,
+  ): ClientUnaryCall;
+  /** Screen a symbol universe against weighted criteria (feature 060) */
+  screenSymbols(
+    request: ScreenSymbolsRequest,
+    callback: (error: ServiceError | null, response: ScreenSymbolsResponse) => void,
+  ): ClientUnaryCall;
+  screenSymbols(
+    request: ScreenSymbolsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ScreenSymbolsResponse) => void,
+  ): ClientUnaryCall;
+  screenSymbols(
+    request: ScreenSymbolsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ScreenSymbolsResponse) => void,
+  ): ClientUnaryCall;
+  /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+  runFundamentalsScan(
+    request: RunFundamentalsScanRequest,
+    callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void,
+  ): ClientUnaryCall;
+  runFundamentalsScan(
+    request: RunFundamentalsScanRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void,
+  ): ClientUnaryCall;
+  runFundamentalsScan(
+    request: RunFundamentalsScanRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void,
   ): ClientUnaryCall;
 }
 

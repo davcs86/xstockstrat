@@ -27,6 +27,12 @@ on:
       JWT_SECRET:
         required: true
         # Callers pass DEV_JWT_SECRET or PROD_JWT_SECRET from GitHub Secrets.
+      ALPACA_API_KEY:
+        required: true
+        # Callers pass DEV_ALPACA_API_KEY (paper) or PROD_ALPACA_API_KEY (live) from GitHub Secrets.
+      ALPACA_API_SECRET:
+        required: true
+        # Callers pass DEV_ALPACA_API_SECRET (paper) or PROD_ALPACA_API_SECRET (live) from GitHub Secrets.
 
 jobs:
   deploy:
@@ -42,6 +48,8 @@ jobs:
         env:
           BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.BROKER_ACCOUNTS_ENCRYPTION_KEY }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
         run: |
           sed \
             -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \
@@ -49,6 +57,8 @@ jobs:
             ${{ inputs.app_spec }} \
           | BROKER_ACCOUNTS_ENCRYPTION_KEY="$BROKER_ACCOUNTS_ENCRYPTION_KEY" \
             JWT_SECRET="$JWT_SECRET" \
+            ALPACA_API_KEY="$ALPACA_API_KEY" \
+            ALPACA_API_SECRET="$ALPACA_API_SECRET" \
             python3 -c "
           import os, sys
           content = sys.stdin.read()
@@ -58,6 +68,12 @@ jobs:
           jwt = os.environ['JWT_SECRET']
           content = content.replace('YOUR_DEV_JWT_SECRET', jwt)
           content = content.replace('YOUR_PROD_JWT_SECRET', jwt)
+          alpaca_key = os.environ['ALPACA_API_KEY']
+          content = content.replace('YOUR_DEV_ALPACA_API_KEY', alpaca_key)
+          content = content.replace('YOUR_PROD_ALPACA_API_KEY', alpaca_key)
+          alpaca_secret = os.environ['ALPACA_API_SECRET']
+          content = content.replace('YOUR_DEV_ALPACA_API_SECRET', alpaca_secret)
+          content = content.replace('YOUR_PROD_ALPACA_API_SECRET', alpaca_secret)
           sys.stdout.write(content)
           " > /tmp/app_spec_substituted.yaml
 

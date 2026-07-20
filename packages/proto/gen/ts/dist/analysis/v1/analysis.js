@@ -5,16 +5,31 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.StrategyOperation = exports.ComponentKind = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
+exports.barActionFromJSON = barActionFromJSON;
+exports.barActionToJSON = barActionToJSON;
+exports.barActionToNumber = barActionToNumber;
+exports.noTradeReasonFromJSON = noTradeReasonFromJSON;
+exports.noTradeReasonToJSON = noTradeReasonToJSON;
+exports.noTradeReasonToNumber = noTradeReasonToNumber;
 exports.componentKindFromJSON = componentKindFromJSON;
 exports.componentKindToJSON = componentKindToJSON;
 exports.componentKindToNumber = componentKindToNumber;
 exports.strategyOperationFromJSON = strategyOperationFromJSON;
 exports.strategyOperationToJSON = strategyOperationToJSON;
 exports.strategyOperationToNumber = strategyOperationToNumber;
+exports.comparatorFromJSON = comparatorFromJSON;
+exports.comparatorToJSON = comparatorToJSON;
+exports.comparatorToNumber = comparatorToNumber;
+exports.screenKindFromJSON = screenKindFromJSON;
+exports.screenKindToJSON = screenKindToJSON;
+exports.screenKindToNumber = screenKindToNumber;
+exports.screenResultStatusFromJSON = screenResultStatusFromJSON;
+exports.screenResultStatusToJSON = screenResultStatusToJSON;
+exports.screenResultStatusToNumber = screenResultStatusToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -68,6 +83,149 @@ function backtestStatusToNumber(object) {
         case BacktestStatus.BACKTEST_STATUS_INSUFFICIENT_DATA:
             return 2;
         case BacktestStatus.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** The engine's decision for a single bar. Closed set → enum (C-04). */
+var BarAction;
+(function (BarAction) {
+    BarAction["BAR_ACTION_UNSPECIFIED"] = "BAR_ACTION_UNSPECIFIED";
+    /** BAR_ACTION_WARMUP - bar within the strategy's warm-up window */
+    BarAction["BAR_ACTION_WARMUP"] = "BAR_ACTION_WARMUP";
+    /** BAR_ACTION_HOLD_FLAT - flat, no entry this bar */
+    BarAction["BAR_ACTION_HOLD_FLAT"] = "BAR_ACTION_HOLD_FLAT";
+    /** BAR_ACTION_ENTER_LONG - opened a long position this bar */
+    BarAction["BAR_ACTION_ENTER_LONG"] = "BAR_ACTION_ENTER_LONG";
+    /** BAR_ACTION_EXIT_LONG - closed a long position this bar */
+    BarAction["BAR_ACTION_EXIT_LONG"] = "BAR_ACTION_EXIT_LONG";
+    /** BAR_ACTION_HOLD_LONG - holding an existing long, no exit this bar */
+    BarAction["BAR_ACTION_HOLD_LONG"] = "BAR_ACTION_HOLD_LONG";
+    BarAction["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(BarAction || (exports.BarAction = BarAction = {}));
+function barActionFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "BAR_ACTION_UNSPECIFIED":
+            return BarAction.BAR_ACTION_UNSPECIFIED;
+        case 1:
+        case "BAR_ACTION_WARMUP":
+            return BarAction.BAR_ACTION_WARMUP;
+        case 2:
+        case "BAR_ACTION_HOLD_FLAT":
+            return BarAction.BAR_ACTION_HOLD_FLAT;
+        case 3:
+        case "BAR_ACTION_ENTER_LONG":
+            return BarAction.BAR_ACTION_ENTER_LONG;
+        case 4:
+        case "BAR_ACTION_EXIT_LONG":
+            return BarAction.BAR_ACTION_EXIT_LONG;
+        case 5:
+        case "BAR_ACTION_HOLD_LONG":
+            return BarAction.BAR_ACTION_HOLD_LONG;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return BarAction.UNRECOGNIZED;
+    }
+}
+function barActionToJSON(object) {
+    switch (object) {
+        case BarAction.BAR_ACTION_UNSPECIFIED:
+            return "BAR_ACTION_UNSPECIFIED";
+        case BarAction.BAR_ACTION_WARMUP:
+            return "BAR_ACTION_WARMUP";
+        case BarAction.BAR_ACTION_HOLD_FLAT:
+            return "BAR_ACTION_HOLD_FLAT";
+        case BarAction.BAR_ACTION_ENTER_LONG:
+            return "BAR_ACTION_ENTER_LONG";
+        case BarAction.BAR_ACTION_EXIT_LONG:
+            return "BAR_ACTION_EXIT_LONG";
+        case BarAction.BAR_ACTION_HOLD_LONG:
+            return "BAR_ACTION_HOLD_LONG";
+        case BarAction.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function barActionToNumber(object) {
+    switch (object) {
+        case BarAction.BAR_ACTION_UNSPECIFIED:
+            return 0;
+        case BarAction.BAR_ACTION_WARMUP:
+            return 1;
+        case BarAction.BAR_ACTION_HOLD_FLAT:
+            return 2;
+        case BarAction.BAR_ACTION_ENTER_LONG:
+            return 3;
+        case BarAction.BAR_ACTION_EXIT_LONG:
+            return 4;
+        case BarAction.BAR_ACTION_HOLD_LONG:
+            return 5;
+        case BarAction.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** Why a symbol produced zero trades. Closed set → enum (C-04). */
+var NoTradeReason;
+(function (NoTradeReason) {
+    /** NO_TRADE_REASON_UNSPECIFIED - symbol traded, or not classified */
+    NoTradeReason["NO_TRADE_REASON_UNSPECIFIED"] = "NO_TRADE_REASON_UNSPECIFIED";
+    /** NO_TRADE_REASON_ENTIRE_RANGE_WARMUP - the whole range was warm-up */
+    NoTradeReason["NO_TRADE_REASON_ENTIRE_RANGE_WARMUP"] = "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP";
+    /** NO_TRADE_REASON_ENTRY_NEVER_TRUE - entry condition never satisfied */
+    NoTradeReason["NO_TRADE_REASON_ENTRY_NEVER_TRUE"] = "NO_TRADE_REASON_ENTRY_NEVER_TRUE";
+    /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
+    NoTradeReason["NO_TRADE_REASON_INSUFFICIENT_CAPITAL"] = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
+    NoTradeReason["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(NoTradeReason || (exports.NoTradeReason = NoTradeReason = {}));
+function noTradeReasonFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "NO_TRADE_REASON_UNSPECIFIED":
+            return NoTradeReason.NO_TRADE_REASON_UNSPECIFIED;
+        case 1:
+        case "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP":
+            return NoTradeReason.NO_TRADE_REASON_ENTIRE_RANGE_WARMUP;
+        case 2:
+        case "NO_TRADE_REASON_ENTRY_NEVER_TRUE":
+            return NoTradeReason.NO_TRADE_REASON_ENTRY_NEVER_TRUE;
+        case 3:
+        case "NO_TRADE_REASON_INSUFFICIENT_CAPITAL":
+            return NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return NoTradeReason.UNRECOGNIZED;
+    }
+}
+function noTradeReasonToJSON(object) {
+    switch (object) {
+        case NoTradeReason.NO_TRADE_REASON_UNSPECIFIED:
+            return "NO_TRADE_REASON_UNSPECIFIED";
+        case NoTradeReason.NO_TRADE_REASON_ENTIRE_RANGE_WARMUP:
+            return "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP";
+        case NoTradeReason.NO_TRADE_REASON_ENTRY_NEVER_TRUE:
+            return "NO_TRADE_REASON_ENTRY_NEVER_TRUE";
+        case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
+            return "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
+        case NoTradeReason.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function noTradeReasonToNumber(object) {
+    switch (object) {
+        case NoTradeReason.NO_TRADE_REASON_UNSPECIFIED:
+            return 0;
+        case NoTradeReason.NO_TRADE_REASON_ENTIRE_RANGE_WARMUP:
+            return 1;
+        case NoTradeReason.NO_TRADE_REASON_ENTRY_NEVER_TRUE:
+            return 2;
+        case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
+            return 3;
+        case NoTradeReason.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -176,6 +334,203 @@ function strategyOperationToNumber(object) {
         case StrategyOperation.STRATEGY_OPERATION_DEACTIVATE:
             return 3;
         case StrategyOperation.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** Comparator for a screen criterion's threshold test (closed set → enum). */
+var Comparator;
+(function (Comparator) {
+    Comparator["COMPARATOR_UNSPECIFIED"] = "COMPARATOR_UNSPECIFIED";
+    Comparator["COMPARATOR_LT"] = "COMPARATOR_LT";
+    Comparator["COMPARATOR_LTE"] = "COMPARATOR_LTE";
+    Comparator["COMPARATOR_GT"] = "COMPARATOR_GT";
+    Comparator["COMPARATOR_GTE"] = "COMPARATOR_GTE";
+    /** COMPARATOR_BETWEEN - threshold <= x <= threshold_high */
+    Comparator["COMPARATOR_BETWEEN"] = "COMPARATOR_BETWEEN";
+    Comparator["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(Comparator || (exports.Comparator = Comparator = {}));
+function comparatorFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "COMPARATOR_UNSPECIFIED":
+            return Comparator.COMPARATOR_UNSPECIFIED;
+        case 1:
+        case "COMPARATOR_LT":
+            return Comparator.COMPARATOR_LT;
+        case 2:
+        case "COMPARATOR_LTE":
+            return Comparator.COMPARATOR_LTE;
+        case 3:
+        case "COMPARATOR_GT":
+            return Comparator.COMPARATOR_GT;
+        case 4:
+        case "COMPARATOR_GTE":
+            return Comparator.COMPARATOR_GTE;
+        case 5:
+        case "COMPARATOR_BETWEEN":
+            return Comparator.COMPARATOR_BETWEEN;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return Comparator.UNRECOGNIZED;
+    }
+}
+function comparatorToJSON(object) {
+    switch (object) {
+        case Comparator.COMPARATOR_UNSPECIFIED:
+            return "COMPARATOR_UNSPECIFIED";
+        case Comparator.COMPARATOR_LT:
+            return "COMPARATOR_LT";
+        case Comparator.COMPARATOR_LTE:
+            return "COMPARATOR_LTE";
+        case Comparator.COMPARATOR_GT:
+            return "COMPARATOR_GT";
+        case Comparator.COMPARATOR_GTE:
+            return "COMPARATOR_GTE";
+        case Comparator.COMPARATOR_BETWEEN:
+            return "COMPARATOR_BETWEEN";
+        case Comparator.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function comparatorToNumber(object) {
+    switch (object) {
+        case Comparator.COMPARATOR_UNSPECIFIED:
+            return 0;
+        case Comparator.COMPARATOR_LT:
+            return 1;
+        case Comparator.COMPARATOR_LTE:
+            return 2;
+        case Comparator.COMPARATOR_GT:
+            return 3;
+        case Comparator.COMPARATOR_GTE:
+            return 4;
+        case Comparator.COMPARATOR_BETWEEN:
+            return 5;
+        case Comparator.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** What a screen criterion evaluates. */
+var ScreenKind;
+(function (ScreenKind) {
+    ScreenKind["SCREEN_KIND_UNSPECIFIED"] = "SCREEN_KIND_UNSPECIFIED";
+    /** SCREEN_KIND_FUNDAMENTAL - a fundamental metric (metric_name) */
+    ScreenKind["SCREEN_KIND_FUNDAMENTAL"] = "SCREEN_KIND_FUNDAMENTAL";
+    /** SCREEN_KIND_TECHNICAL_FORMULA - a custom formula (component) */
+    ScreenKind["SCREEN_KIND_TECHNICAL_FORMULA"] = "SCREEN_KIND_TECHNICAL_FORMULA";
+    /** SCREEN_KIND_TECHNICAL_INDICATOR - a built-in indicator (component) */
+    ScreenKind["SCREEN_KIND_TECHNICAL_INDICATOR"] = "SCREEN_KIND_TECHNICAL_INDICATOR";
+    /** SCREEN_KIND_SIGNAL - source-weighted signal blend */
+    ScreenKind["SCREEN_KIND_SIGNAL"] = "SCREEN_KIND_SIGNAL";
+    ScreenKind["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(ScreenKind || (exports.ScreenKind = ScreenKind = {}));
+function screenKindFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "SCREEN_KIND_UNSPECIFIED":
+            return ScreenKind.SCREEN_KIND_UNSPECIFIED;
+        case 1:
+        case "SCREEN_KIND_FUNDAMENTAL":
+            return ScreenKind.SCREEN_KIND_FUNDAMENTAL;
+        case 2:
+        case "SCREEN_KIND_TECHNICAL_FORMULA":
+            return ScreenKind.SCREEN_KIND_TECHNICAL_FORMULA;
+        case 3:
+        case "SCREEN_KIND_TECHNICAL_INDICATOR":
+            return ScreenKind.SCREEN_KIND_TECHNICAL_INDICATOR;
+        case 4:
+        case "SCREEN_KIND_SIGNAL":
+            return ScreenKind.SCREEN_KIND_SIGNAL;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return ScreenKind.UNRECOGNIZED;
+    }
+}
+function screenKindToJSON(object) {
+    switch (object) {
+        case ScreenKind.SCREEN_KIND_UNSPECIFIED:
+            return "SCREEN_KIND_UNSPECIFIED";
+        case ScreenKind.SCREEN_KIND_FUNDAMENTAL:
+            return "SCREEN_KIND_FUNDAMENTAL";
+        case ScreenKind.SCREEN_KIND_TECHNICAL_FORMULA:
+            return "SCREEN_KIND_TECHNICAL_FORMULA";
+        case ScreenKind.SCREEN_KIND_TECHNICAL_INDICATOR:
+            return "SCREEN_KIND_TECHNICAL_INDICATOR";
+        case ScreenKind.SCREEN_KIND_SIGNAL:
+            return "SCREEN_KIND_SIGNAL";
+        case ScreenKind.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function screenKindToNumber(object) {
+    switch (object) {
+        case ScreenKind.SCREEN_KIND_UNSPECIFIED:
+            return 0;
+        case ScreenKind.SCREEN_KIND_FUNDAMENTAL:
+            return 1;
+        case ScreenKind.SCREEN_KIND_TECHNICAL_FORMULA:
+            return 2;
+        case ScreenKind.SCREEN_KIND_TECHNICAL_INDICATOR:
+            return 3;
+        case ScreenKind.SCREEN_KIND_SIGNAL:
+            return 4;
+        case ScreenKind.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+var ScreenResultStatus;
+(function (ScreenResultStatus) {
+    ScreenResultStatus["SCREEN_RESULT_STATUS_UNSPECIFIED"] = "SCREEN_RESULT_STATUS_UNSPECIFIED";
+    ScreenResultStatus["SCREEN_RESULT_STATUS_OK"] = "SCREEN_RESULT_STATUS_OK";
+    ScreenResultStatus["SCREEN_RESULT_STATUS_INSUFFICIENT_DATA"] = "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA";
+    ScreenResultStatus["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(ScreenResultStatus || (exports.ScreenResultStatus = ScreenResultStatus = {}));
+function screenResultStatusFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "SCREEN_RESULT_STATUS_UNSPECIFIED":
+            return ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED;
+        case 1:
+        case "SCREEN_RESULT_STATUS_OK":
+            return ScreenResultStatus.SCREEN_RESULT_STATUS_OK;
+        case 2:
+        case "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA":
+            return ScreenResultStatus.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return ScreenResultStatus.UNRECOGNIZED;
+    }
+}
+function screenResultStatusToJSON(object) {
+    switch (object) {
+        case ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED:
+            return "SCREEN_RESULT_STATUS_UNSPECIFIED";
+        case ScreenResultStatus.SCREEN_RESULT_STATUS_OK:
+            return "SCREEN_RESULT_STATUS_OK";
+        case ScreenResultStatus.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA:
+            return "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA";
+        case ScreenResultStatus.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function screenResultStatusToNumber(object) {
+    switch (object) {
+        case ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED:
+            return 0;
+        case ScreenResultStatus.SCREEN_RESULT_STATUS_OK:
+            return 1;
+        case ScreenResultStatus.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA:
+            return 2;
+        case ScreenResultStatus.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -519,6 +874,7 @@ function createBaseBacktestResult() {
         trades: [],
         status: BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
         coverageGaps: [],
+        diagnostics: [],
     };
 }
 exports.BacktestResult = {
@@ -561,6 +917,9 @@ exports.BacktestResult = {
         }
         for (const v of message.coverageGaps) {
             exports.CoverageGap.encode(v, writer.uint32(106).fork()).join();
+        }
+        for (const v of message.diagnostics) {
+            exports.SymbolDiagnostics.encode(v, writer.uint32(114).fork()).join();
         }
         return writer;
     },
@@ -662,6 +1021,13 @@ exports.BacktestResult = {
                     message.coverageGaps.push(exports.CoverageGap.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 14: {
+                    if (tag !== 114) {
+                        break;
+                    }
+                    message.diagnostics.push(exports.SymbolDiagnostics.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -731,6 +1097,9 @@ exports.BacktestResult = {
                 : globalThis.Array.isArray(object?.coverage_gaps)
                     ? object.coverage_gaps.map((e) => exports.CoverageGap.fromJSON(e))
                     : [],
+            diagnostics: globalThis.Array.isArray(object?.diagnostics)
+                ? object.diagnostics.map((e) => exports.SymbolDiagnostics.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -774,6 +1143,9 @@ exports.BacktestResult = {
         if (message.coverageGaps?.length) {
             obj.coverageGaps = message.coverageGaps.map((e) => exports.CoverageGap.toJSON(e));
         }
+        if (message.diagnostics?.length) {
+            obj.diagnostics = message.diagnostics.map((e) => exports.SymbolDiagnostics.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -794,6 +1166,7 @@ exports.BacktestResult = {
         message.trades = object.trades?.map((e) => exports.TradeRecord.fromPartial(e)) || [];
         message.status = object.status ?? BacktestStatus.BACKTEST_STATUS_UNSPECIFIED;
         message.coverageGaps = object.coverageGaps?.map((e) => exports.CoverageGap.fromPartial(e)) || [];
+        message.diagnostics = object.diagnostics?.map((e) => exports.SymbolDiagnostics.fromPartial(e)) || [];
         return message;
     },
 };
@@ -977,6 +1350,495 @@ exports.TradeRecord = {
         message.pnl = object.pnl ?? 0;
         message.entryTime = object.entryTime ?? undefined;
         message.exitTime = object.exitTime ?? undefined;
+        return message;
+    },
+};
+function createBaseBarDiagnostic() {
+    return {
+        symbol: "",
+        barIndex: 0,
+        timestamp: undefined,
+        open: 0,
+        high: 0,
+        low: 0,
+        close: 0,
+        volume: 0,
+        vwap: 0,
+        indicators: {},
+        warmup: false,
+        signalScore: 0,
+        conviction: 0,
+        action: BarAction.BAR_ACTION_UNSPECIFIED,
+    };
+}
+exports.BarDiagnostic = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.barIndex !== 0) {
+            writer.uint32(16).int32(message.barIndex);
+        }
+        if (message.timestamp !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.timestamp), writer.uint32(26).fork()).join();
+        }
+        if (message.open !== 0) {
+            writer.uint32(33).double(message.open);
+        }
+        if (message.high !== 0) {
+            writer.uint32(41).double(message.high);
+        }
+        if (message.low !== 0) {
+            writer.uint32(49).double(message.low);
+        }
+        if (message.close !== 0) {
+            writer.uint32(57).double(message.close);
+        }
+        if (message.volume !== 0) {
+            writer.uint32(64).int64(message.volume);
+        }
+        if (message.vwap !== 0) {
+            writer.uint32(73).double(message.vwap);
+        }
+        globalThis.Object.entries(message.indicators).forEach(([key, value]) => {
+            exports.BarDiagnostic_IndicatorsEntry.encode({ key: key, value }, writer.uint32(82).fork()).join();
+        });
+        if (message.warmup !== false) {
+            writer.uint32(88).bool(message.warmup);
+        }
+        if (message.signalScore !== 0) {
+            writer.uint32(97).double(message.signalScore);
+        }
+        if (message.conviction !== 0) {
+            writer.uint32(105).double(message.conviction);
+        }
+        if (message.action !== BarAction.BAR_ACTION_UNSPECIFIED) {
+            writer.uint32(112).int32(barActionToNumber(message.action));
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseBarDiagnostic();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.barIndex = reader.int32();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.timestamp = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 33) {
+                        break;
+                    }
+                    message.open = reader.double();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 41) {
+                        break;
+                    }
+                    message.high = reader.double();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 49) {
+                        break;
+                    }
+                    message.low = reader.double();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 57) {
+                        break;
+                    }
+                    message.close = reader.double();
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 64) {
+                        break;
+                    }
+                    message.volume = longToNumber(reader.int64());
+                    continue;
+                }
+                case 9: {
+                    if (tag !== 73) {
+                        break;
+                    }
+                    message.vwap = reader.double();
+                    continue;
+                }
+                case 10: {
+                    if (tag !== 82) {
+                        break;
+                    }
+                    const entry10 = exports.BarDiagnostic_IndicatorsEntry.decode(reader, reader.uint32());
+                    if (entry10.value !== undefined) {
+                        message.indicators[entry10.key] = entry10.value;
+                    }
+                    continue;
+                }
+                case 11: {
+                    if (tag !== 88) {
+                        break;
+                    }
+                    message.warmup = reader.bool();
+                    continue;
+                }
+                case 12: {
+                    if (tag !== 97) {
+                        break;
+                    }
+                    message.signalScore = reader.double();
+                    continue;
+                }
+                case 13: {
+                    if (tag !== 105) {
+                        break;
+                    }
+                    message.conviction = reader.double();
+                    continue;
+                }
+                case 14: {
+                    if (tag !== 112) {
+                        break;
+                    }
+                    message.action = barActionFromJSON(reader.int32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            barIndex: isSet(object.barIndex)
+                ? globalThis.Number(object.barIndex)
+                : isSet(object.bar_index)
+                    ? globalThis.Number(object.bar_index)
+                    : 0,
+            timestamp: isSet(object.timestamp) ? fromJsonTimestamp(object.timestamp) : undefined,
+            open: isSet(object.open) ? globalThis.Number(object.open) : 0,
+            high: isSet(object.high) ? globalThis.Number(object.high) : 0,
+            low: isSet(object.low) ? globalThis.Number(object.low) : 0,
+            close: isSet(object.close) ? globalThis.Number(object.close) : 0,
+            volume: isSet(object.volume) ? globalThis.Number(object.volume) : 0,
+            vwap: isSet(object.vwap) ? globalThis.Number(object.vwap) : 0,
+            indicators: isObject(object.indicators)
+                ? globalThis.Object.entries(object.indicators).reduce((acc, [key, value]) => {
+                    acc[key] = globalThis.Number(value);
+                    return acc;
+                }, {})
+                : {},
+            warmup: isSet(object.warmup) ? globalThis.Boolean(object.warmup) : false,
+            signalScore: isSet(object.signalScore)
+                ? globalThis.Number(object.signalScore)
+                : isSet(object.signal_score)
+                    ? globalThis.Number(object.signal_score)
+                    : 0,
+            conviction: isSet(object.conviction) ? globalThis.Number(object.conviction) : 0,
+            action: isSet(object.action) ? barActionFromJSON(object.action) : BarAction.BAR_ACTION_UNSPECIFIED,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.barIndex !== 0) {
+            obj.barIndex = Math.round(message.barIndex);
+        }
+        if (message.timestamp !== undefined) {
+            obj.timestamp = message.timestamp.toISOString();
+        }
+        if (message.open !== 0) {
+            obj.open = message.open;
+        }
+        if (message.high !== 0) {
+            obj.high = message.high;
+        }
+        if (message.low !== 0) {
+            obj.low = message.low;
+        }
+        if (message.close !== 0) {
+            obj.close = message.close;
+        }
+        if (message.volume !== 0) {
+            obj.volume = Math.round(message.volume);
+        }
+        if (message.vwap !== 0) {
+            obj.vwap = message.vwap;
+        }
+        if (message.indicators) {
+            const entries = globalThis.Object.entries(message.indicators);
+            if (entries.length > 0) {
+                obj.indicators = {};
+                entries.forEach(([k, v]) => {
+                    obj.indicators[k] = v;
+                });
+            }
+        }
+        if (message.warmup !== false) {
+            obj.warmup = message.warmup;
+        }
+        if (message.signalScore !== 0) {
+            obj.signalScore = message.signalScore;
+        }
+        if (message.conviction !== 0) {
+            obj.conviction = message.conviction;
+        }
+        if (message.action !== BarAction.BAR_ACTION_UNSPECIFIED) {
+            obj.action = barActionToJSON(message.action);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.BarDiagnostic.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseBarDiagnostic();
+        message.symbol = object.symbol ?? "";
+        message.barIndex = object.barIndex ?? 0;
+        message.timestamp = object.timestamp ?? undefined;
+        message.open = object.open ?? 0;
+        message.high = object.high ?? 0;
+        message.low = object.low ?? 0;
+        message.close = object.close ?? 0;
+        message.volume = object.volume ?? 0;
+        message.vwap = object.vwap ?? 0;
+        message.indicators = globalThis.Object.entries(object.indicators ?? {}).reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = globalThis.Number(value);
+            }
+            return acc;
+        }, {});
+        message.warmup = object.warmup ?? false;
+        message.signalScore = object.signalScore ?? 0;
+        message.conviction = object.conviction ?? 0;
+        message.action = object.action ?? BarAction.BAR_ACTION_UNSPECIFIED;
+        return message;
+    },
+};
+function createBaseBarDiagnostic_IndicatorsEntry() {
+    return { key: "", value: 0 };
+}
+exports.BarDiagnostic_IndicatorsEntry = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.key !== "") {
+            writer.uint32(10).string(message.key);
+        }
+        if (message.value !== 0) {
+            writer.uint32(17).double(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseBarDiagnostic_IndicatorsEntry();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.key = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.value = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            key: isSet(object.key) ? globalThis.String(object.key) : "",
+            value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.key !== "") {
+            obj.key = message.key;
+        }
+        if (message.value !== 0) {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.BarDiagnostic_IndicatorsEntry.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseBarDiagnostic_IndicatorsEntry();
+        message.key = object.key ?? "";
+        message.value = object.value ?? 0;
+        return message;
+    },
+};
+function createBaseSymbolDiagnostics() {
+    return {
+        symbol: "",
+        bars: [],
+        noTradeReason: NoTradeReason.NO_TRADE_REASON_UNSPECIFIED,
+        barsTotal: 0,
+        warmupBars: 0,
+    };
+}
+exports.SymbolDiagnostics = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        for (const v of message.bars) {
+            exports.BarDiagnostic.encode(v, writer.uint32(18).fork()).join();
+        }
+        if (message.noTradeReason !== NoTradeReason.NO_TRADE_REASON_UNSPECIFIED) {
+            writer.uint32(24).int32(noTradeReasonToNumber(message.noTradeReason));
+        }
+        if (message.barsTotal !== 0) {
+            writer.uint32(32).int32(message.barsTotal);
+        }
+        if (message.warmupBars !== 0) {
+            writer.uint32(40).int32(message.warmupBars);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSymbolDiagnostics();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.bars.push(exports.BarDiagnostic.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.noTradeReason = noTradeReasonFromJSON(reader.int32());
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.barsTotal = reader.int32();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.warmupBars = reader.int32();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            bars: globalThis.Array.isArray(object?.bars) ? object.bars.map((e) => exports.BarDiagnostic.fromJSON(e)) : [],
+            noTradeReason: isSet(object.noTradeReason)
+                ? noTradeReasonFromJSON(object.noTradeReason)
+                : isSet(object.no_trade_reason)
+                    ? noTradeReasonFromJSON(object.no_trade_reason)
+                    : NoTradeReason.NO_TRADE_REASON_UNSPECIFIED,
+            barsTotal: isSet(object.barsTotal)
+                ? globalThis.Number(object.barsTotal)
+                : isSet(object.bars_total)
+                    ? globalThis.Number(object.bars_total)
+                    : 0,
+            warmupBars: isSet(object.warmupBars)
+                ? globalThis.Number(object.warmupBars)
+                : isSet(object.warmup_bars)
+                    ? globalThis.Number(object.warmup_bars)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.bars?.length) {
+            obj.bars = message.bars.map((e) => exports.BarDiagnostic.toJSON(e));
+        }
+        if (message.noTradeReason !== NoTradeReason.NO_TRADE_REASON_UNSPECIFIED) {
+            obj.noTradeReason = noTradeReasonToJSON(message.noTradeReason);
+        }
+        if (message.barsTotal !== 0) {
+            obj.barsTotal = Math.round(message.barsTotal);
+        }
+        if (message.warmupBars !== 0) {
+            obj.warmupBars = Math.round(message.warmupBars);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SymbolDiagnostics.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSymbolDiagnostics();
+        message.symbol = object.symbol ?? "";
+        message.bars = object.bars?.map((e) => exports.BarDiagnostic.fromPartial(e)) || [];
+        message.noTradeReason = object.noTradeReason ?? NoTradeReason.NO_TRADE_REASON_UNSPECIFIED;
+        message.barsTotal = object.barsTotal ?? 0;
+        message.warmupBars = object.warmupBars ?? 0;
         return message;
     },
 };
@@ -1359,6 +2221,440 @@ exports.StrategyReport = {
             ? exports.StrategyScore.fromPartial(object.score)
             : undefined;
         message.metadata = object.metadata ?? undefined;
+        return message;
+    },
+};
+function createBaseListBacktestsRequest() {
+    return { strategyId: "", limit: 0 };
+}
+exports.ListBacktestsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.strategyId !== "") {
+            writer.uint32(10).string(message.strategyId);
+        }
+        if (message.limit !== 0) {
+            writer.uint32(16).int32(message.limit);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListBacktestsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.limit = reader.int32();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+            limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        if (message.limit !== 0) {
+            obj.limit = Math.round(message.limit);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListBacktestsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListBacktestsRequest();
+        message.strategyId = object.strategyId ?? "";
+        message.limit = object.limit ?? 0;
+        return message;
+    },
+};
+function createBaseBacktestRunSummary() {
+    return {
+        backtestId: "",
+        strategyId: "",
+        status: BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
+        totalReturn: 0,
+        annualizedReturn: 0,
+        sharpeRatio: 0,
+        maxDrawdown: 0,
+        winRate: 0,
+        totalTrades: 0,
+        profitFactor: 0,
+        symbols: [],
+        overallScore: 0,
+        rating: "",
+        completedAt: undefined,
+    };
+}
+exports.BacktestRunSummary = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.backtestId !== "") {
+            writer.uint32(10).string(message.backtestId);
+        }
+        if (message.strategyId !== "") {
+            writer.uint32(18).string(message.strategyId);
+        }
+        if (message.status !== BacktestStatus.BACKTEST_STATUS_UNSPECIFIED) {
+            writer.uint32(24).int32(backtestStatusToNumber(message.status));
+        }
+        if (message.totalReturn !== 0) {
+            writer.uint32(33).double(message.totalReturn);
+        }
+        if (message.annualizedReturn !== 0) {
+            writer.uint32(41).double(message.annualizedReturn);
+        }
+        if (message.sharpeRatio !== 0) {
+            writer.uint32(49).double(message.sharpeRatio);
+        }
+        if (message.maxDrawdown !== 0) {
+            writer.uint32(57).double(message.maxDrawdown);
+        }
+        if (message.winRate !== 0) {
+            writer.uint32(65).double(message.winRate);
+        }
+        if (message.totalTrades !== 0) {
+            writer.uint32(72).int32(message.totalTrades);
+        }
+        if (message.profitFactor !== 0) {
+            writer.uint32(81).double(message.profitFactor);
+        }
+        for (const v of message.symbols) {
+            writer.uint32(90).string(v);
+        }
+        if (message.overallScore !== 0) {
+            writer.uint32(97).double(message.overallScore);
+        }
+        if (message.rating !== "") {
+            writer.uint32(106).string(message.rating);
+        }
+        if (message.completedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.completedAt), writer.uint32(114).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseBacktestRunSummary();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.backtestId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.status = backtestStatusFromJSON(reader.int32());
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 33) {
+                        break;
+                    }
+                    message.totalReturn = reader.double();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 41) {
+                        break;
+                    }
+                    message.annualizedReturn = reader.double();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 49) {
+                        break;
+                    }
+                    message.sharpeRatio = reader.double();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 57) {
+                        break;
+                    }
+                    message.maxDrawdown = reader.double();
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 65) {
+                        break;
+                    }
+                    message.winRate = reader.double();
+                    continue;
+                }
+                case 9: {
+                    if (tag !== 72) {
+                        break;
+                    }
+                    message.totalTrades = reader.int32();
+                    continue;
+                }
+                case 10: {
+                    if (tag !== 81) {
+                        break;
+                    }
+                    message.profitFactor = reader.double();
+                    continue;
+                }
+                case 11: {
+                    if (tag !== 90) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+                case 12: {
+                    if (tag !== 97) {
+                        break;
+                    }
+                    message.overallScore = reader.double();
+                    continue;
+                }
+                case 13: {
+                    if (tag !== 106) {
+                        break;
+                    }
+                    message.rating = reader.string();
+                    continue;
+                }
+                case 14: {
+                    if (tag !== 114) {
+                        break;
+                    }
+                    message.completedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            backtestId: isSet(object.backtestId)
+                ? globalThis.String(object.backtestId)
+                : isSet(object.backtest_id)
+                    ? globalThis.String(object.backtest_id)
+                    : "",
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+            status: isSet(object.status) ? backtestStatusFromJSON(object.status) : BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
+            totalReturn: isSet(object.totalReturn)
+                ? globalThis.Number(object.totalReturn)
+                : isSet(object.total_return)
+                    ? globalThis.Number(object.total_return)
+                    : 0,
+            annualizedReturn: isSet(object.annualizedReturn)
+                ? globalThis.Number(object.annualizedReturn)
+                : isSet(object.annualized_return)
+                    ? globalThis.Number(object.annualized_return)
+                    : 0,
+            sharpeRatio: isSet(object.sharpeRatio)
+                ? globalThis.Number(object.sharpeRatio)
+                : isSet(object.sharpe_ratio)
+                    ? globalThis.Number(object.sharpe_ratio)
+                    : 0,
+            maxDrawdown: isSet(object.maxDrawdown)
+                ? globalThis.Number(object.maxDrawdown)
+                : isSet(object.max_drawdown)
+                    ? globalThis.Number(object.max_drawdown)
+                    : 0,
+            winRate: isSet(object.winRate)
+                ? globalThis.Number(object.winRate)
+                : isSet(object.win_rate)
+                    ? globalThis.Number(object.win_rate)
+                    : 0,
+            totalTrades: isSet(object.totalTrades)
+                ? globalThis.Number(object.totalTrades)
+                : isSet(object.total_trades)
+                    ? globalThis.Number(object.total_trades)
+                    : 0,
+            profitFactor: isSet(object.profitFactor)
+                ? globalThis.Number(object.profitFactor)
+                : isSet(object.profit_factor)
+                    ? globalThis.Number(object.profit_factor)
+                    : 0,
+            symbols: globalThis.Array.isArray(object?.symbols)
+                ? object.symbols.map((e) => globalThis.String(e))
+                : [],
+            overallScore: isSet(object.overallScore)
+                ? globalThis.Number(object.overallScore)
+                : isSet(object.overall_score)
+                    ? globalThis.Number(object.overall_score)
+                    : 0,
+            rating: isSet(object.rating) ? globalThis.String(object.rating) : "",
+            completedAt: isSet(object.completedAt)
+                ? fromJsonTimestamp(object.completedAt)
+                : isSet(object.completed_at)
+                    ? fromJsonTimestamp(object.completed_at)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.backtestId !== "") {
+            obj.backtestId = message.backtestId;
+        }
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        if (message.status !== BacktestStatus.BACKTEST_STATUS_UNSPECIFIED) {
+            obj.status = backtestStatusToJSON(message.status);
+        }
+        if (message.totalReturn !== 0) {
+            obj.totalReturn = message.totalReturn;
+        }
+        if (message.annualizedReturn !== 0) {
+            obj.annualizedReturn = message.annualizedReturn;
+        }
+        if (message.sharpeRatio !== 0) {
+            obj.sharpeRatio = message.sharpeRatio;
+        }
+        if (message.maxDrawdown !== 0) {
+            obj.maxDrawdown = message.maxDrawdown;
+        }
+        if (message.winRate !== 0) {
+            obj.winRate = message.winRate;
+        }
+        if (message.totalTrades !== 0) {
+            obj.totalTrades = Math.round(message.totalTrades);
+        }
+        if (message.profitFactor !== 0) {
+            obj.profitFactor = message.profitFactor;
+        }
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        if (message.overallScore !== 0) {
+            obj.overallScore = message.overallScore;
+        }
+        if (message.rating !== "") {
+            obj.rating = message.rating;
+        }
+        if (message.completedAt !== undefined) {
+            obj.completedAt = message.completedAt.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.BacktestRunSummary.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseBacktestRunSummary();
+        message.backtestId = object.backtestId ?? "";
+        message.strategyId = object.strategyId ?? "";
+        message.status = object.status ?? BacktestStatus.BACKTEST_STATUS_UNSPECIFIED;
+        message.totalReturn = object.totalReturn ?? 0;
+        message.annualizedReturn = object.annualizedReturn ?? 0;
+        message.sharpeRatio = object.sharpeRatio ?? 0;
+        message.maxDrawdown = object.maxDrawdown ?? 0;
+        message.winRate = object.winRate ?? 0;
+        message.totalTrades = object.totalTrades ?? 0;
+        message.profitFactor = object.profitFactor ?? 0;
+        message.symbols = object.symbols?.map((e) => e) || [];
+        message.overallScore = object.overallScore ?? 0;
+        message.rating = object.rating ?? "";
+        message.completedAt = object.completedAt ?? undefined;
+        return message;
+    },
+};
+function createBaseListBacktestsResponse() {
+    return { runs: [] };
+}
+exports.ListBacktestsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.runs) {
+            exports.BacktestRunSummary.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListBacktestsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.runs.push(exports.BacktestRunSummary.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            runs: globalThis.Array.isArray(object?.runs) ? object.runs.map((e) => exports.BacktestRunSummary.fromJSON(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.runs?.length) {
+            obj.runs = message.runs.map((e) => exports.BacktestRunSummary.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListBacktestsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListBacktestsResponse();
+        message.runs = object.runs?.map((e) => exports.BacktestRunSummary.fromPartial(e)) || [];
         return message;
     },
 };
@@ -2393,6 +3689,967 @@ exports.SetStrategyLiveResponse = {
         return message;
     },
 };
+function createBaseScreenCriterion() {
+    return {
+        refName: "",
+        kind: ScreenKind.SCREEN_KIND_UNSPECIFIED,
+        metricName: "",
+        component: undefined,
+        op: Comparator.COMPARATOR_UNSPECIFIED,
+        threshold: 0,
+        thresholdHigh: 0,
+        weight: 0,
+        hardFilter: false,
+    };
+}
+exports.ScreenCriterion = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.refName !== "") {
+            writer.uint32(10).string(message.refName);
+        }
+        if (message.kind !== ScreenKind.SCREEN_KIND_UNSPECIFIED) {
+            writer.uint32(16).int32(screenKindToNumber(message.kind));
+        }
+        if (message.metricName !== "") {
+            writer.uint32(26).string(message.metricName);
+        }
+        if (message.component !== undefined) {
+            exports.StrategyComponent.encode(message.component, writer.uint32(34).fork()).join();
+        }
+        if (message.op !== Comparator.COMPARATOR_UNSPECIFIED) {
+            writer.uint32(40).int32(comparatorToNumber(message.op));
+        }
+        if (message.threshold !== 0) {
+            writer.uint32(49).double(message.threshold);
+        }
+        if (message.thresholdHigh !== 0) {
+            writer.uint32(57).double(message.thresholdHigh);
+        }
+        if (message.weight !== 0) {
+            writer.uint32(65).double(message.weight);
+        }
+        if (message.hardFilter !== false) {
+            writer.uint32(72).bool(message.hardFilter);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseScreenCriterion();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.refName = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.kind = screenKindFromJSON(reader.int32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.metricName = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.component = exports.StrategyComponent.decode(reader, reader.uint32());
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.op = comparatorFromJSON(reader.int32());
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 49) {
+                        break;
+                    }
+                    message.threshold = reader.double();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 57) {
+                        break;
+                    }
+                    message.thresholdHigh = reader.double();
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 65) {
+                        break;
+                    }
+                    message.weight = reader.double();
+                    continue;
+                }
+                case 9: {
+                    if (tag !== 72) {
+                        break;
+                    }
+                    message.hardFilter = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            refName: isSet(object.refName)
+                ? globalThis.String(object.refName)
+                : isSet(object.ref_name)
+                    ? globalThis.String(object.ref_name)
+                    : "",
+            kind: isSet(object.kind) ? screenKindFromJSON(object.kind) : ScreenKind.SCREEN_KIND_UNSPECIFIED,
+            metricName: isSet(object.metricName)
+                ? globalThis.String(object.metricName)
+                : isSet(object.metric_name)
+                    ? globalThis.String(object.metric_name)
+                    : "",
+            component: isSet(object.component) ? exports.StrategyComponent.fromJSON(object.component) : undefined,
+            op: isSet(object.op) ? comparatorFromJSON(object.op) : Comparator.COMPARATOR_UNSPECIFIED,
+            threshold: isSet(object.threshold) ? globalThis.Number(object.threshold) : 0,
+            thresholdHigh: isSet(object.thresholdHigh)
+                ? globalThis.Number(object.thresholdHigh)
+                : isSet(object.threshold_high)
+                    ? globalThis.Number(object.threshold_high)
+                    : 0,
+            weight: isSet(object.weight) ? globalThis.Number(object.weight) : 0,
+            hardFilter: isSet(object.hardFilter)
+                ? globalThis.Boolean(object.hardFilter)
+                : isSet(object.hard_filter)
+                    ? globalThis.Boolean(object.hard_filter)
+                    : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.refName !== "") {
+            obj.refName = message.refName;
+        }
+        if (message.kind !== ScreenKind.SCREEN_KIND_UNSPECIFIED) {
+            obj.kind = screenKindToJSON(message.kind);
+        }
+        if (message.metricName !== "") {
+            obj.metricName = message.metricName;
+        }
+        if (message.component !== undefined) {
+            obj.component = exports.StrategyComponent.toJSON(message.component);
+        }
+        if (message.op !== Comparator.COMPARATOR_UNSPECIFIED) {
+            obj.op = comparatorToJSON(message.op);
+        }
+        if (message.threshold !== 0) {
+            obj.threshold = message.threshold;
+        }
+        if (message.thresholdHigh !== 0) {
+            obj.thresholdHigh = message.thresholdHigh;
+        }
+        if (message.weight !== 0) {
+            obj.weight = message.weight;
+        }
+        if (message.hardFilter !== false) {
+            obj.hardFilter = message.hardFilter;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ScreenCriterion.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseScreenCriterion();
+        message.refName = object.refName ?? "";
+        message.kind = object.kind ?? ScreenKind.SCREEN_KIND_UNSPECIFIED;
+        message.metricName = object.metricName ?? "";
+        message.component = (object.component !== undefined && object.component !== null)
+            ? exports.StrategyComponent.fromPartial(object.component)
+            : undefined;
+        message.op = object.op ?? Comparator.COMPARATOR_UNSPECIFIED;
+        message.threshold = object.threshold ?? 0;
+        message.thresholdHigh = object.thresholdHigh ?? 0;
+        message.weight = object.weight ?? 0;
+        message.hardFilter = object.hardFilter ?? false;
+        return message;
+    },
+};
+function createBaseScreenResult() {
+    return {
+        symbol: "",
+        score: 0,
+        criterionScores: {},
+        passed: false,
+        status: ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED,
+        gap: undefined,
+    };
+}
+exports.ScreenResult = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.score !== 0) {
+            writer.uint32(17).double(message.score);
+        }
+        globalThis.Object.entries(message.criterionScores).forEach(([key, value]) => {
+            exports.ScreenResult_CriterionScoresEntry.encode({ key: key, value }, writer.uint32(26).fork()).join();
+        });
+        if (message.passed !== false) {
+            writer.uint32(32).bool(message.passed);
+        }
+        if (message.status !== ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED) {
+            writer.uint32(40).int32(screenResultStatusToNumber(message.status));
+        }
+        if (message.gap !== undefined) {
+            exports.CoverageGap.encode(message.gap, writer.uint32(50).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseScreenResult();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.score = reader.double();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    const entry3 = exports.ScreenResult_CriterionScoresEntry.decode(reader, reader.uint32());
+                    if (entry3.value !== undefined) {
+                        message.criterionScores[entry3.key] = entry3.value;
+                    }
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.passed = reader.bool();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.status = screenResultStatusFromJSON(reader.int32());
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.gap = exports.CoverageGap.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            score: isSet(object.score) ? globalThis.Number(object.score) : 0,
+            criterionScores: isObject(object.criterionScores)
+                ? globalThis.Object.entries(object.criterionScores).reduce((acc, [key, value]) => {
+                    acc[key] = globalThis.Number(value);
+                    return acc;
+                }, {})
+                : isObject(object.criterion_scores)
+                    ? globalThis.Object.entries(object.criterion_scores).reduce((acc, [key, value]) => {
+                        acc[key] = globalThis.Number(value);
+                        return acc;
+                    }, {})
+                    : {},
+            passed: isSet(object.passed) ? globalThis.Boolean(object.passed) : false,
+            status: isSet(object.status)
+                ? screenResultStatusFromJSON(object.status)
+                : ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED,
+            gap: isSet(object.gap) ? exports.CoverageGap.fromJSON(object.gap) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.score !== 0) {
+            obj.score = message.score;
+        }
+        if (message.criterionScores) {
+            const entries = globalThis.Object.entries(message.criterionScores);
+            if (entries.length > 0) {
+                obj.criterionScores = {};
+                entries.forEach(([k, v]) => {
+                    obj.criterionScores[k] = v;
+                });
+            }
+        }
+        if (message.passed !== false) {
+            obj.passed = message.passed;
+        }
+        if (message.status !== ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED) {
+            obj.status = screenResultStatusToJSON(message.status);
+        }
+        if (message.gap !== undefined) {
+            obj.gap = exports.CoverageGap.toJSON(message.gap);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ScreenResult.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseScreenResult();
+        message.symbol = object.symbol ?? "";
+        message.score = object.score ?? 0;
+        message.criterionScores = globalThis.Object.entries(object.criterionScores ?? {}).reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = globalThis.Number(value);
+            }
+            return acc;
+        }, {});
+        message.passed = object.passed ?? false;
+        message.status = object.status ?? ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED;
+        message.gap = (object.gap !== undefined && object.gap !== null) ? exports.CoverageGap.fromPartial(object.gap) : undefined;
+        return message;
+    },
+};
+function createBaseScreenResult_CriterionScoresEntry() {
+    return { key: "", value: 0 };
+}
+exports.ScreenResult_CriterionScoresEntry = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.key !== "") {
+            writer.uint32(10).string(message.key);
+        }
+        if (message.value !== 0) {
+            writer.uint32(17).double(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseScreenResult_CriterionScoresEntry();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.key = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.value = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            key: isSet(object.key) ? globalThis.String(object.key) : "",
+            value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.key !== "") {
+            obj.key = message.key;
+        }
+        if (message.value !== 0) {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ScreenResult_CriterionScoresEntry.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseScreenResult_CriterionScoresEntry();
+        message.key = object.key ?? "";
+        message.value = object.value ?? 0;
+        return message;
+    },
+};
+function createBaseScreenSymbolsRequest() {
+    return {
+        symbols: [],
+        criteria: [],
+        signalSources: [],
+        signalWeight: 0,
+        technicalWeight: 0,
+        minConviction: 0,
+        rankLimit: 0,
+        evaluationWindow: undefined,
+    };
+}
+exports.ScreenSymbolsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.symbols) {
+            writer.uint32(10).string(v);
+        }
+        for (const v of message.criteria) {
+            exports.ScreenCriterion.encode(v, writer.uint32(18).fork()).join();
+        }
+        for (const v of message.signalSources) {
+            writer.uint32(26).string(v);
+        }
+        if (message.signalWeight !== 0) {
+            writer.uint32(33).double(message.signalWeight);
+        }
+        if (message.technicalWeight !== 0) {
+            writer.uint32(41).double(message.technicalWeight);
+        }
+        if (message.minConviction !== 0) {
+            writer.uint32(49).double(message.minConviction);
+        }
+        if (message.rankLimit !== 0) {
+            writer.uint32(56).int32(message.rankLimit);
+        }
+        if (message.evaluationWindow !== undefined) {
+            common_1.TimeRange.encode(message.evaluationWindow, writer.uint32(66).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseScreenSymbolsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.criteria.push(exports.ScreenCriterion.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.signalSources.push(reader.string());
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 33) {
+                        break;
+                    }
+                    message.signalWeight = reader.double();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 41) {
+                        break;
+                    }
+                    message.technicalWeight = reader.double();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 49) {
+                        break;
+                    }
+                    message.minConviction = reader.double();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 56) {
+                        break;
+                    }
+                    message.rankLimit = reader.int32();
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.evaluationWindow = common_1.TimeRange.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+            criteria: globalThis.Array.isArray(object?.criteria)
+                ? object.criteria.map((e) => exports.ScreenCriterion.fromJSON(e))
+                : [],
+            signalSources: globalThis.Array.isArray(object?.signalSources)
+                ? object.signalSources.map((e) => globalThis.String(e))
+                : globalThis.Array.isArray(object?.signal_sources)
+                    ? object.signal_sources.map((e) => globalThis.String(e))
+                    : [],
+            signalWeight: isSet(object.signalWeight)
+                ? globalThis.Number(object.signalWeight)
+                : isSet(object.signal_weight)
+                    ? globalThis.Number(object.signal_weight)
+                    : 0,
+            technicalWeight: isSet(object.technicalWeight)
+                ? globalThis.Number(object.technicalWeight)
+                : isSet(object.technical_weight)
+                    ? globalThis.Number(object.technical_weight)
+                    : 0,
+            minConviction: isSet(object.minConviction)
+                ? globalThis.Number(object.minConviction)
+                : isSet(object.min_conviction)
+                    ? globalThis.Number(object.min_conviction)
+                    : 0,
+            rankLimit: isSet(object.rankLimit)
+                ? globalThis.Number(object.rankLimit)
+                : isSet(object.rank_limit)
+                    ? globalThis.Number(object.rank_limit)
+                    : 0,
+            evaluationWindow: isSet(object.evaluationWindow)
+                ? common_1.TimeRange.fromJSON(object.evaluationWindow)
+                : isSet(object.evaluation_window)
+                    ? common_1.TimeRange.fromJSON(object.evaluation_window)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        if (message.criteria?.length) {
+            obj.criteria = message.criteria.map((e) => exports.ScreenCriterion.toJSON(e));
+        }
+        if (message.signalSources?.length) {
+            obj.signalSources = message.signalSources;
+        }
+        if (message.signalWeight !== 0) {
+            obj.signalWeight = message.signalWeight;
+        }
+        if (message.technicalWeight !== 0) {
+            obj.technicalWeight = message.technicalWeight;
+        }
+        if (message.minConviction !== 0) {
+            obj.minConviction = message.minConviction;
+        }
+        if (message.rankLimit !== 0) {
+            obj.rankLimit = Math.round(message.rankLimit);
+        }
+        if (message.evaluationWindow !== undefined) {
+            obj.evaluationWindow = common_1.TimeRange.toJSON(message.evaluationWindow);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ScreenSymbolsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseScreenSymbolsRequest();
+        message.symbols = object.symbols?.map((e) => e) || [];
+        message.criteria = object.criteria?.map((e) => exports.ScreenCriterion.fromPartial(e)) || [];
+        message.signalSources = object.signalSources?.map((e) => e) || [];
+        message.signalWeight = object.signalWeight ?? 0;
+        message.technicalWeight = object.technicalWeight ?? 0;
+        message.minConviction = object.minConviction ?? 0;
+        message.rankLimit = object.rankLimit ?? 0;
+        message.evaluationWindow = (object.evaluationWindow !== undefined && object.evaluationWindow !== null)
+            ? common_1.TimeRange.fromPartial(object.evaluationWindow)
+            : undefined;
+        return message;
+    },
+};
+function createBaseScreenSymbolsResponse() {
+    return { results: [], coverageGaps: [] };
+}
+exports.ScreenSymbolsResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.results) {
+            exports.ScreenResult.encode(v, writer.uint32(10).fork()).join();
+        }
+        for (const v of message.coverageGaps) {
+            exports.CoverageGap.encode(v, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseScreenSymbolsResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.results.push(exports.ScreenResult.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.coverageGaps.push(exports.CoverageGap.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            results: globalThis.Array.isArray(object?.results)
+                ? object.results.map((e) => exports.ScreenResult.fromJSON(e))
+                : [],
+            coverageGaps: globalThis.Array.isArray(object?.coverageGaps)
+                ? object.coverageGaps.map((e) => exports.CoverageGap.fromJSON(e))
+                : globalThis.Array.isArray(object?.coverage_gaps)
+                    ? object.coverage_gaps.map((e) => exports.CoverageGap.fromJSON(e))
+                    : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.results?.length) {
+            obj.results = message.results.map((e) => exports.ScreenResult.toJSON(e));
+        }
+        if (message.coverageGaps?.length) {
+            obj.coverageGaps = message.coverageGaps.map((e) => exports.CoverageGap.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ScreenSymbolsResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseScreenSymbolsResponse();
+        message.results = object.results?.map((e) => exports.ScreenResult.fromPartial(e)) || [];
+        message.coverageGaps = object.coverageGaps?.map((e) => exports.CoverageGap.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseRunFundamentalsScanRequest() {
+    return { force: false, dryRun: false, symbols: [] };
+}
+exports.RunFundamentalsScanRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.force !== false) {
+            writer.uint32(8).bool(message.force);
+        }
+        if (message.dryRun !== false) {
+            writer.uint32(16).bool(message.dryRun);
+        }
+        for (const v of message.symbols) {
+            writer.uint32(26).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseRunFundamentalsScanRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 8) {
+                        break;
+                    }
+                    message.force = reader.bool();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.dryRun = reader.bool();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            force: isSet(object.force) ? globalThis.Boolean(object.force) : false,
+            dryRun: isSet(object.dryRun)
+                ? globalThis.Boolean(object.dryRun)
+                : isSet(object.dry_run)
+                    ? globalThis.Boolean(object.dry_run)
+                    : false,
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.force !== false) {
+            obj.force = message.force;
+        }
+        if (message.dryRun !== false) {
+            obj.dryRun = message.dryRun;
+        }
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.RunFundamentalsScanRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseRunFundamentalsScanRequest();
+        message.force = object.force ?? false;
+        message.dryRun = object.dryRun ?? false;
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseFundamentalsScanSummary() {
+    return {
+        runId: "",
+        symbolsProcessed: 0,
+        signalsEmitted: 0,
+        callsSpent: 0,
+        deferredCount: 0,
+        status: "",
+        finishedAt: undefined,
+    };
+}
+exports.FundamentalsScanSummary = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.runId !== "") {
+            writer.uint32(10).string(message.runId);
+        }
+        if (message.symbolsProcessed !== 0) {
+            writer.uint32(16).int32(message.symbolsProcessed);
+        }
+        if (message.signalsEmitted !== 0) {
+            writer.uint32(24).int32(message.signalsEmitted);
+        }
+        if (message.callsSpent !== 0) {
+            writer.uint32(32).int32(message.callsSpent);
+        }
+        if (message.deferredCount !== 0) {
+            writer.uint32(40).int32(message.deferredCount);
+        }
+        if (message.status !== "") {
+            writer.uint32(50).string(message.status);
+        }
+        if (message.finishedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.finishedAt), writer.uint32(58).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseFundamentalsScanSummary();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.runId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.symbolsProcessed = reader.int32();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.signalsEmitted = reader.int32();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.callsSpent = reader.int32();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.deferredCount = reader.int32();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.status = reader.string();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.finishedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            runId: isSet(object.runId)
+                ? globalThis.String(object.runId)
+                : isSet(object.run_id)
+                    ? globalThis.String(object.run_id)
+                    : "",
+            symbolsProcessed: isSet(object.symbolsProcessed)
+                ? globalThis.Number(object.symbolsProcessed)
+                : isSet(object.symbols_processed)
+                    ? globalThis.Number(object.symbols_processed)
+                    : 0,
+            signalsEmitted: isSet(object.signalsEmitted)
+                ? globalThis.Number(object.signalsEmitted)
+                : isSet(object.signals_emitted)
+                    ? globalThis.Number(object.signals_emitted)
+                    : 0,
+            callsSpent: isSet(object.callsSpent)
+                ? globalThis.Number(object.callsSpent)
+                : isSet(object.calls_spent)
+                    ? globalThis.Number(object.calls_spent)
+                    : 0,
+            deferredCount: isSet(object.deferredCount)
+                ? globalThis.Number(object.deferredCount)
+                : isSet(object.deferred_count)
+                    ? globalThis.Number(object.deferred_count)
+                    : 0,
+            status: isSet(object.status) ? globalThis.String(object.status) : "",
+            finishedAt: isSet(object.finishedAt)
+                ? fromJsonTimestamp(object.finishedAt)
+                : isSet(object.finished_at)
+                    ? fromJsonTimestamp(object.finished_at)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.runId !== "") {
+            obj.runId = message.runId;
+        }
+        if (message.symbolsProcessed !== 0) {
+            obj.symbolsProcessed = Math.round(message.symbolsProcessed);
+        }
+        if (message.signalsEmitted !== 0) {
+            obj.signalsEmitted = Math.round(message.signalsEmitted);
+        }
+        if (message.callsSpent !== 0) {
+            obj.callsSpent = Math.round(message.callsSpent);
+        }
+        if (message.deferredCount !== 0) {
+            obj.deferredCount = Math.round(message.deferredCount);
+        }
+        if (message.status !== "") {
+            obj.status = message.status;
+        }
+        if (message.finishedAt !== undefined) {
+            obj.finishedAt = message.finishedAt.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.FundamentalsScanSummary.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseFundamentalsScanSummary();
+        message.runId = object.runId ?? "";
+        message.symbolsProcessed = object.symbolsProcessed ?? 0;
+        message.signalsEmitted = object.signalsEmitted ?? 0;
+        message.callsSpent = object.callsSpent ?? 0;
+        message.deferredCount = object.deferredCount ?? 0;
+        message.status = object.status ?? "";
+        message.finishedAt = object.finishedAt ?? undefined;
+        return message;
+    },
+};
 exports.AnalysisServiceService = {
     runBacktest: {
         path: "/xstockstrat.analysis.v1.AnalysisService/RunBacktest",
@@ -2430,6 +4687,16 @@ exports.AnalysisServiceService = {
         responseSerialize: (value) => Buffer.from(exports.StrategyReport.encode(value).finish()),
         responseDeserialize: (value) => exports.StrategyReport.decode(value),
     },
+    /** List past backtest runs (summary metrics + earned score) for a strategy, newest first. */
+    listBacktests: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/ListBacktests",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListBacktestsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListBacktestsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListBacktestsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListBacktestsResponse.decode(value),
+    },
     manageStrategy: {
         path: "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy",
         requestStream: false,
@@ -2465,6 +4732,26 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.SetStrategyLiveRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.SetStrategyLiveResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.SetStrategyLiveResponse.decode(value),
+    },
+    /** Screen a symbol universe against weighted criteria (feature 060) */
+    screenSymbols: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ScreenSymbolsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ScreenSymbolsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ScreenSymbolsResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ScreenSymbolsResponse.decode(value),
+    },
+    /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+    runFundamentalsScan: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.RunFundamentalsScanRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.RunFundamentalsScanRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.FundamentalsScanSummary.encode(value).finish()),
+        responseDeserialize: (value) => exports.FundamentalsScanSummary.decode(value),
     },
 };
 exports.AnalysisServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.AnalysisServiceService, "xstockstrat.analysis.v1.AnalysisService");

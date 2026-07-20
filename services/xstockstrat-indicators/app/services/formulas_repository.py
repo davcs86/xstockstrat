@@ -53,13 +53,14 @@ class FormulasRepository:
         input_schema,
         parameters=None,
         outputs=None,
+        warmup_period=0,
     ) -> dict:
         row = await self._db.fetchrow(
             """
             INSERT INTO indicators.formulas
                 (formula_id, name, description, source, author, is_public, input_schema,
-                 parameters, outputs)
-            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb)
+                 parameters, outputs, warmup_period)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10)
             RETURNING *
             """,
             formula_id,
@@ -71,6 +72,58 @@ class FormulasRepository:
             json.dumps(dict(input_schema) if input_schema else {}),
             json.dumps(list(parameters) if parameters else []),
             json.dumps(list(outputs) if outputs else []),
+            int(warmup_period or 0),
+        )
+        return _to_dict(row)
+
+    async def upsert(
+        self,
+        formula_id,
+        name,
+        description,
+        source,
+        author,
+        is_public,
+        input_schema,
+        parameters=None,
+        outputs=None,
+        warmup_period=0,
+    ) -> dict:
+        """Idempotent insert-or-update keyed on the formula_id PK.
+
+        Used by the startup seeding hook (feature 063): re-seeding the same well-known
+        id on every restart is safe, and a band/param/source change takes effect on the
+        next deploy. Mirrors ``create``'s JSONB encoding.
+        """
+        row = await self._db.fetchrow(
+            """
+            INSERT INTO indicators.formulas
+                (formula_id, name, description, source, author, is_public, input_schema,
+                 parameters, outputs, warmup_period)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10)
+            ON CONFLICT (formula_id) DO UPDATE SET
+                name = EXCLUDED.name,
+                description = EXCLUDED.description,
+                source = EXCLUDED.source,
+                author = EXCLUDED.author,
+                is_public = EXCLUDED.is_public,
+                input_schema = EXCLUDED.input_schema,
+                parameters = EXCLUDED.parameters,
+                outputs = EXCLUDED.outputs,
+                warmup_period = EXCLUDED.warmup_period,
+                updated_at = NOW()
+            RETURNING *
+            """,
+            formula_id,
+            name,
+            description or "",
+            source,
+            author,
+            is_public,
+            json.dumps(dict(input_schema) if input_schema else {}),
+            json.dumps(list(parameters) if parameters else []),
+            json.dumps(list(outputs) if outputs else []),
+            int(warmup_period or 0),
         )
         return _to_dict(row)
 
@@ -116,12 +169,14 @@ class FormulasRepository:
         is_public,
         parameters=None,
         outputs=None,
+        warmup_period=0,
     ) -> dict | None:
         row = await self._db.fetchrow(
             """
             UPDATE indicators.formulas
                SET name = $2, description = $3, source = $4, is_public = $5,
-                   parameters = $6::jsonb, outputs = $7::jsonb, updated_at = NOW()
+                   parameters = $6::jsonb, outputs = $7::jsonb, warmup_period = $8,
+                   updated_at = NOW()
              WHERE formula_id = $1::uuid
             RETURNING *
             """,
@@ -132,6 +187,7 @@ class FormulasRepository:
             is_public,
             json.dumps(list(parameters) if parameters else []),
             json.dumps(list(outputs) if outputs else []),
+            int(warmup_period or 0),
         )
         return _to_dict(row)
 

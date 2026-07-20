@@ -12,6 +12,8 @@ service IngestService {
   rpc TriggerBackfill(TriggerBackfillRequest) returns (TriggerBackfillResponse);
   rpc GetBackfillStatus(GetBackfillStatusRequest) returns (BackfillJob);
   rpc ListBackfillJobs(ListBackfillJobsRequest) returns (ListBackfillJobsResponse);
+  // Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4).
+  rpc CancelBackfill(CancelBackfillRequest) returns (BackfillJob);
   rpc NormalizeRawData(NormalizeRawDataRequest) returns (NormalizeRawDataResponse);
   // Signal ingestion — persists newsletter/external signals to ingest.newsletter_signals hypertable
   rpc IngestSignal(IngestSignalRequest) returns (IngestSignalResponse);
@@ -46,6 +48,7 @@ enum BackfillStatus {
   BACKFILL_STATUS_COMPLETED = 3;
   BACKFILL_STATUS_FAILED = 4;
   BACKFILL_STATUS_PARTIAL = 5;
+  BACKFILL_STATUS_CANCELED = 6;  // operator-canceled (FR-4); completed-chunk bars retained
 }
 
 // FillMode selects how much of the requested range a backfill fetches (feature 054, FR-4).
@@ -75,6 +78,11 @@ message GetBackfillStatusRequest { string job_id = 1; }
 message ListBackfillJobsRequest {
   BackfillStatus status_filter = 1;
   xstockstrat.common.v1.PageRequest page = 2;
+  string symbol = 3;  // optional ticker filter (FR-3); empty = no narrowing
+}
+
+message CancelBackfillRequest {
+  string job_id = 1;
 }
 
 message ListBackfillJobsResponse {

@@ -23,10 +23,13 @@ const (
 	AnalysisService_ScoreStrategy_FullMethodName           = "/xstockstrat.analysis.v1.AnalysisService/ScoreStrategy"
 	AnalysisService_ListStrategies_FullMethodName          = "/xstockstrat.analysis.v1.AnalysisService/ListStrategies"
 	AnalysisService_GetStrategyReport_FullMethodName       = "/xstockstrat.analysis.v1.AnalysisService/GetStrategyReport"
+	AnalysisService_ListBacktests_FullMethodName           = "/xstockstrat.analysis.v1.AnalysisService/ListBacktests"
 	AnalysisService_ManageStrategy_FullMethodName          = "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy"
 	AnalysisService_GetStrategy_FullMethodName             = "/xstockstrat.analysis.v1.AnalysisService/GetStrategy"
 	AnalysisService_ListStrategyDefinitions_FullMethodName = "/xstockstrat.analysis.v1.AnalysisService/ListStrategyDefinitions"
 	AnalysisService_SetStrategyLive_FullMethodName         = "/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive"
+	AnalysisService_ScreenSymbols_FullMethodName           = "/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols"
+	AnalysisService_RunFundamentalsScan_FullMethodName     = "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan"
 )
 
 // AnalysisServiceClient is the client API for AnalysisService service.
@@ -37,10 +40,16 @@ type AnalysisServiceClient interface {
 	ScoreStrategy(ctx context.Context, in *ScoreStrategyRequest, opts ...grpc.CallOption) (*StrategyScore, error)
 	ListStrategies(ctx context.Context, in *ListStrategiesRequest, opts ...grpc.CallOption) (*ListStrategiesResponse, error)
 	GetStrategyReport(ctx context.Context, in *GetStrategyReportRequest, opts ...grpc.CallOption) (*StrategyReport, error)
+	// List past backtest runs (summary metrics + earned score) for a strategy, newest first.
+	ListBacktests(ctx context.Context, in *ListBacktestsRequest, opts ...grpc.CallOption) (*ListBacktestsResponse, error)
 	ManageStrategy(ctx context.Context, in *ManageStrategyRequest, opts ...grpc.CallOption) (*StrategyDefinition, error)
 	GetStrategy(ctx context.Context, in *GetStrategyRequest, opts ...grpc.CallOption) (*StrategyDefinition, error)
 	ListStrategyDefinitions(ctx context.Context, in *ListStrategyDefinitionsRequest, opts ...grpc.CallOption) (*ListStrategyDefinitionsResponse, error)
 	SetStrategyLive(ctx context.Context, in *SetStrategyLiveRequest, opts ...grpc.CallOption) (*SetStrategyLiveResponse, error)
+	// Screen a symbol universe against weighted criteria (feature 060)
+	ScreenSymbols(ctx context.Context, in *ScreenSymbolsRequest, opts ...grpc.CallOption) (*ScreenSymbolsResponse, error)
+	// Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+	RunFundamentalsScan(ctx context.Context, in *RunFundamentalsScanRequest, opts ...grpc.CallOption) (*FundamentalsScanSummary, error)
 }
 
 type analysisServiceClient struct {
@@ -91,6 +100,16 @@ func (c *analysisServiceClient) GetStrategyReport(ctx context.Context, in *GetSt
 	return out, nil
 }
 
+func (c *analysisServiceClient) ListBacktests(ctx context.Context, in *ListBacktestsRequest, opts ...grpc.CallOption) (*ListBacktestsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListBacktestsResponse)
+	err := c.cc.Invoke(ctx, AnalysisService_ListBacktests_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *analysisServiceClient) ManageStrategy(ctx context.Context, in *ManageStrategyRequest, opts ...grpc.CallOption) (*StrategyDefinition, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StrategyDefinition)
@@ -131,6 +150,26 @@ func (c *analysisServiceClient) SetStrategyLive(ctx context.Context, in *SetStra
 	return out, nil
 }
 
+func (c *analysisServiceClient) ScreenSymbols(ctx context.Context, in *ScreenSymbolsRequest, opts ...grpc.CallOption) (*ScreenSymbolsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ScreenSymbolsResponse)
+	err := c.cc.Invoke(ctx, AnalysisService_ScreenSymbols_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *analysisServiceClient) RunFundamentalsScan(ctx context.Context, in *RunFundamentalsScanRequest, opts ...grpc.CallOption) (*FundamentalsScanSummary, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FundamentalsScanSummary)
+	err := c.cc.Invoke(ctx, AnalysisService_RunFundamentalsScan_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AnalysisServiceServer is the server API for AnalysisService service.
 // All implementations should embed UnimplementedAnalysisServiceServer
 // for forward compatibility.
@@ -139,10 +178,16 @@ type AnalysisServiceServer interface {
 	ScoreStrategy(context.Context, *ScoreStrategyRequest) (*StrategyScore, error)
 	ListStrategies(context.Context, *ListStrategiesRequest) (*ListStrategiesResponse, error)
 	GetStrategyReport(context.Context, *GetStrategyReportRequest) (*StrategyReport, error)
+	// List past backtest runs (summary metrics + earned score) for a strategy, newest first.
+	ListBacktests(context.Context, *ListBacktestsRequest) (*ListBacktestsResponse, error)
 	ManageStrategy(context.Context, *ManageStrategyRequest) (*StrategyDefinition, error)
 	GetStrategy(context.Context, *GetStrategyRequest) (*StrategyDefinition, error)
 	ListStrategyDefinitions(context.Context, *ListStrategyDefinitionsRequest) (*ListStrategyDefinitionsResponse, error)
 	SetStrategyLive(context.Context, *SetStrategyLiveRequest) (*SetStrategyLiveResponse, error)
+	// Screen a symbol universe against weighted criteria (feature 060)
+	ScreenSymbols(context.Context, *ScreenSymbolsRequest) (*ScreenSymbolsResponse, error)
+	// Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+	RunFundamentalsScan(context.Context, *RunFundamentalsScanRequest) (*FundamentalsScanSummary, error)
 }
 
 // UnimplementedAnalysisServiceServer should be embedded to have
@@ -164,6 +209,9 @@ func (UnimplementedAnalysisServiceServer) ListStrategies(context.Context, *ListS
 func (UnimplementedAnalysisServiceServer) GetStrategyReport(context.Context, *GetStrategyReportRequest) (*StrategyReport, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetStrategyReport not implemented")
 }
+func (UnimplementedAnalysisServiceServer) ListBacktests(context.Context, *ListBacktestsRequest) (*ListBacktestsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListBacktests not implemented")
+}
 func (UnimplementedAnalysisServiceServer) ManageStrategy(context.Context, *ManageStrategyRequest) (*StrategyDefinition, error) {
 	return nil, status.Error(codes.Unimplemented, "method ManageStrategy not implemented")
 }
@@ -175,6 +223,12 @@ func (UnimplementedAnalysisServiceServer) ListStrategyDefinitions(context.Contex
 }
 func (UnimplementedAnalysisServiceServer) SetStrategyLive(context.Context, *SetStrategyLiveRequest) (*SetStrategyLiveResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetStrategyLive not implemented")
+}
+func (UnimplementedAnalysisServiceServer) ScreenSymbols(context.Context, *ScreenSymbolsRequest) (*ScreenSymbolsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ScreenSymbols not implemented")
+}
+func (UnimplementedAnalysisServiceServer) RunFundamentalsScan(context.Context, *RunFundamentalsScanRequest) (*FundamentalsScanSummary, error) {
+	return nil, status.Error(codes.Unimplemented, "method RunFundamentalsScan not implemented")
 }
 func (UnimplementedAnalysisServiceServer) testEmbeddedByValue() {}
 
@@ -268,6 +322,24 @@ func _AnalysisService_GetStrategyReport_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AnalysisService_ListBacktests_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListBacktestsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).ListBacktests(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_ListBacktests_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).ListBacktests(ctx, req.(*ListBacktestsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AnalysisService_ManageStrategy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ManageStrategyRequest)
 	if err := dec(in); err != nil {
@@ -340,6 +412,42 @@ func _AnalysisService_SetStrategyLive_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AnalysisService_ScreenSymbols_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ScreenSymbolsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).ScreenSymbols(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_ScreenSymbols_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).ScreenSymbols(ctx, req.(*ScreenSymbolsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AnalysisService_RunFundamentalsScan_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RunFundamentalsScanRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).RunFundamentalsScan(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_RunFundamentalsScan_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).RunFundamentalsScan(ctx, req.(*RunFundamentalsScanRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AnalysisService_ServiceDesc is the grpc.ServiceDesc for AnalysisService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -364,6 +472,10 @@ var AnalysisService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AnalysisService_GetStrategyReport_Handler,
 		},
 		{
+			MethodName: "ListBacktests",
+			Handler:    _AnalysisService_ListBacktests_Handler,
+		},
+		{
 			MethodName: "ManageStrategy",
 			Handler:    _AnalysisService_ManageStrategy_Handler,
 		},
@@ -378,6 +490,14 @@ var AnalysisService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetStrategyLive",
 			Handler:    _AnalysisService_SetStrategyLive_Handler,
+		},
+		{
+			MethodName: "ScreenSymbols",
+			Handler:    _AnalysisService_ScreenSymbols_Handler,
+		},
+		{
+			MethodName: "RunFundamentalsScan",
+			Handler:    _AnalysisService_RunFundamentalsScan_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

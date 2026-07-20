@@ -47,6 +47,8 @@ jobs:
       DO_PROJECT_ID: ${{ secrets.DO_PROD_PROJECT_ID }}
       BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY }}
       JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
+      ALPACA_API_KEY: ${{ secrets.PROD_ALPACA_API_KEY }}
+      ALPACA_API_SECRET: ${{ secrets.PROD_ALPACA_API_SECRET }}
     with:
       app_spec: .do/app.yaml
       image_tag: ${{ needs.prepare.outputs.short_sha }}

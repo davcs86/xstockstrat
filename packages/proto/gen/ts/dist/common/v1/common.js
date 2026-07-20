@@ -184,14 +184,31 @@ function brokerTypeToNumber(object) {
 /**
  * Timeframe is the canonical OHLCV bar interval, shared by marketdata + analysis + ingest.
  * Replaces the free-text "1d"/"1Day"/"1m" strings that previously mismatched across services.
+ *
+ * 15 minutes is the smallest supported interval: the free Alpaca market-data plan serves
+ * 15-minute-delayed data, and the platform is not a real-time trader. TIMEFRAME_1MIN and
+ * TIMEFRAME_5MIN are deprecated — no longer ingested or selectable — but retained (not
+ * deleted) so the change stays wire- and source-compatible.
  */
 var Timeframe;
 (function (Timeframe) {
     Timeframe["TIMEFRAME_UNSPECIFIED"] = "TIMEFRAME_UNSPECIFIED";
-    Timeframe["TIMEFRAME_1MIN"] = "TIMEFRAME_1MIN";
-    Timeframe["TIMEFRAME_5MIN"] = "TIMEFRAME_5MIN";
+    /** TIMEFRAME_15MIN - smallest supported interval */
+    Timeframe["TIMEFRAME_15MIN"] = "TIMEFRAME_15MIN";
     Timeframe["TIMEFRAME_1HOUR"] = "TIMEFRAME_1HOUR";
     Timeframe["TIMEFRAME_1DAY"] = "TIMEFRAME_1DAY";
+    /**
+     * TIMEFRAME_1MIN - deprecated: sub-15m intervals removed from the product
+     *
+     * @deprecated
+     */
+    Timeframe["TIMEFRAME_1MIN"] = "TIMEFRAME_1MIN";
+    /**
+     * TIMEFRAME_5MIN - deprecated: sub-15m intervals removed from the product
+     *
+     * @deprecated
+     */
+    Timeframe["TIMEFRAME_5MIN"] = "TIMEFRAME_5MIN";
     Timeframe["UNRECOGNIZED"] = "UNRECOGNIZED";
 })(Timeframe || (exports.Timeframe = Timeframe = {}));
 function timeframeFromJSON(object) {
@@ -199,18 +216,21 @@ function timeframeFromJSON(object) {
         case 0:
         case "TIMEFRAME_UNSPECIFIED":
             return Timeframe.TIMEFRAME_UNSPECIFIED;
-        case 1:
-        case "TIMEFRAME_1MIN":
-            return Timeframe.TIMEFRAME_1MIN;
-        case 2:
-        case "TIMEFRAME_5MIN":
-            return Timeframe.TIMEFRAME_5MIN;
+        case 5:
+        case "TIMEFRAME_15MIN":
+            return Timeframe.TIMEFRAME_15MIN;
         case 3:
         case "TIMEFRAME_1HOUR":
             return Timeframe.TIMEFRAME_1HOUR;
         case 4:
         case "TIMEFRAME_1DAY":
             return Timeframe.TIMEFRAME_1DAY;
+        case 1:
+        case "TIMEFRAME_1MIN":
+            return Timeframe.TIMEFRAME_1MIN;
+        case 2:
+        case "TIMEFRAME_5MIN":
+            return Timeframe.TIMEFRAME_5MIN;
         case -1:
         case "UNRECOGNIZED":
         default:
@@ -221,14 +241,16 @@ function timeframeToJSON(object) {
     switch (object) {
         case Timeframe.TIMEFRAME_UNSPECIFIED:
             return "TIMEFRAME_UNSPECIFIED";
-        case Timeframe.TIMEFRAME_1MIN:
-            return "TIMEFRAME_1MIN";
-        case Timeframe.TIMEFRAME_5MIN:
-            return "TIMEFRAME_5MIN";
+        case Timeframe.TIMEFRAME_15MIN:
+            return "TIMEFRAME_15MIN";
         case Timeframe.TIMEFRAME_1HOUR:
             return "TIMEFRAME_1HOUR";
         case Timeframe.TIMEFRAME_1DAY:
             return "TIMEFRAME_1DAY";
+        case Timeframe.TIMEFRAME_1MIN:
+            return "TIMEFRAME_1MIN";
+        case Timeframe.TIMEFRAME_5MIN:
+            return "TIMEFRAME_5MIN";
         case Timeframe.UNRECOGNIZED:
         default:
             return "UNRECOGNIZED";
@@ -238,14 +260,16 @@ function timeframeToNumber(object) {
     switch (object) {
         case Timeframe.TIMEFRAME_UNSPECIFIED:
             return 0;
-        case Timeframe.TIMEFRAME_1MIN:
-            return 1;
-        case Timeframe.TIMEFRAME_5MIN:
-            return 2;
+        case Timeframe.TIMEFRAME_15MIN:
+            return 5;
         case Timeframe.TIMEFRAME_1HOUR:
             return 3;
         case Timeframe.TIMEFRAME_1DAY:
             return 4;
+        case Timeframe.TIMEFRAME_1MIN:
+            return 1;
+        case Timeframe.TIMEFRAME_5MIN:
+            return 2;
         case Timeframe.UNRECOGNIZED:
         default:
             return -1;

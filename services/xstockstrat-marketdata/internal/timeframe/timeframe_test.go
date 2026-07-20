@@ -15,12 +15,13 @@ func TestFromString(t *testing.T) {
 		// The load-bearing bug: "1Day" (analysis) and "1d" (backfill) must agree.
 		{"1Day", commonv1.Timeframe_TIMEFRAME_1DAY},
 		{"1d", commonv1.Timeframe_TIMEFRAME_1DAY},
-		{"1m", commonv1.Timeframe_TIMEFRAME_1MIN},
-		{"1Min", commonv1.Timeframe_TIMEFRAME_1MIN},
-		{"5m", commonv1.Timeframe_TIMEFRAME_5MIN},
-		{"5Min", commonv1.Timeframe_TIMEFRAME_5MIN},
+		{"15m", commonv1.Timeframe_TIMEFRAME_15MIN},
+		{"15Min", commonv1.Timeframe_TIMEFRAME_15MIN},
 		{"1h", commonv1.Timeframe_TIMEFRAME_1HOUR},
 		{"1Hour", commonv1.Timeframe_TIMEFRAME_1HOUR},
+		// Sub-15m intervals were removed from the product — no longer resolvable.
+		{"1m", commonv1.Timeframe_TIMEFRAME_UNSPECIFIED},
+		{"5m", commonv1.Timeframe_TIMEFRAME_UNSPECIFIED},
 		{"weekly", commonv1.Timeframe_TIMEFRAME_UNSPECIFIED},
 		{"", commonv1.Timeframe_TIMEFRAME_UNSPECIFIED},
 	}
@@ -31,17 +32,40 @@ func TestFromString(t *testing.T) {
 	}
 }
 
+func TestInterval(t *testing.T) {
+	tests := []struct {
+		in   string
+		want time.Duration
+	}{
+		{"15m", 15 * time.Minute},
+		{"1h", time.Hour},
+		{"1d", 24 * time.Hour},
+		// Non-canonical / unsupported spellings have no defined interval.
+		{"1Day", 0},
+		{"1w", 0},
+		{"10Min", 0},
+		{"", 0},
+	}
+	for _, tt := range tests {
+		if got := Interval(tt.in); got != tt.want {
+			t.Errorf("Interval(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestToCanonical(t *testing.T) {
 	tests := []struct {
 		in     commonv1.Timeframe
 		want   string
 		wantOk bool
 	}{
-		{commonv1.Timeframe_TIMEFRAME_1MIN, "1m", true},
-		{commonv1.Timeframe_TIMEFRAME_5MIN, "5m", true},
+		{commonv1.Timeframe_TIMEFRAME_15MIN, "15m", true},
 		{commonv1.Timeframe_TIMEFRAME_1HOUR, "1h", true},
 		{commonv1.Timeframe_TIMEFRAME_1DAY, "1d", true},
 		{commonv1.Timeframe_TIMEFRAME_UNSPECIFIED, "", false},
+		// Deprecated sub-15m enums no longer map to a canonical string.
+		{commonv1.Timeframe_TIMEFRAME_1MIN, "", false}, //nolint:staticcheck // SA1019: asserting the deprecated sub-15m enum no longer resolves
+		{commonv1.Timeframe_TIMEFRAME_5MIN, "", false}, //nolint:staticcheck // SA1019: asserting the deprecated sub-15m enum no longer resolves
 	}
 	for _, tt := range tests {
 		got, ok := ToCanonical(tt.in)

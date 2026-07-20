@@ -11,15 +11,47 @@
  *   - services/xstockstrat-indicators/app/services/sandbox.py (safe builtins, imports)
  *   - docs/runbooks/indicator-builder.md (the contract + limits table)
  */
-import { SandboxExitReason } from '@xstockstrat/proto/indicators/v1/indicators_pb';
+import { ParameterType, SandboxExitReason } from '@xstockstrat/proto/indicators/v1/indicators_pb';
+import type { ParameterDraft } from './ParameterEditor';
+import type { OutputDraft } from './OutputEditor';
 
 export interface FormulaTemplate {
   id: string;
   label: string;
   description: string;
   source: string;
-  /** Pre-fills the run cell so the template executes as-is. */
+  /**
+   * Typed parameters the template declares. Loading a template fills the
+   * Parameters cell with these and the run-cell form seeds each input from the
+   * declared `default`. Read inside the formula via `params["<name>"]`.
+   */
+  parameters: ParameterDraft[];
+  /**
+   * Secondary output series the template emits beyond the implicit primary
+   * `value` series. Loading a template fills the Outputs cell with these.
+   */
+  outputs: OutputDraft[];
+  /** Pre-fills the run cell's `data` editor so the template executes as-is. */
   sampleInput: Record<string, unknown>;
+}
+
+/** Concise builder for a numeric (int/float) parameter draft. */
+function numericParam(
+  name: string,
+  type: ParameterType.INT | ParameterType.FLOAT,
+  def: number,
+  description: string,
+  min?: number,
+): ParameterDraft {
+  return {
+    name,
+    type,
+    default: String(def),
+    description,
+    required: false,
+    min: min !== undefined ? String(min) : '',
+    max: '',
+  };
 }
 
 export interface LibraryRef {
@@ -36,18 +68,21 @@ const SAMPLE_CLOSE = [
   47.0, 46.5, 47.2, 47.8, 47.5, 48.1, 48.4, 47.9, 48.6, 49.0, 48.7,
 ];
 
-/** A representative OHLCV bundle authors can load into the run cell. */
+/**
+ * A representative OHLCV bundle authors can load into the run cell. This is the
+ * `data` input only — typed parameters live in the separate `params` namespace
+ * (the Parameters cell), never embedded here.
+ */
 export const SAMPLE_OHLCV: Record<string, unknown> = {
   open: SAMPLE_CLOSE.map((c) => Math.round((c - 0.2) * 100) / 100),
   high: SAMPLE_CLOSE.map((c) => Math.round((c + 0.4) * 100) / 100),
   low: SAMPLE_CLOSE.map((c) => Math.round((c - 0.5) * 100) / 100),
   close: SAMPLE_CLOSE,
   volume: SAMPLE_CLOSE.map((_, i) => 1_000_000 + i * 25_000),
-  period: 20,
 };
 
-/** Pretty-printed default for the run cell's input editor. */
-export const SAMPLE_INPUT_JSON = JSON.stringify({ close: SAMPLE_CLOSE, period: 20 }, null, 2);
+/** Pretty-printed default for the run cell's `data` editor (series only). */
+export const SAMPLE_INPUT_JSON = JSON.stringify({ close: SAMPLE_CLOSE }, null, 2);
 
 /**
  * What a formula receives and what it must return. Surfaced verbatim in the
@@ -56,14 +91,21 @@ export const SAMPLE_INPUT_JSON = JSON.stringify({ close: SAMPLE_CLOSE, period: 2
 export const INPUT_CONTRACT = [
   'Your code runs with a dict named `data` already in scope — the JSON you',
   'enter in the run cell below. Time-series come in as lists of numbers',
-  '(`data["close"]`), parameters as scalars (`data.get("period", 20)`).',
+  '(`data["close"]`), e.g. OHLCV bars.',
+].join(' ');
+
+export const PARAMS_CONTRACT = [
+  'Typed parameters arrive in a separate `params` dict — never merged into',
+  '`data`. Declare each one in the Parameters cell with a type, default, and',
+  'optional min/max, then read it inside the formula as `params["period"]`.',
 ].join(' ');
 
 export const OUTPUT_CONTRACT = [
-  'Before your code finishes, assign a dict to `result`. Keys are free-form',
-  '(e.g. `sma`, `upper`, `signal`); values must be JSON-serializable (lists,',
-  'numbers, strings, bools, null). A non-dict result is wrapped as',
-  '`{"value": <result>}`.',
+  'Before your code finishes, assign a dict to `result`. The primary series is',
+  '`result["value"]`; declare any extra series (e.g. `upper`, `signal`) in the',
+  'Outputs cell and emit them under matching keys. Values must be',
+  'JSON-serializable (lists, numbers, strings, bools, null). A non-dict result',
+  'is wrapped as `{"value": <result>}`.',
 ].join(' ');
 
 export const AVAILABLE_LIBRARIES: LibraryRef[] = [
@@ -146,13 +188,17 @@ export const FORMULA_TEMPLATES: FormulaTemplate[] = [
     id: 'blank',
     label: 'Blank',
     description: 'Minimal scaffold showing the data → result contract.',
-    source: `# \`data\` is the dict from the run cell (e.g. data["close"]).
-# Assign your output to \`result\` as a dict of JSON-serializable values.
+    source: `# \`data\` holds the input series from the run cell (e.g. data["close"]).
+# \`params\` holds your typed parameters (e.g. params["period"]).
+# Assign your output to \`result\` as a dict of JSON-serializable values;
+# the primary series is result["value"].
 
 close = data["close"]
 
 result = {"value": close}
 `,
+    parameters: [],
+    outputs: [],
     sampleInput: { close: SAMPLE_CLOSE },
   },
   {
@@ -162,14 +208,16 @@ result = {"value": close}
     source: `import numpy as np
 
 close = np.array(data["close"], dtype=float)
-period = int(data.get("period", 20))
+period = int(params["period"])
 
 weights = np.ones(period) / period
 sma = np.convolve(close, weights, mode="valid")
 
-result = {"sma": sma.tolist()}
+result = {"value": sma.tolist()}
 `,
-    sampleInput: { close: SAMPLE_CLOSE, period: 5 },
+    parameters: [numericParam('period', ParameterType.INT, 20, 'Lookback window in bars.', 1)],
+    outputs: [],
+    sampleInput: { close: SAMPLE_CLOSE },
   },
   {
     id: 'rsi',
@@ -178,7 +226,7 @@ result = {"sma": sma.tolist()}
     source: `import numpy as np
 
 close = np.array(data["close"], dtype=float)
-period = int(data.get("period", 14))
+period = int(params["period"])
 
 delta = np.diff(close)
 gain = np.where(delta > 0, delta, 0.0)
@@ -194,9 +242,11 @@ rs = np.divide(
 )
 rsi = 100 - (100 / (1 + rs))
 
-result = {"rsi": rsi.tolist()}
+result = {"value": rsi.tolist()}
 `,
-    sampleInput: { close: SAMPLE_CLOSE, period: 14 },
+    parameters: [numericParam('period', ParameterType.INT, 14, 'Averaging window in bars.', 2)],
+    outputs: [],
+    sampleInput: { close: SAMPLE_CLOSE },
   },
   {
     id: 'bollinger',
@@ -205,19 +255,28 @@ result = {"rsi": rsi.tolist()}
     source: `import pandas as pd
 
 close = pd.Series(data["close"], dtype=float)
-period = int(data.get("period", 20))
-mult = float(data.get("multiplier", 2.0))
+period = int(params["period"])
+mult = float(params["multiplier"])
 
 mid = close.rolling(period).mean()
 std = close.rolling(period).std()
 
+# Primary "value" series is the middle band; upper/lower are declared outputs.
 result = {
-    "middle": mid.dropna().tolist(),
+    "value": mid.dropna().tolist(),
     "upper": (mid + mult * std).dropna().tolist(),
     "lower": (mid - mult * std).dropna().tolist(),
 }
 `,
-    sampleInput: { close: SAMPLE_CLOSE, period: 10, multiplier: 2.0 },
+    parameters: [
+      numericParam('period', ParameterType.INT, 20, 'Rolling window in bars.', 1),
+      numericParam('multiplier', ParameterType.FLOAT, 2.0, 'Std-dev band width.', 0),
+    ],
+    outputs: [
+      { name: 'upper', description: 'Upper band (mid + mult · std).' },
+      { name: 'lower', description: 'Lower band (mid − mult · std).' },
+    ],
+    sampleInput: { close: SAMPLE_CLOSE },
   },
   {
     id: 'macd',
@@ -226,22 +285,32 @@ result = {
     source: `import pandas as pd
 
 close = pd.Series(data["close"], dtype=float)
-fast = int(data.get("fast", 12))
-slow = int(data.get("slow", 26))
-signal = int(data.get("signal", 9))
+fast = int(params["fast"])
+slow = int(params["slow"])
+signal = int(params["signal"])
 
 ema_fast = close.ewm(span=fast, adjust=False).mean()
 ema_slow = close.ewm(span=slow, adjust=False).mean()
 macd = ema_fast - ema_slow
 signal_line = macd.ewm(span=signal, adjust=False).mean()
 
+# Primary "value" series is the MACD line; signal/histogram are declared outputs.
 result = {
-    "macd": macd.tolist(),
+    "value": macd.tolist(),
     "signal": signal_line.tolist(),
     "histogram": (macd - signal_line).tolist(),
 }
 `,
-    sampleInput: { close: SAMPLE_CLOSE, fast: 12, slow: 26, signal: 9 },
+    parameters: [
+      numericParam('fast', ParameterType.INT, 12, 'Fast EMA span.', 1),
+      numericParam('slow', ParameterType.INT, 26, 'Slow EMA span.', 1),
+      numericParam('signal', ParameterType.INT, 9, 'Signal EMA span.', 1),
+    ],
+    outputs: [
+      { name: 'signal', description: 'Signal line (EMA of MACD).' },
+      { name: 'histogram', description: 'MACD minus signal line.' },
+    ],
+    sampleInput: { close: SAMPLE_CLOSE },
   },
 ];
 

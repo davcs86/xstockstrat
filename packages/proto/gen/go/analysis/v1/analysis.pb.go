@@ -73,6 +73,118 @@ func (BacktestStatus) EnumDescriptor() ([]byte, []int) {
 	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{0}
 }
 
+// The engine's decision for a single bar. Closed set → enum (C-04).
+type BarAction int32
+
+const (
+	BarAction_BAR_ACTION_UNSPECIFIED BarAction = 0
+	BarAction_BAR_ACTION_WARMUP      BarAction = 1 // bar within the strategy's warm-up window
+	BarAction_BAR_ACTION_HOLD_FLAT   BarAction = 2 // flat, no entry this bar
+	BarAction_BAR_ACTION_ENTER_LONG  BarAction = 3 // opened a long position this bar
+	BarAction_BAR_ACTION_EXIT_LONG   BarAction = 4 // closed a long position this bar
+	BarAction_BAR_ACTION_HOLD_LONG   BarAction = 5 // holding an existing long, no exit this bar
+)
+
+// Enum value maps for BarAction.
+var (
+	BarAction_name = map[int32]string{
+		0: "BAR_ACTION_UNSPECIFIED",
+		1: "BAR_ACTION_WARMUP",
+		2: "BAR_ACTION_HOLD_FLAT",
+		3: "BAR_ACTION_ENTER_LONG",
+		4: "BAR_ACTION_EXIT_LONG",
+		5: "BAR_ACTION_HOLD_LONG",
+	}
+	BarAction_value = map[string]int32{
+		"BAR_ACTION_UNSPECIFIED": 0,
+		"BAR_ACTION_WARMUP":      1,
+		"BAR_ACTION_HOLD_FLAT":   2,
+		"BAR_ACTION_ENTER_LONG":  3,
+		"BAR_ACTION_EXIT_LONG":   4,
+		"BAR_ACTION_HOLD_LONG":   5,
+	}
+)
+
+func (x BarAction) Enum() *BarAction {
+	p := new(BarAction)
+	*p = x
+	return p
+}
+
+func (x BarAction) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BarAction) Descriptor() protoreflect.EnumDescriptor {
+	return file_analysis_v1_analysis_proto_enumTypes[1].Descriptor()
+}
+
+func (BarAction) Type() protoreflect.EnumType {
+	return &file_analysis_v1_analysis_proto_enumTypes[1]
+}
+
+func (x BarAction) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BarAction.Descriptor instead.
+func (BarAction) EnumDescriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{1}
+}
+
+// Why a symbol produced zero trades. Closed set → enum (C-04).
+type NoTradeReason int32
+
+const (
+	NoTradeReason_NO_TRADE_REASON_UNSPECIFIED          NoTradeReason = 0 // symbol traded, or not classified
+	NoTradeReason_NO_TRADE_REASON_ENTIRE_RANGE_WARMUP  NoTradeReason = 1 // the whole range was warm-up
+	NoTradeReason_NO_TRADE_REASON_ENTRY_NEVER_TRUE     NoTradeReason = 2 // entry condition never satisfied
+	NoTradeReason_NO_TRADE_REASON_INSUFFICIENT_CAPITAL NoTradeReason = 3 // reserved; not emitted this version
+)
+
+// Enum value maps for NoTradeReason.
+var (
+	NoTradeReason_name = map[int32]string{
+		0: "NO_TRADE_REASON_UNSPECIFIED",
+		1: "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP",
+		2: "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
+		3: "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
+	}
+	NoTradeReason_value = map[string]int32{
+		"NO_TRADE_REASON_UNSPECIFIED":          0,
+		"NO_TRADE_REASON_ENTIRE_RANGE_WARMUP":  1,
+		"NO_TRADE_REASON_ENTRY_NEVER_TRUE":     2,
+		"NO_TRADE_REASON_INSUFFICIENT_CAPITAL": 3,
+	}
+)
+
+func (x NoTradeReason) Enum() *NoTradeReason {
+	p := new(NoTradeReason)
+	*p = x
+	return p
+}
+
+func (x NoTradeReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (NoTradeReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_analysis_v1_analysis_proto_enumTypes[2].Descriptor()
+}
+
+func (NoTradeReason) Type() protoreflect.EnumType {
+	return &file_analysis_v1_analysis_proto_enumTypes[2]
+}
+
+func (x NoTradeReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use NoTradeReason.Descriptor instead.
+func (NoTradeReason) EnumDescriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{2}
+}
+
 type ComponentKind int32
 
 const (
@@ -106,11 +218,11 @@ func (x ComponentKind) String() string {
 }
 
 func (ComponentKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_analysis_v1_analysis_proto_enumTypes[1].Descriptor()
+	return file_analysis_v1_analysis_proto_enumTypes[3].Descriptor()
 }
 
 func (ComponentKind) Type() protoreflect.EnumType {
-	return &file_analysis_v1_analysis_proto_enumTypes[1]
+	return &file_analysis_v1_analysis_proto_enumTypes[3]
 }
 
 func (x ComponentKind) Number() protoreflect.EnumNumber {
@@ -119,7 +231,7 @@ func (x ComponentKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ComponentKind.Descriptor instead.
 func (ComponentKind) EnumDescriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{1}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{3}
 }
 
 type StrategyOperation int32
@@ -158,11 +270,11 @@ func (x StrategyOperation) String() string {
 }
 
 func (StrategyOperation) Descriptor() protoreflect.EnumDescriptor {
-	return file_analysis_v1_analysis_proto_enumTypes[2].Descriptor()
+	return file_analysis_v1_analysis_proto_enumTypes[4].Descriptor()
 }
 
 func (StrategyOperation) Type() protoreflect.EnumType {
-	return &file_analysis_v1_analysis_proto_enumTypes[2]
+	return &file_analysis_v1_analysis_proto_enumTypes[4]
 }
 
 func (x StrategyOperation) Number() protoreflect.EnumNumber {
@@ -171,7 +283,171 @@ func (x StrategyOperation) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use StrategyOperation.Descriptor instead.
 func (StrategyOperation) EnumDescriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{2}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{4}
+}
+
+// Comparator for a screen criterion's threshold test (closed set → enum).
+type Comparator int32
+
+const (
+	Comparator_COMPARATOR_UNSPECIFIED Comparator = 0
+	Comparator_COMPARATOR_LT          Comparator = 1
+	Comparator_COMPARATOR_LTE         Comparator = 2
+	Comparator_COMPARATOR_GT          Comparator = 3
+	Comparator_COMPARATOR_GTE         Comparator = 4
+	Comparator_COMPARATOR_BETWEEN     Comparator = 5 // threshold <= x <= threshold_high
+)
+
+// Enum value maps for Comparator.
+var (
+	Comparator_name = map[int32]string{
+		0: "COMPARATOR_UNSPECIFIED",
+		1: "COMPARATOR_LT",
+		2: "COMPARATOR_LTE",
+		3: "COMPARATOR_GT",
+		4: "COMPARATOR_GTE",
+		5: "COMPARATOR_BETWEEN",
+	}
+	Comparator_value = map[string]int32{
+		"COMPARATOR_UNSPECIFIED": 0,
+		"COMPARATOR_LT":          1,
+		"COMPARATOR_LTE":         2,
+		"COMPARATOR_GT":          3,
+		"COMPARATOR_GTE":         4,
+		"COMPARATOR_BETWEEN":     5,
+	}
+)
+
+func (x Comparator) Enum() *Comparator {
+	p := new(Comparator)
+	*p = x
+	return p
+}
+
+func (x Comparator) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Comparator) Descriptor() protoreflect.EnumDescriptor {
+	return file_analysis_v1_analysis_proto_enumTypes[5].Descriptor()
+}
+
+func (Comparator) Type() protoreflect.EnumType {
+	return &file_analysis_v1_analysis_proto_enumTypes[5]
+}
+
+func (x Comparator) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Comparator.Descriptor instead.
+func (Comparator) EnumDescriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{5}
+}
+
+// What a screen criterion evaluates.
+type ScreenKind int32
+
+const (
+	ScreenKind_SCREEN_KIND_UNSPECIFIED         ScreenKind = 0
+	ScreenKind_SCREEN_KIND_FUNDAMENTAL         ScreenKind = 1 // a fundamental metric (metric_name)
+	ScreenKind_SCREEN_KIND_TECHNICAL_FORMULA   ScreenKind = 2 // a custom formula (component)
+	ScreenKind_SCREEN_KIND_TECHNICAL_INDICATOR ScreenKind = 3 // a built-in indicator (component)
+	ScreenKind_SCREEN_KIND_SIGNAL              ScreenKind = 4 // source-weighted signal blend
+)
+
+// Enum value maps for ScreenKind.
+var (
+	ScreenKind_name = map[int32]string{
+		0: "SCREEN_KIND_UNSPECIFIED",
+		1: "SCREEN_KIND_FUNDAMENTAL",
+		2: "SCREEN_KIND_TECHNICAL_FORMULA",
+		3: "SCREEN_KIND_TECHNICAL_INDICATOR",
+		4: "SCREEN_KIND_SIGNAL",
+	}
+	ScreenKind_value = map[string]int32{
+		"SCREEN_KIND_UNSPECIFIED":         0,
+		"SCREEN_KIND_FUNDAMENTAL":         1,
+		"SCREEN_KIND_TECHNICAL_FORMULA":   2,
+		"SCREEN_KIND_TECHNICAL_INDICATOR": 3,
+		"SCREEN_KIND_SIGNAL":              4,
+	}
+)
+
+func (x ScreenKind) Enum() *ScreenKind {
+	p := new(ScreenKind)
+	*p = x
+	return p
+}
+
+func (x ScreenKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ScreenKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_analysis_v1_analysis_proto_enumTypes[6].Descriptor()
+}
+
+func (ScreenKind) Type() protoreflect.EnumType {
+	return &file_analysis_v1_analysis_proto_enumTypes[6]
+}
+
+func (x ScreenKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ScreenKind.Descriptor instead.
+func (ScreenKind) EnumDescriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{6}
+}
+
+type ScreenResultStatus int32
+
+const (
+	ScreenResultStatus_SCREEN_RESULT_STATUS_UNSPECIFIED       ScreenResultStatus = 0
+	ScreenResultStatus_SCREEN_RESULT_STATUS_OK                ScreenResultStatus = 1
+	ScreenResultStatus_SCREEN_RESULT_STATUS_INSUFFICIENT_DATA ScreenResultStatus = 2
+)
+
+// Enum value maps for ScreenResultStatus.
+var (
+	ScreenResultStatus_name = map[int32]string{
+		0: "SCREEN_RESULT_STATUS_UNSPECIFIED",
+		1: "SCREEN_RESULT_STATUS_OK",
+		2: "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA",
+	}
+	ScreenResultStatus_value = map[string]int32{
+		"SCREEN_RESULT_STATUS_UNSPECIFIED":       0,
+		"SCREEN_RESULT_STATUS_OK":                1,
+		"SCREEN_RESULT_STATUS_INSUFFICIENT_DATA": 2,
+	}
+)
+
+func (x ScreenResultStatus) Enum() *ScreenResultStatus {
+	p := new(ScreenResultStatus)
+	*p = x
+	return p
+}
+
+func (x ScreenResultStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ScreenResultStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_analysis_v1_analysis_proto_enumTypes[7].Descriptor()
+}
+
+func (ScreenResultStatus) Type() protoreflect.EnumType {
+	return &file_analysis_v1_analysis_proto_enumTypes[7]
+}
+
+func (x ScreenResultStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ScreenResultStatus.Descriptor instead.
+func (ScreenResultStatus) EnumDescriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{7}
 }
 
 type RunBacktestRequest struct {
@@ -368,6 +644,7 @@ type BacktestResult struct {
 	Trades           []*TradeRecord         `protobuf:"bytes,11,rep,name=trades,proto3" json:"trades,omitempty"`
 	Status           BacktestStatus         `protobuf:"varint,12,opt,name=status,proto3,enum=xstockstrat.analysis.v1.BacktestStatus" json:"status,omitempty"`
 	CoverageGaps     []*CoverageGap         `protobuf:"bytes,13,rep,name=coverage_gaps,json=coverageGaps,proto3" json:"coverage_gaps,omitempty"` // populated per-symbol when status == INSUFFICIENT_DATA
+	Diagnostics      []*SymbolDiagnostics   `protobuf:"bytes,14,rep,name=diagnostics,proto3" json:"diagnostics,omitempty"`                       // per-bar debug data for every simulated symbol (feature 064)
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -493,6 +770,13 @@ func (x *BacktestResult) GetCoverageGaps() []*CoverageGap {
 	return nil
 }
 
+func (x *BacktestResult) GetDiagnostics() []*SymbolDiagnostics {
+	if x != nil {
+		return x.Diagnostics
+	}
+	return nil
+}
+
 type TradeRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
@@ -593,6 +877,232 @@ func (x *TradeRecord) GetExitTime() *timestamppb.Timestamp {
 	return nil
 }
 
+// One row of day-by-day backtest diagnostics for a single bar.
+type BarDiagnostic struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	BarIndex      int32                  `protobuf:"varint,2,opt,name=bar_index,json=barIndex,proto3" json:"bar_index,omitempty"`
+	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Open          float64                `protobuf:"fixed64,4,opt,name=open,proto3" json:"open,omitempty"`
+	High          float64                `protobuf:"fixed64,5,opt,name=high,proto3" json:"high,omitempty"`
+	Low           float64                `protobuf:"fixed64,6,opt,name=low,proto3" json:"low,omitempty"`
+	Close         float64                `protobuf:"fixed64,7,opt,name=close,proto3" json:"close,omitempty"`
+	Volume        int64                  `protobuf:"varint,8,opt,name=volume,proto3" json:"volume,omitempty"`
+	Vwap          float64                `protobuf:"fixed64,9,opt,name=vwap,proto3" json:"vwap,omitempty"`
+	Indicators    map[string]float64     `protobuf:"bytes,10,rep,name=indicators,proto3" json:"indicators,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"` // present-only: a series is absent during its warm-up
+	Warmup        bool                   `protobuf:"varint,11,opt,name=warmup,proto3" json:"warmup,omitempty"`
+	SignalScore   float64                `protobuf:"fixed64,12,opt,name=signal_score,json=signalScore,proto3" json:"signal_score,omitempty"`
+	Conviction    float64                `protobuf:"fixed64,13,opt,name=conviction,proto3" json:"conviction,omitempty"`
+	Action        BarAction              `protobuf:"varint,14,opt,name=action,proto3,enum=xstockstrat.analysis.v1.BarAction" json:"action,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BarDiagnostic) Reset() {
+	*x = BarDiagnostic{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BarDiagnostic) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BarDiagnostic) ProtoMessage() {}
+
+func (x *BarDiagnostic) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BarDiagnostic.ProtoReflect.Descriptor instead.
+func (*BarDiagnostic) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *BarDiagnostic) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *BarDiagnostic) GetBarIndex() int32 {
+	if x != nil {
+		return x.BarIndex
+	}
+	return 0
+}
+
+func (x *BarDiagnostic) GetTimestamp() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Timestamp
+	}
+	return nil
+}
+
+func (x *BarDiagnostic) GetOpen() float64 {
+	if x != nil {
+		return x.Open
+	}
+	return 0
+}
+
+func (x *BarDiagnostic) GetHigh() float64 {
+	if x != nil {
+		return x.High
+	}
+	return 0
+}
+
+func (x *BarDiagnostic) GetLow() float64 {
+	if x != nil {
+		return x.Low
+	}
+	return 0
+}
+
+func (x *BarDiagnostic) GetClose() float64 {
+	if x != nil {
+		return x.Close
+	}
+	return 0
+}
+
+func (x *BarDiagnostic) GetVolume() int64 {
+	if x != nil {
+		return x.Volume
+	}
+	return 0
+}
+
+func (x *BarDiagnostic) GetVwap() float64 {
+	if x != nil {
+		return x.Vwap
+	}
+	return 0
+}
+
+func (x *BarDiagnostic) GetIndicators() map[string]float64 {
+	if x != nil {
+		return x.Indicators
+	}
+	return nil
+}
+
+func (x *BarDiagnostic) GetWarmup() bool {
+	if x != nil {
+		return x.Warmup
+	}
+	return false
+}
+
+func (x *BarDiagnostic) GetSignalScore() float64 {
+	if x != nil {
+		return x.SignalScore
+	}
+	return 0
+}
+
+func (x *BarDiagnostic) GetConviction() float64 {
+	if x != nil {
+		return x.Conviction
+	}
+	return 0
+}
+
+func (x *BarDiagnostic) GetAction() BarAction {
+	if x != nil {
+		return x.Action
+	}
+	return BarAction_BAR_ACTION_UNSPECIFIED
+}
+
+// Per-symbol diagnostics bundle attached to a BacktestResult.
+type SymbolDiagnostics struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Bars          []*BarDiagnostic       `protobuf:"bytes,2,rep,name=bars,proto3" json:"bars,omitempty"`
+	NoTradeReason NoTradeReason          `protobuf:"varint,3,opt,name=no_trade_reason,json=noTradeReason,proto3,enum=xstockstrat.analysis.v1.NoTradeReason" json:"no_trade_reason,omitempty"`
+	BarsTotal     int32                  `protobuf:"varint,4,opt,name=bars_total,json=barsTotal,proto3" json:"bars_total,omitempty"`
+	WarmupBars    int32                  `protobuf:"varint,5,opt,name=warmup_bars,json=warmupBars,proto3" json:"warmup_bars,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SymbolDiagnostics) Reset() {
+	*x = SymbolDiagnostics{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SymbolDiagnostics) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SymbolDiagnostics) ProtoMessage() {}
+
+func (x *SymbolDiagnostics) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SymbolDiagnostics.ProtoReflect.Descriptor instead.
+func (*SymbolDiagnostics) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *SymbolDiagnostics) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *SymbolDiagnostics) GetBars() []*BarDiagnostic {
+	if x != nil {
+		return x.Bars
+	}
+	return nil
+}
+
+func (x *SymbolDiagnostics) GetNoTradeReason() NoTradeReason {
+	if x != nil {
+		return x.NoTradeReason
+	}
+	return NoTradeReason_NO_TRADE_REASON_UNSPECIFIED
+}
+
+func (x *SymbolDiagnostics) GetBarsTotal() int32 {
+	if x != nil {
+		return x.BarsTotal
+	}
+	return 0
+}
+
+func (x *SymbolDiagnostics) GetWarmupBars() int32 {
+	if x != nil {
+		return x.WarmupBars
+	}
+	return 0
+}
+
 type ScoreStrategyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	StrategyId    string                 `protobuf:"bytes,1,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"`
@@ -603,7 +1113,7 @@ type ScoreStrategyRequest struct {
 
 func (x *ScoreStrategyRequest) Reset() {
 	*x = ScoreStrategyRequest{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[4]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -615,7 +1125,7 @@ func (x *ScoreStrategyRequest) String() string {
 func (*ScoreStrategyRequest) ProtoMessage() {}
 
 func (x *ScoreStrategyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[4]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -628,7 +1138,7 @@ func (x *ScoreStrategyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScoreStrategyRequest.ProtoReflect.Descriptor instead.
 func (*ScoreStrategyRequest) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{4}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ScoreStrategyRequest) GetStrategyId() string {
@@ -657,7 +1167,7 @@ type StrategyScore struct {
 
 func (x *StrategyScore) Reset() {
 	*x = StrategyScore{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[5]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -669,7 +1179,7 @@ func (x *StrategyScore) String() string {
 func (*StrategyScore) ProtoMessage() {}
 
 func (x *StrategyScore) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[5]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -682,7 +1192,7 @@ func (x *StrategyScore) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StrategyScore.ProtoReflect.Descriptor instead.
 func (*StrategyScore) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{5}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *StrategyScore) GetStrategyId() string {
@@ -725,7 +1235,7 @@ type StrategyReport struct {
 
 func (x *StrategyReport) Reset() {
 	*x = StrategyReport{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[6]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -737,7 +1247,7 @@ func (x *StrategyReport) String() string {
 func (*StrategyReport) ProtoMessage() {}
 
 func (x *StrategyReport) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[6]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -750,7 +1260,7 @@ func (x *StrategyReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StrategyReport.ProtoReflect.Descriptor instead.
 func (*StrategyReport) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{6}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *StrategyReport) GetStrategyId() string {
@@ -781,6 +1291,250 @@ func (x *StrategyReport) GetMetadata() *structpb.Struct {
 	return nil
 }
 
+type ListBacktestsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	StrategyId    string                 `protobuf:"bytes,1,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"`
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"` // 0 → server default (most recent 20)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBacktestsRequest) Reset() {
+	*x = ListBacktestsRequest{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBacktestsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBacktestsRequest) ProtoMessage() {}
+
+func (x *ListBacktestsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBacktestsRequest.ProtoReflect.Descriptor instead.
+func (*ListBacktestsRequest) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListBacktestsRequest) GetStrategyId() string {
+	if x != nil {
+		return x.StrategyId
+	}
+	return ""
+}
+
+func (x *ListBacktestsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type BacktestRunSummary struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	BacktestId       string                 `protobuf:"bytes,1,opt,name=backtest_id,json=backtestId,proto3" json:"backtest_id,omitempty"`
+	StrategyId       string                 `protobuf:"bytes,2,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"`
+	Status           BacktestStatus         `protobuf:"varint,3,opt,name=status,proto3,enum=xstockstrat.analysis.v1.BacktestStatus" json:"status,omitempty"`
+	TotalReturn      float64                `protobuf:"fixed64,4,opt,name=total_return,json=totalReturn,proto3" json:"total_return,omitempty"`
+	AnnualizedReturn float64                `protobuf:"fixed64,5,opt,name=annualized_return,json=annualizedReturn,proto3" json:"annualized_return,omitempty"`
+	SharpeRatio      float64                `protobuf:"fixed64,6,opt,name=sharpe_ratio,json=sharpeRatio,proto3" json:"sharpe_ratio,omitempty"`
+	MaxDrawdown      float64                `protobuf:"fixed64,7,opt,name=max_drawdown,json=maxDrawdown,proto3" json:"max_drawdown,omitempty"`
+	WinRate          float64                `protobuf:"fixed64,8,opt,name=win_rate,json=winRate,proto3" json:"win_rate,omitempty"`
+	TotalTrades      int32                  `protobuf:"varint,9,opt,name=total_trades,json=totalTrades,proto3" json:"total_trades,omitempty"`
+	ProfitFactor     float64                `protobuf:"fixed64,10,opt,name=profit_factor,json=profitFactor,proto3" json:"profit_factor,omitempty"`
+	Symbols          []string               `protobuf:"bytes,11,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	OverallScore     float64                `protobuf:"fixed64,12,opt,name=overall_score,json=overallScore,proto3" json:"overall_score,omitempty"` // 0 when the run earned no score (e.g. INSUFFICIENT_DATA)
+	Rating           string                 `protobuf:"bytes,13,opt,name=rating,proto3" json:"rating,omitempty"`                                   // "" when the run earned no score
+	CompletedAt      *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=completed_at,json=completedAt,proto3" json:"completed_at,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *BacktestRunSummary) Reset() {
+	*x = BacktestRunSummary{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BacktestRunSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BacktestRunSummary) ProtoMessage() {}
+
+func (x *BacktestRunSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BacktestRunSummary.ProtoReflect.Descriptor instead.
+func (*BacktestRunSummary) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *BacktestRunSummary) GetBacktestId() string {
+	if x != nil {
+		return x.BacktestId
+	}
+	return ""
+}
+
+func (x *BacktestRunSummary) GetStrategyId() string {
+	if x != nil {
+		return x.StrategyId
+	}
+	return ""
+}
+
+func (x *BacktestRunSummary) GetStatus() BacktestStatus {
+	if x != nil {
+		return x.Status
+	}
+	return BacktestStatus_BACKTEST_STATUS_UNSPECIFIED
+}
+
+func (x *BacktestRunSummary) GetTotalReturn() float64 {
+	if x != nil {
+		return x.TotalReturn
+	}
+	return 0
+}
+
+func (x *BacktestRunSummary) GetAnnualizedReturn() float64 {
+	if x != nil {
+		return x.AnnualizedReturn
+	}
+	return 0
+}
+
+func (x *BacktestRunSummary) GetSharpeRatio() float64 {
+	if x != nil {
+		return x.SharpeRatio
+	}
+	return 0
+}
+
+func (x *BacktestRunSummary) GetMaxDrawdown() float64 {
+	if x != nil {
+		return x.MaxDrawdown
+	}
+	return 0
+}
+
+func (x *BacktestRunSummary) GetWinRate() float64 {
+	if x != nil {
+		return x.WinRate
+	}
+	return 0
+}
+
+func (x *BacktestRunSummary) GetTotalTrades() int32 {
+	if x != nil {
+		return x.TotalTrades
+	}
+	return 0
+}
+
+func (x *BacktestRunSummary) GetProfitFactor() float64 {
+	if x != nil {
+		return x.ProfitFactor
+	}
+	return 0
+}
+
+func (x *BacktestRunSummary) GetSymbols() []string {
+	if x != nil {
+		return x.Symbols
+	}
+	return nil
+}
+
+func (x *BacktestRunSummary) GetOverallScore() float64 {
+	if x != nil {
+		return x.OverallScore
+	}
+	return 0
+}
+
+func (x *BacktestRunSummary) GetRating() string {
+	if x != nil {
+		return x.Rating
+	}
+	return ""
+}
+
+func (x *BacktestRunSummary) GetCompletedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CompletedAt
+	}
+	return nil
+}
+
+type ListBacktestsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Runs          []*BacktestRunSummary  `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBacktestsResponse) Reset() {
+	*x = ListBacktestsResponse{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBacktestsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBacktestsResponse) ProtoMessage() {}
+
+func (x *ListBacktestsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBacktestsResponse.ProtoReflect.Descriptor instead.
+func (*ListBacktestsResponse) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ListBacktestsResponse) GetRuns() []*BacktestRunSummary {
+	if x != nil {
+		return x.Runs
+	}
+	return nil
+}
+
 type ListStrategiesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Page          *v1.PageRequest        `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
@@ -791,7 +1545,7 @@ type ListStrategiesRequest struct {
 
 func (x *ListStrategiesRequest) Reset() {
 	*x = ListStrategiesRequest{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[7]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -803,7 +1557,7 @@ func (x *ListStrategiesRequest) String() string {
 func (*ListStrategiesRequest) ProtoMessage() {}
 
 func (x *ListStrategiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[7]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -816,7 +1570,7 @@ func (x *ListStrategiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListStrategiesRequest.ProtoReflect.Descriptor instead.
 func (*ListStrategiesRequest) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{7}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ListStrategiesRequest) GetPage() *v1.PageRequest {
@@ -843,7 +1597,7 @@ type ListStrategiesResponse struct {
 
 func (x *ListStrategiesResponse) Reset() {
 	*x = ListStrategiesResponse{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[8]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -855,7 +1609,7 @@ func (x *ListStrategiesResponse) String() string {
 func (*ListStrategiesResponse) ProtoMessage() {}
 
 func (x *ListStrategiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[8]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -868,7 +1622,7 @@ func (x *ListStrategiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListStrategiesResponse.ProtoReflect.Descriptor instead.
 func (*ListStrategiesResponse) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{8}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ListStrategiesResponse) GetStrategies() []*StrategyScore {
@@ -894,7 +1648,7 @@ type GetStrategyReportRequest struct {
 
 func (x *GetStrategyReportRequest) Reset() {
 	*x = GetStrategyReportRequest{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[9]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -906,7 +1660,7 @@ func (x *GetStrategyReportRequest) String() string {
 func (*GetStrategyReportRequest) ProtoMessage() {}
 
 func (x *GetStrategyReportRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[9]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -919,7 +1673,7 @@ func (x *GetStrategyReportRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStrategyReportRequest.ProtoReflect.Descriptor instead.
 func (*GetStrategyReportRequest) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{9}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetStrategyReportRequest) GetStrategyId() string {
@@ -942,7 +1696,7 @@ type StrategyComponent struct {
 
 func (x *StrategyComponent) Reset() {
 	*x = StrategyComponent{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[10]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -954,7 +1708,7 @@ func (x *StrategyComponent) String() string {
 func (*StrategyComponent) ProtoMessage() {}
 
 func (x *StrategyComponent) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[10]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -967,7 +1721,7 @@ func (x *StrategyComponent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StrategyComponent.ProtoReflect.Descriptor instead.
 func (*StrategyComponent) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{10}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *StrategyComponent) GetRefName() string {
@@ -1021,7 +1775,7 @@ type StrategyDefinition struct {
 
 func (x *StrategyDefinition) Reset() {
 	*x = StrategyDefinition{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[11]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1033,7 +1787,7 @@ func (x *StrategyDefinition) String() string {
 func (*StrategyDefinition) ProtoMessage() {}
 
 func (x *StrategyDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[11]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1046,7 +1800,7 @@ func (x *StrategyDefinition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StrategyDefinition.ProtoReflect.Descriptor instead.
 func (*StrategyDefinition) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{11}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *StrategyDefinition) GetStrategyId() string {
@@ -1115,7 +1869,7 @@ type ManageStrategyRequest struct {
 
 func (x *ManageStrategyRequest) Reset() {
 	*x = ManageStrategyRequest{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[12]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1127,7 +1881,7 @@ func (x *ManageStrategyRequest) String() string {
 func (*ManageStrategyRequest) ProtoMessage() {}
 
 func (x *ManageStrategyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[12]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1140,7 +1894,7 @@ func (x *ManageStrategyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManageStrategyRequest.ProtoReflect.Descriptor instead.
 func (*ManageStrategyRequest) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{12}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ManageStrategyRequest) GetOperation() StrategyOperation {
@@ -1166,7 +1920,7 @@ type GetStrategyRequest struct {
 
 func (x *GetStrategyRequest) Reset() {
 	*x = GetStrategyRequest{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[13]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1178,7 +1932,7 @@ func (x *GetStrategyRequest) String() string {
 func (*GetStrategyRequest) ProtoMessage() {}
 
 func (x *GetStrategyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[13]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1191,7 +1945,7 @@ func (x *GetStrategyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStrategyRequest.ProtoReflect.Descriptor instead.
 func (*GetStrategyRequest) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{13}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetStrategyRequest) GetStrategyId() string {
@@ -1212,7 +1966,7 @@ type ListStrategyDefinitionsRequest struct {
 
 func (x *ListStrategyDefinitionsRequest) Reset() {
 	*x = ListStrategyDefinitionsRequest{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[14]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1224,7 +1978,7 @@ func (x *ListStrategyDefinitionsRequest) String() string {
 func (*ListStrategyDefinitionsRequest) ProtoMessage() {}
 
 func (x *ListStrategyDefinitionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[14]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1237,7 +1991,7 @@ func (x *ListStrategyDefinitionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListStrategyDefinitionsRequest.ProtoReflect.Descriptor instead.
 func (*ListStrategyDefinitionsRequest) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{14}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ListStrategyDefinitionsRequest) GetIncludeInactive() bool {
@@ -1271,7 +2025,7 @@ type ListStrategyDefinitionsResponse struct {
 
 func (x *ListStrategyDefinitionsResponse) Reset() {
 	*x = ListStrategyDefinitionsResponse{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[15]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1283,7 +2037,7 @@ func (x *ListStrategyDefinitionsResponse) String() string {
 func (*ListStrategyDefinitionsResponse) ProtoMessage() {}
 
 func (x *ListStrategyDefinitionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[15]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1296,7 +2050,7 @@ func (x *ListStrategyDefinitionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListStrategyDefinitionsResponse.ProtoReflect.Descriptor instead.
 func (*ListStrategyDefinitionsResponse) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{15}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListStrategyDefinitionsResponse) GetDefinitions() []*StrategyDefinition {
@@ -1323,7 +2077,7 @@ type SetStrategyLiveRequest struct {
 
 func (x *SetStrategyLiveRequest) Reset() {
 	*x = SetStrategyLiveRequest{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[16]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1335,7 +2089,7 @@ func (x *SetStrategyLiveRequest) String() string {
 func (*SetStrategyLiveRequest) ProtoMessage() {}
 
 func (x *SetStrategyLiveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[16]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1348,7 +2102,7 @@ func (x *SetStrategyLiveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetStrategyLiveRequest.ProtoReflect.Descriptor instead.
 func (*SetStrategyLiveRequest) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{16}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SetStrategyLiveRequest) GetStrategyId() string {
@@ -1374,7 +2128,7 @@ type SetStrategyLiveResponse struct {
 
 func (x *SetStrategyLiveResponse) Reset() {
 	*x = SetStrategyLiveResponse{}
-	mi := &file_analysis_v1_analysis_proto_msgTypes[17]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1386,7 +2140,7 @@ func (x *SetStrategyLiveResponse) String() string {
 func (*SetStrategyLiveResponse) ProtoMessage() {}
 
 func (x *SetStrategyLiveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_analysis_v1_analysis_proto_msgTypes[17]
+	mi := &file_analysis_v1_analysis_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1399,12 +2153,510 @@ func (x *SetStrategyLiveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetStrategyLiveResponse.ProtoReflect.Descriptor instead.
 func (*SetStrategyLiveResponse) Descriptor() ([]byte, []int) {
-	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{17}
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SetStrategyLiveResponse) GetDefinition() *StrategyDefinition {
 	if x != nil {
 		return x.Definition
+	}
+	return nil
+}
+
+type ScreenCriterion struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RefName       string                 `protobuf:"bytes,1,opt,name=ref_name,json=refName,proto3" json:"ref_name,omitempty"`
+	Kind          ScreenKind             `protobuf:"varint,2,opt,name=kind,proto3,enum=xstockstrat.analysis.v1.ScreenKind" json:"kind,omitempty"`
+	MetricName    string                 `protobuf:"bytes,3,opt,name=metric_name,json=metricName,proto3" json:"metric_name,omitempty"` // FUNDAMENTAL only (e.g. "pe_ratio")
+	Component     *StrategyComponent     `protobuf:"bytes,4,opt,name=component,proto3" json:"component,omitempty"`                     // reused, for TECHNICAL_* kinds
+	Op            Comparator             `protobuf:"varint,5,opt,name=op,proto3,enum=xstockstrat.analysis.v1.Comparator" json:"op,omitempty"`
+	Threshold     float64                `protobuf:"fixed64,6,opt,name=threshold,proto3" json:"threshold,omitempty"`
+	ThresholdHigh float64                `protobuf:"fixed64,7,opt,name=threshold_high,json=thresholdHigh,proto3" json:"threshold_high,omitempty"` // for COMPARATOR_BETWEEN
+	Weight        float64                `protobuf:"fixed64,8,opt,name=weight,proto3" json:"weight,omitempty"`                                    // contribution to the blended score
+	HardFilter    bool                   `protobuf:"varint,9,opt,name=hard_filter,json=hardFilter,proto3" json:"hard_filter,omitempty"`           // true → failing this excludes the symbol
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScreenCriterion) Reset() {
+	*x = ScreenCriterion{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScreenCriterion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScreenCriterion) ProtoMessage() {}
+
+func (x *ScreenCriterion) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScreenCriterion.ProtoReflect.Descriptor instead.
+func (*ScreenCriterion) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ScreenCriterion) GetRefName() string {
+	if x != nil {
+		return x.RefName
+	}
+	return ""
+}
+
+func (x *ScreenCriterion) GetKind() ScreenKind {
+	if x != nil {
+		return x.Kind
+	}
+	return ScreenKind_SCREEN_KIND_UNSPECIFIED
+}
+
+func (x *ScreenCriterion) GetMetricName() string {
+	if x != nil {
+		return x.MetricName
+	}
+	return ""
+}
+
+func (x *ScreenCriterion) GetComponent() *StrategyComponent {
+	if x != nil {
+		return x.Component
+	}
+	return nil
+}
+
+func (x *ScreenCriterion) GetOp() Comparator {
+	if x != nil {
+		return x.Op
+	}
+	return Comparator_COMPARATOR_UNSPECIFIED
+}
+
+func (x *ScreenCriterion) GetThreshold() float64 {
+	if x != nil {
+		return x.Threshold
+	}
+	return 0
+}
+
+func (x *ScreenCriterion) GetThresholdHigh() float64 {
+	if x != nil {
+		return x.ThresholdHigh
+	}
+	return 0
+}
+
+func (x *ScreenCriterion) GetWeight() float64 {
+	if x != nil {
+		return x.Weight
+	}
+	return 0
+}
+
+func (x *ScreenCriterion) GetHardFilter() bool {
+	if x != nil {
+		return x.HardFilter
+	}
+	return false
+}
+
+type ScreenResult struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Symbol          string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Score           float64                `protobuf:"fixed64,2,opt,name=score,proto3" json:"score,omitempty"`
+	CriterionScores map[string]float64     `protobuf:"bytes,3,rep,name=criterion_scores,json=criterionScores,proto3" json:"criterion_scores,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"` // per ref_name; skipped criteria are absent
+	Passed          bool                   `protobuf:"varint,4,opt,name=passed,proto3" json:"passed,omitempty"`
+	Status          ScreenResultStatus     `protobuf:"varint,5,opt,name=status,proto3,enum=xstockstrat.analysis.v1.ScreenResultStatus" json:"status,omitempty"`
+	Gap             *CoverageGap           `protobuf:"bytes,6,opt,name=gap,proto3" json:"gap,omitempty"` // populated when status == INSUFFICIENT_DATA
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ScreenResult) Reset() {
+	*x = ScreenResult{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScreenResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScreenResult) ProtoMessage() {}
+
+func (x *ScreenResult) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScreenResult.ProtoReflect.Descriptor instead.
+func (*ScreenResult) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ScreenResult) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *ScreenResult) GetScore() float64 {
+	if x != nil {
+		return x.Score
+	}
+	return 0
+}
+
+func (x *ScreenResult) GetCriterionScores() map[string]float64 {
+	if x != nil {
+		return x.CriterionScores
+	}
+	return nil
+}
+
+func (x *ScreenResult) GetPassed() bool {
+	if x != nil {
+		return x.Passed
+	}
+	return false
+}
+
+func (x *ScreenResult) GetStatus() ScreenResultStatus {
+	if x != nil {
+		return x.Status
+	}
+	return ScreenResultStatus_SCREEN_RESULT_STATUS_UNSPECIFIED
+}
+
+func (x *ScreenResult) GetGap() *CoverageGap {
+	if x != nil {
+		return x.Gap
+	}
+	return nil
+}
+
+type ScreenSymbolsRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Symbols  []string               `protobuf:"bytes,1,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	Criteria []*ScreenCriterion     `protobuf:"bytes,2,rep,name=criteria,proto3" json:"criteria,omitempty"`
+	// Blend params — same names the extracted scoring module reads (kept consistent with backtest).
+	SignalSources   []string `protobuf:"bytes,3,rep,name=signal_sources,json=signalSources,proto3" json:"signal_sources,omitempty"`
+	SignalWeight    float64  `protobuf:"fixed64,4,opt,name=signal_weight,json=signalWeight,proto3" json:"signal_weight,omitempty"`
+	TechnicalWeight float64  `protobuf:"fixed64,5,opt,name=technical_weight,json=technicalWeight,proto3" json:"technical_weight,omitempty"`
+	MinConviction   float64  `protobuf:"fixed64,6,opt,name=min_conviction,json=minConviction,proto3" json:"min_conviction,omitempty"`
+	RankLimit       int32    `protobuf:"varint,7,opt,name=rank_limit,json=rankLimit,proto3" json:"rank_limit,omitempty"`
+	// Reserved/optional — historical as-of is deferred (OQ-060-e); latest bar is the default.
+	EvaluationWindow *v1.TimeRange `protobuf:"bytes,8,opt,name=evaluation_window,json=evaluationWindow,proto3" json:"evaluation_window,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ScreenSymbolsRequest) Reset() {
+	*x = ScreenSymbolsRequest{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScreenSymbolsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScreenSymbolsRequest) ProtoMessage() {}
+
+func (x *ScreenSymbolsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScreenSymbolsRequest.ProtoReflect.Descriptor instead.
+func (*ScreenSymbolsRequest) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ScreenSymbolsRequest) GetSymbols() []string {
+	if x != nil {
+		return x.Symbols
+	}
+	return nil
+}
+
+func (x *ScreenSymbolsRequest) GetCriteria() []*ScreenCriterion {
+	if x != nil {
+		return x.Criteria
+	}
+	return nil
+}
+
+func (x *ScreenSymbolsRequest) GetSignalSources() []string {
+	if x != nil {
+		return x.SignalSources
+	}
+	return nil
+}
+
+func (x *ScreenSymbolsRequest) GetSignalWeight() float64 {
+	if x != nil {
+		return x.SignalWeight
+	}
+	return 0
+}
+
+func (x *ScreenSymbolsRequest) GetTechnicalWeight() float64 {
+	if x != nil {
+		return x.TechnicalWeight
+	}
+	return 0
+}
+
+func (x *ScreenSymbolsRequest) GetMinConviction() float64 {
+	if x != nil {
+		return x.MinConviction
+	}
+	return 0
+}
+
+func (x *ScreenSymbolsRequest) GetRankLimit() int32 {
+	if x != nil {
+		return x.RankLimit
+	}
+	return 0
+}
+
+func (x *ScreenSymbolsRequest) GetEvaluationWindow() *v1.TimeRange {
+	if x != nil {
+		return x.EvaluationWindow
+	}
+	return nil
+}
+
+type ScreenSymbolsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Results       []*ScreenResult        `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
+	CoverageGaps  []*CoverageGap         `protobuf:"bytes,2,rep,name=coverage_gaps,json=coverageGaps,proto3" json:"coverage_gaps,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScreenSymbolsResponse) Reset() {
+	*x = ScreenSymbolsResponse{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScreenSymbolsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScreenSymbolsResponse) ProtoMessage() {}
+
+func (x *ScreenSymbolsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScreenSymbolsResponse.ProtoReflect.Descriptor instead.
+func (*ScreenSymbolsResponse) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ScreenSymbolsResponse) GetResults() []*ScreenResult {
+	if x != nil {
+		return x.Results
+	}
+	return nil
+}
+
+func (x *ScreenSymbolsResponse) GetCoverageGaps() []*CoverageGap {
+	if x != nil {
+		return x.CoverageGaps
+	}
+	return nil
+}
+
+type RunFundamentalsScanRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Force         bool                   `protobuf:"varint,1,opt,name=force,proto3" json:"force,omitempty"`                 // ignore the day's idempotency guard / re-emit
+	DryRun        bool                   `protobuf:"varint,2,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"` // score + report but do not emit or spend cache calls
+	Symbols       []string               `protobuf:"bytes,3,rep,name=symbols,proto3" json:"symbols,omitempty"`              // optional explicit override of the computed universe
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunFundamentalsScanRequest) Reset() {
+	*x = RunFundamentalsScanRequest{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunFundamentalsScanRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunFundamentalsScanRequest) ProtoMessage() {}
+
+func (x *RunFundamentalsScanRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunFundamentalsScanRequest.ProtoReflect.Descriptor instead.
+func (*RunFundamentalsScanRequest) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *RunFundamentalsScanRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
+}
+
+func (x *RunFundamentalsScanRequest) GetDryRun() bool {
+	if x != nil {
+		return x.DryRun
+	}
+	return false
+}
+
+func (x *RunFundamentalsScanRequest) GetSymbols() []string {
+	if x != nil {
+		return x.Symbols
+	}
+	return nil
+}
+
+type FundamentalsScanSummary struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	RunId            string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	SymbolsProcessed int32                  `protobuf:"varint,2,opt,name=symbols_processed,json=symbolsProcessed,proto3" json:"symbols_processed,omitempty"`
+	SignalsEmitted   int32                  `protobuf:"varint,3,opt,name=signals_emitted,json=signalsEmitted,proto3" json:"signals_emitted,omitempty"`
+	CallsSpent       int32                  `protobuf:"varint,4,opt,name=calls_spent,json=callsSpent,proto3" json:"calls_spent,omitempty"`
+	DeferredCount    int32                  `protobuf:"varint,5,opt,name=deferred_count,json=deferredCount,proto3" json:"deferred_count,omitempty"`
+	Status           string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"` // "completed" | "budget_deferred" | "failed"
+	FinishedAt       *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *FundamentalsScanSummary) Reset() {
+	*x = FundamentalsScanSummary{}
+	mi := &file_analysis_v1_analysis_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FundamentalsScanSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FundamentalsScanSummary) ProtoMessage() {}
+
+func (x *FundamentalsScanSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_analysis_v1_analysis_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FundamentalsScanSummary.ProtoReflect.Descriptor instead.
+func (*FundamentalsScanSummary) Descriptor() ([]byte, []int) {
+	return file_analysis_v1_analysis_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *FundamentalsScanSummary) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *FundamentalsScanSummary) GetSymbolsProcessed() int32 {
+	if x != nil {
+		return x.SymbolsProcessed
+	}
+	return 0
+}
+
+func (x *FundamentalsScanSummary) GetSignalsEmitted() int32 {
+	if x != nil {
+		return x.SignalsEmitted
+	}
+	return 0
+}
+
+func (x *FundamentalsScanSummary) GetCallsSpent() int32 {
+	if x != nil {
+		return x.CallsSpent
+	}
+	return 0
+}
+
+func (x *FundamentalsScanSummary) GetDeferredCount() int32 {
+	if x != nil {
+		return x.DeferredCount
+	}
+	return 0
+}
+
+func (x *FundamentalsScanSummary) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *FundamentalsScanSummary) GetFinishedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FinishedAt
 	}
 	return nil
 }
@@ -1429,7 +2681,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x0frequested_range\x18\x03 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x0erequestedRange\x12\x1b\n" +
 	"\tbars_have\x18\x04 \x01(\x03R\bbarsHave\x12\x1b\n" +
 	"\tbars_need\x18\x05 \x01(\x03R\bbarsNeed\x122\n" +
-	"\x03gap\x18\x06 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x03gap\"\xd4\x04\n" +
+	"\x03gap\x18\x06 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x03gap\"\xa2\x05\n" +
 	"\x0eBacktestResult\x12\x1f\n" +
 	"\vbacktest_id\x18\x01 \x01(\tR\n" +
 	"backtestId\x12\x1f\n" +
@@ -1446,7 +2698,8 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\vcompletedAt\x12<\n" +
 	"\x06trades\x18\v \x03(\v2$.xstockstrat.analysis.v1.TradeRecordR\x06trades\x12?\n" +
 	"\x06status\x18\f \x01(\x0e2'.xstockstrat.analysis.v1.BacktestStatusR\x06status\x12I\n" +
-	"\rcoverage_gaps\x18\r \x03(\v2$.xstockstrat.analysis.v1.CoverageGapR\fcoverageGaps\"\x91\x02\n" +
+	"\rcoverage_gaps\x18\r \x03(\v2$.xstockstrat.analysis.v1.CoverageGapR\fcoverageGaps\x12L\n" +
+	"\vdiagnostics\x18\x0e \x03(\v2*.xstockstrat.analysis.v1.SymbolDiagnosticsR\vdiagnostics\"\x91\x02\n" +
 	"\vTradeRecord\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x12\n" +
 	"\x04side\x18\x02 \x01(\tR\x04side\x12\x10\n" +
@@ -1458,7 +2711,38 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x03pnl\x18\x06 \x01(\x01R\x03pnl\x129\n" +
 	"\n" +
 	"entry_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tentryTime\x127\n" +
-	"\texit_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bexitTime\"o\n" +
+	"\texit_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bexitTime\"\xa8\x04\n" +
+	"\rBarDiagnostic\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x1b\n" +
+	"\tbar_index\x18\x02 \x01(\x05R\bbarIndex\x128\n" +
+	"\ttimestamp\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x12\n" +
+	"\x04open\x18\x04 \x01(\x01R\x04open\x12\x12\n" +
+	"\x04high\x18\x05 \x01(\x01R\x04high\x12\x10\n" +
+	"\x03low\x18\x06 \x01(\x01R\x03low\x12\x14\n" +
+	"\x05close\x18\a \x01(\x01R\x05close\x12\x16\n" +
+	"\x06volume\x18\b \x01(\x03R\x06volume\x12\x12\n" +
+	"\x04vwap\x18\t \x01(\x01R\x04vwap\x12V\n" +
+	"\n" +
+	"indicators\x18\n" +
+	" \x03(\v26.xstockstrat.analysis.v1.BarDiagnostic.IndicatorsEntryR\n" +
+	"indicators\x12\x16\n" +
+	"\x06warmup\x18\v \x01(\bR\x06warmup\x12!\n" +
+	"\fsignal_score\x18\f \x01(\x01R\vsignalScore\x12\x1e\n" +
+	"\n" +
+	"conviction\x18\r \x01(\x01R\n" +
+	"conviction\x12:\n" +
+	"\x06action\x18\x0e \x01(\x0e2\".xstockstrat.analysis.v1.BarActionR\x06action\x1a=\n" +
+	"\x0fIndicatorsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\xf7\x01\n" +
+	"\x11SymbolDiagnostics\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12:\n" +
+	"\x04bars\x18\x02 \x03(\v2&.xstockstrat.analysis.v1.BarDiagnosticR\x04bars\x12N\n" +
+	"\x0fno_trade_reason\x18\x03 \x01(\x0e2&.xstockstrat.analysis.v1.NoTradeReasonR\rnoTradeReason\x12\x1d\n" +
+	"\n" +
+	"bars_total\x18\x04 \x01(\x05R\tbarsTotal\x12\x1f\n" +
+	"\vwarmup_bars\x18\x05 \x01(\x05R\n" +
+	"warmupBars\"o\n" +
 	"\x14ScoreStrategyRequest\x12\x1f\n" +
 	"\vstrategy_id\x18\x01 \x01(\tR\n" +
 	"strategyId\x126\n" +
@@ -1477,7 +2761,31 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"strategyId\x12P\n" +
 	"\x0flatest_backtest\x18\x02 \x01(\v2'.xstockstrat.analysis.v1.BacktestResultR\x0elatestBacktest\x12<\n" +
 	"\x05score\x18\x03 \x01(\v2&.xstockstrat.analysis.v1.StrategyScoreR\x05score\x123\n" +
-	"\bmetadata\x18\x04 \x01(\v2\x17.google.protobuf.StructR\bmetadata\"h\n" +
+	"\bmetadata\x18\x04 \x01(\v2\x17.google.protobuf.StructR\bmetadata\"M\n" +
+	"\x14ListBacktestsRequest\x12\x1f\n" +
+	"\vstrategy_id\x18\x01 \x01(\tR\n" +
+	"strategyId\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\"\xa6\x04\n" +
+	"\x12BacktestRunSummary\x12\x1f\n" +
+	"\vbacktest_id\x18\x01 \x01(\tR\n" +
+	"backtestId\x12\x1f\n" +
+	"\vstrategy_id\x18\x02 \x01(\tR\n" +
+	"strategyId\x12?\n" +
+	"\x06status\x18\x03 \x01(\x0e2'.xstockstrat.analysis.v1.BacktestStatusR\x06status\x12!\n" +
+	"\ftotal_return\x18\x04 \x01(\x01R\vtotalReturn\x12+\n" +
+	"\x11annualized_return\x18\x05 \x01(\x01R\x10annualizedReturn\x12!\n" +
+	"\fsharpe_ratio\x18\x06 \x01(\x01R\vsharpeRatio\x12!\n" +
+	"\fmax_drawdown\x18\a \x01(\x01R\vmaxDrawdown\x12\x19\n" +
+	"\bwin_rate\x18\b \x01(\x01R\awinRate\x12!\n" +
+	"\ftotal_trades\x18\t \x01(\x05R\vtotalTrades\x12#\n" +
+	"\rprofit_factor\x18\n" +
+	" \x01(\x01R\fprofitFactor\x12\x18\n" +
+	"\asymbols\x18\v \x03(\tR\asymbols\x12#\n" +
+	"\roverall_score\x18\f \x01(\x01R\foverallScore\x12\x16\n" +
+	"\x06rating\x18\r \x01(\tR\x06rating\x12=\n" +
+	"\fcompleted_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\vcompletedAt\"X\n" +
+	"\x15ListBacktestsResponse\x12?\n" +
+	"\x04runs\x18\x01 \x03(\v2+.xstockstrat.analysis.v1.BacktestRunSummaryR\x04runs\"h\n" +
 	"\x15ListStrategiesRequest\x126\n" +
 	"\x04page\x18\x01 \x01(\v2\".xstockstrat.common.v1.PageRequestR\x04page\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\"\x99\x01\n" +
@@ -1536,11 +2844,72 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x17SetStrategyLiveResponse\x12K\n" +
 	"\n" +
 	"definition\x18\x01 \x01(\v2+.xstockstrat.analysis.v1.StrategyDefinitionR\n" +
-	"definition*p\n" +
+	"definition\"\x83\x03\n" +
+	"\x0fScreenCriterion\x12\x19\n" +
+	"\bref_name\x18\x01 \x01(\tR\arefName\x127\n" +
+	"\x04kind\x18\x02 \x01(\x0e2#.xstockstrat.analysis.v1.ScreenKindR\x04kind\x12\x1f\n" +
+	"\vmetric_name\x18\x03 \x01(\tR\n" +
+	"metricName\x12H\n" +
+	"\tcomponent\x18\x04 \x01(\v2*.xstockstrat.analysis.v1.StrategyComponentR\tcomponent\x123\n" +
+	"\x02op\x18\x05 \x01(\x0e2#.xstockstrat.analysis.v1.ComparatorR\x02op\x12\x1c\n" +
+	"\tthreshold\x18\x06 \x01(\x01R\tthreshold\x12%\n" +
+	"\x0ethreshold_high\x18\a \x01(\x01R\rthresholdHigh\x12\x16\n" +
+	"\x06weight\x18\b \x01(\x01R\x06weight\x12\x1f\n" +
+	"\vhard_filter\x18\t \x01(\bR\n" +
+	"hardFilter\"\xfc\x02\n" +
+	"\fScreenResult\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x14\n" +
+	"\x05score\x18\x02 \x01(\x01R\x05score\x12e\n" +
+	"\x10criterion_scores\x18\x03 \x03(\v2:.xstockstrat.analysis.v1.ScreenResult.CriterionScoresEntryR\x0fcriterionScores\x12\x16\n" +
+	"\x06passed\x18\x04 \x01(\bR\x06passed\x12C\n" +
+	"\x06status\x18\x05 \x01(\x0e2+.xstockstrat.analysis.v1.ScreenResultStatusR\x06status\x126\n" +
+	"\x03gap\x18\x06 \x01(\v2$.xstockstrat.analysis.v1.CoverageGapR\x03gap\x1aB\n" +
+	"\x14CriterionScoresEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\x82\x03\n" +
+	"\x14ScreenSymbolsRequest\x12\x18\n" +
+	"\asymbols\x18\x01 \x03(\tR\asymbols\x12D\n" +
+	"\bcriteria\x18\x02 \x03(\v2(.xstockstrat.analysis.v1.ScreenCriterionR\bcriteria\x12%\n" +
+	"\x0esignal_sources\x18\x03 \x03(\tR\rsignalSources\x12#\n" +
+	"\rsignal_weight\x18\x04 \x01(\x01R\fsignalWeight\x12)\n" +
+	"\x10technical_weight\x18\x05 \x01(\x01R\x0ftechnicalWeight\x12%\n" +
+	"\x0emin_conviction\x18\x06 \x01(\x01R\rminConviction\x12\x1d\n" +
+	"\n" +
+	"rank_limit\x18\a \x01(\x05R\trankLimit\x12M\n" +
+	"\x11evaluation_window\x18\b \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x10evaluationWindow\"\xa3\x01\n" +
+	"\x15ScreenSymbolsResponse\x12?\n" +
+	"\aresults\x18\x01 \x03(\v2%.xstockstrat.analysis.v1.ScreenResultR\aresults\x12I\n" +
+	"\rcoverage_gaps\x18\x02 \x03(\v2$.xstockstrat.analysis.v1.CoverageGapR\fcoverageGaps\"e\n" +
+	"\x1aRunFundamentalsScanRequest\x12\x14\n" +
+	"\x05force\x18\x01 \x01(\bR\x05force\x12\x17\n" +
+	"\adry_run\x18\x02 \x01(\bR\x06dryRun\x12\x18\n" +
+	"\asymbols\x18\x03 \x03(\tR\asymbols\"\xa3\x02\n" +
+	"\x17FundamentalsScanSummary\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12+\n" +
+	"\x11symbols_processed\x18\x02 \x01(\x05R\x10symbolsProcessed\x12'\n" +
+	"\x0fsignals_emitted\x18\x03 \x01(\x05R\x0esignalsEmitted\x12\x1f\n" +
+	"\vcalls_spent\x18\x04 \x01(\x05R\n" +
+	"callsSpent\x12%\n" +
+	"\x0edeferred_count\x18\x05 \x01(\x05R\rdeferredCount\x12\x16\n" +
+	"\x06status\x18\x06 \x01(\tR\x06status\x12;\n" +
+	"\vfinished_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"finishedAt*p\n" +
 	"\x0eBacktestStatus\x12\x1f\n" +
 	"\x1bBACKTEST_STATUS_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12BACKTEST_STATUS_OK\x10\x01\x12%\n" +
-	"!BACKTEST_STATUS_INSUFFICIENT_DATA\x10\x02*x\n" +
+	"!BACKTEST_STATUS_INSUFFICIENT_DATA\x10\x02*\xa7\x01\n" +
+	"\tBarAction\x12\x1a\n" +
+	"\x16BAR_ACTION_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11BAR_ACTION_WARMUP\x10\x01\x12\x18\n" +
+	"\x14BAR_ACTION_HOLD_FLAT\x10\x02\x12\x19\n" +
+	"\x15BAR_ACTION_ENTER_LONG\x10\x03\x12\x18\n" +
+	"\x14BAR_ACTION_EXIT_LONG\x10\x04\x12\x18\n" +
+	"\x14BAR_ACTION_HOLD_LONG\x10\x05*\xa9\x01\n" +
+	"\rNoTradeReason\x12\x1f\n" +
+	"\x1bNO_TRADE_REASON_UNSPECIFIED\x10\x00\x12'\n" +
+	"#NO_TRADE_REASON_ENTIRE_RANGE_WARMUP\x10\x01\x12$\n" +
+	" NO_TRADE_REASON_ENTRY_NEVER_TRUE\x10\x02\x12(\n" +
+	"$NO_TRADE_REASON_INSUFFICIENT_CAPITAL\x10\x03*x\n" +
 	"\rComponentKind\x12\x1e\n" +
 	"\x1aCOMPONENT_KIND_UNSPECIFIED\x10\x00\x12$\n" +
 	" COMPONENT_KIND_BUILTIN_INDICATOR\x10\x01\x12!\n" +
@@ -1549,16 +2918,38 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x1eSTRATEGY_OPERATION_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bSTRATEGY_OPERATION_REGISTER\x10\x01\x12\x1d\n" +
 	"\x19STRATEGY_OPERATION_UPDATE\x10\x02\x12!\n" +
-	"\x1dSTRATEGY_OPERATION_DEACTIVATE\x10\x032\x9f\a\n" +
+	"\x1dSTRATEGY_OPERATION_DEACTIVATE\x10\x03*\x8e\x01\n" +
+	"\n" +
+	"Comparator\x12\x1a\n" +
+	"\x16COMPARATOR_UNSPECIFIED\x10\x00\x12\x11\n" +
+	"\rCOMPARATOR_LT\x10\x01\x12\x12\n" +
+	"\x0eCOMPARATOR_LTE\x10\x02\x12\x11\n" +
+	"\rCOMPARATOR_GT\x10\x03\x12\x12\n" +
+	"\x0eCOMPARATOR_GTE\x10\x04\x12\x16\n" +
+	"\x12COMPARATOR_BETWEEN\x10\x05*\xa6\x01\n" +
+	"\n" +
+	"ScreenKind\x12\x1b\n" +
+	"\x17SCREEN_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17SCREEN_KIND_FUNDAMENTAL\x10\x01\x12!\n" +
+	"\x1dSCREEN_KIND_TECHNICAL_FORMULA\x10\x02\x12#\n" +
+	"\x1fSCREEN_KIND_TECHNICAL_INDICATOR\x10\x03\x12\x16\n" +
+	"\x12SCREEN_KIND_SIGNAL\x10\x04*\x83\x01\n" +
+	"\x12ScreenResultStatus\x12$\n" +
+	" SCREEN_RESULT_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17SCREEN_RESULT_STATUS_OK\x10\x01\x12*\n" +
+	"&SCREEN_RESULT_STATUS_INSUFFICIENT_DATA\x10\x022\xfd\t\n" +
 	"\x0fAnalysisService\x12c\n" +
 	"\vRunBacktest\x12+.xstockstrat.analysis.v1.RunBacktestRequest\x1a'.xstockstrat.analysis.v1.BacktestResult\x12f\n" +
 	"\rScoreStrategy\x12-.xstockstrat.analysis.v1.ScoreStrategyRequest\x1a&.xstockstrat.analysis.v1.StrategyScore\x12q\n" +
 	"\x0eListStrategies\x12..xstockstrat.analysis.v1.ListStrategiesRequest\x1a/.xstockstrat.analysis.v1.ListStrategiesResponse\x12o\n" +
-	"\x11GetStrategyReport\x121.xstockstrat.analysis.v1.GetStrategyReportRequest\x1a'.xstockstrat.analysis.v1.StrategyReport\x12m\n" +
+	"\x11GetStrategyReport\x121.xstockstrat.analysis.v1.GetStrategyReportRequest\x1a'.xstockstrat.analysis.v1.StrategyReport\x12n\n" +
+	"\rListBacktests\x12-.xstockstrat.analysis.v1.ListBacktestsRequest\x1a..xstockstrat.analysis.v1.ListBacktestsResponse\x12m\n" +
 	"\x0eManageStrategy\x12..xstockstrat.analysis.v1.ManageStrategyRequest\x1a+.xstockstrat.analysis.v1.StrategyDefinition\x12g\n" +
 	"\vGetStrategy\x12+.xstockstrat.analysis.v1.GetStrategyRequest\x1a+.xstockstrat.analysis.v1.StrategyDefinition\x12\x8c\x01\n" +
 	"\x17ListStrategyDefinitions\x127.xstockstrat.analysis.v1.ListStrategyDefinitionsRequest\x1a8.xstockstrat.analysis.v1.ListStrategyDefinitionsResponse\x12t\n" +
-	"\x0fSetStrategyLive\x12/.xstockstrat.analysis.v1.SetStrategyLiveRequest\x1a0.xstockstrat.analysis.v1.SetStrategyLiveResponseB@Z>github.com/xstockstrat/contracts/gen/go/analysis/v1;analysisv1b\x06proto3"
+	"\x0fSetStrategyLive\x12/.xstockstrat.analysis.v1.SetStrategyLiveRequest\x1a0.xstockstrat.analysis.v1.SetStrategyLiveResponse\x12n\n" +
+	"\rScreenSymbols\x12-.xstockstrat.analysis.v1.ScreenSymbolsRequest\x1a..xstockstrat.analysis.v1.ScreenSymbolsResponse\x12|\n" +
+	"\x13RunFundamentalsScan\x123.xstockstrat.analysis.v1.RunFundamentalsScanRequest\x1a0.xstockstrat.analysis.v1.FundamentalsScanSummaryB@Z>github.com/xstockstrat/contracts/gen/go/analysis/v1;analysisv1b\x06proto3"
 
 var (
 	file_analysis_v1_analysis_proto_rawDescOnce sync.Once
@@ -1572,89 +2963,133 @@ func file_analysis_v1_analysis_proto_rawDescGZIP() []byte {
 	return file_analysis_v1_analysis_proto_rawDescData
 }
 
-var file_analysis_v1_analysis_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_analysis_v1_analysis_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_analysis_v1_analysis_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
+var file_analysis_v1_analysis_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_analysis_v1_analysis_proto_goTypes = []any{
 	(BacktestStatus)(0),                     // 0: xstockstrat.analysis.v1.BacktestStatus
-	(ComponentKind)(0),                      // 1: xstockstrat.analysis.v1.ComponentKind
-	(StrategyOperation)(0),                  // 2: xstockstrat.analysis.v1.StrategyOperation
-	(*RunBacktestRequest)(nil),              // 3: xstockstrat.analysis.v1.RunBacktestRequest
-	(*CoverageGap)(nil),                     // 4: xstockstrat.analysis.v1.CoverageGap
-	(*BacktestResult)(nil),                  // 5: xstockstrat.analysis.v1.BacktestResult
-	(*TradeRecord)(nil),                     // 6: xstockstrat.analysis.v1.TradeRecord
-	(*ScoreStrategyRequest)(nil),            // 7: xstockstrat.analysis.v1.ScoreStrategyRequest
-	(*StrategyScore)(nil),                   // 8: xstockstrat.analysis.v1.StrategyScore
-	(*StrategyReport)(nil),                  // 9: xstockstrat.analysis.v1.StrategyReport
-	(*ListStrategiesRequest)(nil),           // 10: xstockstrat.analysis.v1.ListStrategiesRequest
-	(*ListStrategiesResponse)(nil),          // 11: xstockstrat.analysis.v1.ListStrategiesResponse
-	(*GetStrategyReportRequest)(nil),        // 12: xstockstrat.analysis.v1.GetStrategyReportRequest
-	(*StrategyComponent)(nil),               // 13: xstockstrat.analysis.v1.StrategyComponent
-	(*StrategyDefinition)(nil),              // 14: xstockstrat.analysis.v1.StrategyDefinition
-	(*ManageStrategyRequest)(nil),           // 15: xstockstrat.analysis.v1.ManageStrategyRequest
-	(*GetStrategyRequest)(nil),              // 16: xstockstrat.analysis.v1.GetStrategyRequest
-	(*ListStrategyDefinitionsRequest)(nil),  // 17: xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
-	(*ListStrategyDefinitionsResponse)(nil), // 18: xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
-	(*SetStrategyLiveRequest)(nil),          // 19: xstockstrat.analysis.v1.SetStrategyLiveRequest
-	(*SetStrategyLiveResponse)(nil),         // 20: xstockstrat.analysis.v1.SetStrategyLiveResponse
-	nil,                                     // 21: xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
-	nil,                                     // 22: xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
-	(*v1.TimeRange)(nil),                    // 23: xstockstrat.common.v1.TimeRange
-	(*structpb.Struct)(nil),                 // 24: google.protobuf.Struct
-	(v1.Timeframe)(0),                       // 25: xstockstrat.common.v1.Timeframe
-	(*timestamppb.Timestamp)(nil),           // 26: google.protobuf.Timestamp
-	(*v1.PageRequest)(nil),                  // 27: xstockstrat.common.v1.PageRequest
-	(*v1.PageResponse)(nil),                 // 28: xstockstrat.common.v1.PageResponse
+	(BarAction)(0),                          // 1: xstockstrat.analysis.v1.BarAction
+	(NoTradeReason)(0),                      // 2: xstockstrat.analysis.v1.NoTradeReason
+	(ComponentKind)(0),                      // 3: xstockstrat.analysis.v1.ComponentKind
+	(StrategyOperation)(0),                  // 4: xstockstrat.analysis.v1.StrategyOperation
+	(Comparator)(0),                         // 5: xstockstrat.analysis.v1.Comparator
+	(ScreenKind)(0),                         // 6: xstockstrat.analysis.v1.ScreenKind
+	(ScreenResultStatus)(0),                 // 7: xstockstrat.analysis.v1.ScreenResultStatus
+	(*RunBacktestRequest)(nil),              // 8: xstockstrat.analysis.v1.RunBacktestRequest
+	(*CoverageGap)(nil),                     // 9: xstockstrat.analysis.v1.CoverageGap
+	(*BacktestResult)(nil),                  // 10: xstockstrat.analysis.v1.BacktestResult
+	(*TradeRecord)(nil),                     // 11: xstockstrat.analysis.v1.TradeRecord
+	(*BarDiagnostic)(nil),                   // 12: xstockstrat.analysis.v1.BarDiagnostic
+	(*SymbolDiagnostics)(nil),               // 13: xstockstrat.analysis.v1.SymbolDiagnostics
+	(*ScoreStrategyRequest)(nil),            // 14: xstockstrat.analysis.v1.ScoreStrategyRequest
+	(*StrategyScore)(nil),                   // 15: xstockstrat.analysis.v1.StrategyScore
+	(*StrategyReport)(nil),                  // 16: xstockstrat.analysis.v1.StrategyReport
+	(*ListBacktestsRequest)(nil),            // 17: xstockstrat.analysis.v1.ListBacktestsRequest
+	(*BacktestRunSummary)(nil),              // 18: xstockstrat.analysis.v1.BacktestRunSummary
+	(*ListBacktestsResponse)(nil),           // 19: xstockstrat.analysis.v1.ListBacktestsResponse
+	(*ListStrategiesRequest)(nil),           // 20: xstockstrat.analysis.v1.ListStrategiesRequest
+	(*ListStrategiesResponse)(nil),          // 21: xstockstrat.analysis.v1.ListStrategiesResponse
+	(*GetStrategyReportRequest)(nil),        // 22: xstockstrat.analysis.v1.GetStrategyReportRequest
+	(*StrategyComponent)(nil),               // 23: xstockstrat.analysis.v1.StrategyComponent
+	(*StrategyDefinition)(nil),              // 24: xstockstrat.analysis.v1.StrategyDefinition
+	(*ManageStrategyRequest)(nil),           // 25: xstockstrat.analysis.v1.ManageStrategyRequest
+	(*GetStrategyRequest)(nil),              // 26: xstockstrat.analysis.v1.GetStrategyRequest
+	(*ListStrategyDefinitionsRequest)(nil),  // 27: xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
+	(*ListStrategyDefinitionsResponse)(nil), // 28: xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
+	(*SetStrategyLiveRequest)(nil),          // 29: xstockstrat.analysis.v1.SetStrategyLiveRequest
+	(*SetStrategyLiveResponse)(nil),         // 30: xstockstrat.analysis.v1.SetStrategyLiveResponse
+	(*ScreenCriterion)(nil),                 // 31: xstockstrat.analysis.v1.ScreenCriterion
+	(*ScreenResult)(nil),                    // 32: xstockstrat.analysis.v1.ScreenResult
+	(*ScreenSymbolsRequest)(nil),            // 33: xstockstrat.analysis.v1.ScreenSymbolsRequest
+	(*ScreenSymbolsResponse)(nil),           // 34: xstockstrat.analysis.v1.ScreenSymbolsResponse
+	(*RunFundamentalsScanRequest)(nil),      // 35: xstockstrat.analysis.v1.RunFundamentalsScanRequest
+	(*FundamentalsScanSummary)(nil),         // 36: xstockstrat.analysis.v1.FundamentalsScanSummary
+	nil,                                     // 37: xstockstrat.analysis.v1.BarDiagnostic.IndicatorsEntry
+	nil,                                     // 38: xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
+	nil,                                     // 39: xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
+	nil,                                     // 40: xstockstrat.analysis.v1.ScreenResult.CriterionScoresEntry
+	(*v1.TimeRange)(nil),                    // 41: xstockstrat.common.v1.TimeRange
+	(*structpb.Struct)(nil),                 // 42: google.protobuf.Struct
+	(v1.Timeframe)(0),                       // 43: xstockstrat.common.v1.Timeframe
+	(*timestamppb.Timestamp)(nil),           // 44: google.protobuf.Timestamp
+	(*v1.PageRequest)(nil),                  // 45: xstockstrat.common.v1.PageRequest
+	(*v1.PageResponse)(nil),                 // 46: xstockstrat.common.v1.PageResponse
 }
 var file_analysis_v1_analysis_proto_depIdxs = []int32{
-	23, // 0: xstockstrat.analysis.v1.RunBacktestRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	24, // 1: xstockstrat.analysis.v1.RunBacktestRequest.strategy_params:type_name -> google.protobuf.Struct
-	14, // 2: xstockstrat.analysis.v1.RunBacktestRequest.inline_definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
-	25, // 3: xstockstrat.analysis.v1.CoverageGap.timeframe:type_name -> xstockstrat.common.v1.Timeframe
-	23, // 4: xstockstrat.analysis.v1.CoverageGap.requested_range:type_name -> xstockstrat.common.v1.TimeRange
-	23, // 5: xstockstrat.analysis.v1.CoverageGap.gap:type_name -> xstockstrat.common.v1.TimeRange
-	26, // 6: xstockstrat.analysis.v1.BacktestResult.completed_at:type_name -> google.protobuf.Timestamp
-	6,  // 7: xstockstrat.analysis.v1.BacktestResult.trades:type_name -> xstockstrat.analysis.v1.TradeRecord
+	41, // 0: xstockstrat.analysis.v1.RunBacktestRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	42, // 1: xstockstrat.analysis.v1.RunBacktestRequest.strategy_params:type_name -> google.protobuf.Struct
+	24, // 2: xstockstrat.analysis.v1.RunBacktestRequest.inline_definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
+	43, // 3: xstockstrat.analysis.v1.CoverageGap.timeframe:type_name -> xstockstrat.common.v1.Timeframe
+	41, // 4: xstockstrat.analysis.v1.CoverageGap.requested_range:type_name -> xstockstrat.common.v1.TimeRange
+	41, // 5: xstockstrat.analysis.v1.CoverageGap.gap:type_name -> xstockstrat.common.v1.TimeRange
+	44, // 6: xstockstrat.analysis.v1.BacktestResult.completed_at:type_name -> google.protobuf.Timestamp
+	11, // 7: xstockstrat.analysis.v1.BacktestResult.trades:type_name -> xstockstrat.analysis.v1.TradeRecord
 	0,  // 8: xstockstrat.analysis.v1.BacktestResult.status:type_name -> xstockstrat.analysis.v1.BacktestStatus
-	4,  // 9: xstockstrat.analysis.v1.BacktestResult.coverage_gaps:type_name -> xstockstrat.analysis.v1.CoverageGap
-	26, // 10: xstockstrat.analysis.v1.TradeRecord.entry_time:type_name -> google.protobuf.Timestamp
-	26, // 11: xstockstrat.analysis.v1.TradeRecord.exit_time:type_name -> google.protobuf.Timestamp
-	23, // 12: xstockstrat.analysis.v1.ScoreStrategyRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	21, // 13: xstockstrat.analysis.v1.StrategyScore.component_scores:type_name -> xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
-	5,  // 14: xstockstrat.analysis.v1.StrategyReport.latest_backtest:type_name -> xstockstrat.analysis.v1.BacktestResult
-	8,  // 15: xstockstrat.analysis.v1.StrategyReport.score:type_name -> xstockstrat.analysis.v1.StrategyScore
-	24, // 16: xstockstrat.analysis.v1.StrategyReport.metadata:type_name -> google.protobuf.Struct
-	27, // 17: xstockstrat.analysis.v1.ListStrategiesRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	8,  // 18: xstockstrat.analysis.v1.ListStrategiesResponse.strategies:type_name -> xstockstrat.analysis.v1.StrategyScore
-	28, // 19: xstockstrat.analysis.v1.ListStrategiesResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	1,  // 20: xstockstrat.analysis.v1.StrategyComponent.kind:type_name -> xstockstrat.analysis.v1.ComponentKind
-	22, // 21: xstockstrat.analysis.v1.StrategyComponent.params:type_name -> xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
-	13, // 22: xstockstrat.analysis.v1.StrategyDefinition.components:type_name -> xstockstrat.analysis.v1.StrategyComponent
-	24, // 23: xstockstrat.analysis.v1.StrategyDefinition.signal_params:type_name -> google.protobuf.Struct
-	2,  // 24: xstockstrat.analysis.v1.ManageStrategyRequest.operation:type_name -> xstockstrat.analysis.v1.StrategyOperation
-	14, // 25: xstockstrat.analysis.v1.ManageStrategyRequest.definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
-	14, // 26: xstockstrat.analysis.v1.ListStrategyDefinitionsResponse.definitions:type_name -> xstockstrat.analysis.v1.StrategyDefinition
-	14, // 27: xstockstrat.analysis.v1.SetStrategyLiveResponse.definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
-	3,  // 28: xstockstrat.analysis.v1.AnalysisService.RunBacktest:input_type -> xstockstrat.analysis.v1.RunBacktestRequest
-	7,  // 29: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:input_type -> xstockstrat.analysis.v1.ScoreStrategyRequest
-	10, // 30: xstockstrat.analysis.v1.AnalysisService.ListStrategies:input_type -> xstockstrat.analysis.v1.ListStrategiesRequest
-	12, // 31: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:input_type -> xstockstrat.analysis.v1.GetStrategyReportRequest
-	15, // 32: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:input_type -> xstockstrat.analysis.v1.ManageStrategyRequest
-	16, // 33: xstockstrat.analysis.v1.AnalysisService.GetStrategy:input_type -> xstockstrat.analysis.v1.GetStrategyRequest
-	17, // 34: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:input_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
-	19, // 35: xstockstrat.analysis.v1.AnalysisService.SetStrategyLive:input_type -> xstockstrat.analysis.v1.SetStrategyLiveRequest
-	5,  // 36: xstockstrat.analysis.v1.AnalysisService.RunBacktest:output_type -> xstockstrat.analysis.v1.BacktestResult
-	8,  // 37: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:output_type -> xstockstrat.analysis.v1.StrategyScore
-	11, // 38: xstockstrat.analysis.v1.AnalysisService.ListStrategies:output_type -> xstockstrat.analysis.v1.ListStrategiesResponse
-	9,  // 39: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:output_type -> xstockstrat.analysis.v1.StrategyReport
-	14, // 40: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
-	14, // 41: xstockstrat.analysis.v1.AnalysisService.GetStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
-	18, // 42: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:output_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
-	20, // 43: xstockstrat.analysis.v1.AnalysisService.SetStrategyLive:output_type -> xstockstrat.analysis.v1.SetStrategyLiveResponse
-	36, // [36:44] is the sub-list for method output_type
-	28, // [28:36] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	9,  // 9: xstockstrat.analysis.v1.BacktestResult.coverage_gaps:type_name -> xstockstrat.analysis.v1.CoverageGap
+	13, // 10: xstockstrat.analysis.v1.BacktestResult.diagnostics:type_name -> xstockstrat.analysis.v1.SymbolDiagnostics
+	44, // 11: xstockstrat.analysis.v1.TradeRecord.entry_time:type_name -> google.protobuf.Timestamp
+	44, // 12: xstockstrat.analysis.v1.TradeRecord.exit_time:type_name -> google.protobuf.Timestamp
+	44, // 13: xstockstrat.analysis.v1.BarDiagnostic.timestamp:type_name -> google.protobuf.Timestamp
+	37, // 14: xstockstrat.analysis.v1.BarDiagnostic.indicators:type_name -> xstockstrat.analysis.v1.BarDiagnostic.IndicatorsEntry
+	1,  // 15: xstockstrat.analysis.v1.BarDiagnostic.action:type_name -> xstockstrat.analysis.v1.BarAction
+	12, // 16: xstockstrat.analysis.v1.SymbolDiagnostics.bars:type_name -> xstockstrat.analysis.v1.BarDiagnostic
+	2,  // 17: xstockstrat.analysis.v1.SymbolDiagnostics.no_trade_reason:type_name -> xstockstrat.analysis.v1.NoTradeReason
+	41, // 18: xstockstrat.analysis.v1.ScoreStrategyRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	38, // 19: xstockstrat.analysis.v1.StrategyScore.component_scores:type_name -> xstockstrat.analysis.v1.StrategyScore.ComponentScoresEntry
+	10, // 20: xstockstrat.analysis.v1.StrategyReport.latest_backtest:type_name -> xstockstrat.analysis.v1.BacktestResult
+	15, // 21: xstockstrat.analysis.v1.StrategyReport.score:type_name -> xstockstrat.analysis.v1.StrategyScore
+	42, // 22: xstockstrat.analysis.v1.StrategyReport.metadata:type_name -> google.protobuf.Struct
+	0,  // 23: xstockstrat.analysis.v1.BacktestRunSummary.status:type_name -> xstockstrat.analysis.v1.BacktestStatus
+	44, // 24: xstockstrat.analysis.v1.BacktestRunSummary.completed_at:type_name -> google.protobuf.Timestamp
+	18, // 25: xstockstrat.analysis.v1.ListBacktestsResponse.runs:type_name -> xstockstrat.analysis.v1.BacktestRunSummary
+	45, // 26: xstockstrat.analysis.v1.ListStrategiesRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	15, // 27: xstockstrat.analysis.v1.ListStrategiesResponse.strategies:type_name -> xstockstrat.analysis.v1.StrategyScore
+	46, // 28: xstockstrat.analysis.v1.ListStrategiesResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	3,  // 29: xstockstrat.analysis.v1.StrategyComponent.kind:type_name -> xstockstrat.analysis.v1.ComponentKind
+	39, // 30: xstockstrat.analysis.v1.StrategyComponent.params:type_name -> xstockstrat.analysis.v1.StrategyComponent.ParamsEntry
+	23, // 31: xstockstrat.analysis.v1.StrategyDefinition.components:type_name -> xstockstrat.analysis.v1.StrategyComponent
+	42, // 32: xstockstrat.analysis.v1.StrategyDefinition.signal_params:type_name -> google.protobuf.Struct
+	4,  // 33: xstockstrat.analysis.v1.ManageStrategyRequest.operation:type_name -> xstockstrat.analysis.v1.StrategyOperation
+	24, // 34: xstockstrat.analysis.v1.ManageStrategyRequest.definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
+	24, // 35: xstockstrat.analysis.v1.ListStrategyDefinitionsResponse.definitions:type_name -> xstockstrat.analysis.v1.StrategyDefinition
+	24, // 36: xstockstrat.analysis.v1.SetStrategyLiveResponse.definition:type_name -> xstockstrat.analysis.v1.StrategyDefinition
+	6,  // 37: xstockstrat.analysis.v1.ScreenCriterion.kind:type_name -> xstockstrat.analysis.v1.ScreenKind
+	23, // 38: xstockstrat.analysis.v1.ScreenCriterion.component:type_name -> xstockstrat.analysis.v1.StrategyComponent
+	5,  // 39: xstockstrat.analysis.v1.ScreenCriterion.op:type_name -> xstockstrat.analysis.v1.Comparator
+	40, // 40: xstockstrat.analysis.v1.ScreenResult.criterion_scores:type_name -> xstockstrat.analysis.v1.ScreenResult.CriterionScoresEntry
+	7,  // 41: xstockstrat.analysis.v1.ScreenResult.status:type_name -> xstockstrat.analysis.v1.ScreenResultStatus
+	9,  // 42: xstockstrat.analysis.v1.ScreenResult.gap:type_name -> xstockstrat.analysis.v1.CoverageGap
+	31, // 43: xstockstrat.analysis.v1.ScreenSymbolsRequest.criteria:type_name -> xstockstrat.analysis.v1.ScreenCriterion
+	41, // 44: xstockstrat.analysis.v1.ScreenSymbolsRequest.evaluation_window:type_name -> xstockstrat.common.v1.TimeRange
+	32, // 45: xstockstrat.analysis.v1.ScreenSymbolsResponse.results:type_name -> xstockstrat.analysis.v1.ScreenResult
+	9,  // 46: xstockstrat.analysis.v1.ScreenSymbolsResponse.coverage_gaps:type_name -> xstockstrat.analysis.v1.CoverageGap
+	44, // 47: xstockstrat.analysis.v1.FundamentalsScanSummary.finished_at:type_name -> google.protobuf.Timestamp
+	8,  // 48: xstockstrat.analysis.v1.AnalysisService.RunBacktest:input_type -> xstockstrat.analysis.v1.RunBacktestRequest
+	14, // 49: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:input_type -> xstockstrat.analysis.v1.ScoreStrategyRequest
+	20, // 50: xstockstrat.analysis.v1.AnalysisService.ListStrategies:input_type -> xstockstrat.analysis.v1.ListStrategiesRequest
+	22, // 51: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:input_type -> xstockstrat.analysis.v1.GetStrategyReportRequest
+	17, // 52: xstockstrat.analysis.v1.AnalysisService.ListBacktests:input_type -> xstockstrat.analysis.v1.ListBacktestsRequest
+	25, // 53: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:input_type -> xstockstrat.analysis.v1.ManageStrategyRequest
+	26, // 54: xstockstrat.analysis.v1.AnalysisService.GetStrategy:input_type -> xstockstrat.analysis.v1.GetStrategyRequest
+	27, // 55: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:input_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsRequest
+	29, // 56: xstockstrat.analysis.v1.AnalysisService.SetStrategyLive:input_type -> xstockstrat.analysis.v1.SetStrategyLiveRequest
+	33, // 57: xstockstrat.analysis.v1.AnalysisService.ScreenSymbols:input_type -> xstockstrat.analysis.v1.ScreenSymbolsRequest
+	35, // 58: xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan:input_type -> xstockstrat.analysis.v1.RunFundamentalsScanRequest
+	10, // 59: xstockstrat.analysis.v1.AnalysisService.RunBacktest:output_type -> xstockstrat.analysis.v1.BacktestResult
+	15, // 60: xstockstrat.analysis.v1.AnalysisService.ScoreStrategy:output_type -> xstockstrat.analysis.v1.StrategyScore
+	21, // 61: xstockstrat.analysis.v1.AnalysisService.ListStrategies:output_type -> xstockstrat.analysis.v1.ListStrategiesResponse
+	16, // 62: xstockstrat.analysis.v1.AnalysisService.GetStrategyReport:output_type -> xstockstrat.analysis.v1.StrategyReport
+	19, // 63: xstockstrat.analysis.v1.AnalysisService.ListBacktests:output_type -> xstockstrat.analysis.v1.ListBacktestsResponse
+	24, // 64: xstockstrat.analysis.v1.AnalysisService.ManageStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
+	24, // 65: xstockstrat.analysis.v1.AnalysisService.GetStrategy:output_type -> xstockstrat.analysis.v1.StrategyDefinition
+	28, // 66: xstockstrat.analysis.v1.AnalysisService.ListStrategyDefinitions:output_type -> xstockstrat.analysis.v1.ListStrategyDefinitionsResponse
+	30, // 67: xstockstrat.analysis.v1.AnalysisService.SetStrategyLive:output_type -> xstockstrat.analysis.v1.SetStrategyLiveResponse
+	34, // 68: xstockstrat.analysis.v1.AnalysisService.ScreenSymbols:output_type -> xstockstrat.analysis.v1.ScreenSymbolsResponse
+	36, // 69: xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan:output_type -> xstockstrat.analysis.v1.FundamentalsScanSummary
+	59, // [59:70] is the sub-list for method output_type
+	48, // [48:59] is the sub-list for method input_type
+	48, // [48:48] is the sub-list for extension type_name
+	48, // [48:48] is the sub-list for extension extendee
+	0,  // [0:48] is the sub-list for field type_name
 }
 
 func init() { file_analysis_v1_analysis_proto_init() }
@@ -1667,8 +3102,8 @@ func file_analysis_v1_analysis_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_analysis_v1_analysis_proto_rawDesc), len(file_analysis_v1_analysis_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   20,
+			NumEnums:      8,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

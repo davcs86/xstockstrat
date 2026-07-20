@@ -3,15 +3,22 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
+	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -34,26 +41,40 @@ type PortfolioService struct {
 	marketdata marketdatav1.MarketDataServiceClient
 	notify     notifyv1.NotifyServiceClient
 
+	// Watchlists (feature 058). Held behind interfaces so the cap/ownership business
+	// rules can be unit-tested with a stubbed store + config.
+	watchlists WatchlistStore
+	wlCfg      watchlistConfig
+
 	mu   sync.RWMutex
 	subs map[string]chan *portfoliov1.PortfolioSnapshot
 }
 
 // NewPortfolioService creates the service, opens the DB pool, and dials dependencies.
+// clientKeepAlive pings idle inter-service connections so a silently-dropped link
+// (e.g. an idle ledger connection the server GOAWAYs) is detected and re-established
+// promptly instead of failing the next call.
+var clientKeepAlive = grpc.WithKeepaliveParams(keepalive.ClientParameters{
+	Time:                30 * time.Second,
+	Timeout:             10 * time.Second,
+	PermitWithoutStream: true,
+})
+
 func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*PortfolioService, error) {
 	repo, err := repository.NewPortfolioRepo(cfg.DBConnStr)
 	if err != nil {
 		return nil, fmt.Errorf("portfolio repo: %w", err)
 	}
 
-	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial ledger: %w", err)
 	}
-	mdConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	mdConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial marketdata: %w", err)
 	}
-	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
@@ -65,6 +86,9 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 		ledger:     ledgerv1.NewLedgerServiceClient(ledgerConn),
 		marketdata: marketdatav1.NewMarketDataServiceClient(mdConn),
 		notify:     notifyv1.NewNotifyServiceClient(notifyConn),
+		// Watchlists reuse the single portfolio pgxpool (no second pool — budget stays 2).
+		watchlists: repository.NewWatchlistRepo(repo.Pool()),
+		wlCfg:      cfgWatcher,
 		subs:       make(map[string]chan *portfoliov1.PortfolioSnapshot),
 	}
 	return svc, nil
@@ -73,35 +97,76 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 // ConsumeOrderFills subscribes to ledger StreamEvents filtered on "order.filled"
 // and updates positions accordingly.
 func (s *PortfolioService) ConsumeOrderFills(ctx context.Context) {
+	s.consumeEventStream(ctx, "order fill", "order.filled", s.processOrderFill)
+}
+
+// consumeEventStream subscribes to a filtered ledger StreamEvents and dispatches
+// each event to handle, reconnecting on disconnect. It tracks the highest sequence
+// processed and resumes from there (from_sequence = lastSeq+1) across reconnects,
+// so a recycled connection neither re-replays history — which would double-count
+// incremental updates such as order fills — nor drops events that arrived during
+// the gap. The first connection still replays from sequence 0 to build initial
+// state. Graceful HTTP/2 disconnects (GOAWAY / Unavailable), which the DO App
+// Platform issues routinely on long-lived streams, are logged below ERROR so they
+// don't trip alerting; genuine errors stay at ERROR.
+func (s *PortfolioService) consumeEventStream(ctx context.Context, name, eventType string, handle func(context.Context, *ledgerv1.LedgerEvent)) {
+	var lastSeq int64
 	for {
-		if err := s.streamFills(ctx); err != nil {
+		next, err := s.streamEventsFrom(ctx, eventType, lastSeq, handle)
+		lastSeq = next
+		if err != nil {
 			if ctx.Err() != nil {
 				return
 			}
-			slog.Error("order fill stream error, retrying", "error", err)
+			if isGracefulStreamClose(err) {
+				slog.Info(name+" stream disconnected, reconnecting", "resume_from_sequence", lastSeq+1)
+			} else {
+				slog.Error(name+" stream error, retrying", "error", err)
+			}
 			time.Sleep(2 * time.Second)
 		}
 	}
 }
 
-func (s *PortfolioService) streamFills(ctx context.Context) error {
+// streamEventsFrom opens one StreamEvents call and dispatches events until the
+// stream ends or errors. It returns the highest sequence processed so the caller
+// can resume past it on reconnect. lastSeq == 0 replays full history (initial
+// connect); lastSeq > 0 resumes from lastSeq+1.
+func (s *PortfolioService) streamEventsFrom(ctx context.Context, eventType string, lastSeq int64, handle func(context.Context, *ledgerv1.LedgerEvent)) (int64, error) {
+	fromSeq := int64(0)
+	if lastSeq > 0 {
+		fromSeq = lastSeq + 1
+	}
 	stream, err := s.ledger.StreamEvents(ctx, &ledgerv1.StreamEventsRequest{
-		EventType:    "order.filled",
-		FromSequence: 0,
+		EventType:    eventType,
+		FromSequence: fromSeq,
 	})
 	if err != nil {
-		return fmt.Errorf("StreamEvents: %w", err)
+		return lastSeq, fmt.Errorf("StreamEvents: %w", err)
 	}
 	for {
 		event, err := stream.Recv()
 		if err == io.EOF {
-			return nil
+			return lastSeq, nil
 		}
 		if err != nil {
-			return fmt.Errorf("recv: %w", err)
+			return lastSeq, fmt.Errorf("recv: %w", err)
 		}
-		s.processOrderFill(ctx, event)
+		handle(ctx, event)
+		if event.Sequence > lastSeq {
+			lastSeq = event.Sequence
+		}
 	}
+}
+
+// isGracefulStreamClose reports whether a stream error is an expected, benign
+// disconnect (a GOAWAY / transport recycle surfaced as codes.Unavailable) rather
+// than a real failure worth alerting on.
+func isGracefulStreamClose(err error) bool {
+	if st, ok := status.FromError(err); ok {
+		return st.Code() == codes.Unavailable
+	}
+	return false
 }
 
 // orderFillPayload is the expected shape of the order.filled / order.partially_filled event payload.
@@ -182,24 +247,65 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 	s.broadcastSnapshot(ctx, fill.UserID, mode)
 }
 
+// enrichPositions fills CurrentPrice / MarketValue / UnrealizedPnl on each position
+// from the latest market-data quote. A failed lookup or an empty (zero) quote leaves
+// the position's price fields at zero, but is logged so the gap is diagnosable rather
+// than silently masked (otherwise positions render at $0.00 with no explanation).
+//
+// Positions the broker already valued (CurrentPrice > 0, set by the account.positions.synced
+// reconciliation) are left untouched so their authoritative mark-to-market figures reconcile
+// with broker equity instead of being overwritten by a marketdata mid-quote. Only positions
+// the broker did not value (e.g. a fresh order-fill position) fall back to mid-quote enrichment.
+func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*portfoliov1.Position) {
+	for _, p := range positions {
+		if p.CurrentPrice > 0 {
+			continue
+		}
+		quote, err := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
+		if err != nil {
+			slog.Warn("latest quote unavailable for position", "symbol", p.Symbol, "error", err)
+			continue
+		}
+		price := (quote.AskPrice + quote.BidPrice) / 2
+		if price <= 0 {
+			slog.Warn("latest quote has no usable price", "symbol", p.Symbol, "ask", quote.AskPrice, "bid", quote.BidPrice)
+			continue
+		}
+		enrichPosition(p, quote.AskPrice, quote.BidPrice)
+	}
+}
+
+// enrichPosition fills current price / market value / unrealized P&L on p from a quote's
+// ask/bid, using the mid price (Ask+Bid)/2. UnrealizedPnlPct is guarded against zero cost basis.
+func enrichPosition(p *portfoliov1.Position, askPrice, bidPrice float64) {
+	price := (askPrice + bidPrice) / 2
+	p.CurrentPrice = price
+	p.MarketValue = price * p.Qty
+	p.UnrealizedPnl = p.MarketValue - p.CostBasis
+	if p.CostBasis > 0 {
+		p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
+	}
+}
+
+// sideOf derives a PositionSide from a signed quantity (qty > 0 long, qty < 0 short).
+func sideOf(qty float64) portfoliov1.PositionSide {
+	switch {
+	case qty > 0:
+		return portfoliov1.PositionSide_POSITION_SIDE_LONG
+	case qty < 0:
+		return portfoliov1.PositionSide_POSITION_SIDE_SHORT
+	default:
+		return portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED
+	}
+}
+
 // GetPortfolio aggregates all open positions with live prices.
 func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.GetPortfolioRequest) (*portfoliov1.Portfolio, error) {
-	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", req.GetAccountId())
+	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", req.GetAccountId(), "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
-	for _, p := range positions {
-		quote, err := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
-		if err == nil {
-			price := (quote.AskPrice + quote.BidPrice) / 2
-			p.CurrentPrice = price
-			p.MarketValue = price * p.Qty
-			p.UnrealizedPnl = p.MarketValue - p.CostBasis
-			if p.CostBasis > 0 {
-				p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
-			}
-		}
-	}
+	s.enrichPositions(ctx, positions)
 
 	var totalValue float64
 	for _, p := range positions {
@@ -221,16 +327,7 @@ func (s *PortfolioService) GetPosition(ctx context.Context, req *portfoliov1.Get
 	if err != nil {
 		return nil, err
 	}
-	quote, err := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
-	if err == nil {
-		price := (quote.AskPrice + quote.BidPrice) / 2
-		p.CurrentPrice = price
-		p.MarketValue = price * p.Qty
-		p.UnrealizedPnl = p.MarketValue - p.CostBasis
-		if p.CostBasis > 0 {
-			p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
-		}
-	}
+	s.enrichPositions(ctx, []*portfoliov1.Position{p})
 	return p, nil
 }
 
@@ -244,10 +341,14 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 		}
 		pageToken = req.Page.PageToken
 	}
-	positions, nextToken, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, pageSize, pageToken, "")
+	positions, nextToken, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, pageSize, pageToken, req.GetAccountId(), req.Symbol, req.Side)
 	if err != nil {
 		return nil, err
 	}
+	// Preserve the broker's mark-to-market valuation for positions it valued; only fall back to
+	// marketdata mid-quote enrichment for positions the broker did not value (CurrentPrice <= 0).
+	// The UI winners/losers P&L filter and detail view read these enriched figures.
+	s.enrichPositions(ctx, positions)
 	return &portfoliov1.ListPositionsResponse{
 		Positions: positions,
 		Page:      &commonv1.PageResponse{NextPageToken: nextToken},
@@ -256,7 +357,7 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 
 // GetPnL computes realized + unrealized P&L for a user over a time range.
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
-	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", "")
+	positions, _, err := s.repo.ListPositions(ctx, req.UserId, req.TradingMode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
@@ -456,7 +557,7 @@ func (s *PortfolioService) StartSnapshotWriter(ctx context.Context, userID strin
 }
 
 func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string, mode commonv1.TradingMode) {
-	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "")
+	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
 		return
 	}
@@ -494,7 +595,7 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	maxDrawdownPct := s.cfg.GetFloat("portfolio.risk.max_drawdown_pct", 0.10)
 	concentrationLimitPct := s.cfg.GetFloat("portfolio.risk.concentration_limit_pct", 0.20)
 
-	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "")
+	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
 		return
 	}
@@ -544,16 +645,40 @@ func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey s
 		val, _ := structpb.NewValue(v)
 		fields[k] = val
 	}
-	_, err := s.ledger.AppendEvent(ctx, &ledgerv1.AppendEventRequest{
+	req := &ledgerv1.AppendEventRequest{
 		EventType:     eventType,
 		SourceService: "portfolio",
 		StreamKey:     streamKey,
 		OccurredAt:    timestamppb.Now(),
 		Payload:       &structpb.Struct{Fields: fields},
-	})
-	if err != nil {
-		slog.Warn("ledger append failed", "event_type", eventType, "error", err)
+		// Stable per-emit dedup key. Reused across the retries below so a retry that
+		// follows an append the ledger actually committed (but whose response was lost)
+		// returns the stored event instead of writing a duplicate audit event.
+		IdempotencyKey: uuid.NewString(),
 	}
+
+	// Retry transient transport failures. A ledger restart sends an HTTP/2 GOAWAY that
+	// fails the in-flight append with codes.Unavailable; without a retry the event was
+	// silently dropped (it was only logged), so a deploy-time ledger bounce lost audit
+	// events. The idempotency key above makes the retry safe against duplication.
+	const maxAttempts = 4
+	backoff := 100 * time.Millisecond
+	var err error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if _, err = s.ledger.AppendEvent(ctx, req); err == nil {
+			return
+		}
+		if status.Code(err) != codes.Unavailable || attempt == maxAttempts {
+			break
+		}
+		select {
+		case <-time.After(backoff):
+		case <-ctx.Done():
+			return
+		}
+		backoff *= 2
+	}
+	slog.Warn("ledger append failed", "event_type", eventType, "error", err)
 }
 
 // fillAccumulator tracks signed average-cost-basis state per symbol for realized P&L computation.
@@ -571,41 +696,24 @@ type positionSyncPayload struct {
 		Symbol  string  `json:"symbol"`
 		Qty     float64 `json:"qty"`
 		AvgCost float64 `json:"avg_cost"`
+		// Broker mark-to-market valuation (zero when the broker did not report it, e.g.
+		// legacy events emitted before these fields existed). When present these are
+		// authoritative and used verbatim so the card reconciles with broker equity.
+		CurrentPrice     float64 `json:"current_price"`
+		MarketValue      float64 `json:"market_value"`
+		UnrealizedPnl    float64 `json:"unrealized_pl"`
+		UnrealizedPnlPct float64 `json:"unrealized_plpc"`
+		// Broker intraday (today's) P&L — change since the previous close. Distinct from
+		// UnrealizedPnl (total since entry); zero when the broker did not report it.
+		DayPnl    float64 `json:"day_pnl"`
+		DayPnlPct float64 `json:"day_pnl_pct"`
 	} `json:"positions"`
 }
 
 // ConsumePositionSyncs subscribes to ledger StreamEvents filtered on "account.positions.synced"
 // and upserts positions from broker snapshots.
 func (s *PortfolioService) ConsumePositionSyncs(ctx context.Context) {
-	for {
-		if err := s.streamPositionSyncs(ctx); err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			slog.Error("position sync stream error, retrying", "error", err)
-			time.Sleep(2 * time.Second)
-		}
-	}
-}
-
-func (s *PortfolioService) streamPositionSyncs(ctx context.Context) error {
-	stream, err := s.ledger.StreamEvents(ctx, &ledgerv1.StreamEventsRequest{
-		EventType:    "account.positions.synced",
-		FromSequence: 0,
-	})
-	if err != nil {
-		return fmt.Errorf("StreamEvents: %w", err)
-	}
-	for {
-		event, err := stream.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("recv: %w", err)
-		}
-		s.processPositionSync(ctx, event)
-	}
+	s.consumeEventStream(ctx, "position sync", "account.positions.synced", s.processPositionSync)
 }
 
 func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) {
@@ -634,7 +742,15 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	}
 	presentSymbols := make([]string, 0, len(sync.Positions))
 	for _, p := range sync.Positions {
-		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost); err != nil {
+		val := repository.PositionValuation{
+			CurrentPrice:     p.CurrentPrice,
+			MarketValue:      p.MarketValue,
+			UnrealizedPnl:    p.UnrealizedPnl,
+			UnrealizedPnlPct: p.UnrealizedPnlPct,
+			DayPnl:           p.DayPnl,
+			DayPnlPct:        p.DayPnlPct,
+		}
+		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
 			slog.Warn("upsert position from sync failed", "symbol", p.Symbol, "error", err)
 		}
 		presentSymbols = append(presentSymbols, p.Symbol)
@@ -658,35 +774,7 @@ type balanceSyncPayload struct {
 // ConsumeBalanceSyncs subscribes to ledger StreamEvents filtered on "account.balance.synced"
 // and stores the latest broker balance snapshot per account.
 func (s *PortfolioService) ConsumeBalanceSyncs(ctx context.Context) {
-	for {
-		if err := s.streamBalanceSyncs(ctx); err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			slog.Error("balance sync stream error, retrying", "error", err)
-			time.Sleep(2 * time.Second)
-		}
-	}
-}
-
-func (s *PortfolioService) streamBalanceSyncs(ctx context.Context) error {
-	stream, err := s.ledger.StreamEvents(ctx, &ledgerv1.StreamEventsRequest{
-		EventType:    "account.balance.synced",
-		FromSequence: 0,
-	})
-	if err != nil {
-		return fmt.Errorf("StreamEvents: %w", err)
-	}
-	for {
-		event, err := stream.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("recv: %w", err)
-		}
-		s.processBalanceSync(ctx, event)
-	}
+	s.consumeEventStream(ctx, "balance sync", "account.balance.synced", s.processBalanceSync)
 }
 
 func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledgerv1.LedgerEvent) {
@@ -714,33 +802,27 @@ func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledger
 	}
 }
 
-// ListPortfolios returns a Portfolio for the requested broker account (or an empty list if no
-// account_id is specified, since cross-account aggregation requires a separate query).
-func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.ListPortfoliosRequest) (*portfoliov1.ListPortfoliosResponse, error) {
-	accountID := req.GetAccountId()
-	if accountID == "" {
-		return &portfoliov1.ListPortfoliosResponse{}, nil
-	}
-
+// buildAccountPortfolio assembles a Portfolio for a single broker account: its
+// positions (enriched with live prices) overlaid with the broker-synced balance
+// snapshot. The broker is authoritative for cash, buying power, and total equity
+// (cash + positions); day P&L is derived from equity vs. previous-close equity.
+// When bal is nil, equity falls back to the summed position market value.
+func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID string, bal *repository.AccountBalance) (*portfoliov1.Portfolio, error) {
 	positions, err := s.repo.ListPositionsByAccount(ctx, accountID, "")
 	if err != nil {
 		return nil, err
 	}
+	// Positions synced from the broker carry its authoritative mark-to-market valuation
+	// (current_price/market_value/unrealized_pnl), which reconciles with the broker equity
+	// shown below. enrichPositions only falls back to marketdata mid-quote enrichment for
+	// positions the broker did not value — e.g. a fresh order-fill position not yet reconciled
+	// by the sync poller.
+	s.enrichPositions(ctx, positions)
 
 	var positionsValue, unrealizedPnl float64
 	for _, p := range positions {
-		quote, err := s.marketdata.GetLatestQuote(ctx, &marketdatav1.GetLatestQuoteRequest{Symbol: p.Symbol})
-		if err == nil {
-			price := (quote.AskPrice + quote.BidPrice) / 2
-			p.CurrentPrice = price
-			p.MarketValue = price * p.Qty
-			p.UnrealizedPnl = p.MarketValue - p.CostBasis
-			if p.CostBasis > 0 {
-				p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
-			}
-			positionsValue += p.MarketValue
-			unrealizedPnl += p.UnrealizedPnl
-		}
+		positionsValue += p.MarketValue
+		unrealizedPnl += p.UnrealizedPnl
 	}
 
 	portfolio := &portfoliov1.Portfolio{
@@ -751,14 +833,7 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		UpdatedAt:   timestamppb.Now(),
 		Positions:   positions,
 	}
-
-	// Overlay the broker-synced balance snapshot when available. The broker is
-	// authoritative for cash, buying power, and total equity (cash + positions);
-	// day P&L is derived from equity vs. previous-close equity.
-	bal, err := s.repo.GetAccountBalance(ctx, accountID)
-	if err != nil {
-		slog.Warn("ListPortfolios: GetAccountBalance failed", "account_id", accountID, "error", err)
-	} else if bal != nil {
+	if bal != nil {
 		portfolio.Cash = bal.Cash
 		portfolio.BuyingPower = bal.BuyingPower
 		portfolio.Equity = bal.Equity
@@ -767,8 +842,292 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 			portfolio.DayPnlPct = portfolio.DayPnl / bal.LastEquity
 		}
 	}
+	return portfolio, nil
+}
 
-	return &portfoliov1.ListPortfoliosResponse{
-		Portfolios: []*portfoliov1.Portfolio{portfolio},
+// ListPortfolios returns a Portfolio per broker account. With a specific account_id
+// it returns just that account; without one it aggregates every account owned by the
+// requesting user (resolved from the propagated x-user-id header), so the "All
+// Accounts" view sums real per-account equity instead of showing $0.00.
+func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.ListPortfoliosRequest) (*portfoliov1.ListPortfoliosResponse, error) {
+	accountID := req.GetAccountId()
+	if accountID != "" {
+		bal, err := s.repo.GetAccountBalance(ctx, accountID)
+		if err != nil {
+			slog.Warn("ListPortfolios: GetAccountBalance failed", "account_id", accountID, "error", err)
+		}
+		portfolio, err := s.buildAccountPortfolio(ctx, accountID, bal)
+		if err != nil {
+			return nil, err
+		}
+		return &portfoliov1.ListPortfoliosResponse{
+			Portfolios: []*portfoliov1.Portfolio{portfolio},
+		}, nil
+	}
+
+	// All-accounts view: discover every account owned by the requesting user.
+	userID := middleware.FromContext(ctx).UserID
+	if userID == "" {
+		return &portfoliov1.ListPortfoliosResponse{}, nil
+	}
+	accounts, err := s.repo.ListAccountBalancesByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	portfolios := make([]*portfoliov1.Portfolio, 0, len(accounts))
+	for _, acct := range accounts {
+		bal := acct.Balance
+		portfolio, err := s.buildAccountPortfolio(ctx, acct.AccountID, &bal)
+		if err != nil {
+			slog.Warn("ListPortfolios: build account portfolio failed", "account_id", acct.AccountID, "error", err)
+			continue
+		}
+		portfolios = append(portfolios, portfolio)
+	}
+	return &portfoliov1.ListPortfoliosResponse{Portfolios: portfolios}, nil
+}
+
+// ─── Watchlists (feature 058) ────────────────────────────────────────────────
+//
+// Ownership (FR-2) is enforced from the propagated x-user-id header, never from the
+// wire: every mutation loads the row, compares its user_id to the caller, and returns
+// PermissionDenied on mismatch. Caps (FR-3/FR-7) are read fresh from config on every
+// mutation so a lowered limit is honored immediately. Ledger emission (FR-6) is
+// non-fatal — emitEvent logs and drops on failure, never failing the mutation.
+
+const (
+	defaultMaxWatchlistsPerUser = 50
+	defaultMaxSymbolsPerList    = 500
+)
+
+// WatchlistStore is the persistence surface the watchlist RPCs depend on. The
+// concrete implementation is *repository.WatchlistRepo; tests inject a stub.
+type WatchlistStore interface {
+	Create(ctx context.Context, userID, name, description string, symbols []string) (*portfoliov1.Watchlist, error)
+	GetByID(ctx context.Context, watchlistID string) (*portfoliov1.Watchlist, error)
+	ListByUser(ctx context.Context, userID string, pageSize int, pageToken string) ([]*portfoliov1.Watchlist, string, error)
+	Update(ctx context.Context, watchlistID, name, description string, symbols []string) (*portfoliov1.Watchlist, error)
+	Delete(ctx context.Context, watchlistID string) error
+	AddSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
+	RemoveSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
+	CountByUser(ctx context.Context, userID string) (int, error)
+}
+
+// watchlistConfig is the slice of the config watcher the watchlist caps read. Lets
+// tests inject chosen caps without a live config stream.
+type watchlistConfig interface {
+	GetInt(key string, defaultVal int64) int64
+}
+
+// normalizeSymbols uppercases, trims, and de-duplicates a symbol list, dropping
+// empties while preserving first-seen order (FR-3).
+func normalizeSymbols(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		u := strings.ToUpper(strings.TrimSpace(s))
+		if u == "" {
+			continue
+		}
+		if _, dup := seen[u]; dup {
+			continue
+		}
+		seen[u] = struct{}{}
+		out = append(out, u)
+	}
+	return out
+}
+
+func (s *PortfolioService) maxWatchlistsPerUser() int {
+	return int(s.wlCfg.GetInt("portfolio.watchlist.max_per_user", defaultMaxWatchlistsPerUser))
+}
+
+func (s *PortfolioService) maxSymbolsPerList() int {
+	return int(s.wlCfg.GetInt("portfolio.watchlist.max_symbols_per_list", defaultMaxSymbolsPerList))
+}
+
+// requireUserID returns the caller's propagated user id or an InvalidArgument error.
+func requireUserID(ctx context.Context) (string, error) {
+	userID := middleware.FromContext(ctx).UserID
+	if userID == "" {
+		return "", connect.NewError(connect.CodeInvalidArgument, errors.New("missing user identity"))
+	}
+	return userID, nil
+}
+
+// loadOwned fetches a watchlist and enforces FR-2 ownership against the caller.
+// Returns NotFound if it does not exist, PermissionDenied if owned by someone else.
+func (s *PortfolioService) loadOwned(ctx context.Context, userID, watchlistID string) (*portfoliov1.Watchlist, error) {
+	if watchlistID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("watchlist_id required"))
+	}
+	wl, err := s.watchlists.GetByID(ctx, watchlistID)
+	if err != nil {
+		if errors.Is(err, repository.ErrWatchlistNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, errors.New("watchlist not found"))
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if wl.UserId != userID {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("watchlist not owned by caller"))
+	}
+	return wl, nil
+}
+
+// CreateWatchlist creates a new watchlist for the calling user (FR-1).
+func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1.CreateWatchlistRequest) (*portfoliov1.CreateWatchlistResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.GetName()) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name required"))
+	}
+	symbols := normalizeSymbols(req.GetSymbols())
+	if len(symbols) > s.maxSymbolsPerList() {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("too many symbols: %d exceeds max %d", len(symbols), s.maxSymbolsPerList()))
+	}
+	count, err := s.watchlists.CountByUser(ctx, userID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if count >= s.maxWatchlistsPerUser() {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("watchlist limit reached: %d", s.maxWatchlistsPerUser()))
+	}
+	wl, err := s.watchlists.Create(ctx, userID, req.GetName(), req.GetDescription(), symbols)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.emitEvent(ctx, "portfolio.watchlist.created", "watchlist:"+wl.WatchlistId, map[string]interface{}{
+		"user_id": userID, "watchlist_id": wl.WatchlistId, "name": wl.Name,
+	})
+	return &portfoliov1.CreateWatchlistResponse{Watchlist: wl}, nil
+}
+
+// GetWatchlist returns a single watchlist owned by the caller (FR-2).
+func (s *PortfolioService) GetWatchlist(ctx context.Context, req *portfoliov1.GetWatchlistRequest) (*portfoliov1.GetWatchlistResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	wl, err := s.loadOwned(ctx, userID, req.GetWatchlistId())
+	if err != nil {
+		return nil, err
+	}
+	return &portfoliov1.GetWatchlistResponse{Watchlist: wl}, nil
+}
+
+// ListWatchlists returns the caller's watchlists, paginated.
+func (s *PortfolioService) ListWatchlists(ctx context.Context, req *portfoliov1.ListWatchlistsRequest) (*portfoliov1.ListWatchlistsResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	pageSize := 0
+	pageToken := ""
+	if p := req.GetPage(); p != nil {
+		pageSize = int(p.GetPageSize())
+		pageToken = p.GetPageToken()
+	}
+	wls, next, err := s.watchlists.ListByUser(ctx, userID, pageSize, pageToken)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &portfoliov1.ListWatchlistsResponse{
+		Watchlists: wls,
+		Page:       &commonv1.PageResponse{NextPageToken: next},
 	}, nil
+}
+
+// UpdateWatchlist replaces name/description/symbols (FR-1).
+func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1.UpdateWatchlistRequest) (*portfoliov1.UpdateWatchlistResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.loadOwned(ctx, userID, req.GetWatchlistId()); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.GetName()) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name required"))
+	}
+	symbols := normalizeSymbols(req.GetSymbols())
+	if len(symbols) > s.maxSymbolsPerList() {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("too many symbols: %d exceeds max %d", len(symbols), s.maxSymbolsPerList()))
+	}
+	wl, err := s.watchlists.Update(ctx, req.GetWatchlistId(), req.GetName(), req.GetDescription(), symbols)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
+		"user_id": userID, "watchlist_id": wl.WatchlistId,
+	})
+	return &portfoliov1.UpdateWatchlistResponse{Watchlist: wl}, nil
+}
+
+// DeleteWatchlist hard-deletes a watchlist owned by the caller (FR-6).
+func (s *PortfolioService) DeleteWatchlist(ctx context.Context, req *portfoliov1.DeleteWatchlistRequest) (*portfoliov1.DeleteWatchlistResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.loadOwned(ctx, userID, req.GetWatchlistId()); err != nil {
+		return nil, err
+	}
+	if err := s.watchlists.Delete(ctx, req.GetWatchlistId()); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.emitEvent(ctx, "portfolio.watchlist.deleted", "watchlist:"+req.GetWatchlistId(), map[string]interface{}{
+		"user_id": userID, "watchlist_id": req.GetWatchlistId(),
+	})
+	return &portfoliov1.DeleteWatchlistResponse{}, nil
+}
+
+// AddWatchlistSymbols adds symbols, enforcing the per-list cap on the resulting set (FR-3).
+func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfoliov1.AddWatchlistSymbolsRequest) (*portfoliov1.AddWatchlistSymbolsResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	existing, err := s.loadOwned(ctx, userID, req.GetWatchlistId())
+	if err != nil {
+		return nil, err
+	}
+	add := normalizeSymbols(req.GetSymbols())
+	// Resulting count = union of current + new (both normalized).
+	resulting := normalizeSymbols(append(append([]string{}, existing.Symbols...), add...))
+	if len(resulting) > s.maxSymbolsPerList() {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("too many symbols: %d exceeds max %d", len(resulting), s.maxSymbolsPerList()))
+	}
+	wl, err := s.watchlists.AddSymbols(ctx, req.GetWatchlistId(), add)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
+		"user_id": userID, "watchlist_id": wl.WatchlistId,
+	})
+	return &portfoliov1.AddWatchlistSymbolsResponse{Watchlist: wl}, nil
+}
+
+// RemoveWatchlistSymbols removes symbols from a watchlist owned by the caller.
+func (s *PortfolioService) RemoveWatchlistSymbols(ctx context.Context, req *portfoliov1.RemoveWatchlistSymbolsRequest) (*portfoliov1.RemoveWatchlistSymbolsResponse, error) {
+	userID, err := requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.loadOwned(ctx, userID, req.GetWatchlistId()); err != nil {
+		return nil, err
+	}
+	wl, err := s.watchlists.RemoveSymbols(ctx, req.GetWatchlistId(), normalizeSymbols(req.GetSymbols()))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
+		"user_id": userID, "watchlist_id": wl.WatchlistId,
+	})
+	return &portfoliov1.RemoveWatchlistSymbolsResponse{Watchlist: wl}, nil
 }

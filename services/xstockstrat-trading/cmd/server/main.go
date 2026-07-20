@@ -12,7 +12,6 @@ import (
 
 	"encoding/hex"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
@@ -79,13 +78,9 @@ func main() {
 	}
 	slog.Info("db repository initialized")
 
-	// Account repository — backed by its own pool (TradingRepo pool is private).
-	pool, err := pgxpool.New(ctx, cfg.DBConnStr)
-	if err != nil {
-		slog.Error("account repo pool init failed", "error", err)
-		os.Exit(1)
-	}
-	accountRepo := repository.NewAccountRepo(pool)
+	// Account repository — shares the TradingRepo pool to avoid a second
+	// connection pool (keeps the service within the shared DB connection budget).
+	accountRepo := repository.NewAccountRepo(repo.Pool())
 	slog.Info("account repository initialized")
 
 	// Wire service layer.
@@ -99,6 +94,12 @@ func main() {
 	if err := svc.LoadBrokerPool(ctx); err != nil {
 		slog.Error("broker pool load failed", "error", err)
 		os.Exit(1)
+	}
+
+	// Reload still-open orders so the fill poller resumes tracking orders placed before this
+	// restart (otherwise they would never get their fills detected). Best-effort, non-fatal.
+	if err := svc.LoadInflightOrders(ctx); err != nil {
+		slog.Warn("in-flight order reload failed; fill poller starts without pre-restart orders", "error", err)
 	}
 
 	// Start fill poller — detects broker fills and emits order.filled events.

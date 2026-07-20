@@ -66,10 +66,25 @@ class MarketDataServiceStub(object):
                 request_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetDataCoverageRequest.SerializeToString,
                 response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetDataCoverageResponse.FromString,
                 _registered_method=True)
+        self.DeleteBackfilledData = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/DeleteBackfilledData',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.DeleteBackfilledDataRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.DeleteBackfilledDataResponse.FromString,
+                _registered_method=True)
         self.ListAssets = channel.unary_unary(
                 '/xstockstrat.marketdata.v1.MarketDataService/ListAssets',
                 request_serializer=marketdata_dot_v1_dot_marketdata__pb2.ListAssetsRequest.SerializeToString,
                 response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.ListAssetsResponse.FromString,
+                _registered_method=True)
+        self.GetFundamentals = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/GetFundamentals',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetFundamentalsRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetFundamentalsResponse.FromString,
+                _registered_method=True)
+        self.GetFundamentalsMulti = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/GetFundamentalsMulti',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetFundamentalsMultiRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetFundamentalsMultiResponse.FromString,
                 _registered_method=True)
 
 
@@ -120,8 +135,29 @@ class MarketDataServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def DeleteBackfilledData(self, request, context):
+        """Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ListAssets(self, request, context):
         """Get available symbols
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetFundamentals(self, request, context):
+        """Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetFundamentalsMulti(self, request, context):
+        """Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -160,10 +196,25 @@ def add_MarketDataServiceServicer_to_server(servicer, server):
                     request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetDataCoverageRequest.FromString,
                     response_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetDataCoverageResponse.SerializeToString,
             ),
+            'DeleteBackfilledData': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteBackfilledData,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.DeleteBackfilledDataRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.DeleteBackfilledDataResponse.SerializeToString,
+            ),
             'ListAssets': grpc.unary_unary_rpc_method_handler(
                     servicer.ListAssets,
                     request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.ListAssetsRequest.FromString,
                     response_serializer=marketdata_dot_v1_dot_marketdata__pb2.ListAssetsResponse.SerializeToString,
+            ),
+            'GetFundamentals': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetFundamentals,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetFundamentalsRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetFundamentalsResponse.SerializeToString,
+            ),
+            'GetFundamentalsMulti': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetFundamentalsMulti,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetFundamentalsMultiRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetFundamentalsMultiResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -341,6 +392,33 @@ class MarketDataService(object):
             _registered_method=True)
 
     @staticmethod
+    def DeleteBackfilledData(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/DeleteBackfilledData',
+            marketdata_dot_v1_dot_marketdata__pb2.DeleteBackfilledDataRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.DeleteBackfilledDataResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def ListAssets(request,
             target,
             options=(),
@@ -357,6 +435,60 @@ class MarketDataService(object):
             '/xstockstrat.marketdata.v1.MarketDataService/ListAssets',
             marketdata_dot_v1_dot_marketdata__pb2.ListAssetsRequest.SerializeToString,
             marketdata_dot_v1_dot_marketdata__pb2.ListAssetsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetFundamentals(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/GetFundamentals',
+            marketdata_dot_v1_dot_marketdata__pb2.GetFundamentalsRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.GetFundamentalsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetFundamentalsMulti(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/GetFundamentalsMulti',
+            marketdata_dot_v1_dot_marketdata__pb2.GetFundamentalsMultiRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.GetFundamentalsMultiResponse.FromString,
             options,
             channel_credentials,
             insecure,

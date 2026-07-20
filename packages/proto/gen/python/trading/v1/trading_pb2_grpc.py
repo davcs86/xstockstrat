@@ -59,6 +59,11 @@ class TradingServiceStub(object):
                 request_serializer=trading_dot_v1_dot_trading__pb2.StreamOrderUpdatesRequest.SerializeToString,
                 response_deserializer=trading_dot_v1_dot_trading__pb2.Order.FromString,
                 _registered_method=True)
+        self.ReplaceOrder = channel.unary_unary(
+                '/xstockstrat.trading.v1.TradingService/ReplaceOrder',
+                request_serializer=trading_dot_v1_dot_trading__pb2.ReplaceOrderRequest.SerializeToString,
+                response_deserializer=trading_dot_v1_dot_trading__pb2.Order.FromString,
+                _registered_method=True)
         self.RegisterBrokerAccount = channel.unary_unary(
                 '/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount',
                 request_serializer=trading_dot_v1_dot_trading__pb2.RegisterBrokerAccountRequest.SerializeToString,
@@ -115,6 +120,16 @@ class TradingServiceServicer(object):
 
     def StreamOrderUpdates(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReplaceOrder(self, request, context):
+        """ReplaceOrder modifies a working order's qty/price/TIF. It is broker-agnostic at
+        this surface and routes by the persisted order's broker_type
+        (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
+        while the order is NEW or PARTIALLY_FILLED.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -179,6 +194,11 @@ def add_TradingServiceServicer_to_server(servicer, server):
             'StreamOrderUpdates': grpc.unary_stream_rpc_method_handler(
                     servicer.StreamOrderUpdates,
                     request_deserializer=trading_dot_v1_dot_trading__pb2.StreamOrderUpdatesRequest.FromString,
+                    response_serializer=trading_dot_v1_dot_trading__pb2.Order.SerializeToString,
+            ),
+            'ReplaceOrder': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReplaceOrder,
+                    request_deserializer=trading_dot_v1_dot_trading__pb2.ReplaceOrderRequest.FromString,
                     response_serializer=trading_dot_v1_dot_trading__pb2.Order.SerializeToString,
             ),
             'RegisterBrokerAccount': grpc.unary_unary_rpc_method_handler(
@@ -341,6 +361,33 @@ class TradingService(object):
             target,
             '/xstockstrat.trading.v1.TradingService/StreamOrderUpdates',
             trading_dot_v1_dot_trading__pb2.StreamOrderUpdatesRequest.SerializeToString,
+            trading_dot_v1_dot_trading__pb2.Order.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReplaceOrder(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.trading.v1.TradingService/ReplaceOrder',
+            trading_dot_v1_dot_trading__pb2.ReplaceOrderRequest.SerializeToString,
             trading_dot_v1_dot_trading__pb2.Order.FromString,
             options,
             channel_credentials,

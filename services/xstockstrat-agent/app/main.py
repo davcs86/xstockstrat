@@ -5,10 +5,10 @@ Transport is selected via MCP_TRANSPORT env var:
   stdio  (default) -- for Claude.ai desktop MCP integration
   sse              -- for remote MCP connections on MCP_SSE_PORT (default 9000)
 
-SSE transport requires a valid API key, accepted via either:
-  - Authorization: Bearer <api_key> header, or
-  - ?api_key=<api_key> query parameter (for clients that cannot set headers, e.g. Claude Desktop)
-Key is validated against xstockstrat-identity ValidateApiKey gRPC RPC. Returns HTTP 401 on failure.
+SSE transport requires an OAuth 2.1 audience-bound access JWT presented as
+  - Authorization: Bearer <jwt>
+validated against xstockstrat-identity ValidateToken gRPC RPC (aud must match AGENT_PUBLIC_URL).
+Returns HTTP 401 on failure.
 """
 
 import logging
@@ -54,15 +54,14 @@ def build_sse_app():
     without binding a real socket.
     """
     from contextlib import asynccontextmanager
-    from urllib.parse import parse_qs
 
     from mcp.server.sse import SseServerTransport
     from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
     from starlette.applications import Starlette
-    from starlette.responses import Response
+    from starlette.responses import JSONResponse, Response
     from starlette.routing import Mount, Route
 
-    from app.auth import validate_api_key, validate_bearer_jwt
+    from app.auth import validate_bearer_jwt
     from app.oauth_metadata import (
         authorization_server_metadata,
         protected_resource_metadata,
@@ -75,6 +74,27 @@ def build_sse_app():
     server = create_server()
     sse = SseServerTransport("/messages")
 
+    async def list_tools_metadata(_request):
+        """Tool catalog for the UI's "MCP Tools" page — name/description/inputSchema only.
+
+        Unauthenticated like the .well-known discovery routes: it describes capabilities (the
+        same data published in docs/runbooks/mcp-tools.md), never user data or credentials, and
+        the UI's BFF has no MCP-audience-bound token to present here anyway.
+        """
+        tools = await server.list_tools()
+        return JSONResponse(
+            {
+                "tools": [
+                    {
+                        "name": t.name,
+                        "description": t.description or "",
+                        "inputSchema": t.inputSchema,
+                    }
+                    for t in tools
+                ]
+            }
+        )
+
     # Streamable HTTP transport (MCP 2025-03-26). Claude.ai's remote connector speaks Streamable
     # HTTP against the connector URL itself — POST <url> for client→server JSON-RPC and GET <url>
     # for the server→client stream. The connector URL is AGENT_PUBLIC_URL (`${APP_URL}/agent`),
@@ -83,24 +103,15 @@ def build_sse_app():
     session_manager = StreamableHTTPSessionManager(app=server._mcp_server)
 
     async def _authorized(scope) -> bool:
-        """Shared OAuth/API-key gate for both transports.
+        """OAuth 2.1 gate for both transports.
 
-        Tries the OAuth 2.1 aud-bound JWT first (so a token whose aud is wrong is rejected even if
-        it would validate as some other credential — FR-B8), then the legacy API-key path (FR-B10),
-        including the deprecated `?api_key=` query fallback for clients that cannot set headers
-        (Claude Desktop SSE — OAuth 2.1 forbids credentials in query strings; OQ-G).
+        Requires an aud-bound JWT presented as `Authorization: Bearer <jwt>` (a token whose aud is
+        wrong is rejected — FR-B8).
         """
         headers = dict(scope.get("headers", []))
         auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
-        if not auth_header:
-            qs = parse_qs(scope.get("query_string", b"").decode())
-            raw_key = (qs.get("api_key") or [""])[0]
-            if raw_key:
-                auth_header = f"Bearer {raw_key}"
         token = auth_header[len("Bearer ") :] if auth_header.startswith("Bearer ") else ""
-        return bool(
-            (token and await validate_bearer_jwt(token)) or await validate_api_key(auth_header)
-        )
+        return bool(token and await validate_bearer_jwt(token))
 
     async def _send_unauthorized(scope, receive, send) -> None:
         # 401 with a WWW-Authenticate discovery pointer so the client starts OAuth (FR-B0).
@@ -166,6 +177,7 @@ def build_sse_app():
         Route("/oauth/authorize", endpoint=oauth_authorize, methods=["GET"]),
         Route("/oauth/callback", endpoint=oauth_callback, methods=["GET"]),
         Route("/oauth/token", endpoint=oauth_token, methods=["POST"]),
+        Route("/api/tools", endpoint=list_tools_metadata, methods=["GET"]),
         # Both MCP transports at the agent root. MUST be last — the specific routes above win.
         Mount("/", app=handle_mcp),
     ]

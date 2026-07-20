@@ -19,13 +19,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MarketDataService_StreamBars_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/StreamBars"
-	MarketDataService_StreamQuotes_FullMethodName    = "/xstockstrat.marketdata.v1.MarketDataService/StreamQuotes"
-	MarketDataService_GetBars_FullMethodName         = "/xstockstrat.marketdata.v1.MarketDataService/GetBars"
-	MarketDataService_GetLatestQuote_FullMethodName  = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuote"
-	MarketDataService_BackfillBars_FullMethodName    = "/xstockstrat.marketdata.v1.MarketDataService/BackfillBars"
-	MarketDataService_GetDataCoverage_FullMethodName = "/xstockstrat.marketdata.v1.MarketDataService/GetDataCoverage"
-	MarketDataService_ListAssets_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/ListAssets"
+	MarketDataService_StreamBars_FullMethodName           = "/xstockstrat.marketdata.v1.MarketDataService/StreamBars"
+	MarketDataService_StreamQuotes_FullMethodName         = "/xstockstrat.marketdata.v1.MarketDataService/StreamQuotes"
+	MarketDataService_GetBars_FullMethodName              = "/xstockstrat.marketdata.v1.MarketDataService/GetBars"
+	MarketDataService_GetLatestQuote_FullMethodName       = "/xstockstrat.marketdata.v1.MarketDataService/GetLatestQuote"
+	MarketDataService_BackfillBars_FullMethodName         = "/xstockstrat.marketdata.v1.MarketDataService/BackfillBars"
+	MarketDataService_GetDataCoverage_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/GetDataCoverage"
+	MarketDataService_DeleteBackfilledData_FullMethodName = "/xstockstrat.marketdata.v1.MarketDataService/DeleteBackfilledData"
+	MarketDataService_ListAssets_FullMethodName           = "/xstockstrat.marketdata.v1.MarketDataService/ListAssets"
+	MarketDataService_GetFundamentals_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentals"
+	MarketDataService_GetFundamentalsMulti_FullMethodName = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentalsMulti"
 )
 
 // MarketDataServiceClient is the client API for MarketDataService service.
@@ -47,8 +50,14 @@ type MarketDataServiceClient interface {
 	BackfillBars(ctx context.Context, in *BackfillBarsRequest, opts ...grpc.CallOption) (*BackfillBarsResponse, error)
 	// Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
 	GetDataCoverage(ctx context.Context, in *GetDataCoverageRequest, opts ...grpc.CallOption) (*GetDataCoverageResponse, error)
+	// Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5)
+	DeleteBackfilledData(ctx context.Context, in *DeleteBackfilledDataRequest, opts ...grpc.CallOption) (*DeleteBackfilledDataResponse, error)
 	// Get available symbols
 	ListAssets(ctx context.Context, in *ListAssetsRequest, opts ...grpc.CallOption) (*ListAssetsResponse, error)
+	// Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache)
+	GetFundamentals(ctx context.Context, in *GetFundamentalsRequest, opts ...grpc.CallOption) (*GetFundamentalsResponse, error)
+	// Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
+	GetFundamentalsMulti(ctx context.Context, in *GetFundamentalsMultiRequest, opts ...grpc.CallOption) (*GetFundamentalsMultiResponse, error)
 }
 
 type marketDataServiceClient struct {
@@ -137,10 +146,40 @@ func (c *marketDataServiceClient) GetDataCoverage(ctx context.Context, in *GetDa
 	return out, nil
 }
 
+func (c *marketDataServiceClient) DeleteBackfilledData(ctx context.Context, in *DeleteBackfilledDataRequest, opts ...grpc.CallOption) (*DeleteBackfilledDataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteBackfilledDataResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_DeleteBackfilledData_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *marketDataServiceClient) ListAssets(ctx context.Context, in *ListAssetsRequest, opts ...grpc.CallOption) (*ListAssetsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListAssetsResponse)
 	err := c.cc.Invoke(ctx, MarketDataService_ListAssets_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketDataServiceClient) GetFundamentals(ctx context.Context, in *GetFundamentalsRequest, opts ...grpc.CallOption) (*GetFundamentalsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetFundamentalsResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_GetFundamentals_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketDataServiceClient) GetFundamentalsMulti(ctx context.Context, in *GetFundamentalsMultiRequest, opts ...grpc.CallOption) (*GetFundamentalsMultiResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetFundamentalsMultiResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_GetFundamentalsMulti_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -166,8 +205,14 @@ type MarketDataServiceServer interface {
 	BackfillBars(context.Context, *BackfillBarsRequest) (*BackfillBarsResponse, error)
 	// Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
 	GetDataCoverage(context.Context, *GetDataCoverageRequest) (*GetDataCoverageResponse, error)
+	// Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5)
+	DeleteBackfilledData(context.Context, *DeleteBackfilledDataRequest) (*DeleteBackfilledDataResponse, error)
 	// Get available symbols
 	ListAssets(context.Context, *ListAssetsRequest) (*ListAssetsResponse, error)
+	// Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache)
+	GetFundamentals(context.Context, *GetFundamentalsRequest) (*GetFundamentalsResponse, error)
+	// Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
+	GetFundamentalsMulti(context.Context, *GetFundamentalsMultiRequest) (*GetFundamentalsMultiResponse, error)
 }
 
 // UnimplementedMarketDataServiceServer should be embedded to have
@@ -195,8 +240,17 @@ func (UnimplementedMarketDataServiceServer) BackfillBars(context.Context, *Backf
 func (UnimplementedMarketDataServiceServer) GetDataCoverage(context.Context, *GetDataCoverageRequest) (*GetDataCoverageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDataCoverage not implemented")
 }
+func (UnimplementedMarketDataServiceServer) DeleteBackfilledData(context.Context, *DeleteBackfilledDataRequest) (*DeleteBackfilledDataResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteBackfilledData not implemented")
+}
 func (UnimplementedMarketDataServiceServer) ListAssets(context.Context, *ListAssetsRequest) (*ListAssetsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListAssets not implemented")
+}
+func (UnimplementedMarketDataServiceServer) GetFundamentals(context.Context, *GetFundamentalsRequest) (*GetFundamentalsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetFundamentals not implemented")
+}
+func (UnimplementedMarketDataServiceServer) GetFundamentalsMulti(context.Context, *GetFundamentalsMultiRequest) (*GetFundamentalsMultiResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetFundamentalsMulti not implemented")
 }
 func (UnimplementedMarketDataServiceServer) testEmbeddedByValue() {}
 
@@ -312,6 +366,24 @@ func _MarketDataService_GetDataCoverage_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MarketDataService_DeleteBackfilledData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteBackfilledDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).DeleteBackfilledData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_DeleteBackfilledData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).DeleteBackfilledData(ctx, req.(*DeleteBackfilledDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MarketDataService_ListAssets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListAssetsRequest)
 	if err := dec(in); err != nil {
@@ -326,6 +398,42 @@ func _MarketDataService_ListAssets_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MarketDataServiceServer).ListAssets(ctx, req.(*ListAssetsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketDataService_GetFundamentals_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFundamentalsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).GetFundamentals(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_GetFundamentals_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).GetFundamentals(ctx, req.(*GetFundamentalsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketDataService_GetFundamentalsMulti_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFundamentalsMultiRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).GetFundamentalsMulti(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_GetFundamentalsMulti_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).GetFundamentalsMulti(ctx, req.(*GetFundamentalsMultiRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -354,8 +462,20 @@ var MarketDataService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MarketDataService_GetDataCoverage_Handler,
 		},
 		{
+			MethodName: "DeleteBackfilledData",
+			Handler:    _MarketDataService_DeleteBackfilledData_Handler,
+		},
+		{
 			MethodName: "ListAssets",
 			Handler:    _MarketDataService_ListAssets_Handler,
+		},
+		{
+			MethodName: "GetFundamentals",
+			Handler:    _MarketDataService_GetFundamentals_Handler,
+		},
+		{
+			MethodName: "GetFundamentalsMulti",
+			Handler:    _MarketDataService_GetFundamentalsMulti_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

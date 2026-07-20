@@ -47,6 +47,9 @@ const (
 	// TradingServiceStreamOrderUpdatesProcedure is the fully-qualified name of the TradingService's
 	// StreamOrderUpdates RPC.
 	TradingServiceStreamOrderUpdatesProcedure = "/xstockstrat.trading.v1.TradingService/StreamOrderUpdates"
+	// TradingServiceReplaceOrderProcedure is the fully-qualified name of the TradingService's
+	// ReplaceOrder RPC.
+	TradingServiceReplaceOrderProcedure = "/xstockstrat.trading.v1.TradingService/ReplaceOrder"
 	// TradingServiceRegisterBrokerAccountProcedure is the fully-qualified name of the TradingService's
 	// RegisterBrokerAccount RPC.
 	TradingServiceRegisterBrokerAccountProcedure = "/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount"
@@ -71,6 +74,11 @@ type TradingServiceClient interface {
 	GetOrder(context.Context, *connect.Request[v1.GetOrderRequest]) (*connect.Response[v1.Order], error)
 	ListOrders(context.Context, *connect.Request[v1.ListOrdersRequest]) (*connect.Response[v1.ListOrdersResponse], error)
 	StreamOrderUpdates(context.Context, *connect.Request[v1.StreamOrderUpdatesRequest]) (*connect.ServerStreamForClient[v1.Order], error)
+	// ReplaceOrder modifies a working order's qty/price/TIF. It is broker-agnostic at
+	// this surface and routes by the persisted order's broker_type
+	// (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
+	// while the order is NEW or PARTIALLY_FILLED.
+	ReplaceOrder(context.Context, *connect.Request[v1.ReplaceOrderRequest]) (*connect.Response[v1.Order], error)
 	RegisterBrokerAccount(context.Context, *connect.Request[v1.RegisterBrokerAccountRequest]) (*connect.Response[v1.RegisterBrokerAccountResponse], error)
 	ListBrokerAccounts(context.Context, *connect.Request[v1.ListBrokerAccountsRequest]) (*connect.Response[v1.ListBrokerAccountsResponse], error)
 	DeregisterBrokerAccount(context.Context, *connect.Request[v1.DeregisterBrokerAccountRequest]) (*connect.Response[v1.DeregisterBrokerAccountResponse], error)
@@ -123,6 +131,12 @@ func NewTradingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(tradingServiceMethods.ByName("StreamOrderUpdates")),
 			connect.WithClientOptions(opts...),
 		),
+		replaceOrder: connect.NewClient[v1.ReplaceOrderRequest, v1.Order](
+			httpClient,
+			baseURL+TradingServiceReplaceOrderProcedure,
+			connect.WithSchema(tradingServiceMethods.ByName("ReplaceOrder")),
+			connect.WithClientOptions(opts...),
+		),
 		registerBrokerAccount: connect.NewClient[v1.RegisterBrokerAccountRequest, v1.RegisterBrokerAccountResponse](
 			httpClient,
 			baseURL+TradingServiceRegisterBrokerAccountProcedure,
@@ -163,6 +177,7 @@ type tradingServiceClient struct {
 	getOrder                       *connect.Client[v1.GetOrderRequest, v1.Order]
 	listOrders                     *connect.Client[v1.ListOrdersRequest, v1.ListOrdersResponse]
 	streamOrderUpdates             *connect.Client[v1.StreamOrderUpdatesRequest, v1.Order]
+	replaceOrder                   *connect.Client[v1.ReplaceOrderRequest, v1.Order]
 	registerBrokerAccount          *connect.Client[v1.RegisterBrokerAccountRequest, v1.RegisterBrokerAccountResponse]
 	listBrokerAccounts             *connect.Client[v1.ListBrokerAccountsRequest, v1.ListBrokerAccountsResponse]
 	deregisterBrokerAccount        *connect.Client[v1.DeregisterBrokerAccountRequest, v1.DeregisterBrokerAccountResponse]
@@ -193,6 +208,11 @@ func (c *tradingServiceClient) ListOrders(ctx context.Context, req *connect.Requ
 // StreamOrderUpdates calls xstockstrat.trading.v1.TradingService.StreamOrderUpdates.
 func (c *tradingServiceClient) StreamOrderUpdates(ctx context.Context, req *connect.Request[v1.StreamOrderUpdatesRequest]) (*connect.ServerStreamForClient[v1.Order], error) {
 	return c.streamOrderUpdates.CallServerStream(ctx, req)
+}
+
+// ReplaceOrder calls xstockstrat.trading.v1.TradingService.ReplaceOrder.
+func (c *tradingServiceClient) ReplaceOrder(ctx context.Context, req *connect.Request[v1.ReplaceOrderRequest]) (*connect.Response[v1.Order], error) {
+	return c.replaceOrder.CallUnary(ctx, req)
 }
 
 // RegisterBrokerAccount calls xstockstrat.trading.v1.TradingService.RegisterBrokerAccount.
@@ -228,6 +248,11 @@ type TradingServiceHandler interface {
 	GetOrder(context.Context, *connect.Request[v1.GetOrderRequest]) (*connect.Response[v1.Order], error)
 	ListOrders(context.Context, *connect.Request[v1.ListOrdersRequest]) (*connect.Response[v1.ListOrdersResponse], error)
 	StreamOrderUpdates(context.Context, *connect.Request[v1.StreamOrderUpdatesRequest], *connect.ServerStream[v1.Order]) error
+	// ReplaceOrder modifies a working order's qty/price/TIF. It is broker-agnostic at
+	// this surface and routes by the persisted order's broker_type
+	// (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
+	// while the order is NEW or PARTIALLY_FILLED.
+	ReplaceOrder(context.Context, *connect.Request[v1.ReplaceOrderRequest]) (*connect.Response[v1.Order], error)
 	RegisterBrokerAccount(context.Context, *connect.Request[v1.RegisterBrokerAccountRequest]) (*connect.Response[v1.RegisterBrokerAccountResponse], error)
 	ListBrokerAccounts(context.Context, *connect.Request[v1.ListBrokerAccountsRequest]) (*connect.Response[v1.ListBrokerAccountsResponse], error)
 	DeregisterBrokerAccount(context.Context, *connect.Request[v1.DeregisterBrokerAccountRequest]) (*connect.Response[v1.DeregisterBrokerAccountResponse], error)
@@ -276,6 +301,12 @@ func NewTradingServiceHandler(svc TradingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(tradingServiceMethods.ByName("StreamOrderUpdates")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tradingServiceReplaceOrderHandler := connect.NewUnaryHandler(
+		TradingServiceReplaceOrderProcedure,
+		svc.ReplaceOrder,
+		connect.WithSchema(tradingServiceMethods.ByName("ReplaceOrder")),
+		connect.WithHandlerOptions(opts...),
+	)
 	tradingServiceRegisterBrokerAccountHandler := connect.NewUnaryHandler(
 		TradingServiceRegisterBrokerAccountProcedure,
 		svc.RegisterBrokerAccount,
@@ -318,6 +349,8 @@ func NewTradingServiceHandler(svc TradingServiceHandler, opts ...connect.Handler
 			tradingServiceListOrdersHandler.ServeHTTP(w, r)
 		case TradingServiceStreamOrderUpdatesProcedure:
 			tradingServiceStreamOrderUpdatesHandler.ServeHTTP(w, r)
+		case TradingServiceReplaceOrderProcedure:
+			tradingServiceReplaceOrderHandler.ServeHTTP(w, r)
 		case TradingServiceRegisterBrokerAccountProcedure:
 			tradingServiceRegisterBrokerAccountHandler.ServeHTTP(w, r)
 		case TradingServiceListBrokerAccountsProcedure:
@@ -355,6 +388,10 @@ func (UnimplementedTradingServiceHandler) ListOrders(context.Context, *connect.R
 
 func (UnimplementedTradingServiceHandler) StreamOrderUpdates(context.Context, *connect.Request[v1.StreamOrderUpdatesRequest], *connect.ServerStream[v1.Order]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.trading.v1.TradingService.StreamOrderUpdates is not implemented"))
+}
+
+func (UnimplementedTradingServiceHandler) ReplaceOrder(context.Context, *connect.Request[v1.ReplaceOrderRequest]) (*connect.Response[v1.Order], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.trading.v1.TradingService.ReplaceOrder is not implemented"))
 }
 
 func (UnimplementedTradingServiceHandler) RegisterBrokerAccount(context.Context, *connect.Request[v1.RegisterBrokerAccountRequest]) (*connect.Response[v1.RegisterBrokerAccountResponse], error) {

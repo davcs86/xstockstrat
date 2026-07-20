@@ -69,6 +69,41 @@ class PortfolioServiceStub(object):
                 request_serializer=portfolio_dot_v1_dot_portfolio__pb2.ListPortfoliosRequest.SerializeToString,
                 response_deserializer=portfolio_dot_v1_dot_portfolio__pb2.ListPortfoliosResponse.FromString,
                 _registered_method=True)
+        self.CreateWatchlist = channel.unary_unary(
+                '/xstockstrat.portfolio.v1.PortfolioService/CreateWatchlist',
+                request_serializer=portfolio_dot_v1_dot_portfolio__pb2.CreateWatchlistRequest.SerializeToString,
+                response_deserializer=portfolio_dot_v1_dot_portfolio__pb2.CreateWatchlistResponse.FromString,
+                _registered_method=True)
+        self.GetWatchlist = channel.unary_unary(
+                '/xstockstrat.portfolio.v1.PortfolioService/GetWatchlist',
+                request_serializer=portfolio_dot_v1_dot_portfolio__pb2.GetWatchlistRequest.SerializeToString,
+                response_deserializer=portfolio_dot_v1_dot_portfolio__pb2.GetWatchlistResponse.FromString,
+                _registered_method=True)
+        self.ListWatchlists = channel.unary_unary(
+                '/xstockstrat.portfolio.v1.PortfolioService/ListWatchlists',
+                request_serializer=portfolio_dot_v1_dot_portfolio__pb2.ListWatchlistsRequest.SerializeToString,
+                response_deserializer=portfolio_dot_v1_dot_portfolio__pb2.ListWatchlistsResponse.FromString,
+                _registered_method=True)
+        self.UpdateWatchlist = channel.unary_unary(
+                '/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlist',
+                request_serializer=portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistRequest.SerializeToString,
+                response_deserializer=portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistResponse.FromString,
+                _registered_method=True)
+        self.DeleteWatchlist = channel.unary_unary(
+                '/xstockstrat.portfolio.v1.PortfolioService/DeleteWatchlist',
+                request_serializer=portfolio_dot_v1_dot_portfolio__pb2.DeleteWatchlistRequest.SerializeToString,
+                response_deserializer=portfolio_dot_v1_dot_portfolio__pb2.DeleteWatchlistResponse.FromString,
+                _registered_method=True)
+        self.AddWatchlistSymbols = channel.unary_unary(
+                '/xstockstrat.portfolio.v1.PortfolioService/AddWatchlistSymbols',
+                request_serializer=portfolio_dot_v1_dot_portfolio__pb2.AddWatchlistSymbolsRequest.SerializeToString,
+                response_deserializer=portfolio_dot_v1_dot_portfolio__pb2.AddWatchlistSymbolsResponse.FromString,
+                _registered_method=True)
+        self.RemoveWatchlistSymbols = channel.unary_unary(
+                '/xstockstrat.portfolio.v1.PortfolioService/RemoveWatchlistSymbols',
+                request_serializer=portfolio_dot_v1_dot_portfolio__pb2.RemoveWatchlistSymbolsRequest.SerializeToString,
+                response_deserializer=portfolio_dot_v1_dot_portfolio__pb2.RemoveWatchlistSymbolsResponse.FromString,
+                _registered_method=True)
 
 
 class PortfolioServiceServicer(object):
@@ -116,6 +151,50 @@ class PortfolioServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def CreateWatchlist(self, request, context):
+        """Watchlist management (feature 058). Additive — ownership is taken from the
+        propagated x-user-id header server-side, never from request fields.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetWatchlist(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListWatchlists(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateWatchlist(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteWatchlist(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def AddWatchlistSymbols(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RemoveWatchlistSymbols(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_PortfolioServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -153,6 +232,41 @@ def add_PortfolioServiceServicer_to_server(servicer, server):
                     servicer.ListPortfolios,
                     request_deserializer=portfolio_dot_v1_dot_portfolio__pb2.ListPortfoliosRequest.FromString,
                     response_serializer=portfolio_dot_v1_dot_portfolio__pb2.ListPortfoliosResponse.SerializeToString,
+            ),
+            'CreateWatchlist': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateWatchlist,
+                    request_deserializer=portfolio_dot_v1_dot_portfolio__pb2.CreateWatchlistRequest.FromString,
+                    response_serializer=portfolio_dot_v1_dot_portfolio__pb2.CreateWatchlistResponse.SerializeToString,
+            ),
+            'GetWatchlist': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetWatchlist,
+                    request_deserializer=portfolio_dot_v1_dot_portfolio__pb2.GetWatchlistRequest.FromString,
+                    response_serializer=portfolio_dot_v1_dot_portfolio__pb2.GetWatchlistResponse.SerializeToString,
+            ),
+            'ListWatchlists': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListWatchlists,
+                    request_deserializer=portfolio_dot_v1_dot_portfolio__pb2.ListWatchlistsRequest.FromString,
+                    response_serializer=portfolio_dot_v1_dot_portfolio__pb2.ListWatchlistsResponse.SerializeToString,
+            ),
+            'UpdateWatchlist': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateWatchlist,
+                    request_deserializer=portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistRequest.FromString,
+                    response_serializer=portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistResponse.SerializeToString,
+            ),
+            'DeleteWatchlist': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteWatchlist,
+                    request_deserializer=portfolio_dot_v1_dot_portfolio__pb2.DeleteWatchlistRequest.FromString,
+                    response_serializer=portfolio_dot_v1_dot_portfolio__pb2.DeleteWatchlistResponse.SerializeToString,
+            ),
+            'AddWatchlistSymbols': grpc.unary_unary_rpc_method_handler(
+                    servicer.AddWatchlistSymbols,
+                    request_deserializer=portfolio_dot_v1_dot_portfolio__pb2.AddWatchlistSymbolsRequest.FromString,
+                    response_serializer=portfolio_dot_v1_dot_portfolio__pb2.AddWatchlistSymbolsResponse.SerializeToString,
+            ),
+            'RemoveWatchlistSymbols': grpc.unary_unary_rpc_method_handler(
+                    servicer.RemoveWatchlistSymbols,
+                    request_deserializer=portfolio_dot_v1_dot_portfolio__pb2.RemoveWatchlistSymbolsRequest.FromString,
+                    response_serializer=portfolio_dot_v1_dot_portfolio__pb2.RemoveWatchlistSymbolsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -344,6 +458,195 @@ class PortfolioService(object):
             '/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios',
             portfolio_dot_v1_dot_portfolio__pb2.ListPortfoliosRequest.SerializeToString,
             portfolio_dot_v1_dot_portfolio__pb2.ListPortfoliosResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateWatchlist(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.portfolio.v1.PortfolioService/CreateWatchlist',
+            portfolio_dot_v1_dot_portfolio__pb2.CreateWatchlistRequest.SerializeToString,
+            portfolio_dot_v1_dot_portfolio__pb2.CreateWatchlistResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetWatchlist(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.portfolio.v1.PortfolioService/GetWatchlist',
+            portfolio_dot_v1_dot_portfolio__pb2.GetWatchlistRequest.SerializeToString,
+            portfolio_dot_v1_dot_portfolio__pb2.GetWatchlistResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListWatchlists(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.portfolio.v1.PortfolioService/ListWatchlists',
+            portfolio_dot_v1_dot_portfolio__pb2.ListWatchlistsRequest.SerializeToString,
+            portfolio_dot_v1_dot_portfolio__pb2.ListWatchlistsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateWatchlist(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlist',
+            portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistRequest.SerializeToString,
+            portfolio_dot_v1_dot_portfolio__pb2.UpdateWatchlistResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteWatchlist(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.portfolio.v1.PortfolioService/DeleteWatchlist',
+            portfolio_dot_v1_dot_portfolio__pb2.DeleteWatchlistRequest.SerializeToString,
+            portfolio_dot_v1_dot_portfolio__pb2.DeleteWatchlistResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AddWatchlistSymbols(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.portfolio.v1.PortfolioService/AddWatchlistSymbols',
+            portfolio_dot_v1_dot_portfolio__pb2.AddWatchlistSymbolsRequest.SerializeToString,
+            portfolio_dot_v1_dot_portfolio__pb2.AddWatchlistSymbolsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RemoveWatchlistSymbols(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.portfolio.v1.PortfolioService/RemoveWatchlistSymbols',
+            portfolio_dot_v1_dot_portfolio__pb2.RemoveWatchlistSymbolsRequest.SerializeToString,
+            portfolio_dot_v1_dot_portfolio__pb2.RemoveWatchlistSymbolsResponse.FromString,
             options,
             channel_credentials,
             insecure,

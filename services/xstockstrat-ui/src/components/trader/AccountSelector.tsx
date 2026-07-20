@@ -54,9 +54,9 @@ export function AccountSelector() {
                 <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
                   {brokerLabel(account.brokerType)}
                 </Badge>
-                <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
-                  {account.isPaper ? 'Paper' : 'Live'}
-                </Badge>
+                {/* Trading mode is shown once globally via TradingModeBadge in the
+                    header — it is environment-fixed, so a per-account Paper/Live badge
+                    here would just duplicate it. */}
               </span>
             </SelectItem>
           ))}

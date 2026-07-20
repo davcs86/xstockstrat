@@ -9,6 +9,8 @@ export declare enum BackfillStatus {
     BACKFILL_STATUS_COMPLETED = "BACKFILL_STATUS_COMPLETED",
     BACKFILL_STATUS_FAILED = "BACKFILL_STATUS_FAILED",
     BACKFILL_STATUS_PARTIAL = "BACKFILL_STATUS_PARTIAL",
+    /** BACKFILL_STATUS_CANCELED - operator-canceled (FR-4); completed-chunk bars retained */
+    BACKFILL_STATUS_CANCELED = "BACKFILL_STATUS_CANCELED",
     UNRECOGNIZED = "UNRECOGNIZED"
 }
 export declare function backfillStatusFromJSON(object: any): BackfillStatus;
@@ -75,6 +77,11 @@ export interface GetBackfillStatusRequest {
 export interface ListBackfillJobsRequest {
     statusFilter: BackfillStatus;
     page?: PageRequest | undefined;
+    /** optional ticker filter (FR-3); empty = no narrowing */
+    symbol: string;
+}
+export interface CancelBackfillRequest {
+    jobId: string;
 }
 export interface ListBackfillJobsResponse {
     jobs: BackfillJob[];
@@ -166,6 +173,7 @@ export declare const TriggerBackfillRequest: MessageFns<TriggerBackfillRequest>;
 export declare const TriggerBackfillResponse: MessageFns<TriggerBackfillResponse>;
 export declare const GetBackfillStatusRequest: MessageFns<GetBackfillStatusRequest>;
 export declare const ListBackfillJobsRequest: MessageFns<ListBackfillJobsRequest>;
+export declare const CancelBackfillRequest: MessageFns<CancelBackfillRequest>;
 export declare const ListBackfillJobsResponse: MessageFns<ListBackfillJobsResponse>;
 export declare const NormalizeRawDataRequest: MessageFns<NormalizeRawDataRequest>;
 export declare const NormalizeRawDataResponse: MessageFns<NormalizeRawDataResponse>;
@@ -207,6 +215,16 @@ export declare const IngestServiceService: {
         readonly requestDeserialize: (value: Buffer) => ListBackfillJobsRequest;
         readonly responseSerialize: (value: ListBackfillJobsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => ListBackfillJobsResponse;
+    };
+    /** Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4). */
+    readonly cancelBackfill: {
+        readonly path: "/xstockstrat.ingest.v1.IngestService/CancelBackfill";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: CancelBackfillRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => CancelBackfillRequest;
+        readonly responseSerialize: (value: BackfillJob) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => BackfillJob;
     };
     readonly normalizeRawData: {
         readonly path: "/xstockstrat.ingest.v1.IngestService/NormalizeRawData";
@@ -260,6 +278,8 @@ export interface IngestServiceServer extends UntypedServiceImplementation {
     triggerBackfill: handleUnaryCall<TriggerBackfillRequest, TriggerBackfillResponse>;
     getBackfillStatus: handleUnaryCall<GetBackfillStatusRequest, BackfillJob>;
     listBackfillJobs: handleUnaryCall<ListBackfillJobsRequest, ListBackfillJobsResponse>;
+    /** Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4). */
+    cancelBackfill: handleUnaryCall<CancelBackfillRequest, BackfillJob>;
     normalizeRawData: handleUnaryCall<NormalizeRawDataRequest, NormalizeRawDataResponse>;
     /** Signal ingestion — persists newsletter/external signals to ingest.newsletter_signals hypertable */
     ingestSignal: handleUnaryCall<IngestSignalRequest, IngestSignalResponse>;
@@ -278,6 +298,10 @@ export interface IngestServiceClient extends Client {
     listBackfillJobs(request: ListBackfillJobsRequest, callback: (error: ServiceError | null, response: ListBackfillJobsResponse) => void): ClientUnaryCall;
     listBackfillJobs(request: ListBackfillJobsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListBackfillJobsResponse) => void): ClientUnaryCall;
     listBackfillJobs(request: ListBackfillJobsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListBackfillJobsResponse) => void): ClientUnaryCall;
+    /** Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4). */
+    cancelBackfill(request: CancelBackfillRequest, callback: (error: ServiceError | null, response: BackfillJob) => void): ClientUnaryCall;
+    cancelBackfill(request: CancelBackfillRequest, metadata: Metadata, callback: (error: ServiceError | null, response: BackfillJob) => void): ClientUnaryCall;
+    cancelBackfill(request: CancelBackfillRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: BackfillJob) => void): ClientUnaryCall;
     normalizeRawData(request: NormalizeRawDataRequest, callback: (error: ServiceError | null, response: NormalizeRawDataResponse) => void): ClientUnaryCall;
     normalizeRawData(request: NormalizeRawDataRequest, metadata: Metadata, callback: (error: ServiceError | null, response: NormalizeRawDataResponse) => void): ClientUnaryCall;
     normalizeRawData(request: NormalizeRawDataRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: NormalizeRawDataResponse) => void): ClientUnaryCall;

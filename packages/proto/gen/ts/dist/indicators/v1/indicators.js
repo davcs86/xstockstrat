@@ -739,6 +739,7 @@ function createBaseExecuteFormulaRequest() {
         timeoutMsOverride: 0,
         memoryBytesOverride: 0,
         inputParams: undefined,
+        parameters: [],
     };
 }
 exports.ExecuteFormulaRequest = {
@@ -763,6 +764,9 @@ exports.ExecuteFormulaRequest = {
         }
         if (message.inputParams !== undefined) {
             struct_1.Struct.encode(struct_1.Struct.wrap(message.inputParams), writer.uint32(58).fork()).join();
+        }
+        for (const v of message.parameters) {
+            exports.FormulaParameter.encode(v, writer.uint32(66).fork()).join();
         }
         return writer;
     },
@@ -825,6 +829,13 @@ exports.ExecuteFormulaRequest = {
                     message.inputParams = struct_1.Struct.unwrap(struct_1.Struct.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.parameters.push(exports.FormulaParameter.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -871,6 +882,9 @@ exports.ExecuteFormulaRequest = {
                 : isObject(object.input_params)
                     ? object.input_params
                     : undefined,
+            parameters: globalThis.Array.isArray(object?.parameters)
+                ? object.parameters.map((e) => exports.FormulaParameter.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -902,6 +916,9 @@ exports.ExecuteFormulaRequest = {
         if (message.inputParams !== undefined) {
             obj.inputParams = message.inputParams;
         }
+        if (message.parameters?.length) {
+            obj.parameters = message.parameters.map((e) => exports.FormulaParameter.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -921,6 +938,7 @@ exports.ExecuteFormulaRequest = {
         message.timeoutMsOverride = object.timeoutMsOverride ?? 0;
         message.memoryBytesOverride = object.memoryBytesOverride ?? 0;
         message.inputParams = object.inputParams ?? undefined;
+        message.parameters = object.parameters?.map((e) => exports.FormulaParameter.fromPartial(e)) || [];
         return message;
     },
 };
@@ -1495,6 +1513,7 @@ function createBaseFormulaDefinition() {
         inputSchema: {},
         parameters: [],
         outputs: [],
+        warmupPeriod: 0,
     };
 }
 exports.FormulaDefinition = {
@@ -1531,6 +1550,9 @@ exports.FormulaDefinition = {
         }
         for (const v of message.outputs) {
             exports.FormulaOutput.encode(v, writer.uint32(90).fork()).join();
+        }
+        if (message.warmupPeriod !== 0) {
+            writer.uint32(96).int32(message.warmupPeriod);
         }
         return writer;
     },
@@ -1621,6 +1643,13 @@ exports.FormulaDefinition = {
                     message.outputs.push(exports.FormulaOutput.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 12: {
+                    if (tag !== 96) {
+                        break;
+                    }
+                    message.warmupPeriod = reader.int32();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1672,6 +1701,11 @@ exports.FormulaDefinition = {
             outputs: globalThis.Array.isArray(object?.outputs)
                 ? object.outputs.map((e) => exports.FormulaOutput.fromJSON(e))
                 : [],
+            warmupPeriod: isSet(object.warmupPeriod)
+                ? globalThis.Number(object.warmupPeriod)
+                : isSet(object.warmup_period)
+                    ? globalThis.Number(object.warmup_period)
+                    : 0,
         };
     },
     toJSON(message) {
@@ -1715,6 +1749,9 @@ exports.FormulaDefinition = {
         if (message.outputs?.length) {
             obj.outputs = message.outputs.map((e) => exports.FormulaOutput.toJSON(e));
         }
+        if (message.warmupPeriod !== 0) {
+            obj.warmupPeriod = Math.round(message.warmupPeriod);
+        }
         return obj;
     },
     create(base) {
@@ -1738,6 +1775,7 @@ exports.FormulaDefinition = {
         }, {});
         message.parameters = object.parameters?.map((e) => exports.FormulaParameter.fromPartial(e)) || [];
         message.outputs = object.outputs?.map((e) => exports.FormulaOutput.fromPartial(e)) || [];
+        message.warmupPeriod = object.warmupPeriod ?? 0;
         return message;
     },
 };
@@ -2017,6 +2055,7 @@ function createBaseRegisterFormulaRequest() {
         author: "",
         parameters: [],
         outputs: [],
+        warmupPeriod: 0,
     };
 }
 exports.RegisterFormulaRequest = {
@@ -2044,6 +2083,9 @@ exports.RegisterFormulaRequest = {
         }
         for (const v of message.outputs) {
             exports.FormulaOutput.encode(v, writer.uint32(66).fork()).join();
+        }
+        if (message.warmupPeriod !== 0) {
+            writer.uint32(72).int32(message.warmupPeriod);
         }
         return writer;
     },
@@ -2113,6 +2155,13 @@ exports.RegisterFormulaRequest = {
                     message.outputs.push(exports.FormulaOutput.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 9: {
+                    if (tag !== 72) {
+                        break;
+                    }
+                    message.warmupPeriod = reader.int32();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2149,6 +2198,11 @@ exports.RegisterFormulaRequest = {
             outputs: globalThis.Array.isArray(object?.outputs)
                 ? object.outputs.map((e) => exports.FormulaOutput.fromJSON(e))
                 : [],
+            warmupPeriod: isSet(object.warmupPeriod)
+                ? globalThis.Number(object.warmupPeriod)
+                : isSet(object.warmup_period)
+                    ? globalThis.Number(object.warmup_period)
+                    : 0,
         };
     },
     toJSON(message) {
@@ -2183,6 +2237,9 @@ exports.RegisterFormulaRequest = {
         if (message.outputs?.length) {
             obj.outputs = message.outputs.map((e) => exports.FormulaOutput.toJSON(e));
         }
+        if (message.warmupPeriod !== 0) {
+            obj.warmupPeriod = Math.round(message.warmupPeriod);
+        }
         return obj;
     },
     create(base) {
@@ -2203,6 +2260,7 @@ exports.RegisterFormulaRequest = {
         message.author = object.author ?? "";
         message.parameters = object.parameters?.map((e) => exports.FormulaParameter.fromPartial(e)) || [];
         message.outputs = object.outputs?.map((e) => exports.FormulaOutput.fromPartial(e)) || [];
+        message.warmupPeriod = object.warmupPeriod ?? 0;
         return message;
     },
 };
@@ -2586,6 +2644,7 @@ function createBaseUpdateFormulaRequest() {
         isPublic: false,
         parameters: [],
         outputs: [],
+        warmupPeriod: 0,
     };
 }
 exports.UpdateFormulaRequest = {
@@ -2613,6 +2672,9 @@ exports.UpdateFormulaRequest = {
         }
         for (const v of message.outputs) {
             exports.FormulaOutput.encode(v, writer.uint32(66).fork()).join();
+        }
+        if (message.warmupPeriod !== 0) {
+            writer.uint32(72).int32(message.warmupPeriod);
         }
         return writer;
     },
@@ -2679,6 +2741,13 @@ exports.UpdateFormulaRequest = {
                     message.outputs.push(exports.FormulaOutput.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 9: {
+                    if (tag !== 72) {
+                        break;
+                    }
+                    message.warmupPeriod = reader.int32();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2713,6 +2782,11 @@ exports.UpdateFormulaRequest = {
             outputs: globalThis.Array.isArray(object?.outputs)
                 ? object.outputs.map((e) => exports.FormulaOutput.fromJSON(e))
                 : [],
+            warmupPeriod: isSet(object.warmupPeriod)
+                ? globalThis.Number(object.warmupPeriod)
+                : isSet(object.warmup_period)
+                    ? globalThis.Number(object.warmup_period)
+                    : 0,
         };
     },
     toJSON(message) {
@@ -2741,6 +2815,9 @@ exports.UpdateFormulaRequest = {
         if (message.outputs?.length) {
             obj.outputs = message.outputs.map((e) => exports.FormulaOutput.toJSON(e));
         }
+        if (message.warmupPeriod !== 0) {
+            obj.warmupPeriod = Math.round(message.warmupPeriod);
+        }
         return obj;
     },
     create(base) {
@@ -2756,6 +2833,7 @@ exports.UpdateFormulaRequest = {
         message.isPublic = object.isPublic ?? false;
         message.parameters = object.parameters?.map((e) => exports.FormulaParameter.fromPartial(e)) || [];
         message.outputs = object.outputs?.map((e) => exports.FormulaOutput.fromPartial(e)) || [];
+        message.warmupPeriod = object.warmupPeriod ?? 0;
         return message;
     },
 };

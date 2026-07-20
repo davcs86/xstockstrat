@@ -1,7 +1,7 @@
 """Tests for app/tools.py — all six MCP tool definitions."""
 
 import base64
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -247,6 +247,38 @@ async def test_run_backtest_calls_grpc():
         )
 
 
+# ── screen_symbols (feature 061) ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_screen_symbols_calls_client():
+    """screen_symbols delegates to client.screen_symbols with the forwarded kwargs."""
+    mock_screen = AsyncMock(
+        return_value={
+            "results": [{"symbol": "NVDA", "score": 0.9, "passed": True}],
+            "coverage_gaps": [],
+        }
+    )
+    criteria = [{"ref_name": "pe", "kind": "SCREEN_KIND_FUNDAMENTAL", "op": "COMPARATOR_LTE"}]
+    with patch.object(client, "screen_symbols", mock_screen):
+        server = _make_server()
+        result = await _tool_fn(server, "screen_symbols")(
+            symbols=["NVDA", "AAPL"],
+            criteria=criteria,
+            rank_limit=5,
+        )
+        assert result["results"][0]["symbol"] == "NVDA"
+        mock_screen.assert_called_once_with(
+            symbols=["NVDA", "AAPL"],
+            criteria=criteria,
+            signal_sources=None,
+            signal_weight=0.0,
+            technical_weight=1.0,
+            min_conviction=0.0,
+            rank_limit=5,
+        )
+
+
 # ── extractor_tool mapping ────────────────────────────────────────────────
 
 
@@ -274,34 +306,20 @@ class TestManageStrategyTool:
     @pytest.mark.asyncio
     async def test_calls_client_with_args(self):
         server = _make_server()
-        with (
-            patch.object(client, "validate_admin", AsyncMock(return_value=True)),
-            patch.object(
-                client, "manage_strategy", AsyncMock(return_value={"strategy_id": "sma_x"})
-            ) as m,
-        ):
+        with patch.object(
+            client, "manage_strategy", AsyncMock(return_value={"strategy_id": "sma_x"})
+        ) as m:
             result = await _tool_fn(server, "manage_strategy")(
                 operation="register",
                 strategy_id="sma_x",
                 display_name="SMA X",
                 components=[{"ref_name": "fast", "kind": "builtin", "indicator": "SMA"}],
                 entry_rule="{}",
-                admin_api_key="key-123",
             )
         assert result == {"strategy_id": "sma_x"}
         kwargs = m.call_args.kwargs
         assert kwargs["operation"] == "register"
-        assert kwargs["api_key"] == "key-123"
         assert kwargs["definition"]["strategy_id"] == "sma_x"
-
-    @pytest.mark.asyncio
-    async def test_non_admin_rejected_at_entry(self):
-        server = _make_server()
-        with patch.object(client, "validate_admin", AsyncMock(return_value=False)):
-            with pytest.raises(RuntimeError, match="admin API key required"):
-                await _tool_fn(server, "manage_strategy")(
-                    operation="register", strategy_id="x", admin_api_key="bad"
-                )
 
     @pytest.mark.asyncio
     async def test_grpc_error_reraised_as_clear_message(self):
@@ -309,14 +327,9 @@ class TestManageStrategyTool:
 
         server = _make_server()
         err = _rpc_error(grpc.StatusCode.NOT_FOUND, "nope")
-        with (
-            patch.object(client, "validate_admin", AsyncMock(return_value=True)),
-            patch.object(client, "manage_strategy", AsyncMock(side_effect=err)),
-        ):
+        with patch.object(client, "manage_strategy", AsyncMock(side_effect=err)):
             with pytest.raises(RuntimeError, match="strategy not found"):
-                await _tool_fn(server, "manage_strategy")(
-                    operation="update", strategy_id="x", admin_api_key="good"
-                )
+                await _tool_fn(server, "manage_strategy")(operation="update", strategy_id="x")
 
 
 class TestManageFormulaTool:
@@ -327,13 +340,12 @@ class TestManageFormulaTool:
             client, "manage_formula", AsyncMock(return_value={"formula_id": "f-1"})
         ) as m:
             await _tool_fn(server, "manage_formula")(
-                operation="register", name="rsi2", source="x = 1", admin_api_key="k"
+                operation="register", name="rsi2", source="x = 1"
             )
             await _tool_fn(server, "manage_formula")(
                 operation="delete",
                 formula_id="f-1",
                 formula_author_user_id="u1",
-                admin_api_key="k",
             )
         assert m.call_count == 2
         assert m.call_args_list[0].kwargs["operation"] == "register"
@@ -349,7 +361,6 @@ class TestManageFormulaTool:
                 operation="register",
                 name="rsi3",
                 source="result = params['period']",
-                admin_api_key="k",
                 parameters=[
                     {
                         "name": "period",
@@ -386,44 +397,21 @@ class TestManageSignalSourceTool:
             "active": True,
             "has_credentials": True,
         }
-        with (
-            patch.object(client, "validate_admin", AsyncMock(return_value=True)),
-            patch.object(client, "manage_signal_source", AsyncMock(return_value=returned)) as m,
-        ):
+        with patch.object(client, "manage_signal_source", AsyncMock(return_value=returned)) as m:
             result = await _tool_fn(server, "manage_signal_source")(
                 operation="register",
                 slug="uw",
                 display_name="UW",
                 source_type="newsletter",
                 credentials_ref="secret-ref",
-                admin_api_key="k",
             )
         assert "credentials_ref" not in result  # FR-12
         assert m.call_args.kwargs["credentials_ref"] == "secret-ref"
 
-    @pytest.mark.asyncio
-    async def test_non_admin_rejected_at_entry(self):
-        """AC-A2: manage_signal_source validates admin at the agent entry."""
-        server = _make_server()
-        with patch.object(client, "validate_admin", AsyncMock(return_value=False)):
-            with pytest.raises(RuntimeError, match="admin API key required"):
-                await _tool_fn(server, "manage_signal_source")(
-                    operation="register", slug="uw", admin_api_key="bad"
-                )
-
 
 class TestSetStrategyLiveTool:
     @pytest.mark.asyncio
-    async def test_requires_admin(self):
-        server = _make_server()
-        with patch.object(client, "validate_admin", AsyncMock(return_value=False)):
-            with pytest.raises(RuntimeError, match="admin API key required"):
-                await _tool_fn(server, "set_strategy_live")(
-                    strategy_id="s1", live_enabled=True, admin_api_key="bad"
-                )
-
-    @pytest.mark.asyncio
-    async def test_calls_client_when_admin(self):
+    async def test_calls_client(self):
         server = _make_server()
         returned = {
             "strategy_id": "s1",
@@ -431,11 +419,58 @@ class TestSetStrategyLiveTool:
             "live_enabled": True,
             "active": True,
         }
-        with patch.object(client, "validate_admin", AsyncMock(return_value=True)):
-            with patch.object(client, "set_strategy_live", AsyncMock(return_value=returned)) as m:
-                result = await _tool_fn(server, "set_strategy_live")(
-                    strategy_id="s1", live_enabled=True, admin_api_key="good"
-                )
+        with patch.object(client, "set_strategy_live", AsyncMock(return_value=returned)) as m:
+            result = await _tool_fn(server, "set_strategy_live")(
+                strategy_id="s1", live_enabled=True
+            )
         assert result == returned
         assert m.call_args.kwargs["strategy_id"] == "s1"
-        assert m.call_args.kwargs["api_key"] == "good"
+        assert m.call_args.kwargs["live_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_backtest_projects_full_result_with_diagnostics():
+    """feature 064: client.run_backtest returns the full result (snake_case keys, zero-valued
+    metrics preserved, per-bar diagnostics with readable enum names)."""
+    from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc
+
+    result = analysis_pb2.BacktestResult(
+        backtest_id="bt-9", strategy_id="s", total_return=0.0, total_trades=0
+    )
+    sd = result.diagnostics.add()
+    sd.symbol = "AAPL"
+    sd.no_trade_reason = analysis_pb2.NO_TRADE_REASON_ENTRY_NEVER_TRUE
+    bar = sd.bars.add()
+    bar.symbol = "AAPL"
+    bar.bar_index = 0
+    bar.close = 10.0
+    bar.warmup = True
+    bar.action = analysis_pb2.BAR_ACTION_WARMUP
+
+    class _Chan:
+        async def __aenter__(self):
+            return MagicMock()
+
+        async def __aexit__(self, *a):
+            return False
+
+    stub = MagicMock()
+    stub.RunBacktest = AsyncMock(return_value=result)
+    with (
+        patch.object(client.grpc.aio, "insecure_channel", return_value=_Chan()),
+        patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=stub),
+    ):
+        out = await client.run_backtest(
+            strategy_id="s", symbols=["AAPL"], initial_capital=100000.0
+        )
+
+    assert out["backtest_id"] == "bt-9"
+    # zero-valued metrics stay present (the "0 trades / 0% return" debugging case)
+    assert out["total_return"] == 0.0
+    assert out["total_trades"] == 0
+    # per-bar diagnostics surfaced with snake_case keys + readable enum names
+    diag = out["diagnostics"][0]
+    assert diag["symbol"] == "AAPL"
+    assert diag["no_trade_reason"] == "NO_TRADE_REASON_ENTRY_NEVER_TRUE"
+    assert diag["bars"][0]["action"] == "BAR_ACTION_WARMUP"
+    assert diag["bars"][0]["bar_index"] == 0

@@ -19,11 +19,17 @@ type TradingRepo struct {
 
 // NewTradingRepo opens a pgxpool connection to the given DSN.
 func NewTradingRepo(connStr string) (*TradingRepo, error) {
-	pool, err := pgxpool.New(context.Background(), connStr)
+	pool, err := newPool(context.Background(), connStr)
 	if err != nil {
-		return nil, fmt.Errorf("pgxpool.New: %w", err)
+		return nil, fmt.Errorf("newPool: %w", err)
 	}
 	return &TradingRepo{pool: pool}, nil
+}
+
+// Pool exposes the underlying connection pool so sibling repositories
+// (e.g. AccountRepo) can share it instead of opening a second pool.
+func (r *TradingRepo) Pool() *pgxpool.Pool {
+	return r.pool
 }
 
 // UpsertOrder inserts a new order or updates an existing one.
@@ -95,6 +101,11 @@ func (r *TradingRepo) ListOrders(
 	status tradingv1.OrderStatus,
 	mode commonv1.TradingMode,
 	strategyID string,
+	symbol string,
+	side tradingv1.OrderSide,
+	orderType tradingv1.OrderType,
+	accountID string,
+	rng *commonv1.TimeRange,
 ) ([]*tradingv1.Order, error) {
 	query := `
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
@@ -124,6 +135,39 @@ func (r *TradingRepo) ListOrders(
 	if strategyID != "" {
 		query += fmt.Sprintf(" AND strategy_id = $%d", i)
 		args = append(args, strategyID)
+		i++
+	}
+	if symbol != "" {
+		query += fmt.Sprintf(" AND symbol = $%d", i)
+		args = append(args, symbol)
+		i++
+	}
+	if side != tradingv1.OrderSide_ORDER_SIDE_UNSPECIFIED {
+		query += fmt.Sprintf(" AND side = $%d", i)
+		args = append(args, sideStr(side))
+		i++
+	}
+	if orderType != tradingv1.OrderType_ORDER_TYPE_UNSPECIFIED {
+		query += fmt.Sprintf(" AND order_type = $%d", i)
+		args = append(args, typeStr(orderType))
+		i++
+	}
+	if accountID != "" {
+		query += fmt.Sprintf(" AND account_id = $%d", i)
+		args = append(args, accountID)
+		i++
+	}
+	if rng != nil {
+		if rng.Start != nil {
+			query += fmt.Sprintf(" AND created_at >= $%d", i)
+			args = append(args, rng.Start.AsTime())
+			i++
+		}
+		if rng.End != nil {
+			query += fmt.Sprintf(" AND created_at <= $%d", i)
+			args = append(args, rng.End.AsTime())
+			// created_at <= is the last optional clause; no further i++ needed (ineffassign).
+		}
 	}
 	query += " ORDER BY created_at DESC LIMIT 500"
 

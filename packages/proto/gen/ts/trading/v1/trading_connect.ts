@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CancelOrderRequest, CancelOrderResponse, DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse, GetOrderRequest, GetTradingEnvironmentRequest, GetTradingEnvironmentResponse, ListBrokerAccountsRequest, ListBrokerAccountsResponse, ListOrdersRequest, ListOrdersResponse, Order, PlaceOrderRequest, RegisterBrokerAccountRequest, RegisterBrokerAccountResponse, StreamOrderUpdatesRequest, UpdateBrokerAccountCredentialsRequest, UpdateBrokerAccountCredentialsResponse } from "./trading_pb.js";
+import { CancelOrderRequest, CancelOrderResponse, DeregisterBrokerAccountRequest, DeregisterBrokerAccountResponse, GetOrderRequest, GetTradingEnvironmentRequest, GetTradingEnvironmentResponse, ListBrokerAccountsRequest, ListBrokerAccountsResponse, ListOrdersRequest, ListOrdersResponse, Order, PlaceOrderRequest, RegisterBrokerAccountRequest, RegisterBrokerAccountResponse, ReplaceOrderRequest, StreamOrderUpdatesRequest, UpdateBrokerAccountCredentialsRequest, UpdateBrokerAccountCredentialsResponse } from "./trading_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -56,6 +56,20 @@ export const TradingService = {
       I: StreamOrderUpdatesRequest,
       O: Order,
       kind: MethodKind.ServerStreaming,
+    },
+    /**
+     * ReplaceOrder modifies a working order's qty/price/TIF. It is broker-agnostic at
+     * this surface and routes by the persisted order's broker_type
+     * (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
+     * while the order is NEW or PARTIALLY_FILLED.
+     *
+     * @generated from rpc xstockstrat.trading.v1.TradingService.ReplaceOrder
+     */
+    replaceOrder: {
+      name: "ReplaceOrder",
+      I: ReplaceOrderRequest,
+      O: Order,
+      kind: MethodKind.Unary,
     },
     /**
      * @generated from rpc xstockstrat.trading.v1.TradingService.RegisterBrokerAccount

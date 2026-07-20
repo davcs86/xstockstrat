@@ -71,26 +71,27 @@ JWT, server-side). The gRPC path below remains available for automation.
 
 ### Formula Interface Contract
 
-Your Python formula receives a `data` dict and must assign its output to a `result` variable.
+Your Python formula receives two dicts already in scope — `data` (the series input) and
+`params` (typed scalar parameters) — and must assign its output to a `result` variable. The
+primary series is `result["value"]`; any additional keys are **declared outputs** (see below).
 
 ```python
-# data: dict passed from ExecuteFormulaRequest.input_data
-# result: must be set before formula ends
+# data:   series input from ExecuteFormulaRequest.input_data   (e.g. data["close"])
+# params: validated scalar parameters from ExecuteFormulaRequest.input_params
+# result: must be set before the formula ends; result["value"] is the primary series
 
 import numpy as np
 
-prices = data["close"]       # list of closing prices
-period = int(data.get("period", 20))
+arr = np.array(data["close"], dtype=float)   # series stay in `data`
+period = int(params["period"])               # scalars come from `params`, never `data`
 
-arr = np.array(prices, dtype=float)
-sma = np.convolve(arr, np.ones(period) / period, mode='valid')
-stdev = [np.std(arr[i:i+period]) for i in range(len(arr) - period + 1)]
+mid = np.convolve(arr, np.ones(period) / period, mode="valid")
+stdev = np.array([np.std(arr[i:i + period]) for i in range(len(arr) - period + 1)])
 
 result = {
-    "sma": sma.tolist(),
-    "std": stdev,
-    "upper_2std": (sma + 2 * np.array(stdev)).tolist(),
-    "lower_2std": (sma - 2 * np.array(stdev)).tolist(),
+    "value": mid.tolist(),                   # primary series (implicit "value")
+    "upper": (mid + 2 * stdev).tolist(),     # declared output series
+    "lower": (mid - 2 * stdev).tolist(),     # declared output series
 }
 ```
 
@@ -129,6 +130,11 @@ The engine validates supplied `input_params` **before** running the sandbox: unk
 missing-required, type mismatches, and out-of-range values are returned as a structured
 `parameter_errors` list (`{name, reason}`) on the response with `success=false`, and the formula
 body never runs. Omitted optional parameters fall back to their declared `default_value`.
+
+A saved formula (`formula_id`) validates against its stored definitions. An **inline**
+`ExecuteFormula` run (`formula_source`, e.g. the authoring **Run** with an unsaved buffer) has no
+stored formula, so it validates against the definitions passed on
+`ExecuteFormulaRequest.parameters` — letting authors test typed parameters before registering.
 
 **Engine-enforced soft cap**: a formula may declare at most **32 parameters** (hardcoded in the
 indicators engine — `app/services/parameters.py`). This cap is **not** a config key; there is no
@@ -281,3 +287,43 @@ Register a strategy via the `manage_strategy` MCP tool (admin-scoped) or the `Ma
 on `xstockstrat-analysis`. The shared evaluator lives at
 `services/xstockstrat-analysis/app/services/evaluator.py` and is reused by both `RunBacktest`
 (feature 047) and the live strategy→alert runtime (feature 048), guaranteeing backtest/live parity.
+
+---
+
+## Default fundamentals "Value+Quality" formula (seeded)
+
+Feature 063 ships a built-in **public** scoring formula, seeded idempotently at indicators
+startup (`app/services/seed_formulas.py`, defined in `app/formulas/fundamentals_value_quality.py`).
+It is a pure per-symbol function of a symbol's fundamentals — the screener (060) and the
+fundamentals-signal producer (062) consume its `composite` score.
+
+- **Well-known `FORMULA_ID`**: `d1ff5e6b-6d9c-589d-b95e-defd862c702b`
+  (UUIDv5 of `xstockstrat:formula:fundamentals-value-quality-v1`). Stable across restarts/deploys —
+  062 references it as `analysis.fundsignal.scoring_formula_id` (062-owned).
+- **Inputs**: the symbol's fundamentals arrive in `input_data` (`pe_ratio`, `pb_ratio`,
+  `dividend_yield`, `roe`, `debt_to_equity`, `eps`, …). Tunables arrive in `input_params`.
+- **Outputs**: `value` (implicit primary), `quality`, `composite` — each in `[0,1]`.
+
+### Default band table (FR-4)
+
+| Metric | Param(s) | Mapping |
+|---|---|---|
+| P/E | `pe_good=10`, `pe_bad=35` | lower-is-better linear band; **P/E ≤ 0 → 0** |
+| P/B | `pb_good=1.0`, `pb_bad=5.0` | lower-is-better linear band; **negative book → 0** |
+| Dividend yield | `div_peak=0.04`, `div_zero_hi=0.10` | **triangular**: 0 at 0%, 1 at peak, 0 at/above `div_zero_hi` (yield-trap guard) |
+| ROE | `roe_good=0.25`, `roe_bad=0.05` | higher-is-better linear band (capped at good) |
+| D/E | `de_good=0.3`, `de_bad=2.0` | lower-is-better linear band; **negative equity → 0** |
+| EPS | — | binary: EPS > 0 → 1 else 0 |
+| Weights | `value_weight=0.5`, `quality_weight=0.5` | `composite = value_weight·value + quality_weight·quality` |
+
+`value` = average of available P/E, P/B, dividend scores; `quality` = average of available ROE, D/E,
+EPS scores. A **missing metric drops out** of its sub-average rather than zeroing it; a sub-score with
+no contributing metrics is a neutral `0.5` (FR-5).
+
+### Retuning without a deploy
+
+The band endpoints and weights are tunable **formula params**, so a caller can override them per call
+via `ExecuteFormulaRequest.input_params` — no service code change (FR-6). To change the shipped
+defaults platform-wide, edit the constants in `app/formulas/fundamentals_value_quality.py` and redeploy;
+the idempotent seed upserts the new source/params under the same well-known id on startup. `beta` and
+`market_cap` are deliberately excluded from the composite (reserved for risk/size factors).

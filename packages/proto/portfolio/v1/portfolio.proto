@@ -15,6 +15,15 @@ service PortfolioService {
   rpc GetSnapshot(GetSnapshotRequest) returns (PortfolioSnapshot);
   rpc StreamPortfolioUpdates(StreamPortfolioUpdatesRequest) returns (stream PortfolioSnapshot);
   rpc ListPortfolios (ListPortfoliosRequest) returns (ListPortfoliosResponse);
+  // Watchlist management (feature 058). Additive — ownership is taken from the
+  // propagated x-user-id header server-side, never from request fields.
+  rpc CreateWatchlist(CreateWatchlistRequest) returns (CreateWatchlistResponse);
+  rpc GetWatchlist(GetWatchlistRequest) returns (GetWatchlistResponse);
+  rpc ListWatchlists(ListWatchlistsRequest) returns (ListWatchlistsResponse);
+  rpc UpdateWatchlist(UpdateWatchlistRequest) returns (UpdateWatchlistResponse);
+  rpc DeleteWatchlist(DeleteWatchlistRequest) returns (DeleteWatchlistResponse);
+  rpc AddWatchlistSymbols(AddWatchlistSymbolsRequest) returns (AddWatchlistSymbolsResponse);
+  rpc RemoveWatchlistSymbols(RemoveWatchlistSymbolsRequest) returns (RemoveWatchlistSymbolsResponse);
 }
 
 message Portfolio {
@@ -43,6 +52,23 @@ message Position {
   google.protobuf.Timestamp opened_at = 9;
   xstockstrat.common.v1.TradingMode trading_mode = 10;
   string account_id = 11;
+  // Today's (intraday) P&L — change since the previous trading day's close.
+  // Sourced from the broker's per-position intraday valuation (Alpaca
+  // unrealized_intraday_pl / unrealized_intraday_plpc) on account.positions.synced.
+  // Zero when the broker does not report an intraday figure (e.g. order-fill-only
+  // positions enriched from marketdata mid-quotes); distinct from unrealized_pnl,
+  // which is total P&L since entry.
+  double day_pnl = 12;       // dollars
+  double day_pnl_pct = 13;   // fraction (e.g. 0.0125 = +1.25%)
+}
+
+// PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
+// Used only as an additive filter on ListPositionsRequest; the Position message itself
+// continues to carry signed qty.
+enum PositionSide {
+  POSITION_SIDE_UNSPECIFIED = 0; // no side filter — return both long and short
+  POSITION_SIDE_LONG = 1;        // qty > 0
+  POSITION_SIDE_SHORT = 2;       // qty < 0
 }
 
 message PortfolioSnapshot {
@@ -82,6 +108,9 @@ message ListPositionsRequest {
   // Filter by trading mode; UNSPECIFIED returns all positions.
   xstockstrat.common.v1.TradingMode trading_mode = 3;
   optional string account_id = 4;
+  // Additive filters (feature 056). Empty symbol / UNSPECIFIED side = no narrowing.
+  string symbol = 5;       // exact-match symbol filter; "" = all symbols
+  PositionSide side = 6;   // long/short filter derived from qty sign
 }
 message ListPositionsResponse {
   repeated Position positions = 1;
@@ -112,4 +141,73 @@ message ListPortfoliosRequest {
 
 message ListPortfoliosResponse {
   repeated Portfolio portfolios = 1;
+}
+
+// Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols.
+message Watchlist {
+  string watchlist_id = 1;
+  string user_id = 2;
+  string name = 3;
+  string description = 4;
+  repeated string symbols = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+// user_id is intentionally absent from all request messages — ownership is taken
+// from the propagated x-user-id header server-side (FR-2), never from the wire.
+message CreateWatchlistRequest {
+  string name = 1;
+  string description = 2;
+  repeated string symbols = 3;
+}
+message CreateWatchlistResponse {
+  Watchlist watchlist = 1;
+}
+
+message GetWatchlistRequest {
+  string watchlist_id = 1;
+}
+message GetWatchlistResponse {
+  Watchlist watchlist = 1;
+}
+
+message ListWatchlistsRequest {
+  xstockstrat.common.v1.PageRequest page = 1;
+}
+message ListWatchlistsResponse {
+  repeated Watchlist watchlists = 1;
+  xstockstrat.common.v1.PageResponse page = 2;
+}
+
+// Replace semantics for name/description/symbols per FR-1.
+message UpdateWatchlistRequest {
+  string watchlist_id = 1;
+  string name = 2;
+  string description = 3;
+  repeated string symbols = 4;
+}
+message UpdateWatchlistResponse {
+  Watchlist watchlist = 1;
+}
+
+message DeleteWatchlistRequest {
+  string watchlist_id = 1;
+}
+message DeleteWatchlistResponse {}
+
+message AddWatchlistSymbolsRequest {
+  string watchlist_id = 1;
+  repeated string symbols = 2;
+}
+message AddWatchlistSymbolsResponse {
+  Watchlist watchlist = 1;
+}
+
+message RemoveWatchlistSymbolsRequest {
+  string watchlist_id = 1;
+  repeated string symbols = 2;
+}
+message RemoveWatchlistSymbolsResponse {
+  Watchlist watchlist = 1;
 }

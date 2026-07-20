@@ -383,6 +383,71 @@ class TestExecuteFormulaInputData:
         assert dict(resp.output) == {"value": 20.0}
 
 
+class TestExecuteFormulaInlineParameters:
+    """Inline formula_source runs validate input_params against the parameter
+    DEFINITIONS supplied on the request (the authoring "Run" with an unsaved
+    buffer), since there is no stored formula to read definitions from."""
+
+    def _cfg(self):
+        cfg = MagicMock()
+        cfg.sandbox_timeout_ms = 5000
+        cfg.sandbox_memory_bytes = 256 * 1024 * 1024
+        cfg.sandbox_allowed_imports = []
+        return cfg
+
+    async def test_inline_request_parameters_inject_into_params(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=self._cfg())
+        req = indicators_pb2.ExecuteFormulaRequest(
+            formula_source="result = {'value': params['period'] * 2}",
+            parameters=[
+                indicators_pb2.FormulaParameter(
+                    name="period", type=indicators_pb2.PARAMETER_TYPE_INT
+                )
+            ],
+        )
+        req.input_params.update({"period": 21})
+
+        resp = await servicer.ExecuteFormula(req, MagicMock())
+        assert resp.success is True, resp.error
+        assert dict(resp.output) == {"value": 42}
+
+    async def test_inline_request_parameter_default_applies_when_omitted(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=self._cfg())
+        param = indicators_pb2.FormulaParameter(
+            name="period", type=indicators_pb2.PARAMETER_TYPE_INT
+        )
+        param.default_value.number_value = 14
+        req = indicators_pb2.ExecuteFormulaRequest(
+            formula_source="result = {'value': params['period']}",
+            parameters=[param],
+        )
+        # input_params omitted → declared default (14) is applied.
+        resp = await servicer.ExecuteFormula(req, MagicMock())
+        assert resp.success is True, resp.error
+        assert dict(resp.output) == {"value": 14}
+
+    async def test_inline_out_of_range_value_returns_parameter_errors(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=self._cfg())
+        param = indicators_pb2.FormulaParameter(
+            name="period", type=indicators_pb2.PARAMETER_TYPE_INT, max=200
+        )
+        req = indicators_pb2.ExecuteFormulaRequest(
+            formula_source="result = {'value': params['period']}",
+            parameters=[param],
+        )
+        req.input_params.update({"period": 500})  # above max → validation fails
+
+        resp = await servicer.ExecuteFormula(req, MagicMock())
+        assert resp.success is False
+        assert [e.name for e in resp.parameter_errors] == ["period"]
+
+
 class TestFormulaAdminOverride:
     async def test_owner_updates_without_admin_scope(self):
         from gen.indicators.v1 import indicators_pb2
@@ -425,6 +490,149 @@ class TestFormulaAdminOverride:
         servicer = _repo_servicer(author="owner")
         req = indicators_pb2.DeleteFormulaRequest(formula_id="f", user_id="someone-else")
         ctx = _ctx([("x-access-scope", "0")])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.DeleteFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+
+
+# ---------------------------------------------------------------------------
+# Custom-formula warm-up period (feature 064-backtest-debug-info)
+# ---------------------------------------------------------------------------
+
+
+class TestFormulaWarmupPeriod:
+    def _servicer(self):
+        return IndicatorsServicer(config_watcher=MagicMock())
+
+    async def test_create_round_trips_warmup_period(self):
+        pool = MagicMock()
+        pool.fetchrow = AsyncMock(
+            return_value={
+                "formula_id": "11111111-1111-1111-1111-111111111111",
+                "name": "F",
+                "input_schema": "{}",
+                "warmup_period": 14,
+            }
+        )
+        repo = FormulasRepository(pool)
+        result = await repo.create(
+            formula_id="11111111-1111-1111-1111-111111111111",
+            name="F",
+            description="",
+            source="x = 1",
+            author="u",
+            is_public=False,
+            input_schema={},
+            warmup_period=14,
+        )
+        # warmup_period is bound as the 10th positional arg to the INSERT
+        assert pool.fetchrow.await_args.args[-1] == 14
+        assert result["warmup_period"] == 14
+
+    async def test_register_get_round_trips_warmup_period(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = self._servicer()  # in-memory path
+        req = indicators_pb2.RegisterFormulaRequest(
+            name="f", source="x = 1", author="u", warmup_period=14
+        )
+        resp = await servicer.RegisterFormula(req, _ctx([("x-user-id", "u")]))
+        got = await servicer.GetFormula(
+            indicators_pb2.GetFormulaRequest(formula_id=resp.formula_id), MagicMock()
+        )
+        assert got.warmup_period == 14
+
+    async def test_warmup_period_defaults_to_zero(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = self._servicer()
+        req = indicators_pb2.RegisterFormulaRequest(name="f", source="x = 1", author="u")
+        resp = await servicer.RegisterFormula(req, _ctx([("x-user-id", "u")]))
+        assert servicer._formulas[resp.formula_id].warmup_period == 0
+
+    async def test_register_rejects_negative_warmup_period(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = self._servicer()
+        req = indicators_pb2.RegisterFormulaRequest(
+            name="f", source="x = 1", author="u", warmup_period=-1
+        )
+        ctx = _ctx([("x-user-id", "u")])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.RegisterFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+
+    async def test_update_rejects_negative_warmup_period(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = _repo_servicer("u")
+        req = indicators_pb2.UpdateFormulaRequest(
+            formula_id="f", user_id="u", name="n", source="x = 1", warmup_period=-1
+        )
+        ctx = MagicMock()
+        ctx.invocation_metadata = MagicMock(return_value=[])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.UpdateFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+
+    async def test_update_round_trips_warmup_period(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer = IndicatorsServicer(config_watcher=MagicMock())
+        repo = MagicMock()
+        repo.get_by_id = AsyncMock(return_value={"author": "u"})
+        repo.update = AsyncMock(
+            return_value={
+                "formula_id": "f",
+                "name": "n",
+                "description": "",
+                "source": "x = 1",
+                "author": "u",
+                "is_public": False,
+                "input_schema": {},
+                "warmup_period": 21,
+            }
+        )
+        servicer._repo = repo
+        req = indicators_pb2.UpdateFormulaRequest(
+            formula_id="f", user_id="u", name="n", source="x = 1", warmup_period=21
+        )
+        ctx = MagicMock()
+        ctx.invocation_metadata = MagicMock(return_value=[])
+        resp = await servicer.UpdateFormula(req, ctx)
+        assert repo.update.await_args.kwargs["warmup_period"] == 21
+        assert resp.formula.warmup_period == 21
+
+
+class TestSystemFormulaReadOnly:
+    """System-authored (seeded, platform-managed) formulas are immutable via the RPCs —
+    even an admin scope cannot edit or delete them, since feature 062 depends on the
+    seeded fundamentals scoring formula by id."""
+
+    async def test_update_system_formula_denied_even_for_admin(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        from app.formulas import SYSTEM_AUTHOR
+
+        servicer = _repo_servicer(author=SYSTEM_AUTHOR)
+        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="admin", name="n")
+        ctx = _ctx([("x-access-scope", "7")])  # admin scope present
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.UpdateFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+
+    async def test_delete_system_formula_denied_even_for_admin(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        from app.formulas import SYSTEM_AUTHOR
+
+        servicer = _repo_servicer(author=SYSTEM_AUTHOR)
+        req = indicators_pb2.DeleteFormulaRequest(formula_id="f", user_id="admin")
+        ctx = _ctx([("x-access-scope", "7")])  # admin scope present
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception):
             await servicer.DeleteFormula(req, ctx)

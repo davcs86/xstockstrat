@@ -10,8 +10,8 @@ dispatcher (`app/main.py` `handle_mcp`): the modern **Streamable HTTP** transpor
 against the connector URL (`AGENT_PUBLIC_URL`, `${APP_URL}/agent`, stripped to `/` by DO
 ingress) — plus the **legacy HTTP+SSE** transport at `/sse` + `/messages` for Claude Desktop.
 All outbound gRPC calls to platform services carry `x-mcp-secret` when `MCP_AGENT_SECRET` is
-set; admin-scoped tools additionally forward an `authorization: Bearer <admin_api_key>`
-validated at the entry point.
+set; the management tools forward a hardcoded admin `x-access-scope` so the backends' role checks
+pass.
 
 ## Language
 
@@ -19,7 +19,7 @@ Python 3.12 (asyncio, grpc.aio, FastMCP)
 
 ## MCP Tools
 
-The agent registers ten tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers eleven tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -30,18 +30,19 @@ reference):
 | `ingest_signal` | Ingest a trading signal (auto-alerts above conviction threshold) |
 | `emit_alert` | Emit an alert via xstockstrat-notify |
 | `run_backtest` | Trigger a backtest via xstockstrat-analysis |
-| `manage_strategy` | Register/update/deactivate stored strategies (admin-scoped) |
-| `manage_formula` | Register/update/delete custom formulas (admin-scoped) |
-| `manage_signal_source` | Register/update/deactivate signal sources (admin-scoped) |
-| `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (admin-scoped, feature 048) |
+| `screen_symbols` | Scan a symbol universe via xstockstrat-analysis and return ranked candidates (read-only) |
+| `manage_strategy` | Register/update/deactivate stored strategies |
+| `manage_formula` | Register/update/delete custom formulas |
+| `manage_signal_source` | Register/update/deactivate signal sources |
+| `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (feature 048) |
 
-### Admin authorization (entry-point pattern)
+### Management-tool authorization
 
-The SSE auth layer (`app/auth.py`) validates that an API key is **valid**; it does not check the
-admin role. Admin-scoped tools therefore authorize at the agent entry point: `set_strategy_live`
-calls `client.validate_admin(admin_api_key)` (identity `ValidateApiKey` → `"admin" in roles`) before
-forwarding the call with the admin access scope. Internal services (e.g. `xstockstrat-analysis`
-`SetStrategyLive`) only perform a role check on the propagated `x-access-scope`.
+The management tools (`manage_strategy`, `manage_formula`, `manage_signal_source`,
+`set_strategy_live`) forward a hardcoded admin `x-access-scope` on their backend gRPC calls.
+Internal services (e.g. `xstockstrat-analysis` `SetStrategyLive`) only perform a role check on the
+propagated `x-access-scope`; `manage_formula` additionally relies on the indicators backend's
+author-ownership check. The MCP endpoint itself is gated by OAuth 2.1 (see below).
 
 ### OAuth 2.1 edge auth (feature 049 Part B)
 
@@ -63,10 +64,10 @@ Routes (registered in `app/main.py` `build_sse_app`):
 | `POST /oauth/token` | `authorization_code` + `refresh_token` grants (tokens in JSON body only) |
 | `/` (GET/POST) | **Streamable HTTP** MCP endpoint (Claude.ai remote connector) |
 | `/sse` + `/messages` | Legacy HTTP+SSE MCP endpoint (Claude Desktop) |
+| `GET /api/tools` | Tool catalog (name/description/inputSchema) — **unauthenticated**, capability metadata only; powers the `xstockstrat-ui` `/accounts/mcp-tools` page |
 
-Both MCP endpoints (root Streamable HTTP and `/sse`) accept an **`aud`-bound JWT** (`aud` ==
-`AGENT_PUBLIC_URL`, validated first) and fall back to the legacy `Authorization: Bearer <api_key>`
-and the **deprecated** `?api_key=` query fallback; unauthenticated requests get `401` with a
+Both MCP endpoints (root Streamable HTTP and `/sse`) require an **`aud`-bound JWT** (`aud` ==
+`AGENT_PUBLIC_URL`); unauthenticated requests get `401` with a
 `WWW-Authenticate: Bearer resource_metadata=…` discovery pointer. Note the **RFC 8414/9728 path
 insertion** quirk: because `AGENT_PUBLIC_URL` has a path (`/agent`), spec-compliant clients fetch
 the AS/PR metadata at `https://<host>/.well-known/oauth-authorization-server/agent`, which lands on

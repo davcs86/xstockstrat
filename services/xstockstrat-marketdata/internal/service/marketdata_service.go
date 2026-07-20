@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"connectrpc.com/connect"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -41,15 +44,42 @@ type MarketDataService struct {
 	// the DB so subsequent reads hit the cache instead of a live Alpaca call.
 	warmMu      sync.Mutex
 	warmSymbols map[string]struct{}
+
+	// fundamentals is the FMP source (feature 059), held separately from the OHLCV
+	// registry (FR-2). nil when marketdata.fmp.enabled is false at startup.
+	fundamentals source.FundamentalsSource
+	// fundCfg / fundRepo are the config + repo surfaces the fundamentals RPCs use,
+	// behind interfaces so the cache/quota/gate logic is unit-testable with stubs.
+	fundCfg  fundamentalsConfig
+	fundRepo fundamentalsRepo
+	// quotaAlert dedupes the FR-7 80%-quota WARNING to one emit per UTC day.
+	quotaAlertMu  sync.Mutex
+	quotaAlertDay string
 }
 
-// NewMarketDataService creates the service and dials ledger + notify.
+// fundamentalsConfig is the slice of *config.Watcher the fundamentals RPCs read.
+type fundamentalsConfig interface {
+	GetBool(key string, defaultVal bool) bool
+	GetInt(key string, defaultVal int64) int64
+	GetString(key, defaultVal string) string
+}
+
+// fundamentalsRepo is the persistence surface for the fundamentals cache/quota.
+type fundamentalsRepo interface {
+	GetFundamentals(ctx context.Context, symbol string) (*source.Fundamentals, time.Time, bool, error)
+	UpsertFundamentals(ctx context.Context, f *source.Fundamentals) error
+	CountFundamentalsFetchedToday(ctx context.Context) (int, error)
+}
+
+// NewMarketDataService creates the service and dials ledger + notify. fundamentals is
+// the FMP source (feature 059) or nil when marketdata.fmp.enabled is false.
 func NewMarketDataService(
 	registry *source.Registry,
 	repo *repository.MarketDataRepo,
 	cfgWatcher *config.Watcher,
 	ledgerEndpoint string,
 	notifyEndpoint string,
+	fundamentals source.FundamentalsSource,
 ) (*MarketDataService, error) {
 	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
@@ -60,19 +90,46 @@ func NewMarketDataService(
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
 	return &MarketDataService{
-		registry:  registry,
-		repo:      repo,
-		cfg:       cfgWatcher,
-		ledger:    ledgerv1.NewLedgerServiceClient(ledgerConn),
-		notify:    notifyv1.NewNotifyServiceClient(notifyConn),
-		barSubs:     make(map[string]chan *marketdatav1.Bar),
-		quoteSubs:   make(map[string]chan *marketdatav1.Quote),
-		warmSymbols: make(map[string]struct{}),
+		registry:     registry,
+		repo:         repo,
+		cfg:          cfgWatcher,
+		ledger:       ledgerv1.NewLedgerServiceClient(ledgerConn),
+		notify:       notifyv1.NewNotifyServiceClient(notifyConn),
+		barSubs:      make(map[string]chan *marketdatav1.Bar),
+		quoteSubs:    make(map[string]chan *marketdatav1.Quote),
+		warmSymbols:  make(map[string]struct{}),
+		fundamentals: fundamentals,
+		fundCfg:      cfgWatcher,
+		fundRepo:     repo,
 	}, nil
 }
 
 // GetBars retrieves historical OHLCV bars, querying from TimescaleDB.
 func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBarsRequest) (*marketdatav1.GetBarsResponse, error) {
+	// A charted symbol becomes "warm" so the always-on bar ingester keeps it fresh.
+	s.markWarm(req.Symbol)
+
+	// Normalize the requested interval to the canonical DB spelling ("1Day"→"1d",
+	// "15Min"→"15m", …). The always-on ingester and backfill store canonical strings;
+	// without this, QueryBars searches for the literal alias and never matches them, so
+	// the chart renders empty for every ingested symbol. Unresolvable inputs (e.g. the
+	// dead "10Min"/"30Min" aliases) fall back to the raw string — they have no stored
+	// bars either way. Prefer timeframe_enum; fall back to the deprecated string field.
+	legacyTf := req.Timeframe //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+	canonicalTf := legacyTf
+	if c, rErr := timeframe.Resolve(req.GetTimeframeEnum(), legacyTf); rErr == nil {
+		canonicalTf = c
+	}
+
+	pageSize := 500
+	pageToken := ""
+	if req.Page != nil {
+		if req.Page.PageSize > 0 {
+			pageSize = int(req.Page.PageSize)
+		}
+		pageToken = req.Page.PageToken
+	}
+
 	var start, end time.Time
 	if req.Range != nil {
 		if req.Range.Start != nil {
@@ -86,26 +143,85 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 		end = time.Now()
 	}
 	if start.IsZero() {
-		start = end.Add(-24 * time.Hour)
+		// Size the implicit history window to the requested page of bars for this
+		// timeframe — not a flat 24h, which yields ~0 bars for a 1d/1h chart (a daily
+		// chart requested on a weekend has no bar inside the last 24h at all). The 3×
+		// slack absorbs weekends/holidays/market-closed gaps so a full page still loads.
+		start = end.Add(-defaultBarLookback(canonicalTf, pageSize))
 	}
 
-	pageSize := 500
-	pageToken := ""
-	if req.Page != nil {
-		if req.Page.PageSize > 0 {
-			pageSize = int(req.Page.PageSize)
-		}
-		pageToken = req.Page.PageToken
-	}
-
-	bars, nextToken, err := s.repo.QueryBars(ctx, req.Symbol, req.Timeframe, start, end, pageSize, pageToken) //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+	bars, nextToken, err := s.repo.QueryBars(ctx, req.Symbol, canonicalTf, start, end, pageSize, pageToken)
 	if err != nil {
 		return nil, fmt.Errorf("query bars: %w", err)
 	}
+
+	// DB miss on the first page — fall back to a live Alpaca fetch, cache the result,
+	// and re-read so pagination stays consistent. Without this the chart stays empty
+	// until an explicit backfill runs, even though the data is one REST call away.
+	// (Mirrors GetLatestQuote's live fallback.) Only on the first page: an empty later
+	// page means end-of-data, not a miss.
+	if len(bars) == 0 && pageToken == "" {
+		bars, nextToken = s.fetchAndCacheBars(ctx, req.Symbol, canonicalTf, start, end, pageSize)
+	}
+
 	return &marketdatav1.GetBarsResponse{
 		Bars: bars,
 		Page: &commonv1.PageResponse{NextPageToken: nextToken},
 	}, nil
+}
+
+// fetchAndCacheBars fetches bars for a symbol from the live source, persists them, and
+// returns the first page from the DB (so the next_page_token is consistent with a normal
+// cached read). On any failure it logs and returns no bars — GetBars then yields an empty
+// (but valid) response rather than erroring. If caching fails the freshly fetched bars are
+// still served, truncated to pageSize.
+func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf string, start, end time.Time, pageSize int) ([]*marketdatav1.Bar, string) {
+	src, err := s.registry.Get("")
+	if err != nil {
+		slog.Warn("GetBars: resolve source failed", "symbol", symbol, "error", err)
+		return nil, ""
+	}
+	live, err := src.GetBars(ctx, symbol, tf, start, end)
+	if err != nil {
+		slog.Warn("GetBars: live fetch failed", "symbol", symbol, "timeframe", tf, "error", err)
+		return nil, ""
+	}
+	if len(live) == 0 {
+		return nil, ""
+	}
+	if err := s.repo.InsertBars(ctx, live); err != nil {
+		slog.Warn("GetBars: cache insert failed", "symbol", symbol, "error", err)
+		// Serve what we fetched even if caching failed.
+		if len(live) > pageSize {
+			return live[:pageSize], ""
+		}
+		return live, ""
+	}
+	bars, nextToken, err := s.repo.QueryBars(ctx, symbol, tf, start, end, pageSize, "")
+	if err != nil {
+		slog.Warn("GetBars: re-read after cache failed", "symbol", symbol, "error", err)
+		if len(live) > pageSize {
+			return live[:pageSize], ""
+		}
+		return live, ""
+	}
+	return bars, nextToken
+}
+
+// defaultBarLookback sizes the implicit history window (when the caller supplies no
+// explicit range) to cover at least `bars` bars of the given canonical timeframe, times a
+// slack multiplier so non-continuous market hours (overnight gaps, weekends, holidays)
+// still yield a full page. Unknown timeframes fall back to a day-sized interval.
+func defaultBarLookback(canonicalTf string, bars int) time.Duration {
+	interval := timeframe.Interval(canonicalTf)
+	if interval <= 0 {
+		interval = 24 * time.Hour
+	}
+	if bars <= 0 {
+		bars = 100
+	}
+	const slack = 3
+	return time.Duration(bars) * interval * slack
 }
 
 // GetDataCoverage reports stored OHLCV coverage (earliest/latest/count + gaps) for a
@@ -162,6 +278,73 @@ func (s *MarketDataService) GetDataCoverage(ctx context.Context, req *marketdata
 		})
 	}
 	return resp, nil
+}
+
+// resolveDeletePlan validates a delete request and computes the scoped (timeframe, start, end)
+// to hand to the repo. Pure: it takes the propagated access scope and the configured
+// max-delete-days directly (not a ctx or config.Watcher) so the FR-5 guards — symbol required,
+// admin-only (0x04), and the optional delete-window cap — are unit-testable without a DB or
+// config server. Returns connect-coded errors that the handler forwards.
+func resolveDeletePlan(symbol, accessScope string, tf commonv1.Timeframe, rng *commonv1.TimeRange, maxDays int64) (canonical string, start, end time.Time, err error) {
+	if symbol == "" {
+		return "", time.Time{}, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("symbol required; refusing unbounded delete"))
+	}
+	// Admin gate (0x04): destructive op, admin/operator only (FR-7).
+	scope, _ := strconv.Atoi(accessScope)
+	if scope&0x04 == 0 {
+		return "", time.Time{}, time.Time{}, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("admin scope required"))
+	}
+	// Resolve timeframe: UNSPECIFIED → "" = delete across all timeframes for the symbol/range.
+	if tf != commonv1.Timeframe_TIMEFRAME_UNSPECIFIED {
+		canonical, err = timeframe.Resolve(tf, "")
+		if err != nil {
+			return "", time.Time{}, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("resolve timeframe: %w", err))
+		}
+	}
+	if rng != nil {
+		if rng.Start != nil {
+			start = rng.Start.AsTime()
+		}
+		if rng.End != nil {
+			end = rng.End.AsTime()
+		}
+	}
+	// Delete-window guard: when maxDays > 0 and a bounded range exceeds it, reject. A whole-symbol
+	// delete (no range) is exempt.
+	if maxDays > 0 && !start.IsZero() && !end.IsZero() && end.Sub(start) > time.Duration(maxDays)*24*time.Hour {
+		return "", time.Time{}, time.Time{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("delete range %d days exceeds marketdata.backfill.max_delete_days=%d",
+				int(end.Sub(start).Hours()/24), maxDays))
+	}
+	return canonical, start, end, nil
+}
+
+// DeleteBackfilledData performs a scoped, admin-only delete of backfilled OHLCV bars (FR-5).
+// The symbol is required (server-side guard against an unbounded delete); range and timeframe
+// are optional. A whole-symbol delete (no range) is allowed at the server — the UI double-confirms
+// it — but is still bounded by the symbol predicate. Emits an audit ledger event.
+func (s *MarketDataService) DeleteBackfilledData(ctx context.Context, req *marketdatav1.DeleteBackfilledDataRequest) (*marketdatav1.DeleteBackfilledDataResponse, error) {
+	canonical, start, end, err := resolveDeletePlan(
+		req.Symbol,
+		middleware.FromContext(ctx).AccessScope,
+		req.Timeframe,
+		req.Range,
+		s.cfg.GetInt("marketdata.backfill.max_delete_days", 0),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	n, err := s.repo.DeleteBars(ctx, req.Symbol, canonical, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("delete bars: %w", err)
+	}
+	s.emitEvent(ctx, "marketdata.backfill.data_deleted", "backfill:delete:"+req.Symbol, map[string]interface{}{
+		"symbol":       req.Symbol,
+		"timeframe":    canonical,
+		"rows_deleted": n,
+	})
+	return &marketdatav1.DeleteBackfilledDataResponse{RowsDeleted: n}, nil
 }
 
 // GetLatestQuote returns the most recent quote for a symbol from the DB.
@@ -237,15 +420,131 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 			if err != nil {
 				continue
 			}
+			// Prefer one multi-symbol request per cycle; fall back to per-symbol.
+			if ms, ok := src.(source.MultiSymbolSource); ok {
+				if quotes, err := ms.GetLatestQuotesMulti(ctx, symbols); err == nil {
+					for _, q := range quotes {
+						if err := s.repo.InsertQuote(ctx, q); err != nil {
+							slog.Warn("warm poller: cache insert failed", "symbol", q.Symbol, "error", err)
+						}
+					}
+					continue
+				} else {
+					slog.Warn("warm poller: multi-quote fetch failed, falling back to per-symbol", "error", err)
+				}
+			}
+			var fetched, failed int
+			var firstErr error
 			for _, sym := range symbols {
 				q, err := src.GetLatestQuote(ctx, sym)
 				if err != nil {
+					failed++
+					if firstErr == nil {
+						firstErr = err
+					}
 					continue
 				}
+				fetched++
 				if err := s.repo.InsertQuote(ctx, q); err != nil {
 					slog.Warn("warm poller: cache insert failed", "symbol", sym, "error", err)
 				}
 			}
+			// Per-symbol fetch errors used to be dropped silently, which hid
+			// whole-feed failures (e.g. invalid/placeholder Alpaca credentials, where
+			// every call gets the same 401). Surface them once per cycle with a sample
+			// error instead of staying quiet — a high failed count with fetched==0 is
+			// the signature of a credential/feed problem, not a bad ticker.
+			if failed > 0 {
+				slog.Warn("warm poller: per-symbol quote fetch failures",
+					"failed", failed, "fetched", fetched, "total", len(symbols), "sample_error", firstErr)
+			}
+		}
+	}
+}
+
+// StartBarIngestPoller continuously ingests recent bars for every symbol that has been
+// queried (the same warm set StartWarmQuotePoller tracks — populated by GetLatestQuote and
+// GetBars), upserting them into marketdata.ohlcv. This gives the platform an always-on feed
+// instead of one that only runs while a client holds a StreamBars RPC open. Interval is
+// configurable via marketdata.stream.bar_ingest_interval_ms (default 60s); set to 0 to pause.
+func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
+	const defaultIntervalMs = 60000
+	interval := time.Duration(s.cfg.GetInt("marketdata.stream.bar_ingest_interval_ms", defaultIntervalMs)) * time.Millisecond
+	if interval <= 0 {
+		interval = defaultIntervalMs * time.Millisecond
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ms := s.cfg.GetInt("marketdata.stream.bar_ingest_interval_ms", defaultIntervalMs)
+			if ms <= 0 {
+				continue // paused via config
+			}
+			if newInterval := time.Duration(ms) * time.Millisecond; newInterval != interval {
+				interval = newInterval
+				ticker.Reset(interval)
+			}
+			s.ingestRecentBars(ctx)
+		}
+	}
+}
+
+// ingestRecentBars fetches the recent bar window for every warm symbol and upserts it.
+// The lookback (marketdata.stream.bar_ingest_lookback_ms, default 15m) is re-fetched each
+// cycle; overlap is harmless because InsertBars upserts, and a window wider than the poll
+// interval lets the feed self-heal after a brief pause or restart.
+func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
+	s.warmMu.Lock()
+	symbols := make([]string, 0, len(s.warmSymbols))
+	for sym := range s.warmSymbols {
+		symbols = append(symbols, sym)
+	}
+	s.warmMu.Unlock()
+	if len(symbols) == 0 {
+		return
+	}
+	src, err := s.registry.Get("")
+	if err != nil {
+		return
+	}
+	tf := s.cfg.GetString("marketdata.stream.bar_ingest_timeframe", "15m")
+	lookbackMs := s.cfg.GetInt("marketdata.stream.bar_ingest_lookback_ms", 900000)
+	if lookbackMs <= 0 {
+		lookbackMs = 900000
+	}
+	end := time.Now().UTC()
+	start := end.Add(-time.Duration(lookbackMs) * time.Millisecond)
+	// Prefer one multi-symbol request per cycle; fall back to per-symbol.
+	if ms, ok := src.(source.MultiSymbolSource); ok {
+		if barsBySym, err := ms.GetBarsMulti(ctx, symbols, tf, start, end); err == nil {
+			for sym, bars := range barsBySym {
+				if len(bars) == 0 {
+					continue
+				}
+				if err := s.repo.InsertBars(ctx, bars); err != nil {
+					slog.Warn("bar ingest: insert failed", "symbol", sym, "error", err)
+				}
+			}
+			return
+		} else {
+			slog.Warn("bar ingest: multi-bar fetch failed, falling back to per-symbol", "error", err)
+		}
+	}
+	for _, sym := range symbols {
+		bars, err := src.GetBars(ctx, sym, tf, start, end)
+		if err != nil {
+			slog.Warn("bar ingest: live fetch failed", "symbol", sym, "timeframe", tf, "error", err)
+			continue
+		}
+		if len(bars) == 0 {
+			continue
+		}
+		if err := s.repo.InsertBars(ctx, bars); err != nil {
+			slog.Warn("bar ingest: insert failed", "symbol", sym, "error", err)
 		}
 	}
 }
@@ -282,8 +581,9 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 		start = end.Add(-365 * 24 * time.Hour)
 	}
 
-	batchSize := int(s.cfg.GetInt("marketdata.backfill.batch_size", 1000))
-	_ = batchSize // used as hint; Alpaca API handles pagination internally
+	// The per-request bar limit (marketdata.backfill.batch_size) and rate limit are
+	// applied inside the Alpaca client (configured at startup); pagination is handled
+	// transparently by GetBars/GetBarsMulti, so no batching is needed here.
 
 	s.emitEvent(ctx, "marketdata.backfill.started", "marketdata:backfill", map[string]interface{}{
 		"symbols":   req.Symbols,
@@ -358,10 +658,8 @@ func estimateExpectedBars(symbols []string, timeframe string, start, end time.Ti
 		perDay = 1
 	case "1h", "1Hour":
 		perDay = 7 // ~6.5 RTH hours, rounded up
-	case "5m", "5Min":
-		perDay = 78
-	case "1m", "1Min":
-		perDay = 390
+	case "15m", "15Min":
+		perDay = 26 // ~6.5 RTH hours × 4 fifteen-min bars
 	default:
 		perDay = 1
 	}
@@ -426,8 +724,11 @@ func (s *MarketDataService) StartBarStream(ctx context.Context, symbols []string
 		"symbols": symbols, "timeframe": timeframe,
 	})
 	go func() {
+		// Streamed bars are Alpaca's native 1-minute bars (see alpaca.streamBarTimeframe);
+		// they are forwarded to live subscribers only. Persisting the platform's 15m/1h/1d
+		// OHLCV is owned by the always-on REST bar ingester (StartBarIngestPoller), so we do
+		// not write streamed minute bars into the ohlcv table here.
 		for bar := range feed {
-			_ = s.repo.InsertBars(ctx, []*marketdatav1.Bar{bar})
 			s.mu.RLock()
 			for _, ch := range s.barSubs {
 				select {
@@ -499,4 +800,197 @@ func (s *MarketDataService) emitAlert(ctx context.Context, msg string) {
 	if err != nil {
 		slog.Warn("notify emit failed", "error", err)
 	}
+}
+
+// ── Fundamentals (feature 059) ───────────────────────────────────────────────
+// Read-through cache → quota guard → FMP fetch → 80%-quota WARNING, mirroring the
+// GetBars/fetchAndCacheBars idiom. FMP is gated behind marketdata.fmp.enabled and
+// reached only via this service (the single FMP chokepoint).
+
+// GetFundamentals returns cached-or-fetched fundamentals for one symbol.
+func (s *MarketDataService) GetFundamentals(ctx context.Context, symbol string) (*marketdatav1.Fundamentals, error) {
+	if symbol == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("symbol required"))
+	}
+	if err := s.fundamentalsEnabled(); err != nil {
+		return nil, err
+	}
+	f, err := s.resolveFundamentals(ctx, symbol)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+// GetFundamentalsMulti returns fundamentals for several symbols, batching the
+// needs-fetch set through one FMP quote call (FR-5).
+func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []string) ([]*marketdatav1.Fundamentals, error) {
+	if err := s.fundamentalsEnabled(); err != nil {
+		return nil, err
+	}
+	ttl := time.Duration(s.fundCfg.GetInt("marketdata.fmp.cache_ttl_hours", 24)) * time.Hour
+
+	out := make([]*marketdatav1.Fundamentals, 0, len(symbols))
+	var needFetch []string
+	cached := map[string]*marketdatav1.Fundamentals{}
+
+	for _, sym := range symbols {
+		if sym == "" {
+			continue
+		}
+		f, fetchedAt, found, err := s.fundRepo.GetFundamentals(ctx, sym)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if found && time.Since(fetchedAt) <= ttl {
+			cached[strings.ToUpper(sym)] = toProtoFundamentals(f, false)
+			continue
+		}
+		needFetch = append(needFetch, sym)
+	}
+
+	if len(needFetch) > 0 {
+		dailyCap := int(s.fundCfg.GetInt("marketdata.fmp.daily_request_cap", 250))
+		count, err := s.fundRepo.CountFundamentalsFetchedToday(ctx)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if count >= dailyCap {
+			// Quota exhausted: serve stale rows where we have them, skip the rest.
+			for _, sym := range needFetch {
+				if f, _, found, _ := s.fundRepo.GetFundamentals(ctx, sym); found {
+					cached[strings.ToUpper(sym)] = toProtoFundamentals(f, true)
+				}
+			}
+		} else {
+			fetched, err := s.fundamentals.GetFundamentalsMulti(ctx, needFetch)
+			if err != nil {
+				return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("fmp fetch: %w", err))
+			}
+			for _, f := range fetched {
+				if upErr := s.fundRepo.UpsertFundamentals(ctx, f); upErr != nil {
+					slog.Warn("GetFundamentalsMulti: cache upsert failed", "symbol", f.Symbol, "error", upErr)
+				}
+				cached[strings.ToUpper(f.Symbol)] = toProtoFundamentals(f, false)
+			}
+			s.maybeAlertQuota(ctx, count+len(fetched), dailyCap)
+		}
+	}
+
+	// Preserve requested order; drop symbols neither cached nor fetched.
+	for _, sym := range symbols {
+		if f, ok := cached[strings.ToUpper(sym)]; ok {
+			out = append(out, f)
+		}
+	}
+	return out, nil
+}
+
+// resolveFundamentals implements the single-symbol read-through: cache hit within TTL,
+// else quota-guarded FMP fetch, else stale/ResourceExhausted.
+func (s *MarketDataService) resolveFundamentals(ctx context.Context, symbol string) (*marketdatav1.Fundamentals, error) {
+	ttl := time.Duration(s.fundCfg.GetInt("marketdata.fmp.cache_ttl_hours", 24)) * time.Hour
+	cached, fetchedAt, found, err := s.fundRepo.GetFundamentals(ctx, symbol)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if found && time.Since(fetchedAt) <= ttl {
+		return toProtoFundamentals(cached, false), nil
+	}
+
+	dailyCap := int(s.fundCfg.GetInt("marketdata.fmp.daily_request_cap", 250))
+	count, err := s.fundRepo.CountFundamentalsFetchedToday(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if count >= dailyCap {
+		if found {
+			return toProtoFundamentals(cached, true), nil // stale under quota exhaustion (FR-4)
+		}
+		return nil, connect.NewError(connect.CodeResourceExhausted, fmt.Errorf("fmp daily request cap %d reached", dailyCap))
+	}
+
+	fresh, err := s.fundamentals.GetFundamentals(ctx, symbol)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("fmp fetch: %w", err))
+	}
+	if upErr := s.fundRepo.UpsertFundamentals(ctx, fresh); upErr != nil {
+		slog.Warn("GetFundamentals: cache upsert failed", "symbol", symbol, "error", upErr)
+	}
+	s.maybeAlertQuota(ctx, count+1, dailyCap)
+	return toProtoFundamentals(fresh, false), nil
+}
+
+// fundamentalsEnabled returns FailedPrecondition when FMP is disabled (or unbuilt),
+// making NO external call (FR-6).
+func (s *MarketDataService) fundamentalsEnabled() error {
+	if !s.fundCfg.GetBool("marketdata.fmp.enabled", false) || s.fundamentals == nil {
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("fmp fundamentals source disabled"))
+	}
+	return nil
+}
+
+// maybeAlertQuota emits one WARNING per UTC day once the daily fetch count crosses 80%
+// of the cap (FR-7). Uses the request ctx so the propagation interceptor carries headers.
+func (s *MarketDataService) maybeAlertQuota(ctx context.Context, count, dailyCap int) {
+	if dailyCap <= 0 || count < (dailyCap*8)/10 {
+		return
+	}
+	day := time.Now().UTC().Format("2006-01-02")
+	s.quotaAlertMu.Lock()
+	if s.quotaAlertDay == day {
+		s.quotaAlertMu.Unlock()
+		return
+	}
+	s.quotaAlertDay = day
+	s.quotaAlertMu.Unlock()
+	s.emitWarning(ctx, fmt.Sprintf("FMP daily request usage at %d/%d (>=80%% of cap)", count, dailyCap))
+}
+
+// emitWarning emits an ALERT_SEVERITY_WARNING notify alert. Distinct from emitAlert,
+// which hardcodes ALERT_SEVERITY_ERROR — FR-7 needs a WARNING.
+func (s *MarketDataService) emitWarning(ctx context.Context, msg string) {
+	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
+		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_WARNING,
+		Category:      "system",
+		Title:         "marketdata FMP quota warning",
+		Body:          msg,
+		SourceService: "marketdata",
+	})
+	if err != nil {
+		slog.Warn("notify emit (warning) failed", "error", err)
+	}
+}
+
+// toProtoFundamentals maps the internal source.Fundamentals to the wire message.
+func toProtoFundamentals(f *source.Fundamentals, stale bool) *marketdatav1.Fundamentals {
+	if f == nil {
+		return nil
+	}
+	src := f.Source
+	if src == "" {
+		src = "fmp"
+	}
+	pb := &marketdatav1.Fundamentals{
+		Symbol:        f.Symbol,
+		MarketCap:     f.MarketCap,
+		PeRatio:       f.PERatio,
+		PbRatio:       f.PBRatio,
+		DividendYield: f.DividendYield,
+		Eps:           f.EPS,
+		Beta:          f.Beta,
+		Roe:           f.ROE,
+		DebtToEquity:  f.DebtToEquity,
+		Price:         f.Price,
+		YearHigh:      f.YearHigh,
+		YearLow:       f.YearLow,
+		ExtraMetrics:  f.ExtraMetrics,
+		Currency:      f.Currency,
+		Source:        src,
+		Stale:         stale,
+	}
+	if !f.AsOf.IsZero() {
+		pb.AsOf = timestamppb.New(f.AsOf)
+	}
+	return pb
 }

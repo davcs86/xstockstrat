@@ -86,6 +86,12 @@ export interface ExecuteFormulaRequest {
     inputParams?: {
         [key: string]: any;
     } | undefined;
+    /**
+     * Declared parameter DEFINITIONS used to validate input_params and apply defaults
+     * for inline formula_source runs (authoring "Run" with an unsaved buffer). Ignored
+     * when formula_id is set — saved formulas use their stored definitions instead.
+     */
+    parameters: FormulaParameter[];
 }
 export interface ExecuteFormulaRequest_EnvEntry {
     key: string;
@@ -149,6 +155,8 @@ export interface FormulaDefinition {
     parameters: FormulaParameter[];
     /** declared output series (beyond implicit "value") */
     outputs: FormulaOutput[];
+    /** bars of warm-up before this formula's outputs are valid (feature 064) */
+    warmupPeriod: number;
 }
 export interface FormulaDefinition_InputSchemaEntry {
     key: string;
@@ -178,6 +186,8 @@ export interface RegisterFormulaRequest {
     parameters: FormulaParameter[];
     /** declared output series (beyond implicit "value") */
     outputs: FormulaOutput[];
+    /** bars of warm-up before this formula's outputs are valid (feature 064) */
+    warmupPeriod: number;
 }
 export interface RegisterFormulaRequest_InputSchemaEntry {
     key: string;
@@ -214,6 +224,8 @@ export interface UpdateFormulaRequest {
     parameters: FormulaParameter[];
     /** declared output series (beyond implicit "value") */
     outputs: FormulaOutput[];
+    /** bars of warm-up before this formula's outputs are valid (feature 064) */
+    warmupPeriod: number;
 }
 export interface UpdateFormulaResponse {
     formula?: FormulaDefinition | undefined;

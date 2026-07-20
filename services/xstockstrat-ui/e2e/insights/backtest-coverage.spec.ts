@@ -28,4 +28,34 @@ test.describe('Backtest data coverage', () => {
       timeout: 10000,
     });
   });
+
+  // feature 064 — an OK backtest renders the day-by-day debug diagnostics table + no-trade reason.
+  test('OK backtest renders day-by-day debug diagnostics', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/strategies/strat-diag-001');
+
+    await page.getByRole('button', { name: 'Run Backtest' }).click();
+
+    await expect(page.getByTestId('diagnostics-table')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('no-trade-reason')).toContainText(
+      'entry condition was never satisfied',
+    );
+  });
+
+  // Score persistence + run history: a strategy with prior runs shows the persisted score
+  // and a Past Runs table without needing to re-run a backtest.
+  test('persisted score + past runs render from report metadata', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/strategies/strat-history-001');
+
+    // Persisted score card (no Run Backtest click needed).
+    await expect(page.getByText('Strategy Score')).toBeVisible({ timeout: 10000 });
+
+    // Past Runs history table lists both persisted runs, newest first.
+    const pastRuns = page.getByTestId('past-runs');
+    await expect(pastRuns).toBeVisible();
+    await expect(pastRuns).toContainText('AAPL');
+    await expect(pastRuns).toContainText('MSFT');
+    await expect(pastRuns).toContainText('15.00%');
+  });
 });

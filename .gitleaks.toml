@@ -2,3 +2,15 @@ title = "xstockstrat gitleaks config"
 
 [extend]
 useDefault = true
+
+# False positive (feature 059): a descriptive comment in the FMP config seed migration
+# (services/xstockstrat-config/migrations/007_marketdata_fmp.up.sql) historically read
+# "first seeded secret: is_secret=TRUE", which trips the default generic-api-key heuristic.
+# The seeded value is a `secret://` placeholder reference (config invariant #5 — secret
+# values are never plaintext), not a real credential. Scoped to that exact line so any
+# real secret is still detected.
+[allowlist]
+regexTarget = "line"
+regexes = [
+  '''first seeded secret: is_secret=TRUE''',
+]

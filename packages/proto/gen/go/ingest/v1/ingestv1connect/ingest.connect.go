@@ -42,6 +42,9 @@ const (
 	// IngestServiceListBackfillJobsProcedure is the fully-qualified name of the IngestService's
 	// ListBackfillJobs RPC.
 	IngestServiceListBackfillJobsProcedure = "/xstockstrat.ingest.v1.IngestService/ListBackfillJobs"
+	// IngestServiceCancelBackfillProcedure is the fully-qualified name of the IngestService's
+	// CancelBackfill RPC.
+	IngestServiceCancelBackfillProcedure = "/xstockstrat.ingest.v1.IngestService/CancelBackfill"
 	// IngestServiceNormalizeRawDataProcedure is the fully-qualified name of the IngestService's
 	// NormalizeRawData RPC.
 	IngestServiceNormalizeRawDataProcedure = "/xstockstrat.ingest.v1.IngestService/NormalizeRawData"
@@ -64,6 +67,8 @@ type IngestServiceClient interface {
 	TriggerBackfill(context.Context, *connect.Request[v1.TriggerBackfillRequest]) (*connect.Response[v1.TriggerBackfillResponse], error)
 	GetBackfillStatus(context.Context, *connect.Request[v1.GetBackfillStatusRequest]) (*connect.Response[v1.BackfillJob], error)
 	ListBackfillJobs(context.Context, *connect.Request[v1.ListBackfillJobsRequest]) (*connect.Response[v1.ListBackfillJobsResponse], error)
+	// Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4).
+	CancelBackfill(context.Context, *connect.Request[v1.CancelBackfillRequest]) (*connect.Response[v1.BackfillJob], error)
 	NormalizeRawData(context.Context, *connect.Request[v1.NormalizeRawDataRequest]) (*connect.Response[v1.NormalizeRawDataResponse], error)
 	// Signal ingestion — persists newsletter/external signals to ingest.newsletter_signals hypertable
 	IngestSignal(context.Context, *connect.Request[v1.IngestSignalRequest]) (*connect.Response[v1.IngestSignalResponse], error)
@@ -100,6 +105,12 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+IngestServiceListBackfillJobsProcedure,
 			connect.WithSchema(ingestServiceMethods.ByName("ListBackfillJobs")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelBackfill: connect.NewClient[v1.CancelBackfillRequest, v1.BackfillJob](
+			httpClient,
+			baseURL+IngestServiceCancelBackfillProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("CancelBackfill")),
 			connect.WithClientOptions(opts...),
 		),
 		normalizeRawData: connect.NewClient[v1.NormalizeRawDataRequest, v1.NormalizeRawDataResponse](
@@ -140,6 +151,7 @@ type ingestServiceClient struct {
 	triggerBackfill    *connect.Client[v1.TriggerBackfillRequest, v1.TriggerBackfillResponse]
 	getBackfillStatus  *connect.Client[v1.GetBackfillStatusRequest, v1.BackfillJob]
 	listBackfillJobs   *connect.Client[v1.ListBackfillJobsRequest, v1.ListBackfillJobsResponse]
+	cancelBackfill     *connect.Client[v1.CancelBackfillRequest, v1.BackfillJob]
 	normalizeRawData   *connect.Client[v1.NormalizeRawDataRequest, v1.NormalizeRawDataResponse]
 	ingestSignal       *connect.Client[v1.IngestSignalRequest, v1.IngestSignalResponse]
 	querySignals       *connect.Client[v1.QuerySignalsRequest, v1.QuerySignalsResponse]
@@ -160,6 +172,11 @@ func (c *ingestServiceClient) GetBackfillStatus(ctx context.Context, req *connec
 // ListBackfillJobs calls xstockstrat.ingest.v1.IngestService.ListBackfillJobs.
 func (c *ingestServiceClient) ListBackfillJobs(ctx context.Context, req *connect.Request[v1.ListBackfillJobsRequest]) (*connect.Response[v1.ListBackfillJobsResponse], error) {
 	return c.listBackfillJobs.CallUnary(ctx, req)
+}
+
+// CancelBackfill calls xstockstrat.ingest.v1.IngestService.CancelBackfill.
+func (c *ingestServiceClient) CancelBackfill(ctx context.Context, req *connect.Request[v1.CancelBackfillRequest]) (*connect.Response[v1.BackfillJob], error) {
+	return c.cancelBackfill.CallUnary(ctx, req)
 }
 
 // NormalizeRawData calls xstockstrat.ingest.v1.IngestService.NormalizeRawData.
@@ -192,6 +209,8 @@ type IngestServiceHandler interface {
 	TriggerBackfill(context.Context, *connect.Request[v1.TriggerBackfillRequest]) (*connect.Response[v1.TriggerBackfillResponse], error)
 	GetBackfillStatus(context.Context, *connect.Request[v1.GetBackfillStatusRequest]) (*connect.Response[v1.BackfillJob], error)
 	ListBackfillJobs(context.Context, *connect.Request[v1.ListBackfillJobsRequest]) (*connect.Response[v1.ListBackfillJobsResponse], error)
+	// Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4).
+	CancelBackfill(context.Context, *connect.Request[v1.CancelBackfillRequest]) (*connect.Response[v1.BackfillJob], error)
 	NormalizeRawData(context.Context, *connect.Request[v1.NormalizeRawDataRequest]) (*connect.Response[v1.NormalizeRawDataResponse], error)
 	// Signal ingestion — persists newsletter/external signals to ingest.newsletter_signals hypertable
 	IngestSignal(context.Context, *connect.Request[v1.IngestSignalRequest]) (*connect.Response[v1.IngestSignalResponse], error)
@@ -224,6 +243,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		IngestServiceListBackfillJobsProcedure,
 		svc.ListBackfillJobs,
 		connect.WithSchema(ingestServiceMethods.ByName("ListBackfillJobs")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServiceCancelBackfillHandler := connect.NewUnaryHandler(
+		IngestServiceCancelBackfillProcedure,
+		svc.CancelBackfill,
+		connect.WithSchema(ingestServiceMethods.ByName("CancelBackfill")),
 		connect.WithHandlerOptions(opts...),
 	)
 	ingestServiceNormalizeRawDataHandler := connect.NewUnaryHandler(
@@ -264,6 +289,8 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceGetBackfillStatusHandler.ServeHTTP(w, r)
 		case IngestServiceListBackfillJobsProcedure:
 			ingestServiceListBackfillJobsHandler.ServeHTTP(w, r)
+		case IngestServiceCancelBackfillProcedure:
+			ingestServiceCancelBackfillHandler.ServeHTTP(w, r)
 		case IngestServiceNormalizeRawDataProcedure:
 			ingestServiceNormalizeRawDataHandler.ServeHTTP(w, r)
 		case IngestServiceIngestSignalProcedure:
@@ -293,6 +320,10 @@ func (UnimplementedIngestServiceHandler) GetBackfillStatus(context.Context, *con
 
 func (UnimplementedIngestServiceHandler) ListBackfillJobs(context.Context, *connect.Request[v1.ListBackfillJobsRequest]) (*connect.Response[v1.ListBackfillJobsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.ingest.v1.IngestService.ListBackfillJobs is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) CancelBackfill(context.Context, *connect.Request[v1.CancelBackfillRequest]) (*connect.Response[v1.BackfillJob], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.ingest.v1.IngestService.CancelBackfill is not implemented"))
 }
 
 func (UnimplementedIngestServiceHandler) NormalizeRawData(context.Context, *connect.Request[v1.NormalizeRawDataRequest]) (*connect.Response[v1.NormalizeRawDataResponse], error) {

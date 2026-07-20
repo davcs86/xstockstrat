@@ -108,6 +108,15 @@ export type AppendEventRequest = Message<"xstockstrat.ledger.v1.AppendEventReque
      * @generated from field: google.protobuf.Timestamp occurred_at = 7;
      */
     occurredAt?: Timestamp | undefined;
+    /**
+     * Optional caller-supplied dedup key. When set, the ledger appends the event at most
+     * once for this key: a retried AppendEvent (e.g. after a transient transport failure)
+     * returns the originally-stored event instead of inserting a duplicate. Empty = no
+     * dedup (every call inserts), preserving the prior behavior.
+     *
+     * @generated from field: string idempotency_key = 8;
+     */
+    idempotencyKey: string;
 };
 /**
  * Describes the message xstockstrat.ledger.v1.AppendEventRequest.

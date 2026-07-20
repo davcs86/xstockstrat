@@ -22,6 +22,7 @@ const (
 	IngestService_TriggerBackfill_FullMethodName    = "/xstockstrat.ingest.v1.IngestService/TriggerBackfill"
 	IngestService_GetBackfillStatus_FullMethodName  = "/xstockstrat.ingest.v1.IngestService/GetBackfillStatus"
 	IngestService_ListBackfillJobs_FullMethodName   = "/xstockstrat.ingest.v1.IngestService/ListBackfillJobs"
+	IngestService_CancelBackfill_FullMethodName     = "/xstockstrat.ingest.v1.IngestService/CancelBackfill"
 	IngestService_NormalizeRawData_FullMethodName   = "/xstockstrat.ingest.v1.IngestService/NormalizeRawData"
 	IngestService_IngestSignal_FullMethodName       = "/xstockstrat.ingest.v1.IngestService/IngestSignal"
 	IngestService_QuerySignals_FullMethodName       = "/xstockstrat.ingest.v1.IngestService/QuerySignals"
@@ -36,6 +37,8 @@ type IngestServiceClient interface {
 	TriggerBackfill(ctx context.Context, in *TriggerBackfillRequest, opts ...grpc.CallOption) (*TriggerBackfillResponse, error)
 	GetBackfillStatus(ctx context.Context, in *GetBackfillStatusRequest, opts ...grpc.CallOption) (*BackfillJob, error)
 	ListBackfillJobs(ctx context.Context, in *ListBackfillJobsRequest, opts ...grpc.CallOption) (*ListBackfillJobsResponse, error)
+	// Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4).
+	CancelBackfill(ctx context.Context, in *CancelBackfillRequest, opts ...grpc.CallOption) (*BackfillJob, error)
 	NormalizeRawData(ctx context.Context, in *NormalizeRawDataRequest, opts ...grpc.CallOption) (*NormalizeRawDataResponse, error)
 	// Signal ingestion — persists newsletter/external signals to ingest.newsletter_signals hypertable
 	IngestSignal(ctx context.Context, in *IngestSignalRequest, opts ...grpc.CallOption) (*IngestSignalResponse, error)
@@ -77,6 +80,16 @@ func (c *ingestServiceClient) ListBackfillJobs(ctx context.Context, in *ListBack
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListBackfillJobsResponse)
 	err := c.cc.Invoke(ctx, IngestService_ListBackfillJobs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ingestServiceClient) CancelBackfill(ctx context.Context, in *CancelBackfillRequest, opts ...grpc.CallOption) (*BackfillJob, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BackfillJob)
+	err := c.cc.Invoke(ctx, IngestService_CancelBackfill_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +153,8 @@ type IngestServiceServer interface {
 	TriggerBackfill(context.Context, *TriggerBackfillRequest) (*TriggerBackfillResponse, error)
 	GetBackfillStatus(context.Context, *GetBackfillStatusRequest) (*BackfillJob, error)
 	ListBackfillJobs(context.Context, *ListBackfillJobsRequest) (*ListBackfillJobsResponse, error)
+	// Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4).
+	CancelBackfill(context.Context, *CancelBackfillRequest) (*BackfillJob, error)
 	NormalizeRawData(context.Context, *NormalizeRawDataRequest) (*NormalizeRawDataResponse, error)
 	// Signal ingestion — persists newsletter/external signals to ingest.newsletter_signals hypertable
 	IngestSignal(context.Context, *IngestSignalRequest) (*IngestSignalResponse, error)
@@ -164,6 +179,9 @@ func (UnimplementedIngestServiceServer) GetBackfillStatus(context.Context, *GetB
 }
 func (UnimplementedIngestServiceServer) ListBackfillJobs(context.Context, *ListBackfillJobsRequest) (*ListBackfillJobsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListBackfillJobs not implemented")
+}
+func (UnimplementedIngestServiceServer) CancelBackfill(context.Context, *CancelBackfillRequest) (*BackfillJob, error) {
+	return nil, status.Error(codes.Unimplemented, "method CancelBackfill not implemented")
 }
 func (UnimplementedIngestServiceServer) NormalizeRawData(context.Context, *NormalizeRawDataRequest) (*NormalizeRawDataResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method NormalizeRawData not implemented")
@@ -250,6 +268,24 @@ func _IngestService_ListBackfillJobs_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(IngestServiceServer).ListBackfillJobs(ctx, req.(*ListBackfillJobsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IngestService_CancelBackfill_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelBackfillRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngestServiceServer).CancelBackfill(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IngestService_CancelBackfill_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngestServiceServer).CancelBackfill(ctx, req.(*CancelBackfillRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -362,6 +398,10 @@ var IngestService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListBackfillJobs",
 			Handler:    _IngestService_ListBackfillJobs_Handler,
+		},
+		{
+			MethodName: "CancelBackfill",
+			Handler:    _IngestService_CancelBackfill_Handler,
 		},
 		{
 			MethodName: "NormalizeRawData",

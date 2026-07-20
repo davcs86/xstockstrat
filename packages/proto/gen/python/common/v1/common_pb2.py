@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16\x63ommon/v1/common.proto\x12\x15xstockstrat.common.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"4\n\x0bPageRequest\x12\x11\n\tpage_size\x18\x01 \x01(\x05\x12\x12\n\npage_token\x18\x02 \x01(\t\"<\n\x0cPageResponse\x12\x17\n\x0fnext_page_token\x18\x01 \x01(\t\x12\x13\n\x0btotal_count\x18\x02 \x01(\x05\"\x92\x01\n\x05\x45rror\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12:\n\x07\x64\x65tails\x18\x03 \x03(\x0b\x32).xstockstrat.common.v1.Error.DetailsEntry\x1a.\n\x0c\x44\x65tailsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"9\n\x07\x44\x65\x63imal\x12\r\n\x05units\x18\x01 \x01(\x03\x12\r\n\x05nanos\x18\x02 \x01(\x05\x12\x10\n\x08\x63urrency\x18\x03 \x01(\t\">\n\x05\x41sset\x12\x0e\n\x06symbol\x18\x01 \x01(\t\x12\x10\n\x08\x65xchange\x18\x02 \x01(\t\x12\x13\n\x0b\x61sset_class\x18\x03 \x01(\t\"_\n\tTimeRange\x12)\n\x05start\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp*Z\n\x0bTradingMode\x12\x1c\n\x18TRADING_MODE_UNSPECIFIED\x10\x00\x12\x16\n\x12TRADING_MODE_PAPER\x10\x01\x12\x15\n\x11TRADING_MODE_LIVE\x10\x02*[\n\x0b\x45nvironment\x12\x1b\n\x17\x45NVIRONMENT_UNSPECIFIED\x10\x00\x12\x13\n\x0f\x45NVIRONMENT_DEV\x10\x01\x12\x1a\n\x16\x45NVIRONMENT_PRODUCTION\x10\x02*W\n\nBrokerType\x12\x1b\n\x17\x42ROKER_TYPE_UNSPECIFIED\x10\x00\x12\x16\n\x12\x42ROKER_TYPE_ALPACA\x10\x01\x12\x14\n\x10\x42ROKER_TYPE_IBKR\x10\x02*w\n\tTimeframe\x12\x19\n\x15TIMEFRAME_UNSPECIFIED\x10\x00\x12\x12\n\x0eTIMEFRAME_1MIN\x10\x01\x12\x12\n\x0eTIMEFRAME_5MIN\x10\x02\x12\x13\n\x0fTIMEFRAME_1HOUR\x10\x03\x12\x12\n\x0eTIMEFRAME_1DAY\x10\x04\x42<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16\x63ommon/v1/common.proto\x12\x15xstockstrat.common.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"4\n\x0bPageRequest\x12\x11\n\tpage_size\x18\x01 \x01(\x05\x12\x12\n\npage_token\x18\x02 \x01(\t\"<\n\x0cPageResponse\x12\x17\n\x0fnext_page_token\x18\x01 \x01(\t\x12\x13\n\x0btotal_count\x18\x02 \x01(\x05\"\x92\x01\n\x05\x45rror\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12:\n\x07\x64\x65tails\x18\x03 \x03(\x0b\x32).xstockstrat.common.v1.Error.DetailsEntry\x1a.\n\x0c\x44\x65tailsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"9\n\x07\x44\x65\x63imal\x12\r\n\x05units\x18\x01 \x01(\x03\x12\r\n\x05nanos\x18\x02 \x01(\x05\x12\x10\n\x08\x63urrency\x18\x03 \x01(\t\">\n\x05\x41sset\x12\x0e\n\x06symbol\x18\x01 \x01(\t\x12\x10\n\x08\x65xchange\x18\x02 \x01(\t\x12\x13\n\x0b\x61sset_class\x18\x03 \x01(\t\"_\n\tTimeRange\x12)\n\x05start\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp*Z\n\x0bTradingMode\x12\x1c\n\x18TRADING_MODE_UNSPECIFIED\x10\x00\x12\x16\n\x12TRADING_MODE_PAPER\x10\x01\x12\x15\n\x11TRADING_MODE_LIVE\x10\x02*[\n\x0b\x45nvironment\x12\x1b\n\x17\x45NVIRONMENT_UNSPECIFIED\x10\x00\x12\x13\n\x0f\x45NVIRONMENT_DEV\x10\x01\x12\x1a\n\x16\x45NVIRONMENT_PRODUCTION\x10\x02*W\n\nBrokerType\x12\x1b\n\x17\x42ROKER_TYPE_UNSPECIFIED\x10\x00\x12\x16\n\x12\x42ROKER_TYPE_ALPACA\x10\x01\x12\x14\n\x10\x42ROKER_TYPE_IBKR\x10\x02*\x94\x01\n\tTimeframe\x12\x19\n\x15TIMEFRAME_UNSPECIFIED\x10\x00\x12\x13\n\x0fTIMEFRAME_15MIN\x10\x05\x12\x13\n\x0fTIMEFRAME_1HOUR\x10\x03\x12\x12\n\x0eTIMEFRAME_1DAY\x10\x04\x12\x16\n\x0eTIMEFRAME_1MIN\x10\x01\x1a\x02\x08\x01\x12\x16\n\x0eTIMEFRAME_5MIN\x10\x02\x1a\x02\x08\x01\x42<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,6 +33,10 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'common.v1.common_pb2', _glo
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1'
+  _globals['_TIMEFRAME'].values_by_name["TIMEFRAME_1MIN"]._loaded_options = None
+  _globals['_TIMEFRAME'].values_by_name["TIMEFRAME_1MIN"]._serialized_options = b'\010\001'
+  _globals['_TIMEFRAME'].values_by_name["TIMEFRAME_5MIN"]._loaded_options = None
+  _globals['_TIMEFRAME'].values_by_name["TIMEFRAME_5MIN"]._serialized_options = b'\010\001'
   _globals['_ERROR_DETAILSENTRY']._loaded_options = None
   _globals['_ERROR_DETAILSENTRY']._serialized_options = b'8\001'
   _globals['_TRADINGMODE']._serialized_start=567
@@ -41,8 +45,8 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_ENVIRONMENT']._serialized_end=750
   _globals['_BROKERTYPE']._serialized_start=752
   _globals['_BROKERTYPE']._serialized_end=839
-  _globals['_TIMEFRAME']._serialized_start=841
-  _globals['_TIMEFRAME']._serialized_end=960
+  _globals['_TIMEFRAME']._serialized_start=842
+  _globals['_TIMEFRAME']._serialized_end=990
   _globals['_PAGEREQUEST']._serialized_start=82
   _globals['_PAGEREQUEST']._serialized_end=134
   _globals['_PAGERESPONSE']._serialized_start=136

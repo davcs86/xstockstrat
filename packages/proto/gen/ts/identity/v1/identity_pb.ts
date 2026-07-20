@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file identity/v1/identity.proto.
  */
 export const file_identity_v1_identity: GenFile = /*@__PURE__*/
-  fileDesc("ChppZGVudGl0eS92MS9pZGVudGl0eS5wcm90bxIXeHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEiOgoXQXV0aGVudGljYXRlVXNlclJlcXVlc3QSDQoFZW1haWwYASABKAkSEAoIcGFzc3dvcmQYAiABKAkipgEKEUF1dGhUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIVCg1yZWZyZXNoX3Rva2VuGAIgASgJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKBmNsYWltcxgEIAEoCzIkLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlRva2VuQ2xhaW1zIqgBCgtUb2tlbkNsYWltcxIPCgd1c2VyX2lkGAEgASgJEg0KBWVtYWlsGAIgASgJEg0KBXJvbGVzGAMgAygJEi0KCWlzc3VlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASCwoDYXVkGAYgASgJIiUKFFZhbGlkYXRlVG9rZW5SZXF1ZXN0Eg0KBXRva2VuGAEgASgJIiwKE1JlZnJlc2hUb2tlblJlcXVlc3QSFQoNcmVmcmVzaF90b2tlbhgBIAEoCSIjChJSZXZva2VUb2tlblJlcXVlc3QSDQoFdG9rZW4YASABKAkiJgoTUmV2b2tlVG9rZW5SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIrsBCgZBcGlLZXkSDgoGa2V5X2lkGAEgASgJEhIKCmtleV9wcmVmaXgYAiABKAkSDwoHdXNlcl9pZBgDIAEoCRIMCgRuYW1lGAQgASgJEg4KBnNjb3BlcxgFIAMoCRIuCgpjcmVhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpleHBpcmVzX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJ0ChNDcmVhdGVBcGlLZXlSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZzY29wZXMYAyADKAkSLgoKZXhwaXJlc19hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiKAoVVmFsaWRhdGVBcGlLZXlSZXF1ZXN0Eg8KB2FwaV9rZXkYASABKAkiJQoSTGlzdEFwaUtleXNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkiRAoTTGlzdEFwaUtleXNSZXNwb25zZRItCgRrZXlzGAEgAygLMh8ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXBpS2V5IjYKE1Jldm9rZUFwaUtleVJlcXVlc3QSDgoGa2V5X2lkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkiJwoUUmV2b2tlQXBpS2V5UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCJ8CgtPQXV0aENsaWVudBIRCgljbGllbnRfaWQYASABKAkSFQoNcmVkaXJlY3RfdXJpcxgCIAMoCRITCgtjbGllbnRfbmFtZRgDIAEoCRIuCgpjcmVhdGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJIChpSZWdpc3Rlck9BdXRoQ2xpZW50UmVxdWVzdBIVCg1yZWRpcmVjdF91cmlzGAEgAygJEhMKC2NsaWVudF9uYW1lGAIgASgJIioKFUdldE9BdXRoQ2xpZW50UmVxdWVzdBIRCgljbGllbnRfaWQYASABKAkiegoUSXNzdWVBdXRoQ29kZVJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIRCgljbGllbnRfaWQYAiABKAkSFAoMcmVkaXJlY3RfdXJpGAMgASgJEhYKDmNvZGVfY2hhbGxlbmdlGAQgASgJEhAKCHJlc291cmNlGAUgASgJIiUKFUlzc3VlQXV0aENvZGVSZXNwb25zZRIMCgRjb2RlGAEgASgJInkKF0V4Y2hhbmdlQXV0aENvZGVSZXF1ZXN0EgwKBGNvZGUYASABKAkSFQoNY29kZV92ZXJpZmllchgCIAEoCRIUCgxyZWRpcmVjdF91cmkYAyABKAkSEQoJY2xpZW50X2lkGAQgASgJEhAKCHJlc291cmNlGAUgASgJImkKEk9BdXRoVG9rZW5SZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSEgoKdG9rZW5fdHlwZRgCIAEoCRISCgpleHBpcmVzX2luGAMgASgDEhUKDXJlZnJlc2hfdG9rZW4YBCABKAkiQwoYUmVmcmVzaE9BdXRoVG9rZW5SZXF1ZXN0EhUKDXJlZnJlc2hfdG9rZW4YASABKAkSEAoIcmVzb3VyY2UYAiABKAkiswEKDUF1dGhvcml6ZWRBcHASEQoJY2xpZW50X2lkGAEgASgJEhMKC2NsaWVudF9uYW1lGAIgASgJEjEKDWF1dGhvcml6ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGxhc3RfdXNlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFQoNcmVkaXJlY3RfdXJpcxgFIAMoCSIsChlMaXN0QXV0aG9yaXplZEFwcHNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkiUgoaTGlzdEF1dGhvcml6ZWRBcHBzUmVzcG9uc2USNAoEYXBwcxgBIAMoCzImLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkF1dGhvcml6ZWRBcHAiQAoaUmV2b2tlQXV0aG9yaXplZEFwcFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIRCgljbGllbnRfaWQYAiABKAkiLgobUmV2b2tlQXV0aG9yaXplZEFwcFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgyjw0KD0lkZW50aXR5U2VydmljZRJwChBBdXRoZW50aWNhdGVVc2VyEjAueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXV0aGVudGljYXRlVXNlclJlcXVlc3QaKi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5BdXRoVG9rZW5SZXNwb25zZRJkCg1WYWxpZGF0ZVRva2VuEi0ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuVmFsaWRhdGVUb2tlblJlcXVlc3QaJC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5Ub2tlbkNsYWltcxJoCgxSZWZyZXNoVG9rZW4SLC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZWZyZXNoVG9rZW5SZXF1ZXN0GioueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXV0aFRva2VuUmVzcG9uc2USaAoLUmV2b2tlVG9rZW4SKy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZXZva2VUb2tlblJlcXVlc3QaLC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZXZva2VUb2tlblJlc3BvbnNlEl0KDENyZWF0ZUFwaUtleRIsLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkNyZWF0ZUFwaUtleVJlcXVlc3QaHy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5BcGlLZXkSZgoOVmFsaWRhdGVBcGlLZXkSLi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5WYWxpZGF0ZUFwaUtleVJlcXVlc3QaJC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5Ub2tlbkNsYWltcxJoCgtMaXN0QXBpS2V5cxIrLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkxpc3RBcGlLZXlzUmVxdWVzdBosLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkxpc3RBcGlLZXlzUmVzcG9uc2USawoMUmV2b2tlQXBpS2V5EiwueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuUmV2b2tlQXBpS2V5UmVxdWVzdBotLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZUFwaUtleVJlc3BvbnNlEnAKE1JlZ2lzdGVyT0F1dGhDbGllbnQSMy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZWdpc3Rlck9BdXRoQ2xpZW50UmVxdWVzdBokLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLk9BdXRoQ2xpZW50EmYKDkdldE9BdXRoQ2xpZW50Ei4ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuR2V0T0F1dGhDbGllbnRSZXF1ZXN0GiQueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuT0F1dGhDbGllbnQSbgoNSXNzdWVBdXRoQ29kZRItLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLklzc3VlQXV0aENvZGVSZXF1ZXN0Gi4ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuSXNzdWVBdXRoQ29kZVJlc3BvbnNlEnEKEEV4Y2hhbmdlQXV0aENvZGUSMC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5FeGNoYW5nZUF1dGhDb2RlUmVxdWVzdBorLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLk9BdXRoVG9rZW5SZXNwb25zZRJzChFSZWZyZXNoT0F1dGhUb2tlbhIxLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJlZnJlc2hPQXV0aFRva2VuUmVxdWVzdBorLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLk9BdXRoVG9rZW5SZXNwb25zZRJ9ChJMaXN0QXV0aG9yaXplZEFwcHMSMi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5MaXN0QXV0aG9yaXplZEFwcHNSZXF1ZXN0GjMueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuTGlzdEF1dGhvcml6ZWRBcHBzUmVzcG9uc2USgAEKE1Jldm9rZUF1dGhvcml6ZWRBcHASMy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZXZva2VBdXRob3JpemVkQXBwUmVxdWVzdBo0LnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZUF1dGhvcml6ZWRBcHBSZXNwb25zZUJAWj5naXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vaWRlbnRpdHkvdjE7aWRlbnRpdHl2MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("ChppZGVudGl0eS92MS9pZGVudGl0eS5wcm90bxIXeHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEiOgoXQXV0aGVudGljYXRlVXNlclJlcXVlc3QSDQoFZW1haWwYASABKAkSEAoIcGFzc3dvcmQYAiABKAkipgEKEUF1dGhUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIVCg1yZWZyZXNoX3Rva2VuGAIgASgJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKBmNsYWltcxgEIAEoCzIkLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlRva2VuQ2xhaW1zIqgBCgtUb2tlbkNsYWltcxIPCgd1c2VyX2lkGAEgASgJEg0KBWVtYWlsGAIgASgJEg0KBXJvbGVzGAMgAygJEi0KCWlzc3VlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASCwoDYXVkGAYgASgJIiUKFFZhbGlkYXRlVG9rZW5SZXF1ZXN0Eg0KBXRva2VuGAEgASgJIiwKE1JlZnJlc2hUb2tlblJlcXVlc3QSFQoNcmVmcmVzaF90b2tlbhgBIAEoCSIjChJSZXZva2VUb2tlblJlcXVlc3QSDQoFdG9rZW4YASABKAkiJgoTUmV2b2tlVG9rZW5SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIInwKC09BdXRoQ2xpZW50EhEKCWNsaWVudF9pZBgBIAEoCRIVCg1yZWRpcmVjdF91cmlzGAIgAygJEhMKC2NsaWVudF9uYW1lGAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkgKGlJlZ2lzdGVyT0F1dGhDbGllbnRSZXF1ZXN0EhUKDXJlZGlyZWN0X3VyaXMYASADKAkSEwoLY2xpZW50X25hbWUYAiABKAkiKgoVR2V0T0F1dGhDbGllbnRSZXF1ZXN0EhEKCWNsaWVudF9pZBgBIAEoCSJ6ChRJc3N1ZUF1dGhDb2RlUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCRIUCgxyZWRpcmVjdF91cmkYAyABKAkSFgoOY29kZV9jaGFsbGVuZ2UYBCABKAkSEAoIcmVzb3VyY2UYBSABKAkiJQoVSXNzdWVBdXRoQ29kZVJlc3BvbnNlEgwKBGNvZGUYASABKAkieQoXRXhjaGFuZ2VBdXRoQ29kZVJlcXVlc3QSDAoEY29kZRgBIAEoCRIVCg1jb2RlX3ZlcmlmaWVyGAIgASgJEhQKDHJlZGlyZWN0X3VyaRgDIAEoCRIRCgljbGllbnRfaWQYBCABKAkSEAoIcmVzb3VyY2UYBSABKAkiaQoST0F1dGhUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRISCgp0b2tlbl90eXBlGAIgASgJEhIKCmV4cGlyZXNfaW4YAyABKAMSFQoNcmVmcmVzaF90b2tlbhgEIAEoCSJDChhSZWZyZXNoT0F1dGhUb2tlblJlcXVlc3QSFQoNcmVmcmVzaF90b2tlbhgBIAEoCRIQCghyZXNvdXJjZRgCIAEoCSKzAQoNQXV0aG9yaXplZEFwcBIRCgljbGllbnRfaWQYASABKAkSEwoLY2xpZW50X25hbWUYAiABKAkSMQoNYXV0aG9yaXplZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF91c2VkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1yZWRpcmVjdF91cmlzGAUgAygJIiwKGUxpc3RBdXRob3JpemVkQXBwc1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCSJSChpMaXN0QXV0aG9yaXplZEFwcHNSZXNwb25zZRI0CgRhcHBzGAEgAygLMiYueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXV0aG9yaXplZEFwcCJAChpSZXZva2VBdXRob3JpemVkQXBwUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCSIuChtSZXZva2VBdXRob3JpemVkQXBwUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCDLxCQoPSWRlbnRpdHlTZXJ2aWNlEnAKEEF1dGhlbnRpY2F0ZVVzZXISMC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5BdXRoZW50aWNhdGVVc2VyUmVxdWVzdBoqLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkF1dGhUb2tlblJlc3BvbnNlEmQKDVZhbGlkYXRlVG9rZW4SLS54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5WYWxpZGF0ZVRva2VuUmVxdWVzdBokLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlRva2VuQ2xhaW1zEmgKDFJlZnJlc2hUb2tlbhIsLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJlZnJlc2hUb2tlblJlcXVlc3QaKi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5BdXRoVG9rZW5SZXNwb25zZRJoCgtSZXZva2VUb2tlbhIrLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZVRva2VuUmVxdWVzdBosLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZVRva2VuUmVzcG9uc2UScAoTUmVnaXN0ZXJPQXV0aENsaWVudBIzLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJlZ2lzdGVyT0F1dGhDbGllbnRSZXF1ZXN0GiQueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuT0F1dGhDbGllbnQSZgoOR2V0T0F1dGhDbGllbnQSLi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5HZXRPQXV0aENsaWVudFJlcXVlc3QaJC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5PQXV0aENsaWVudBJuCg1Jc3N1ZUF1dGhDb2RlEi0ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuSXNzdWVBdXRoQ29kZVJlcXVlc3QaLi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5Jc3N1ZUF1dGhDb2RlUmVzcG9uc2UScQoQRXhjaGFuZ2VBdXRoQ29kZRIwLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkV4Y2hhbmdlQXV0aENvZGVSZXF1ZXN0GisueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuT0F1dGhUb2tlblJlc3BvbnNlEnMKEVJlZnJlc2hPQXV0aFRva2VuEjEueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuUmVmcmVzaE9BdXRoVG9rZW5SZXF1ZXN0GisueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuT0F1dGhUb2tlblJlc3BvbnNlEn0KEkxpc3RBdXRob3JpemVkQXBwcxIyLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkxpc3RBdXRob3JpemVkQXBwc1JlcXVlc3QaMy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5MaXN0QXV0aG9yaXplZEFwcHNSZXNwb25zZRKAAQoTUmV2b2tlQXV0aG9yaXplZEFwcBIzLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZUF1dGhvcml6ZWRBcHBSZXF1ZXN0GjQueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuUmV2b2tlQXV0aG9yaXplZEFwcFJlc3BvbnNlQkBaPmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9pZGVudGl0eS92MTtpZGVudGl0eXYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message xstockstrat.identity.v1.AuthenticateUserRequest
@@ -181,177 +181,6 @@ export const RevokeTokenResponseSchema: GenMessage<RevokeTokenResponse> = /*@__P
   messageDesc(file_identity_v1_identity, 6);
 
 /**
- * @generated from message xstockstrat.identity.v1.ApiKey
- */
-export type ApiKey = Message<"xstockstrat.identity.v1.ApiKey"> & {
-  /**
-   * @generated from field: string key_id = 1;
-   */
-  keyId: string;
-
-  /**
-   * first 8 chars only (rest is hashed)
-   *
-   * @generated from field: string key_prefix = 2;
-   */
-  keyPrefix: string;
-
-  /**
-   * @generated from field: string user_id = 3;
-   */
-  userId: string;
-
-  /**
-   * @generated from field: string name = 4;
-   */
-  name: string;
-
-  /**
-   * @generated from field: repeated string scopes = 5;
-   */
-  scopes: string[];
-
-  /**
-   * @generated from field: google.protobuf.Timestamp created_at = 6;
-   */
-  createdAt?: Timestamp | undefined;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp expires_at = 7;
-   */
-  expiresAt?: Timestamp | undefined;
-};
-
-/**
- * Describes the message xstockstrat.identity.v1.ApiKey.
- * Use `create(ApiKeySchema)` to create a new message.
- */
-export const ApiKeySchema: GenMessage<ApiKey> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 7);
-
-/**
- * @generated from message xstockstrat.identity.v1.CreateApiKeyRequest
- */
-export type CreateApiKeyRequest = Message<"xstockstrat.identity.v1.CreateApiKeyRequest"> & {
-  /**
-   * @generated from field: string user_id = 1;
-   */
-  userId: string;
-
-  /**
-   * @generated from field: string name = 2;
-   */
-  name: string;
-
-  /**
-   * @generated from field: repeated string scopes = 3;
-   */
-  scopes: string[];
-
-  /**
-   * @generated from field: google.protobuf.Timestamp expires_at = 4;
-   */
-  expiresAt?: Timestamp | undefined;
-};
-
-/**
- * Describes the message xstockstrat.identity.v1.CreateApiKeyRequest.
- * Use `create(CreateApiKeyRequestSchema)` to create a new message.
- */
-export const CreateApiKeyRequestSchema: GenMessage<CreateApiKeyRequest> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 8);
-
-/**
- * @generated from message xstockstrat.identity.v1.ValidateApiKeyRequest
- */
-export type ValidateApiKeyRequest = Message<"xstockstrat.identity.v1.ValidateApiKeyRequest"> & {
-  /**
-   * @generated from field: string api_key = 1;
-   */
-  apiKey: string;
-};
-
-/**
- * Describes the message xstockstrat.identity.v1.ValidateApiKeyRequest.
- * Use `create(ValidateApiKeyRequestSchema)` to create a new message.
- */
-export const ValidateApiKeyRequestSchema: GenMessage<ValidateApiKeyRequest> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 9);
-
-/**
- * @generated from message xstockstrat.identity.v1.ListApiKeysRequest
- */
-export type ListApiKeysRequest = Message<"xstockstrat.identity.v1.ListApiKeysRequest"> & {
-  /**
-   * @generated from field: string user_id = 1;
-   */
-  userId: string;
-};
-
-/**
- * Describes the message xstockstrat.identity.v1.ListApiKeysRequest.
- * Use `create(ListApiKeysRequestSchema)` to create a new message.
- */
-export const ListApiKeysRequestSchema: GenMessage<ListApiKeysRequest> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 10);
-
-/**
- * @generated from message xstockstrat.identity.v1.ListApiKeysResponse
- */
-export type ListApiKeysResponse = Message<"xstockstrat.identity.v1.ListApiKeysResponse"> & {
-  /**
-   * @generated from field: repeated xstockstrat.identity.v1.ApiKey keys = 1;
-   */
-  keys: ApiKey[];
-};
-
-/**
- * Describes the message xstockstrat.identity.v1.ListApiKeysResponse.
- * Use `create(ListApiKeysResponseSchema)` to create a new message.
- */
-export const ListApiKeysResponseSchema: GenMessage<ListApiKeysResponse> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 11);
-
-/**
- * @generated from message xstockstrat.identity.v1.RevokeApiKeyRequest
- */
-export type RevokeApiKeyRequest = Message<"xstockstrat.identity.v1.RevokeApiKeyRequest"> & {
-  /**
-   * @generated from field: string key_id = 1;
-   */
-  keyId: string;
-
-  /**
-   * @generated from field: string user_id = 2;
-   */
-  userId: string;
-};
-
-/**
- * Describes the message xstockstrat.identity.v1.RevokeApiKeyRequest.
- * Use `create(RevokeApiKeyRequestSchema)` to create a new message.
- */
-export const RevokeApiKeyRequestSchema: GenMessage<RevokeApiKeyRequest> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 12);
-
-/**
- * @generated from message xstockstrat.identity.v1.RevokeApiKeyResponse
- */
-export type RevokeApiKeyResponse = Message<"xstockstrat.identity.v1.RevokeApiKeyResponse"> & {
-  /**
-   * @generated from field: bool success = 1;
-   */
-  success: boolean;
-};
-
-/**
- * Describes the message xstockstrat.identity.v1.RevokeApiKeyResponse.
- * Use `create(RevokeApiKeyResponseSchema)` to create a new message.
- */
-export const RevokeApiKeyResponseSchema: GenMessage<RevokeApiKeyResponse> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 13);
-
-/**
  * ── OAuth 2.1 messages (feature 049 Part B) ──────────────────────────────────
  *
  * @generated from message xstockstrat.identity.v1.OAuthClient
@@ -383,7 +212,7 @@ export type OAuthClient = Message<"xstockstrat.identity.v1.OAuthClient"> & {
  * Use `create(OAuthClientSchema)` to create a new message.
  */
 export const OAuthClientSchema: GenMessage<OAuthClient> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 14);
+  messageDesc(file_identity_v1_identity, 7);
 
 /**
  * @generated from message xstockstrat.identity.v1.RegisterOAuthClientRequest
@@ -405,7 +234,7 @@ export type RegisterOAuthClientRequest = Message<"xstockstrat.identity.v1.Regist
  * Use `create(RegisterOAuthClientRequestSchema)` to create a new message.
  */
 export const RegisterOAuthClientRequestSchema: GenMessage<RegisterOAuthClientRequest> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 15);
+  messageDesc(file_identity_v1_identity, 8);
 
 /**
  * @generated from message xstockstrat.identity.v1.GetOAuthClientRequest
@@ -422,7 +251,7 @@ export type GetOAuthClientRequest = Message<"xstockstrat.identity.v1.GetOAuthCli
  * Use `create(GetOAuthClientRequestSchema)` to create a new message.
  */
 export const GetOAuthClientRequestSchema: GenMessage<GetOAuthClientRequest> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 16);
+  messageDesc(file_identity_v1_identity, 9);
 
 /**
  * @generated from message xstockstrat.identity.v1.IssueAuthCodeRequest
@@ -459,7 +288,7 @@ export type IssueAuthCodeRequest = Message<"xstockstrat.identity.v1.IssueAuthCod
  * Use `create(IssueAuthCodeRequestSchema)` to create a new message.
  */
 export const IssueAuthCodeRequestSchema: GenMessage<IssueAuthCodeRequest> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 17);
+  messageDesc(file_identity_v1_identity, 10);
 
 /**
  * @generated from message xstockstrat.identity.v1.IssueAuthCodeResponse
@@ -476,7 +305,7 @@ export type IssueAuthCodeResponse = Message<"xstockstrat.identity.v1.IssueAuthCo
  * Use `create(IssueAuthCodeResponseSchema)` to create a new message.
  */
 export const IssueAuthCodeResponseSchema: GenMessage<IssueAuthCodeResponse> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 18);
+  messageDesc(file_identity_v1_identity, 11);
 
 /**
  * @generated from message xstockstrat.identity.v1.ExchangeAuthCodeRequest
@@ -513,7 +342,7 @@ export type ExchangeAuthCodeRequest = Message<"xstockstrat.identity.v1.ExchangeA
  * Use `create(ExchangeAuthCodeRequestSchema)` to create a new message.
  */
 export const ExchangeAuthCodeRequestSchema: GenMessage<ExchangeAuthCodeRequest> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 19);
+  messageDesc(file_identity_v1_identity, 12);
 
 /**
  * @generated from message xstockstrat.identity.v1.OAuthTokenResponse
@@ -545,7 +374,7 @@ export type OAuthTokenResponse = Message<"xstockstrat.identity.v1.OAuthTokenResp
  * Use `create(OAuthTokenResponseSchema)` to create a new message.
  */
 export const OAuthTokenResponseSchema: GenMessage<OAuthTokenResponse> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 20);
+  messageDesc(file_identity_v1_identity, 13);
 
 /**
  * @generated from message xstockstrat.identity.v1.RefreshOAuthTokenRequest
@@ -567,7 +396,7 @@ export type RefreshOAuthTokenRequest = Message<"xstockstrat.identity.v1.RefreshO
  * Use `create(RefreshOAuthTokenRequestSchema)` to create a new message.
  */
 export const RefreshOAuthTokenRequestSchema: GenMessage<RefreshOAuthTokenRequest> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 21);
+  messageDesc(file_identity_v1_identity, 14);
 
 /**
  * ── Authorized-apps management (feature 051) ─────────────────────────────────
@@ -609,7 +438,7 @@ export type AuthorizedApp = Message<"xstockstrat.identity.v1.AuthorizedApp"> & {
  * Use `create(AuthorizedAppSchema)` to create a new message.
  */
 export const AuthorizedAppSchema: GenMessage<AuthorizedApp> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 22);
+  messageDesc(file_identity_v1_identity, 15);
 
 /**
  * @generated from message xstockstrat.identity.v1.ListAuthorizedAppsRequest
@@ -626,7 +455,7 @@ export type ListAuthorizedAppsRequest = Message<"xstockstrat.identity.v1.ListAut
  * Use `create(ListAuthorizedAppsRequestSchema)` to create a new message.
  */
 export const ListAuthorizedAppsRequestSchema: GenMessage<ListAuthorizedAppsRequest> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 23);
+  messageDesc(file_identity_v1_identity, 16);
 
 /**
  * @generated from message xstockstrat.identity.v1.ListAuthorizedAppsResponse
@@ -643,7 +472,7 @@ export type ListAuthorizedAppsResponse = Message<"xstockstrat.identity.v1.ListAu
  * Use `create(ListAuthorizedAppsResponseSchema)` to create a new message.
  */
 export const ListAuthorizedAppsResponseSchema: GenMessage<ListAuthorizedAppsResponse> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 24);
+  messageDesc(file_identity_v1_identity, 17);
 
 /**
  * @generated from message xstockstrat.identity.v1.RevokeAuthorizedAppRequest
@@ -665,7 +494,7 @@ export type RevokeAuthorizedAppRequest = Message<"xstockstrat.identity.v1.Revoke
  * Use `create(RevokeAuthorizedAppRequestSchema)` to create a new message.
  */
 export const RevokeAuthorizedAppRequestSchema: GenMessage<RevokeAuthorizedAppRequest> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 25);
+  messageDesc(file_identity_v1_identity, 18);
 
 /**
  * @generated from message xstockstrat.identity.v1.RevokeAuthorizedAppResponse
@@ -682,7 +511,7 @@ export type RevokeAuthorizedAppResponse = Message<"xstockstrat.identity.v1.Revok
  * Use `create(RevokeAuthorizedAppResponseSchema)` to create a new message.
  */
 export const RevokeAuthorizedAppResponseSchema: GenMessage<RevokeAuthorizedAppResponse> = /*@__PURE__*/
-  messageDesc(file_identity_v1_identity, 26);
+  messageDesc(file_identity_v1_identity, 19);
 
 /**
  * @generated from service xstockstrat.identity.v1.IdentityService
@@ -719,38 +548,6 @@ export const IdentityService: GenService<{
     methodKind: "unary";
     input: typeof RevokeTokenRequestSchema;
     output: typeof RevokeTokenResponseSchema;
-  },
-  /**
-   * @generated from rpc xstockstrat.identity.v1.IdentityService.CreateApiKey
-   */
-  createApiKey: {
-    methodKind: "unary";
-    input: typeof CreateApiKeyRequestSchema;
-    output: typeof ApiKeySchema;
-  },
-  /**
-   * @generated from rpc xstockstrat.identity.v1.IdentityService.ValidateApiKey
-   */
-  validateApiKey: {
-    methodKind: "unary";
-    input: typeof ValidateApiKeyRequestSchema;
-    output: typeof TokenClaimsSchema;
-  },
-  /**
-   * @generated from rpc xstockstrat.identity.v1.IdentityService.ListApiKeys
-   */
-  listApiKeys: {
-    methodKind: "unary";
-    input: typeof ListApiKeysRequestSchema;
-    output: typeof ListApiKeysResponseSchema;
-  },
-  /**
-   * @generated from rpc xstockstrat.identity.v1.IdentityService.RevokeApiKey
-   */
-  revokeApiKey: {
-    methodKind: "unary";
-    input: typeof RevokeApiKeyRequestSchema;
-    output: typeof RevokeApiKeyResponseSchema;
   },
   /**
    * OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the

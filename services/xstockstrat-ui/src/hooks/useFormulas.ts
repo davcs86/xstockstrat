@@ -37,6 +37,7 @@ export function useRegisterFormula() {
       author?: string;
       parameters?: FormulaParameterInit[];
       outputs?: FormulaOutputInit[];
+      warmupPeriod?: number;
     }) =>
       indicatorsClient.registerFormula({
         name: req.name ?? '',
@@ -47,6 +48,7 @@ export function useRegisterFormula() {
         author: req.author ?? '',
         parameters: req.parameters ?? [],
         outputs: req.outputs ?? [],
+        warmupPeriod: req.warmupPeriod ?? 0,
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['indicators-formulas'] }),
   });
@@ -64,6 +66,7 @@ export function useUpdateFormula() {
       isPublic?: boolean;
       parameters?: FormulaParameterInit[];
       outputs?: FormulaOutputInit[];
+      warmupPeriod?: number;
     }) =>
       indicatorsClient.updateFormula({
         formulaId: req.formulaId,
@@ -74,6 +77,7 @@ export function useUpdateFormula() {
         isPublic: req.isPublic ?? false,
         parameters: req.parameters ?? [],
         outputs: req.outputs ?? [],
+        warmupPeriod: req.warmupPeriod ?? 0,
       }),
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['indicators-formulas'] });
@@ -94,17 +98,22 @@ export function useExecuteFormula() {
   return useMutation({
     // Either formulaId (run a saved formula) or formulaSource (run the current,
     // possibly unsaved, editor buffer — the notebook-style "Run" behavior).
+    // For inline formula_source runs, `parameters` carries the in-editor parameter
+    // DEFINITIONS so the engine can validate input_params and apply defaults
+    // (saved formulas use their stored definitions and ignore this).
     mutationFn: (req: {
       formulaId?: string;
       formulaSource?: string;
       inputData: Record<string, unknown>;
       inputParams?: Record<string, unknown>;
+      parameters?: FormulaParameterInit[];
     }) =>
       indicatorsClient.executeFormula({
         formulaId: req.formulaId ?? '',
         formulaSource: req.formulaSource ?? '',
         inputData: req.inputData as Record<string, never>,
         inputParams: (req.inputParams ?? {}) as Record<string, never>,
+        parameters: req.parameters ?? [],
       }),
   });
 }

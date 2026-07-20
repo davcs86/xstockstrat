@@ -226,7 +226,15 @@ export interface ExecuteFormulaRequest {
   /** 0 = use config value */
   memoryBytesOverride: number;
   /** parameter VALUES, separate from input_data */
-  inputParams?: { [key: string]: any } | undefined;
+  inputParams?:
+    | { [key: string]: any }
+    | undefined;
+  /**
+   * Declared parameter DEFINITIONS used to validate input_params and apply defaults
+   * for inline formula_source runs (authoring "Run" with an unsaved buffer). Ignored
+   * when formula_id is set — saved formulas use their stored definitions instead.
+   */
+  parameters: FormulaParameter[];
 }
 
 export interface ExecuteFormulaRequest_EnvEntry {
@@ -294,6 +302,8 @@ export interface FormulaDefinition {
   parameters: FormulaParameter[];
   /** declared output series (beyond implicit "value") */
   outputs: FormulaOutput[];
+  /** bars of warm-up before this formula's outputs are valid (feature 064) */
+  warmupPeriod: number;
 }
 
 export interface FormulaDefinition_InputSchemaEntry {
@@ -326,6 +336,8 @@ export interface RegisterFormulaRequest {
   parameters: FormulaParameter[];
   /** declared output series (beyond implicit "value") */
   outputs: FormulaOutput[];
+  /** bars of warm-up before this formula's outputs are valid (feature 064) */
+  warmupPeriod: number;
 }
 
 export interface RegisterFormulaRequest_InputSchemaEntry {
@@ -368,6 +380,8 @@ export interface UpdateFormulaRequest {
   parameters: FormulaParameter[];
   /** declared output series (beyond implicit "value") */
   outputs: FormulaOutput[];
+  /** bars of warm-up before this formula's outputs are valid (feature 064) */
+  warmupPeriod: number;
 }
 
 export interface UpdateFormulaResponse {
@@ -1050,6 +1064,7 @@ function createBaseExecuteFormulaRequest(): ExecuteFormulaRequest {
     timeoutMsOverride: 0,
     memoryBytesOverride: 0,
     inputParams: undefined,
+    parameters: [],
   };
 }
 
@@ -1075,6 +1090,9 @@ export const ExecuteFormulaRequest: MessageFns<ExecuteFormulaRequest> = {
     }
     if (message.inputParams !== undefined) {
       Struct.encode(Struct.wrap(message.inputParams), writer.uint32(58).fork()).join();
+    }
+    for (const v of message.parameters) {
+      FormulaParameter.encode(v!, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -1145,6 +1163,14 @@ export const ExecuteFormulaRequest: MessageFns<ExecuteFormulaRequest> = {
           message.inputParams = Struct.unwrap(Struct.decode(reader, reader.uint32()));
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.parameters.push(FormulaParameter.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1195,6 +1221,9 @@ export const ExecuteFormulaRequest: MessageFns<ExecuteFormulaRequest> = {
         : isObject(object.input_params)
         ? object.input_params
         : undefined,
+      parameters: globalThis.Array.isArray(object?.parameters)
+        ? object.parameters.map((e: any) => FormulaParameter.fromJSON(e))
+        : [],
     };
   },
 
@@ -1227,6 +1256,9 @@ export const ExecuteFormulaRequest: MessageFns<ExecuteFormulaRequest> = {
     if (message.inputParams !== undefined) {
       obj.inputParams = message.inputParams;
     }
+    if (message.parameters?.length) {
+      obj.parameters = message.parameters.map((e) => FormulaParameter.toJSON(e));
+    }
     return obj;
   },
 
@@ -1250,6 +1282,7 @@ export const ExecuteFormulaRequest: MessageFns<ExecuteFormulaRequest> = {
     message.timeoutMsOverride = object.timeoutMsOverride ?? 0;
     message.memoryBytesOverride = object.memoryBytesOverride ?? 0;
     message.inputParams = object.inputParams ?? undefined;
+    message.parameters = object.parameters?.map((e) => FormulaParameter.fromPartial(e)) || [];
     return message;
   },
 };
@@ -1879,6 +1912,7 @@ function createBaseFormulaDefinition(): FormulaDefinition {
     inputSchema: {},
     parameters: [],
     outputs: [],
+    warmupPeriod: 0,
   };
 }
 
@@ -1916,6 +1950,9 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
     }
     for (const v of message.outputs) {
       FormulaOutput.encode(v!, writer.uint32(90).fork()).join();
+    }
+    if (message.warmupPeriod !== 0) {
+      writer.uint32(96).int32(message.warmupPeriod);
     }
     return writer;
   },
@@ -2018,6 +2055,14 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
           message.outputs.push(FormulaOutput.decode(reader, reader.uint32()));
           continue;
         }
+        case 12: {
+          if (tag !== 96) {
+            break;
+          }
+
+          message.warmupPeriod = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2076,6 +2121,11 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
       outputs: globalThis.Array.isArray(object?.outputs)
         ? object.outputs.map((e: any) => FormulaOutput.fromJSON(e))
         : [],
+      warmupPeriod: isSet(object.warmupPeriod)
+        ? globalThis.Number(object.warmupPeriod)
+        : isSet(object.warmup_period)
+        ? globalThis.Number(object.warmup_period)
+        : 0,
     };
   },
 
@@ -2120,6 +2170,9 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
     if (message.outputs?.length) {
       obj.outputs = message.outputs.map((e) => FormulaOutput.toJSON(e));
     }
+    if (message.warmupPeriod !== 0) {
+      obj.warmupPeriod = Math.round(message.warmupPeriod);
+    }
     return obj;
   },
 
@@ -2147,6 +2200,7 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
     );
     message.parameters = object.parameters?.map((e) => FormulaParameter.fromPartial(e)) || [];
     message.outputs = object.outputs?.map((e) => FormulaOutput.fromPartial(e)) || [];
+    message.warmupPeriod = object.warmupPeriod ?? 0;
     return message;
   },
 };
@@ -2462,6 +2516,7 @@ function createBaseRegisterFormulaRequest(): RegisterFormulaRequest {
     author: "",
     parameters: [],
     outputs: [],
+    warmupPeriod: 0,
   };
 }
 
@@ -2490,6 +2545,9 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
     }
     for (const v of message.outputs) {
       FormulaOutput.encode(v!, writer.uint32(66).fork()).join();
+    }
+    if (message.warmupPeriod !== 0) {
+      writer.uint32(72).int32(message.warmupPeriod);
     }
     return writer;
   },
@@ -2568,6 +2626,14 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
           message.outputs.push(FormulaOutput.decode(reader, reader.uint32()));
           continue;
         }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.warmupPeriod = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2611,6 +2677,11 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
       outputs: globalThis.Array.isArray(object?.outputs)
         ? object.outputs.map((e: any) => FormulaOutput.fromJSON(e))
         : [],
+      warmupPeriod: isSet(object.warmupPeriod)
+        ? globalThis.Number(object.warmupPeriod)
+        : isSet(object.warmup_period)
+        ? globalThis.Number(object.warmup_period)
+        : 0,
     };
   },
 
@@ -2646,6 +2717,9 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
     if (message.outputs?.length) {
       obj.outputs = message.outputs.map((e) => FormulaOutput.toJSON(e));
     }
+    if (message.warmupPeriod !== 0) {
+      obj.warmupPeriod = Math.round(message.warmupPeriod);
+    }
     return obj;
   },
 
@@ -2670,6 +2744,7 @@ export const RegisterFormulaRequest: MessageFns<RegisterFormulaRequest> = {
     message.author = object.author ?? "";
     message.parameters = object.parameters?.map((e) => FormulaParameter.fromPartial(e)) || [];
     message.outputs = object.outputs?.map((e) => FormulaOutput.fromPartial(e)) || [];
+    message.warmupPeriod = object.warmupPeriod ?? 0;
     return message;
   },
 };
@@ -3098,6 +3173,7 @@ function createBaseUpdateFormulaRequest(): UpdateFormulaRequest {
     isPublic: false,
     parameters: [],
     outputs: [],
+    warmupPeriod: 0,
   };
 }
 
@@ -3126,6 +3202,9 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
     }
     for (const v of message.outputs) {
       FormulaOutput.encode(v!, writer.uint32(66).fork()).join();
+    }
+    if (message.warmupPeriod !== 0) {
+      writer.uint32(72).int32(message.warmupPeriod);
     }
     return writer;
   },
@@ -3201,6 +3280,14 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
           message.outputs.push(FormulaOutput.decode(reader, reader.uint32()));
           continue;
         }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.warmupPeriod = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3236,6 +3323,11 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
       outputs: globalThis.Array.isArray(object?.outputs)
         ? object.outputs.map((e: any) => FormulaOutput.fromJSON(e))
         : [],
+      warmupPeriod: isSet(object.warmupPeriod)
+        ? globalThis.Number(object.warmupPeriod)
+        : isSet(object.warmup_period)
+        ? globalThis.Number(object.warmup_period)
+        : 0,
     };
   },
 
@@ -3265,6 +3357,9 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
     if (message.outputs?.length) {
       obj.outputs = message.outputs.map((e) => FormulaOutput.toJSON(e));
     }
+    if (message.warmupPeriod !== 0) {
+      obj.warmupPeriod = Math.round(message.warmupPeriod);
+    }
     return obj;
   },
 
@@ -3281,6 +3376,7 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
     message.isPublic = object.isPublic ?? false;
     message.parameters = object.parameters?.map((e) => FormulaParameter.fromPartial(e)) || [];
     message.outputs = object.outputs?.map((e) => FormulaOutput.fromPartial(e)) || [];
+    message.warmupPeriod = object.warmupPeriod ?? 0;
     return message;
   },
 };
