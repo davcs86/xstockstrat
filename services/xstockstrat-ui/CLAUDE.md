@@ -142,7 +142,16 @@ OTel via `src/telemetry.ts`, gated by `OTEL_ENABLED`; init failures are warnings
 
 ## Testing
 
-Playwright E2E in `e2e/`, organized by segment (`e2e/{trader,insights,config-ui,accounts}/`,
+**Unit (vitest, feature 065).** A node-environment **logic** unit layer lives beside the code as
+`src/**/*.test.ts` (`vitest.config.ts`). Run `pnpm run test:unit` (or `test:unit:watch`) and
+`pnpm run test:coverage` (lcov + text; the `node-test` CI job runs this and uploads
+`coverage/lcov.info`). Coverage is scoped to `src/lib/**` with `coverage.all: false`, so the **40%**
+threshold applies only to files a unit test actually exercises (e.g. `src/lib/scoreDisplay.ts`) and
+grows as more unit tests are added — a whole-`src/lib` floor over the e2e-only codebase would be
+unearnable. **Component/jsdom testing is intentionally out of scope** for this seed; UI behavior is
+covered by the Playwright e2e suite below.
+
+**E2E (Playwright).** In `e2e/`, organized by segment (`e2e/{trader,insights,config-ui,accounts}/`,
 `e2e/auth.spec.ts`) against a mock gRPC backend (`e2e/mock-backend.ts`, `e2e/global-setup.ts`,
 `e2e/helpers/`). Run `pnpm test:e2e` (or `pnpm test:e2e:ui`).
 

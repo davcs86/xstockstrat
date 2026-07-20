@@ -344,6 +344,26 @@ export type StrategyScore = Message<"xstockstrat.analysis.v1.StrategyScore"> & {
      * @generated from field: string rating = 4;
      */
     rating: string;
+    /**
+     * Evidence provenance for the derived cross-stock headline grade (feature 065).
+     *
+     * distinct symbols contributing eligible evidence cells
+     *
+     * @generated from field: int32 evidence_symbols = 5;
+     */
+    evidenceSymbols: number;
+    /**
+     * total trading days of evidence across those symbols
+     *
+     * @generated from field: int32 evidence_days = 6;
+     */
+    evidenceDays: number;
+    /**
+     * true when evidence is below the symbol/day floor
+     *
+     * @generated from field: bool provisional = 7;
+     */
+    provisional: boolean;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyScore.
@@ -460,6 +480,16 @@ export type BacktestRunSummary = Message<"xstockstrat.analysis.v1.BacktestRunSum
      * @generated from field: google.protobuf.Timestamp completed_at = 14;
      */
     completedAt?: Timestamp | undefined;
+    /**
+     * Backtest range covered by this run (feature 065); unset on legacy rows.
+     *
+     * @generated from field: google.protobuf.Timestamp range_start = 15;
+     */
+    rangeStart?: Timestamp | undefined;
+    /**
+     * @generated from field: google.protobuf.Timestamp range_end = 16;
+     */
+    rangeEnd?: Timestamp | undefined;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.BacktestRunSummary.

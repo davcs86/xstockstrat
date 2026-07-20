@@ -460,9 +460,7 @@ async def test_run_backtest_projects_full_result_with_diagnostics():
         patch.object(client.grpc.aio, "insecure_channel", return_value=_Chan()),
         patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=stub),
     ):
-        out = await client.run_backtest(
-            strategy_id="s", symbols=["AAPL"], initial_capital=100000.0
-        )
+        out = await client.run_backtest(strategy_id="s", symbols=["AAPL"], initial_capital=100000.0)
 
     assert out["backtest_id"] == "bt-9"
     # zero-valued metrics stay present (the "0 trades / 0% return" debugging case)
@@ -474,3 +472,37 @@ async def test_run_backtest_projects_full_result_with_diagnostics():
     assert diag["no_trade_reason"] == "NO_TRADE_REASON_ENTRY_NEVER_TRUE"
     assert diag["bars"][0]["action"] == "BAR_ACTION_WARMUP"
     assert diag["bars"][0]["bar_index"] == 0
+
+
+@pytest.mark.asyncio
+async def test_run_backtest_sends_strategy_id_ref_for_registered_definition():
+    """feature 065: agent-triggered runs must execute the REGISTERED definition, so the client
+    sends strategy_id_ref == strategy_id (earning fingerprinted evidence for the headline grade).
+    Unregistered ids now surface NOT_FOUND instead of silently running a legacy SMA backtest.
+
+    Asserted at the stub-capture level (the constructed RunBacktestRequest) — NOT in
+    test_run_backtest_calls_grpc, which mocks client.run_backtest wholesale so no request object
+    is ever constructed there.
+    """
+    from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc
+
+    class _Chan:
+        async def __aenter__(self):
+            return MagicMock()
+
+        async def __aexit__(self, *a):
+            return False
+
+    stub = MagicMock()
+    stub.RunBacktest = AsyncMock(
+        return_value=analysis_pb2.BacktestResult(backtest_id="bt-1", strategy_id="sma")
+    )
+    with (
+        patch.object(client.grpc.aio, "insecure_channel", return_value=_Chan()),
+        patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=stub),
+    ):
+        await client.run_backtest(strategy_id="sma", symbols=["AAPL"], initial_capital=100000.0)
+
+    sent = stub.RunBacktest.call_args.args[0]
+    assert sent.strategy_id == "sma"
+    assert sent.strategy_id_ref == "sma"

@@ -13,9 +13,11 @@ import {
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/components/ui/utils';
 import { ConnectError } from '@connectrpc/connect';
+import { formatSymbolYears, isNotFoundError } from '@/lib/scoreDisplay';
 import { useStrategyReport, useBacktestHistory } from '@/hooks/useStrategies';
 import { useRunBacktest, useTriggerBackfill } from '@/hooks/useBacktest';
 import { useGetStrategy, useSetStrategyLiveInsights } from '@/hooks/useStrategyDefinitions';
@@ -42,7 +44,7 @@ interface BacktestFormState {
 export default function StrategyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const queryClient = useQueryClient();
-  const { data: report, isLoading } = useStrategyReport(id);
+  const { data: report, isLoading, error: reportError } = useStrategyReport(id);
   const { data: history } = useBacktestHistory(id);
   const { data: isAdmin } = useIsAdmin();
   const { data: definition } = useGetStrategy(id);
@@ -80,6 +82,9 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
     runBacktestMutate(
       {
         strategyId: id,
+        // feature 065: run the strategy's registered definition so the run earns fingerprinted
+        // evidence toward the derived headline grade (parity with the agent caller).
+        strategyIdRef: id,
         symbols: form.symbol ? [form.symbol] : [],
         initialCapital: parseFloat(form.initial_capital),
         range: { start: isoToTimestamp(form.start), end: isoToTimestamp(form.end) },
@@ -97,6 +102,9 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
 
   const result = backtestResult ?? report?.latestBacktest;
   const pastRuns = history?.runs ?? [];
+  // feature 065: the derived grade is cleared (NOT_FOUND) or absent for an unscored strategy — the
+  // backtest form + Past Runs stay rendered so the user can earn evidence.
+  const gradeCleared = isNotFoundError(reportError) || (!!report && !report.score);
 
   const equityCurve = (() => {
     if (!result?.trades?.length) return [];
@@ -117,19 +125,26 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
         <div className="flex flex-col lg:flex-row gap-4">
           {/* Left sidebar: score + backtest runner */}
           <div className="w-full lg:w-80 shrink-0 space-y-4">
-            {/* Score card */}
-            {report?.score && (
+            {/* Strategy Grade card (feature 065) — derived from cross-stock evidence, distinct
+                from a single run's "Run score" in the Past Runs table below. */}
+            {report?.score ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>Strategy Score</CardTitle>
+                  <CardTitle>Strategy Grade</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-3 mb-4">
+                  <div className="flex items-center gap-3 mb-2">
                     <span className="text-4xl font-bold text-buy">{report.score.rating}</span>
                     <span className="text-2xl text-muted-foreground tabular-nums">
                       {(report.score.overallScore * 100).toFixed(0)}%
                     </span>
+                    {report.score.provisional && <Badge variant="secondary">Provisional</Badge>}
                   </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Derived from {report.score.evidenceSymbols} symbols ·{' '}
+                    {formatSymbolYears(report.score.evidenceDays)} — individual runs are graded
+                    separately
+                  </p>
                   <div className="space-y-1.5">
                     {Object.entries(
                       (report.score.componentScores ?? {}) as Record<string, number>,
@@ -144,7 +159,18 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                   </div>
                 </CardContent>
               </Card>
-            )}
+            ) : gradeCleared ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Strategy Grade</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    Not scored yet — run a backtest to earn evidence.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : null}
 
             {/* Live evaluation toggle */}
             {definition && (
@@ -392,10 +418,11 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                         <tr className="text-left text-xs text-muted-foreground">
                           <th className="py-1.5 pr-3 font-medium">When</th>
                           <th className="py-1.5 pr-3 font-medium">Symbols</th>
+                          <th className="py-1.5 pr-3 font-medium">Range</th>
                           <th className="py-1.5 pr-3 font-medium text-right">Return</th>
                           <th className="py-1.5 pr-3 font-medium text-right">Sharpe</th>
                           <th className="py-1.5 pr-3 font-medium text-right">Trades</th>
-                          <th className="py-1.5 font-medium text-right">Score</th>
+                          <th className="py-1.5 font-medium text-right">Run score</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -408,6 +435,16 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                             </td>
                             <td className="py-1.5 pr-3 font-mono text-xs">
                               {run.symbols.join(', ') || '—'}
+                            </td>
+                            {/* feature 065: the range each run covered; legacy rows have none. */}
+                            <td className="py-1.5 pr-3 text-xs text-muted-foreground whitespace-nowrap">
+                              {run.rangeStart && run.rangeEnd
+                                ? `${new Date(Number(run.rangeStart.seconds) * 1000)
+                                    .toISOString()
+                                    .slice(0, 10)}–${new Date(Number(run.rangeEnd.seconds) * 1000)
+                                    .toISOString()
+                                    .slice(0, 10)}`
+                                : '—'}
                             </td>
                             <td
                               className={cn(

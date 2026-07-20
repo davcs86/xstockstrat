@@ -35,25 +35,46 @@ class StrategyScoresRepository:
         overall_score: float,
         rating: str,
         component_scores: dict,
+        n_symbols: int = 0,
+        total_trading_days: int = 0,
+        provisional: bool = False,
     ) -> dict:
         row = await self._db.fetchrow(
             """
             INSERT INTO analysis.strategy_scores
-                (strategy_id, overall_score, rating, component_scores)
-            VALUES ($1, $2, $3, $4::jsonb)
+                (strategy_id, overall_score, rating, component_scores,
+                 n_symbols, total_trading_days, provisional)
+            VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)
             ON CONFLICT (strategy_id) DO UPDATE SET
-                overall_score    = EXCLUDED.overall_score,
-                rating           = EXCLUDED.rating,
-                component_scores = EXCLUDED.component_scores,
-                updated_at       = NOW()
+                overall_score      = EXCLUDED.overall_score,
+                rating             = EXCLUDED.rating,
+                component_scores   = EXCLUDED.component_scores,
+                n_symbols          = EXCLUDED.n_symbols,
+                total_trading_days = EXCLUDED.total_trading_days,
+                provisional        = EXCLUDED.provisional,
+                updated_at         = NOW()
             RETURNING *
             """,
             strategy_id,
             overall_score,
             rating,
             json.dumps(dict(component_scores) if component_scores else {}),
+            n_symbols,
+            total_trading_days,
+            provisional,
         )
         return _to_dict(row)
+
+    async def delete(self, strategy_id: str) -> None:
+        """Remove a strategy's materialized score (feature 065 — clear a stale grade).
+
+        Used when a recompute finds zero eligible evidence (e.g. after a definition change),
+        so a broad old grade never lingers past the change that invalidated its evidence base.
+        """
+        await self._db.execute(
+            "DELETE FROM analysis.strategy_scores WHERE strategy_id = $1",
+            strategy_id,
+        )
 
     async def get_by_id(self, strategy_id: str) -> dict | None:
         row = await self._db.fetchrow(
