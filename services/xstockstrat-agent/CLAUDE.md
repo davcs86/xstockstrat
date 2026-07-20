@@ -19,7 +19,7 @@ Python 3.12 (asyncio, grpc.aio, FastMCP)
 
 ## MCP Tools
 
-The agent registers eleven tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers thirteen tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -35,11 +35,13 @@ reference):
 | `manage_formula` | Register/update/delete custom formulas |
 | `manage_signal_source` | Register/update/deactivate signal sources |
 | `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (feature 048) |
+| `trigger_backfill` | Trigger an OHLCV history backfill via xstockstrat-ingest (admin-scoped write, feature 066) |
+| `get_backfill_status` | Check one backfill job or list recent jobs (read-only, feature 066) |
 
 ### Management-tool authorization
 
 The management tools (`manage_strategy`, `manage_formula`, `manage_signal_source`,
-`set_strategy_live`) forward a hardcoded admin `x-access-scope` on their backend gRPC calls.
+`set_strategy_live`, `trigger_backfill`) forward a hardcoded admin `x-access-scope` on their backend gRPC calls.
 Internal services (e.g. `xstockstrat-analysis` `SetStrategyLive`) only perform a role check on the
 propagated `x-access-scope`; `manage_formula` additionally relies on the indicators backend's
 author-ownership check. The MCP endpoint itself is gated by OAuth 2.1 (see below).

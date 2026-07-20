@@ -269,3 +269,200 @@ class TestSetStrategyLiveClient:
         assert ("x-access-scope", "7") in meta
         assert not any(k == "authorization" for k, _ in meta)
         assert result["live_enabled"] is True
+
+
+# ── backfill client (feature 066) ──────────────────────────────────────────
+
+
+class TestTriggerBackfillClient:
+    def _run(self, mock_stub, **kwargs):
+        from gen.ingest.v1 import ingest_pb2_grpc  # type: ignore
+
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                return mock_grpc, client.trigger_backfill(**kwargs)
+
+    @pytest.mark.asyncio
+    async def test_trigger_sends_admin_scope_and_returns_envelope(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        resp = ingest_pb2.TriggerBackfillResponse(
+            job_id="j-1", status=ingest_pb2.BACKFILL_STATUS_QUEUED
+        )
+        mock_stub = MagicMock()
+        mock_stub.TriggerBackfill = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                result = await client.trigger_backfill(symbols=["AAPL"], timeframe="1d")
+        assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.INGEST_ENDPOINT
+        meta = mock_stub.TriggerBackfill.call_args.kwargs["metadata"]
+        assert ("x-mcp-secret", "test-secret") in meta
+        assert ("x-access-scope", "7") in meta
+        assert result == {"job_id": "j-1", "status": "BACKFILL_STATUS_QUEUED"}
+
+    @pytest.mark.asyncio
+    async def test_trigger_request_field_mapping_dual_field_and_alias(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.TriggerBackfill = AsyncMock(
+            return_value=ingest_pb2.TriggerBackfillResponse(job_id="j")
+        )
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                await client.trigger_backfill(
+                    symbols=["AAPL", "MSFT"], timeframe="1Day", overwrite=True
+                )
+        sent_req = mock_stub.TriggerBackfill.call_args[0][0]
+        assert list(sent_req.symbols) == ["AAPL", "MSFT"]
+        # Alias canonicalized + dual-field send (deprecated string AND enum, FR-2).
+        assert sent_req.timeframe == "1d"
+        assert sent_req.timeframe_enum == 4  # TIMEFRAME_1DAY
+        assert sent_req.overwrite is True
+        assert sent_req.fill_mode == 0  # omitted → UNSPECIFIED (server FULL)
+
+    @pytest.mark.asyncio
+    async def test_trigger_fill_mode_gaps_only(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.TriggerBackfill = AsyncMock(
+            return_value=ingest_pb2.TriggerBackfillResponse(job_id="j")
+        )
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                await client.trigger_backfill(symbols=["AAPL"], fill_mode="gaps_only")
+        assert mock_stub.TriggerBackfill.call_args[0][0].fill_mode == 2
+
+    @pytest.mark.asyncio
+    async def test_trigger_range_omitted_one_sided_and_both(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.TriggerBackfill = AsyncMock(
+            return_value=ingest_pb2.TriggerBackfillResponse(job_id="j")
+        )
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                await client.trigger_backfill(symbols=["AAPL"])
+                no_range = mock_stub.TriggerBackfill.call_args[0][0]
+                await client.trigger_backfill(symbols=["AAPL"], start="2025-01-01T00:00:00Z")
+                start_only = mock_stub.TriggerBackfill.call_args[0][0]
+                await client.trigger_backfill(
+                    symbols=["AAPL"],
+                    start="2025-01-01T00:00:00Z",
+                    end="2025-06-30T00:00:00Z",
+                )
+                both = mock_stub.TriggerBackfill.call_args[0][0]
+        assert no_range.HasField("range") is False
+        assert start_only.range.start.seconds > 0
+        assert start_only.range.end.seconds == 0
+        assert both.range.start.seconds > 0
+        assert both.range.end.seconds > both.range.start.seconds
+
+    @pytest.mark.asyncio
+    async def test_trigger_validation_valueerrors(self):
+        with pytest.raises(ValueError, match="non-empty"):
+            await client.trigger_backfill(symbols=[])
+        with pytest.raises(ValueError, match="max 50"):
+            await client.trigger_backfill(symbols=[f"S{i}" for i in range(51)])
+        with pytest.raises(ValueError, match="15m/15Min/1h/1Hour/1d/1Day"):
+            await client.trigger_backfill(symbols=["AAPL"], timeframe="1w")
+        with pytest.raises(ValueError, match="full/gaps_only"):
+            await client.trigger_backfill(symbols=["AAPL"], fill_mode="everything")
+        with pytest.raises(ValueError, match="start"):
+            await client.trigger_backfill(
+                symbols=["AAPL"],
+                start="2025-06-30T00:00:00Z",
+                end="2025-01-01T00:00:00Z",
+            )
+
+
+class TestGetBackfillStatusClient:
+    @pytest.mark.asyncio
+    async def test_single_job_branch_read_only_metadata_and_envelope(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        job = ingest_pb2.BackfillJob(
+            job_id="j-1",
+            symbols=["AAPL"],
+            status=ingest_pb2.BACKFILL_STATUS_RUNNING,
+            bars_processed=0,
+            bars_total=500,
+        )
+        mock_stub = MagicMock()
+        mock_stub.GetBackfillStatus = AsyncMock(return_value=job)
+        mock_stub.ListBackfillJobs = AsyncMock()
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                result = await client.get_backfill_status(job_id="j-1")
+        assert mock_stub.GetBackfillStatus.called
+        assert not mock_stub.ListBackfillJobs.called
+        meta = mock_stub.GetBackfillStatus.call_args.kwargs["metadata"]
+        assert ("x-mcp-secret", "test-secret") in meta
+        assert not any(k == "x-access-scope" for k, _ in meta)
+        # {"job": ...} envelope, snake_case keys, zero-valued fields visible while polling.
+        # (int64 proto fields serialize as strings — same as run_backtest's output.)
+        assert result["job"]["job_id"] == "j-1"
+        assert result["job"]["status"] == "BACKFILL_STATUS_RUNNING"
+        assert result["job"]["bars_processed"] == "0"
+
+    @pytest.mark.asyncio
+    async def test_not_found_propagates_as_aio_rpc_error(self):
+        import grpc  # noqa: PLC0415
+        from gen.ingest.v1 import ingest_pb2_grpc  # type: ignore
+        from grpc.aio import AioRpcError, Metadata  # noqa: PLC0415
+
+        err = AioRpcError(grpc.StatusCode.NOT_FOUND, Metadata(), Metadata(), details="nope")
+        mock_stub = MagicMock()
+        mock_stub.GetBackfillStatus = AsyncMock(side_effect=err)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                with pytest.raises(AioRpcError):
+                    await client.get_backfill_status(job_id="missing")
+
+    @pytest.mark.asyncio
+    async def test_list_branch_filters_pagination_and_envelope(self):
+        from gen.common.v1 import common_pb2  # type: ignore
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        resp = ingest_pb2.ListBackfillJobsResponse(
+            jobs=[ingest_pb2.BackfillJob(job_id="j-2", status=3)],
+            page=common_pb2.PageResponse(next_page_token="20"),
+        )
+        mock_stub = MagicMock()
+        mock_stub.ListBackfillJobs = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                result = await client.get_backfill_status(
+                    status_filter="completed", symbol="AAPL", limit=5, page_token="10"
+                )
+        sent_req = mock_stub.ListBackfillJobs.call_args[0][0]
+        assert sent_req.status_filter == 3  # BACKFILL_STATUS_COMPLETED
+        assert sent_req.symbol == "AAPL"
+        assert sent_req.page.page_size == 5
+        assert sent_req.page.page_token == "10"
+        assert result["jobs"][0]["job_id"] == "j-2"
+        assert result["next_page_token"] == "20"
+
+    @pytest.mark.asyncio
+    async def test_list_branch_unspecified_filter_and_bad_filter(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.ListBackfillJobs = AsyncMock(return_value=ingest_pb2.ListBackfillJobsResponse())
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                await client.get_backfill_status(status_filter="unspecified")
+        assert mock_stub.ListBackfillJobs.call_args[0][0].status_filter == 0
+        with pytest.raises(ValueError, match="queued/running/completed/failed/partial/canceled"):
+            await client.get_backfill_status(status_filter="bogus")

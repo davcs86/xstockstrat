@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the eleven tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the thirteen tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -26,7 +26,7 @@ directly on port 9000.
 
 **Direct SSE (local):** `http://localhost:9000/sse`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same eleven tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same thirteen tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -397,6 +397,71 @@ Registers, updates, or deactivates a signal source in `xstockstrat-ingest`.
 | Invalid source fields | `invalid argument` (INVALID_ARGUMENT) |
 | `deactivate` on unknown source | `signal source not found` (NOT_FOUND) |
 | `credentials_ref` exposure | **Never** — `credentials_ref` is intentionally omitted from the return and never exposed to Claude (FR-12) |
+
+---
+
+### `trigger_backfill`
+
+Triggers a historical OHLCV backfill via `xstockstrat-ingest` `TriggerBackfill` (feature 066).
+**Write/management op** — sends `x-mcp-secret` **and** the hardcoded admin `x-access-scope`.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `symbols` | `string[]` | Yes | Explicit ticker list, e.g. `["AAPL", "MSFT"]`; max 50 per call |
+| `timeframe` | `string` | No | `"1d"` default; accepts `15m`/`15Min`/`1h`/`1Hour`/`1d`/`1Day` (canonicalized) |
+| `start` / `end` | `string` (ISO 8601) | No | Optional range bounds; one-sided allowed; both omitted = service default range |
+| `overwrite` | `bool` | No | `false` default; `true` re-fetches bars that already exist |
+| `fill_mode` | `string` | No | `"full"` \| `"gaps_only"`; omitted → server default FULL (`gaps_only` fetches only missing ranges) |
+
+**Return**
+
+```json
+{ "job_id": "…", "status": "BACKFILL_STATUS_QUEUED" }
+```
+
+**Errors**
+
+| Condition | Error |
+|---|---|
+| Empty/oversized `symbols`, bad `timeframe`/`fill_mode`, `start` after `end` | tool `ValueError` **before** any RPC |
+| Bad symbols / provider failures | **No synchronous error** — ingest queues unconditionally; surfaces as a terminal `FAILED`/`PARTIAL` job via `get_backfill_status` |
+| Ingest unreachable | gRPC error propagated |
+
+---
+
+### `get_backfill_status`
+
+Checks one backfill job or lists recent jobs via ingest `GetBackfillStatus` / `ListBackfillJobs`.
+**Read-only** — sends `x-mcp-secret` only, no admin scope.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `job_id` | `string` | No | When set → single-job mode; empty → list mode |
+| `status_filter` | `string` | No | List mode: `queued`/`running`/`completed`/`failed`/`partial`/`canceled`; omit or `unspecified` = all |
+| `symbol` | `string` | No | List mode: optional ticker filter |
+| `limit` | `int` | No | List mode page size; `0` ⇒ server default (100) |
+| `page_token` | `string` | No | Pass the previous response's `next_page_token` to paginate |
+
+**Return**
+
+```json
+{ "job": { "status": "…", "bars_processed": "…", "bars_total": "…", "chunks_completed": 0, "chunks_total": 0, "failed_symbols": [], "error": "" } }
+```
+or, in list mode:
+```json
+{ "jobs": [ … ], "next_page_token": "…" }
+```
+
+**Errors**
+
+| Condition | Error |
+|---|---|
+| Unknown `job_id` | `backfill job not found` (NOT_FOUND) |
+| Unknown `status_filter` | tool `ValueError` enumerating accepted values |
 
 ---
 

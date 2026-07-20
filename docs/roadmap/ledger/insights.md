@@ -92,3 +92,19 @@ reusing.
   `src/lib/scoreDisplay.test.ts`; `.github/workflows/ci.yml` `node-test` matrix (feature 065 step 13).
 - **Rule it implies**: when adding coverage gates to a codebase with large untested surface, gate on
   tested files, not the whole tree — a floor you can't reach on day one gets disabled, not met.
+
+### 2026-07-20 — trigger-backfill-mcp-tool — design
+- **Pattern**: A new MCP agent tool has **five** discovery/documentation surfaces, not one: the
+  `app/tools.py` module-docstring tool count + enumeration, the agent `CLAUDE.md` tool table, the
+  `docs/runbooks/mcp-tools.md` reference (header count + per-tool section), the
+  `docs/runbooks/CLAUDE.md` index line, and any **operational runbook** that documents how to do
+  the underlying task (e.g. `historical-backfill.md` for a backfill tool). Recon found four; the
+  adversarial round caught the fifth — the operational runbook is the surface that makes the
+  capability *findable* by an operator solving a problem. The `/api/tools` catalog itself is
+  automatic (FastMCP registration), but its name-set test is the built-in reachability proof.
+- **Evidence**: feature 066 design.md § Chosen Approach (Docs — five surfaces); adversary round-1
+  C-10(a) finding; `services/xstockstrat-agent/app/main.py:180` (auto catalog);
+  `tests/test_tools_endpoint.py:23-35` (name-set test).
+- **Rule it implies**: C-10(a) applies to tool/CLI/API additions, not just UI routes — enumerate
+  the discovery surfaces (including task-oriented runbooks) at recon time and prove the shared one
+  with a test.
