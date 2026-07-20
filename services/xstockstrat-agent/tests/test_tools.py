@@ -152,9 +152,7 @@ async def test_extract_website_content_sends_request_headers():
             "has_credentials": False,
         },
     ]
-    with patch.object(
-        client, "list_signal_sources", AsyncMock(return_value=sources_with_headers)
-    ):
+    with patch.object(client, "list_signal_sources", AsyncMock(return_value=sources_with_headers)):
         with respx.mock(base_url="https://example.com") as site_mock:
             route = site_mock.get("/").mock(
                 return_value=httpx.Response(200, text="<entry>8-K</entry>")
