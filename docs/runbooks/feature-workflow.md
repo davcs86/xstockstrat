@@ -5,6 +5,12 @@
 This runbook defines the canonical lifecycle for developing, testing, integrating, and
 deploying new features across the xstockstrat platform.
 
+**Before step 1 below:** every feature request runs the SDD pipeline first, at minimum
+`/sdd-story` → `/sdd-design <slug> quick` → a ledger touch, regardless of how the request arrives
+(issue, chat message, or a direct task instruction) — see root `CLAUDE.md` § Feature Roadmap
+"Mandatory Entry Point" and Constitution **C-11** (`docs/sdd/constitution.md`). Confirmed bug
+fixes use `docs/runbooks/bug-triage.md` instead.
+
 **Key invariants enforced at the infrastructure level:**
 
 | Environment | Branch  | Trading mode | Alpaca endpoint              |
@@ -81,6 +87,25 @@ The `CI / Proto lint and breaking check` check is produced by `.github/workflows
 until this check passes** — `buf lint` and `buf breaking` failures block the merge button.
 
 ---
+
+## Feature Numbering
+
+Feature directories are `docs/roadmap/features/NNN-<slug>/`, where `NNN` is a zero-padded ordinal.
+
+- **Next number = `max(existing NNN) + 1`.** Compute it from the highest existing prefix, never from a
+  directory *count* (a count collides the moment a gap exists). `/sdd-story` does this automatically and
+  aborts if the computed directory already exists.
+- **Never reuse a number and never backfill a gap.** If a feature is deleted, its number stays retired.
+- **Numbers are immutable once `launched`.** Before that, a number may be changed only to resolve a
+  collision.
+- **Collision resolution.** If two `/sdd-story` runs race and produce the same `NNN`, renumber the later
+  one to the next free number with `git mv`, then update: the moved dir's own `**Feature**`/`**Product
+  Spec**`/`**Implementation Spec**` path lines and any self-referential `NNN` in its `context.md`;
+  `CHANGELOG.md` and `merge-order.md` only if they cite the moved feature by number (both key off the
+  slug, so usually no change). Branches use the slug, so no branch rename is needed.
+
+The historical `020-`/`052-` duplicates were resolved this way (`order-snapshots-pnl-patterns` → `042`,
+`formula-parameters` → `058`).
 
 ## Step-by-step Lifecycle
 

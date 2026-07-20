@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import type { TradingMode } from '@/app/trader/page';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePlaceOrder } from '@/hooks/usePlaceOrder';
@@ -37,7 +38,15 @@ interface OrderFormProps {
 
 export function OrderForm({ mode }: OrderFormProps) {
   const { selectedAccountId } = useAccountContext();
-  const [symbol, setSymbol] = useState('');
+  // Quick-trade deep link: the positions table links here as /trader?symbol=SYM so the
+  // ticket opens pre-filled. Seed the initial value from the param, then keep it in sync
+  // if the param changes (without clobbering what the user types once it's empty).
+  const searchParams = useSearchParams();
+  const prefillSymbol = (searchParams.get('symbol') ?? '').toUpperCase();
+  const [symbol, setSymbol] = useState(prefillSymbol);
+  useEffect(() => {
+    if (prefillSymbol) setSymbol(prefillSymbol);
+  }, [prefillSymbol]);
   const [side, setSide] = useState<OrderSide>('buy');
   const [orderType, setOrderType] = useState<OrderType>('market');
   const [qty, setQty] = useState('');

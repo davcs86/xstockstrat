@@ -313,7 +313,9 @@ func TestGetPositions_Alpaca_BrokerValuation(t *testing.T) {
 			"current_price": "200.00",
 			"market_value": "400.00",
 			"unrealized_pl": "-262.39",
-			"unrealized_plpc": "-0.396"
+			"unrealized_plpc": "-0.396",
+			"unrealized_intraday_pl": "12.50",
+			"unrealized_intraday_plpc": "0.032"
 		}]`))
 	})
 	srv := httptest.NewServer(mux)
@@ -345,6 +347,12 @@ func TestGetPositions_Alpaca_BrokerValuation(t *testing.T) {
 	}
 	if p.UnrealizedPnlPct != -0.396 {
 		t.Errorf("UnrealizedPnlPct: got %v, want -0.396", p.UnrealizedPnlPct)
+	}
+	if p.DayPnl != 12.50 {
+		t.Errorf("DayPnl: got %v, want 12.50", p.DayPnl)
+	}
+	if p.DayPnlPct != 0.032 {
+		t.Errorf("DayPnlPct: got %v, want 0.032", p.DayPnlPct)
 	}
 }
 

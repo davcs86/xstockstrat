@@ -54,26 +54,6 @@ class IdentityServiceStub(object):
                 request_serializer=identity_dot_v1_dot_identity__pb2.RevokeTokenRequest.SerializeToString,
                 response_deserializer=identity_dot_v1_dot_identity__pb2.RevokeTokenResponse.FromString,
                 _registered_method=True)
-        self.CreateApiKey = channel.unary_unary(
-                '/xstockstrat.identity.v1.IdentityService/CreateApiKey',
-                request_serializer=identity_dot_v1_dot_identity__pb2.CreateApiKeyRequest.SerializeToString,
-                response_deserializer=identity_dot_v1_dot_identity__pb2.ApiKey.FromString,
-                _registered_method=True)
-        self.ValidateApiKey = channel.unary_unary(
-                '/xstockstrat.identity.v1.IdentityService/ValidateApiKey',
-                request_serializer=identity_dot_v1_dot_identity__pb2.ValidateApiKeyRequest.SerializeToString,
-                response_deserializer=identity_dot_v1_dot_identity__pb2.TokenClaims.FromString,
-                _registered_method=True)
-        self.ListApiKeys = channel.unary_unary(
-                '/xstockstrat.identity.v1.IdentityService/ListApiKeys',
-                request_serializer=identity_dot_v1_dot_identity__pb2.ListApiKeysRequest.SerializeToString,
-                response_deserializer=identity_dot_v1_dot_identity__pb2.ListApiKeysResponse.FromString,
-                _registered_method=True)
-        self.RevokeApiKey = channel.unary_unary(
-                '/xstockstrat.identity.v1.IdentityService/RevokeApiKey',
-                request_serializer=identity_dot_v1_dot_identity__pb2.RevokeApiKeyRequest.SerializeToString,
-                response_deserializer=identity_dot_v1_dot_identity__pb2.RevokeApiKeyResponse.FromString,
-                _registered_method=True)
         self.RegisterOAuthClient = channel.unary_unary(
                 '/xstockstrat.identity.v1.IdentityService/RegisterOAuthClient',
                 request_serializer=identity_dot_v1_dot_identity__pb2.RegisterOAuthClientRequest.SerializeToString,
@@ -133,30 +113,6 @@ class IdentityServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def RevokeToken(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def CreateApiKey(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ValidateApiKey(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ListApiKeys(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def RevokeApiKey(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -230,26 +186,6 @@ def add_IdentityServiceServicer_to_server(servicer, server):
                     servicer.RevokeToken,
                     request_deserializer=identity_dot_v1_dot_identity__pb2.RevokeTokenRequest.FromString,
                     response_serializer=identity_dot_v1_dot_identity__pb2.RevokeTokenResponse.SerializeToString,
-            ),
-            'CreateApiKey': grpc.unary_unary_rpc_method_handler(
-                    servicer.CreateApiKey,
-                    request_deserializer=identity_dot_v1_dot_identity__pb2.CreateApiKeyRequest.FromString,
-                    response_serializer=identity_dot_v1_dot_identity__pb2.ApiKey.SerializeToString,
-            ),
-            'ValidateApiKey': grpc.unary_unary_rpc_method_handler(
-                    servicer.ValidateApiKey,
-                    request_deserializer=identity_dot_v1_dot_identity__pb2.ValidateApiKeyRequest.FromString,
-                    response_serializer=identity_dot_v1_dot_identity__pb2.TokenClaims.SerializeToString,
-            ),
-            'ListApiKeys': grpc.unary_unary_rpc_method_handler(
-                    servicer.ListApiKeys,
-                    request_deserializer=identity_dot_v1_dot_identity__pb2.ListApiKeysRequest.FromString,
-                    response_serializer=identity_dot_v1_dot_identity__pb2.ListApiKeysResponse.SerializeToString,
-            ),
-            'RevokeApiKey': grpc.unary_unary_rpc_method_handler(
-                    servicer.RevokeApiKey,
-                    request_deserializer=identity_dot_v1_dot_identity__pb2.RevokeApiKeyRequest.FromString,
-                    response_serializer=identity_dot_v1_dot_identity__pb2.RevokeApiKeyResponse.SerializeToString,
             ),
             'RegisterOAuthClient': grpc.unary_unary_rpc_method_handler(
                     servicer.RegisterOAuthClient,
@@ -395,114 +331,6 @@ class IdentityService(object):
             '/xstockstrat.identity.v1.IdentityService/RevokeToken',
             identity_dot_v1_dot_identity__pb2.RevokeTokenRequest.SerializeToString,
             identity_dot_v1_dot_identity__pb2.RevokeTokenResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def CreateApiKey(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/xstockstrat.identity.v1.IdentityService/CreateApiKey',
-            identity_dot_v1_dot_identity__pb2.CreateApiKeyRequest.SerializeToString,
-            identity_dot_v1_dot_identity__pb2.ApiKey.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def ValidateApiKey(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/xstockstrat.identity.v1.IdentityService/ValidateApiKey',
-            identity_dot_v1_dot_identity__pb2.ValidateApiKeyRequest.SerializeToString,
-            identity_dot_v1_dot_identity__pb2.TokenClaims.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def ListApiKeys(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/xstockstrat.identity.v1.IdentityService/ListApiKeys',
-            identity_dot_v1_dot_identity__pb2.ListApiKeysRequest.SerializeToString,
-            identity_dot_v1_dot_identity__pb2.ListApiKeysResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def RevokeApiKey(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/xstockstrat.identity.v1.IdentityService/RevokeApiKey',
-            identity_dot_v1_dot_identity__pb2.RevokeApiKeyRequest.SerializeToString,
-            identity_dot_v1_dot_identity__pb2.RevokeApiKeyResponse.FromString,
             options,
             channel_credentials,
             insecure,

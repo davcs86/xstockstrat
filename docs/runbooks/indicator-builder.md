@@ -287,3 +287,43 @@ Register a strategy via the `manage_strategy` MCP tool (admin-scoped) or the `Ma
 on `xstockstrat-analysis`. The shared evaluator lives at
 `services/xstockstrat-analysis/app/services/evaluator.py` and is reused by both `RunBacktest`
 (feature 047) and the live strategy→alert runtime (feature 048), guaranteeing backtest/live parity.
+
+---
+
+## Default fundamentals "Value+Quality" formula (seeded)
+
+Feature 063 ships a built-in **public** scoring formula, seeded idempotently at indicators
+startup (`app/services/seed_formulas.py`, defined in `app/formulas/fundamentals_value_quality.py`).
+It is a pure per-symbol function of a symbol's fundamentals — the screener (060) and the
+fundamentals-signal producer (062) consume its `composite` score.
+
+- **Well-known `FORMULA_ID`**: `d1ff5e6b-6d9c-589d-b95e-defd862c702b`
+  (UUIDv5 of `xstockstrat:formula:fundamentals-value-quality-v1`). Stable across restarts/deploys —
+  062 references it as `analysis.fundsignal.scoring_formula_id` (062-owned).
+- **Inputs**: the symbol's fundamentals arrive in `input_data` (`pe_ratio`, `pb_ratio`,
+  `dividend_yield`, `roe`, `debt_to_equity`, `eps`, …). Tunables arrive in `input_params`.
+- **Outputs**: `value` (implicit primary), `quality`, `composite` — each in `[0,1]`.
+
+### Default band table (FR-4)
+
+| Metric | Param(s) | Mapping |
+|---|---|---|
+| P/E | `pe_good=10`, `pe_bad=35` | lower-is-better linear band; **P/E ≤ 0 → 0** |
+| P/B | `pb_good=1.0`, `pb_bad=5.0` | lower-is-better linear band; **negative book → 0** |
+| Dividend yield | `div_peak=0.04`, `div_zero_hi=0.10` | **triangular**: 0 at 0%, 1 at peak, 0 at/above `div_zero_hi` (yield-trap guard) |
+| ROE | `roe_good=0.25`, `roe_bad=0.05` | higher-is-better linear band (capped at good) |
+| D/E | `de_good=0.3`, `de_bad=2.0` | lower-is-better linear band; **negative equity → 0** |
+| EPS | — | binary: EPS > 0 → 1 else 0 |
+| Weights | `value_weight=0.5`, `quality_weight=0.5` | `composite = value_weight·value + quality_weight·quality` |
+
+`value` = average of available P/E, P/B, dividend scores; `quality` = average of available ROE, D/E,
+EPS scores. A **missing metric drops out** of its sub-average rather than zeroing it; a sub-score with
+no contributing metrics is a neutral `0.5` (FR-5).
+
+### Retuning without a deploy
+
+The band endpoints and weights are tunable **formula params**, so a caller can override them per call
+via `ExecuteFormulaRequest.input_params` — no service code change (FR-6). To change the shipped
+defaults platform-wide, edit the constants in `app/formulas/fundamentals_value_quality.py` and redeploy;
+the idempotent seed upserts the new source/params under the same well-known id on startup. `beta` and
+`market_cap` are deliberately excluded from the composite (reserved for risk/size factors).

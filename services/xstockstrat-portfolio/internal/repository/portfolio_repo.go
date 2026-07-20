@@ -32,6 +32,13 @@ func NewPortfolioRepo(connStr string) (*PortfolioRepo, error) {
 	return &PortfolioRepo{pool: pool}, nil
 }
 
+// Pool exposes the underlying connection pool so sibling repositories in this
+// package (e.g. WatchlistRepo) can reuse the single portfolio pgxpool rather than
+// opening a second pool (keeps the connection-pool budget at 2).
+func (r *PortfolioRepo) Pool() *pgxpool.Pool {
+	return r.pool
+}
+
 // UpsertPosition inserts or updates a position row.
 func (r *PortfolioRepo) UpsertPosition(ctx context.Context, userID, symbol string, qty, avgEntry, costBasis float64, mode commonv1.TradingMode, accountID string) error {
 	const q = `
@@ -97,8 +104,15 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 	args = append(args, pageSize+1)
 	limitIdx := len(args)
 
+	// Select the broker's mark-to-market valuation (current_price / market_value /
+	// unrealized_pnl / unrealized_pnl_pct) and intraday day_pnl figures via the shared
+	// positionColumns/scanPositionRow so broker-valued positions return authoritative figures.
+	// The service only falls back to marketdata mid-quote enrichment for positions the broker
+	// did not value (current_price <= 0) — previously this query omitted these columns, so the
+	// service always recomputed them from mid-quotes and the positions table diverged from the
+	// broker (e.g. market value / current price / P&L disagreeing with the Alpaca dashboard).
 	q := fmt.Sprintf(`
-		SELECT symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id
+		SELECT `+positionColumns+`
 		FROM portfolio.positions
 		WHERE %s
 		ORDER BY symbol ASC LIMIT $%d`, strings.Join(conds, " AND "), limitIdx)
@@ -111,22 +125,11 @@ func (r *PortfolioRepo) ListPositions(ctx context.Context, userID string, mode c
 
 	var positions []*portfoliov1.Position
 	for rows.Next() {
-		var (
-			symbol, modeStr, acctID  string
-			qty, avgEntry, costBasis float64
-			openedAt                 time.Time
-		)
-		if err := rows.Scan(&symbol, &qty, &avgEntry, &costBasis, &openedAt, &modeStr, &acctID); err != nil {
-			return nil, "", fmt.Errorf("scan position: %w", err)
+		p, err := scanPositionRow(rows)
+		if err != nil {
+			return nil, "", err
 		}
-		positions = append(positions, &portfoliov1.Position{
-			Symbol:        symbol,
-			Qty:           qty,
-			AvgEntryPrice: avgEntry,
-			CostBasis:     costBasis,
-			OpenedAt:      timestamppb.New(openedAt),
-			AccountId:     acctID,
-		})
+		positions = append(positions, p)
 	}
 	if rows.Err() != nil {
 		return nil, "", rows.Err()
@@ -194,10 +197,11 @@ func scanPositionRow(row pgxRow) (*portfoliov1.Position, error) {
 		symbol, modeStr, accountID                                 string
 		qty, avgEntry, costBasis                                   float64
 		currentPrice, marketValue, unrealizedPnl, unrealizedPnlPct float64
+		dayPnl, dayPnlPct                                          float64
 		openedAt                                                   time.Time
 	)
 	if err := row.Scan(&symbol, &qty, &avgEntry, &costBasis, &openedAt, &modeStr, &accountID,
-		&currentPrice, &marketValue, &unrealizedPnl, &unrealizedPnlPct); err != nil {
+		&currentPrice, &marketValue, &unrealizedPnl, &unrealizedPnlPct, &dayPnl, &dayPnlPct); err != nil {
 		return nil, fmt.Errorf("scan position: %w", err)
 	}
 	return &portfoliov1.Position{
@@ -211,12 +215,14 @@ func scanPositionRow(row pgxRow) (*portfoliov1.Position, error) {
 		MarketValue:      marketValue,
 		UnrealizedPnl:    unrealizedPnl,
 		UnrealizedPnlPct: unrealizedPnlPct,
+		DayPnl:           dayPnl,
+		DayPnlPct:        dayPnlPct,
 	}, nil
 }
 
 // positionColumns is the SELECT column list backing scanPositionRow — kept in one place so
 // the column order stays in lockstep with the Scan call above.
-const positionColumns = `symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id, current_price, market_value, unrealized_pnl, unrealized_pnl_pct`
+const positionColumns = `symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id, current_price, market_value, unrealized_pnl, unrealized_pnl_pct, day_pnl, day_pnl_pct`
 
 // PositionValuation is the broker's mark-to-market snapshot for a single position,
 // carried on account.positions.synced. Zero fields mean the broker did not report a
@@ -226,6 +232,10 @@ type PositionValuation struct {
 	MarketValue      float64
 	UnrealizedPnl    float64
 	UnrealizedPnlPct float64
+	// DayPnl / DayPnlPct are the broker's intraday (today's) P&L — change since the
+	// previous close. Distinct from UnrealizedPnl (total since entry); zero = not reported.
+	DayPnl    float64
+	DayPnlPct float64
 }
 
 // UpsertPositionFromSync inserts or updates a position from a broker position sync.
@@ -237,12 +247,12 @@ type PositionValuation struct {
 func (r *PortfolioRepo) UpsertPositionFromSync(ctx context.Context, userID, symbol, tradingMode, accountID string, qty, avgCost float64, val PositionValuation) error {
 	costBasis := qty * avgCost
 	const q = `
-		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, current_price, market_value, unrealized_pnl, unrealized_pnl_pct, opened_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+		INSERT INTO portfolio.positions (user_id, symbol, qty, avg_entry_price, cost_basis, trading_mode, account_id, current_price, market_value, unrealized_pnl, unrealized_pnl_pct, day_pnl, day_pnl_pct, opened_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
 		ON CONFLICT (user_id, symbol, trading_mode, account_id) DO UPDATE
-		SET qty=$3, avg_entry_price=$4, cost_basis=$5, current_price=$8, market_value=$9, unrealized_pnl=$10, unrealized_pnl_pct=$11, updated_at=NOW()`
+		SET qty=$3, avg_entry_price=$4, cost_basis=$5, current_price=$8, market_value=$9, unrealized_pnl=$10, unrealized_pnl_pct=$11, day_pnl=$12, day_pnl_pct=$13, updated_at=NOW()`
 	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgCost, costBasis, tradingMode, accountID,
-		val.CurrentPrice, val.MarketValue, val.UnrealizedPnl, val.UnrealizedPnlPct)
+		val.CurrentPrice, val.MarketValue, val.UnrealizedPnl, val.UnrealizedPnlPct, val.DayPnl, val.DayPnlPct)
 	return err
 }
 

@@ -3,6 +3,7 @@ import type { MessageInitShape } from '@bufbuild/protobuf';
 import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useListEditor } from '@/hooks/useListEditor';
 import {
   FormulaOutputSchema,
   type FormulaOutput,
@@ -43,22 +44,7 @@ interface OutputEditorProps {
  * sandbox enforces that the formula actually emits every declared series.
  */
 export function OutputEditor({ value, onChange }: OutputEditorProps) {
-  function update(i: number, patch: Partial<OutputDraft>) {
-    onChange(value.map((o, j) => (j === i ? { ...o, ...patch } : o)));
-  }
-  function add() {
-    onChange([...value, emptyOutput()]);
-  }
-  function remove(i: number) {
-    onChange(value.filter((_, j) => j !== i));
-  }
-  function move(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= value.length) return;
-    const next = value.slice();
-    [next[i], next[j]] = [next[j], next[i]];
-    onChange(next);
-  }
+  const { update, add, remove, move } = useListEditor(value, onChange, emptyOutput);
 
   return (
     <div className="space-y-3">

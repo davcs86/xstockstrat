@@ -23,10 +23,6 @@ const (
 	IdentityService_ValidateToken_FullMethodName       = "/xstockstrat.identity.v1.IdentityService/ValidateToken"
 	IdentityService_RefreshToken_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/RefreshToken"
 	IdentityService_RevokeToken_FullMethodName         = "/xstockstrat.identity.v1.IdentityService/RevokeToken"
-	IdentityService_CreateApiKey_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/CreateApiKey"
-	IdentityService_ValidateApiKey_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/ValidateApiKey"
-	IdentityService_ListApiKeys_FullMethodName         = "/xstockstrat.identity.v1.IdentityService/ListApiKeys"
-	IdentityService_RevokeApiKey_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/RevokeApiKey"
 	IdentityService_RegisterOAuthClient_FullMethodName = "/xstockstrat.identity.v1.IdentityService/RegisterOAuthClient"
 	IdentityService_GetOAuthClient_FullMethodName      = "/xstockstrat.identity.v1.IdentityService/GetOAuthClient"
 	IdentityService_IssueAuthCode_FullMethodName       = "/xstockstrat.identity.v1.IdentityService/IssueAuthCode"
@@ -44,10 +40,6 @@ type IdentityServiceClient interface {
 	ValidateToken(ctx context.Context, in *ValidateTokenRequest, opts ...grpc.CallOption) (*TokenClaims, error)
 	RefreshToken(ctx context.Context, in *RefreshTokenRequest, opts ...grpc.CallOption) (*AuthTokenResponse, error)
 	RevokeToken(ctx context.Context, in *RevokeTokenRequest, opts ...grpc.CallOption) (*RevokeTokenResponse, error)
-	CreateApiKey(ctx context.Context, in *CreateApiKeyRequest, opts ...grpc.CallOption) (*ApiKey, error)
-	ValidateApiKey(ctx context.Context, in *ValidateApiKeyRequest, opts ...grpc.CallOption) (*TokenClaims, error)
-	ListApiKeys(ctx context.Context, in *ListApiKeysRequest, opts ...grpc.CallOption) (*ListApiKeysResponse, error)
-	RevokeApiKey(ctx context.Context, in *RevokeApiKeyRequest, opts ...grpc.CallOption) (*RevokeApiKeyResponse, error)
 	// OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
 	// OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
 	RegisterOAuthClient(ctx context.Context, in *RegisterOAuthClientRequest, opts ...grpc.CallOption) (*OAuthClient, error)
@@ -103,46 +95,6 @@ func (c *identityServiceClient) RevokeToken(ctx context.Context, in *RevokeToken
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RevokeTokenResponse)
 	err := c.cc.Invoke(ctx, IdentityService_RevokeToken_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *identityServiceClient) CreateApiKey(ctx context.Context, in *CreateApiKeyRequest, opts ...grpc.CallOption) (*ApiKey, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ApiKey)
-	err := c.cc.Invoke(ctx, IdentityService_CreateApiKey_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *identityServiceClient) ValidateApiKey(ctx context.Context, in *ValidateApiKeyRequest, opts ...grpc.CallOption) (*TokenClaims, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TokenClaims)
-	err := c.cc.Invoke(ctx, IdentityService_ValidateApiKey_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *identityServiceClient) ListApiKeys(ctx context.Context, in *ListApiKeysRequest, opts ...grpc.CallOption) (*ListApiKeysResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListApiKeysResponse)
-	err := c.cc.Invoke(ctx, IdentityService_ListApiKeys_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *identityServiceClient) RevokeApiKey(ctx context.Context, in *RevokeApiKeyRequest, opts ...grpc.CallOption) (*RevokeApiKeyResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RevokeApiKeyResponse)
-	err := c.cc.Invoke(ctx, IdentityService_RevokeApiKey_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -227,10 +179,6 @@ type IdentityServiceServer interface {
 	ValidateToken(context.Context, *ValidateTokenRequest) (*TokenClaims, error)
 	RefreshToken(context.Context, *RefreshTokenRequest) (*AuthTokenResponse, error)
 	RevokeToken(context.Context, *RevokeTokenRequest) (*RevokeTokenResponse, error)
-	CreateApiKey(context.Context, *CreateApiKeyRequest) (*ApiKey, error)
-	ValidateApiKey(context.Context, *ValidateApiKeyRequest) (*TokenClaims, error)
-	ListApiKeys(context.Context, *ListApiKeysRequest) (*ListApiKeysResponse, error)
-	RevokeApiKey(context.Context, *RevokeApiKeyRequest) (*RevokeApiKeyResponse, error)
 	// OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
 	// OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
 	RegisterOAuthClient(context.Context, *RegisterOAuthClientRequest) (*OAuthClient, error)
@@ -262,18 +210,6 @@ func (UnimplementedIdentityServiceServer) RefreshToken(context.Context, *Refresh
 }
 func (UnimplementedIdentityServiceServer) RevokeToken(context.Context, *RevokeTokenRequest) (*RevokeTokenResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RevokeToken not implemented")
-}
-func (UnimplementedIdentityServiceServer) CreateApiKey(context.Context, *CreateApiKeyRequest) (*ApiKey, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateApiKey not implemented")
-}
-func (UnimplementedIdentityServiceServer) ValidateApiKey(context.Context, *ValidateApiKeyRequest) (*TokenClaims, error) {
-	return nil, status.Error(codes.Unimplemented, "method ValidateApiKey not implemented")
-}
-func (UnimplementedIdentityServiceServer) ListApiKeys(context.Context, *ListApiKeysRequest) (*ListApiKeysResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListApiKeys not implemented")
-}
-func (UnimplementedIdentityServiceServer) RevokeApiKey(context.Context, *RevokeApiKeyRequest) (*RevokeApiKeyResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method RevokeApiKey not implemented")
 }
 func (UnimplementedIdentityServiceServer) RegisterOAuthClient(context.Context, *RegisterOAuthClientRequest) (*OAuthClient, error) {
 	return nil, status.Error(codes.Unimplemented, "method RegisterOAuthClient not implemented")
@@ -384,78 +320,6 @@ func _IdentityService_RevokeToken_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(IdentityServiceServer).RevokeToken(ctx, req.(*RevokeTokenRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _IdentityService_CreateApiKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateApiKeyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(IdentityServiceServer).CreateApiKey(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: IdentityService_CreateApiKey_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IdentityServiceServer).CreateApiKey(ctx, req.(*CreateApiKeyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _IdentityService_ValidateApiKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ValidateApiKeyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(IdentityServiceServer).ValidateApiKey(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: IdentityService_ValidateApiKey_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IdentityServiceServer).ValidateApiKey(ctx, req.(*ValidateApiKeyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _IdentityService_ListApiKeys_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListApiKeysRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(IdentityServiceServer).ListApiKeys(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: IdentityService_ListApiKeys_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IdentityServiceServer).ListApiKeys(ctx, req.(*ListApiKeysRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _IdentityService_RevokeApiKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RevokeApiKeyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(IdentityServiceServer).RevokeApiKey(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: IdentityService_RevokeApiKey_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IdentityServiceServer).RevokeApiKey(ctx, req.(*RevokeApiKeyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -608,22 +472,6 @@ var IdentityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RevokeToken",
 			Handler:    _IdentityService_RevokeToken_Handler,
-		},
-		{
-			MethodName: "CreateApiKey",
-			Handler:    _IdentityService_CreateApiKey_Handler,
-		},
-		{
-			MethodName: "ValidateApiKey",
-			Handler:    _IdentityService_ValidateApiKey_Handler,
-		},
-		{
-			MethodName: "ListApiKeys",
-			Handler:    _IdentityService_ListApiKeys_Handler,
-		},
-		{
-			MethodName: "RevokeApiKey",
-			Handler:    _IdentityService_RevokeApiKey_Handler,
 		},
 		{
 			MethodName: "RegisterOAuthClient",

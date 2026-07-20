@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -43,15 +44,42 @@ type MarketDataService struct {
 	// the DB so subsequent reads hit the cache instead of a live Alpaca call.
 	warmMu      sync.Mutex
 	warmSymbols map[string]struct{}
+
+	// fundamentals is the FMP source (feature 059), held separately from the OHLCV
+	// registry (FR-2). nil when marketdata.fmp.enabled is false at startup.
+	fundamentals source.FundamentalsSource
+	// fundCfg / fundRepo are the config + repo surfaces the fundamentals RPCs use,
+	// behind interfaces so the cache/quota/gate logic is unit-testable with stubs.
+	fundCfg  fundamentalsConfig
+	fundRepo fundamentalsRepo
+	// quotaAlert dedupes the FR-7 80%-quota WARNING to one emit per UTC day.
+	quotaAlertMu  sync.Mutex
+	quotaAlertDay string
 }
 
-// NewMarketDataService creates the service and dials ledger + notify.
+// fundamentalsConfig is the slice of *config.Watcher the fundamentals RPCs read.
+type fundamentalsConfig interface {
+	GetBool(key string, defaultVal bool) bool
+	GetInt(key string, defaultVal int64) int64
+	GetString(key, defaultVal string) string
+}
+
+// fundamentalsRepo is the persistence surface for the fundamentals cache/quota.
+type fundamentalsRepo interface {
+	GetFundamentals(ctx context.Context, symbol string) (*source.Fundamentals, time.Time, bool, error)
+	UpsertFundamentals(ctx context.Context, f *source.Fundamentals) error
+	CountFundamentalsFetchedToday(ctx context.Context) (int, error)
+}
+
+// NewMarketDataService creates the service and dials ledger + notify. fundamentals is
+// the FMP source (feature 059) or nil when marketdata.fmp.enabled is false.
 func NewMarketDataService(
 	registry *source.Registry,
 	repo *repository.MarketDataRepo,
 	cfgWatcher *config.Watcher,
 	ledgerEndpoint string,
 	notifyEndpoint string,
+	fundamentals source.FundamentalsSource,
 ) (*MarketDataService, error) {
 	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
@@ -62,14 +90,17 @@ func NewMarketDataService(
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
 	return &MarketDataService{
-		registry:    registry,
-		repo:        repo,
-		cfg:         cfgWatcher,
-		ledger:      ledgerv1.NewLedgerServiceClient(ledgerConn),
-		notify:      notifyv1.NewNotifyServiceClient(notifyConn),
-		barSubs:     make(map[string]chan *marketdatav1.Bar),
-		quoteSubs:   make(map[string]chan *marketdatav1.Quote),
-		warmSymbols: make(map[string]struct{}),
+		registry:     registry,
+		repo:         repo,
+		cfg:          cfgWatcher,
+		ledger:       ledgerv1.NewLedgerServiceClient(ledgerConn),
+		notify:       notifyv1.NewNotifyServiceClient(notifyConn),
+		barSubs:      make(map[string]chan *marketdatav1.Bar),
+		quoteSubs:    make(map[string]chan *marketdatav1.Quote),
+		warmSymbols:  make(map[string]struct{}),
+		fundamentals: fundamentals,
+		fundCfg:      cfgWatcher,
+		fundRepo:     repo,
 	}, nil
 }
 
@@ -769,4 +800,197 @@ func (s *MarketDataService) emitAlert(ctx context.Context, msg string) {
 	if err != nil {
 		slog.Warn("notify emit failed", "error", err)
 	}
+}
+
+// ── Fundamentals (feature 059) ───────────────────────────────────────────────
+// Read-through cache → quota guard → FMP fetch → 80%-quota WARNING, mirroring the
+// GetBars/fetchAndCacheBars idiom. FMP is gated behind marketdata.fmp.enabled and
+// reached only via this service (the single FMP chokepoint).
+
+// GetFundamentals returns cached-or-fetched fundamentals for one symbol.
+func (s *MarketDataService) GetFundamentals(ctx context.Context, symbol string) (*marketdatav1.Fundamentals, error) {
+	if symbol == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("symbol required"))
+	}
+	if err := s.fundamentalsEnabled(); err != nil {
+		return nil, err
+	}
+	f, err := s.resolveFundamentals(ctx, symbol)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+// GetFundamentalsMulti returns fundamentals for several symbols, batching the
+// needs-fetch set through one FMP quote call (FR-5).
+func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []string) ([]*marketdatav1.Fundamentals, error) {
+	if err := s.fundamentalsEnabled(); err != nil {
+		return nil, err
+	}
+	ttl := time.Duration(s.fundCfg.GetInt("marketdata.fmp.cache_ttl_hours", 24)) * time.Hour
+
+	out := make([]*marketdatav1.Fundamentals, 0, len(symbols))
+	var needFetch []string
+	cached := map[string]*marketdatav1.Fundamentals{}
+
+	for _, sym := range symbols {
+		if sym == "" {
+			continue
+		}
+		f, fetchedAt, found, err := s.fundRepo.GetFundamentals(ctx, sym)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if found && time.Since(fetchedAt) <= ttl {
+			cached[strings.ToUpper(sym)] = toProtoFundamentals(f, false)
+			continue
+		}
+		needFetch = append(needFetch, sym)
+	}
+
+	if len(needFetch) > 0 {
+		dailyCap := int(s.fundCfg.GetInt("marketdata.fmp.daily_request_cap", 250))
+		count, err := s.fundRepo.CountFundamentalsFetchedToday(ctx)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if count >= dailyCap {
+			// Quota exhausted: serve stale rows where we have them, skip the rest.
+			for _, sym := range needFetch {
+				if f, _, found, _ := s.fundRepo.GetFundamentals(ctx, sym); found {
+					cached[strings.ToUpper(sym)] = toProtoFundamentals(f, true)
+				}
+			}
+		} else {
+			fetched, err := s.fundamentals.GetFundamentalsMulti(ctx, needFetch)
+			if err != nil {
+				return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("fmp fetch: %w", err))
+			}
+			for _, f := range fetched {
+				if upErr := s.fundRepo.UpsertFundamentals(ctx, f); upErr != nil {
+					slog.Warn("GetFundamentalsMulti: cache upsert failed", "symbol", f.Symbol, "error", upErr)
+				}
+				cached[strings.ToUpper(f.Symbol)] = toProtoFundamentals(f, false)
+			}
+			s.maybeAlertQuota(ctx, count+len(fetched), dailyCap)
+		}
+	}
+
+	// Preserve requested order; drop symbols neither cached nor fetched.
+	for _, sym := range symbols {
+		if f, ok := cached[strings.ToUpper(sym)]; ok {
+			out = append(out, f)
+		}
+	}
+	return out, nil
+}
+
+// resolveFundamentals implements the single-symbol read-through: cache hit within TTL,
+// else quota-guarded FMP fetch, else stale/ResourceExhausted.
+func (s *MarketDataService) resolveFundamentals(ctx context.Context, symbol string) (*marketdatav1.Fundamentals, error) {
+	ttl := time.Duration(s.fundCfg.GetInt("marketdata.fmp.cache_ttl_hours", 24)) * time.Hour
+	cached, fetchedAt, found, err := s.fundRepo.GetFundamentals(ctx, symbol)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if found && time.Since(fetchedAt) <= ttl {
+		return toProtoFundamentals(cached, false), nil
+	}
+
+	dailyCap := int(s.fundCfg.GetInt("marketdata.fmp.daily_request_cap", 250))
+	count, err := s.fundRepo.CountFundamentalsFetchedToday(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if count >= dailyCap {
+		if found {
+			return toProtoFundamentals(cached, true), nil // stale under quota exhaustion (FR-4)
+		}
+		return nil, connect.NewError(connect.CodeResourceExhausted, fmt.Errorf("fmp daily request cap %d reached", dailyCap))
+	}
+
+	fresh, err := s.fundamentals.GetFundamentals(ctx, symbol)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("fmp fetch: %w", err))
+	}
+	if upErr := s.fundRepo.UpsertFundamentals(ctx, fresh); upErr != nil {
+		slog.Warn("GetFundamentals: cache upsert failed", "symbol", symbol, "error", upErr)
+	}
+	s.maybeAlertQuota(ctx, count+1, dailyCap)
+	return toProtoFundamentals(fresh, false), nil
+}
+
+// fundamentalsEnabled returns FailedPrecondition when FMP is disabled (or unbuilt),
+// making NO external call (FR-6).
+func (s *MarketDataService) fundamentalsEnabled() error {
+	if !s.fundCfg.GetBool("marketdata.fmp.enabled", false) || s.fundamentals == nil {
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("fmp fundamentals source disabled"))
+	}
+	return nil
+}
+
+// maybeAlertQuota emits one WARNING per UTC day once the daily fetch count crosses 80%
+// of the cap (FR-7). Uses the request ctx so the propagation interceptor carries headers.
+func (s *MarketDataService) maybeAlertQuota(ctx context.Context, count, dailyCap int) {
+	if dailyCap <= 0 || count < (dailyCap*8)/10 {
+		return
+	}
+	day := time.Now().UTC().Format("2006-01-02")
+	s.quotaAlertMu.Lock()
+	if s.quotaAlertDay == day {
+		s.quotaAlertMu.Unlock()
+		return
+	}
+	s.quotaAlertDay = day
+	s.quotaAlertMu.Unlock()
+	s.emitWarning(ctx, fmt.Sprintf("FMP daily request usage at %d/%d (>=80%% of cap)", count, dailyCap))
+}
+
+// emitWarning emits an ALERT_SEVERITY_WARNING notify alert. Distinct from emitAlert,
+// which hardcodes ALERT_SEVERITY_ERROR — FR-7 needs a WARNING.
+func (s *MarketDataService) emitWarning(ctx context.Context, msg string) {
+	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
+		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_WARNING,
+		Category:      "system",
+		Title:         "marketdata FMP quota warning",
+		Body:          msg,
+		SourceService: "marketdata",
+	})
+	if err != nil {
+		slog.Warn("notify emit (warning) failed", "error", err)
+	}
+}
+
+// toProtoFundamentals maps the internal source.Fundamentals to the wire message.
+func toProtoFundamentals(f *source.Fundamentals, stale bool) *marketdatav1.Fundamentals {
+	if f == nil {
+		return nil
+	}
+	src := f.Source
+	if src == "" {
+		src = "fmp"
+	}
+	pb := &marketdatav1.Fundamentals{
+		Symbol:        f.Symbol,
+		MarketCap:     f.MarketCap,
+		PeRatio:       f.PERatio,
+		PbRatio:       f.PBRatio,
+		DividendYield: f.DividendYield,
+		Eps:           f.EPS,
+		Beta:          f.Beta,
+		Roe:           f.ROE,
+		DebtToEquity:  f.DebtToEquity,
+		Price:         f.Price,
+		YearHigh:      f.YearHigh,
+		YearLow:       f.YearLow,
+		ExtraMetrics:  f.ExtraMetrics,
+		Currency:      f.Currency,
+		Source:        src,
+		Stale:         stale,
+	}
+	if !f.AsOf.IsZero() {
+		pb.AsOf = timestamppb.New(f.AsOf)
+	}
+	return pb
 }

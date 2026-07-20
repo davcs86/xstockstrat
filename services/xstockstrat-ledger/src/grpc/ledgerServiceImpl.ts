@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigWatcher } from '../services/configWatcher';
+import { EventNotifier } from '../services/eventNotifier';
 import { getLogger } from '../services/logger';
 
 const log = getLogger('ledger:impl');
@@ -9,6 +10,10 @@ export class LedgerServiceImpl {
   constructor(
     private readonly pool: Pool,
     private readonly config: ConfigWatcher,
+    // Shared LISTEN/NOTIFY fan-out used by StreamEvents. Optional only so unit
+    // tests (which never exercise streaming) can construct the impl with a
+    // bare pool; production always wires it.
+    private readonly notifier?: EventNotifier,
   ) {}
 
   /**
@@ -75,8 +80,11 @@ export class LedgerServiceImpl {
 
       if (claim.rows.length === 0) {
         // Key already claimed — the event exists. Roll back our no-op claim and return it.
+        // Reuse the transaction's own connection for the lookup (post-ROLLBACK the
+        // session is reusable): borrowing a second pooled connection here would
+        // require pool max >= 2 and self-deadlock at max = 1.
         await client.query('ROLLBACK');
-        const existing = await this.pool.query(
+        const existing = await client.query(
           `SELECT e.event_id, e.sequence, e.recorded_at
              FROM ledger.idempotency_keys k
              JOIN ledger.events e ON e.event_id = k.event_id
@@ -169,12 +177,72 @@ export class LedgerServiceImpl {
 
   /**
    * StreamEvents — server-streaming; replays from sequence then tails live.
-   * Live tail is implemented via LISTEN/NOTIFY on ledger.events_inserted channel.
+   *
+   * Live tailing uses the shared EventNotifier (a single dedicated LISTEN
+   * connection that fans out to all subscribers) rather than a per-stream
+   * pooled connection, so an open stream never holds a pool connection for its
+   * lifetime. Replay borrows a pool connection only for the duration of the
+   * historical query and releases it immediately.
    */
   async streamEvents(call: any) {
     const req = call.request;
+    const notifier = this.notifier;
+    if (!notifier) {
+      call.destroy(new Error('event notifier not configured'));
+      return;
+    }
 
-    // Replay historical events first
+    // Highest sequence written so far. Seeded just below fromSequence so the
+    // first replayed row (sequence === fromSequence) is delivered.
+    let maxSeq = req.fromSequence ? req.fromSequence - 1 : 0;
+    let live = false;
+    let buffer: any[] = [];
+
+    const writeRow = (row: any) => {
+      if (row.sequence > maxSeq) maxSeq = row.sequence;
+      // rowToEvent converts the snake_case DB/NOTIFY row to the camelCase shape
+      // that ts-proto encode() expects.
+      call.write(rowToEvent(row));
+    };
+
+    // Subscribe to live events BEFORE replaying history: events inserted during
+    // replay are buffered (not lost), then flushed (deduped by sequence) once
+    // replay finishes, after which delivery switches to direct/live.
+    const unsubscribe = notifier.subscribe({
+      streamKey: req.streamKey || undefined,
+      eventType: req.eventType || undefined,
+      onEvent: (row) => {
+        if (!live) {
+          buffer.push(row);
+          return;
+        }
+        if (row.sequence > maxSeq) writeRow(row);
+      },
+      onReconnect: () => {
+        // The listener missed live NOTIFYs while reconnecting. End the stream so
+        // the client reconnects and replays the gap from the durable table
+        // (consumers resume from their last processed sequence).
+        try {
+          call.end();
+        } catch {
+          /* already closing */
+        }
+      },
+    });
+
+    // Release the subscription on every termination path — not just
+    // 'cancelled' — so a dropped/closed/errored stream can never leak it.
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      unsubscribe();
+    };
+    call.on('cancelled', cleanup);
+    call.on('close', cleanup);
+    call.on('error', cleanup);
+
+    // Replay history (borrow + release a pool connection — no long-held conn).
     try {
       const result = await this.pool.query(
         `SELECT * FROM ledger.events
@@ -184,35 +252,25 @@ export class LedgerServiceImpl {
          ORDER BY sequence ASC`,
         [req.streamKey || null, req.eventType || null, req.fromSequence || 0],
       );
-
-      for (const row of result.rows) {
-        call.write(rowToEvent(row));
-      }
+      for (const row of result.rows) writeRow(row);
     } catch (err: any) {
+      cleanup();
       call.destroy(err);
       return;
     }
 
-    // Tail live via pg LISTEN
-    const client = await this.pool.connect();
-    const channel = `ledger_stream_${req.streamKey?.replace(/[^a-z0-9]/gi, '_') ?? 'all'}`;
-    await client.query(`LISTEN "${channel}"`);
+    // If the client went away while we were replaying, stop here — the
+    // subscription is already released and the call is dead.
+    if (cleaned) return;
 
-    client.on('notification', (msg) => {
-      if (!msg.payload) return;
-      try {
-        // Notification payload is JSON from a DB trigger — uses DB column names (snake_case).
-        // rowToEvent converts to the camelCase shape that ts-proto encode() expects.
-        const row = JSON.parse(msg.payload);
-        if (!req.eventType || row.event_type === req.eventType) {
-          call.write(rowToEvent(row));
-        }
-      } catch { /* ignore parse errors for malformed NOTIFY payloads */ }
-    });
-
-    call.on('cancelled', () => {
-      client.query(`UNLISTEN "${channel}"`).finally(() => client.release());
-    });
+    // Flush events buffered during replay (dedup by sequence), then go live.
+    // This block is synchronous, so no notification can interleave between the
+    // flush and the `live = true` switch.
+    for (const row of buffer) {
+      if (row.sequence > maxSeq) writeRow(row);
+    }
+    buffer = [];
+    live = true;
   }
 
   async getEvent(call: any, callback: any) {

@@ -57,6 +57,12 @@ const (
 	// MarketDataServiceListAssetsProcedure is the fully-qualified name of the MarketDataService's
 	// ListAssets RPC.
 	MarketDataServiceListAssetsProcedure = "/xstockstrat.marketdata.v1.MarketDataService/ListAssets"
+	// MarketDataServiceGetFundamentalsProcedure is the fully-qualified name of the MarketDataService's
+	// GetFundamentals RPC.
+	MarketDataServiceGetFundamentalsProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentals"
+	// MarketDataServiceGetFundamentalsMultiProcedure is the fully-qualified name of the
+	// MarketDataService's GetFundamentalsMulti RPC.
+	MarketDataServiceGetFundamentalsMultiProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentalsMulti"
 )
 
 // MarketDataServiceClient is a client for the xstockstrat.marketdata.v1.MarketDataService service.
@@ -77,6 +83,10 @@ type MarketDataServiceClient interface {
 	DeleteBackfilledData(context.Context, *connect.Request[v1.DeleteBackfilledDataRequest]) (*connect.Response[v1.DeleteBackfilledDataResponse], error)
 	// Get available symbols
 	ListAssets(context.Context, *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error)
+	// Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache)
+	GetFundamentals(context.Context, *connect.Request[v1.GetFundamentalsRequest]) (*connect.Response[v1.GetFundamentalsResponse], error)
+	// Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
+	GetFundamentalsMulti(context.Context, *connect.Request[v1.GetFundamentalsMultiRequest]) (*connect.Response[v1.GetFundamentalsMultiResponse], error)
 }
 
 // NewMarketDataServiceClient constructs a client for the
@@ -139,6 +149,18 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(marketDataServiceMethods.ByName("ListAssets")),
 			connect.WithClientOptions(opts...),
 		),
+		getFundamentals: connect.NewClient[v1.GetFundamentalsRequest, v1.GetFundamentalsResponse](
+			httpClient,
+			baseURL+MarketDataServiceGetFundamentalsProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("GetFundamentals")),
+			connect.WithClientOptions(opts...),
+		),
+		getFundamentalsMulti: connect.NewClient[v1.GetFundamentalsMultiRequest, v1.GetFundamentalsMultiResponse](
+			httpClient,
+			baseURL+MarketDataServiceGetFundamentalsMultiProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("GetFundamentalsMulti")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -152,6 +174,8 @@ type marketDataServiceClient struct {
 	getDataCoverage      *connect.Client[v1.GetDataCoverageRequest, v1.GetDataCoverageResponse]
 	deleteBackfilledData *connect.Client[v1.DeleteBackfilledDataRequest, v1.DeleteBackfilledDataResponse]
 	listAssets           *connect.Client[v1.ListAssetsRequest, v1.ListAssetsResponse]
+	getFundamentals      *connect.Client[v1.GetFundamentalsRequest, v1.GetFundamentalsResponse]
+	getFundamentalsMulti *connect.Client[v1.GetFundamentalsMultiRequest, v1.GetFundamentalsMultiResponse]
 }
 
 // StreamBars calls xstockstrat.marketdata.v1.MarketDataService.StreamBars.
@@ -194,6 +218,16 @@ func (c *marketDataServiceClient) ListAssets(ctx context.Context, req *connect.R
 	return c.listAssets.CallUnary(ctx, req)
 }
 
+// GetFundamentals calls xstockstrat.marketdata.v1.MarketDataService.GetFundamentals.
+func (c *marketDataServiceClient) GetFundamentals(ctx context.Context, req *connect.Request[v1.GetFundamentalsRequest]) (*connect.Response[v1.GetFundamentalsResponse], error) {
+	return c.getFundamentals.CallUnary(ctx, req)
+}
+
+// GetFundamentalsMulti calls xstockstrat.marketdata.v1.MarketDataService.GetFundamentalsMulti.
+func (c *marketDataServiceClient) GetFundamentalsMulti(ctx context.Context, req *connect.Request[v1.GetFundamentalsMultiRequest]) (*connect.Response[v1.GetFundamentalsMultiResponse], error) {
+	return c.getFundamentalsMulti.CallUnary(ctx, req)
+}
+
 // MarketDataServiceHandler is an implementation of the xstockstrat.marketdata.v1.MarketDataService
 // service.
 type MarketDataServiceHandler interface {
@@ -213,6 +247,10 @@ type MarketDataServiceHandler interface {
 	DeleteBackfilledData(context.Context, *connect.Request[v1.DeleteBackfilledDataRequest]) (*connect.Response[v1.DeleteBackfilledDataResponse], error)
 	// Get available symbols
 	ListAssets(context.Context, *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error)
+	// Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache)
+	GetFundamentals(context.Context, *connect.Request[v1.GetFundamentalsRequest]) (*connect.Response[v1.GetFundamentalsResponse], error)
+	// Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
+	GetFundamentalsMulti(context.Context, *connect.Request[v1.GetFundamentalsMultiRequest]) (*connect.Response[v1.GetFundamentalsMultiResponse], error)
 }
 
 // NewMarketDataServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -270,6 +308,18 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 		connect.WithSchema(marketDataServiceMethods.ByName("ListAssets")),
 		connect.WithHandlerOptions(opts...),
 	)
+	marketDataServiceGetFundamentalsHandler := connect.NewUnaryHandler(
+		MarketDataServiceGetFundamentalsProcedure,
+		svc.GetFundamentals,
+		connect.WithSchema(marketDataServiceMethods.ByName("GetFundamentals")),
+		connect.WithHandlerOptions(opts...),
+	)
+	marketDataServiceGetFundamentalsMultiHandler := connect.NewUnaryHandler(
+		MarketDataServiceGetFundamentalsMultiProcedure,
+		svc.GetFundamentalsMulti,
+		connect.WithSchema(marketDataServiceMethods.ByName("GetFundamentalsMulti")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.marketdata.v1.MarketDataService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case MarketDataServiceStreamBarsProcedure:
@@ -288,6 +338,10 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 			marketDataServiceDeleteBackfilledDataHandler.ServeHTTP(w, r)
 		case MarketDataServiceListAssetsProcedure:
 			marketDataServiceListAssetsHandler.ServeHTTP(w, r)
+		case MarketDataServiceGetFundamentalsProcedure:
+			marketDataServiceGetFundamentalsHandler.ServeHTTP(w, r)
+		case MarketDataServiceGetFundamentalsMultiProcedure:
+			marketDataServiceGetFundamentalsMultiHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -327,4 +381,12 @@ func (UnimplementedMarketDataServiceHandler) DeleteBackfilledData(context.Contex
 
 func (UnimplementedMarketDataServiceHandler) ListAssets(context.Context, *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.ListAssets is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) GetFundamentals(context.Context, *connect.Request[v1.GetFundamentalsRequest]) (*connect.Response[v1.GetFundamentalsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetFundamentals is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) GetFundamentalsMulti(context.Context, *connect.Request[v1.GetFundamentalsMultiRequest]) (*connect.Response[v1.GetFundamentalsMultiResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetFundamentalsMulti is not implemented"))
 }

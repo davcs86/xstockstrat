@@ -156,6 +156,41 @@ func (h *MarketDataHandler) ListAssets(ctx context.Context, req *connect.Request
 	return connect.NewResponse(resp), nil
 }
 
+// GetFundamentals returns cached/fetched fundamental metrics for a symbol (feature 059).
+// Connect-coded errors from the service (FailedPrecondition/ResourceExhausted/Unavailable)
+// are forwarded as-is; only un-coded errors are wrapped as Internal.
+func (h *MarketDataHandler) GetFundamentals(ctx context.Context, req *connect.Request[marketdatav1.GetFundamentalsRequest]) (*connect.Response[marketdatav1.GetFundamentalsResponse], error) {
+	if req.Msg.Symbol == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errorf("symbol required"))
+	}
+	f, err := h.svc.GetFundamentals(ctx, req.Msg.Symbol)
+	if err != nil {
+		return nil, forwardConnectErr(err)
+	}
+	return connect.NewResponse(&marketdatav1.GetFundamentalsResponse{Fundamentals: f}), nil
+}
+
+// GetFundamentalsMulti returns batched fundamentals for a watchlist scan (feature 059).
+func (h *MarketDataHandler) GetFundamentalsMulti(ctx context.Context, req *connect.Request[marketdatav1.GetFundamentalsMultiRequest]) (*connect.Response[marketdatav1.GetFundamentalsMultiResponse], error) {
+	if len(req.Msg.Symbols) == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errorf("symbols required"))
+	}
+	list, err := h.svc.GetFundamentalsMulti(ctx, req.Msg.Symbols)
+	if err != nil {
+		return nil, forwardConnectErr(err)
+	}
+	return connect.NewResponse(&marketdatav1.GetFundamentalsMultiResponse{Fundamentals: list}), nil
+}
+
+// forwardConnectErr returns connect-coded errors unchanged and wraps the rest as Internal.
+func forwardConnectErr(err error) error {
+	var cErr *connect.Error
+	if errors.As(err, &cErr) {
+		return err
+	}
+	return connect.NewError(connect.CodeInternal, err)
+}
+
 // GRPCHandler returns a gRPC-compatible adapter around this handler.
 // Used for the native gRPC server registration.
 func (h *MarketDataHandler) GRPCHandler() *grpcMarketDataAdapter {
@@ -256,6 +291,22 @@ func (a *grpcMarketDataAdapter) StreamQuotes(req *marketdatav1.StreamQuotesReque
 	}
 }
 
+func (a *grpcMarketDataAdapter) GetFundamentals(ctx context.Context, req *marketdatav1.GetFundamentalsRequest) (*marketdatav1.GetFundamentalsResponse, error) {
+	resp, err := a.h.GetFundamentals(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcMarketDataAdapter) GetFundamentalsMulti(ctx context.Context, req *marketdatav1.GetFundamentalsMultiRequest) (*marketdatav1.GetFundamentalsMultiResponse, error) {
+	resp, err := a.h.GetFundamentalsMulti(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
 func keyFor(v interface{}) string {
 	return fmt.Sprintf("%p", v)
 }
@@ -274,6 +325,12 @@ func toGRPCError(err error) error {
 			return status.Error(codes.NotFound, connectErr.Message())
 		case connect.CodePermissionDenied:
 			return status.Error(codes.PermissionDenied, connectErr.Message())
+		case connect.CodeFailedPrecondition:
+			return status.Error(codes.FailedPrecondition, connectErr.Message())
+		case connect.CodeResourceExhausted:
+			return status.Error(codes.ResourceExhausted, connectErr.Message())
+		case connect.CodeUnavailable:
+			return status.Error(codes.Unavailable, connectErr.Message())
 		}
 	}
 	return status.Error(codes.Internal, err.Error())

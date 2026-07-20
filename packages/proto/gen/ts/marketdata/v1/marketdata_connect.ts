@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BackfillBarsRequest, BackfillBarsResponse, Bar, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetLatestQuoteRequest, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
+import { BackfillBarsRequest, BackfillBarsResponse, Bar, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetLatestQuoteRequest, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -101,6 +101,28 @@ export const MarketDataService = {
       name: "ListAssets",
       I: ListAssetsRequest,
       O: ListAssetsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache)
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetFundamentals
+     */
+    getFundamentals: {
+      name: "GetFundamentals",
+      I: GetFundamentalsRequest,
+      O: GetFundamentalsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetFundamentalsMulti
+     */
+    getFundamentalsMulti: {
+      name: "GetFundamentalsMulti",
+      I: GetFundamentalsMultiRequest,
+      O: GetFundamentalsMultiResponse,
       kind: MethodKind.Unary,
     },
   }

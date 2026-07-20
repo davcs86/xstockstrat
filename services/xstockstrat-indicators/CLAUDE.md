@@ -43,8 +43,11 @@ HTTP/Connect-RPC server on `8054` was removed.
     (`FormulaParameter`: `name`, `type`, `default_value`, `required`, `min`/`max`, `description`)
   - `outputs JSONB` (default `'[]'`) — ordered list of declared output series
     (`FormulaOutput`: `name`, `description`); the primary `value` series is implicit
+  - `warmup_period INTEGER` (default `0`) — bars this formula needs before its outputs are valid
+    (feature 064); read by `xstockstrat-analysis` for the Option-C backtest warm-up length
 - Migrations: `migrations/001_formulas.*` (table); `migrations/002_formula_parameters.*` (adds the
-  `parameters` JSONB column); `migrations/003_formula_outputs.*` (adds the `outputs` JSONB column)
+  `parameters` JSONB column); `migrations/003_formula_outputs.*` (adds the `outputs` JSONB column);
+  `migrations/004_formula_warmup.*` (adds the `warmup_period` INTEGER column)
 - Pool: `asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)` created in `app/main.py`
 
 ## Config Keys Consumed
@@ -57,6 +60,19 @@ Namespace: `indicators`
 | `indicators.sandbox.memory_bytes` | int | `134217728` | Max memory (128 MiB) per formula |
 | `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports |
 | `indicators.sandbox.max_concurrent` | int | `4` | Max concurrent sandbox executions |
+
+## Seeded Formulas
+
+A built-in **public** "Value+Quality Composite" fundamentals formula (feature 063) is seeded at
+startup by `app/services/seed_formulas.py` (called from `app/main.py` after the DB pool is created,
+before serving). The definition lives in `app/formulas/fundamentals_value_quality.py` — source,
+typed `params` (band endpoints + weights), declared outputs (`quality`, `composite`; `value` is the
+implicit primary series), and a **deterministic well-known** `FORMULA_ID`
+(`d1ff5e6b-6d9c-589d-b95e-defd862c702b`, a UUIDv5). Seeding is **idempotent**: it upserts on the
+`formula_id` PK (`FormulasRepository.upsert`, `ON CONFLICT`), so re-seeding on every restart is safe
+and a band/param/source change takes effect on the next deploy. Feature 062 references the formula by
+this stable id (`analysis.fundsignal.scoring_formula_id`, 062-owned). Seeding is non-fatal — a
+failure is logged and never blocks startup.
 
 ## Sandbox Security Model
 

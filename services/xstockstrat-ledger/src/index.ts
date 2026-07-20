@@ -6,7 +6,8 @@ import { getLogger } from './services/logger';
 import { ConfigWatcher } from './services/configWatcher';
 import { LedgerServiceImpl } from './grpc/ledgerServiceImpl';
 import { createLedgerServiceDefinition } from './grpc/serviceDefinition';
-import { Pool } from 'pg';
+import { EventNotifier } from './services/eventNotifier';
+import { Pool, Client } from 'pg';
 
 const log = getLogger('ledger:server');
 
@@ -32,20 +33,31 @@ async function main() {
     } catch { /* keep original if URL parsing fails */ }
   }
   const caCert = process.env.DATABASE_CA_CERT;
+  const sslOption = sslDisabled ? false : {
+    rejectUnauthorized: !!caCert,
+    ...(caCert ? { ca: caCert } : {}),
+  };
   const pool = new Pool({
     connectionString: dbUrl,
-    // Cap pool size to stay within DigitalOcean's shared 20-connection budget
-    // (see root CLAUDE.md). Override with DB_POOL_MAX.
-    max: parseInt(process.env.DB_POOL_MAX ?? '2', 10),
-    ssl: sslDisabled ? false : {
-      rejectUnauthorized: !!caCert,
-      ...(caCert ? { ca: caCert } : {}),
-    },
+    // Query pool. Live streaming no longer borrows from this pool (it uses the
+    // dedicated EventNotifier connection below), so a small pool is sufficient.
+    // Default 1 keeps the ledger's total DB connections at 2 (1 pool + 1
+    // listener), within DigitalOcean's shared 20-connection budget (see root
+    // CLAUDE.md). Override with DB_POOL_MAX.
+    max: parseInt(process.env.DB_POOL_MAX ?? '1', 10),
+    ssl: sslOption,
   });
   await pool.query('SELECT 1'); // verify connectivity
   log.info('Database connected');
 
-  const ledgerImpl = new LedgerServiceImpl(pool, configWatcher);
+  // Dedicated LISTEN/NOTIFY connection (separate from the query pool) that fans
+  // live events out to every StreamEvents subscriber. Decoupling streaming from
+  // the pool prevents N concurrent streams from starving AppendEvent.
+  const notifier = new EventNotifier(() => new Client({ connectionString: dbUrl, ssl: sslOption }));
+  await notifier.start();
+  log.info('Event notifier started');
+
+  const ledgerImpl = new LedgerServiceImpl(pool, configWatcher, notifier);
 
   // ── gRPC server (internal service-to-service, port 50057) ──────────────
   const grpcServer = new grpc.Server();
@@ -67,8 +79,9 @@ async function main() {
   // Graceful shutdown
   const shutdown = async () => {
     log.info('Shutting down ledger service...');
-    grpcServer.tryShutdown(() => {
-      pool.end();
+    grpcServer.tryShutdown(async () => {
+      await notifier.stop();
+      await pool.end();
       process.exit(0);
     });
   };

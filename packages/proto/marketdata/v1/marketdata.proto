@@ -33,6 +33,12 @@ service MarketDataService {
 
   // Get available symbols
   rpc ListAssets(ListAssetsRequest) returns (ListAssetsResponse);
+
+  // Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache)
+  rpc GetFundamentals(GetFundamentalsRequest) returns (GetFundamentalsResponse);
+
+  // Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
+  rpc GetFundamentalsMulti(GetFundamentalsMultiRequest) returns (GetFundamentalsMultiResponse);
 }
 
 message Bar {
@@ -149,4 +155,42 @@ message DeleteBackfilledDataRequest {
 
 message DeleteBackfilledDataResponse {
   int64 rows_deleted = 1;
+}
+
+// Fundamentals (feature 059) — cached fundamental metrics for a symbol, FMP-backed.
+message Fundamentals {
+  string symbol = 1;
+  double market_cap = 2;
+  double pe_ratio = 3;
+  double pb_ratio = 4;
+  double dividend_yield = 5;
+  double eps = 6;
+  double beta = 7;
+  double roe = 8;
+  double debt_to_equity = 9;
+  double price = 10;
+  double year_high = 11;
+  double year_low = 12;
+  // FMP's open-ended metric set (keys are FMP field names)
+  map<string, double> extra_metrics = 13;
+  google.protobuf.Timestamp as_of = 14;
+  string currency = 15;
+  string source = 16;   // "fmp"
+  bool stale = 17;      // true when served past TTL under quota exhaustion (FR-4)
+}
+
+message GetFundamentalsRequest {
+  string symbol = 1;
+}
+
+message GetFundamentalsResponse {
+  Fundamentals fundamentals = 1;
+}
+
+message GetFundamentalsMultiRequest {
+  repeated string symbols = 1;
+}
+
+message GetFundamentalsMultiResponse {
+  repeated Fundamentals fundamentals = 1;
 }

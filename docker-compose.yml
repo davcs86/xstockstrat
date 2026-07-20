@@ -144,7 +144,9 @@ services:
       CONFIG_ENDPOINT: xstockstrat-config:50060
       WAIT_FOR: "xstockstrat-config:50060"
       SERVICE_NAME: ledger
-      DB_POOL_MAX: "2"
+      # 1 query-pool connection + 1 dedicated LISTEN/NOTIFY connection = 2 total
+      # (streaming no longer borrows from the pool). See root CLAUDE.md budget.
+      DB_POOL_MAX: "1"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50057:50057"
@@ -348,6 +350,7 @@ services:
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       INGEST_ENDPOINT: xstockstrat-ingest:50055
+      PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-indicators:50054"

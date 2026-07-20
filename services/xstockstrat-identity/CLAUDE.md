@@ -2,7 +2,7 @@
 
 ## Role
 
-Node.js gRPC service for authentication, JWT management, and API key lifecycle. All services validate tokens against this service. Issues short-lived access JWTs and longer-lived refresh tokens. API keys are hashed before storage.
+Node.js gRPC service for authentication and JWT management. All services validate tokens against this service. Issues short-lived access JWTs and longer-lived refresh tokens, and is the durable OAuth 2.1 state store behind the MCP agent.
 
 ## Language
 
@@ -19,8 +19,8 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 | gRPC | `50058` | Internal service-to-service (protobuf) |
 
 This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing all
-fifteen methods: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`, `CreateApiKey`,
-`ValidateApiKey`, `ListApiKeys`, `RevokeApiKey`, the OAuth 2.1 backend RPCs (feature 049 Part B)
+eleven methods: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`,
+the OAuth 2.1 backend RPCs (feature 049 Part B)
 `RegisterOAuthClient`, `GetOAuthClient`, `IssueAuthCode`, `ExchangeAuthCode`, `RefreshOAuthToken`,
 and the per-user authorized-app RPCs (feature 051) `ListAuthorizedApps`, `RevokeAuthorizedApp`).
 The frontends validate tokens over gRPC `50058`.
@@ -43,11 +43,12 @@ on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs 
 |---|---|---|
 | xstockstrat-config | gRPC WatchConfig | Live config (JWT secrets, token TTLs) |
 | xstockstrat-ledger | gRPC write | Auth event audit trail |
-| PostgreSQL | DB (schema: `identity`) | Users, sessions, API keys, OAuth clients + auth codes |
+| PostgreSQL | DB (schema: `identity`) | Users, sessions, OAuth clients + auth codes |
 
 ## Database / Migrations
 
 - `000_schema`, `001_identity_tables` (`users`, `api_keys`, `refresh_tokens`), `002_seed_admin`.
+  Note: `005_drop_api_keys` later drops `identity.api_keys` (the API-key feature was removed).
 - `003_oauth` (feature 049 Part B) — adds `identity.oauth_clients` (`client_id` PK, `redirect_uris
   TEXT[]`, `client_name`, `created_at`) and `identity.oauth_auth_codes` (`code` PK = SHA-256 hash,
   `client_id`/`user_id` FKs ON DELETE CASCADE, `redirect_uri`, `code_challenge`, `resource`,
@@ -60,6 +61,9 @@ on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs 
   are now tagged with their `client_id` on mint (`ExchangeAuthCode`) and rotation
   (`RefreshOAuthToken`) so `ListAuthorizedApps` / `RevokeAuthorizedApp` can list and revoke them
   per-user.
+- `005_drop_api_keys` — drops `identity.api_keys` (and its index). The API-key RPCs
+  (`CreateApiKey`/`ValidateApiKey`/`ListApiKeys`/`RevokeApiKey`) were removed; nothing consumes
+  API keys anymore.
 
 ## Config Keys Consumed
 
@@ -70,7 +74,6 @@ Namespace: `identity`
 | `identity.jwt.access_ttl_seconds` | int | `900` | Access token TTL (15 min) |
 | `identity.jwt.refresh_ttl_seconds` | int | `2592000` | Refresh token TTL (30 days) |
 | `identity.jwt.secret` | string (secret) | — | JWT signing key (resolved from secret store) |
-| `identity.apikey.max_per_user` | int | `10` | Max API keys per user |
 
 ## Webhooks
 

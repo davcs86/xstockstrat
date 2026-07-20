@@ -27,6 +27,8 @@ const (
 	MarketDataService_GetDataCoverage_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/GetDataCoverage"
 	MarketDataService_DeleteBackfilledData_FullMethodName = "/xstockstrat.marketdata.v1.MarketDataService/DeleteBackfilledData"
 	MarketDataService_ListAssets_FullMethodName           = "/xstockstrat.marketdata.v1.MarketDataService/ListAssets"
+	MarketDataService_GetFundamentals_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentals"
+	MarketDataService_GetFundamentalsMulti_FullMethodName = "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentalsMulti"
 )
 
 // MarketDataServiceClient is the client API for MarketDataService service.
@@ -52,6 +54,10 @@ type MarketDataServiceClient interface {
 	DeleteBackfilledData(ctx context.Context, in *DeleteBackfilledDataRequest, opts ...grpc.CallOption) (*DeleteBackfilledDataResponse, error)
 	// Get available symbols
 	ListAssets(ctx context.Context, in *ListAssetsRequest, opts ...grpc.CallOption) (*ListAssetsResponse, error)
+	// Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache)
+	GetFundamentals(ctx context.Context, in *GetFundamentalsRequest, opts ...grpc.CallOption) (*GetFundamentalsResponse, error)
+	// Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
+	GetFundamentalsMulti(ctx context.Context, in *GetFundamentalsMultiRequest, opts ...grpc.CallOption) (*GetFundamentalsMultiResponse, error)
 }
 
 type marketDataServiceClient struct {
@@ -160,6 +166,26 @@ func (c *marketDataServiceClient) ListAssets(ctx context.Context, in *ListAssets
 	return out, nil
 }
 
+func (c *marketDataServiceClient) GetFundamentals(ctx context.Context, in *GetFundamentalsRequest, opts ...grpc.CallOption) (*GetFundamentalsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetFundamentalsResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_GetFundamentals_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketDataServiceClient) GetFundamentalsMulti(ctx context.Context, in *GetFundamentalsMultiRequest, opts ...grpc.CallOption) (*GetFundamentalsMultiResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetFundamentalsMultiResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_GetFundamentalsMulti_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MarketDataServiceServer is the server API for MarketDataService service.
 // All implementations should embed UnimplementedMarketDataServiceServer
 // for forward compatibility.
@@ -183,6 +209,10 @@ type MarketDataServiceServer interface {
 	DeleteBackfilledData(context.Context, *DeleteBackfilledDataRequest) (*DeleteBackfilledDataResponse, error)
 	// Get available symbols
 	ListAssets(context.Context, *ListAssetsRequest) (*ListAssetsResponse, error)
+	// Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache)
+	GetFundamentals(context.Context, *GetFundamentalsRequest) (*GetFundamentalsResponse, error)
+	// Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
+	GetFundamentalsMulti(context.Context, *GetFundamentalsMultiRequest) (*GetFundamentalsMultiResponse, error)
 }
 
 // UnimplementedMarketDataServiceServer should be embedded to have
@@ -215,6 +245,12 @@ func (UnimplementedMarketDataServiceServer) DeleteBackfilledData(context.Context
 }
 func (UnimplementedMarketDataServiceServer) ListAssets(context.Context, *ListAssetsRequest) (*ListAssetsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListAssets not implemented")
+}
+func (UnimplementedMarketDataServiceServer) GetFundamentals(context.Context, *GetFundamentalsRequest) (*GetFundamentalsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetFundamentals not implemented")
+}
+func (UnimplementedMarketDataServiceServer) GetFundamentalsMulti(context.Context, *GetFundamentalsMultiRequest) (*GetFundamentalsMultiResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetFundamentalsMulti not implemented")
 }
 func (UnimplementedMarketDataServiceServer) testEmbeddedByValue() {}
 
@@ -366,6 +402,42 @@ func _MarketDataService_ListAssets_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MarketDataService_GetFundamentals_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFundamentalsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).GetFundamentals(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_GetFundamentals_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).GetFundamentals(ctx, req.(*GetFundamentalsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketDataService_GetFundamentalsMulti_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFundamentalsMultiRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).GetFundamentalsMulti(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_GetFundamentalsMulti_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).GetFundamentalsMulti(ctx, req.(*GetFundamentalsMultiRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MarketDataService_ServiceDesc is the grpc.ServiceDesc for MarketDataService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -396,6 +468,14 @@ var MarketDataService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListAssets",
 			Handler:    _MarketDataService_ListAssets_Handler,
+		},
+		{
+			MethodName: "GetFundamentals",
+			Handler:    _MarketDataService_GetFundamentals_Handler,
+		},
+		{
+			MethodName: "GetFundamentalsMulti",
+			Handler:    _MarketDataService_GetFundamentalsMulti_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

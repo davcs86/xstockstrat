@@ -5,6 +5,7 @@ import {
   ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS,
   generateTraceId,
 } from '@/lib/auth';
+import { HEADER_TRACE_ID } from '@/lib/headers';
 
 export const config = {
   matcher: [
@@ -16,7 +17,7 @@ export const config = {
 export async function middleware(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
 
-  const traceId = req.headers.get('x-trace-id') ?? generateTraceId();
+  const traceId = req.headers.get(HEADER_TRACE_ID) ?? generateTraceId();
 
   if (!claims) {
     if (req.nextUrl.pathname === '/auth/login' || req.nextUrl.pathname === '/auth/oauth-login') {
@@ -43,7 +44,7 @@ export async function middleware(req: NextRequest) {
 
   return NextResponse.next({
     request: {
-      headers: new Headers({ ...Object.fromEntries(req.headers), 'x-trace-id': traceId }),
+      headers: new Headers({ ...Object.fromEntries(req.headers), [HEADER_TRACE_ID]: traceId }),
     },
   });
 }

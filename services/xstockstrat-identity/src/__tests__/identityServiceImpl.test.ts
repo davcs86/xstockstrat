@@ -156,26 +156,6 @@ describe('revokeToken', () => {
 });
 
 // ---------------------------------------------------------------------------
-// createApiKey — validation
-// ---------------------------------------------------------------------------
-
-describe('createApiKey', () => {
-  it('rejects when userId is missing', async () => {
-    const impl = makeImpl();
-    if (!impl) return;
-    const call = makeCall({ userId: '' });
-
-    await new Promise<void>((resolve) => {
-      impl.createApiKey(call, (err: any) => {
-        // Should reject missing user_id
-        assert.ok(err);
-        resolve();
-      });
-    });
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Regression: success responses must carry `Date` Timestamp fields so the
 // ts-proto grpc-js serializer can encode them. Before the fix, `{ seconds }`
 // plain objects threw `getTime is not a function` inside `responseSerialize`

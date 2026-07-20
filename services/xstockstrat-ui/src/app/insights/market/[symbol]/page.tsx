@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -8,85 +8,19 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConnectError } from '@connectrpc/connect';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
-
-// Only 15m/1h/1d are supported platform-wide (common.v1.Timeframe = 15MIN/1HOUR/1DAY;
-// 15m is the smallest interval the free Alpaca data plan serves). 10m/30m/1w/1mo have no
-// backend support and render empty, so they are not offered.
-type Timeframe = '15Min' | '1Hour' | '1Day';
-
-const TIMEFRAMES: { value: Timeframe; label: string }[] = [
-  { value: '15Min', label: '15m' },
-  { value: '1Hour', label: '1h' },
-  { value: '1Day', label: '1d' },
-];
-
-interface Bar {
-  time: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
+import { type Timeframe, TIMEFRAMES, type Bar, mapBars } from '@/lib/chart';
+import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 
 export default function MarketSymbolPage() {
   const params = useParams<{ symbol: string }>();
   const symbol = (params?.symbol ?? '').toUpperCase();
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const chartRef = useRef<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const seriesRef = useRef<any>(null);
+  const { containerRef, seriesRef } = useCandlestickChart(480);
 
   const [timeframe, setTimeframe] = useState<Timeframe>('1Day');
   const [bars, setBars] = useState<Bar[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Create chart on mount
-  useEffect(() => {
-    if (!containerRef.current) return;
-    let cleanup: (() => void) | undefined;
-
-    import('lightweight-charts').then(({ createChart }) => {
-      if (!containerRef.current) return;
-      const chart = createChart(containerRef.current, {
-        width: containerRef.current.offsetWidth,
-        height: 480,
-        layout: { background: { color: 'transparent' }, textColor: '#94a3b8' },
-        grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
-        crosshair: { mode: 1 },
-        rightPriceScale: { borderColor: '#334155' },
-        timeScale: { borderColor: '#334155', timeVisible: true },
-      });
-      // v4 API: addCandlestickSeries (v5 renamed this to addSeries(CandlestickSeries))
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const series = (chart as any).addCandlestickSeries({
-        upColor: '#22c55e',
-        downColor: '#ef4444',
-        borderVisible: false,
-        wickUpColor: '#22c55e',
-        wickDownColor: '#ef4444',
-      });
-      chartRef.current = chart;
-      seriesRef.current = series;
-
-      const ro = new ResizeObserver(() => {
-        if (containerRef.current) chart.applyOptions({ width: containerRef.current.offsetWidth });
-      });
-      ro.observe(containerRef.current);
-
-      cleanup = () => {
-        ro.disconnect();
-        chart.remove();
-        chartRef.current = null;
-        seriesRef.current = null;
-      };
-    });
-
-    return () => cleanup?.();
-  }, []);
 
   // Fetch bars on symbol/timeframe change
   useEffect(() => {
@@ -98,15 +32,7 @@ export default function MarketSymbolPage() {
       .getBars({ symbol, timeframe, page: { pageSize: 300 } })
       .then((res) => {
         if (cancelled) return;
-        const mapped: Bar[] = res.bars.map((b) => ({
-          time: b.time ? Number(b.time.seconds) : 0,
-          open: b.open,
-          high: b.high,
-          low: b.low,
-          close: b.close,
-          volume: Number(b.volume),
-        }));
-        const sorted = mapped.sort((a, b) => a.time - b.time);
+        const sorted = mapBars(res.bars);
         setBars(sorted);
         if (seriesRef.current) seriesRef.current.setData(sorted);
       })
@@ -121,7 +47,7 @@ export default function MarketSymbolPage() {
     return () => {
       cancelled = true;
     };
-  }, [symbol, timeframe]);
+  }, [symbol, timeframe]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const latest = bars[bars.length - 1];
   const prior = bars[bars.length - 2];

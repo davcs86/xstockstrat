@@ -53,6 +53,27 @@ const (
 	// PortfolioServiceListPortfoliosProcedure is the fully-qualified name of the PortfolioService's
 	// ListPortfolios RPC.
 	PortfolioServiceListPortfoliosProcedure = "/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios"
+	// PortfolioServiceCreateWatchlistProcedure is the fully-qualified name of the PortfolioService's
+	// CreateWatchlist RPC.
+	PortfolioServiceCreateWatchlistProcedure = "/xstockstrat.portfolio.v1.PortfolioService/CreateWatchlist"
+	// PortfolioServiceGetWatchlistProcedure is the fully-qualified name of the PortfolioService's
+	// GetWatchlist RPC.
+	PortfolioServiceGetWatchlistProcedure = "/xstockstrat.portfolio.v1.PortfolioService/GetWatchlist"
+	// PortfolioServiceListWatchlistsProcedure is the fully-qualified name of the PortfolioService's
+	// ListWatchlists RPC.
+	PortfolioServiceListWatchlistsProcedure = "/xstockstrat.portfolio.v1.PortfolioService/ListWatchlists"
+	// PortfolioServiceUpdateWatchlistProcedure is the fully-qualified name of the PortfolioService's
+	// UpdateWatchlist RPC.
+	PortfolioServiceUpdateWatchlistProcedure = "/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlist"
+	// PortfolioServiceDeleteWatchlistProcedure is the fully-qualified name of the PortfolioService's
+	// DeleteWatchlist RPC.
+	PortfolioServiceDeleteWatchlistProcedure = "/xstockstrat.portfolio.v1.PortfolioService/DeleteWatchlist"
+	// PortfolioServiceAddWatchlistSymbolsProcedure is the fully-qualified name of the
+	// PortfolioService's AddWatchlistSymbols RPC.
+	PortfolioServiceAddWatchlistSymbolsProcedure = "/xstockstrat.portfolio.v1.PortfolioService/AddWatchlistSymbols"
+	// PortfolioServiceRemoveWatchlistSymbolsProcedure is the fully-qualified name of the
+	// PortfolioService's RemoveWatchlistSymbols RPC.
+	PortfolioServiceRemoveWatchlistSymbolsProcedure = "/xstockstrat.portfolio.v1.PortfolioService/RemoveWatchlistSymbols"
 )
 
 // PortfolioServiceClient is a client for the xstockstrat.portfolio.v1.PortfolioService service.
@@ -64,6 +85,15 @@ type PortfolioServiceClient interface {
 	GetSnapshot(context.Context, *connect.Request[v1.GetSnapshotRequest]) (*connect.Response[v1.PortfolioSnapshot], error)
 	StreamPortfolioUpdates(context.Context, *connect.Request[v1.StreamPortfolioUpdatesRequest]) (*connect.ServerStreamForClient[v1.PortfolioSnapshot], error)
 	ListPortfolios(context.Context, *connect.Request[v1.ListPortfoliosRequest]) (*connect.Response[v1.ListPortfoliosResponse], error)
+	// Watchlist management (feature 058). Additive — ownership is taken from the
+	// propagated x-user-id header server-side, never from request fields.
+	CreateWatchlist(context.Context, *connect.Request[v1.CreateWatchlistRequest]) (*connect.Response[v1.CreateWatchlistResponse], error)
+	GetWatchlist(context.Context, *connect.Request[v1.GetWatchlistRequest]) (*connect.Response[v1.GetWatchlistResponse], error)
+	ListWatchlists(context.Context, *connect.Request[v1.ListWatchlistsRequest]) (*connect.Response[v1.ListWatchlistsResponse], error)
+	UpdateWatchlist(context.Context, *connect.Request[v1.UpdateWatchlistRequest]) (*connect.Response[v1.UpdateWatchlistResponse], error)
+	DeleteWatchlist(context.Context, *connect.Request[v1.DeleteWatchlistRequest]) (*connect.Response[v1.DeleteWatchlistResponse], error)
+	AddWatchlistSymbols(context.Context, *connect.Request[v1.AddWatchlistSymbolsRequest]) (*connect.Response[v1.AddWatchlistSymbolsResponse], error)
+	RemoveWatchlistSymbols(context.Context, *connect.Request[v1.RemoveWatchlistSymbolsRequest]) (*connect.Response[v1.RemoveWatchlistSymbolsResponse], error)
 }
 
 // NewPortfolioServiceClient constructs a client for the xstockstrat.portfolio.v1.PortfolioService
@@ -119,6 +149,48 @@ func NewPortfolioServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(portfolioServiceMethods.ByName("ListPortfolios")),
 			connect.WithClientOptions(opts...),
 		),
+		createWatchlist: connect.NewClient[v1.CreateWatchlistRequest, v1.CreateWatchlistResponse](
+			httpClient,
+			baseURL+PortfolioServiceCreateWatchlistProcedure,
+			connect.WithSchema(portfolioServiceMethods.ByName("CreateWatchlist")),
+			connect.WithClientOptions(opts...),
+		),
+		getWatchlist: connect.NewClient[v1.GetWatchlistRequest, v1.GetWatchlistResponse](
+			httpClient,
+			baseURL+PortfolioServiceGetWatchlistProcedure,
+			connect.WithSchema(portfolioServiceMethods.ByName("GetWatchlist")),
+			connect.WithClientOptions(opts...),
+		),
+		listWatchlists: connect.NewClient[v1.ListWatchlistsRequest, v1.ListWatchlistsResponse](
+			httpClient,
+			baseURL+PortfolioServiceListWatchlistsProcedure,
+			connect.WithSchema(portfolioServiceMethods.ByName("ListWatchlists")),
+			connect.WithClientOptions(opts...),
+		),
+		updateWatchlist: connect.NewClient[v1.UpdateWatchlistRequest, v1.UpdateWatchlistResponse](
+			httpClient,
+			baseURL+PortfolioServiceUpdateWatchlistProcedure,
+			connect.WithSchema(portfolioServiceMethods.ByName("UpdateWatchlist")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteWatchlist: connect.NewClient[v1.DeleteWatchlistRequest, v1.DeleteWatchlistResponse](
+			httpClient,
+			baseURL+PortfolioServiceDeleteWatchlistProcedure,
+			connect.WithSchema(portfolioServiceMethods.ByName("DeleteWatchlist")),
+			connect.WithClientOptions(opts...),
+		),
+		addWatchlistSymbols: connect.NewClient[v1.AddWatchlistSymbolsRequest, v1.AddWatchlistSymbolsResponse](
+			httpClient,
+			baseURL+PortfolioServiceAddWatchlistSymbolsProcedure,
+			connect.WithSchema(portfolioServiceMethods.ByName("AddWatchlistSymbols")),
+			connect.WithClientOptions(opts...),
+		),
+		removeWatchlistSymbols: connect.NewClient[v1.RemoveWatchlistSymbolsRequest, v1.RemoveWatchlistSymbolsResponse](
+			httpClient,
+			baseURL+PortfolioServiceRemoveWatchlistSymbolsProcedure,
+			connect.WithSchema(portfolioServiceMethods.ByName("RemoveWatchlistSymbols")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -131,6 +203,13 @@ type portfolioServiceClient struct {
 	getSnapshot            *connect.Client[v1.GetSnapshotRequest, v1.PortfolioSnapshot]
 	streamPortfolioUpdates *connect.Client[v1.StreamPortfolioUpdatesRequest, v1.PortfolioSnapshot]
 	listPortfolios         *connect.Client[v1.ListPortfoliosRequest, v1.ListPortfoliosResponse]
+	createWatchlist        *connect.Client[v1.CreateWatchlistRequest, v1.CreateWatchlistResponse]
+	getWatchlist           *connect.Client[v1.GetWatchlistRequest, v1.GetWatchlistResponse]
+	listWatchlists         *connect.Client[v1.ListWatchlistsRequest, v1.ListWatchlistsResponse]
+	updateWatchlist        *connect.Client[v1.UpdateWatchlistRequest, v1.UpdateWatchlistResponse]
+	deleteWatchlist        *connect.Client[v1.DeleteWatchlistRequest, v1.DeleteWatchlistResponse]
+	addWatchlistSymbols    *connect.Client[v1.AddWatchlistSymbolsRequest, v1.AddWatchlistSymbolsResponse]
+	removeWatchlistSymbols *connect.Client[v1.RemoveWatchlistSymbolsRequest, v1.RemoveWatchlistSymbolsResponse]
 }
 
 // GetPortfolio calls xstockstrat.portfolio.v1.PortfolioService.GetPortfolio.
@@ -168,6 +247,41 @@ func (c *portfolioServiceClient) ListPortfolios(ctx context.Context, req *connec
 	return c.listPortfolios.CallUnary(ctx, req)
 }
 
+// CreateWatchlist calls xstockstrat.portfolio.v1.PortfolioService.CreateWatchlist.
+func (c *portfolioServiceClient) CreateWatchlist(ctx context.Context, req *connect.Request[v1.CreateWatchlistRequest]) (*connect.Response[v1.CreateWatchlistResponse], error) {
+	return c.createWatchlist.CallUnary(ctx, req)
+}
+
+// GetWatchlist calls xstockstrat.portfolio.v1.PortfolioService.GetWatchlist.
+func (c *portfolioServiceClient) GetWatchlist(ctx context.Context, req *connect.Request[v1.GetWatchlistRequest]) (*connect.Response[v1.GetWatchlistResponse], error) {
+	return c.getWatchlist.CallUnary(ctx, req)
+}
+
+// ListWatchlists calls xstockstrat.portfolio.v1.PortfolioService.ListWatchlists.
+func (c *portfolioServiceClient) ListWatchlists(ctx context.Context, req *connect.Request[v1.ListWatchlistsRequest]) (*connect.Response[v1.ListWatchlistsResponse], error) {
+	return c.listWatchlists.CallUnary(ctx, req)
+}
+
+// UpdateWatchlist calls xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlist.
+func (c *portfolioServiceClient) UpdateWatchlist(ctx context.Context, req *connect.Request[v1.UpdateWatchlistRequest]) (*connect.Response[v1.UpdateWatchlistResponse], error) {
+	return c.updateWatchlist.CallUnary(ctx, req)
+}
+
+// DeleteWatchlist calls xstockstrat.portfolio.v1.PortfolioService.DeleteWatchlist.
+func (c *portfolioServiceClient) DeleteWatchlist(ctx context.Context, req *connect.Request[v1.DeleteWatchlistRequest]) (*connect.Response[v1.DeleteWatchlistResponse], error) {
+	return c.deleteWatchlist.CallUnary(ctx, req)
+}
+
+// AddWatchlistSymbols calls xstockstrat.portfolio.v1.PortfolioService.AddWatchlistSymbols.
+func (c *portfolioServiceClient) AddWatchlistSymbols(ctx context.Context, req *connect.Request[v1.AddWatchlistSymbolsRequest]) (*connect.Response[v1.AddWatchlistSymbolsResponse], error) {
+	return c.addWatchlistSymbols.CallUnary(ctx, req)
+}
+
+// RemoveWatchlistSymbols calls xstockstrat.portfolio.v1.PortfolioService.RemoveWatchlistSymbols.
+func (c *portfolioServiceClient) RemoveWatchlistSymbols(ctx context.Context, req *connect.Request[v1.RemoveWatchlistSymbolsRequest]) (*connect.Response[v1.RemoveWatchlistSymbolsResponse], error) {
+	return c.removeWatchlistSymbols.CallUnary(ctx, req)
+}
+
 // PortfolioServiceHandler is an implementation of the xstockstrat.portfolio.v1.PortfolioService
 // service.
 type PortfolioServiceHandler interface {
@@ -178,6 +292,15 @@ type PortfolioServiceHandler interface {
 	GetSnapshot(context.Context, *connect.Request[v1.GetSnapshotRequest]) (*connect.Response[v1.PortfolioSnapshot], error)
 	StreamPortfolioUpdates(context.Context, *connect.Request[v1.StreamPortfolioUpdatesRequest], *connect.ServerStream[v1.PortfolioSnapshot]) error
 	ListPortfolios(context.Context, *connect.Request[v1.ListPortfoliosRequest]) (*connect.Response[v1.ListPortfoliosResponse], error)
+	// Watchlist management (feature 058). Additive — ownership is taken from the
+	// propagated x-user-id header server-side, never from request fields.
+	CreateWatchlist(context.Context, *connect.Request[v1.CreateWatchlistRequest]) (*connect.Response[v1.CreateWatchlistResponse], error)
+	GetWatchlist(context.Context, *connect.Request[v1.GetWatchlistRequest]) (*connect.Response[v1.GetWatchlistResponse], error)
+	ListWatchlists(context.Context, *connect.Request[v1.ListWatchlistsRequest]) (*connect.Response[v1.ListWatchlistsResponse], error)
+	UpdateWatchlist(context.Context, *connect.Request[v1.UpdateWatchlistRequest]) (*connect.Response[v1.UpdateWatchlistResponse], error)
+	DeleteWatchlist(context.Context, *connect.Request[v1.DeleteWatchlistRequest]) (*connect.Response[v1.DeleteWatchlistResponse], error)
+	AddWatchlistSymbols(context.Context, *connect.Request[v1.AddWatchlistSymbolsRequest]) (*connect.Response[v1.AddWatchlistSymbolsResponse], error)
+	RemoveWatchlistSymbols(context.Context, *connect.Request[v1.RemoveWatchlistSymbolsRequest]) (*connect.Response[v1.RemoveWatchlistSymbolsResponse], error)
 }
 
 // NewPortfolioServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -229,6 +352,48 @@ func NewPortfolioServiceHandler(svc PortfolioServiceHandler, opts ...connect.Han
 		connect.WithSchema(portfolioServiceMethods.ByName("ListPortfolios")),
 		connect.WithHandlerOptions(opts...),
 	)
+	portfolioServiceCreateWatchlistHandler := connect.NewUnaryHandler(
+		PortfolioServiceCreateWatchlistProcedure,
+		svc.CreateWatchlist,
+		connect.WithSchema(portfolioServiceMethods.ByName("CreateWatchlist")),
+		connect.WithHandlerOptions(opts...),
+	)
+	portfolioServiceGetWatchlistHandler := connect.NewUnaryHandler(
+		PortfolioServiceGetWatchlistProcedure,
+		svc.GetWatchlist,
+		connect.WithSchema(portfolioServiceMethods.ByName("GetWatchlist")),
+		connect.WithHandlerOptions(opts...),
+	)
+	portfolioServiceListWatchlistsHandler := connect.NewUnaryHandler(
+		PortfolioServiceListWatchlistsProcedure,
+		svc.ListWatchlists,
+		connect.WithSchema(portfolioServiceMethods.ByName("ListWatchlists")),
+		connect.WithHandlerOptions(opts...),
+	)
+	portfolioServiceUpdateWatchlistHandler := connect.NewUnaryHandler(
+		PortfolioServiceUpdateWatchlistProcedure,
+		svc.UpdateWatchlist,
+		connect.WithSchema(portfolioServiceMethods.ByName("UpdateWatchlist")),
+		connect.WithHandlerOptions(opts...),
+	)
+	portfolioServiceDeleteWatchlistHandler := connect.NewUnaryHandler(
+		PortfolioServiceDeleteWatchlistProcedure,
+		svc.DeleteWatchlist,
+		connect.WithSchema(portfolioServiceMethods.ByName("DeleteWatchlist")),
+		connect.WithHandlerOptions(opts...),
+	)
+	portfolioServiceAddWatchlistSymbolsHandler := connect.NewUnaryHandler(
+		PortfolioServiceAddWatchlistSymbolsProcedure,
+		svc.AddWatchlistSymbols,
+		connect.WithSchema(portfolioServiceMethods.ByName("AddWatchlistSymbols")),
+		connect.WithHandlerOptions(opts...),
+	)
+	portfolioServiceRemoveWatchlistSymbolsHandler := connect.NewUnaryHandler(
+		PortfolioServiceRemoveWatchlistSymbolsProcedure,
+		svc.RemoveWatchlistSymbols,
+		connect.WithSchema(portfolioServiceMethods.ByName("RemoveWatchlistSymbols")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.portfolio.v1.PortfolioService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PortfolioServiceGetPortfolioProcedure:
@@ -245,6 +410,20 @@ func NewPortfolioServiceHandler(svc PortfolioServiceHandler, opts ...connect.Han
 			portfolioServiceStreamPortfolioUpdatesHandler.ServeHTTP(w, r)
 		case PortfolioServiceListPortfoliosProcedure:
 			portfolioServiceListPortfoliosHandler.ServeHTTP(w, r)
+		case PortfolioServiceCreateWatchlistProcedure:
+			portfolioServiceCreateWatchlistHandler.ServeHTTP(w, r)
+		case PortfolioServiceGetWatchlistProcedure:
+			portfolioServiceGetWatchlistHandler.ServeHTTP(w, r)
+		case PortfolioServiceListWatchlistsProcedure:
+			portfolioServiceListWatchlistsHandler.ServeHTTP(w, r)
+		case PortfolioServiceUpdateWatchlistProcedure:
+			portfolioServiceUpdateWatchlistHandler.ServeHTTP(w, r)
+		case PortfolioServiceDeleteWatchlistProcedure:
+			portfolioServiceDeleteWatchlistHandler.ServeHTTP(w, r)
+		case PortfolioServiceAddWatchlistSymbolsProcedure:
+			portfolioServiceAddWatchlistSymbolsHandler.ServeHTTP(w, r)
+		case PortfolioServiceRemoveWatchlistSymbolsProcedure:
+			portfolioServiceRemoveWatchlistSymbolsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -280,4 +459,32 @@ func (UnimplementedPortfolioServiceHandler) StreamPortfolioUpdates(context.Conte
 
 func (UnimplementedPortfolioServiceHandler) ListPortfolios(context.Context, *connect.Request[v1.ListPortfoliosRequest]) (*connect.Response[v1.ListPortfoliosResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.portfolio.v1.PortfolioService.ListPortfolios is not implemented"))
+}
+
+func (UnimplementedPortfolioServiceHandler) CreateWatchlist(context.Context, *connect.Request[v1.CreateWatchlistRequest]) (*connect.Response[v1.CreateWatchlistResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.portfolio.v1.PortfolioService.CreateWatchlist is not implemented"))
+}
+
+func (UnimplementedPortfolioServiceHandler) GetWatchlist(context.Context, *connect.Request[v1.GetWatchlistRequest]) (*connect.Response[v1.GetWatchlistResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.portfolio.v1.PortfolioService.GetWatchlist is not implemented"))
+}
+
+func (UnimplementedPortfolioServiceHandler) ListWatchlists(context.Context, *connect.Request[v1.ListWatchlistsRequest]) (*connect.Response[v1.ListWatchlistsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.portfolio.v1.PortfolioService.ListWatchlists is not implemented"))
+}
+
+func (UnimplementedPortfolioServiceHandler) UpdateWatchlist(context.Context, *connect.Request[v1.UpdateWatchlistRequest]) (*connect.Response[v1.UpdateWatchlistResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlist is not implemented"))
+}
+
+func (UnimplementedPortfolioServiceHandler) DeleteWatchlist(context.Context, *connect.Request[v1.DeleteWatchlistRequest]) (*connect.Response[v1.DeleteWatchlistResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.portfolio.v1.PortfolioService.DeleteWatchlist is not implemented"))
+}
+
+func (UnimplementedPortfolioServiceHandler) AddWatchlistSymbols(context.Context, *connect.Request[v1.AddWatchlistSymbolsRequest]) (*connect.Response[v1.AddWatchlistSymbolsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.portfolio.v1.PortfolioService.AddWatchlistSymbols is not implemented"))
+}
+
+func (UnimplementedPortfolioServiceHandler) RemoveWatchlistSymbols(context.Context, *connect.Request[v1.RemoveWatchlistSymbolsRequest]) (*connect.Response[v1.RemoveWatchlistSymbolsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.portfolio.v1.PortfolioService.RemoveWatchlistSymbols is not implemented"))
 }

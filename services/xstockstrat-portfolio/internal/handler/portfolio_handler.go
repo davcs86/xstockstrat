@@ -124,6 +124,67 @@ func (h *PortfolioHandler) ListPortfolios(ctx context.Context, req *connect.Requ
 	return connect.NewResponse(resp), nil
 }
 
+// ─── Watchlists (feature 058) ────────────────────────────────────────────────
+// The service returns *connect.Error values carrying the right code (InvalidArgument
+// / PermissionDenied / NotFound / Internal); Connect handlers pass them through and
+// the gRPC adapter maps them via toGRPCError.
+
+func (h *PortfolioHandler) CreateWatchlist(ctx context.Context, req *connect.Request[portfoliov1.CreateWatchlistRequest]) (*connect.Response[portfoliov1.CreateWatchlistResponse], error) {
+	resp, err := h.svc.CreateWatchlist(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (h *PortfolioHandler) GetWatchlist(ctx context.Context, req *connect.Request[portfoliov1.GetWatchlistRequest]) (*connect.Response[portfoliov1.GetWatchlistResponse], error) {
+	resp, err := h.svc.GetWatchlist(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (h *PortfolioHandler) ListWatchlists(ctx context.Context, req *connect.Request[portfoliov1.ListWatchlistsRequest]) (*connect.Response[portfoliov1.ListWatchlistsResponse], error) {
+	resp, err := h.svc.ListWatchlists(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (h *PortfolioHandler) UpdateWatchlist(ctx context.Context, req *connect.Request[portfoliov1.UpdateWatchlistRequest]) (*connect.Response[portfoliov1.UpdateWatchlistResponse], error) {
+	resp, err := h.svc.UpdateWatchlist(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (h *PortfolioHandler) DeleteWatchlist(ctx context.Context, req *connect.Request[portfoliov1.DeleteWatchlistRequest]) (*connect.Response[portfoliov1.DeleteWatchlistResponse], error) {
+	resp, err := h.svc.DeleteWatchlist(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (h *PortfolioHandler) AddWatchlistSymbols(ctx context.Context, req *connect.Request[portfoliov1.AddWatchlistSymbolsRequest]) (*connect.Response[portfoliov1.AddWatchlistSymbolsResponse], error) {
+	resp, err := h.svc.AddWatchlistSymbols(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (h *PortfolioHandler) RemoveWatchlistSymbols(ctx context.Context, req *connect.Request[portfoliov1.RemoveWatchlistSymbolsRequest]) (*connect.Response[portfoliov1.RemoveWatchlistSymbolsResponse], error) {
+	resp, err := h.svc.RemoveWatchlistSymbols(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
 // GRPCHandler returns a gRPC-compatible adapter around this handler.
 func (h *PortfolioHandler) GRPCHandler() *grpcPortfolioAdapter {
 	return &grpcPortfolioAdapter{h: h}
@@ -205,6 +266,62 @@ func (a *grpcPortfolioAdapter) ListPortfolios(ctx context.Context, req *portfoli
 	return resp.Msg, nil
 }
 
+func (a *grpcPortfolioAdapter) CreateWatchlist(ctx context.Context, req *portfoliov1.CreateWatchlistRequest) (*portfoliov1.CreateWatchlistResponse, error) {
+	resp, err := a.h.CreateWatchlist(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcPortfolioAdapter) GetWatchlist(ctx context.Context, req *portfoliov1.GetWatchlistRequest) (*portfoliov1.GetWatchlistResponse, error) {
+	resp, err := a.h.GetWatchlist(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcPortfolioAdapter) ListWatchlists(ctx context.Context, req *portfoliov1.ListWatchlistsRequest) (*portfoliov1.ListWatchlistsResponse, error) {
+	resp, err := a.h.ListWatchlists(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcPortfolioAdapter) UpdateWatchlist(ctx context.Context, req *portfoliov1.UpdateWatchlistRequest) (*portfoliov1.UpdateWatchlistResponse, error) {
+	resp, err := a.h.UpdateWatchlist(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcPortfolioAdapter) DeleteWatchlist(ctx context.Context, req *portfoliov1.DeleteWatchlistRequest) (*portfoliov1.DeleteWatchlistResponse, error) {
+	resp, err := a.h.DeleteWatchlist(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcPortfolioAdapter) AddWatchlistSymbols(ctx context.Context, req *portfoliov1.AddWatchlistSymbolsRequest) (*portfoliov1.AddWatchlistSymbolsResponse, error) {
+	resp, err := a.h.AddWatchlistSymbols(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcPortfolioAdapter) RemoveWatchlistSymbols(ctx context.Context, req *portfoliov1.RemoveWatchlistSymbolsRequest) (*portfoliov1.RemoveWatchlistSymbolsResponse, error) {
+	resp, err := a.h.RemoveWatchlistSymbols(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
 func errorf(msg string) error {
 	return fmt.Errorf("%s", msg)
 }
@@ -217,6 +334,8 @@ func toGRPCError(err error) error {
 			return status.Error(codes.InvalidArgument, connectErr.Message())
 		case connect.CodeNotFound:
 			return status.Error(codes.NotFound, connectErr.Message())
+		case connect.CodePermissionDenied:
+			return status.Error(codes.PermissionDenied, connectErr.Message())
 		}
 	}
 	return status.Error(codes.Internal, err.Error())

@@ -30,6 +30,24 @@ was removed.
 3. **stream_key** is the logical partition for event replay (`order:{id}`, `portfolio:{user_id}`, etc.)
 4. **sequence** is globally monotonic — never gaps, never decreasing.
 
+## Live Streaming Architecture (connection budget)
+
+`StreamEvents` does **not** hold a pooled DB connection for the stream's lifetime. Instead a
+single dedicated LISTEN connection — `EventNotifier` (`src/services/eventNotifier.ts`), created
+outside the query pool — tails the `ledger_stream_all` channel (the DB trigger emits every insert
+there in addition to the per-`stream_key` channel) and fans each event out to in-process
+subscribers, filtered per-subscriber by `stream_key`/`event_type`. Each `StreamEvents` handler
+replays history with a borrow-and-release pool query, then subscribes to the notifier.
+
+This decoupling is load-bearing: `xstockstrat-portfolio` holds **three** permanent `StreamEvents`
+subscriptions (`order.filled`, `account.positions.synced`, `account.balance.synced`). Under the
+old per-stream design each held one of the pool's 2 connections, so the pool was permanently
+exhausted and **every `AppendEvent` blocked until the caller's deadline** (`DeadlineExceeded`) —
+which is why position/balance-sync ledger writes silently froze. The query pool is therefore now
+`DB_POOL_MAX=1` (+ 1 dedicated listener = 2 total, unchanged budget). Subscriptions are released on
+`cancelled`/`close`/`error` (leak-proof), and on listener reconnect the handler ends the call so
+the client reconnects and replays the gap.
+
 ## Dependencies
 
 | Dependency | Type | Reason |
@@ -92,6 +110,7 @@ _No webhooks. Call the gRPC RPCs on port 50057 directly._
 GRPC_PORT=50057
 CONFIG_ENDPOINT=xstockstrat-config:50060
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
+DB_POOL_MAX=1                          # query pool size; live streaming uses a separate dedicated LISTEN connection (1 + 1 = 2 total, see Live Streaming Architecture)
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
 ```

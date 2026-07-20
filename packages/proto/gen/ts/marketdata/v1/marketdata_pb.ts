@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file marketdata/v1/marketdata.proto.
  */
 export const file_marketdata_v1_marketdata: GenFile = /*@__PURE__*/
-  fileDesc("Ch5tYXJrZXRkYXRhL3YxL21hcmtldGRhdGEucHJvdG8SGXhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEiiwIKA0JhchIOCgZzeW1ib2wYASABKAkSKAoEdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDAoEb3BlbhgDIAEoARIMCgRoaWdoGAQgASgBEgsKA2xvdxgFIAEoARINCgVjbG9zZRgGIAEoARIOCgZ2b2x1bWUYByABKAMSDAoEdndhcBgIIAEoARITCgt0cmFkZV9jb3VudBgJIAEoBRIVCgl0aW1lZnJhbWUYCiABKAlCAhgBEg4KBnNvdXJjZRgLIAEoCRI4Cg50aW1lZnJhbWVfZW51bRgMIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUimwEKBVF1b3RlEg4KBnN5bWJvbBgBIAEoCRIoCgR0aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglhc2tfcHJpY2UYAyABKAESEAoIYXNrX3NpemUYBCABKAUSEQoJYmlkX3ByaWNlGAUgASgBEhAKCGJpZF9zaXplGAYgASgFEg4KBnNvdXJjZRgHIAEoCSKsAQoRU3RyZWFtQmFyc1JlcXVlc3QSDwoHc3ltYm9scxgBIAMoCRIVCgl0aW1lZnJhbWUYAiABKAlCAhgBEhkKEWluY2x1ZGVfcHJlbWFya2V0GAMgASgIEhoKEmluY2x1ZGVfYWZ0ZXJob3VycxgEIAEoCBI4Cg50aW1lZnJhbWVfZW51bRgFIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUiJgoTU3RyZWFtUXVvdGVzUmVxdWVzdBIPCgdzeW1ib2xzGAEgAygJItQBCg5HZXRCYXJzUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USMAoEcGFnZRgEIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdBI4Cg50aW1lZnJhbWVfZW51bRgFIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUicgoPR2V0QmFyc1Jlc3BvbnNlEiwKBGJhcnMYASADKAsyHi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhchIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSInChVHZXRMYXRlc3RRdW90ZVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJIsQBChNCYWNrZmlsbEJhcnNSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USGgoSb3ZlcndyaXRlX2V4aXN0aW5nGAQgASgIEjgKDnRpbWVmcmFtZV9lbnVtGAUgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZSJbChRCYWNrZmlsbEJhcnNSZXNwb25zZRIUCgxiYXJzX3dyaXR0ZW4YASABKAMSFgoOZmFpbGVkX3N5bWJvbHMYAiADKAkSFQoNZXhwZWN0ZWRfYmFycxgDIAEoAyKOAQoWR2V0RGF0YUNvdmVyYWdlUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSMwoJdGltZWZyYW1lGAIgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZRIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UidgoNQ292ZXJhZ2VSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgliYXJfY291bnQYAyABKAMivgIKF0dldERhdGFDb3ZlcmFnZVJlc3BvbnNlEg4KBnN5bWJvbBgBIAEoCRIzCgl0aW1lZnJhbWUYAiABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEhIKCmJhcnNfdG90YWwYAyABKAMSLAoIZWFybGllc3QYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBmxhdGVzdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASQAoOY292ZXJlZF9yYW5nZXMYBiADKAsyKC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkNvdmVyYWdlUmFuZ2USLgoEZ2FwcxgHIAMoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UiPwoRTGlzdEFzc2V0c1JlcXVlc3QSEwoLYXNzZXRfY2xhc3MYASABKAkSFQoNdHJhZGFibGVfb25seRgCIAEoCCJCChJMaXN0QXNzZXRzUmVzcG9uc2USLAoGYXNzZXRzGAEgAygLMhwueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkFzc2V0IpMBChtEZWxldGVCYWNrZmlsbGVkRGF0YVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJEi8KBXJhbmdlGAIgASgLMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVSYW5nZRIzCgl0aW1lZnJhbWUYAyABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lIjQKHERlbGV0ZUJhY2tmaWxsZWREYXRhUmVzcG9uc2USFAoMcm93c19kZWxldGVkGAEgASgDMv0GChFNYXJrZXREYXRhU2VydmljZRJcCgpTdHJlYW1CYXJzEiwueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5TdHJlYW1CYXJzUmVxdWVzdBoeLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuQmFyMAESYgoMU3RyZWFtUXVvdGVzEi4ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5TdHJlYW1RdW90ZXNSZXF1ZXN0GiAueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5RdW90ZTABEmAKB0dldEJhcnMSKS54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldEJhcnNSZXF1ZXN0GioueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRCYXJzUmVzcG9uc2USZAoOR2V0TGF0ZXN0UXVvdGUSMC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldExhdGVzdFF1b3RlUmVxdWVzdBogLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuUXVvdGUSbwoMQmFja2ZpbGxCYXJzEi4ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYWNrZmlsbEJhcnNSZXF1ZXN0Gi8ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYWNrZmlsbEJhcnNSZXNwb25zZRJ4Cg9HZXREYXRhQ292ZXJhZ2USMS54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldERhdGFDb3ZlcmFnZVJlcXVlc3QaMi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldERhdGFDb3ZlcmFnZVJlc3BvbnNlEocBChREZWxldGVCYWNrZmlsbGVkRGF0YRI2LnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuRGVsZXRlQmFja2ZpbGxlZERhdGFSZXF1ZXN0GjcueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5EZWxldGVCYWNrZmlsbGVkRGF0YVJlc3BvbnNlEmkKCkxpc3RBc3NldHMSLC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkxpc3RBc3NldHNSZXF1ZXN0Gi0ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5MaXN0QXNzZXRzUmVzcG9uc2VCRFpCZ2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL21hcmtldGRhdGEvdjE7bWFya2V0ZGF0YXYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_common_v1_common]);
+  fileDesc("Ch5tYXJrZXRkYXRhL3YxL21hcmtldGRhdGEucHJvdG8SGXhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEiiwIKA0JhchIOCgZzeW1ib2wYASABKAkSKAoEdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDAoEb3BlbhgDIAEoARIMCgRoaWdoGAQgASgBEgsKA2xvdxgFIAEoARINCgVjbG9zZRgGIAEoARIOCgZ2b2x1bWUYByABKAMSDAoEdndhcBgIIAEoARITCgt0cmFkZV9jb3VudBgJIAEoBRIVCgl0aW1lZnJhbWUYCiABKAlCAhgBEg4KBnNvdXJjZRgLIAEoCRI4Cg50aW1lZnJhbWVfZW51bRgMIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUimwEKBVF1b3RlEg4KBnN5bWJvbBgBIAEoCRIoCgR0aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglhc2tfcHJpY2UYAyABKAESEAoIYXNrX3NpemUYBCABKAUSEQoJYmlkX3ByaWNlGAUgASgBEhAKCGJpZF9zaXplGAYgASgFEg4KBnNvdXJjZRgHIAEoCSKsAQoRU3RyZWFtQmFyc1JlcXVlc3QSDwoHc3ltYm9scxgBIAMoCRIVCgl0aW1lZnJhbWUYAiABKAlCAhgBEhkKEWluY2x1ZGVfcHJlbWFya2V0GAMgASgIEhoKEmluY2x1ZGVfYWZ0ZXJob3VycxgEIAEoCBI4Cg50aW1lZnJhbWVfZW51bRgFIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUiJgoTU3RyZWFtUXVvdGVzUmVxdWVzdBIPCgdzeW1ib2xzGAEgAygJItQBCg5HZXRCYXJzUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USMAoEcGFnZRgEIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdBI4Cg50aW1lZnJhbWVfZW51bRgFIAEoDjIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lZnJhbWUicgoPR2V0QmFyc1Jlc3BvbnNlEiwKBGJhcnMYASADKAsyHi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhchIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSInChVHZXRMYXRlc3RRdW90ZVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJIsQBChNCYWNrZmlsbEJhcnNSZXF1ZXN0Eg8KB3N5bWJvbHMYASADKAkSFQoJdGltZWZyYW1lGAIgASgJQgIYARIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USGgoSb3ZlcndyaXRlX2V4aXN0aW5nGAQgASgIEjgKDnRpbWVmcmFtZV9lbnVtGAUgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZSJbChRCYWNrZmlsbEJhcnNSZXNwb25zZRIUCgxiYXJzX3dyaXR0ZW4YASABKAMSFgoOZmFpbGVkX3N5bWJvbHMYAiADKAkSFQoNZXhwZWN0ZWRfYmFycxgDIAEoAyKOAQoWR2V0RGF0YUNvdmVyYWdlUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSMwoJdGltZWZyYW1lGAIgASgOMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVmcmFtZRIvCgVyYW5nZRgDIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UidgoNQ292ZXJhZ2VSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgliYXJfY291bnQYAyABKAMivgIKF0dldERhdGFDb3ZlcmFnZVJlc3BvbnNlEg4KBnN5bWJvbBgBIAEoCRIzCgl0aW1lZnJhbWUYAiABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lEhIKCmJhcnNfdG90YWwYAyABKAMSLAoIZWFybGllc3QYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBmxhdGVzdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASQAoOY292ZXJlZF9yYW5nZXMYBiADKAsyKC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkNvdmVyYWdlUmFuZ2USLgoEZ2FwcxgHIAMoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UiPwoRTGlzdEFzc2V0c1JlcXVlc3QSEwoLYXNzZXRfY2xhc3MYASABKAkSFQoNdHJhZGFibGVfb25seRgCIAEoCCJCChJMaXN0QXNzZXRzUmVzcG9uc2USLAoGYXNzZXRzGAEgAygLMhwueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkFzc2V0IpMBChtEZWxldGVCYWNrZmlsbGVkRGF0YVJlcXVlc3QSDgoGc3ltYm9sGAEgASgJEi8KBXJhbmdlGAIgASgLMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVSYW5nZRIzCgl0aW1lZnJhbWUYAyABKA4yIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZWZyYW1lIjQKHERlbGV0ZUJhY2tmaWxsZWREYXRhUmVzcG9uc2USFAoMcm93c19kZWxldGVkGAEgASgDIsUDCgxGdW5kYW1lbnRhbHMSDgoGc3ltYm9sGAEgASgJEhIKCm1hcmtldF9jYXAYAiABKAESEAoIcGVfcmF0aW8YAyABKAESEAoIcGJfcmF0aW8YBCABKAESFgoOZGl2aWRlbmRfeWllbGQYBSABKAESCwoDZXBzGAYgASgBEgwKBGJldGEYByABKAESCwoDcm9lGAggASgBEhYKDmRlYnRfdG9fZXF1aXR5GAkgASgBEg0KBXByaWNlGAogASgBEhEKCXllYXJfaGlnaBgLIAEoARIQCgh5ZWFyX2xvdxgMIAEoARJQCg1leHRyYV9tZXRyaWNzGA0gAygLMjkueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5GdW5kYW1lbnRhbHMuRXh0cmFNZXRyaWNzRW50cnkSKQoFYXNfb2YYDiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhAKCGN1cnJlbmN5GA8gASgJEg4KBnNvdXJjZRgQIAEoCRINCgVzdGFsZRgRIAEoCBozChFFeHRyYU1ldHJpY3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAE6AjgBIigKFkdldEZ1bmRhbWVudGFsc1JlcXVlc3QSDgoGc3ltYm9sGAEgASgJIlgKF0dldEZ1bmRhbWVudGFsc1Jlc3BvbnNlEj0KDGZ1bmRhbWVudGFscxgBIAEoCzInLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuRnVuZGFtZW50YWxzIi4KG0dldEZ1bmRhbWVudGFsc011bHRpUmVxdWVzdBIPCgdzeW1ib2xzGAEgAygJIl0KHEdldEZ1bmRhbWVudGFsc011bHRpUmVzcG9uc2USPQoMZnVuZGFtZW50YWxzGAEgAygLMicueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5GdW5kYW1lbnRhbHMygQkKEU1hcmtldERhdGFTZXJ2aWNlElwKClN0cmVhbUJhcnMSLC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLlN0cmVhbUJhcnNSZXF1ZXN0Gh4ueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5CYXIwARJiCgxTdHJlYW1RdW90ZXMSLi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLlN0cmVhbVF1b3Rlc1JlcXVlc3QaIC54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLlF1b3RlMAESYAoHR2V0QmFycxIpLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0QmFyc1JlcXVlc3QaKi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldEJhcnNSZXNwb25zZRJkCg5HZXRMYXRlc3RRdW90ZRIwLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0TGF0ZXN0UXVvdGVSZXF1ZXN0GiAueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5RdW90ZRJvCgxCYWNrZmlsbEJhcnMSLi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhY2tmaWxsQmFyc1JlcXVlc3QaLy54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkJhY2tmaWxsQmFyc1Jlc3BvbnNlEngKD0dldERhdGFDb3ZlcmFnZRIxLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0RGF0YUNvdmVyYWdlUmVxdWVzdBoyLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0RGF0YUNvdmVyYWdlUmVzcG9uc2UShwEKFERlbGV0ZUJhY2tmaWxsZWREYXRhEjYueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5EZWxldGVCYWNrZmlsbGVkRGF0YVJlcXVlc3QaNy54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkRlbGV0ZUJhY2tmaWxsZWREYXRhUmVzcG9uc2USaQoKTGlzdEFzc2V0cxIsLnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuTGlzdEFzc2V0c1JlcXVlc3QaLS54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkxpc3RBc3NldHNSZXNwb25zZRJ4Cg9HZXRGdW5kYW1lbnRhbHMSMS54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldEZ1bmRhbWVudGFsc1JlcXVlc3QaMi54c3RvY2tzdHJhdC5tYXJrZXRkYXRhLnYxLkdldEZ1bmRhbWVudGFsc1Jlc3BvbnNlEocBChRHZXRGdW5kYW1lbnRhbHNNdWx0aRI2LnhzdG9ja3N0cmF0Lm1hcmtldGRhdGEudjEuR2V0RnVuZGFtZW50YWxzTXVsdGlSZXF1ZXN0GjcueHN0b2Nrc3RyYXQubWFya2V0ZGF0YS52MS5HZXRGdW5kYW1lbnRhbHNNdWx0aVJlc3BvbnNlQkRaQmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9tYXJrZXRkYXRhL3YxO21hcmtldGRhdGF2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.marketdata.v1.Bar
@@ -547,6 +547,179 @@ export const DeleteBackfilledDataResponseSchema: GenMessage<DeleteBackfilledData
   messageDesc(file_marketdata_v1_marketdata, 15);
 
 /**
+ * Fundamentals (feature 059) — cached fundamental metrics for a symbol, FMP-backed.
+ *
+ * @generated from message xstockstrat.marketdata.v1.Fundamentals
+ */
+export type Fundamentals = Message<"xstockstrat.marketdata.v1.Fundamentals"> & {
+  /**
+   * @generated from field: string symbol = 1;
+   */
+  symbol: string;
+
+  /**
+   * @generated from field: double market_cap = 2;
+   */
+  marketCap: number;
+
+  /**
+   * @generated from field: double pe_ratio = 3;
+   */
+  peRatio: number;
+
+  /**
+   * @generated from field: double pb_ratio = 4;
+   */
+  pbRatio: number;
+
+  /**
+   * @generated from field: double dividend_yield = 5;
+   */
+  dividendYield: number;
+
+  /**
+   * @generated from field: double eps = 6;
+   */
+  eps: number;
+
+  /**
+   * @generated from field: double beta = 7;
+   */
+  beta: number;
+
+  /**
+   * @generated from field: double roe = 8;
+   */
+  roe: number;
+
+  /**
+   * @generated from field: double debt_to_equity = 9;
+   */
+  debtToEquity: number;
+
+  /**
+   * @generated from field: double price = 10;
+   */
+  price: number;
+
+  /**
+   * @generated from field: double year_high = 11;
+   */
+  yearHigh: number;
+
+  /**
+   * @generated from field: double year_low = 12;
+   */
+  yearLow: number;
+
+  /**
+   * FMP's open-ended metric set (keys are FMP field names)
+   *
+   * @generated from field: map<string, double> extra_metrics = 13;
+   */
+  extraMetrics: { [key: string]: number };
+
+  /**
+   * @generated from field: google.protobuf.Timestamp as_of = 14;
+   */
+  asOf?: Timestamp | undefined;
+
+  /**
+   * @generated from field: string currency = 15;
+   */
+  currency: string;
+
+  /**
+   * "fmp"
+   *
+   * @generated from field: string source = 16;
+   */
+  source: string;
+
+  /**
+   * true when served past TTL under quota exhaustion (FR-4)
+   *
+   * @generated from field: bool stale = 17;
+   */
+  stale: boolean;
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.Fundamentals.
+ * Use `create(FundamentalsSchema)` to create a new message.
+ */
+export const FundamentalsSchema: GenMessage<Fundamentals> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 16);
+
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetFundamentalsRequest
+ */
+export type GetFundamentalsRequest = Message<"xstockstrat.marketdata.v1.GetFundamentalsRequest"> & {
+  /**
+   * @generated from field: string symbol = 1;
+   */
+  symbol: string;
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetFundamentalsRequest.
+ * Use `create(GetFundamentalsRequestSchema)` to create a new message.
+ */
+export const GetFundamentalsRequestSchema: GenMessage<GetFundamentalsRequest> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 17);
+
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetFundamentalsResponse
+ */
+export type GetFundamentalsResponse = Message<"xstockstrat.marketdata.v1.GetFundamentalsResponse"> & {
+  /**
+   * @generated from field: xstockstrat.marketdata.v1.Fundamentals fundamentals = 1;
+   */
+  fundamentals?: Fundamentals | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetFundamentalsResponse.
+ * Use `create(GetFundamentalsResponseSchema)` to create a new message.
+ */
+export const GetFundamentalsResponseSchema: GenMessage<GetFundamentalsResponse> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 18);
+
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetFundamentalsMultiRequest
+ */
+export type GetFundamentalsMultiRequest = Message<"xstockstrat.marketdata.v1.GetFundamentalsMultiRequest"> & {
+  /**
+   * @generated from field: repeated string symbols = 1;
+   */
+  symbols: string[];
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetFundamentalsMultiRequest.
+ * Use `create(GetFundamentalsMultiRequestSchema)` to create a new message.
+ */
+export const GetFundamentalsMultiRequestSchema: GenMessage<GetFundamentalsMultiRequest> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 19);
+
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetFundamentalsMultiResponse
+ */
+export type GetFundamentalsMultiResponse = Message<"xstockstrat.marketdata.v1.GetFundamentalsMultiResponse"> & {
+  /**
+   * @generated from field: repeated xstockstrat.marketdata.v1.Fundamentals fundamentals = 1;
+   */
+  fundamentals: Fundamentals[];
+};
+
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetFundamentalsMultiResponse.
+ * Use `create(GetFundamentalsMultiResponseSchema)` to create a new message.
+ */
+export const GetFundamentalsMultiResponseSchema: GenMessage<GetFundamentalsMultiResponse> = /*@__PURE__*/
+  messageDesc(file_marketdata_v1_marketdata, 20);
+
+/**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
  *
@@ -632,6 +805,26 @@ export const MarketDataService: GenService<{
     methodKind: "unary";
     input: typeof ListAssetsRequestSchema;
     output: typeof ListAssetsResponseSchema;
+  },
+  /**
+   * Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache)
+   *
+   * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetFundamentals
+   */
+  getFundamentals: {
+    methodKind: "unary";
+    input: typeof GetFundamentalsRequestSchema;
+    output: typeof GetFundamentalsResponseSchema;
+  },
+  /**
+   * Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
+   *
+   * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetFundamentalsMulti
+   */
+  getFundamentalsMulti: {
+    methodKind: "unary";
+    input: typeof GetFundamentalsMultiRequestSchema;
+    output: typeof GetFundamentalsMultiResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_marketdata_v1_marketdata, 0);

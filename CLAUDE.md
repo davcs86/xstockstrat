@@ -30,7 +30,9 @@ This file covers always-needed platform conventions. For larger reference sectio
 | DB schema map, migration tooling, run order | `docs/patterns/database.md` |
 | OTel setup, env vars, per-language modules | `docs/patterns/observability.md` |
 | CI job matrix, coverage thresholds, deploys | `docs/patterns/ci-overview.md` |
+| DRY guard rail (no repeated constants/literals/types/helpers) — pre-commit hook, jscpd tool, `dry-reviewer` subagent | `docs/patterns/dry-guard-rail.md` |
 | Proto / buf changes | `docs/runbooks/proto-versioning.md` |
+| Provisioning the codegen toolchain on a host (Docker unavailable / GitHub-releases egress blocked) | `docs/runbooks/codegen-toolchain-host-setup.md` |
 | Adding a data source (Polygon, Tiingo, etc.) | `docs/runbooks/add-data-source.md` |
 | Building a custom indicator formula | `docs/runbooks/indicator-builder.md` |
 | Bug triage / hotfix | `docs/runbooks/bug-triage.md` |
@@ -40,6 +42,9 @@ This file covers always-needed platform conventions. For larger reference sectio
 | OTel / Grafana Cloud wiring | `docs/setup/grafana-cloud.md` |
 | Feature workflow (branch, PR, promote) | `docs/runbooks/feature-workflow.md` |
 | Using or troubleshooting the agent MCP tools | `docs/runbooks/mcp-tools.md` |
+| Adding/refactoring a skill, subagent, or `CLAUDE.md`; how the AI tooling curates context (subagent delegation, progressive disclosure, structured `context.md` memory) | `docs/patterns/context-engineering.md` |
+| SDD binding rules — Constitution constraint IDs (`C-*`/`P-*`/`F-*`) cited by review/design/execute | `docs/sdd/constitution.md` |
+| Cross-feature SDD memory — insights (patterns that worked) and fails (mistakes that recurred) | `docs/roadmap/ledger/insights.md`, `docs/roadmap/ledger/fails.md` |
 
 ---
 
@@ -116,6 +121,7 @@ To change a language or tool version:
 | Python | `.github/workflows/ci.yml` (`python-version`), Python service Dockerfiles (`FROM python:X-slim`) |
 | Node.js | `.github/workflows/ci.yml` (`node-version`), Node/Next service Dockerfiles (`FROM node:X-alpine`) |
 | pnpm | `package.json` (`packageManager`), `.github/workflows/ci.yml` (`pnpm@X`), Node service Dockerfiles |
+| Proto plugins (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-connect-go`) | `Dockerfile.codegen` (§"Go proto plugins") **and** `.github/workflows/ci.yml` `proto-freshness` job's "Install Go proto plugins" step — these two are the *only* places these pins live and CI's `proto-freshness` job installs its own copies rather than building `Dockerfile.codegen`, so it will not catch a drift between them. Bump both in the same PR; verify with an empty `git diff packages/proto/gen/` after `./scripts/buf-gen.sh` (see `docs/runbooks/codegen-toolchain-host-setup.md`) |
 
 1. Open a PR — CI will catch any missed files.
 
@@ -150,17 +156,67 @@ Recently added keys (feature 049 Part B — MCP OAuth 2.1 edge auth, owned by `x
 | `agent.oauth.registration_enabled` | bool | `true` | Allow RFC 7591 Dynamic Client Registration at `/oauth/register` |
 | `agent.oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only (no allow-any) |
 
+Recently added keys (feature 058 — watchlist management, owned by `xstockstrat-portfolio`):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `portfolio.watchlist.max_per_user` | int | `50` | Max watchlists a single user may own |
+| `portfolio.watchlist.max_symbols_per_list` | int | `500` | Max symbols allowed in one watchlist |
+
+Recently added keys (feature 060 — screener engine, owned by `xstockstrat-analysis`):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.screener.max_universe_size` | int | `100` | Max symbols a single `ScreenSymbols` scan may cover |
+| `analysis.screener.max_duration_seconds` | int | `120` | Overall deadline for one screener scan |
+| `analysis.screener.default_rank_limit` | int | `50` | Default ranked results returned when `rank_limit` is omitted |
+| `analysis.screener.max_concurrent_formula_evals` | int | `4` | Max concurrent `ExecuteFormula` evals during a scan |
+
+Recently added keys (feature 059 — fundamentals data source, owned by `xstockstrat-marketdata`). Establishes the `marketdata.<source>.enabled` convention (a source is off until its `enabled` key is flipped):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `marketdata.fmp.enabled` | bool | `false` | Master gate for the FMP fundamentals source; off by default |
+| `secret.marketdata.fmp.api_key` | string (secret) | — | FMP API key; first seeded secret (`is_secret=TRUE`), value is a `secret://` reference, never plaintext |
+| `marketdata.fmp.cache_ttl_hours` | int | `24` | Hours a cached fundamentals row stays fresh before re-fetch |
+| `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day (free Basic budget) |
+| `marketdata.fmp.base_url` | string | `https://financialmodelingprep.com` | FMP API base URL |
+| `marketdata.fmp.metrics` | string | `core,extended` | Metric tiers to fetch (`core`, `extended`) |
+
+Recently added keys (feature 062 — fundamentals signal producer, owned by `xstockstrat-analysis`). A daily background loop reads cached fundamentals via marketdata `GetFundamentalsMulti` (never FMP), scores, and emits `buy`/`sell`/`hold` `ExternalSignal`s through ingest. Analysis also gains a `PORTFOLIO_ENDPOINT` (gRPC `xstockstrat-portfolio:50052`) for the watchlist universe, and ingest migration `006_signal_source_type_derived` adds the `derived` source type:
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.fundsignal.enabled` | bool | `false` | Master gate for the producer loop; off by default |
+| `analysis.fundsignal.run_interval_hours` | int | `24` | Hours between scheduled cycles |
+| `analysis.fundsignal.universe_source` | string | `watchlists` | `watchlists` \| `explicit` \| `both` (watchlists union pends a global portfolio RPC; falls back to `explicit`) |
+| `analysis.fundsignal.explicit_symbols` | string | `""` | Comma-separated symbols for the explicit universe |
+| `analysis.fundsignal.max_symbols_per_run` | int | `200` | Cap on symbols scanned per cycle |
+| `analysis.fundsignal.daily_call_budget` | int | `200` | Max cached `GetFundamentalsMulti` calls per cycle; ≤ `marketdata.fmp.daily_request_cap` (250) |
+| `analysis.fundsignal.source_slug` | string | `fundamentals` | Slug of the registered `derived` signal source |
+| `analysis.fundsignal.scoring_formula_id` | string | `""` | Optional 063 scoring formula id; empty → built-in default score |
+| `analysis.fundsignal.buy_quantile` | float | `0.80` | Cross-sectional quantile ≥ → `buy` |
+| `analysis.fundsignal.sell_quantile` | float | `0.20` | Cross-sectional quantile ≤ → `sell` |
+| `analysis.fundsignal.min_conviction_to_emit` | float | `0.0` | Drop symbols below this score before emitting |
+| `analysis.fundsignal.valid_days` | int | `90` | Emitted signal validity window in days |
+
 Recently added keys (feature 057 — backfill management UI, owned by `xstockstrat-marketdata`):
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `marketdata.backfill.max_delete_days` | int | `0` | Max date-range span (days) a single scoped `DeleteBackfilledData` may cover; `0` = no window cap (current behavior). Whole-symbol deletes (no range) are exempt and double-confirmed in the UI (FR-5). |
 
-Recently added keys (Alpaca API compliance audit, owned by `xstockstrat-marketdata`):
+Recently added keys (Alpaca API compliance audit — PR #699 "Audit and fix Alpaca API usage against Trading + Market Data specs"; owned by `xstockstrat-marketdata`):
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `marketdata.alpaca.adjustment` | string | `all` | Corporate-action adjustment for historical bars (`raw`/`split`/`dividend`/`all`); sent as `adjustment=` on every Alpaca bars request so splits/dividends do not distort backtest OHLCV. |
+
+Recently added keys (feature 064 — backtest debug diagnostics, owned by `xstockstrat-analysis`):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.backtest.max_range_days` | int | `730` | Max backtest range span in days (≈2 years). A `RunBacktest` whose `range` exceeds it is rejected with `INVALID_ARGUMENT`; an unset bound is defaulted to the last `max_range_days`. Applies to all callers. Bounds the always-included per-bar diagnostics to ~504 rows/symbol. |
 
 ---
 
@@ -171,12 +227,13 @@ All inter-service connection env vars follow these patterns. **Never invent new 
 | Pattern | Format | Used for | Example |
 |---|---|---|---|
 | `<SERVICE>_ENDPOINT` | `host:port` (no protocol) | gRPC connections | `IDENTITY_ENDPOINT=xstockstrat-identity:50058` |
-| `XSTOCKSTRAT_<SERVICE>_PRIVATE_URL` | `PRIVATE_DOMAIN` on DO (e.g. `svc.internal`), bare container name in Compose | **nginx container only** — `envsubst` upstream resolution; entrypoint strips `http://` prefix just in case, but the nginx template already appends `:PORT` so `PRIVATE_URL` (which includes the port) must not be used here | `XSTOCKSTRAT_AGENT_PRIVATE_URL=xstockstrat-agent` |
+
+> **Removed (historical):** `XSTOCKSTRAT_<SERVICE>_PRIVATE_URL` was the nginx-container-only `envsubst` upstream var. Nginx was removed by feature 045 (`ui-consolidation-nextjs`); these vars no longer exist and must not be reintroduced. See `docs/patterns/nginx-routing.md` (deprecated).
 
 **Rules:**
 
 - All backend services are gRPC-only, so all inter-service connection vars use the `_ENDPOINT` (gRPC `host:port`) form. The legacy `<SERVICE>_HTTP_ENDPOINT` form was removed when the backend HTTP/Connect-RPC (80xx) servers were deleted — do not reintroduce it (test-only Playwright mocks may still set it, but no runtime code reads it).
-- No `XSTOCKSTRAT_` prefix except for nginx `PRIVATE_URL` vars.
+- No `XSTOCKSTRAT_` prefix on inter-service connection vars (the only historical exception, the nginx `PRIVATE_URL` vars, was removed with nginx — see above).
 - No `_URL` suffix on inter-service connection vars — always `_ENDPOINT`.
 - When a new service introduces connection env vars, check `docker-compose.yml` first — the var may already exist in another service's block and only needs to be added to the new service's block with the same value.
 - `N8N_WEBHOOK_SECRET` was removed by feature 011 (`remove-n8n-references`). Do not reference it. The MCP agent uses `MCP_AGENT_SECRET` (sent as `x-mcp-secret` header on outbound calls to identify itself to platform services); the receiving services do not currently enforce it.
@@ -205,7 +262,7 @@ raising any service's pool, re-check this table so the total never exceeds 20.**
 | xstockstrat-indicators | Python | 2 | |
 | xstockstrat-ingest | Python | 2 | |
 | xstockstrat-analysis | Python | 2 | |
-| xstockstrat-ledger | Node | 2 | |
+| xstockstrat-ledger | Node | 2 | 1 query-pool conn (`DB_POOL_MAX=1`) + 1 dedicated LISTEN/NOTIFY conn (`EventNotifier`). Live `StreamEvents` subscribers share the single listener and never borrow from the query pool, so concurrent streams can't starve `AppendEvent`. |
 | xstockstrat-identity | Node | 2 | |
 | xstockstrat-config | Node | 2 | |
 | xstockstrat-notify | Node | 1 | Light DB use (alert history only) |
@@ -368,34 +425,57 @@ Active phases and their current status. See `docs/roadmap/implementation-roadmap
 
 | Phase | Description | Status |
 |---|---|---|
-| Phase 0 | Foundation: proto gen, bootstrap, DB, Docker Compose | Pending |
+| Phase 0 | Foundation: proto gen, bootstrap, DB, Docker Compose | **DONE** |
 | Phase 1 | Core infrastructure: config, ledger, identity, notify | **DONE** |
-| Phase 2 | Data layer: marketdata, portfolio | Pending |
+| Phase 2 | Data layer: marketdata, portfolio | **DONE** |
 | Phase 3 | Processing: indicators, ingest, analysis | **DONE** |
 | Phase 4 | Trading core | **DONE** |
 | Phase 5 | UI layer: trader, insights, config-ui → consolidated as `xstockstrat-ui` (feature 045) | **DONE** |
 | Phase 6 | Integration & webhook wiring | **DONE** |
 | Phase 7 | Observability: OTel + Grafana Cloud | **DONE** |
 
-Deviation notes for completed phases: `docs/roadmap/phase[3-7]-deviations.md`.
+This table is a coarse phase map only; all phases are now **DONE**. Per-feature lifecycle status is authoritative in the feature directories (see § Feature Roadmap) — do not track individual feature status here.
+
+Deviation notes exist only for phases 3–7 (`docs/roadmap/phase[3-7]-deviations.md`). Phases 0–2 predate the deviation-doc convention and have none — their absence is expected, not a missing file.
 
 ---
 
 ## Feature Roadmap
 
-Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number auto-assigned in creation order. Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
+Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is `max(existing NNN) + 1` — never reuse a number, never backfill a gap, and once a feature reaches `launched` its number is immutable. If two `/sdd-story` runs race and collide on a number, renumber the later one to the next free `NNN` (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
 
 - `feature.md` — lifecycle status (`idea`/`draft`/`spec-ready`/`implementation-ready`/`in-progress`/`code-completed`/`launched`/`rolled-back`/`demoted/canceled`), links to all artifacts
 - `product-spec.md` — requirements, affected services, governance gates
 - `implementation-spec.md` — numbered steps with concrete code references and statuses
 - `context.md` — append-only session log of decisions, deviations, files modified
 
-### Active Features
+### Mandatory Entry Point — No Feature Work Without SDD Grounding
 
-| Feature | Status | Branch | Next Action |
-|---|---|---|---|
-| `001-add-ikbr-account-support` | `launched` | `feature/add-ikbr-account-support` | — merged to main-dev via PR #97 |
-| `004-make-repo-public-secure` | `launched` | `feature/make-repo-public-secure` | — promoted to production via PR #158 |
+**IMPORTANT — this overrides task framing.** Before writing any code for a new capability (a new
+UI page/route, endpoint, service behavior, tool, or config surface), run the SDD pipeline at
+minimum: `/sdd-story <slug>` → `/sdd-design <slug> quick` → the design-phase ledger touch
+(Constitution **C-11**, `docs/sdd/constitution.md`). This applies **regardless of how the request
+arrives** — a GitHub issue, a chat message, or a session/task instruction that says, in plain
+language, to "implement X, commit, and push." That framing is a request for the *capability*, not
+permission to skip the pipeline — run `/sdd-story` and `/sdd-design quick` yourself first, *then*
+implement.
+
+`quick` mode is the fast-track for small changes, not an exemption: Phase 0 Recon always runs in
+full and a single mandated adversarial round still happens (see `.claude/skills/sdd-design/SKILL.md`).
+It shortens the debate; it never skips Phase 0/Phase 1 or the Constitution.
+
+**Exempt:** confirmed bug fixes, which route through `docs/runbooks/bug-triage.md` (Track A/B/C) —
+that runbook's own `skip` design-depth recommendation applies to bugs, not new capability. Docs-only
+or process-only edits (no service/UI behavior change) are also outside this rule's scope.
+
+This rule is a Constitution **Commandment** — overridable only with the user's **explicit**
+sign-off, recorded in the feature's `context.md`.
+
+### Feature Status — Single Source of Truth
+
+**Do not maintain a feature-status table here.** It drifts the moment a feature lands. The authoritative
+status of every feature is the `**Lifecycle Status**` field in `docs/roadmap/features/<NNN-slug>/feature.md`.
+Run `/sdd-status` for a live, computed view across all features, or `/sdd-status <slug>` for one.
 
 **When starting any session involving an in-progress feature:**
 
@@ -403,7 +483,7 @@ Active and completed feature implementations are tracked under `docs/roadmap/fea
 2. Read `docs/roadmap/features/<NNN-slug>/context.md` before touching any related files — it contains critical decisions from prior sessions.
 3. Do NOT rely on conversation context from a previous session. Always re-read context.md.
 
-SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime) | `/sdd-sync` (sync spec files from feature branches to main-dev)
+SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon + design debate) → `/sdd-spec` → `/sdd-review impl-spec` → `/sdd-execute` (loop) | `/sdd-status` (anytime) | `/sdd-sync` (sync spec files from feature branches to main-dev)
 
 ---
 
@@ -435,6 +515,9 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-spec` → `/sd
 | User management script | `scripts/manage-users.sh` — also at `/app/scripts/manage-users.sh` inside the identity container |
 | Proto gen script | `scripts/buf-gen.sh` |
 | Integration tests | `scripts/integration-test.sh` |
+| DRY duplication check (jscpd) | `scripts/check-duplication.sh`, `.jscpd.json` |
+| DRY pre-commit hook | `.husky/pre-commit` |
+| DRY semantic reviewer subagent | `.claude/agents/dry-reviewer.md` |
 | CI workflow | `.github/workflows/ci.yml` |
 | Dev deploy workflow | `.github/workflows/deploy-dev.yml` |
 | Prod deploy workflow | `.github/workflows/deploy-prod.yml` |
