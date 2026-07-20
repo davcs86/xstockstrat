@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Eleven tools:
+Thirteen tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -13,6 +13,8 @@ Eleven tools:
   manage_formula      — registers/updates/deletes custom formulas in indicators
   manage_signal_source — registers/updates/deactivates signal sources in ingest
   set_strategy_live   — enables/disables live alert evaluation for a strategy
+  trigger_backfill    — triggers an OHLCV history backfill via gRPC TriggerBackfill (admin-scoped)
+  get_backfill_status — checks a backfill job / lists recent jobs (read-only)
 """
 
 import base64
@@ -393,6 +395,67 @@ def register_tools(server: FastMCP) -> None:
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
+
+    @server.tool()
+    async def trigger_backfill(
+        symbols: list[str],
+        timeframe: str = "1d",
+        start: str | None = None,
+        end: str | None = None,
+        overwrite: bool = False,
+        fill_mode: str | None = None,
+    ) -> dict:
+        """Trigger a historical OHLCV backfill in xstockstrat-ingest (admin-scoped write).
+        symbols: explicit ticker list, e.g. ["AAPL", "MSFT"]; max 50 per call.
+        timeframe: one of 15m/15Min/1h/1Hour/1d/1Day (canonicalized; default '1d').
+        start / end: optional ISO 8601 datetimes bounding the range; one-sided allowed;
+            both omitted = the service's default range.
+        overwrite: true re-fetches bars that already exist.
+        fill_mode: 'full' | 'gaps_only'; omitted = server default FULL. 'gaps_only'
+            fetches only missing ranges (cheaper on provider quota).
+        Returns {"job_id", "status"}. Ingest performs NO synchronous input validation —
+        it queues unconditionally and bad input surfaces as a terminal FAILED/PARTIAL
+        job; poll get_backfill_status with the returned job_id to observe the outcome."""
+        try:
+            return await client.trigger_backfill(
+                symbols=symbols,
+                timeframe=timeframe,
+                start=start,
+                end=end,
+                overwrite=overwrite,
+                fill_mode=fill_mode,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def get_backfill_status(
+        job_id: str = "",
+        status_filter: str | None = None,
+        symbol: str = "",
+        limit: int = 0,
+        page_token: str = "",
+    ) -> dict:
+        """Check one backfill job or list recent jobs (read-only — no admin scope).
+        job_id: when set, returns {"job": {...}} with the BackfillJob fields (status,
+            bars_processed, bars_total, chunks_completed, chunks_total, failed_symbols,
+            error). When empty, lists recent jobs instead.
+        status_filter: list mode only — queued/running/completed/failed/partial/canceled;
+            omit or 'unspecified' = all statuses.
+        symbol: list mode only — optional ticker filter.
+        limit: list mode page size; 0 = server default (100).
+        page_token: pass the previous response's next_page_token to fetch the next page.
+        List mode returns {"jobs": [...], "next_page_token": "..."}."""
+        try:
+            return await client.get_backfill_status(
+                job_id=job_id,
+                status_filter=status_filter,
+                symbol=symbol,
+                limit=limit,
+                page_token=page_token,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="backfill job not found")) from e
 
 
 async def _get_source(source_slug: str) -> dict:

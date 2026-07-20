@@ -128,3 +128,18 @@ PR #769 = integration PR).
   local `import grpc` needed in the NOT_FOUND test (module has no top-level grpc import).
 - Files modified: `services/xstockstrat-agent/tests/test_client.py`
 - Deviations: none
+
+### Step 3 — app/tools.py MCP tool wrappers [done]
+- Registered `trigger_backfill` (default not_found message) and `get_backfill_status`
+  (not_found="backfill job not found") after set_strategy_live; module docstring count 11 → 13
+  with two enumeration lines. TDD red: 6 tool/catalog tests failed pre-implementation; green: 67/67.
+- Files modified: `services/xstockstrat-agent/app/tools.py`
+- Deviations: none (one enumeration line shortened to satisfy E501 — wording only)
+
+### Step 4 — tool + catalog tests [done]
+- Added TestTriggerBackfillTool/TestGetBackfillStatusTool (delegation, generic AioRpcError
+  mapping, NOT_FOUND message); name-set + inputSchema assertions in test_tools_endpoint.py;
+  fixed the stale "all six MCP tool definitions" docstring to countless form.
+- Full suite 67 passed, coverage 65.55% (≥40), ruff check+format clean.
+- Files modified: `services/xstockstrat-agent/tests/test_tools.py`, `services/xstockstrat-agent/tests/test_tools_endpoint.py`
+- Deviations: none

@@ -130,7 +130,7 @@ cd services/xstockstrat-agent && uv sync --extra dev && uv run pytest --cov=app 
 
 ### Step 3 — service: `app/tools.py` — `trigger_backfill` + `get_backfill_status` MCP tools
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -186,7 +186,7 @@ Behavioral verification is Step 4 (paired test step).
 
 ### Step 4 — test: tool delegation, error mapping, and `/api/tools` catalog name-set
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
