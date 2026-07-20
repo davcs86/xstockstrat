@@ -1,6 +1,6 @@
 # Feature: trigger-backfill-mcp-tool
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/trigger-backfill-mcp-tool`
 **Created**: 2026-07-20
 **Last Updated**: 2026-07-20
@@ -16,6 +16,7 @@
 | 2026-07-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
 | 2026-07-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-07-20 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1) |
+| 2026-07-20 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done; integration rides PR #769 (recorded branch deviation) |
 
 ---
 
@@ -49,4 +50,4 @@ carry the agent owner; Step 1 also carries the ingest owner; Step 5 is docs — 
 
 ## Next Action
 
-`/sdd-review trigger-backfill-mcp-tool impl-spec` — validate implementation spec, then `/sdd-execute trigger-backfill-mcp-tool`
+Merge PR #769 into `main-dev` (carries this feature per the recorded branch deviation), then promote per `docs/runbooks/feature-workflow.md`

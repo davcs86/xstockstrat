@@ -143,3 +143,20 @@ PR #769 = integration PR).
 - Full suite 67 passed, coverage 65.55% (≥40), ruff check+format clean.
 - Files modified: `services/xstockstrat-agent/tests/test_tools.py`, `services/xstockstrat-agent/tests/test_tools_endpoint.py`
 - Deviations: none
+
+### Step 5 — docs: five discovery surfaces [done]
+- mcp-tools.md: two new tool sections + counts 11→13; agent CLAUDE.md: count, two table rows,
+  trigger_backfill added to Management-tool authorization; docs/runbooks/CLAUDE.md: count + the
+  historical-backfill index row's stale "n8n webhook" wording; historical-backfill.md: stale
+  8055 webhook block replaced with "Via MCP tool (AI agents)" + Step-2 polling note (design
+  Open Risk 3 resolved). Verification greps: "eleven" 0 hits, tool names present, "8055" 0 hits.
+- Files modified: `docs/runbooks/mcp-tools.md`, `services/xstockstrat-agent/CLAUDE.md`,
+  `docs/runbooks/CLAUDE.md`, `docs/runbooks/historical-backfill.md`
+- Deviations: none. TDD: N/A (docs step).
+
+## Session 2026-07-20T19:30Z — sdd-execute session end
+**Steps this session**: 1, 2, 3, 4, 5
+**Progress**: 5 done / 5 total
+**Stopped at**: all complete → code-completed
+**Next**: merge PR #769 (integration, per recorded branch deviation); after staging deploy,
+exercise trigger_backfill + get_backfill_status end-to-end and re-run the five strategy backtests.

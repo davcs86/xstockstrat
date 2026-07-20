@@ -1,6 +1,6 @@
 # Implementation Spec: trigger-backfill-mcp-tool
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-07-20
 **Feature**: `docs/roadmap/features/066-trigger-backfill-mcp-tool/feature.md`
 **Total Steps**: 5
@@ -223,7 +223,7 @@ cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 && 
 
 ### Step 5 — docs: register the tools on all five discovery surfaces
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/` + `services/xstockstrat-agent/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
