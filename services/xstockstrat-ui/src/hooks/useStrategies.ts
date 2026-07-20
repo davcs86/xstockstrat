@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
+import { isNotFoundError } from '@/lib/scoreDisplay';
 
 type ListStrategiesResult = Awaited<ReturnType<typeof analysisClient.listStrategies>>;
 type GetStrategyReportResult = Awaited<ReturnType<typeof analysisClient.getStrategyReport>>;
@@ -26,6 +27,10 @@ export function useStrategyReport(strategyId: string | undefined): {
     queryKey: ['analysis-report', strategyId],
     queryFn: () => analysisClient.getStrategyReport({ strategyId: strategyId! }),
     enabled: !!strategyId,
+    // feature 065: an unscored strategy now answers NOT_FOUND (derived grade cleared / never
+    // earned). That is a terminal state, not a transient error — do not retry it; the detail page
+    // renders a cleared-grade card. Any other error still gets the global one retry.
+    retry: (failureCount, err) => !isNotFoundError(err) && failureCount < 1,
   });
 }
 

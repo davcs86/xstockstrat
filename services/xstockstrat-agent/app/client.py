@@ -148,6 +148,11 @@ async def run_backtest(
         resp = await stub.RunBacktest(
             analysis_pb2.RunBacktestRequest(
                 strategy_id=strategy_id,
+                # feature 065: run the strategy's REGISTERED definition (strategy_id_ref ==
+                # strategy_id) so agent-triggered runs earn fingerprinted evidence toward the
+                # derived headline grade. An unregistered id now returns NOT_FOUND instead of
+                # silently running a legacy SMA backtest (design.md § Callers; C-10(b) parity).
+                strategy_id_ref=strategy_id,
                 symbols=list(symbols),
                 initial_capital=initial_capital,
             ),

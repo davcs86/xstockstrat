@@ -7,13 +7,16 @@ populating _backtests/_strategies directly, same pattern as ingest.
 
 import asyncio
 import json
+import math
 from unittest.mock import AsyncMock, MagicMock
 
+import grpc
 import pytest
 from gen.analysis.v1 import analysis_pb2
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2
 from google.protobuf import json_format
+from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer
@@ -50,107 +53,87 @@ def _make_backtest(
     )
 
 
+def _eligible_cell(symbol="AAPL", days=100, sharpe=2.0, drawdown=0.0, win_rate=1.0, trades=3):
+    """A backtest_run_symbols row as fetch_eligible would return it (feature 065)."""
+    return {
+        "symbol": symbol,
+        "sharpe_ratio": sharpe,
+        "max_drawdown": drawdown,
+        "win_rate": win_rate,
+        "total_return": 0.12,
+        "total_trades": trades,
+        "trading_days": days,
+    }
+
+
+def _derivation_svc(cells, definition_json=None, strategy_id="s1"):
+    """A no-DB servicer wired with a registered strategy row + a cells repo returning ``cells``.
+
+    Reproduces the derived-headline path (feature 065): ScoreStrategy / recompute resolve the
+    strategy row, read eligible cells, aggregate, and persist through the score funnel.
+    """
+    svc = make_servicer()
+    svc._ledger = MagicMock()
+    svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+    svc._strategies_repo = AsyncMock()
+    svc._strategies_repo.get_by_id = AsyncMock(
+        return_value={
+            "strategy_id": strategy_id,
+            "display_name": "S1",
+            "active": True,
+            "live_enabled": False,
+            "definition_json": definition_json or {"entry_rule": "x"},
+        }
+    )
+    svc._backtest_run_symbols_repo = AsyncMock()
+    svc._backtest_run_symbols_repo.fetch_eligible = AsyncMock(return_value=cells)
+    svc._scores_repo = AsyncMock()
+    return svc
+
+
 # ---------------------------------------------------------------------------
 # ScoreStrategy
 # ---------------------------------------------------------------------------
 
 
-class TestScoreStrategy:
-    @pytest.mark.asyncio
-    async def test_aborts_when_no_backtest(self):
-        svc = make_servicer()
-        req = MagicMock()
-        req.strategy_id = "unknown"
-        context = MagicMock()
-        context.abort = MagicMock(side_effect=Exception("aborted"))
+class TestScoreFromMetrics:
+    """Grade-blend + letter-grade math (extracted from the old _score_from_result, feature 065)."""
 
-        with pytest.raises(Exception, match="aborted"):
-            await svc.ScoreStrategy(req, context)
+    def test_blend_and_components(self):
+        from app.handlers.servicer import _score_from_metrics
 
-        context.abort.assert_called_once()
+        overall, comps = _score_from_metrics(1.0, 0.2, 0.5, 0.4, 0.3, 0.3)
+        # sharpe 1.0/2=0.5; drawdown 1-0.2/0.5=0.6; win_rate 0.5
+        assert comps == pytest.approx({"sharpe": 0.5, "drawdown": 0.6, "win_rate": 0.5})
+        assert overall == pytest.approx(0.4 * 0.5 + 0.3 * 0.6 + 0.3 * 0.5)
 
-    @pytest.mark.asyncio
-    async def test_returns_score_with_rating(self):
-        svc = make_servicer()
-        svc._backtests["strat-a"] = _make_backtest(
-            "strat-a", sharpe=1.5, drawdown=0.05, win_rate=0.65
-        )
-        svc._ledger = MagicMock()
-        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+    def test_components_clamped(self):
+        from app.handlers.servicer import _score_from_metrics
 
-        req = MagicMock()
-        req.strategy_id = "strat-a"
-        score = await svc.ScoreStrategy(req, context=MagicMock())
+        _, comps = _score_from_metrics(10.0, 1.0, 5.0, 0.4, 0.3, 0.3)
+        assert comps["sharpe"] == 1.0  # clamped
+        assert comps["drawdown"] == 0.0  # 1 - 1/0.5 = -1 → 0
+        assert comps["win_rate"] == 1.0  # clamped
 
-        assert score.strategy_id == "strat-a"
-        assert 0.0 <= score.overall_score <= 1.0
-        assert score.rating in ("A", "B", "C", "D", "F")
-        assert "strat-a" in svc._strategies
+    @pytest.mark.parametrize(
+        "overall,grade",
+        [
+            (0.85, "A"),
+            (0.8, "A"),
+            (0.7, "B"),
+            (0.65, "B"),
+            (0.55, "C"),
+            (0.5, "C"),
+            (0.4, "D"),
+            (0.35, "D"),
+            (0.2, "F"),
+            (0.0, "F"),
+        ],
+    )
+    def test_grade_thresholds(self, overall, grade):
+        from app.handlers.servicer import _grade
 
-    @pytest.mark.asyncio
-    async def test_rating_A_for_high_score(self):
-        svc = make_servicer()
-        # Sharpe=2.0 → component=1.0; drawdown=0 → component=1.0; win_rate=1.0 → component=1.0
-        svc._backtests["s"] = _make_backtest("s", sharpe=2.0, drawdown=0.0, win_rate=1.0)
-        svc._ledger = MagicMock()
-        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
-
-        req = MagicMock()
-        req.strategy_id = "s"
-        score = await svc.ScoreStrategy(req, context=MagicMock())
-        assert score.rating == "A"
-
-    @pytest.mark.asyncio
-    async def test_rating_F_for_poor_score(self):
-        svc = make_servicer()
-        # Sharpe=0, drawdown=0.5, win_rate=0 → overall near 0
-        svc._backtests["s"] = _make_backtest("s", sharpe=0.0, drawdown=0.5, win_rate=0.0)
-        svc._ledger = MagicMock()
-        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
-
-        req = MagicMock()
-        req.strategy_id = "s"
-        score = await svc.ScoreStrategy(req, context=MagicMock())
-        assert score.rating == "F"
-
-    @pytest.mark.asyncio
-    async def test_ledger_error_is_swallowed(self):
-        svc = make_servicer()
-        svc._backtests["s"] = _make_backtest("s")
-        svc._ledger = MagicMock()
-        svc._ledger.AppendEvent = AsyncMock(side_effect=Exception("ledger down"))
-
-        req = MagicMock()
-        req.strategy_id = "s"
-        score = await svc.ScoreStrategy(req, context=MagicMock())
-        # Should complete normally despite ledger failure
-        assert score.strategy_id == "s"
-
-    @pytest.mark.asyncio
-    async def test_rating_C(self):
-        svc = make_servicer()
-        # sharpe=1.0→0.5, drawdown=0.2→0.6, win_rate=0.5→0.5; overall=0.4*0.5+0.3*0.6+0.3*0.5=0.53
-        svc._backtests["s"] = _make_backtest("s", sharpe=1.0, drawdown=0.2, win_rate=0.5)
-        svc._ledger = MagicMock()
-        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
-
-        req = MagicMock()
-        req.strategy_id = "s"
-        score = await svc.ScoreStrategy(req, context=MagicMock())
-        assert score.rating == "C"
-
-    @pytest.mark.asyncio
-    async def test_rating_D(self):
-        svc = make_servicer()
-        # sharpe=0.8→0.4, drawdown=0.25→0.5, win_rate=0.4→0.4; overall=0.4*0.4+0.3*0.5+0.3*0.4=0.43
-        svc._backtests["s"] = _make_backtest("s", sharpe=0.8, drawdown=0.25, win_rate=0.4)
-        svc._ledger = MagicMock()
-        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
-
-        req = MagicMock()
-        req.strategy_id = "s"
-        score = await svc.ScoreStrategy(req, context=MagicMock())
-        assert score.rating == "D"
+        assert _grade(overall) == grade
 
 
 # ---------------------------------------------------------------------------
@@ -298,9 +281,10 @@ class TestRunBacktestPersistence:
         return req
 
     @pytest.mark.asyncio
-    async def test_ok_run_scores_and_persists_score(self):
-        """An OK backtest auto-scores the strategy so the score is persisted without a
-        separate ScoreStrategy call (fixes 'strategy score is not persisted')."""
+    async def test_ok_run_no_longer_upserts_per_run_headline(self):
+        """feature 065: the headline is DERIVED from evidence cells, not upserted per-run.
+        With no strategy registered (no strategies_repo), an OK run records history + cells but
+        writes NO headline score (the derivation recompute early-returns for an ad-hoc id)."""
         svc = make_servicer()
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
@@ -309,11 +293,8 @@ class TestRunBacktestPersistence:
         result = await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
-        # In-memory serving dict now carries a score for the strategy…
-        assert "s1" in svc._strategies
-        assert svc._strategies["s1"].rating in ("A", "B", "C", "D", "F")
-        # …and it was durably upserted.
-        svc._scores_repo.upsert.assert_awaited_once()
+        # No per-run headline upsert — the run's own aggregate never becomes the grade.
+        svc._scores_repo.upsert.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_ok_run_appends_history_row(self):
@@ -1273,19 +1254,15 @@ class TestBacktestRangeCap:
 class TestScorePersistence:
     @pytest.mark.asyncio
     async def test_score_persists_via_upsert(self):
-        svc = make_servicer()
-        svc._backtests["s"] = _make_backtest("s", sharpe=1.5, drawdown=0.05, win_rate=0.65)
-        svc._ledger = MagicMock()
-        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
-        svc._scores_repo = AsyncMock()
+        svc = _derivation_svc([_eligible_cell(symbol=s, days=600) for s in ("A", "B", "C")])
 
         req = MagicMock()
-        req.strategy_id = "s"
+        req.strategy_id = "s1"
         score = await svc.ScoreStrategy(req, context=MagicMock())
 
         svc._scores_repo.upsert.assert_awaited_once()
         args = svc._scores_repo.upsert.await_args.args
-        assert args[0] == "s"
+        assert args[0] == "s1"
         assert args[1] == pytest.approx(score.overall_score)
         assert args[2] == score.rating
         assert set(args[3].keys()) == {"sharpe", "drawdown", "win_rate"}
@@ -1293,22 +1270,18 @@ class TestScorePersistence:
     @pytest.mark.asyncio
     async def test_fr7_persist_failure_does_not_lose_read(self):
         """A swallowed DB write still returns the score AND keeps it readable (AC-6)."""
-        svc = make_servicer()
-        svc._backtests["s"] = _make_backtest("s", sharpe=1.5, drawdown=0.05, win_rate=0.65)
-        svc._ledger = MagicMock()
-        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
-        svc._scores_repo = AsyncMock()
+        svc = _derivation_svc([_eligible_cell(symbol=s, days=600) for s in ("A", "B", "C")])
         svc._scores_repo.upsert.side_effect = Exception("db down")
 
         req = MagicMock()
-        req.strategy_id = "s"
+        req.strategy_id = "s1"
         score = await svc.ScoreStrategy(req, context=MagicMock())
 
         # No abort/raise — the score is returned despite the write failure.
-        assert score.strategy_id == "s"
+        assert score.strategy_id == "s1"
         # Reads serve from memory, so the caller reads its own write back.
         resp = await svc.ListStrategies(MagicMock(), context=MagicMock())
-        assert any(s.strategy_id == "s" for s in resp.strategies)
+        assert any(s.strategy_id == "s1" for s in resp.strategies)
 
     @pytest.mark.asyncio
     async def test_hydrate_scores_populates_memory_from_db(self):
@@ -1357,3 +1330,481 @@ class TestScorePersistence:
         assert score.overall_score == pytest.approx(0.5)
         assert score.rating == "C"
         assert dict(score.component_scores) == pytest.approx({"sharpe": 0.4, "drawdown": 0.6})
+
+
+# ---------------------------------------------------------------------------
+# feature 065 — definition fingerprint (module-level, no DB)
+# ---------------------------------------------------------------------------
+
+
+class TestDefinitionFingerprint:
+    def test_display_name_active_live_excluded(self):
+        from app.handlers.servicer import _definition_fingerprint
+
+        base = {"strategy_id": "s1", "entry_rule": '{"op":"AND"}', "display_name": "A"}
+        renamed = {**base, "display_name": "Totally Different Name"}
+        toggled = {**base, "active": False, "live_enabled": True}
+        assert _definition_fingerprint(base) == _definition_fingerprint(renamed)
+        assert _definition_fingerprint(base) == _definition_fingerprint(toggled)
+
+    def test_entry_rule_change_changes_hash(self):
+        from app.handlers.servicer import _definition_fingerprint
+
+        a = {"strategy_id": "s1", "entry_rule": '{"op":"AND"}'}
+        b = {"strategy_id": "s1", "entry_rule": '{"op":"OR"}'}
+        assert _definition_fingerprint(a) != _definition_fingerprint(b)
+
+    def test_key_order_shuffle_same_hash(self):
+        from app.handlers.servicer import _definition_fingerprint
+
+        a = {"strategy_id": "s1", "entry_rule": "x", "exit_rule": "y"}
+        b = {"exit_rule": "y", "entry_rule": "x", "strategy_id": "s1"}
+        assert _definition_fingerprint(a) == _definition_fingerprint(b)
+
+    def test_none_and_empty_handled(self):
+        from app.handlers.servicer import _definition_fingerprint
+
+        assert _definition_fingerprint(None) == _definition_fingerprint({})
+        assert isinstance(_definition_fingerprint({}), str)
+
+
+# ---------------------------------------------------------------------------
+# feature 065 — per-symbol evidence cell buffering + fingerprint stamping
+# ---------------------------------------------------------------------------
+
+
+class TestRunBacktestCells:
+    def _req(self, strategy_id="s1", strategy_id_ref="", symbols=("AAPL", "MSFT")):
+        req = MagicMock()
+        req.strategy_id = strategy_id
+        req.strategy_id_ref = strategy_id_ref
+        req.symbols = list(symbols)
+        req.initial_capital = 100_000.0
+        req.HasField = MagicMock(return_value=False)
+        req.range = common_pb2.TimeRange()
+        return req
+
+    def _wire(self, svc):
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_run_symbols_repo = AsyncMock()
+
+    @staticmethod
+    def _fake_sma():
+        # AAPL: 2 winning trades over 10 trading days; MSFT: zero trades over 5 days.
+        trade = analysis_pb2.TradeRecord(pnl=1.0)
+        diag = analysis_pb2.SymbolDiagnostics()
+
+        def fake_symbol(symbol=None, **kwargs):
+            if symbol == "AAPL":
+                return ([trade, trade], 101_000.0, [100_000.0] * 11, diag)
+            return ([], 101_000.0, [101_000.0] * 6, diag)
+
+        return fake_symbol
+
+    @pytest.mark.asyncio
+    async def test_ok_run_buffers_one_cell_per_symbol_incl_zero_trade(self):
+        svc = make_servicer()
+        self._wire(svc)
+        svc._backtest_symbol = AsyncMock(side_effect=self._fake_sma())
+
+        result = await svc.RunBacktest(self._req(), context=MagicMock())
+
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK
+        svc._backtest_run_symbols_repo.insert_many.assert_awaited_once()
+        cells = svc._backtest_run_symbols_repo.insert_many.await_args.args[0]
+        by_symbol = {c["symbol"]: c for c in cells}
+        assert set(by_symbol) == {"AAPL", "MSFT"}
+        assert by_symbol["AAPL"]["total_trades"] == 2
+        assert by_symbol["AAPL"]["trading_days"] == 10
+        # Zero-trade cell IS buffered — non-participation counts as evidence.
+        assert by_symbol["MSFT"]["total_trades"] == 0
+        assert by_symbol["MSFT"]["trading_days"] == 5
+        # bare strategy_id (no ref) → no fingerprint on any cell.
+        assert all(c["definition_fingerprint"] is None for c in cells)
+
+    @pytest.mark.asyncio
+    async def test_registered_own_run_stamps_fingerprint(self):
+        from app.handlers.servicer import _definition_fingerprint
+
+        svc = make_servicer()
+        self._wire(svc)
+        definition_json = {"strategy_id": "s1", "entry_rule": '{"op":"AND"}'}
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(
+            return_value={
+                "strategy_id": "s1",
+                "display_name": "S1",
+                "active": True,
+                "live_enabled": False,
+                "definition_json": definition_json,
+            }
+        )
+        diag = analysis_pb2.SymbolDiagnostics()
+        curve = [100_000.0, 100_100.0, 100_200.0]
+        svc._backtest_symbol_evaluated = AsyncMock(
+            side_effect=lambda symbol=None, **kw: ([], 100_000.0, curve, diag)
+        )
+
+        req = self._req(strategy_id="s1", strategy_id_ref="s1", symbols=("AAPL",))
+        await svc.RunBacktest(req, context=MagicMock())
+
+        cells = svc._backtest_run_symbols_repo.insert_many.await_args.args[0]
+        expected = _definition_fingerprint(definition_json)
+        assert cells and all(c["definition_fingerprint"] == expected for c in cells)
+
+    @pytest.mark.asyncio
+    async def test_id_mismatch_stamps_none(self):
+        svc = make_servicer()
+        self._wire(svc)
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(
+            return_value={
+                "strategy_id": "other",
+                "display_name": "Other",
+                "active": True,
+                "live_enabled": False,
+                "definition_json": {"entry_rule": "x"},
+            }
+        )
+        diag = analysis_pb2.SymbolDiagnostics()
+        svc._backtest_symbol_evaluated = AsyncMock(
+            side_effect=lambda symbol=None, **kw: ([], 100_000.0, [100_000.0, 100_100.0], diag)
+        )
+        # strategy_id "s1" differs from strategy_id_ref "other" → cells carry no fingerprint.
+        req = self._req(strategy_id="s1", strategy_id_ref="other", symbols=("AAPL",))
+        await svc.RunBacktest(req, context=MagicMock())
+
+        cells = svc._backtest_run_symbols_repo.insert_many.await_args.args[0]
+        assert cells and all(c["definition_fingerprint"] is None for c in cells)
+
+    @pytest.mark.asyncio
+    async def test_insufficient_run_flushes_no_cells(self):
+        svc = make_servicer()
+        self._wire(svc)
+        bars_resp = MagicMock()
+        bars_resp.bars = [MagicMock(), MagicMock(), MagicMock()]  # too few → INSUFFICIENT
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
+
+        result = await svc.RunBacktest(self._req(symbols=("AAPL",)), context=MagicMock())
+
+        assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
+        svc._backtest_run_symbols_repo.insert_many.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_cells_flush_failure_never_fails_run(self):
+        svc = make_servicer()
+        self._wire(svc)
+        svc._backtest_run_symbols_repo.insert_many = AsyncMock(side_effect=Exception("db down"))
+        svc._backtest_symbol = AsyncMock(side_effect=self._fake_sma())
+
+        result = await svc.RunBacktest(self._req(), context=MagicMock())
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK  # swallowed
+
+    @pytest.mark.asyncio
+    async def test_range_passed_to_run_history_insert(self):
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_runs_repo = AsyncMock()
+        req = self._req(symbols=())
+        req.range.start.seconds = 1_600_000_000
+        req.range.end.seconds = 1_600_864_000  # 10 days, within cap
+
+        await svc.RunBacktest(req, context=MagicMock())
+
+        kwargs = svc._backtest_runs_repo.insert.await_args.kwargs
+        assert kwargs["range_start"] is not None
+        assert kwargs["range_end"] is not None
+
+
+# ---------------------------------------------------------------------------
+# feature 065 — _aggregate_cells (empirical-Bayes shrinkage)
+# ---------------------------------------------------------------------------
+
+
+class TestAggregateCells:
+    def test_perfect_evidence_reaches_A_threshold(self):
+        from app.handlers.servicer import _aggregate_cells, _grade
+
+        # OQ-1 anchor: total W=375 trading days of perfect (s=1.0) evidence, k=250 → exactly 0.8.
+        cells = [(375, 1.0, {"sharpe": 1.0, "drawdown": 1.0, "win_rate": 1.0})]
+        overall, comps, n, days = _aggregate_cells(cells, k=250)
+        assert overall == pytest.approx(0.8)  # (375 + 0.5*250) / (375 + 250)
+        assert _grade(overall) == "A"
+        assert n == 1 and days == 375
+
+    def test_single_short_perfect_cell_shrinks_below_B(self):
+        from app.handlers.servicer import _aggregate_cells, _grade
+
+        # OQ-1 anchor: one 60-day perfect cell → (60 + 125)/310 ≈ 0.597 (< 0.65 B threshold).
+        overall, comps, n, days = _aggregate_cells([(60, 1.0, {"sharpe": 1.0})], k=250)
+        assert overall == pytest.approx(185 / 310, abs=1e-9)
+        assert _grade(overall) == "C"
+
+    def test_zero_weight_returns_none(self):
+        from app.handlers.servicer import _aggregate_cells
+
+        assert _aggregate_cells([(0, 1.0, {"sharpe": 1.0})], k=250) is None
+        assert _aggregate_cells([], k=250) is None
+
+    def test_component_weighted_mean_then_shrunk(self):
+        from app.handlers.servicer import _aggregate_cells
+
+        # weights 100 & 300 (sum ≠ 1 → renormalized); component 'sharpe' 0.9 and 0.5.
+        cells = [(100, 0.9, {"sharpe": 0.9}), (300, 0.5, {"sharpe": 0.5})]
+        overall, comps, n, days = _aggregate_cells(cells, k=200)
+        # weighted sharpe numerator = 100*0.9 + 300*0.5 = 240; shrunk = (240 + 0.5*200)/(400+200).
+        assert comps["sharpe"] == pytest.approx(340 / 600)
+        # overall uses the same weighted s values → identical shrinkage here.
+        assert overall == pytest.approx(340 / 600)
+        assert days == 400
+
+    def test_nonfinite_component_value_never_emitted(self):
+        from app.handlers.servicer import _aggregate_cells
+
+        cells = [(100, 0.5, {"drawdown": 0.5, "sharpe": float("inf")})]
+        overall, comps, n, days = _aggregate_cells(cells, k=100)
+        assert all(math.isfinite(v) for v in comps.values())
+        assert math.isfinite(overall)
+        assert "drawdown" in comps
+
+    def test_zero_trade_cell_pulls_blend_down(self):
+        from app.handlers.servicer import _aggregate_cells, _score_from_metrics
+
+        # A zero-trade cell scores ≈ 0.3 (drawdown 1.0 only); it drags a strong cell down.
+        s_zero, c_zero = _score_from_metrics(0.0, 0.0, 0.0, 0.4, 0.3, 0.3)  # ≈ 0.3
+        s_good, c_good = _score_from_metrics(2.0, 0.0, 1.0, 0.4, 0.3, 0.3)  # = 1.0
+        strong_only = _aggregate_cells([(200, s_good, c_good)], k=250)[0]
+        with_zero = _aggregate_cells([(200, s_good, c_good), (200, s_zero, c_zero)], k=250)[0]
+        assert with_zero < strong_only
+
+
+# ---------------------------------------------------------------------------
+# feature 065 — recompute triggers (RunBacktest / ManageStrategy UPDATE / ScoreStrategy)
+# ---------------------------------------------------------------------------
+
+
+def _update_req(strategy_id="s1", entry_rule="y"):
+    definition = analysis_pb2.StrategyDefinition(
+        strategy_id=strategy_id, display_name="S1", entry_rule=entry_rule
+    )
+    req = MagicMock()
+    req.definition = definition
+    req.operation = analysis_pb2.STRATEGY_OPERATION_UPDATE
+    return req
+
+
+def _updated_row(strategy_id="s1", entry_rule="y"):
+    return {
+        "strategy_id": strategy_id,
+        "display_name": "S1",
+        "active": True,
+        "live_enabled": False,
+        "definition_json": {"entry_rule": entry_rule},
+    }
+
+
+class TestHeadlineTriggers:
+    @pytest.mark.asyncio
+    async def test_ok_run_derives_headline_from_cells(self):
+        # A registered own run: the persisted grade comes from the cells (400-day perfect),
+        # not the single run's own (flat, near-zero) aggregate.
+        svc = _derivation_svc([_eligible_cell(days=400, sharpe=2.0, drawdown=0.0, win_rate=1.0)])
+        svc._backtest_run_symbols_repo.insert_many = AsyncMock()
+        diag = analysis_pb2.SymbolDiagnostics()
+        svc._backtest_symbol_evaluated = AsyncMock(
+            side_effect=lambda symbol=None, **kw: ([], 100_000.0, [100_000.0, 100_050.0], diag)
+        )
+        req = MagicMock()
+        req.strategy_id = "s1"
+        req.strategy_id_ref = "s1"
+        req.symbols = ["AAPL"]
+        req.initial_capital = 100_000.0
+        req.HasField = MagicMock(return_value=False)
+        req.range = common_pb2.TimeRange()
+
+        await svc.RunBacktest(req, context=MagicMock())
+
+        svc._scores_repo.upsert.assert_awaited()
+        kwargs = svc._scores_repo.upsert.await_args.kwargs
+        assert kwargs["n_symbols"] == 1
+        assert kwargs["total_trading_days"] == 400
+        assert kwargs["provisional"] is True  # 1 < 3 symbols and 400 < 500 days
+        assert svc._strategies["s1"].evidence_days == 400
+
+    @pytest.mark.asyncio
+    async def test_update_clears_inmemory_even_when_delete_raises(self):
+        svc = _derivation_svc([])  # zero eligible cells after the definition change
+        svc._strategies["s1"] = analysis_pb2.StrategyScore(
+            strategy_id="s1", overall_score=0.9, rating="A"
+        )
+        svc._strategies_repo.update = AsyncMock(return_value=_updated_row())
+        svc._scores_repo.delete = AsyncMock(side_effect=Exception("db down"))
+        svc._validate_definition_proto = AsyncMock()
+        svc._has_admin_scope = lambda ctx: True
+
+        await svc.ManageStrategy(_update_req(), context=MagicMock())
+
+        # Unconditional pop FIRST — the stale grade is gone even though recompute/delete failed.
+        assert "s1" not in svc._strategies
+
+    @pytest.mark.asyncio
+    async def test_update_recompute_no_deadlock(self):
+        # UPDATE holds the lock then calls the inner (non-reentrant) recompute — must not deadlock.
+        svc = _derivation_svc([_eligible_cell(symbol=s, days=600) for s in ("A", "B", "C", "D")])
+        svc._strategies_repo.update = AsyncMock(return_value=_updated_row())
+        svc._validate_definition_proto = AsyncMock()
+        svc._has_admin_scope = lambda ctx: True
+
+        await asyncio.wait_for(svc.ManageStrategy(_update_req(), context=MagicMock()), timeout=2.0)
+
+        svc._scores_repo.upsert.assert_awaited_once()  # recompute ran under the same lock
+
+
+def _abort_ctx():
+    context = MagicMock()
+    context.abort = AsyncMock(side_effect=Exception("aborted"))
+    return context
+
+
+class TestScoreStrategyRecompute:
+    @pytest.mark.asyncio
+    async def test_store_unavailable(self):
+        svc = make_servicer()  # no strategies_repo
+        req = MagicMock()
+        req.strategy_id = "s1"
+        ctx = _abort_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ScoreStrategy(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.UNAVAILABLE
+
+    @pytest.mark.asyncio
+    async def test_unregistered_not_found(self):
+        svc = _derivation_svc([])
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        req = MagicMock()
+        req.strategy_id = "nope"
+        ctx = _abort_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ScoreStrategy(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_zero_eligible_clears_and_not_found(self):
+        svc = _derivation_svc([])
+        svc._strategies["s1"] = analysis_pb2.StrategyScore(
+            strategy_id="s1", overall_score=0.9, rating="A"
+        )
+        req = MagicMock()
+        req.strategy_id = "s1"
+        ctx = _abort_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ScoreStrategy(req, ctx)
+        assert "s1" not in svc._strategies  # stale grade popped
+        svc._scores_repo.delete.assert_awaited_once()  # non-best-effort delete
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_cells_read_failure_unavailable_no_mutation(self):
+        svc = _derivation_svc([])
+        svc._backtest_run_symbols_repo.fetch_eligible = AsyncMock(side_effect=Exception("db down"))
+        svc._strategies["s1"] = analysis_pb2.StrategyScore(
+            strategy_id="s1", overall_score=0.9, rating="A"
+        )
+        req = MagicMock()
+        req.strategy_id = "s1"
+        ctx = _abort_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ScoreStrategy(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.UNAVAILABLE
+        assert "s1" in svc._strategies  # untouched — no prior-state mutation
+
+    @pytest.mark.asyncio
+    async def test_success_persists_provenance_and_emits(self):
+        svc = _derivation_svc(
+            [
+                _eligible_cell(symbol=s, days=600, sharpe=2.0, drawdown=0.0, win_rate=1.0)
+                for s in ("A", "B", "C")
+            ]
+        )
+        req = MagicMock()
+        req.strategy_id = "s1"
+
+        score = await svc.ScoreStrategy(req, context=MagicMock())
+
+        assert score.strategy_id == "s1"
+        assert score.evidence_symbols == 3
+        assert score.evidence_days == 1800
+        assert score.provisional is False  # 3 >= 3 symbols and 1800 >= 500 days
+        assert score.rating == "A"
+        svc._scores_repo.upsert.assert_awaited_once()
+        svc._ledger.AppendEvent.assert_awaited()  # guarded ledger emit still fires
+
+    @pytest.mark.asyncio
+    async def test_range_is_ignored(self):
+        # ScoreStrategyRequest.range is documented as ignored — a set range changes nothing.
+        svc = _derivation_svc([_eligible_cell(symbol=s, days=600) for s in ("A", "B", "C")])
+        req = MagicMock()
+        req.strategy_id = "s1"
+        req.range = common_pb2.TimeRange(
+            start=Timestamp(seconds=1_600_000_000), end=Timestamp(seconds=1_600_864_000)
+        )
+        score = await svc.ScoreStrategy(req, context=MagicMock())
+        assert score.evidence_days == 1800  # whole eligible base, not a windowed subset
+
+
+class TestHydrateProvenance:
+    @pytest.mark.asyncio
+    async def test_hydrate_preserves_provenance(self):
+        svc = make_servicer()
+        svc._scores_repo = AsyncMock()
+        svc._scores_repo.list = AsyncMock(
+            return_value=[
+                {
+                    "strategy_id": "s1",
+                    "overall_score": 0.7,
+                    "rating": "B",
+                    "component_scores": {"sharpe": 0.6},
+                    "n_symbols": 5,
+                    "total_trading_days": 900,
+                    "provisional": False,
+                }
+            ]
+        )
+        await svc.hydrate_scores()
+        got = svc._strategies["s1"]
+        assert got.evidence_symbols == 5
+        assert got.evidence_days == 900
+        assert got.provisional is False
+
+    def test_row_to_score_pre007_row_defaults(self):
+        from app.handlers.servicer import _row_to_score
+
+        # A pre-007 row has no provenance keys — must hydrate with zero/false defaults.
+        row = {
+            "strategy_id": "s1",
+            "overall_score": 0.7,
+            "rating": "B",
+            "component_scores": {},
+        }
+        score = _row_to_score(row)
+        assert score.evidence_symbols == 0
+        assert score.evidence_days == 0
+        assert score.provisional is False
+
+
+class TestTradedFirstDedupContract:
+    @pytest.mark.asyncio
+    async def test_aggregation_consumes_fetch_eligible_result(self):
+        # The traded-first dedup lives in the fetch_eligible SQL (asserted in
+        # test_backtest_run_symbols_repo.py). The servicer trusts that result: given a symbol's
+        # traded 100-day cell is what fetch_eligible returns, the grade reflects it (not a
+        # hypothetical 500-day zero-trade cell that the SQL ordering would have discarded).
+        traded = _eligible_cell(symbol="AAPL", days=100, sharpe=2.0, win_rate=1.0, trades=5)
+        svc = _derivation_svc([traded])
+        req = MagicMock()
+        req.strategy_id = "s1"
+        score = await svc.ScoreStrategy(req, context=MagicMock())
+        assert score.evidence_days == 100  # the traded cell's window, per fetch_eligible
