@@ -19,7 +19,13 @@ type ClientConfig struct {
 	PaperURL  string // e.g. https://paper-api.alpaca.markets
 	LiveURL   string // e.g. https://api.alpaca.markets
 	Paper     bool   // when true, routes to PaperURL; when false, routes to LiveURL
+	// TimeoutMs is the HTTP client timeout in milliseconds, sourced from the live
+	// config key trading.broker.timeout_ms. Zero falls back to defaultTimeoutMs.
+	TimeoutMs int
 }
+
+// defaultTimeoutMs matches the documented trading.broker.timeout_ms default.
+const defaultTimeoutMs = 5000
 
 // Client submits and manages orders via Alpaca's broker REST API.
 // Paper and live modes share the same API surface; only the base URL differs.
@@ -35,10 +41,14 @@ func NewClient(cfg ClientConfig) *Client {
 	if cfg.LiveURL == "" {
 		cfg.LiveURL = "https://api.alpaca.markets"
 	}
+	timeoutMs := cfg.TimeoutMs
+	if timeoutMs <= 0 {
+		timeoutMs = defaultTimeoutMs
+	}
 	return &Client{
 		cfg: cfg,
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: time.Duration(timeoutMs) * time.Millisecond,
 		},
 	}
 }
@@ -56,16 +66,10 @@ func (c *Client) IsPaper() bool {
 	return c.cfg.Paper
 }
 
-// SubmitOrderRequest is the input to SubmitOrder.
-type SubmitOrderRequest struct {
-	Symbol        string `json:"symbol"`
-	Qty           string `json:"qty"`           // Alpaca expects string
-	Side          string `json:"side"`          // "buy" or "sell"
-	Type          string `json:"type"`          // "market", "limit", "stop", "stop_limit", "trailing_stop"
-	TimeInForce   string `json:"time_in_force"` // "day", "gtc", "ioc", "fok"
-	LimitPrice    string `json:"limit_price,omitempty"`
-	StopPrice     string `json:"stop_price,omitempty"`
-	ClientOrderID string `json:"client_order_id,omitempty"`
+// HTTPTimeout returns the configured HTTP client timeout (exposed for tests verifying
+// trading.broker.timeout_ms wiring).
+func (c *Client) HTTPTimeout() time.Duration {
+	return c.httpClient.Timeout
 }
 
 // AlpacaOrder mirrors the Alpaca v2 order response object.
@@ -90,25 +94,36 @@ type AlpacaOrder struct {
 // Returns the normalized broker order including the broker-assigned order ID.
 func (c *Client) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrder, error) {
 	alpacaReq := struct {
-		Symbol      string `json:"symbol"`
-		Qty         string `json:"qty"`
-		Side        string `json:"side"`
-		Type        string `json:"type"`
-		TimeInForce string `json:"time_in_force"`
-		LimitPrice  string `json:"limit_price,omitempty"`
-		StopPrice   string `json:"stop_price,omitempty"`
+		Symbol        string `json:"symbol"`
+		Qty           string `json:"qty"`
+		Side          string `json:"side"`          // "buy" or "sell"
+		Type          string `json:"type"`          // "market", "limit", "stop", "stop_limit", "trailing_stop"
+		TimeInForce   string `json:"time_in_force"` // "day", "gtc", "opg", "cls", "ioc", "fok"
+		LimitPrice    string `json:"limit_price,omitempty"`
+		StopPrice     string `json:"stop_price,omitempty"`
+		TrailPrice    string `json:"trail_price,omitempty"`
+		TrailPercent  string `json:"trail_percent,omitempty"`
+		ClientOrderID string `json:"client_order_id,omitempty"`
 	}{
-		Symbol:      req.Symbol,
-		Qty:         strconv.FormatFloat(req.Qty, 'f', -1, 64),
-		Side:        req.Side,
-		Type:        req.OrderType,
-		TimeInForce: req.TimeInForce,
+		Symbol:        req.Symbol,
+		Qty:           strconv.FormatFloat(req.Qty, 'f', -1, 64),
+		Side:          req.Side,
+		Type:          req.OrderType,
+		TimeInForce:   req.TimeInForce,
+		ClientOrderID: req.ClientOrderID,
 	}
 	if req.LimitPrice != 0 {
 		alpacaReq.LimitPrice = strconv.FormatFloat(req.LimitPrice, 'f', -1, 64)
 	}
 	if req.StopPrice != 0 {
 		alpacaReq.StopPrice = strconv.FormatFloat(req.StopPrice, 'f', -1, 64)
+	}
+	// Trailing-stop offset: Alpaca accepts exactly one of trail_price / trail_percent.
+	if req.TrailPrice != 0 {
+		alpacaReq.TrailPrice = strconv.FormatFloat(req.TrailPrice, 'f', -1, 64)
+	}
+	if req.TrailPercent != 0 {
+		alpacaReq.TrailPercent = strconv.FormatFloat(req.TrailPercent, 'f', -1, 64)
 	}
 
 	body, err := json.Marshal(alpacaReq)
@@ -145,7 +160,18 @@ func (c *Client) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrde
 	if err := json.Unmarshal(respBody, &alpacaResp); err != nil {
 		return nil, fmt.Errorf("decode order response: %w", err)
 	}
-	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status}, nil
+	// Market orders can fill immediately, so the submit response may already carry
+	// filled_qty / filled_avg_price. Parse them so an order that fills on submit is
+	// not left at filled_qty=0 (the fill poller skips orders already in FILLED state).
+	var filledAvgPrice float64
+	if alpacaResp.FilledAvgPrice != "" {
+		filledAvgPrice, _ = strconv.ParseFloat(alpacaResp.FilledAvgPrice, 64)
+	}
+	var filledQty float64
+	if alpacaResp.FilledQty != "" {
+		filledQty, _ = strconv.ParseFloat(alpacaResp.FilledQty, 64)
+	}
+	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status, FilledQty: filledQty, FilledAvgPrice: filledAvgPrice}, nil
 }
 
 // CancelOrder cancels a broker order via DELETE /v2/orders/{order_id}.
@@ -171,6 +197,70 @@ func (c *Client) CancelOrder(ctx context.Context, brokerOrderID string) error {
 		return fmt.Errorf("alpaca cancel error (status %d): %s", resp.StatusCode, string(body))
 	}
 	return nil
+}
+
+// ReplaceOrder modifies a working order via PATCH /v2/orders/{order_id}.
+// Only the changed fields are sent; a zero Qty/LimitPrice/StopPrice or empty
+// TimeInForce is omitted so the broker leaves that field unchanged.
+func (c *Client) ReplaceOrder(ctx context.Context, brokerOrderID string, req OrderRequest) (*BrokerOrder, error) {
+	alpacaReq := struct {
+		Qty         string `json:"qty,omitempty"`
+		LimitPrice  string `json:"limit_price,omitempty"`
+		StopPrice   string `json:"stop_price,omitempty"`
+		Trail       string `json:"trail,omitempty"`
+		TimeInForce string `json:"time_in_force,omitempty"`
+	}{}
+	if req.Qty != 0 {
+		alpacaReq.Qty = strconv.FormatFloat(req.Qty, 'f', -1, 64)
+	}
+	if req.LimitPrice != 0 {
+		alpacaReq.LimitPrice = strconv.FormatFloat(req.LimitPrice, 'f', -1, 64)
+	}
+	if req.StopPrice != 0 {
+		alpacaReq.StopPrice = strconv.FormatFloat(req.StopPrice, 'f', -1, 64)
+	}
+	if req.Trail != 0 {
+		alpacaReq.Trail = strconv.FormatFloat(req.Trail, 'f', -1, 64)
+	}
+	if req.TimeInForce != "" {
+		alpacaReq.TimeInForce = req.TimeInForce
+	}
+
+	body, err := json.Marshal(alpacaReq)
+	if err != nil {
+		return nil, fmt.Errorf("marshal replace request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPatch,
+		fmt.Sprintf("%s/v2/orders/%s", c.baseURL(), brokerOrderID),
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	c.setAuthHeaders(httpReq)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("replace order: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("alpaca replace error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var alpacaResp AlpacaOrder
+	if err := json.Unmarshal(respBody, &alpacaResp); err != nil {
+		return nil, fmt.Errorf("decode replace response: %w", err)
+	}
+	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status}, nil
 }
 
 // GetOrder fetches a broker order's current state via GET /v2/orders/{order_id}.
@@ -230,10 +320,21 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("alpaca GetPositions: status %d: %s", resp.StatusCode, body)
 	}
+	// Alpaca returns these monetary fields as decimal strings. current_price / market_value /
+	// unrealized_pl / unrealized_plpc are the broker's mark-to-market valuation — carried
+	// through so the portfolio card reconciles with the broker's authoritative equity.
+	// unrealized_intraday_pl / unrealized_intraday_plpc are today's (intraday) P&L — the
+	// change since the previous close — surfaced as the positions table's "Today's P/L".
 	var raw []struct {
-		Symbol  string `json:"symbol"`
-		Qty     string `json:"qty"`
-		AvgCost string `json:"avg_entry_price"`
+		Symbol         string `json:"symbol"`
+		Qty            string `json:"qty"`
+		AvgCost        string `json:"avg_entry_price"`
+		CurrentPrice   string `json:"current_price"`
+		MarketValue    string `json:"market_value"`
+		UnrealizedPL   string `json:"unrealized_pl"`
+		UnrealizedPLPC string `json:"unrealized_plpc"`
+		IntradayPL     string `json:"unrealized_intraday_pl"`
+		IntradayPLPC   string `json:"unrealized_intraday_plpc"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("alpaca GetPositions: unmarshal: %w", err)
@@ -242,7 +343,23 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 	for _, r := range raw {
 		qty, _ := strconv.ParseFloat(r.Qty, 64)
 		avg, _ := strconv.ParseFloat(r.AvgCost, 64)
-		positions = append(positions, BrokerPosition{Symbol: r.Symbol, Quantity: qty, AvgCost: avg})
+		currentPrice, _ := strconv.ParseFloat(r.CurrentPrice, 64)
+		marketValue, _ := strconv.ParseFloat(r.MarketValue, 64)
+		unrealizedPL, _ := strconv.ParseFloat(r.UnrealizedPL, 64)
+		unrealizedPLPC, _ := strconv.ParseFloat(r.UnrealizedPLPC, 64)
+		intradayPL, _ := strconv.ParseFloat(r.IntradayPL, 64)
+		intradayPLPC, _ := strconv.ParseFloat(r.IntradayPLPC, 64)
+		positions = append(positions, BrokerPosition{
+			Symbol:           r.Symbol,
+			Quantity:         qty,
+			AvgCost:          avg,
+			CurrentPrice:     currentPrice,
+			MarketValue:      marketValue,
+			UnrealizedPnl:    unrealizedPL,
+			UnrealizedPnlPct: unrealizedPLPC,
+			DayPnl:           intradayPL,
+			DayPnlPct:        intradayPLPC,
+		})
 	}
 	return positions, nil
 }

@@ -4,6 +4,7 @@ import type { Value } from '@bufbuild/protobuf/wkt';
 import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useListEditor } from '@/hooks/useListEditor';
 import {
   Select,
   SelectContent,
@@ -135,22 +136,7 @@ interface ParameterEditorProps {
  * definitions. Numeric (int/float) params expose min/max; bool/string hide them.
  */
 export function ParameterEditor({ value, onChange }: ParameterEditorProps) {
-  function update(i: number, patch: Partial<ParameterDraft>) {
-    onChange(value.map((p, j) => (j === i ? { ...p, ...patch } : p)));
-  }
-  function add() {
-    onChange([...value, emptyParameter()]);
-  }
-  function remove(i: number) {
-    onChange(value.filter((_, j) => j !== i));
-  }
-  function move(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= value.length) return;
-    const next = value.slice();
-    [next[i], next[j]] = [next[j], next[i]];
-    onChange(next);
-  }
+  const { update, add, remove, move } = useListEditor(value, onChange, emptyParameter);
 
   return (
     <div className="space-y-3">

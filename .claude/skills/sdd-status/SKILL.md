@@ -121,6 +121,17 @@ Status History:
 <full table from feature.md>
 ```
 
+### 1.5. Design-phase artifacts (if any)
+
+Probe whether the `/sdd-design` artifacts exist on `<SRC>` and print one line:
+```bash
+git cat-file -e <SRC>:$FEATURE_DIR/recon.md 2>/dev/null && echo present
+git cat-file -e <SRC>:$FEATURE_DIR/design.md 2>/dev/null && echo present
+```
+Print: `Design artifacts: recon.md <present|—>, design.md <present|—>`. If both are `—` and the
+status is `spec-ready`, this confirms the design phase has not run yet (next action below will point
+to `/sdd-design`).
+
 ### 2. Read implementation-spec.md (if exists)
 
 Print all steps with their current statuses:
@@ -173,6 +184,7 @@ Print:
 - Steps pending → "/sdd-execute <slug> next  (next: Step N — <title>)"
 - Status `implementation-ready`, no execution started → "/sdd-review <slug> impl-spec  (validate spec before executing)"
 - No implementation-spec.md → "/sdd-spec <slug>  (implementation spec not yet generated)"
-- Status `spec-ready` → "/sdd-spec <slug>  (product spec approved — generate implementation spec)"
+- Status `design-approved` → "/sdd-spec <slug>  (design approved — generate implementation spec)"
+- Status `spec-ready` → "/sdd-design <slug>  (product spec approved — run recon + design debate)"
 - Status `draft` → "/sdd-review <slug> product-spec  (product spec awaiting AI review)"
 - No product-spec.md → "/sdd-story <slug>  (no product spec — provide story text)"

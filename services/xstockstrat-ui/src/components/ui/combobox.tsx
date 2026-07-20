@@ -19,6 +19,15 @@ interface ComboboxProps {
   allowFreeText?: boolean;
   emptyText?: string;
   className?: string;
+  /** Extra classes for the text input itself (e.g. to make it more compact). */
+  inputClassName?: string;
+  /**
+   * Cap how many filtered options are rendered at once. Large option lists
+   * (thousands of entries) render every match into the DOM otherwise, which
+   * makes opening and typing sluggish. When more matches exist than the cap,
+   * a hint row tells the user to keep typing to narrow. Omit for no cap.
+   */
+  maxResults?: number;
   'aria-label'?: string;
   disabled?: boolean;
 }
@@ -36,6 +45,8 @@ export function Combobox({
   allowFreeText = false,
   emptyText = 'No matches',
   className,
+  inputClassName,
+  maxResults,
   'aria-label': ariaLabel,
   disabled,
 }: ComboboxProps) {
@@ -52,10 +63,14 @@ export function Combobox({
     const q = query.trim().toLowerCase();
     if (!q) return options;
     return options.filter(
-      (o) =>
-        o.value.toLowerCase().includes(q) || (o.label ?? '').toLowerCase().includes(q),
+      (o) => o.value.toLowerCase().includes(q) || (o.label ?? '').toLowerCase().includes(q),
     );
   }, [options, query]);
+
+  // Only render up to `maxResults` rows so huge option lists stay responsive.
+  const visible =
+    maxResults != null && filtered.length > maxResults ? filtered.slice(0, maxResults) : filtered;
+  const truncated = filtered.length - visible.length;
 
   React.useEffect(() => {
     if (!open) return;
@@ -80,7 +95,10 @@ export function Combobox({
         <input
           aria-label={ariaLabel}
           disabled={disabled}
-          className="flex h-10 w-full rounded-md border border-input bg-secondary px-3 py-2 pr-8 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          className={cn(
+            'flex h-10 w-full rounded-md border border-input bg-secondary px-3 py-2 pr-8 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+            inputClassName,
+          )}
           placeholder={placeholder}
           value={display}
           onFocus={() => {
@@ -110,7 +128,7 @@ export function Combobox({
           {filtered.length === 0 ? (
             <li className="px-3 py-2 text-xs text-muted-foreground">{emptyText}</li>
           ) : (
-            filtered.map((o) => (
+            visible.map((o) => (
               <li key={o.value}>
                 <button
                   type="button"
@@ -129,6 +147,11 @@ export function Combobox({
                 </button>
               </li>
             ))
+          )}
+          {truncated > 0 && (
+            <li className="px-3 py-1.5 text-xs text-muted-foreground">
+              +{truncated} more — keep typing to narrow
+            </li>
           )}
         </ul>
       )}

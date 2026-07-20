@@ -250,6 +250,25 @@ Stop — do not continue.
 
 ## Track C — SDD Path
 
+### C-0. Recommend design depth
+
+A Track C bug is a lightweight feature, so the `/sdd-design` phase (recon + adversarial debate) is
+optional — but the recommendation should scale with scope, not be all-or-nothing. Derive a depth from
+signals already in hand: severity (T-2) and the **issue body** (its *Affected services* field and any
+mention of proto/schema/migration/config — the `## Fix Scope` checkboxes in C-4 start unchecked, so
+read the issue text, not those placeholders):
+
+- **full** → `/sdd-design <slug>` — **proto** changes mentioned, OR a **DB migration/schema** change
+  mentioned, OR **affected services ≥ 2** (architectural / cross-service fix worth a full debate).
+- **quick** → `/sdd-design <slug> quick` — otherwise, when severity is **SEV-2**, OR a **config** change
+  is mentioned, OR the **root cause is "under investigation"** / non-trivial. One adversarial round:
+  too small to debate, too risky to skip.
+- **skip** → straight to `/sdd-spec <slug>` — **SEV-3**, single service, no proto/migration/config, and
+  a clear root cause. (`/sdd-spec` notes the absent design and proceeds.)
+
+Store the chosen depth + its command as `<design-rec>` (used in C-3's Next Action and C-6). This is a
+**recommendation only** — never auto-invoke `/sdd-design`; the human triggers it (phase-gate, P-04).
+
 ### C-1. Check for existing feature directory
 
 Run:
@@ -307,8 +326,11 @@ Write `docs/roadmap/features/${FEATURE_DIRNAME}/feature.md`:
 
 ## Next Action
 
-`/sdd-spec <slug>` — generate implementation spec from the product spec
+`<design-rec>` — recommended design depth (skip / quick / full) from triage; see context.md
 ```
+
+(Render `<design-rec>` as the recommended command: `/sdd-design <slug>` for full, `/sdd-design <slug>
+quick` for quick, or `/sdd-spec <slug>` for skip.)
 
 ### C-4. Write product-spec.md
 
@@ -379,6 +401,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Created: feature.md, product-spec.md, context.md
 - Affected services (from issue): <list>
 - Root cause hypothesis: <from issue or "under investigation">
+- Recommended design depth: <skip | quick | full> → `<design-rec>` (rationale: <severity + scope signal>)
 - Development branch: feature/<slug>
 ```
 
@@ -390,12 +413,16 @@ SDD path setup complete.
   feature.md: Type=bug, Status=draft
   GitHub issue: <url>
 
+Recommended design depth: <skip | quick | full>
+
 Next steps:
-  1. /sdd-spec <slug>  — investigate root cause, generate numbered fix steps
-  2. /sdd-execute <slug> next  — execute steps one at a time
-  3. Final PR: feature/<slug> → main-dev
-  4. Fix rides next /promote cycle to production
-  5. After launched: close GitHub issue #<number>
+  1. <design-rec>  — recommended design step (see C-0)
+       alternatives: /sdd-design <slug> (full) · /sdd-design <slug> quick · /sdd-spec <slug> (skip)
+  2. /sdd-spec <slug>  — investigate root cause, generate numbered fix steps (consumes design.md if run)
+  3. /sdd-execute <slug> next  — execute steps one at a time
+  4. Final PR: feature/<slug> → main-dev
+  5. Fix rides next /promote cycle to production
+  6. After launched: close GitHub issue #<number>
 
 /sdd-status <slug> to check progress at any time.
 ```

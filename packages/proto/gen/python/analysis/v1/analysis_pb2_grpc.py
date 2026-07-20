@@ -54,6 +54,11 @@ class AnalysisServiceStub(object):
                 request_serializer=analysis_dot_v1_dot_analysis__pb2.GetStrategyReportRequest.SerializeToString,
                 response_deserializer=analysis_dot_v1_dot_analysis__pb2.StrategyReport.FromString,
                 _registered_method=True)
+        self.ListBacktests = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/ListBacktests',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.ListBacktestsRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.ListBacktestsResponse.FromString,
+                _registered_method=True)
         self.ManageStrategy = channel.unary_unary(
                 '/xstockstrat.analysis.v1.AnalysisService/ManageStrategy',
                 request_serializer=analysis_dot_v1_dot_analysis__pb2.ManageStrategyRequest.SerializeToString,
@@ -73,6 +78,16 @@ class AnalysisServiceStub(object):
                 '/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive',
                 request_serializer=analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveRequest.SerializeToString,
                 response_deserializer=analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveResponse.FromString,
+                _registered_method=True)
+        self.ScreenSymbols = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.ScreenSymbolsRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.ScreenSymbolsResponse.FromString,
+                _registered_method=True)
+        self.RunFundamentalsScan = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.RunFundamentalsScanRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.FundamentalsScanSummary.FromString,
                 _registered_method=True)
 
 
@@ -103,6 +118,13 @@ class AnalysisServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListBacktests(self, request, context):
+        """List past backtest runs (summary metrics + earned score) for a strategy, newest first.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ManageStrategy(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -123,6 +145,20 @@ class AnalysisServiceServicer(object):
 
     def SetStrategyLive(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ScreenSymbols(self, request, context):
+        """Screen a symbol universe against weighted criteria (feature 060)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RunFundamentalsScan(self, request, context):
+        """Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -150,6 +186,11 @@ def add_AnalysisServiceServicer_to_server(servicer, server):
                     request_deserializer=analysis_dot_v1_dot_analysis__pb2.GetStrategyReportRequest.FromString,
                     response_serializer=analysis_dot_v1_dot_analysis__pb2.StrategyReport.SerializeToString,
             ),
+            'ListBacktests': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListBacktests,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.ListBacktestsRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.ListBacktestsResponse.SerializeToString,
+            ),
             'ManageStrategy': grpc.unary_unary_rpc_method_handler(
                     servicer.ManageStrategy,
                     request_deserializer=analysis_dot_v1_dot_analysis__pb2.ManageStrategyRequest.FromString,
@@ -169,6 +210,16 @@ def add_AnalysisServiceServicer_to_server(servicer, server):
                     servicer.SetStrategyLive,
                     request_deserializer=analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveRequest.FromString,
                     response_serializer=analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveResponse.SerializeToString,
+            ),
+            'ScreenSymbols': grpc.unary_unary_rpc_method_handler(
+                    servicer.ScreenSymbols,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.ScreenSymbolsRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.ScreenSymbolsResponse.SerializeToString,
+            ),
+            'RunFundamentalsScan': grpc.unary_unary_rpc_method_handler(
+                    servicer.RunFundamentalsScan,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.RunFundamentalsScanRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.FundamentalsScanSummary.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -290,6 +341,33 @@ class AnalysisService(object):
             _registered_method=True)
 
     @staticmethod
+    def ListBacktests(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/ListBacktests',
+            analysis_dot_v1_dot_analysis__pb2.ListBacktestsRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.ListBacktestsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def ManageStrategy(request,
             target,
             options=(),
@@ -387,6 +465,60 @@ class AnalysisService(object):
             '/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive',
             analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveRequest.SerializeToString,
             analysis_dot_v1_dot_analysis__pb2.SetStrategyLiveResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ScreenSymbols(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols',
+            analysis_dot_v1_dot_analysis__pb2.ScreenSymbolsRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.ScreenSymbolsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RunFundamentalsScan(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan',
+            analysis_dot_v1_dot_analysis__pb2.RunFundamentalsScanRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.FundamentalsScanSummary.FromString,
             options,
             channel_credentials,
             insecure,

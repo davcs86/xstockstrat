@@ -191,6 +191,66 @@ func (c *IBKRClient) CancelOrder(ctx context.Context, brokerOrderID string) erro
 	return nil
 }
 
+// ReplaceOrder modifies a working order via POST /iserver/account/{accountID}/order/{orderId}.
+// Only the changed fields are included in the modify body; a zero Qty/LimitPrice/StopPrice
+// or empty TimeInForce is omitted so IBKR leaves that field unchanged.
+//
+// Netting-mode assumption: like the rest of this adapter, replace assumes the account
+// runs in netting mode (see "IBKR: Hedged Mode not supported" in the service CLAUDE.md);
+// a replaced quantity is interpreted as the new total order quantity.
+func (c *IBKRClient) ReplaceOrder(ctx context.Context, brokerOrderID string, req OrderRequest) (*BrokerOrder, error) {
+	body := map[string]interface{}{}
+	if req.OrderType != "" {
+		body["orderType"] = orderTypeToIBKR(req.OrderType)
+	}
+	if req.Qty != 0 {
+		body["quantity"] = req.Qty
+	}
+	if req.LimitPrice != 0 {
+		body["price"] = req.LimitPrice
+	}
+	if req.StopPrice != 0 {
+		body["auxPrice"] = req.StopPrice
+	}
+	if req.TimeInForce != "" {
+		body["tif"] = strings.ToUpper(req.TimeInForce)
+	}
+
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("ibkr ReplaceOrder: marshal: %w", err)
+	}
+
+	endpoint := fmt.Sprintf("%s/iserver/account/%s/order/%s", c.baseURL, c.ibkrAccountID, brokerOrderID)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("ibkr ReplaceOrder: build request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", c.signRequest(http.MethodPost, endpoint))
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("ibkr ReplaceOrder: http: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("ibkr ReplaceOrder: status %d: %s", resp.StatusCode, respBody)
+	}
+
+	// IBKR returns an array of order replies (same shape as SubmitOrder).
+	var replies []struct {
+		OrderID     string `json:"order_id"`
+		OrderStatus string `json:"order_status"`
+	}
+	if err := json.Unmarshal(respBody, &replies); err != nil || len(replies) == 0 {
+		return nil, fmt.Errorf("ibkr ReplaceOrder: parse response: %w", err)
+	}
+	return &BrokerOrder{BrokerOrderID: replies[0].OrderID, Status: replies[0].OrderStatus}, nil
+}
+
 // GetOrder fetches an order's current state via GET /v1/api/iserver/account/orders?orderId={id}.
 func (c *IBKRClient) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrder, error) {
 	endpoint := fmt.Sprintf("%s/iserver/account/orders", c.baseURL)
@@ -249,10 +309,16 @@ func (c *IBKRClient) GetPositions(ctx context.Context) ([]BrokerPosition, error)
 		return nil, fmt.Errorf("ibkr GetPositions: status %d: %s", resp.StatusCode, respBody)
 	}
 
+	// IBKR returns mark-to-market valuation as numeric JSON. unrealized P&L percentage is
+	// not provided, so derive it from unrealizedPnl over cost basis (qty * avgCost) when the
+	// cost basis is non-zero — matching how the broker-authoritative fields are consumed.
 	var raw []struct {
-		Ticker   string  `json:"ticker"`
-		Position float64 `json:"position"`
-		AvgCost  float64 `json:"avgCost"`
+		Ticker        string  `json:"ticker"`
+		Position      float64 `json:"position"`
+		AvgCost       float64 `json:"avgCost"`
+		MktPrice      float64 `json:"mktPrice"`
+		MktValue      float64 `json:"mktValue"`
+		UnrealizedPnl float64 `json:"unrealizedPnl"`
 	}
 	if err := json.Unmarshal(respBody, &raw); err != nil {
 		return nil, fmt.Errorf("ibkr GetPositions: parse response: %w", err)
@@ -260,10 +326,18 @@ func (c *IBKRClient) GetPositions(ctx context.Context) ([]BrokerPosition, error)
 
 	positions := make([]BrokerPosition, 0, len(raw))
 	for _, r := range raw {
+		var pnlPct float64
+		if costBasis := r.Position * r.AvgCost; costBasis != 0 {
+			pnlPct = r.UnrealizedPnl / costBasis
+		}
 		positions = append(positions, BrokerPosition{
-			Symbol:   r.Ticker,
-			Quantity: r.Position,
-			AvgCost:  r.AvgCost,
+			Symbol:           r.Ticker,
+			Quantity:         r.Position,
+			AvgCost:          r.AvgCost,
+			CurrentPrice:     r.MktPrice,
+			MarketValue:      r.MktValue,
+			UnrealizedPnl:    r.UnrealizedPnl,
+			UnrealizedPnlPct: pnlPct,
 		})
 	}
 	return positions, nil

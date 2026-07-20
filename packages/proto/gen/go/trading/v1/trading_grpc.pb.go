@@ -24,6 +24,7 @@ const (
 	TradingService_GetOrder_FullMethodName                       = "/xstockstrat.trading.v1.TradingService/GetOrder"
 	TradingService_ListOrders_FullMethodName                     = "/xstockstrat.trading.v1.TradingService/ListOrders"
 	TradingService_StreamOrderUpdates_FullMethodName             = "/xstockstrat.trading.v1.TradingService/StreamOrderUpdates"
+	TradingService_ReplaceOrder_FullMethodName                   = "/xstockstrat.trading.v1.TradingService/ReplaceOrder"
 	TradingService_RegisterBrokerAccount_FullMethodName          = "/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount"
 	TradingService_ListBrokerAccounts_FullMethodName             = "/xstockstrat.trading.v1.TradingService/ListBrokerAccounts"
 	TradingService_DeregisterBrokerAccount_FullMethodName        = "/xstockstrat.trading.v1.TradingService/DeregisterBrokerAccount"
@@ -40,6 +41,11 @@ type TradingServiceClient interface {
 	GetOrder(ctx context.Context, in *GetOrderRequest, opts ...grpc.CallOption) (*Order, error)
 	ListOrders(ctx context.Context, in *ListOrdersRequest, opts ...grpc.CallOption) (*ListOrdersResponse, error)
 	StreamOrderUpdates(ctx context.Context, in *StreamOrderUpdatesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Order], error)
+	// ReplaceOrder modifies a working order's qty/price/TIF. It is broker-agnostic at
+	// this surface and routes by the persisted order's broker_type
+	// (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
+	// while the order is NEW or PARTIALLY_FILLED.
+	ReplaceOrder(ctx context.Context, in *ReplaceOrderRequest, opts ...grpc.CallOption) (*Order, error)
 	RegisterBrokerAccount(ctx context.Context, in *RegisterBrokerAccountRequest, opts ...grpc.CallOption) (*RegisterBrokerAccountResponse, error)
 	ListBrokerAccounts(ctx context.Context, in *ListBrokerAccountsRequest, opts ...grpc.CallOption) (*ListBrokerAccountsResponse, error)
 	DeregisterBrokerAccount(ctx context.Context, in *DeregisterBrokerAccountRequest, opts ...grpc.CallOption) (*DeregisterBrokerAccountResponse, error)
@@ -118,6 +124,16 @@ func (c *tradingServiceClient) StreamOrderUpdates(ctx context.Context, in *Strea
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type TradingService_StreamOrderUpdatesClient = grpc.ServerStreamingClient[Order]
 
+func (c *tradingServiceClient) ReplaceOrder(ctx context.Context, in *ReplaceOrderRequest, opts ...grpc.CallOption) (*Order, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Order)
+	err := c.cc.Invoke(ctx, TradingService_ReplaceOrder_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *tradingServiceClient) RegisterBrokerAccount(ctx context.Context, in *RegisterBrokerAccountRequest, opts ...grpc.CallOption) (*RegisterBrokerAccountResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RegisterBrokerAccountResponse)
@@ -177,6 +193,11 @@ type TradingServiceServer interface {
 	GetOrder(context.Context, *GetOrderRequest) (*Order, error)
 	ListOrders(context.Context, *ListOrdersRequest) (*ListOrdersResponse, error)
 	StreamOrderUpdates(*StreamOrderUpdatesRequest, grpc.ServerStreamingServer[Order]) error
+	// ReplaceOrder modifies a working order's qty/price/TIF. It is broker-agnostic at
+	// this surface and routes by the persisted order's broker_type
+	// (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
+	// while the order is NEW or PARTIALLY_FILLED.
+	ReplaceOrder(context.Context, *ReplaceOrderRequest) (*Order, error)
 	RegisterBrokerAccount(context.Context, *RegisterBrokerAccountRequest) (*RegisterBrokerAccountResponse, error)
 	ListBrokerAccounts(context.Context, *ListBrokerAccountsRequest) (*ListBrokerAccountsResponse, error)
 	DeregisterBrokerAccount(context.Context, *DeregisterBrokerAccountRequest) (*DeregisterBrokerAccountResponse, error)
@@ -209,6 +230,9 @@ func (UnimplementedTradingServiceServer) ListOrders(context.Context, *ListOrders
 }
 func (UnimplementedTradingServiceServer) StreamOrderUpdates(*StreamOrderUpdatesRequest, grpc.ServerStreamingServer[Order]) error {
 	return status.Error(codes.Unimplemented, "method StreamOrderUpdates not implemented")
+}
+func (UnimplementedTradingServiceServer) ReplaceOrder(context.Context, *ReplaceOrderRequest) (*Order, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReplaceOrder not implemented")
 }
 func (UnimplementedTradingServiceServer) RegisterBrokerAccount(context.Context, *RegisterBrokerAccountRequest) (*RegisterBrokerAccountResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RegisterBrokerAccount not implemented")
@@ -328,6 +352,24 @@ func _TradingService_StreamOrderUpdates_Handler(srv interface{}, stream grpc.Ser
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type TradingService_StreamOrderUpdatesServer = grpc.ServerStreamingServer[Order]
 
+func _TradingService_ReplaceOrder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReplaceOrderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TradingServiceServer).ReplaceOrder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TradingService_ReplaceOrder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TradingServiceServer).ReplaceOrder(ctx, req.(*ReplaceOrderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _TradingService_RegisterBrokerAccount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RegisterBrokerAccountRequest)
 	if err := dec(in); err != nil {
@@ -440,6 +482,10 @@ var TradingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListOrders",
 			Handler:    _TradingService_ListOrders_Handler,
+		},
+		{
+			MethodName: "ReplaceOrder",
+			Handler:    _TradingService_ReplaceOrder_Handler,
 		},
 		{
 			MethodName: "RegisterBrokerAccount",

@@ -11,6 +11,39 @@ export declare enum BacktestStatus {
 export declare function backtestStatusFromJSON(object: any): BacktestStatus;
 export declare function backtestStatusToJSON(object: BacktestStatus): string;
 export declare function backtestStatusToNumber(object: BacktestStatus): number;
+/** The engine's decision for a single bar. Closed set → enum (C-04). */
+export declare enum BarAction {
+    BAR_ACTION_UNSPECIFIED = "BAR_ACTION_UNSPECIFIED",
+    /** BAR_ACTION_WARMUP - bar within the strategy's warm-up window */
+    BAR_ACTION_WARMUP = "BAR_ACTION_WARMUP",
+    /** BAR_ACTION_HOLD_FLAT - flat, no entry this bar */
+    BAR_ACTION_HOLD_FLAT = "BAR_ACTION_HOLD_FLAT",
+    /** BAR_ACTION_ENTER_LONG - opened a long position this bar */
+    BAR_ACTION_ENTER_LONG = "BAR_ACTION_ENTER_LONG",
+    /** BAR_ACTION_EXIT_LONG - closed a long position this bar */
+    BAR_ACTION_EXIT_LONG = "BAR_ACTION_EXIT_LONG",
+    /** BAR_ACTION_HOLD_LONG - holding an existing long, no exit this bar */
+    BAR_ACTION_HOLD_LONG = "BAR_ACTION_HOLD_LONG",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function barActionFromJSON(object: any): BarAction;
+export declare function barActionToJSON(object: BarAction): string;
+export declare function barActionToNumber(object: BarAction): number;
+/** Why a symbol produced zero trades. Closed set → enum (C-04). */
+export declare enum NoTradeReason {
+    /** NO_TRADE_REASON_UNSPECIFIED - symbol traded, or not classified */
+    NO_TRADE_REASON_UNSPECIFIED = "NO_TRADE_REASON_UNSPECIFIED",
+    /** NO_TRADE_REASON_ENTIRE_RANGE_WARMUP - the whole range was warm-up */
+    NO_TRADE_REASON_ENTIRE_RANGE_WARMUP = "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP",
+    /** NO_TRADE_REASON_ENTRY_NEVER_TRUE - entry condition never satisfied */
+    NO_TRADE_REASON_ENTRY_NEVER_TRUE = "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
+    /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
+    NO_TRADE_REASON_INSUFFICIENT_CAPITAL = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function noTradeReasonFromJSON(object: any): NoTradeReason;
+export declare function noTradeReasonToJSON(object: NoTradeReason): string;
+export declare function noTradeReasonToNumber(object: NoTradeReason): number;
 export declare enum ComponentKind {
     COMPONENT_KIND_UNSPECIFIED = "COMPONENT_KIND_UNSPECIFIED",
     COMPONENT_KIND_BUILTIN_INDICATOR = "COMPONENT_KIND_BUILTIN_INDICATOR",
@@ -30,6 +63,45 @@ export declare enum StrategyOperation {
 export declare function strategyOperationFromJSON(object: any): StrategyOperation;
 export declare function strategyOperationToJSON(object: StrategyOperation): string;
 export declare function strategyOperationToNumber(object: StrategyOperation): number;
+/** Comparator for a screen criterion's threshold test (closed set → enum). */
+export declare enum Comparator {
+    COMPARATOR_UNSPECIFIED = "COMPARATOR_UNSPECIFIED",
+    COMPARATOR_LT = "COMPARATOR_LT",
+    COMPARATOR_LTE = "COMPARATOR_LTE",
+    COMPARATOR_GT = "COMPARATOR_GT",
+    COMPARATOR_GTE = "COMPARATOR_GTE",
+    /** COMPARATOR_BETWEEN - threshold <= x <= threshold_high */
+    COMPARATOR_BETWEEN = "COMPARATOR_BETWEEN",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function comparatorFromJSON(object: any): Comparator;
+export declare function comparatorToJSON(object: Comparator): string;
+export declare function comparatorToNumber(object: Comparator): number;
+/** What a screen criterion evaluates. */
+export declare enum ScreenKind {
+    SCREEN_KIND_UNSPECIFIED = "SCREEN_KIND_UNSPECIFIED",
+    /** SCREEN_KIND_FUNDAMENTAL - a fundamental metric (metric_name) */
+    SCREEN_KIND_FUNDAMENTAL = "SCREEN_KIND_FUNDAMENTAL",
+    /** SCREEN_KIND_TECHNICAL_FORMULA - a custom formula (component) */
+    SCREEN_KIND_TECHNICAL_FORMULA = "SCREEN_KIND_TECHNICAL_FORMULA",
+    /** SCREEN_KIND_TECHNICAL_INDICATOR - a built-in indicator (component) */
+    SCREEN_KIND_TECHNICAL_INDICATOR = "SCREEN_KIND_TECHNICAL_INDICATOR",
+    /** SCREEN_KIND_SIGNAL - source-weighted signal blend */
+    SCREEN_KIND_SIGNAL = "SCREEN_KIND_SIGNAL",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function screenKindFromJSON(object: any): ScreenKind;
+export declare function screenKindToJSON(object: ScreenKind): string;
+export declare function screenKindToNumber(object: ScreenKind): number;
+export declare enum ScreenResultStatus {
+    SCREEN_RESULT_STATUS_UNSPECIFIED = "SCREEN_RESULT_STATUS_UNSPECIFIED",
+    SCREEN_RESULT_STATUS_OK = "SCREEN_RESULT_STATUS_OK",
+    SCREEN_RESULT_STATUS_INSUFFICIENT_DATA = "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function screenResultStatusFromJSON(object: any): ScreenResultStatus;
+export declare function screenResultStatusToJSON(object: ScreenResultStatus): string;
+export declare function screenResultStatusToNumber(object: ScreenResultStatus): number;
 export interface RunBacktestRequest {
     strategyId: string;
     range?: TimeRange | undefined;
@@ -67,6 +139,8 @@ export interface BacktestResult {
     status: BacktestStatus;
     /** populated per-symbol when status == INSUFFICIENT_DATA */
     coverageGaps: CoverageGap[];
+    /** per-bar debug data for every simulated symbol (feature 064) */
+    diagnostics: SymbolDiagnostics[];
 }
 export interface TradeRecord {
     symbol: string;
@@ -77,6 +151,38 @@ export interface TradeRecord {
     pnl: number;
     entryTime?: Date | undefined;
     exitTime?: Date | undefined;
+}
+/** One row of day-by-day backtest diagnostics for a single bar. */
+export interface BarDiagnostic {
+    symbol: string;
+    barIndex: number;
+    timestamp?: Date | undefined;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    vwap: number;
+    /** present-only: a series is absent during its warm-up */
+    indicators: {
+        [key: string]: number;
+    };
+    warmup: boolean;
+    signalScore: number;
+    conviction: number;
+    action: BarAction;
+}
+export interface BarDiagnostic_IndicatorsEntry {
+    key: string;
+    value: number;
+}
+/** Per-symbol diagnostics bundle attached to a BacktestResult. */
+export interface SymbolDiagnostics {
+    symbol: string;
+    bars: BarDiagnostic[];
+    noTradeReason: NoTradeReason;
+    barsTotal: number;
+    warmupBars: number;
 }
 export interface ScoreStrategyRequest {
     strategyId: string;
@@ -103,6 +209,32 @@ export interface StrategyReport {
     metadata?: {
         [key: string]: any;
     } | undefined;
+}
+export interface ListBacktestsRequest {
+    strategyId: string;
+    /** 0 → server default (most recent 20) */
+    limit: number;
+}
+export interface BacktestRunSummary {
+    backtestId: string;
+    strategyId: string;
+    status: BacktestStatus;
+    totalReturn: number;
+    annualizedReturn: number;
+    sharpeRatio: number;
+    maxDrawdown: number;
+    winRate: number;
+    totalTrades: number;
+    profitFactor: number;
+    symbols: string[];
+    /** 0 when the run earned no score (e.g. INSUFFICIENT_DATA) */
+    overallScore: number;
+    /** "" when the run earned no score */
+    rating: string;
+    completedAt?: Date | undefined;
+}
+export interface ListBacktestsResponse {
+    runs: BacktestRunSummary[];
 }
 export interface ListStrategiesRequest {
     page?: PageRequest | undefined;
@@ -167,14 +299,86 @@ export interface SetStrategyLiveRequest {
 export interface SetStrategyLiveResponse {
     definition?: StrategyDefinition | undefined;
 }
+export interface ScreenCriterion {
+    refName: string;
+    kind: ScreenKind;
+    /** FUNDAMENTAL only (e.g. "pe_ratio") */
+    metricName: string;
+    /** reused, for TECHNICAL_* kinds */
+    component?: StrategyComponent | undefined;
+    op: Comparator;
+    threshold: number;
+    /** for COMPARATOR_BETWEEN */
+    thresholdHigh: number;
+    /** contribution to the blended score */
+    weight: number;
+    /** true → failing this excludes the symbol */
+    hardFilter: boolean;
+}
+export interface ScreenResult {
+    symbol: string;
+    score: number;
+    /** per ref_name; skipped criteria are absent */
+    criterionScores: {
+        [key: string]: number;
+    };
+    passed: boolean;
+    status: ScreenResultStatus;
+    /** populated when status == INSUFFICIENT_DATA */
+    gap?: CoverageGap | undefined;
+}
+export interface ScreenResult_CriterionScoresEntry {
+    key: string;
+    value: number;
+}
+export interface ScreenSymbolsRequest {
+    symbols: string[];
+    criteria: ScreenCriterion[];
+    /** Blend params — same names the extracted scoring module reads (kept consistent with backtest). */
+    signalSources: string[];
+    signalWeight: number;
+    technicalWeight: number;
+    minConviction: number;
+    rankLimit: number;
+    /** Reserved/optional — historical as-of is deferred (OQ-060-e); latest bar is the default. */
+    evaluationWindow?: TimeRange | undefined;
+}
+export interface ScreenSymbolsResponse {
+    results: ScreenResult[];
+    coverageGaps: CoverageGap[];
+}
+export interface RunFundamentalsScanRequest {
+    /** ignore the day's idempotency guard / re-emit */
+    force: boolean;
+    /** score + report but do not emit or spend cache calls */
+    dryRun: boolean;
+    /** optional explicit override of the computed universe */
+    symbols: string[];
+}
+export interface FundamentalsScanSummary {
+    runId: string;
+    symbolsProcessed: number;
+    signalsEmitted: number;
+    callsSpent: number;
+    deferredCount: number;
+    /** "completed" | "budget_deferred" | "failed" */
+    status: string;
+    finishedAt?: Date | undefined;
+}
 export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
 export declare const CoverageGap: MessageFns<CoverageGap>;
 export declare const BacktestResult: MessageFns<BacktestResult>;
 export declare const TradeRecord: MessageFns<TradeRecord>;
+export declare const BarDiagnostic: MessageFns<BarDiagnostic>;
+export declare const BarDiagnostic_IndicatorsEntry: MessageFns<BarDiagnostic_IndicatorsEntry>;
+export declare const SymbolDiagnostics: MessageFns<SymbolDiagnostics>;
 export declare const ScoreStrategyRequest: MessageFns<ScoreStrategyRequest>;
 export declare const StrategyScore: MessageFns<StrategyScore>;
 export declare const StrategyScore_ComponentScoresEntry: MessageFns<StrategyScore_ComponentScoresEntry>;
 export declare const StrategyReport: MessageFns<StrategyReport>;
+export declare const ListBacktestsRequest: MessageFns<ListBacktestsRequest>;
+export declare const BacktestRunSummary: MessageFns<BacktestRunSummary>;
+export declare const ListBacktestsResponse: MessageFns<ListBacktestsResponse>;
 export declare const ListStrategiesRequest: MessageFns<ListStrategiesRequest>;
 export declare const ListStrategiesResponse: MessageFns<ListStrategiesResponse>;
 export declare const GetStrategyReportRequest: MessageFns<GetStrategyReportRequest>;
@@ -187,6 +391,13 @@ export declare const ListStrategyDefinitionsRequest: MessageFns<ListStrategyDefi
 export declare const ListStrategyDefinitionsResponse: MessageFns<ListStrategyDefinitionsResponse>;
 export declare const SetStrategyLiveRequest: MessageFns<SetStrategyLiveRequest>;
 export declare const SetStrategyLiveResponse: MessageFns<SetStrategyLiveResponse>;
+export declare const ScreenCriterion: MessageFns<ScreenCriterion>;
+export declare const ScreenResult: MessageFns<ScreenResult>;
+export declare const ScreenResult_CriterionScoresEntry: MessageFns<ScreenResult_CriterionScoresEntry>;
+export declare const ScreenSymbolsRequest: MessageFns<ScreenSymbolsRequest>;
+export declare const ScreenSymbolsResponse: MessageFns<ScreenSymbolsResponse>;
+export declare const RunFundamentalsScanRequest: MessageFns<RunFundamentalsScanRequest>;
+export declare const FundamentalsScanSummary: MessageFns<FundamentalsScanSummary>;
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export declare const AnalysisServiceService: {
     readonly runBacktest: {
@@ -225,6 +436,16 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: StrategyReport) => Buffer;
         readonly responseDeserialize: (value: Buffer) => StrategyReport;
     };
+    /** List past backtest runs (summary metrics + earned score) for a strategy, newest first. */
+    readonly listBacktests: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/ListBacktests";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListBacktestsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListBacktestsRequest;
+        readonly responseSerialize: (value: ListBacktestsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListBacktestsResponse;
+    };
     readonly manageStrategy: {
         readonly path: "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy";
         readonly requestStream: false;
@@ -261,16 +482,42 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: SetStrategyLiveResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => SetStrategyLiveResponse;
     };
+    /** Screen a symbol universe against weighted criteria (feature 060) */
+    readonly screenSymbols: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ScreenSymbolsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ScreenSymbolsRequest;
+        readonly responseSerialize: (value: ScreenSymbolsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ScreenSymbolsResponse;
+    };
+    /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+    readonly runFundamentalsScan: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: RunFundamentalsScanRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => RunFundamentalsScanRequest;
+        readonly responseSerialize: (value: FundamentalsScanSummary) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => FundamentalsScanSummary;
+    };
 };
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
     runBacktest: handleUnaryCall<RunBacktestRequest, BacktestResult>;
     scoreStrategy: handleUnaryCall<ScoreStrategyRequest, StrategyScore>;
     listStrategies: handleUnaryCall<ListStrategiesRequest, ListStrategiesResponse>;
     getStrategyReport: handleUnaryCall<GetStrategyReportRequest, StrategyReport>;
+    /** List past backtest runs (summary metrics + earned score) for a strategy, newest first. */
+    listBacktests: handleUnaryCall<ListBacktestsRequest, ListBacktestsResponse>;
     manageStrategy: handleUnaryCall<ManageStrategyRequest, StrategyDefinition>;
     getStrategy: handleUnaryCall<GetStrategyRequest, StrategyDefinition>;
     listStrategyDefinitions: handleUnaryCall<ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse>;
     setStrategyLive: handleUnaryCall<SetStrategyLiveRequest, SetStrategyLiveResponse>;
+    /** Screen a symbol universe against weighted criteria (feature 060) */
+    screenSymbols: handleUnaryCall<ScreenSymbolsRequest, ScreenSymbolsResponse>;
+    /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+    runFundamentalsScan: handleUnaryCall<RunFundamentalsScanRequest, FundamentalsScanSummary>;
 }
 export interface AnalysisServiceClient extends Client {
     runBacktest(request: RunBacktestRequest, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
@@ -285,6 +532,10 @@ export interface AnalysisServiceClient extends Client {
     getStrategyReport(request: GetStrategyReportRequest, callback: (error: ServiceError | null, response: StrategyReport) => void): ClientUnaryCall;
     getStrategyReport(request: GetStrategyReportRequest, metadata: Metadata, callback: (error: ServiceError | null, response: StrategyReport) => void): ClientUnaryCall;
     getStrategyReport(request: GetStrategyReportRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: StrategyReport) => void): ClientUnaryCall;
+    /** List past backtest runs (summary metrics + earned score) for a strategy, newest first. */
+    listBacktests(request: ListBacktestsRequest, callback: (error: ServiceError | null, response: ListBacktestsResponse) => void): ClientUnaryCall;
+    listBacktests(request: ListBacktestsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListBacktestsResponse) => void): ClientUnaryCall;
+    listBacktests(request: ListBacktestsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListBacktestsResponse) => void): ClientUnaryCall;
     manageStrategy(request: ManageStrategyRequest, callback: (error: ServiceError | null, response: StrategyDefinition) => void): ClientUnaryCall;
     manageStrategy(request: ManageStrategyRequest, metadata: Metadata, callback: (error: ServiceError | null, response: StrategyDefinition) => void): ClientUnaryCall;
     manageStrategy(request: ManageStrategyRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: StrategyDefinition) => void): ClientUnaryCall;
@@ -297,6 +548,14 @@ export interface AnalysisServiceClient extends Client {
     setStrategyLive(request: SetStrategyLiveRequest, callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void): ClientUnaryCall;
     setStrategyLive(request: SetStrategyLiveRequest, metadata: Metadata, callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void): ClientUnaryCall;
     setStrategyLive(request: SetStrategyLiveRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: SetStrategyLiveResponse) => void): ClientUnaryCall;
+    /** Screen a symbol universe against weighted criteria (feature 060) */
+    screenSymbols(request: ScreenSymbolsRequest, callback: (error: ServiceError | null, response: ScreenSymbolsResponse) => void): ClientUnaryCall;
+    screenSymbols(request: ScreenSymbolsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ScreenSymbolsResponse) => void): ClientUnaryCall;
+    screenSymbols(request: ScreenSymbolsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ScreenSymbolsResponse) => void): ClientUnaryCall;
+    /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
+    runFundamentalsScan(request: RunFundamentalsScanRequest, callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void): ClientUnaryCall;
+    runFundamentalsScan(request: RunFundamentalsScanRequest, metadata: Metadata, callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void): ClientUnaryCall;
+    runFundamentalsScan(request: RunFundamentalsScanRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void): ClientUnaryCall;
 }
 export declare const AnalysisServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AnalysisServiceClient;

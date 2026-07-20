@@ -296,3 +296,43 @@ class TestComputeSignalScoreWithWeights:
             source_weights={"source_a": 1.0, "source_b": 0.2},
         )
         assert score > 0.5
+
+
+# ---------------------------------------------------------------------------
+# Golden regression for the extracted scoring math (feature 060, FR-4/FR-8)
+# ---------------------------------------------------------------------------
+# These values were captured from the pre-refactor inline backtest math and are
+# frozen here. The Step-4 extraction moved the code verbatim into
+# app.services.scoring, so these must hold byte-for-byte; together with the full
+# pre-existing backtest suite passing unchanged, they prove RunBacktest output is
+# unchanged by the extraction.
+
+from app.services import scoring as _scoring  # noqa: E402
+
+
+class TestScoringGolden:
+    def test_buy_threshold_golden(self):
+        assert _scoring.buy_threshold(0.0) == 0.55
+        assert _scoring.buy_threshold(-1.0) == 0.55  # floored at 0.55
+        assert _scoring.buy_threshold(0.4) == pytest.approx(0.7)
+        assert _scoring.buy_threshold(0.9) == pytest.approx(0.95)
+
+    def test_sell_threshold_golden(self):
+        assert _scoring.sell_threshold() == 0.45
+
+    def test_combine_score_blend_golden(self):
+        # signals present + weighted → technical_weight*(tech*0.5+0.5) + signal_weight*signal
+        assert _scoring.combine_score(1.0, 0.8, 0.5, 0.5, True) == pytest.approx(0.9)
+        assert _scoring.combine_score(-1.0, 0.8, 0.5, 0.5, True) == pytest.approx(0.4)
+        assert _scoring.combine_score(0.0, 0.8, 0.5, 0.5, True) == pytest.approx(0.65)
+
+    def test_combine_score_pure_technical_golden(self):
+        # signal_weight == 0 OR no signals → pure technical mapping (-1→0, 0→0.5, +1→1)
+        assert _scoring.combine_score(1.0, 0.8, 0.0, 0.5, True) == pytest.approx(1.0)
+        assert _scoring.combine_score(1.0, 0.8, 0.5, 0.5, False) == pytest.approx(1.0)
+        assert _scoring.combine_score(0.0, 0.2, 0.5, 0.5, False) == pytest.approx(0.5)
+        assert _scoring.combine_score(-1.0, 0.2, 0.5, 0.5, False) == pytest.approx(0.0)
+
+    def test_servicer_alias_still_resolves(self):
+        # FR-8: the old name still imports from the servicer module and is the same fn.
+        assert _compute_signal_score is _scoring.compute_signal_score

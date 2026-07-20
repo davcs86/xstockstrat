@@ -176,31 +176,41 @@ func (BrokerType) EnumDescriptor() ([]byte, []int) {
 
 // Timeframe is the canonical OHLCV bar interval, shared by marketdata + analysis + ingest.
 // Replaces the free-text "1d"/"1Day"/"1m" strings that previously mismatched across services.
+//
+// 15 minutes is the smallest supported interval: the free Alpaca market-data plan serves
+// 15-minute-delayed data, and the platform is not a real-time trader. TIMEFRAME_1MIN and
+// TIMEFRAME_5MIN are deprecated — no longer ingested or selectable — but retained (not
+// deleted) so the change stays wire- and source-compatible.
 type Timeframe int32
 
 const (
 	Timeframe_TIMEFRAME_UNSPECIFIED Timeframe = 0
-	Timeframe_TIMEFRAME_1MIN        Timeframe = 1
-	Timeframe_TIMEFRAME_5MIN        Timeframe = 2
+	Timeframe_TIMEFRAME_15MIN       Timeframe = 5 // smallest supported interval
 	Timeframe_TIMEFRAME_1HOUR       Timeframe = 3
 	Timeframe_TIMEFRAME_1DAY        Timeframe = 4
+	// Deprecated: Marked as deprecated in common/v1/common.proto.
+	Timeframe_TIMEFRAME_1MIN Timeframe = 1 // deprecated: sub-15m intervals removed from the product
+	// Deprecated: Marked as deprecated in common/v1/common.proto.
+	Timeframe_TIMEFRAME_5MIN Timeframe = 2 // deprecated: sub-15m intervals removed from the product
 )
 
 // Enum value maps for Timeframe.
 var (
 	Timeframe_name = map[int32]string{
 		0: "TIMEFRAME_UNSPECIFIED",
-		1: "TIMEFRAME_1MIN",
-		2: "TIMEFRAME_5MIN",
+		5: "TIMEFRAME_15MIN",
 		3: "TIMEFRAME_1HOUR",
 		4: "TIMEFRAME_1DAY",
+		1: "TIMEFRAME_1MIN",
+		2: "TIMEFRAME_5MIN",
 	}
 	Timeframe_value = map[string]int32{
 		"TIMEFRAME_UNSPECIFIED": 0,
-		"TIMEFRAME_1MIN":        1,
-		"TIMEFRAME_5MIN":        2,
+		"TIMEFRAME_15MIN":       5,
 		"TIMEFRAME_1HOUR":       3,
 		"TIMEFRAME_1DAY":        4,
+		"TIMEFRAME_1MIN":        1,
+		"TIMEFRAME_5MIN":        2,
 	}
 )
 
@@ -616,13 +626,14 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"BrokerType\x12\x1b\n" +
 	"\x17BROKER_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12BROKER_TYPE_ALPACA\x10\x01\x12\x14\n" +
-	"\x10BROKER_TYPE_IBKR\x10\x02*w\n" +
+	"\x10BROKER_TYPE_IBKR\x10\x02*\x94\x01\n" +
 	"\tTimeframe\x12\x19\n" +
-	"\x15TIMEFRAME_UNSPECIFIED\x10\x00\x12\x12\n" +
-	"\x0eTIMEFRAME_1MIN\x10\x01\x12\x12\n" +
-	"\x0eTIMEFRAME_5MIN\x10\x02\x12\x13\n" +
+	"\x15TIMEFRAME_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fTIMEFRAME_15MIN\x10\x05\x12\x13\n" +
 	"\x0fTIMEFRAME_1HOUR\x10\x03\x12\x12\n" +
-	"\x0eTIMEFRAME_1DAY\x10\x04B<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3"
+	"\x0eTIMEFRAME_1DAY\x10\x04\x12\x16\n" +
+	"\x0eTIMEFRAME_1MIN\x10\x01\x1a\x02\b\x01\x12\x16\n" +
+	"\x0eTIMEFRAME_5MIN\x10\x02\x1a\x02\b\x01B<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3"
 
 var (
 	file_common_v1_common_proto_rawDescOnce sync.Once

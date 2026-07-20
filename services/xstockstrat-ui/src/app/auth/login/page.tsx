@@ -1,13 +1,16 @@
 'use client';
-import { Suspense, useState } from 'react';
+import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AuthCardShell, CredentialsForm } from '@/components/auth/AuthForm';
 
 // FR-3: only allow redirects back into one of the known basePaths.
 function safeRedirect(target: string | null): string {
-  if (target && (target.startsWith('/trader') || target.startsWith('/insights') || target.startsWith('/config-ui'))) {
+  if (
+    target &&
+    (target.startsWith('/trader') ||
+      target.startsWith('/insights') ||
+      target.startsWith('/config-ui'))
+  ) {
     return target;
   }
   return '/trader';
@@ -16,89 +19,26 @@ function safeRedirect(target: string | null): string {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      if (res.ok) {
-        router.push(safeRedirect(searchParams.get('redirect')));
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error ?? 'Login failed. Please check your credentials.');
-      }
-    } catch {
-      setError('Network error. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
-    <div className="min-h-screen bg-background font-sans flex items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">xstockstrat Platform</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={loading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={loading}
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Signing in…' : 'Sign in'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <AuthCardShell title="xstockstrat Platform">
+      <CredentialsForm
+        submitLabel="Sign in"
+        loadingLabel="Signing in…"
+        onSuccess={() => router.push(safeRedirect(searchParams.get('redirect')))}
+      />
+    </AuthCardShell>
   );
 }
 
 function LoginSkeleton() {
   return (
-    <div className="min-h-screen bg-background font-sans flex items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">xstockstrat Platform</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="h-10 rounded-md bg-secondary animate-pulse" />
-            <div className="h-10 rounded-md bg-secondary animate-pulse" />
-            <div className="h-10 rounded-md bg-secondary/80 animate-pulse" />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+    <AuthCardShell title="xstockstrat Platform">
+      <div className="space-y-4">
+        <div className="h-10 rounded-md bg-secondary animate-pulse" />
+        <div className="h-10 rounded-md bg-secondary animate-pulse" />
+        <div className="h-10 rounded-md bg-secondary/80 animate-pulse" />
+      </div>
+    </AuthCardShell>
   );
 }
 

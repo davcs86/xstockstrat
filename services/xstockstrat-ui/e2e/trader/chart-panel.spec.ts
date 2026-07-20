@@ -118,10 +118,16 @@ test.describe('ChartPanel component — trading dashboard', () => {
     await expect(page.getByRole('heading', { name: /chart/i })).toBeVisible({ timeout: 10000 });
   });
 
-  test('renders all 6 timeframe buttons', async ({ page }) => {
-    const labels = ['10m', '30m', '1h', '1d', '1w', '1mo'];
+  test('renders the 3 supported timeframe buttons', async ({ page }) => {
+    // The platform supports only 15m / 1h / 1d (common.v1.Timeframe = 15MIN/1HOUR/1DAY;
+    // 15m is the smallest interval the free Alpaca data plan serves). 10m/30m/1w/1mo have
+    // no backend support and are intentionally not offered.
+    const labels = ['15m', '1h', '1d'];
     for (const label of labels) {
-      await expect(page.getByRole('button', { name: label })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible({ timeout: 10000 });
+    }
+    for (const label of ['10m', '30m', '1w', '1mo']) {
+      await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0);
     }
   });
 

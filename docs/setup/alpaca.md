@@ -188,7 +188,7 @@ curl -X POST http://localhost:8053/webhooks/backfill \
   -H "Content-Type: application/json" \
   -d '{
     "symbols": ["AAPL"],
-    "timeframe": "1Min",
+    "timeframe": "15Min",
     "start": "2024-01-02",
     "end": "2024-01-02"
   }'
@@ -235,7 +235,7 @@ Subscribe to a symbol stream:
 curl -X POST http://localhost:8053/webhooks/subscribe \
   -H "x-webhook-secret: $N8N_WEBHOOK_SECRET" \
   -H "Content-Type: application/json" \
-  -d '{"symbols": ["AAPL", "TSLA"], "timeframe": "1Min"}'
+  -d '{"symbols": ["AAPL", "TSLA"], "timeframe": "15Min"}'
 ```
 
 Check xstockstrat-marketdata logs for `"alpaca stream connected"` and incoming bar events.
@@ -254,7 +254,7 @@ curl -X POST http://localhost:8053/webhooks/backfill \
   -H "Content-Type: application/json" \
   -d '{
     "symbols": ["AAPL", "MSFT", "TSLA", "NVDA", "AMZN"],
-    "timeframe": "1Min",
+    "timeframe": "15Min",
     "start": "2023-01-01",
     "end": "2024-01-01"
   }'

@@ -45,6 +45,9 @@ const (
 	// AnalysisServiceGetStrategyReportProcedure is the fully-qualified name of the AnalysisService's
 	// GetStrategyReport RPC.
 	AnalysisServiceGetStrategyReportProcedure = "/xstockstrat.analysis.v1.AnalysisService/GetStrategyReport"
+	// AnalysisServiceListBacktestsProcedure is the fully-qualified name of the AnalysisService's
+	// ListBacktests RPC.
+	AnalysisServiceListBacktestsProcedure = "/xstockstrat.analysis.v1.AnalysisService/ListBacktests"
 	// AnalysisServiceManageStrategyProcedure is the fully-qualified name of the AnalysisService's
 	// ManageStrategy RPC.
 	AnalysisServiceManageStrategyProcedure = "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy"
@@ -57,6 +60,12 @@ const (
 	// AnalysisServiceSetStrategyLiveProcedure is the fully-qualified name of the AnalysisService's
 	// SetStrategyLive RPC.
 	AnalysisServiceSetStrategyLiveProcedure = "/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive"
+	// AnalysisServiceScreenSymbolsProcedure is the fully-qualified name of the AnalysisService's
+	// ScreenSymbols RPC.
+	AnalysisServiceScreenSymbolsProcedure = "/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols"
+	// AnalysisServiceRunFundamentalsScanProcedure is the fully-qualified name of the AnalysisService's
+	// RunFundamentalsScan RPC.
+	AnalysisServiceRunFundamentalsScanProcedure = "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan"
 )
 
 // AnalysisServiceClient is a client for the xstockstrat.analysis.v1.AnalysisService service.
@@ -65,10 +74,16 @@ type AnalysisServiceClient interface {
 	ScoreStrategy(context.Context, *connect.Request[v1.ScoreStrategyRequest]) (*connect.Response[v1.StrategyScore], error)
 	ListStrategies(context.Context, *connect.Request[v1.ListStrategiesRequest]) (*connect.Response[v1.ListStrategiesResponse], error)
 	GetStrategyReport(context.Context, *connect.Request[v1.GetStrategyReportRequest]) (*connect.Response[v1.StrategyReport], error)
+	// List past backtest runs (summary metrics + earned score) for a strategy, newest first.
+	ListBacktests(context.Context, *connect.Request[v1.ListBacktestsRequest]) (*connect.Response[v1.ListBacktestsResponse], error)
 	ManageStrategy(context.Context, *connect.Request[v1.ManageStrategyRequest]) (*connect.Response[v1.StrategyDefinition], error)
 	GetStrategy(context.Context, *connect.Request[v1.GetStrategyRequest]) (*connect.Response[v1.StrategyDefinition], error)
 	ListStrategyDefinitions(context.Context, *connect.Request[v1.ListStrategyDefinitionsRequest]) (*connect.Response[v1.ListStrategyDefinitionsResponse], error)
 	SetStrategyLive(context.Context, *connect.Request[v1.SetStrategyLiveRequest]) (*connect.Response[v1.SetStrategyLiveResponse], error)
+	// Screen a symbol universe against weighted criteria (feature 060)
+	ScreenSymbols(context.Context, *connect.Request[v1.ScreenSymbolsRequest]) (*connect.Response[v1.ScreenSymbolsResponse], error)
+	// Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+	RunFundamentalsScan(context.Context, *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error)
 }
 
 // NewAnalysisServiceClient constructs a client for the xstockstrat.analysis.v1.AnalysisService
@@ -106,6 +121,12 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(analysisServiceMethods.ByName("GetStrategyReport")),
 			connect.WithClientOptions(opts...),
 		),
+		listBacktests: connect.NewClient[v1.ListBacktestsRequest, v1.ListBacktestsResponse](
+			httpClient,
+			baseURL+AnalysisServiceListBacktestsProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("ListBacktests")),
+			connect.WithClientOptions(opts...),
+		),
 		manageStrategy: connect.NewClient[v1.ManageStrategyRequest, v1.StrategyDefinition](
 			httpClient,
 			baseURL+AnalysisServiceManageStrategyProcedure,
@@ -130,6 +151,18 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(analysisServiceMethods.ByName("SetStrategyLive")),
 			connect.WithClientOptions(opts...),
 		),
+		screenSymbols: connect.NewClient[v1.ScreenSymbolsRequest, v1.ScreenSymbolsResponse](
+			httpClient,
+			baseURL+AnalysisServiceScreenSymbolsProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("ScreenSymbols")),
+			connect.WithClientOptions(opts...),
+		),
+		runFundamentalsScan: connect.NewClient[v1.RunFundamentalsScanRequest, v1.FundamentalsScanSummary](
+			httpClient,
+			baseURL+AnalysisServiceRunFundamentalsScanProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("RunFundamentalsScan")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -139,10 +172,13 @@ type analysisServiceClient struct {
 	scoreStrategy           *connect.Client[v1.ScoreStrategyRequest, v1.StrategyScore]
 	listStrategies          *connect.Client[v1.ListStrategiesRequest, v1.ListStrategiesResponse]
 	getStrategyReport       *connect.Client[v1.GetStrategyReportRequest, v1.StrategyReport]
+	listBacktests           *connect.Client[v1.ListBacktestsRequest, v1.ListBacktestsResponse]
 	manageStrategy          *connect.Client[v1.ManageStrategyRequest, v1.StrategyDefinition]
 	getStrategy             *connect.Client[v1.GetStrategyRequest, v1.StrategyDefinition]
 	listStrategyDefinitions *connect.Client[v1.ListStrategyDefinitionsRequest, v1.ListStrategyDefinitionsResponse]
 	setStrategyLive         *connect.Client[v1.SetStrategyLiveRequest, v1.SetStrategyLiveResponse]
+	screenSymbols           *connect.Client[v1.ScreenSymbolsRequest, v1.ScreenSymbolsResponse]
+	runFundamentalsScan     *connect.Client[v1.RunFundamentalsScanRequest, v1.FundamentalsScanSummary]
 }
 
 // RunBacktest calls xstockstrat.analysis.v1.AnalysisService.RunBacktest.
@@ -165,6 +201,11 @@ func (c *analysisServiceClient) GetStrategyReport(ctx context.Context, req *conn
 	return c.getStrategyReport.CallUnary(ctx, req)
 }
 
+// ListBacktests calls xstockstrat.analysis.v1.AnalysisService.ListBacktests.
+func (c *analysisServiceClient) ListBacktests(ctx context.Context, req *connect.Request[v1.ListBacktestsRequest]) (*connect.Response[v1.ListBacktestsResponse], error) {
+	return c.listBacktests.CallUnary(ctx, req)
+}
+
 // ManageStrategy calls xstockstrat.analysis.v1.AnalysisService.ManageStrategy.
 func (c *analysisServiceClient) ManageStrategy(ctx context.Context, req *connect.Request[v1.ManageStrategyRequest]) (*connect.Response[v1.StrategyDefinition], error) {
 	return c.manageStrategy.CallUnary(ctx, req)
@@ -185,6 +226,16 @@ func (c *analysisServiceClient) SetStrategyLive(ctx context.Context, req *connec
 	return c.setStrategyLive.CallUnary(ctx, req)
 }
 
+// ScreenSymbols calls xstockstrat.analysis.v1.AnalysisService.ScreenSymbols.
+func (c *analysisServiceClient) ScreenSymbols(ctx context.Context, req *connect.Request[v1.ScreenSymbolsRequest]) (*connect.Response[v1.ScreenSymbolsResponse], error) {
+	return c.screenSymbols.CallUnary(ctx, req)
+}
+
+// RunFundamentalsScan calls xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan.
+func (c *analysisServiceClient) RunFundamentalsScan(ctx context.Context, req *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error) {
+	return c.runFundamentalsScan.CallUnary(ctx, req)
+}
+
 // AnalysisServiceHandler is an implementation of the xstockstrat.analysis.v1.AnalysisService
 // service.
 type AnalysisServiceHandler interface {
@@ -192,10 +243,16 @@ type AnalysisServiceHandler interface {
 	ScoreStrategy(context.Context, *connect.Request[v1.ScoreStrategyRequest]) (*connect.Response[v1.StrategyScore], error)
 	ListStrategies(context.Context, *connect.Request[v1.ListStrategiesRequest]) (*connect.Response[v1.ListStrategiesResponse], error)
 	GetStrategyReport(context.Context, *connect.Request[v1.GetStrategyReportRequest]) (*connect.Response[v1.StrategyReport], error)
+	// List past backtest runs (summary metrics + earned score) for a strategy, newest first.
+	ListBacktests(context.Context, *connect.Request[v1.ListBacktestsRequest]) (*connect.Response[v1.ListBacktestsResponse], error)
 	ManageStrategy(context.Context, *connect.Request[v1.ManageStrategyRequest]) (*connect.Response[v1.StrategyDefinition], error)
 	GetStrategy(context.Context, *connect.Request[v1.GetStrategyRequest]) (*connect.Response[v1.StrategyDefinition], error)
 	ListStrategyDefinitions(context.Context, *connect.Request[v1.ListStrategyDefinitionsRequest]) (*connect.Response[v1.ListStrategyDefinitionsResponse], error)
 	SetStrategyLive(context.Context, *connect.Request[v1.SetStrategyLiveRequest]) (*connect.Response[v1.SetStrategyLiveResponse], error)
+	// Screen a symbol universe against weighted criteria (feature 060)
+	ScreenSymbols(context.Context, *connect.Request[v1.ScreenSymbolsRequest]) (*connect.Response[v1.ScreenSymbolsResponse], error)
+	// Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+	RunFundamentalsScan(context.Context, *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error)
 }
 
 // NewAnalysisServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -229,6 +286,12 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		connect.WithSchema(analysisServiceMethods.ByName("GetStrategyReport")),
 		connect.WithHandlerOptions(opts...),
 	)
+	analysisServiceListBacktestsHandler := connect.NewUnaryHandler(
+		AnalysisServiceListBacktestsProcedure,
+		svc.ListBacktests,
+		connect.WithSchema(analysisServiceMethods.ByName("ListBacktests")),
+		connect.WithHandlerOptions(opts...),
+	)
 	analysisServiceManageStrategyHandler := connect.NewUnaryHandler(
 		AnalysisServiceManageStrategyProcedure,
 		svc.ManageStrategy,
@@ -253,6 +316,18 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		connect.WithSchema(analysisServiceMethods.ByName("SetStrategyLive")),
 		connect.WithHandlerOptions(opts...),
 	)
+	analysisServiceScreenSymbolsHandler := connect.NewUnaryHandler(
+		AnalysisServiceScreenSymbolsProcedure,
+		svc.ScreenSymbols,
+		connect.WithSchema(analysisServiceMethods.ByName("ScreenSymbols")),
+		connect.WithHandlerOptions(opts...),
+	)
+	analysisServiceRunFundamentalsScanHandler := connect.NewUnaryHandler(
+		AnalysisServiceRunFundamentalsScanProcedure,
+		svc.RunFundamentalsScan,
+		connect.WithSchema(analysisServiceMethods.ByName("RunFundamentalsScan")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.analysis.v1.AnalysisService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AnalysisServiceRunBacktestProcedure:
@@ -263,6 +338,8 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 			analysisServiceListStrategiesHandler.ServeHTTP(w, r)
 		case AnalysisServiceGetStrategyReportProcedure:
 			analysisServiceGetStrategyReportHandler.ServeHTTP(w, r)
+		case AnalysisServiceListBacktestsProcedure:
+			analysisServiceListBacktestsHandler.ServeHTTP(w, r)
 		case AnalysisServiceManageStrategyProcedure:
 			analysisServiceManageStrategyHandler.ServeHTTP(w, r)
 		case AnalysisServiceGetStrategyProcedure:
@@ -271,6 +348,10 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 			analysisServiceListStrategyDefinitionsHandler.ServeHTTP(w, r)
 		case AnalysisServiceSetStrategyLiveProcedure:
 			analysisServiceSetStrategyLiveHandler.ServeHTTP(w, r)
+		case AnalysisServiceScreenSymbolsProcedure:
+			analysisServiceScreenSymbolsHandler.ServeHTTP(w, r)
+		case AnalysisServiceRunFundamentalsScanProcedure:
+			analysisServiceRunFundamentalsScanHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -296,6 +377,10 @@ func (UnimplementedAnalysisServiceHandler) GetStrategyReport(context.Context, *c
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.GetStrategyReport is not implemented"))
 }
 
+func (UnimplementedAnalysisServiceHandler) ListBacktests(context.Context, *connect.Request[v1.ListBacktestsRequest]) (*connect.Response[v1.ListBacktestsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.ListBacktests is not implemented"))
+}
+
 func (UnimplementedAnalysisServiceHandler) ManageStrategy(context.Context, *connect.Request[v1.ManageStrategyRequest]) (*connect.Response[v1.StrategyDefinition], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.ManageStrategy is not implemented"))
 }
@@ -310,4 +395,12 @@ func (UnimplementedAnalysisServiceHandler) ListStrategyDefinitions(context.Conte
 
 func (UnimplementedAnalysisServiceHandler) SetStrategyLive(context.Context, *connect.Request[v1.SetStrategyLiveRequest]) (*connect.Response[v1.SetStrategyLiveResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.SetStrategyLive is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) ScreenSymbols(context.Context, *connect.Request[v1.ScreenSymbolsRequest]) (*connect.Response[v1.ScreenSymbolsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.ScreenSymbols is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) RunFundamentalsScan(context.Context, *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan is not implemented"))
 }

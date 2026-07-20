@@ -1,6 +1,6 @@
 # Implementation Spec: open-positions-ui
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-06-11
 **Feature**: `docs/roadmap/features/056-open-positions-ui/feature.md`
 **Total Steps**: 9
@@ -35,7 +35,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 1 — proto: Add `symbol`/`side` filters + `PositionSide` enum to `portfolio.proto`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/portfolio/v1/portfolio.proto` — modify
@@ -83,7 +83,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 2 — proto-gen: Regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/portfolio/v1/` — modify (regenerated)
@@ -114,7 +114,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 3 — service: Apply `symbol`/`side` filters in portfolio `ListPositions`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -180,7 +180,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 4 — test: portfolio filter + enrichment unit tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_helpers_test.go` — modify
@@ -221,7 +221,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 5 — service: Expose `ListPositions` + `LedgerService.QueryEvents` via trader BFF (add ledger client)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/connectClients.ts` — modify (add ledger client + `LEDGER_ENDPOINT`)
@@ -294,7 +294,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 6 — service: Browser typed clients + hooks (positions pagination, ledger lineage)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/browserClients/ledgerClient.ts` — create
@@ -342,7 +342,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 7 — service: Rebuild positions page (pagination, filters, detail + fill lineage)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/page.tsx` — modify
@@ -385,7 +385,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 8 — docs: Update service CLAUDE.md files for new wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (service CLAUDE.md updates)
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify (note additive `symbol`/`side`
@@ -415,7 +415,7 @@ read-only join over existing `order.filled` ledger events.
 
 ### Step 9 — docs: Record `trade.filled` → `order.filled` correction + deviations
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs`
 **Files**:
 - `docs/roadmap/features/056-open-positions-ui/context.md` — modify (append deviation note)
@@ -454,6 +454,28 @@ read-only join over existing `order.filled` ledger events.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 2 — codegen via host toolchain (Docker unavailable)
+**Spec said**: Run `./scripts/buf-gen.sh` (normally the `Dockerfile.codegen` container per `localenv-setup.sh`).
+**Actual**: The runner's Docker daemon is not running, so the codegen toolchain was installed on the host pinned to the CI `proto-freshness` job versions (`.github/workflows/ci.yml`): `buf` v1.47.2, `protoc-gen-go` v1.36.11, `protoc-gen-go-grpc` v1.6.2, `protoc-gen-connect-go` v1.19.2, `grpcio-tools` 1.80.0; the TS plugins (`protoc-gen-es`/`protoc-gen-connect-es`/`protoc-gen-ts_proto`) came from the committed pnpm lockfile. Ran `./scripts/buf-gen.sh` on the host.
+**Reason**: No Docker; host toolchain is the sanctioned sequential-mode fallback.
+**Disposition**: CI-equivalent fallback. The regen diff was confirmed **limited to `portfolio/v1`** (Go/Python/TS + dist). Host `buf`'s bundled `google/protobuf` descriptors produced an unrelated doc-comment change in `gen/ts/google/protobuf/timestamp.ts`; that drift was reverted so the committed stubs match CI's baseline (which keeps `main-dev`'s `proto-freshness` green).
+
+### Deviation: Step 3 — dynamic SQL predicate builder + account_id fix + sideOf moved to Step 4
+**Spec said**: "Add the predicates to each of the four SQL variants"; extract enrichment + (Step 4) a `sideOf` helper.
+**Actual**: (a) Replaced the four hardcoded `ListPositions` SQL variants with one equivalent **dynamic predicate builder** (optional `trading_mode`/`account_id`/`symbol` params + static `qty`-sign side filter + the keyset `symbol > pageToken` predicate, `ORDER BY symbol` + `pageSize+1` probe preserved). (b) Service `ListPositions` now forwards `req.AccountId` (the pre-existing drop — **user-approved fix** at execute time) plus `req.Symbol`/`req.Side`, and enriches each position via the new `enrichPosition` helper. The four other `repo.ListPositions` call sites (`GetPortfolio`, `GetPnL`, +2, all in `portfolio_service.go`) were updated to the widened signature with no-filter defaults to keep `go build` green. (c) The `sideOf` helper is added in **Step 4** (with its test) instead of here, so Step 3's stacked PR has no unused-function lint window.
+**Reason**: Conditional `symbol`/`side` filters across four positional-param variants combinatorially explode; a builder is correct and maintainable. `sideOf` has no Step-3 production caller (side-filtering is in SQL), so adding it here would fail `golangci-lint unused` until Step 4's test references it.
+**Disposition**: in-scope (all edits within Step 3's two `**Files**`; the extra call-site updates are in `portfolio_service.go`). Verified: `go build` + `golangci-lint run` clean.
+
+### Deviation: Step 4 — `sideOf` helper added to `portfolio_service.go` (not just the test file)
+**Spec said**: Step 4 `**Files**` is `portfolio_helpers_test.go` only; "Add a pure helper (e.g. `sideOf` …) and table-driven tests".
+**Actual**: The `sideOf` helper was added to `services/xstockstrat-portfolio/internal/service/portfolio_service.go` (production), together with its `TestSideOf` + `TestEnrichPosition` tests in `portfolio_helpers_test.go`, in this one step.
+**Reason**: A Go helper can't live only in a `_test.go` file and be a "production helper"; and adding it in Step 3 (with no caller yet) failed `golangci-lint unused`. Adding it here, in the same commit as its test, gives every stacked PR an independently lint-green tree.
+**Disposition**: in-scope (the paired test step naturally co-locates the tested helper). Verified: `go test` passes (coverage 47.8% ≥ 40%); `golangci-lint run` clean.
+
+### Deviation: Step 7 — e2e mock infra extended + CI-equivalent verification
+**Spec said**: Step 7 `**Files**` = `positions/page.tsx` + `e2e/trader/api-smoke.spec.ts`; verify with `pnpm test:e2e`.
+**Actual**: (a) Also modified `e2e/mock-backend.ts` (added a `PortfolioService.listPositions` handler + a new `LedgerService.queryEvents` mock on the 9091 trader mock) and `playwright.config.ts` (added `LEDGER_ENDPOINT: 127.0.0.1:9091`) — the new `ListPositions`/`QueryEvents` smoke tests get a 200 only if the mock backend implements those RPCs. (b) The Playwright dev-server harness timed out (>320s cold-compile + mock startup) so behavioral e2e could not complete locally.
+**Reason**: The e2e smoke step is meaningless without mock handlers for the RPCs it exercises; the dev-server cold-compile flake is the same one documented in `playwright.config.ts` (CI uses a production build).
+**Disposition**: in-scope test-infra + CI-equivalent fallback. The page rewrite, mock, spec, and config are all type-checked by `tsc --noEmit` (the app tsconfig `include` covers `e2e/**/*.ts`) and `pnpm run lint` — both clean. CI's production-bundle e2e run is the authoritative behavioral gate.
 </content>
 </invoke>

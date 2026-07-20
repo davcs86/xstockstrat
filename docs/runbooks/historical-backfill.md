@@ -26,6 +26,39 @@ Ledger event: ingest.backfill.completed
 
 ---
 
+## Manage backfills from the UI (operator-facing)
+
+The `/insights/backfills` page (in `xstockstrat-ui`) is the operator-facing complement to the RPCs
+below — create, monitor, cancel, and delete backfills without a `grpcurl` shell. **The page and all
+its mutating actions are admin-only** (the access-scope `0x04` ADMIN bit, feature 049): non-admins do
+not see the nav entry, and the insights BFF + each backend re-enforce the scope on every mutating
+call. Reach it from the insights sub-nav ("Backfills").
+
+| Action | What it does | RPC | Notes |
+|---|---|---|---|
+| **Create** | Trigger a backfill for one or more symbols over a timeframe + optional date range | `TriggerBackfill` | Same job the gRPC path below creates; `overwrite` re-fetches existing bars |
+| **Monitor** | Live status + truthful progress (`bars_processed/bars_total`, `chunks_completed/chunks_total`, `failed_symbols`, `error`) | `GetBackfillStatus` / `ListBackfillJobs` | The page polls on an interval; progress is the real stored count, never fabricated |
+| **Filter** | Narrow the job list by status and/or by symbol | `ListBackfillJobs` (`status_filter`, `symbol`) | — |
+| **Cancel** | Stop a `QUEUED`/`RUNNING` job; it transitions to `CANCELED` | `CancelBackfill` | **Completed-chunk bars are retained** (no rollback); admin-only |
+| **Delete** | Scoped destructive delete of stored bars for a symbol (+ optional range + optional timeframe) | `DeleteBackfilledData` | See the guardrails below |
+
+### Destructive delete — guardrails (FR-5)
+
+`DeleteBackfilledData` is **symbol-scoped on the server**: an empty symbol is rejected, so it can
+never become a full-table delete. The UI adds two confirmations:
+
+1. The operator must **type the exact symbol** to enable the Delete button.
+2. A **whole-symbol delete** (no date range supplied) requires a **second** typed confirmation
+   (`DELETE ALL`).
+
+An optional **delete-window cap** is enforced server-side by the `marketdata.backfill.max_delete_days`
+config key (default `0` = no cap; current behavior). When set `> 0`, a single scoped delete whose
+date range exceeds that many days is rejected with `InvalidArgument`. A whole-symbol delete (no range)
+is exempt from the cap — that is why the UI double-confirms it. The op emits a
+`marketdata.backfill.data_deleted` ledger event for audit.
+
+---
+
 ## Pre-Backfill Checklist
 
 - [ ] Confirm target symbols are valid (`ListAssets` RPC on xstockstrat-marketdata)
@@ -147,16 +180,18 @@ ORDER BY missing_day;
 
 | Timeframe | Typical use | Data density |
 |---|---|---|
-| `1m` | Intraday strategies, scalping | ~390 bars/day per symbol |
-| `5m` | Short-term momentum | ~78 bars/day |
+| `15m` | Short-term momentum (smallest supported interval) | ~26 bars/day per symbol |
 | `1h` | Swing trading | ~7 bars/day |
 | `1d` | Position trading, backtesting | 1 bar/day |
 
-> **Warning**: 1-minute bars for 5 years × 100 symbols ≈ 500M rows. Split into yearly jobs.
+> **Smallest interval is 15m**: the free Alpaca data plan serves 15-minute-delayed data and the
+> platform is not a real-time trader, so sub-15m timeframes (`1m`/`5m`) were removed. The
+> `TIMEFRAME_1MIN`/`TIMEFRAME_5MIN` enum values remain in the proto for wire compatibility but are
+> deprecated and no longer resolvable — `TriggerBackfill` with them will not produce bars.
 
-> **Canonical timeframe vocabulary** (feature 053): the strings above (`1m`/`5m`/`1h`/`1d`) are the
+> **Canonical timeframe vocabulary** (feature 053): the strings above (`15m`/`1h`/`1d`) are the
 > canonical forms stored in `marketdata.ohlcv.timeframe`. A shared `common.v1.Timeframe` enum
-> (`TIMEFRAME_1MIN`/`_5MIN`/`_1HOUR`/`_1DAY`) is now the **preferred** field on the marketdata,
+> (`TIMEFRAME_15MIN`/`_1HOUR`/`_1DAY`) is the **preferred** field on the marketdata,
 > ingest, and analysis messages (`timeframe_enum`); prefer it in new code. The legacy string
 > `timeframe` fields remain for backward compatibility but are **deprecated for one release** (per
 > `proto-versioning.md`'s deprecation cycle) and will be removed in a future gated breaking change.
@@ -170,7 +205,7 @@ ORDER BY missing_day;
 **Server-side chunking (feature 054)** — you no longer split large jobs by hand. A single
 `TriggerBackfill` over a wide range is planned by `xstockstrat-ingest` into chunks bounded by
 `ingest.backfill.chunk_window_days` (default 90) and `ingest.backfill.chunk_max_bars` (default
-200000, density-aware so 1m ranges produce more, smaller chunks than 1d). Chunks run in parallel up
+200000, density-aware so 15m ranges produce more, smaller chunks than 1d). Chunks run in parallel up
 to `ingest.backfill.max_concurrent_chunks` (default 3), per-chunk progress is tracked in
 `ingest.backfill_chunks`, and the job exposes `chunks_total` / `chunks_completed`.
 
@@ -182,7 +217,7 @@ to `ingest.backfill.max_concurrent_chunks` (default 3), per-chunk progress is tr
 - **Tuning**: lower `chunk_max_bars` for finer progress granularity / smaller Alpaca requests; raise
   `max_concurrent_chunks` to fetch faster (watch `marketdata.backfill.rate_limit_rps`).
 
-You still choose timeframe per job (run 1d first, then 1h, then 1m if you need multiple densities).
+You still choose timeframe per job (run 1d first, then 1h, then 15m if you need multiple densities).
 
 ---
 

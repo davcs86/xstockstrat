@@ -115,6 +115,58 @@ export interface ListAssetsRequest {
 export interface ListAssetsResponse {
     assets: Asset[];
 }
+export interface DeleteBackfilledDataRequest {
+    /** REQUIRED — server rejects empty (FR-5) */
+    symbol: string;
+    /** optional; empty = whole symbol */
+    range?: TimeRange | undefined;
+    /** optional; UNSPECIFIED = all timeframes */
+    timeframe: Timeframe;
+}
+export interface DeleteBackfilledDataResponse {
+    rowsDeleted: number;
+}
+/** Fundamentals (feature 059) — cached fundamental metrics for a symbol, FMP-backed. */
+export interface Fundamentals {
+    symbol: string;
+    marketCap: number;
+    peRatio: number;
+    pbRatio: number;
+    dividendYield: number;
+    eps: number;
+    beta: number;
+    roe: number;
+    debtToEquity: number;
+    price: number;
+    yearHigh: number;
+    yearLow: number;
+    /** FMP's open-ended metric set (keys are FMP field names) */
+    extraMetrics: {
+        [key: string]: number;
+    };
+    asOf?: Date | undefined;
+    currency: string;
+    /** "fmp" */
+    source: string;
+    /** true when served past TTL under quota exhaustion (FR-4) */
+    stale: boolean;
+}
+export interface Fundamentals_ExtraMetricsEntry {
+    key: string;
+    value: number;
+}
+export interface GetFundamentalsRequest {
+    symbol: string;
+}
+export interface GetFundamentalsResponse {
+    fundamentals?: Fundamentals | undefined;
+}
+export interface GetFundamentalsMultiRequest {
+    symbols: string[];
+}
+export interface GetFundamentalsMultiResponse {
+    fundamentals: Fundamentals[];
+}
 export declare const Bar: MessageFns<Bar>;
 export declare const Quote: MessageFns<Quote>;
 export declare const StreamBarsRequest: MessageFns<StreamBarsRequest>;
@@ -129,6 +181,14 @@ export declare const CoverageRange: MessageFns<CoverageRange>;
 export declare const GetDataCoverageResponse: MessageFns<GetDataCoverageResponse>;
 export declare const ListAssetsRequest: MessageFns<ListAssetsRequest>;
 export declare const ListAssetsResponse: MessageFns<ListAssetsResponse>;
+export declare const DeleteBackfilledDataRequest: MessageFns<DeleteBackfilledDataRequest>;
+export declare const DeleteBackfilledDataResponse: MessageFns<DeleteBackfilledDataResponse>;
+export declare const Fundamentals: MessageFns<Fundamentals>;
+export declare const Fundamentals_ExtraMetricsEntry: MessageFns<Fundamentals_ExtraMetricsEntry>;
+export declare const GetFundamentalsRequest: MessageFns<GetFundamentalsRequest>;
+export declare const GetFundamentalsResponse: MessageFns<GetFundamentalsResponse>;
+export declare const GetFundamentalsMultiRequest: MessageFns<GetFundamentalsMultiRequest>;
+export declare const GetFundamentalsMultiResponse: MessageFns<GetFundamentalsMultiResponse>;
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -195,6 +255,16 @@ export declare const MarketDataServiceService: {
         readonly responseSerialize: (value: GetDataCoverageResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => GetDataCoverageResponse;
     };
+    /** Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5) */
+    readonly deleteBackfilledData: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/DeleteBackfilledData";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: DeleteBackfilledDataRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => DeleteBackfilledDataRequest;
+        readonly responseSerialize: (value: DeleteBackfilledDataResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => DeleteBackfilledDataResponse;
+    };
     /** Get available symbols */
     readonly listAssets: {
         readonly path: "/xstockstrat.marketdata.v1.MarketDataService/ListAssets";
@@ -204,6 +274,26 @@ export declare const MarketDataServiceService: {
         readonly requestDeserialize: (value: Buffer) => ListAssetsRequest;
         readonly responseSerialize: (value: ListAssetsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => ListAssetsResponse;
+    };
+    /** Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache) */
+    readonly getFundamentals: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentals";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetFundamentalsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetFundamentalsRequest;
+        readonly responseSerialize: (value: GetFundamentalsResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetFundamentalsResponse;
+    };
+    /** Batched fundamentals for a watchlist scan (core metrics via one FMP quote call) */
+    readonly getFundamentalsMulti: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/GetFundamentalsMulti";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetFundamentalsMultiRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetFundamentalsMultiRequest;
+        readonly responseSerialize: (value: GetFundamentalsMultiResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetFundamentalsMultiResponse;
     };
 };
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
@@ -219,8 +309,14 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
     backfillBars: handleUnaryCall<BackfillBarsRequest, BackfillBarsResponse>;
     /** Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe */
     getDataCoverage: handleUnaryCall<GetDataCoverageRequest, GetDataCoverageResponse>;
+    /** Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5) */
+    deleteBackfilledData: handleUnaryCall<DeleteBackfilledDataRequest, DeleteBackfilledDataResponse>;
     /** Get available symbols */
     listAssets: handleUnaryCall<ListAssetsRequest, ListAssetsResponse>;
+    /** Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache) */
+    getFundamentals: handleUnaryCall<GetFundamentalsRequest, GetFundamentalsResponse>;
+    /** Batched fundamentals for a watchlist scan (core metrics via one FMP quote call) */
+    getFundamentalsMulti: handleUnaryCall<GetFundamentalsMultiRequest, GetFundamentalsMultiResponse>;
 }
 export interface MarketDataServiceClient extends Client {
     /** Stream live bar data for symbols */
@@ -245,10 +341,22 @@ export interface MarketDataServiceClient extends Client {
     getDataCoverage(request: GetDataCoverageRequest, callback: (error: ServiceError | null, response: GetDataCoverageResponse) => void): ClientUnaryCall;
     getDataCoverage(request: GetDataCoverageRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetDataCoverageResponse) => void): ClientUnaryCall;
     getDataCoverage(request: GetDataCoverageRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetDataCoverageResponse) => void): ClientUnaryCall;
+    /** Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5) */
+    deleteBackfilledData(request: DeleteBackfilledDataRequest, callback: (error: ServiceError | null, response: DeleteBackfilledDataResponse) => void): ClientUnaryCall;
+    deleteBackfilledData(request: DeleteBackfilledDataRequest, metadata: Metadata, callback: (error: ServiceError | null, response: DeleteBackfilledDataResponse) => void): ClientUnaryCall;
+    deleteBackfilledData(request: DeleteBackfilledDataRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: DeleteBackfilledDataResponse) => void): ClientUnaryCall;
     /** Get available symbols */
     listAssets(request: ListAssetsRequest, callback: (error: ServiceError | null, response: ListAssetsResponse) => void): ClientUnaryCall;
     listAssets(request: ListAssetsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListAssetsResponse) => void): ClientUnaryCall;
     listAssets(request: ListAssetsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListAssetsResponse) => void): ClientUnaryCall;
+    /** Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache) */
+    getFundamentals(request: GetFundamentalsRequest, callback: (error: ServiceError | null, response: GetFundamentalsResponse) => void): ClientUnaryCall;
+    getFundamentals(request: GetFundamentalsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetFundamentalsResponse) => void): ClientUnaryCall;
+    getFundamentals(request: GetFundamentalsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetFundamentalsResponse) => void): ClientUnaryCall;
+    /** Batched fundamentals for a watchlist scan (core metrics via one FMP quote call) */
+    getFundamentalsMulti(request: GetFundamentalsMultiRequest, callback: (error: ServiceError | null, response: GetFundamentalsMultiResponse) => void): ClientUnaryCall;
+    getFundamentalsMulti(request: GetFundamentalsMultiRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetFundamentalsMultiResponse) => void): ClientUnaryCall;
+    getFundamentalsMulti(request: GetFundamentalsMultiRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetFundamentalsMultiResponse) => void): ClientUnaryCall;
 }
 export declare const MarketDataServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): MarketDataServiceClient;

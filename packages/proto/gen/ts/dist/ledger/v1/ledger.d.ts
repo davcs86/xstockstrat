@@ -42,6 +42,13 @@ export interface AppendEventRequest {
         [key: string]: string;
     };
     occurredAt?: Date | undefined;
+    /**
+     * Optional caller-supplied dedup key. When set, the ledger appends the event at most
+     * once for this key: a retried AppendEvent (e.g. after a transient transport failure)
+     * returns the originally-stored event instead of inserting a duplicate. Empty = no
+     * dedup (every call inserts), preserving the prior behavior.
+     */
+    idempotencyKey: string;
 }
 export interface AppendEventRequest_MetadataEntry {
     key: string;

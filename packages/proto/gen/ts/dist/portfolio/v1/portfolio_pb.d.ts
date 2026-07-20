@@ -1,4 +1,4 @@
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse, TimeRange, TradingMode } from "../../common/v1/common_pb";
 import type { Message } from "@bufbuild/protobuf";
@@ -108,6 +108,25 @@ export type Position = Message<"xstockstrat.portfolio.v1.Position"> & {
      * @generated from field: string account_id = 11;
      */
     accountId: string;
+    /**
+     * Today's (intraday) P&L — change since the previous trading day's close.
+     * Sourced from the broker's per-position intraday valuation (Alpaca
+     * unrealized_intraday_pl / unrealized_intraday_plpc) on account.positions.synced.
+     * Zero when the broker does not report an intraday figure (e.g. order-fill-only
+     * positions enriched from marketdata mid-quotes); distinct from unrealized_pnl,
+     * which is total P&L since entry.
+     *
+     * dollars
+     *
+     * @generated from field: double day_pnl = 12;
+     */
+    dayPnl: number;
+    /**
+     * fraction (e.g. 0.0125 = +1.25%)
+     *
+     * @generated from field: double day_pnl_pct = 13;
+     */
+    dayPnlPct: number;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Position.
@@ -258,6 +277,20 @@ export type ListPositionsRequest = Message<"xstockstrat.portfolio.v1.ListPositio
      * @generated from field: optional string account_id = 4;
      */
     accountId?: string | undefined;
+    /**
+     * Additive filters (feature 056). Empty symbol / UNSPECIFIED side = no narrowing.
+     *
+     * exact-match symbol filter; "" = all symbols
+     *
+     * @generated from field: string symbol = 5;
+     */
+    symbol: string;
+    /**
+     * long/short filter derived from qty sign
+     *
+     * @generated from field: xstockstrat.portfolio.v1.PositionSide side = 6;
+     */
+    side: PositionSide;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.ListPositionsRequest.
@@ -385,6 +418,305 @@ export type ListPortfoliosResponse = Message<"xstockstrat.portfolio.v1.ListPortf
  */
 export declare const ListPortfoliosResponseSchema: GenMessage<ListPortfoliosResponse>;
 /**
+ * Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols.
+ *
+ * @generated from message xstockstrat.portfolio.v1.Watchlist
+ */
+export type Watchlist = Message<"xstockstrat.portfolio.v1.Watchlist"> & {
+    /**
+     * @generated from field: string watchlist_id = 1;
+     */
+    watchlistId: string;
+    /**
+     * @generated from field: string user_id = 2;
+     */
+    userId: string;
+    /**
+     * @generated from field: string name = 3;
+     */
+    name: string;
+    /**
+     * @generated from field: string description = 4;
+     */
+    description: string;
+    /**
+     * @generated from field: repeated string symbols = 5;
+     */
+    symbols: string[];
+    /**
+     * @generated from field: google.protobuf.Timestamp created_at = 6;
+     */
+    createdAt?: Timestamp | undefined;
+    /**
+     * @generated from field: google.protobuf.Timestamp updated_at = 7;
+     */
+    updatedAt?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.Watchlist.
+ * Use `create(WatchlistSchema)` to create a new message.
+ */
+export declare const WatchlistSchema: GenMessage<Watchlist>;
+/**
+ * user_id is intentionally absent from all request messages — ownership is taken
+ * from the propagated x-user-id header server-side (FR-2), never from the wire.
+ *
+ * @generated from message xstockstrat.portfolio.v1.CreateWatchlistRequest
+ */
+export type CreateWatchlistRequest = Message<"xstockstrat.portfolio.v1.CreateWatchlistRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
+    /**
+     * @generated from field: string description = 2;
+     */
+    description: string;
+    /**
+     * @generated from field: repeated string symbols = 3;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.CreateWatchlistRequest.
+ * Use `create(CreateWatchlistRequestSchema)` to create a new message.
+ */
+export declare const CreateWatchlistRequestSchema: GenMessage<CreateWatchlistRequest>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.CreateWatchlistResponse
+ */
+export type CreateWatchlistResponse = Message<"xstockstrat.portfolio.v1.CreateWatchlistResponse"> & {
+    /**
+     * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
+     */
+    watchlist?: Watchlist | undefined;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.CreateWatchlistResponse.
+ * Use `create(CreateWatchlistResponseSchema)` to create a new message.
+ */
+export declare const CreateWatchlistResponseSchema: GenMessage<CreateWatchlistResponse>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.GetWatchlistRequest
+ */
+export type GetWatchlistRequest = Message<"xstockstrat.portfolio.v1.GetWatchlistRequest"> & {
+    /**
+     * @generated from field: string watchlist_id = 1;
+     */
+    watchlistId: string;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.GetWatchlistRequest.
+ * Use `create(GetWatchlistRequestSchema)` to create a new message.
+ */
+export declare const GetWatchlistRequestSchema: GenMessage<GetWatchlistRequest>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.GetWatchlistResponse
+ */
+export type GetWatchlistResponse = Message<"xstockstrat.portfolio.v1.GetWatchlistResponse"> & {
+    /**
+     * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
+     */
+    watchlist?: Watchlist | undefined;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.GetWatchlistResponse.
+ * Use `create(GetWatchlistResponseSchema)` to create a new message.
+ */
+export declare const GetWatchlistResponseSchema: GenMessage<GetWatchlistResponse>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.ListWatchlistsRequest
+ */
+export type ListWatchlistsRequest = Message<"xstockstrat.portfolio.v1.ListWatchlistsRequest"> & {
+    /**
+     * @generated from field: xstockstrat.common.v1.PageRequest page = 1;
+     */
+    page?: PageRequest | undefined;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.ListWatchlistsRequest.
+ * Use `create(ListWatchlistsRequestSchema)` to create a new message.
+ */
+export declare const ListWatchlistsRequestSchema: GenMessage<ListWatchlistsRequest>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.ListWatchlistsResponse
+ */
+export type ListWatchlistsResponse = Message<"xstockstrat.portfolio.v1.ListWatchlistsResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.portfolio.v1.Watchlist watchlists = 1;
+     */
+    watchlists: Watchlist[];
+    /**
+     * @generated from field: xstockstrat.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.ListWatchlistsResponse.
+ * Use `create(ListWatchlistsResponseSchema)` to create a new message.
+ */
+export declare const ListWatchlistsResponseSchema: GenMessage<ListWatchlistsResponse>;
+/**
+ * Replace semantics for name/description/symbols per FR-1.
+ *
+ * @generated from message xstockstrat.portfolio.v1.UpdateWatchlistRequest
+ */
+export type UpdateWatchlistRequest = Message<"xstockstrat.portfolio.v1.UpdateWatchlistRequest"> & {
+    /**
+     * @generated from field: string watchlist_id = 1;
+     */
+    watchlistId: string;
+    /**
+     * @generated from field: string name = 2;
+     */
+    name: string;
+    /**
+     * @generated from field: string description = 3;
+     */
+    description: string;
+    /**
+     * @generated from field: repeated string symbols = 4;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.UpdateWatchlistRequest.
+ * Use `create(UpdateWatchlistRequestSchema)` to create a new message.
+ */
+export declare const UpdateWatchlistRequestSchema: GenMessage<UpdateWatchlistRequest>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.UpdateWatchlistResponse
+ */
+export type UpdateWatchlistResponse = Message<"xstockstrat.portfolio.v1.UpdateWatchlistResponse"> & {
+    /**
+     * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
+     */
+    watchlist?: Watchlist | undefined;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.UpdateWatchlistResponse.
+ * Use `create(UpdateWatchlistResponseSchema)` to create a new message.
+ */
+export declare const UpdateWatchlistResponseSchema: GenMessage<UpdateWatchlistResponse>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.DeleteWatchlistRequest
+ */
+export type DeleteWatchlistRequest = Message<"xstockstrat.portfolio.v1.DeleteWatchlistRequest"> & {
+    /**
+     * @generated from field: string watchlist_id = 1;
+     */
+    watchlistId: string;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.DeleteWatchlistRequest.
+ * Use `create(DeleteWatchlistRequestSchema)` to create a new message.
+ */
+export declare const DeleteWatchlistRequestSchema: GenMessage<DeleteWatchlistRequest>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.DeleteWatchlistResponse
+ */
+export type DeleteWatchlistResponse = Message<"xstockstrat.portfolio.v1.DeleteWatchlistResponse"> & {};
+/**
+ * Describes the message xstockstrat.portfolio.v1.DeleteWatchlistResponse.
+ * Use `create(DeleteWatchlistResponseSchema)` to create a new message.
+ */
+export declare const DeleteWatchlistResponseSchema: GenMessage<DeleteWatchlistResponse>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest
+ */
+export type AddWatchlistSymbolsRequest = Message<"xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest"> & {
+    /**
+     * @generated from field: string watchlist_id = 1;
+     */
+    watchlistId: string;
+    /**
+     * @generated from field: repeated string symbols = 2;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest.
+ * Use `create(AddWatchlistSymbolsRequestSchema)` to create a new message.
+ */
+export declare const AddWatchlistSymbolsRequestSchema: GenMessage<AddWatchlistSymbolsRequest>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse
+ */
+export type AddWatchlistSymbolsResponse = Message<"xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse"> & {
+    /**
+     * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
+     */
+    watchlist?: Watchlist | undefined;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse.
+ * Use `create(AddWatchlistSymbolsResponseSchema)` to create a new message.
+ */
+export declare const AddWatchlistSymbolsResponseSchema: GenMessage<AddWatchlistSymbolsResponse>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest
+ */
+export type RemoveWatchlistSymbolsRequest = Message<"xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest"> & {
+    /**
+     * @generated from field: string watchlist_id = 1;
+     */
+    watchlistId: string;
+    /**
+     * @generated from field: repeated string symbols = 2;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest.
+ * Use `create(RemoveWatchlistSymbolsRequestSchema)` to create a new message.
+ */
+export declare const RemoveWatchlistSymbolsRequestSchema: GenMessage<RemoveWatchlistSymbolsRequest>;
+/**
+ * @generated from message xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse
+ */
+export type RemoveWatchlistSymbolsResponse = Message<"xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse"> & {
+    /**
+     * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
+     */
+    watchlist?: Watchlist | undefined;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse.
+ * Use `create(RemoveWatchlistSymbolsResponseSchema)` to create a new message.
+ */
+export declare const RemoveWatchlistSymbolsResponseSchema: GenMessage<RemoveWatchlistSymbolsResponse>;
+/**
+ * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
+ * Used only as an additive filter on ListPositionsRequest; the Position message itself
+ * continues to carry signed qty.
+ *
+ * @generated from enum xstockstrat.portfolio.v1.PositionSide
+ */
+export declare enum PositionSide {
+    /**
+     * no side filter — return both long and short
+     *
+     * @generated from enum value: POSITION_SIDE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * qty > 0
+     *
+     * @generated from enum value: POSITION_SIDE_LONG = 1;
+     */
+    LONG = 1,
+    /**
+     * qty < 0
+     *
+     * @generated from enum value: POSITION_SIDE_SHORT = 2;
+     */
+    SHORT = 2
+}
+/**
+ * Describes the enum xstockstrat.portfolio.v1.PositionSide.
+ */
+export declare const PositionSideSchema: GenEnum<PositionSide>;
+/**
  * @generated from service xstockstrat.portfolio.v1.PortfolioService
  */
 export declare const PortfolioService: GenService<{
@@ -443,5 +775,64 @@ export declare const PortfolioService: GenService<{
         methodKind: "unary";
         input: typeof ListPortfoliosRequestSchema;
         output: typeof ListPortfoliosResponseSchema;
+    };
+    /**
+     * Watchlist management (feature 058). Additive — ownership is taken from the
+     * propagated x-user-id header server-side, never from request fields.
+     *
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.CreateWatchlist
+     */
+    createWatchlist: {
+        methodKind: "unary";
+        input: typeof CreateWatchlistRequestSchema;
+        output: typeof CreateWatchlistResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.GetWatchlist
+     */
+    getWatchlist: {
+        methodKind: "unary";
+        input: typeof GetWatchlistRequestSchema;
+        output: typeof GetWatchlistResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.ListWatchlists
+     */
+    listWatchlists: {
+        methodKind: "unary";
+        input: typeof ListWatchlistsRequestSchema;
+        output: typeof ListWatchlistsResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlist
+     */
+    updateWatchlist: {
+        methodKind: "unary";
+        input: typeof UpdateWatchlistRequestSchema;
+        output: typeof UpdateWatchlistResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.DeleteWatchlist
+     */
+    deleteWatchlist: {
+        methodKind: "unary";
+        input: typeof DeleteWatchlistRequestSchema;
+        output: typeof DeleteWatchlistResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.AddWatchlistSymbols
+     */
+    addWatchlistSymbols: {
+        methodKind: "unary";
+        input: typeof AddWatchlistSymbolsRequestSchema;
+        output: typeof AddWatchlistSymbolsResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.portfolio.v1.PortfolioService.RemoveWatchlistSymbols
+     */
+    removeWatchlistSymbols: {
+        methodKind: "unary";
+        input: typeof RemoveWatchlistSymbolsRequestSchema;
+        output: typeof RemoveWatchlistSymbolsResponseSchema;
     };
 }>;

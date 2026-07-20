@@ -146,6 +146,14 @@ export type ExecuteFormulaRequest = Message<"xstockstrat.indicators.v1.ExecuteFo
      * @generated from field: google.protobuf.Struct input_params = 7;
      */
     inputParams?: JsonObject | undefined;
+    /**
+     * Declared parameter DEFINITIONS used to validate input_params and apply defaults
+     * for inline formula_source runs (authoring "Run" with an unsaved buffer). Ignored
+     * when formula_id is set — saved formulas use their stored definitions instead.
+     *
+     * @generated from field: repeated xstockstrat.indicators.v1.FormulaParameter parameters = 8;
+     */
+    parameters: FormulaParameter[];
 };
 /**
  * Describes the message xstockstrat.indicators.v1.ExecuteFormulaRequest.
@@ -342,6 +350,12 @@ export type FormulaDefinition = Message<"xstockstrat.indicators.v1.FormulaDefini
      * @generated from field: repeated xstockstrat.indicators.v1.FormulaOutput outputs = 11;
      */
     outputs: FormulaOutput[];
+    /**
+     * bars of warm-up before this formula's outputs are valid (feature 064)
+     *
+     * @generated from field: int32 warmup_period = 12;
+     */
+    warmupPeriod: number;
 };
 /**
  * Describes the message xstockstrat.indicators.v1.FormulaDefinition.
@@ -439,6 +453,12 @@ export type RegisterFormulaRequest = Message<"xstockstrat.indicators.v1.Register
      * @generated from field: repeated xstockstrat.indicators.v1.FormulaOutput outputs = 8;
      */
     outputs: FormulaOutput[];
+    /**
+     * bars of warm-up before this formula's outputs are valid (feature 064)
+     *
+     * @generated from field: int32 warmup_period = 9;
+     */
+    warmupPeriod: number;
 };
 /**
  * Describes the message xstockstrat.indicators.v1.RegisterFormulaRequest.
@@ -565,6 +585,12 @@ export type UpdateFormulaRequest = Message<"xstockstrat.indicators.v1.UpdateForm
      * @generated from field: repeated xstockstrat.indicators.v1.FormulaOutput outputs = 8;
      */
     outputs: FormulaOutput[];
+    /**
+     * bars of warm-up before this formula's outputs are valid (feature 064)
+     *
+     * @generated from field: int32 warmup_period = 9;
+     */
+    warmupPeriod: number;
 };
 /**
  * Describes the message xstockstrat.indicators.v1.UpdateFormulaRequest.

@@ -39,13 +39,30 @@ export declare function brokerTypeToNumber(object: BrokerType): number;
 /**
  * Timeframe is the canonical OHLCV bar interval, shared by marketdata + analysis + ingest.
  * Replaces the free-text "1d"/"1Day"/"1m" strings that previously mismatched across services.
+ *
+ * 15 minutes is the smallest supported interval: the free Alpaca market-data plan serves
+ * 15-minute-delayed data, and the platform is not a real-time trader. TIMEFRAME_1MIN and
+ * TIMEFRAME_5MIN are deprecated — no longer ingested or selectable — but retained (not
+ * deleted) so the change stays wire- and source-compatible.
  */
 export declare enum Timeframe {
     TIMEFRAME_UNSPECIFIED = "TIMEFRAME_UNSPECIFIED",
-    TIMEFRAME_1MIN = "TIMEFRAME_1MIN",
-    TIMEFRAME_5MIN = "TIMEFRAME_5MIN",
+    /** TIMEFRAME_15MIN - smallest supported interval */
+    TIMEFRAME_15MIN = "TIMEFRAME_15MIN",
     TIMEFRAME_1HOUR = "TIMEFRAME_1HOUR",
     TIMEFRAME_1DAY = "TIMEFRAME_1DAY",
+    /**
+     * TIMEFRAME_1MIN - deprecated: sub-15m intervals removed from the product
+     *
+     * @deprecated
+     */
+    TIMEFRAME_1MIN = "TIMEFRAME_1MIN",
+    /**
+     * TIMEFRAME_5MIN - deprecated: sub-15m intervals removed from the product
+     *
+     * @deprecated
+     */
+    TIMEFRAME_5MIN = "TIMEFRAME_5MIN",
     UNRECOGNIZED = "UNRECOGNIZED"
 }
 export declare function timeframeFromJSON(object: any): Timeframe;

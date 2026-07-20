@@ -26,6 +26,13 @@ const (
 	PortfolioService_GetSnapshot_FullMethodName            = "/xstockstrat.portfolio.v1.PortfolioService/GetSnapshot"
 	PortfolioService_StreamPortfolioUpdates_FullMethodName = "/xstockstrat.portfolio.v1.PortfolioService/StreamPortfolioUpdates"
 	PortfolioService_ListPortfolios_FullMethodName         = "/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios"
+	PortfolioService_CreateWatchlist_FullMethodName        = "/xstockstrat.portfolio.v1.PortfolioService/CreateWatchlist"
+	PortfolioService_GetWatchlist_FullMethodName           = "/xstockstrat.portfolio.v1.PortfolioService/GetWatchlist"
+	PortfolioService_ListWatchlists_FullMethodName         = "/xstockstrat.portfolio.v1.PortfolioService/ListWatchlists"
+	PortfolioService_UpdateWatchlist_FullMethodName        = "/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlist"
+	PortfolioService_DeleteWatchlist_FullMethodName        = "/xstockstrat.portfolio.v1.PortfolioService/DeleteWatchlist"
+	PortfolioService_AddWatchlistSymbols_FullMethodName    = "/xstockstrat.portfolio.v1.PortfolioService/AddWatchlistSymbols"
+	PortfolioService_RemoveWatchlistSymbols_FullMethodName = "/xstockstrat.portfolio.v1.PortfolioService/RemoveWatchlistSymbols"
 )
 
 // PortfolioServiceClient is the client API for PortfolioService service.
@@ -39,6 +46,15 @@ type PortfolioServiceClient interface {
 	GetSnapshot(ctx context.Context, in *GetSnapshotRequest, opts ...grpc.CallOption) (*PortfolioSnapshot, error)
 	StreamPortfolioUpdates(ctx context.Context, in *StreamPortfolioUpdatesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PortfolioSnapshot], error)
 	ListPortfolios(ctx context.Context, in *ListPortfoliosRequest, opts ...grpc.CallOption) (*ListPortfoliosResponse, error)
+	// Watchlist management (feature 058). Additive — ownership is taken from the
+	// propagated x-user-id header server-side, never from request fields.
+	CreateWatchlist(ctx context.Context, in *CreateWatchlistRequest, opts ...grpc.CallOption) (*CreateWatchlistResponse, error)
+	GetWatchlist(ctx context.Context, in *GetWatchlistRequest, opts ...grpc.CallOption) (*GetWatchlistResponse, error)
+	ListWatchlists(ctx context.Context, in *ListWatchlistsRequest, opts ...grpc.CallOption) (*ListWatchlistsResponse, error)
+	UpdateWatchlist(ctx context.Context, in *UpdateWatchlistRequest, opts ...grpc.CallOption) (*UpdateWatchlistResponse, error)
+	DeleteWatchlist(ctx context.Context, in *DeleteWatchlistRequest, opts ...grpc.CallOption) (*DeleteWatchlistResponse, error)
+	AddWatchlistSymbols(ctx context.Context, in *AddWatchlistSymbolsRequest, opts ...grpc.CallOption) (*AddWatchlistSymbolsResponse, error)
+	RemoveWatchlistSymbols(ctx context.Context, in *RemoveWatchlistSymbolsRequest, opts ...grpc.CallOption) (*RemoveWatchlistSymbolsResponse, error)
 }
 
 type portfolioServiceClient struct {
@@ -128,6 +144,76 @@ func (c *portfolioServiceClient) ListPortfolios(ctx context.Context, in *ListPor
 	return out, nil
 }
 
+func (c *portfolioServiceClient) CreateWatchlist(ctx context.Context, in *CreateWatchlistRequest, opts ...grpc.CallOption) (*CreateWatchlistResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateWatchlistResponse)
+	err := c.cc.Invoke(ctx, PortfolioService_CreateWatchlist_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *portfolioServiceClient) GetWatchlist(ctx context.Context, in *GetWatchlistRequest, opts ...grpc.CallOption) (*GetWatchlistResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetWatchlistResponse)
+	err := c.cc.Invoke(ctx, PortfolioService_GetWatchlist_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *portfolioServiceClient) ListWatchlists(ctx context.Context, in *ListWatchlistsRequest, opts ...grpc.CallOption) (*ListWatchlistsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListWatchlistsResponse)
+	err := c.cc.Invoke(ctx, PortfolioService_ListWatchlists_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *portfolioServiceClient) UpdateWatchlist(ctx context.Context, in *UpdateWatchlistRequest, opts ...grpc.CallOption) (*UpdateWatchlistResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateWatchlistResponse)
+	err := c.cc.Invoke(ctx, PortfolioService_UpdateWatchlist_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *portfolioServiceClient) DeleteWatchlist(ctx context.Context, in *DeleteWatchlistRequest, opts ...grpc.CallOption) (*DeleteWatchlistResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteWatchlistResponse)
+	err := c.cc.Invoke(ctx, PortfolioService_DeleteWatchlist_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *portfolioServiceClient) AddWatchlistSymbols(ctx context.Context, in *AddWatchlistSymbolsRequest, opts ...grpc.CallOption) (*AddWatchlistSymbolsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddWatchlistSymbolsResponse)
+	err := c.cc.Invoke(ctx, PortfolioService_AddWatchlistSymbols_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *portfolioServiceClient) RemoveWatchlistSymbols(ctx context.Context, in *RemoveWatchlistSymbolsRequest, opts ...grpc.CallOption) (*RemoveWatchlistSymbolsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveWatchlistSymbolsResponse)
+	err := c.cc.Invoke(ctx, PortfolioService_RemoveWatchlistSymbols_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PortfolioServiceServer is the server API for PortfolioService service.
 // All implementations should embed UnimplementedPortfolioServiceServer
 // for forward compatibility.
@@ -139,6 +225,15 @@ type PortfolioServiceServer interface {
 	GetSnapshot(context.Context, *GetSnapshotRequest) (*PortfolioSnapshot, error)
 	StreamPortfolioUpdates(*StreamPortfolioUpdatesRequest, grpc.ServerStreamingServer[PortfolioSnapshot]) error
 	ListPortfolios(context.Context, *ListPortfoliosRequest) (*ListPortfoliosResponse, error)
+	// Watchlist management (feature 058). Additive — ownership is taken from the
+	// propagated x-user-id header server-side, never from request fields.
+	CreateWatchlist(context.Context, *CreateWatchlistRequest) (*CreateWatchlistResponse, error)
+	GetWatchlist(context.Context, *GetWatchlistRequest) (*GetWatchlistResponse, error)
+	ListWatchlists(context.Context, *ListWatchlistsRequest) (*ListWatchlistsResponse, error)
+	UpdateWatchlist(context.Context, *UpdateWatchlistRequest) (*UpdateWatchlistResponse, error)
+	DeleteWatchlist(context.Context, *DeleteWatchlistRequest) (*DeleteWatchlistResponse, error)
+	AddWatchlistSymbols(context.Context, *AddWatchlistSymbolsRequest) (*AddWatchlistSymbolsResponse, error)
+	RemoveWatchlistSymbols(context.Context, *RemoveWatchlistSymbolsRequest) (*RemoveWatchlistSymbolsResponse, error)
 }
 
 // UnimplementedPortfolioServiceServer should be embedded to have
@@ -168,6 +263,27 @@ func (UnimplementedPortfolioServiceServer) StreamPortfolioUpdates(*StreamPortfol
 }
 func (UnimplementedPortfolioServiceServer) ListPortfolios(context.Context, *ListPortfoliosRequest) (*ListPortfoliosResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPortfolios not implemented")
+}
+func (UnimplementedPortfolioServiceServer) CreateWatchlist(context.Context, *CreateWatchlistRequest) (*CreateWatchlistResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateWatchlist not implemented")
+}
+func (UnimplementedPortfolioServiceServer) GetWatchlist(context.Context, *GetWatchlistRequest) (*GetWatchlistResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetWatchlist not implemented")
+}
+func (UnimplementedPortfolioServiceServer) ListWatchlists(context.Context, *ListWatchlistsRequest) (*ListWatchlistsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListWatchlists not implemented")
+}
+func (UnimplementedPortfolioServiceServer) UpdateWatchlist(context.Context, *UpdateWatchlistRequest) (*UpdateWatchlistResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateWatchlist not implemented")
+}
+func (UnimplementedPortfolioServiceServer) DeleteWatchlist(context.Context, *DeleteWatchlistRequest) (*DeleteWatchlistResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteWatchlist not implemented")
+}
+func (UnimplementedPortfolioServiceServer) AddWatchlistSymbols(context.Context, *AddWatchlistSymbolsRequest) (*AddWatchlistSymbolsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddWatchlistSymbols not implemented")
+}
+func (UnimplementedPortfolioServiceServer) RemoveWatchlistSymbols(context.Context, *RemoveWatchlistSymbolsRequest) (*RemoveWatchlistSymbolsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveWatchlistSymbols not implemented")
 }
 func (UnimplementedPortfolioServiceServer) testEmbeddedByValue() {}
 
@@ -308,6 +424,132 @@ func _PortfolioService_ListPortfolios_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PortfolioService_CreateWatchlist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateWatchlistRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PortfolioServiceServer).CreateWatchlist(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PortfolioService_CreateWatchlist_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PortfolioServiceServer).CreateWatchlist(ctx, req.(*CreateWatchlistRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PortfolioService_GetWatchlist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetWatchlistRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PortfolioServiceServer).GetWatchlist(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PortfolioService_GetWatchlist_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PortfolioServiceServer).GetWatchlist(ctx, req.(*GetWatchlistRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PortfolioService_ListWatchlists_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListWatchlistsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PortfolioServiceServer).ListWatchlists(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PortfolioService_ListWatchlists_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PortfolioServiceServer).ListWatchlists(ctx, req.(*ListWatchlistsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PortfolioService_UpdateWatchlist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateWatchlistRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PortfolioServiceServer).UpdateWatchlist(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PortfolioService_UpdateWatchlist_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PortfolioServiceServer).UpdateWatchlist(ctx, req.(*UpdateWatchlistRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PortfolioService_DeleteWatchlist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteWatchlistRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PortfolioServiceServer).DeleteWatchlist(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PortfolioService_DeleteWatchlist_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PortfolioServiceServer).DeleteWatchlist(ctx, req.(*DeleteWatchlistRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PortfolioService_AddWatchlistSymbols_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddWatchlistSymbolsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PortfolioServiceServer).AddWatchlistSymbols(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PortfolioService_AddWatchlistSymbols_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PortfolioServiceServer).AddWatchlistSymbols(ctx, req.(*AddWatchlistSymbolsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PortfolioService_RemoveWatchlistSymbols_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveWatchlistSymbolsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PortfolioServiceServer).RemoveWatchlistSymbols(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PortfolioService_RemoveWatchlistSymbols_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PortfolioServiceServer).RemoveWatchlistSymbols(ctx, req.(*RemoveWatchlistSymbolsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PortfolioService_ServiceDesc is the grpc.ServiceDesc for PortfolioService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -338,6 +580,34 @@ var PortfolioService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListPortfolios",
 			Handler:    _PortfolioService_ListPortfolios_Handler,
+		},
+		{
+			MethodName: "CreateWatchlist",
+			Handler:    _PortfolioService_CreateWatchlist_Handler,
+		},
+		{
+			MethodName: "GetWatchlist",
+			Handler:    _PortfolioService_GetWatchlist_Handler,
+		},
+		{
+			MethodName: "ListWatchlists",
+			Handler:    _PortfolioService_ListWatchlists_Handler,
+		},
+		{
+			MethodName: "UpdateWatchlist",
+			Handler:    _PortfolioService_UpdateWatchlist_Handler,
+		},
+		{
+			MethodName: "DeleteWatchlist",
+			Handler:    _PortfolioService_DeleteWatchlist_Handler,
+		},
+		{
+			MethodName: "AddWatchlistSymbols",
+			Handler:    _PortfolioService_AddWatchlistSymbols_Handler,
+		},
+		{
+			MethodName: "RemoveWatchlistSymbols",
+			Handler:    _PortfolioService_RemoveWatchlistSymbols_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

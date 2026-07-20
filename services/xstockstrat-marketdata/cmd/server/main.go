@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	"github.com/xstockstrat/marketdata/internal/alpaca"
 	"github.com/xstockstrat/marketdata/internal/config"
+	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/handler"
 	"github.com/xstockstrat/marketdata/internal/middleware"
 	"github.com/xstockstrat/marketdata/internal/repository"
@@ -65,9 +67,32 @@ func main() {
 		DataURL:   cfg.AlpacaDataURL,
 		// Data feed (iex/sip/otc). Default "iex" so the free/basic paper data
 		// plan works; deployments on a paid SIP plan can override.
-		Feed:  cfgWatcher.GetString("marketdata.alpaca.feed", "iex"),
-		Paper: cfg.TradingMode == "paper",
+		Feed: cfgWatcher.GetString("marketdata.alpaca.feed", "iex"),
+		// Corporate-action adjustment for historical bars (default "all") so
+		// splits/dividends do not distort backtest OHLCV.
+		Adjustment: cfgWatcher.GetString("marketdata.alpaca.adjustment", "all"),
+		// Bars-per-request limit (clamped to the Alpaca spec max of 10000) and
+		// outbound REST rate limit.
+		BatchSize:    int(cfgWatcher.GetInt("marketdata.backfill.batch_size", 1000)),
+		RateLimitRPS: int(cfgWatcher.GetInt("marketdata.backfill.rate_limit_rps", 200)),
+		// Streaming WebSocket reconnect tuning.
+		ReconnectDelayMs: int(cfgWatcher.GetInt("marketdata.stream.reconnect_delay_ms", 2000)),
+		MaxReconnects:    int(cfgWatcher.GetInt("marketdata.stream.max_reconnects", 10)),
+		Paper:            cfg.TradingMode == "paper",
 	})
+
+	// Fail loud if the Alpaca credentials are missing or still set to the DO app-spec
+	// placeholders (e.g. "YOUR_DEV_ALPACA_API_KEY"). A placeholder makes every Alpaca
+	// call get rejected at the edge with an opaque 401, whose only later symptom is a
+	// warm-poller fetch warning. The service still starts — cached reads and non-Alpaca
+	// RPCs keep working — but the operator gets an unambiguous startup signal.
+	if looksLikePlaceholderCred(cfg.AlpacaAPIKey) || looksLikePlaceholderCred(cfg.AlpacaAPISecret) {
+		slog.Warn("ALPACA credentials look empty or are still set to a placeholder — "+
+			"every Alpaca market-data call will fail with a 401; set the real "+
+			"ALPACA_API_KEY/ALPACA_API_SECRET secrets",
+			"api_key_placeholder", looksLikePlaceholderCred(cfg.AlpacaAPIKey),
+			"api_secret_placeholder", looksLikePlaceholderCred(cfg.AlpacaAPISecret))
+	}
 
 	// TimescaleDB repository
 	repo, err := repository.NewMarketDataRepo(cfg.DBConnStr)
@@ -79,7 +104,20 @@ func main() {
 	reg := source.NewRegistry()
 	reg.Register("alpaca", alpacaClient)
 
-	svc, err := service.NewMarketDataService(reg, repo, cfgWatcher, cfg.LedgerEndpoint, cfg.NotifyEndpoint)
+	// FMP fundamentals source (feature 059) — built only when enabled. It is held as a
+	// dedicated service field, NOT registered in the OHLCV registry above (FR-2). When
+	// disabled the service gets nil and GetFundamentals returns FailedPrecondition.
+	var fundamentalsSrc source.FundamentalsSource
+	if cfgWatcher.GetBool("marketdata.fmp.enabled", false) {
+		fundamentalsSrc = fmp.NewClient(fmp.ClientConfig{
+			BaseURL: cfgWatcher.GetString("marketdata.fmp.base_url", "https://financialmodelingprep.com"),
+			APIKey:  cfgWatcher.GetString("secret.marketdata.fmp.api_key", ""),
+			Metrics: strings.Split(cfgWatcher.GetString("marketdata.fmp.metrics", "core,extended"), ","),
+		})
+		slog.Info("FMP fundamentals source enabled")
+	}
+
+	svc, err := service.NewMarketDataService(reg, repo, cfgWatcher, cfg.LedgerEndpoint, cfg.NotifyEndpoint, fundamentalsSrc)
 	if err != nil {
 		slog.Error("service init failed", "error", err)
 		os.Exit(1)
@@ -89,6 +127,10 @@ func main() {
 	// Keep latest quotes for queried symbols warm in the DB so per-position P&L
 	// reads hit the cache instead of a live Alpaca call on every request.
 	go svc.StartWarmQuotePoller(ctx)
+
+	// Always-on bar ingestion: continuously upsert recent bars for queried symbols so
+	// the feed runs without a client holding a StreamBars RPC open.
+	go svc.StartBarIngestPoller(ctx)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.GRPCPort))
 	if err != nil {
@@ -123,4 +165,17 @@ func main() {
 		slog.Error("server error", "error", err)
 		os.Exit(1)
 	}
+}
+
+// looksLikePlaceholderCred reports whether an Alpaca credential is empty or one of the
+// placeholder values shipped in the DO app specs (e.g. "YOUR_DEV_ALPACA_API_KEY"). It is
+// intentionally conservative — only blank values and the obvious "YOUR_…"/"…PLACEHOLDER…"
+// forms — so a real key is never misflagged.
+func looksLikePlaceholderCred(v string) bool {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return true
+	}
+	upper := strings.ToUpper(v)
+	return strings.HasPrefix(upper, "YOUR_") || strings.Contains(upper, "PLACEHOLDER")
 }

@@ -297,27 +297,24 @@ Secrets to set on **both** dev and prod apps:
 ### Alpaca credentials
 Set on: `xstockstrat-trading`, `xstockstrat-marketdata`, `xstockstrat-ingest`
 
-```bash
-doctl apps update $DO_DEV_APP_ID \
-  --set-env ALPACA_API_KEY=<your-paper-key> \
-  --set-env ALPACA_API_SECRET=<your-paper-secret>
+Like the broker encryption key below, these are injected at deploy time via GitHub Actions secrets (not via `doctl apps update --set-env`) because `doctl apps update --spec` resets DO UI-set secrets to empty on each deploy. Use **paper** keys for dev and **live** keys for prod.
 
-doctl apps update $DO_PROD_APP_ID \
-  --set-env ALPACA_API_KEY=<your-live-key> \
-  --set-env ALPACA_API_SECRET=<your-live-secret>
-```
+Add four GitHub Actions secrets (see Step 9):
 
-Or via the console: **App → Settings → App-Level Environment Variables → Edit → Add Variable → check "Encrypt"**.
+- `DEV_ALPACA_API_KEY` / `DEV_ALPACA_API_SECRET` — paper trading credentials
+- `PROD_ALPACA_API_KEY` / `PROD_ALPACA_API_SECRET` — live trading credentials
+
+The deploy workflows substitute them into the app spec at deploy time via the `YOUR_DEV_ALPACA_API_KEY` / `YOUR_DEV_ALPACA_API_SECRET` (dev) and `YOUR_PROD_ALPACA_API_KEY` / `YOUR_PROD_ALPACA_API_SECRET` (prod) placeholders.
 
 ### JWT secret
 Set on: `xstockstrat-identity`
 
 ```bash
-# Must be at least 32 characters. Generate one:
+# Must be at least 32 characters. Generate one (per environment):
 openssl rand -base64 48
 ```
 
-Set as `JWT_SECRET` on both apps (can use the same secret or separate ones per environment).
+Injected at deploy time via GitHub Actions secrets (same reasoning as the broker key and Alpaca credentials above). Add `DEV_JWT_SECRET` and `PROD_JWT_SECRET` as GitHub Actions secrets (see Step 9) — they substitute into the `YOUR_DEV_JWT_SECRET` / `YOUR_PROD_JWT_SECRET` placeholders. You may use the same value for both or separate ones per environment.
 
 ### MCP agent secret
 Set on: `xstockstrat-agent`
@@ -412,6 +409,12 @@ The CI/CD workflows need the following repository secrets. Go to:
 | `BUF_TOKEN` | Buf Schema Registry token (see below) | deploy-dev, deploy-prod |
 | `DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY` | 64-char hex AES-256 key for staging (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
 | `PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY` | 64-char hex AES-256 key for production (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
+| `DEV_JWT_SECRET` | JWT signing secret for staging (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
+| `PROD_JWT_SECRET` | JWT signing secret for production (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
+| `DEV_ALPACA_API_KEY` | Alpaca **paper** API key (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
+| `DEV_ALPACA_API_SECRET` | Alpaca **paper** API secret (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
+| `PROD_ALPACA_API_KEY` | Alpaca **live** API key (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
+| `PROD_ALPACA_API_SECRET` | Alpaca **live** API secret (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
 
 `GITHUB_TOKEN` is automatically provided by GitHub Actions for GHCR pushes — no setup needed.
 

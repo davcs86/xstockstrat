@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the nine tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the eleven tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -25,6 +25,12 @@ directly on port 9000.
 | `POST /oauth/register`, `GET /oauth/authorize`, `GET /oauth/callback`, `POST /oauth/token` | OAuth 2.1 endpoints |
 
 **Direct SSE (local):** `http://localhost:9000/sse`
+
+**Tool catalog (UI display).** `GET /api/tools` returns the same eleven tools' `name`,
+`description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
+capabilities (the same data documented below), never user data or credentials. It powers the
+`xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
+can see what the agent can do without connecting a client first.
 
 ---
 
@@ -54,14 +60,6 @@ The end-to-end connect flow:
    **audience-bound JWT** (`aud` = the agent resource URI) plus a rotating refresh token. The JWT is
    presented as `Authorization: Bearer <jwt>` on `/sse`; the agent rejects tokens whose `aud` does
    not match.
-
-### SSE — API key (legacy)
-A valid xstockstrat API key in either of:
-- `Authorization: Bearer <api_key>` header
-- `?api_key=<api_key>` query parameter — **DEPRECATED**: OAuth 2.1 forbids credentials in query
-  strings. Kept only as a Desktop-only fallback for clients that cannot perform the OAuth flow.
-
-The key is validated against `xstockstrat-identity` `ValidateApiKey` RPC. Invalid keys return `HTTP 401`.
 
 ### x-mcp-secret (downstream enforcement)
 `MCP_AGENT_SECRET` is a shared secret the agent sends as `x-mcp-secret` on every outbound webhook call to `xstockstrat-ingest`, `xstockstrat-notify`, and `xstockstrat-analysis`. Those services reject requests without the correct header when the secret is configured.
@@ -267,9 +265,49 @@ Triggers a backtest via `xstockstrat-analysis`. The default strategy is SMA cros
 
 ---
 
+### `screen_symbols`
+
+Scans an explicit universe of symbols via `xstockstrat-analysis` `ScreenSymbols` (feature 060) and returns ranked candidates. **Read-only** — sends `x-mcp-secret` and **no** admin `x-access-scope`. Symbols are passed explicitly; there is no watchlist resolution in this tool.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `symbols` | `string[]` | Yes | Explicit ticker list to screen, e.g. `["NVDA", "AAPL"]` |
+| `criteria` | `object[]` | No | Criterion dicts; each key set: `ref_name`, `kind` (`"SCREEN_KIND_FUNDAMENTAL"` \| `"SCREEN_KIND_TECHNICAL_FORMULA"` \| `"SCREEN_KIND_TECHNICAL_INDICATOR"` \| `"SCREEN_KIND_SIGNAL"`), `metric_name`, `op` (e.g. `"COMPARATOR_GTE"`, `"COMPARATOR_BETWEEN"`), `threshold`, `threshold_high`, `weight`, `hard_filter` |
+| `signal_sources` | `string[]` | No | Signal source names for the signal-blend kind |
+| `signal_weight` | `float` | No | Share of score from signals (default `0.0`) |
+| `technical_weight` | `float` | No | Share of score from technicals (default `1.0`) |
+| `min_conviction` | `float` | No | Minimum blended score to pass (default `0.0`) |
+| `rank_limit` | `int` | No | Cap on returned results; `0` ⇒ analysis-side default (`analysis.screener.default_rank_limit`) |
+
+`kind` and `op` accept either the enum name (string) or a numeric value. The `component` field (for technical kinds) is not mapped from string input in this thin wrapper.
+
+**Return**
+
+```json
+{
+  "results": [
+    { "symbol": "NVDA", "score": 0.91, "criterion_scores": { "pe": 1.0 }, "passed": true, "status": "SCREEN_RESULT_STATUS_OK" }
+  ],
+  "coverage_gaps": [ { "symbol": "TSLA" } ]
+}
+```
+
+`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`); `coverage_gaps` lists symbols lacking enough data to screen.
+
+**Errors**
+
+| Condition | Error |
+|---|---|
+| Over-cap universe (> `analysis.screener.max_universe_size`) | Truncated analysis-side |
+| Analysis service unreachable | gRPC error propagated |
+
+---
+
 ### `manage_strategy`
 
-Registers, updates, or deactivates a stored strategy definition in `xstockstrat-analysis` (admin-scoped).
+Registers, updates, or deactivates a stored strategy definition in `xstockstrat-analysis`.
 
 **Parameters**
 
@@ -282,7 +320,6 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 | `entry_rule` | `string` | No | JSON-encoded condition tree |
 | `exit_rule` | `string` | No | JSON-encoded condition tree |
 | `signal_params` | `object` | No | Optional signal-weighting params |
-| `admin_api_key` | `string` | Yes | Admin API key; validated by the analysis backend |
 
 **Return**
 
@@ -294,7 +331,6 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 
 | Condition | Error |
 |---|---|
-| Missing/invalid admin key | `admin API key required` (UNAUTHENTICATED) |
 | Invalid definition (unknown indicator, bad rule JSON, undefined ref_name) | `invalid argument` (INVALID_ARGUMENT) |
 | `update`/`deactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
 
@@ -302,7 +338,7 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 
 ### `manage_formula`
 
-Registers, updates, or deletes a custom formula definition in `xstockstrat-indicators` (admin-scoped).
+Registers, updates, or deletes a custom formula definition in `xstockstrat-indicators`.
 
 **Parameters**
 
@@ -316,7 +352,6 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 | `formula_id` | `string` | update/delete | Formula identifier |
 | `author` | `string` | register | Author, stored immutably on register |
 | `formula_author_user_id` | `string` | update/delete | Must match the formula's original `author` (else PERMISSION_DENIED) |
-| `admin_api_key` | `string` | Yes | Admin API key; validated by the indicators backend |
 
 **Return**
 
@@ -328,7 +363,6 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 
 | Condition | Error |
 |---|---|
-| Missing/invalid admin key | `admin API key required` (UNAUTHENTICATED) |
 | `formula_author_user_id` ≠ author | `permission denied` (PERMISSION_DENIED) |
 | `update`/`delete` on unknown formula | `formula not found` (NOT_FOUND) |
 
@@ -336,7 +370,7 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 
 ### `manage_signal_source`
 
-Registers, updates, or deactivates a signal source in `xstockstrat-ingest` (admin-scoped).
+Registers, updates, or deactivates a signal source in `xstockstrat-ingest`.
 
 **Parameters**
 
@@ -349,7 +383,6 @@ Registers, updates, or deactivates a signal source in `xstockstrat-ingest` (admi
 | `config_json` | `object` | No | Source configuration |
 | `extractor_module` | `string` | No | Extractor module name |
 | `credentials_ref` | `string` | No | Reference to stored credentials — forwarded to the backend, **never echoed** |
-| `admin_api_key` | `string` | Yes | Admin API key; validated by the ingest backend |
 
 **Return**
 
@@ -361,7 +394,6 @@ Registers, updates, or deactivates a signal source in `xstockstrat-ingest` (admi
 
 | Condition | Error |
 |---|---|
-| Missing/invalid admin key | `admin API key required` (UNAUTHENTICATED) |
 | Invalid source fields | `invalid argument` (INVALID_ARGUMENT) |
 | `deactivate` on unknown source | `signal source not found` (NOT_FOUND) |
 | `credentials_ref` exposure | **Never** — `credentials_ref` is intentionally omitted from the return and never exposed to Claude (FR-12) |
@@ -413,11 +445,11 @@ emit_alert(severity="info", category="system",
 
 ```
 1. manage_formula(operation="register", name="rsi_div", source="<python source>",
-                  author="<user_id>", admin_api_key="<key>")
+                  author="<user_id>")
    → formula_id
 
 2. manage_strategy(operation="register", strategy_id="rsi_sma_combo",
-                  display_name="RSI + SMA", admin_api_key="<key>",
+                  display_name="RSI + SMA",
                   components=[
                     {"ref_name": "sma_fast", "kind": "builtin", "indicator": "SMA", "params": {"period": 20}},
                     {"ref_name": "rsi", "kind": "formula", "formula_id": "<formula_id>"}

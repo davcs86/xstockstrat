@@ -2,13 +2,22 @@
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import Link from 'next/link';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AccountPortfolioSelector } from '@/components/insights/AccountPortfolioSelector';
 import { useStrategies } from '@/hooks/useStrategies';
+import { useStrategyDefinitions } from '@/hooks/useStrategyDefinitions';
 import type { StrategyScore } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 function DashboardSkeleton() {
@@ -66,7 +75,12 @@ function InsightsDashboard() {
   };
 
   const { data: strategies } = useStrategies();
+  // List all registered (active) definitions and merge in scores by id, so a
+  // strategy shows up here as soon as it is registered — not only once scored.
+  const { data: defsData } = useStrategyDefinitions(false);
 
+  const scoreById = new Map((strategies?.strategies ?? []).map((s) => [s.strategyId, s]));
+  const definitions = defsData?.definitions ?? [];
   const topStrategy = strategies?.strategies?.[0];
 
   return (
@@ -81,40 +95,47 @@ function InsightsDashboard() {
                 <div className="flex items-center justify-between">
                   <CardTitle>Strategy Scores</CardTitle>
                   <Button variant="ghost" size="sm" asChild>
-                    <Link href="/insights/strategies" className="text-xs text-primary">View all →</Link>
+                    <Link href="/insights/strategies" className="text-xs text-primary">
+                      View all →
+                    </Link>
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
-                {!strategies ? (
+                {!defsData ? (
                   <p className="text-sm text-muted-foreground">Loading…</p>
                 ) : (
                   <ul className="space-y-3">
-                    {(strategies?.strategies ?? []).map((s: StrategyScore) => (
-                      <li key={s.strategyId}>
-                        <Link
-                          href={`/insights/strategies/${s.strategyId}`}
-                          className="flex items-center justify-between text-sm group"
-                        >
-                          <span className="font-mono text-xs text-muted-foreground group-hover:text-foreground transition-colors truncate mr-2">
-                            {s.strategyId}
-                          </span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {s.rating && (
-                              <Badge variant={ratingVariant(s.rating)}>
-                                {s.rating}
-                              </Badge>
-                            )}
-                            {s.overallScore !== undefined && (
-                              <span className={`font-bold text-xs tabular-nums ${scoreColor(s.overallScore)}`}>
-                                {(s.overallScore * 100).toFixed(0)}%
-                              </span>
-                            )}
-                          </div>
-                        </Link>
-                      </li>
-                    ))}
-                    {(strategies?.strategies ?? []).length === 0 && (
+                    {definitions.map((d) => {
+                      const score: StrategyScore | undefined = scoreById.get(d.strategyId);
+                      return (
+                        <li key={d.strategyId}>
+                          <Link
+                            href={`/insights/strategies/${d.strategyId}`}
+                            className="flex items-center justify-between text-sm group"
+                          >
+                            <span className="font-mono text-xs text-muted-foreground group-hover:text-foreground transition-colors truncate mr-2">
+                              {d.displayName || d.strategyId}
+                            </span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {score?.rating && (
+                                <Badge variant={ratingVariant(score.rating)}>{score.rating}</Badge>
+                              )}
+                              {score ? (
+                                <span
+                                  className={`font-bold text-xs tabular-nums ${scoreColor(score.overallScore)}`}
+                                >
+                                  {(score.overallScore * 100).toFixed(0)}%
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Not scored</span>
+                              )}
+                            </div>
+                          </Link>
+                        </li>
+                      );
+                    })}
+                    {definitions.length === 0 && (
                       <p className="text-sm text-muted-foreground">
                         No strategies yet.{' '}
                         <Link href="/insights/strategies" className="text-primary hover:underline">
@@ -138,7 +159,10 @@ function InsightsDashboard() {
                   </CardTitle>
                   {topStrategy && (
                     <Button variant="ghost" size="sm" asChild>
-                      <Link href={`/insights/strategies/${topStrategy.strategyId}`} className="text-xs text-primary">
+                      <Link
+                        href={`/insights/strategies/${topStrategy.strategyId}`}
+                        className="text-xs text-primary"
+                      >
                         Run backtest →
                       </Link>
                     </Button>
@@ -158,7 +182,10 @@ function InsightsDashboard() {
                         borderRadius: 8,
                       }}
                       labelStyle={{ color: 'hsl(215 16% 47%)' }}
-                      formatter={(v: unknown) => [typeof v === 'number' ? `${v.toFixed(0)}` : '0', 'Score']}
+                      formatter={(v: unknown) => [
+                        typeof v === 'number' ? `${v.toFixed(0)}` : '0',
+                        'Score',
+                      ]}
                     />
                     <Line
                       type="monotone"

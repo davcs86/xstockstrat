@@ -8,7 +8,9 @@ function getPool(): Pool {
   if (!pool) {
     pool = new Pool({
       connectionString: process.env.DATABASE_URL ?? '',
-      max: 2,
+      // Admin-only audit endpoint, light use. Kept to 1 so the UI fits within
+      // DigitalOcean's shared 20-connection budget (see root CLAUDE.md).
+      max: parseInt(process.env.DB_POOL_MAX ?? '1', 10),
     });
   }
   return pool;

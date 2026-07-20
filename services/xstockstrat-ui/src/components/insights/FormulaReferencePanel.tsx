@@ -9,6 +9,7 @@ import {
   FORMULA_TEMPLATES,
   INPUT_CONTRACT,
   OUTPUT_CONTRACT,
+  PARAMS_CONTRACT,
   SANDBOX_LIMITS,
   type FormulaTemplate,
 } from './formulaReference';
@@ -69,6 +70,10 @@ export function FormulaReferencePanel({ onLoadTemplate, onClose }: FormulaRefere
               <p className="text-muted-foreground">{INPUT_CONTRACT}</p>
             </div>
             <div>
+              <p className="mb-1 font-mono text-foreground">params →</p>
+              <p className="text-muted-foreground">{PARAMS_CONTRACT}</p>
+            </div>
+            <div>
               <p className="mb-1 font-mono text-foreground">→ result</p>
               <p className="text-muted-foreground">{OUTPUT_CONTRACT}</p>
             </div>
@@ -121,7 +126,8 @@ export function FormulaReferencePanel({ onLoadTemplate, onClose }: FormulaRefere
         {tab === 'templates' && (
           <div className="space-y-2">
             <p className="text-muted-foreground">
-              Load a starter into the editor and run cell. This replaces the current code.
+              Load a starter into the editor, Parameters, and Outputs cells. This replaces the
+              current code, parameters, and outputs.
             </p>
             {FORMULA_TEMPLATES.map((t) => (
               <div key={t.id} className="rounded-md border border-border/60 p-2">

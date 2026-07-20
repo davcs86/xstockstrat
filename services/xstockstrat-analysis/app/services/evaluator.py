@@ -80,14 +80,33 @@ class StrategyEvaluator:
         """
         Compute per-bar entry/exit decisions for the given strategy definition.
 
+        Thin back-compat wrapper: returns only the ``list[BarDecision]`` so existing callers
+        (the feature-048 live loop, list-mocking tests) are unaffected. Diagnostics-bearing
+        callers use ``evaluate_with_series`` for the computed component series (feature 064).
+        """
+        decisions, _ = await self.evaluate_with_series(definition, bars, signals_map)
+        return decisions
+
+    async def evaluate_with_series(
+        self,
+        definition,  # analysis_pb2.StrategyDefinition
+        bars: list,  # list of OHLCV bar proto messages with .close, .timestamp
+        signals_map: dict[str, list] | None = None,
+    ) -> tuple[list[BarDecision], dict[str, list]]:
+        """
+        Like ``evaluate`` but also returns the computed ``component_series`` dict (feature 064).
+
         Steps:
         1. Validate definition (FR-5): check components, entry_rule, exit_rule.
         2. Compute component series for all bars (no look-ahead).
         3. Evaluate entry_rule and exit_rule condition trees bar by bar.
-        4. Return one BarDecision per bar.
+        4. Return (one BarDecision per bar, component_series).
+
+        ``component_series`` maps a bare ``ref_name`` to its primary series and every emitted
+        series to ``<ref_name>.<series>`` — the same keys ``_eval_condition`` resolves against.
         """
         if not bars:
-            return []
+            return [], {}
 
         # Step 1: validate definition
         _validate_definition(definition)
@@ -119,7 +138,7 @@ class StrategyEvaluator:
             decisions.append(
                 BarDecision(bar_index=i, entry=entry, exit=exit_, conviction=conviction)
             )
-        return decisions
+        return decisions, component_series
 
     async def _compute_component(self, comp, closes: list[float]) -> dict[str, list[float | None]]:
         """
@@ -288,6 +307,33 @@ def _validate_rule_refs(
             )
     else:
         raise ValueError(f"{rule_name}: unrecognized condition node structure: {node}")
+
+
+def _iter_leaf_terms(node: Any):
+    """Yield every string operand (leaf ``lhs``, and ``rhs`` when it is a ref string) across a
+    rule tree. Non-raising: malformed/non-dict nodes are skipped. Shared traversal primitive
+    used by ``referenced_refs`` (a numeric ``rhs`` threshold is naturally skipped)."""
+    if not isinstance(node, dict):
+        return
+    if node.get("op") in ("AND", "OR"):
+        for child in node.get("conditions", []):
+            yield from _iter_leaf_terms(child)
+    elif "fn" in node:
+        lhs = node.get("lhs")
+        if isinstance(lhs, str):
+            yield lhs
+        rhs = node.get("rhs")
+        if isinstance(rhs, str):
+            yield rhs
+
+
+def referenced_refs(rule: Any) -> set[str]:
+    """Non-raising: the set of component ref_names a parsed rule tree references, with dotted
+    ``<ref>.<series>`` operands collapsed to their base ``<ref>`` (feature 064 Option-C warm-up).
+    Returns an empty set for a falsy/empty rule."""
+    if not rule:
+        return set()
+    return {term.partition(".")[0] for term in _iter_leaf_terms(rule)}
 
 
 def _eval_condition(node: Any, series: dict[str, list], i: int) -> bool:

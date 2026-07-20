@@ -142,3 +142,64 @@ test.describe('Connect BFF — PortfolioService/GetPortfolio data contract', () 
     }
   });
 });
+
+test.describe('Connect BFF — PortfolioService/ListPositions data contract', () => {
+  /**
+   * positions/page.tsx (via usePositions hook) accesses:
+   *   data.positions[] → symbol, qty, currentPrice, marketValue, unrealizedPnl, unrealizedPnlPct, costBasis
+   *   data.page.nextPageToken → keyset pagination
+   */
+  test('returns a positions array with enriched numeric fields + page token', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/auth/login');
+
+    const result = await page.evaluate(async () => {
+      const res = await fetch('/trader/api/xstockstrat.portfolio.v1.PortfolioService/ListPositions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ tradingMode: 1 }),
+      });
+      return { status: res.status, body: await res.json() as Record<string, unknown> };
+    });
+
+    expect(result.status).toBe(200);
+    const body = result.body;
+    expect(Array.isArray(body.positions)).toBe(true);
+    expect((body.positions as unknown[]).length).toBeGreaterThan(0);
+
+    const pos = (body.positions as Record<string, unknown>[])[0];
+    expect(pos).toHaveProperty('symbol');
+    expect(pos).toHaveProperty('unrealizedPnl');
+    expect(typeof pos.unrealizedPnl).toBe('number');
+  });
+});
+
+test.describe('Connect BFF — LedgerService/QueryEvents data contract', () => {
+  /**
+   * usePositionLineage hook accesses:
+   *   data.events[] → eventType, payload (symbol / account_id / trading_mode / order_id / fill_price)
+   */
+  test('returns an events array with order.filled payload join keys', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/auth/login');
+
+    const result = await page.evaluate(async () => {
+      const res = await fetch('/trader/api/xstockstrat.ledger.v1.LedgerService/QueryEvents', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ eventType: 'order.filled', sourceService: 'trading' }),
+      });
+      return { status: res.status, body: await res.json() as Record<string, unknown> };
+    });
+
+    expect(result.status).toBe(200);
+    const body = result.body;
+    expect(Array.isArray(body.events)).toBe(true);
+
+    if ((body.events as unknown[]).length > 0) {
+      const evt = (body.events as Record<string, unknown>[])[0];
+      expect(evt).toHaveProperty('eventType');
+      expect(evt).toHaveProperty('payload');
+    }
+  });
+});

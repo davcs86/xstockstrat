@@ -4,12 +4,14 @@ go 1.25.0
 
 require (
 	connectrpc.com/connect v1.16.2
+	github.com/coder/websocket v1.8.14
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/xstockstrat/contracts v0.0.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.52.0
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.27.0
 	go.opentelemetry.io/otel/sdk v1.43.0
+	golang.org/x/time v0.15.0
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.10
 )

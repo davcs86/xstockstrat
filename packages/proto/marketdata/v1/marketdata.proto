@@ -28,8 +28,17 @@ service MarketDataService {
   // Report stored OHLCV coverage (earliest/latest/count + gaps) for a symbol+timeframe
   rpc GetDataCoverage(GetDataCoverageRequest) returns (GetDataCoverageResponse);
 
+  // Scoped delete of backfilled OHLCV bars (admin-only, symbol-bounded — FR-5)
+  rpc DeleteBackfilledData(DeleteBackfilledDataRequest) returns (DeleteBackfilledDataResponse);
+
   // Get available symbols
   rpc ListAssets(ListAssetsRequest) returns (ListAssetsResponse);
+
+  // Cached fundamental metrics for one symbol (FMP-backed, read-through DB cache)
+  rpc GetFundamentals(GetFundamentalsRequest) returns (GetFundamentalsResponse);
+
+  // Batched fundamentals for a watchlist scan (core metrics via one FMP quote call)
+  rpc GetFundamentalsMulti(GetFundamentalsMultiRequest) returns (GetFundamentalsMultiResponse);
 }
 
 message Bar {
@@ -43,7 +52,7 @@ message Bar {
   double vwap = 8;
   int32 trade_count = 9;
   // DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
-  string timeframe = 10 [deprecated = true];  // "1m", "5m", "1h", "1d"
+  string timeframe = 10 [deprecated = true];  // "15m", "1h", "1d"
   string source = 11;     // always "alpaca" for this service
   xstockstrat.common.v1.Timeframe timeframe_enum = 12;
 }
@@ -61,7 +70,7 @@ message Quote {
 message StreamBarsRequest {
   repeated string symbols = 1;
   // DEPRECATED: use timeframe_enum. Removed in a future release once all callers migrate.
-  string timeframe = 2 [deprecated = true];   // "1m", "5m", "1h", "1d"
+  string timeframe = 2 [deprecated = true];   // "15m", "1h", "1d"
   bool include_premarket = 3;
   bool include_afterhours = 4;
   xstockstrat.common.v1.Timeframe timeframe_enum = 5;
@@ -136,4 +145,52 @@ message ListAssetsRequest {
 
 message ListAssetsResponse {
   repeated xstockstrat.common.v1.Asset assets = 1;
+}
+
+message DeleteBackfilledDataRequest {
+  string symbol = 1;                              // REQUIRED — server rejects empty (FR-5)
+  xstockstrat.common.v1.TimeRange range = 2;      // optional; empty = whole symbol
+  xstockstrat.common.v1.Timeframe timeframe = 3;  // optional; UNSPECIFIED = all timeframes
+}
+
+message DeleteBackfilledDataResponse {
+  int64 rows_deleted = 1;
+}
+
+// Fundamentals (feature 059) — cached fundamental metrics for a symbol, FMP-backed.
+message Fundamentals {
+  string symbol = 1;
+  double market_cap = 2;
+  double pe_ratio = 3;
+  double pb_ratio = 4;
+  double dividend_yield = 5;
+  double eps = 6;
+  double beta = 7;
+  double roe = 8;
+  double debt_to_equity = 9;
+  double price = 10;
+  double year_high = 11;
+  double year_low = 12;
+  // FMP's open-ended metric set (keys are FMP field names)
+  map<string, double> extra_metrics = 13;
+  google.protobuf.Timestamp as_of = 14;
+  string currency = 15;
+  string source = 16;   // "fmp"
+  bool stale = 17;      // true when served past TTL under quota exhaustion (FR-4)
+}
+
+message GetFundamentalsRequest {
+  string symbol = 1;
+}
+
+message GetFundamentalsResponse {
+  Fundamentals fundamentals = 1;
+}
+
+message GetFundamentalsMultiRequest {
+  repeated string symbols = 1;
+}
+
+message GetFundamentalsMultiResponse {
+  repeated Fundamentals fundamentals = 1;
 }

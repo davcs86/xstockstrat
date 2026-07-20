@@ -9,11 +9,13 @@ Timeout and memory cap are sourced from xstockstrat-config:
 
 Security model:
   - Subprocess isolation: formula runs in a fresh Python subprocess
-  - Memory cap enforced via resource.setrlimit (RLIMIT_AS) in child process
+  - Memory cap enforced via resource.setrlimit (RLIMIT_DATA) in child process
   - Timeout enforced via subprocess timeout + SIGKILL
   - Import whitelist: only allowed_imports may be imported
   - No filesystem writes, no network access (no socket/urllib/requests)
   - __builtins__ filtered to safe subset
+  - BLAS/OMP backends pinned to a single thread so numpy/pandas can import under
+    the RLIMIT_AS cap (see _THREAD_LIMIT_ENV)
 """
 
 import json
@@ -26,6 +28,22 @@ import textwrap
 from dataclasses import dataclass
 
 log = logging.getLogger(__name__)
+
+# Numeric libraries (OpenBLAS, MKL, OpenMP) spin up one worker thread per CPU
+# core on import and each thread reserves a large virtual-memory buffer. Under
+# the sandbox's RLIMIT_AS address-space cap that reservation overflows the limit,
+# so importing numpy/pandas fails with
+#   "OpenBLAS error: Memory allocation still failed after 10 retries, giving up."
+# Pinning every BLAS/OMP backend to a single thread keeps the reservation small
+# enough to fit. These must be set in the child's environment *before* numpy is
+# imported (i.e. at subprocess launch), not inside the formula.
+_THREAD_LIMIT_ENV = {
+    "OPENBLAS_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1",
+}
 
 # Built-in functions allowed in sandbox (conservative subset)
 _SAFE_BUILTINS = {
@@ -97,9 +115,14 @@ import json
 import sys
 import resource
 
-# Apply memory limit
+# Apply memory limit. RLIMIT_DATA (heap + anonymous mmap, since Linux 4.7) is
+# used instead of RLIMIT_AS: numpy/pandas reserve hundreds of MiB of *virtual*
+# address space on import that is never resident, so an RLIMIT_AS cap rejects
+# them (MemoryError) long before any real memory is used. RLIMIT_DATA tracks
+# actual allocation, so the budget stays meaningful — a genuine over-allocation
+# still raises MemoryError — while import-time virtual reservations are ignored.
 if {memory_bytes} > 0:
-    resource.setrlimit(resource.RLIMIT_AS, ({memory_bytes}, {memory_bytes}))
+    resource.setrlimit(resource.RLIMIT_DATA, ({memory_bytes}, {memory_bytes}))
 
 # Guard imports: only modules in the allowed list may be imported by the formula.
 _allowed = set({allowed_imports!r})
@@ -180,7 +203,11 @@ def execute_formula(
             capture_output=True,
             text=True,
             timeout=timeout_ms / 1000,
-            env={**os.environ, "PYTHONPATH": os.environ.get("PYTHONPATH", "")},
+            env={
+                **os.environ,
+                "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+                **_THREAD_LIMIT_ENV,
+            },
         )
         elapsed_ms = int((time.monotonic() - start) * 1000)
 

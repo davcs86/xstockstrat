@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file trading/v1/trading.proto.
  */
 export const file_trading_v1_trading: GenFile = /*@__PURE__*/
-  fileDesc("Chh0cmFkaW5nL3YxL3RyYWRpbmcucHJvdG8SFnhzdG9ja3N0cmF0LnRyYWRpbmcudjEi/wQKBU9yZGVyEhAKCG9yZGVyX2lkGAEgASgJEhcKD2NsaWVudF9vcmRlcl9pZBgCIAEoCRIOCgZzeW1ib2wYAyABKAkSLwoEc2lkZRgEIAEoDjIhLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXJTaWRlEjUKCm9yZGVyX3R5cGUYBSABKA4yIS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyVHlwZRIzCgZzdGF0dXMYBiABKA4yIy54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyU3RhdHVzEgsKA3F0eRgHIAEoARISCgpmaWxsZWRfcXR5GAggASgBEhMKC2xpbWl0X3ByaWNlGAkgASgBEhIKCnN0b3BfcHJpY2UYCiABKAESGAoQZmlsbGVkX2F2Z19wcmljZRgLIAEoARIVCg10aW1lX2luX2ZvcmNlGAwgASgJEi4KCmNyZWF0ZWRfYXQYDSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYDiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC3N0cmF0ZWd5X2lkGA8gASgJEg8KB3VzZXJfaWQYECABKAkSOAoMdHJhZGluZ19tb2RlGBEgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhcKD2Jyb2tlcl9vcmRlcl9pZBgSIAEoCRISCgphY2NvdW50X2lkGBMgASgJEjYKC2Jyb2tlcl90eXBlGBQgASgOMiEueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkJyb2tlclR5cGUigAMKEVBsYWNlT3JkZXJSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRIvCgRzaWRlGAIgASgOMiEueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlclNpZGUSNQoKb3JkZXJfdHlwZRgDIAEoDjIhLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXJUeXBlEgsKA3F0eRgEIAEoARITCgtsaW1pdF9wcmljZRgFIAEoARISCgpzdG9wX3ByaWNlGAYgASgBEhUKDXRpbWVfaW5fZm9yY2UYByABKAkSEwoLc3RyYXRlZ3lfaWQYCCABKAkSDwoHdXNlcl9pZBgJIAEoCRIXCg9jbGllbnRfb3JkZXJfaWQYCiABKAkSGQoRcmVxdWlyZXNfYXBwcm92YWwYCyABKAgSOAoMdHJhZGluZ19tb2RlGAwgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhIKCmFjY291bnRfaWQYDSABKAkiNwoSQ2FuY2VsT3JkZXJSZXF1ZXN0EhAKCG9yZGVyX2lkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkiVAoTQ2FuY2VsT3JkZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEiwKBW9yZGVyGAIgASgLMh0ueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlciIjCg9HZXRPcmRlclJlcXVlc3QSEAoIb3JkZXJfaWQYASABKAkiiwIKEUxpc3RPcmRlcnNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSEwoLc3RyYXRlZ3lfaWQYAiABKAkSMwoGc3RhdHVzGAMgASgOMiMueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlclN0YXR1cxIvCgVyYW5nZRgEIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2USMAoEcGFnZRgFIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdBI4Cgx0cmFkaW5nX21vZGUYBiABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUidgoSTGlzdE9yZGVyc1Jlc3BvbnNlEi0KBm9yZGVycxgBIAMoCzIdLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXISMQoEcGFnZRgCIAEoCzIjLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiaAoZU3RyZWFtT3JkZXJVcGRhdGVzUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEjoKDXN0YXR1c19maWx0ZXIYAiADKA4yIy54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyU3RhdHVzIp8CCg1Ccm9rZXJBY2NvdW50EgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRI2Cgticm9rZXJfdHlwZRgDIAEoDjIhLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5Ccm9rZXJUeXBlEhAKCGlzX3BhcGVyGAQgASgIEg8KB3VzZXJfaWQYBSABKAkSEQoJaXNfYWN0aXZlGAYgASgIEkMKEWNyZWRlbnRpYWxfc3RhdHVzGAcgASgOMigueHN0b2Nrc3RyYXQudHJhZGluZy52MS5DcmVkZW50aWFsU3RhdHVzEjkKFWNyZWRlbnRpYWxfY2hlY2tlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAinAEKHFJlZ2lzdGVyQnJva2VyQWNjb3VudFJlcXVlc3QSFAoMZGlzcGxheV9uYW1lGAEgASgJEjYKC2Jyb2tlcl90eXBlGAIgASgOMiEueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkJyb2tlclR5cGUSFAoIaXNfcGFwZXIYAyABKAhCAhgBEhgKEGNyZWRlbnRpYWxzX2pzb24YBCABKAkiVwodUmVnaXN0ZXJCcm9rZXJBY2NvdW50UmVzcG9uc2USNgoHYWNjb3VudBgBIAEoCzIlLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuQnJva2VyQWNjb3VudCJVCiVVcGRhdGVCcm9rZXJBY2NvdW50Q3JlZGVudGlhbHNSZXF1ZXN0EhIKCmFjY291bnRfaWQYASABKAkSGAoQY3JlZGVudGlhbHNfanNvbhgCIAEoCSJgCiZVcGRhdGVCcm9rZXJBY2NvdW50Q3JlZGVudGlhbHNSZXNwb25zZRI2CgdhY2NvdW50GAEgASgLMiUueHN0b2Nrc3RyYXQudHJhZGluZy52MS5Ccm9rZXJBY2NvdW50Ih4KHEdldFRyYWRpbmdFbnZpcm9ubWVudFJlcXVlc3QicgodR2V0VHJhZGluZ0Vudmlyb25tZW50UmVzcG9uc2USOAoMdHJhZGluZ19tb2RlGAEgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhcKD2FwcGxpY2F0aW9uX2VudhgCIAEoCSIbChlMaXN0QnJva2VyQWNjb3VudHNSZXF1ZXN0IlUKGkxpc3RCcm9rZXJBY2NvdW50c1Jlc3BvbnNlEjcKCGFjY291bnRzGAEgAygLMiUueHN0b2Nrc3RyYXQudHJhZGluZy52MS5Ccm9rZXJBY2NvdW50IjQKHkRlcmVnaXN0ZXJCcm9rZXJBY2NvdW50UmVxdWVzdBISCgphY2NvdW50X2lkGAEgASgJIiEKH0RlcmVnaXN0ZXJCcm9rZXJBY2NvdW50UmVzcG9uc2UqUAoJT3JkZXJTaWRlEhoKFk9SREVSX1NJREVfVU5TUEVDSUZJRUQQABISCg5PUkRFUl9TSURFX0JVWRABEhMKD09SREVSX1NJREVfU0VMTBACKqIBCglPcmRlclR5cGUSGgoWT1JERVJfVFlQRV9VTlNQRUNJRklFRBAAEhUKEU9SREVSX1RZUEVfTUFSS0VUEAESFAoQT1JERVJfVFlQRV9MSU1JVBACEhMKD09SREVSX1RZUEVfU1RPUBADEhkKFU9SREVSX1RZUEVfU1RPUF9MSU1JVBAEEhwKGE9SREVSX1RZUEVfVFJBSUxJTkdfU1RPUBAFKvABCgtPcmRlclN0YXR1cxIcChhPUkRFUl9TVEFUVVNfVU5TUEVDSUZJRUQQABIUChBPUkRFUl9TVEFUVVNfTkVXEAESIQodT1JERVJfU1RBVFVTX1BBUlRJQUxMWV9GSUxMRUQQAhIXChNPUkRFUl9TVEFUVVNfRklMTEVEEAMSGQoVT1JERVJfU1RBVFVTX0NBTkNFTEVEEAQSGAoUT1JERVJfU1RBVFVTX0VYUElSRUQQBRIZChVPUkRFUl9TVEFUVVNfUkVKRUNURUQQBhIhCh1PUkRFUl9TVEFUVVNfUEVORElOR19BUFBST1ZBTBAHKo0BChBDcmVkZW50aWFsU3RhdHVzEiEKHUNSRURFTlRJQUxfU1RBVFVTX1VOU1BFQ0lGSUVEEAASGAoUQ1JFREVOVElBTF9TVEFUVVNfT0sQARIdChlDUkVERU5USUFMX1NUQVRVU19JTlZBTElEEAISHQoZQ1JFREVOVElBTF9TVEFUVVNfVU5LTk9XThADMq0JCg5UcmFkaW5nU2VydmljZRJWCgpQbGFjZU9yZGVyEikueHN0b2Nrc3RyYXQudHJhZGluZy52MS5QbGFjZU9yZGVyUmVxdWVzdBodLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXISZgoLQ2FuY2VsT3JkZXISKi54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkNhbmNlbE9yZGVyUmVxdWVzdBorLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuQ2FuY2VsT3JkZXJSZXNwb25zZRJSCghHZXRPcmRlchInLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuR2V0T3JkZXJSZXF1ZXN0Gh0ueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlchJjCgpMaXN0T3JkZXJzEikueHN0b2Nrc3RyYXQudHJhZGluZy52MS5MaXN0T3JkZXJzUmVxdWVzdBoqLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuTGlzdE9yZGVyc1Jlc3BvbnNlEmgKElN0cmVhbU9yZGVyVXBkYXRlcxIxLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuU3RyZWFtT3JkZXJVcGRhdGVzUmVxdWVzdBodLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXIwARKEAQoVUmVnaXN0ZXJCcm9rZXJBY2NvdW50EjQueHN0b2Nrc3RyYXQudHJhZGluZy52MS5SZWdpc3RlckJyb2tlckFjY291bnRSZXF1ZXN0GjUueHN0b2Nrc3RyYXQudHJhZGluZy52MS5SZWdpc3RlckJyb2tlckFjY291bnRSZXNwb25zZRJ7ChJMaXN0QnJva2VyQWNjb3VudHMSMS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkxpc3RCcm9rZXJBY2NvdW50c1JlcXVlc3QaMi54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkxpc3RCcm9rZXJBY2NvdW50c1Jlc3BvbnNlEooBChdEZXJlZ2lzdGVyQnJva2VyQWNjb3VudBI2LnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuRGVyZWdpc3RlckJyb2tlckFjY291bnRSZXF1ZXN0GjcueHN0b2Nrc3RyYXQudHJhZGluZy52MS5EZXJlZ2lzdGVyQnJva2VyQWNjb3VudFJlc3BvbnNlEp8BCh5VcGRhdGVCcm9rZXJBY2NvdW50Q3JlZGVudGlhbHMSPS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLlVwZGF0ZUJyb2tlckFjY291bnRDcmVkZW50aWFsc1JlcXVlc3QaPi54c3RvY2tzdHJhdC50cmFkaW5nLnYxLlVwZGF0ZUJyb2tlckFjY291bnRDcmVkZW50aWFsc1Jlc3BvbnNlEoQBChVHZXRUcmFkaW5nRW52aXJvbm1lbnQSNC54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkdldFRyYWRpbmdFbnZpcm9ubWVudFJlcXVlc3QaNS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkdldFRyYWRpbmdFbnZpcm9ubWVudFJlc3BvbnNlQj5aPGdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby90cmFkaW5nL3YxO3RyYWRpbmd2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_common_v1_common]);
+  fileDesc("Chh0cmFkaW5nL3YxL3RyYWRpbmcucHJvdG8SFnhzdG9ja3N0cmF0LnRyYWRpbmcudjEi/wQKBU9yZGVyEhAKCG9yZGVyX2lkGAEgASgJEhcKD2NsaWVudF9vcmRlcl9pZBgCIAEoCRIOCgZzeW1ib2wYAyABKAkSLwoEc2lkZRgEIAEoDjIhLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXJTaWRlEjUKCm9yZGVyX3R5cGUYBSABKA4yIS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyVHlwZRIzCgZzdGF0dXMYBiABKA4yIy54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyU3RhdHVzEgsKA3F0eRgHIAEoARISCgpmaWxsZWRfcXR5GAggASgBEhMKC2xpbWl0X3ByaWNlGAkgASgBEhIKCnN0b3BfcHJpY2UYCiABKAESGAoQZmlsbGVkX2F2Z19wcmljZRgLIAEoARIVCg10aW1lX2luX2ZvcmNlGAwgASgJEi4KCmNyZWF0ZWRfYXQYDSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYDiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC3N0cmF0ZWd5X2lkGA8gASgJEg8KB3VzZXJfaWQYECABKAkSOAoMdHJhZGluZ19tb2RlGBEgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhcKD2Jyb2tlcl9vcmRlcl9pZBgSIAEoCRISCgphY2NvdW50X2lkGBMgASgJEjYKC2Jyb2tlcl90eXBlGBQgASgOMiEueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkJyb2tlclR5cGUirAMKEVBsYWNlT3JkZXJSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRIvCgRzaWRlGAIgASgOMiEueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlclNpZGUSNQoKb3JkZXJfdHlwZRgDIAEoDjIhLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXJUeXBlEgsKA3F0eRgEIAEoARITCgtsaW1pdF9wcmljZRgFIAEoARISCgpzdG9wX3ByaWNlGAYgASgBEhUKDXRpbWVfaW5fZm9yY2UYByABKAkSEwoLc3RyYXRlZ3lfaWQYCCABKAkSDwoHdXNlcl9pZBgJIAEoCRIXCg9jbGllbnRfb3JkZXJfaWQYCiABKAkSGQoRcmVxdWlyZXNfYXBwcm92YWwYCyABKAgSOAoMdHJhZGluZ19tb2RlGAwgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhIKCmFjY291bnRfaWQYDSABKAkSEwoLdHJhaWxfcHJpY2UYDiABKAESFQoNdHJhaWxfcGVyY2VudBgPIAEoASI3ChJDYW5jZWxPcmRlclJlcXVlc3QSEAoIb3JkZXJfaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCSJUChNDYW5jZWxPcmRlclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSLAoFb3JkZXIYAiABKAsyHS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyIiMKD0dldE9yZGVyUmVxdWVzdBIQCghvcmRlcl9pZBgBIAEoCSKXAwoRTGlzdE9yZGVyc1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRITCgtzdHJhdGVneV9pZBgCIAEoCRIzCgZzdGF0dXMYAyABKA4yIy54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyU3RhdHVzEi8KBXJhbmdlGAQgASgLMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVSYW5nZRIwCgRwYWdlGAUgASgLMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0EjgKDHRyYWRpbmdfbW9kZRgGIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UcmFkaW5nTW9kZRIOCgZzeW1ib2wYByABKAkSLwoEc2lkZRgIIAEoDjIhLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXJTaWRlEjUKCm9yZGVyX3R5cGUYCSABKA4yIS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyVHlwZRISCgphY2NvdW50X2lkGAogASgJInYKEkxpc3RPcmRlcnNSZXNwb25zZRItCgZvcmRlcnMYASADKAsyHS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyEjEKBHBhZ2UYAiABKAsyIy54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlc3BvbnNlImgKGVN0cmVhbU9yZGVyVXBkYXRlc1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRI6Cg1zdGF0dXNfZmlsdGVyGAIgAygOMiMueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlclN0YXR1cyKUAQoTUmVwbGFjZU9yZGVyUmVxdWVzdBIQCghvcmRlcl9pZBgBIAEoCRILCgNxdHkYAiABKAESEwoLbGltaXRfcHJpY2UYAyABKAESEgoKc3RvcF9wcmljZRgEIAEoARIVCg10aW1lX2luX2ZvcmNlGAUgASgJEg8KB3VzZXJfaWQYBiABKAkSDQoFdHJhaWwYByABKAEinwIKDUJyb2tlckFjY291bnQSCgoCaWQYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEjYKC2Jyb2tlcl90eXBlGAMgASgOMiEueHN0b2Nrc3RyYXQuY29tbW9uLnYxLkJyb2tlclR5cGUSEAoIaXNfcGFwZXIYBCABKAgSDwoHdXNlcl9pZBgFIAEoCRIRCglpc19hY3RpdmUYBiABKAgSQwoRY3JlZGVudGlhbF9zdGF0dXMYByABKA4yKC54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkNyZWRlbnRpYWxTdGF0dXMSOQoVY3JlZGVudGlhbF9jaGVja2VkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKcAQocUmVnaXN0ZXJCcm9rZXJBY2NvdW50UmVxdWVzdBIUCgxkaXNwbGF5X25hbWUYASABKAkSNgoLYnJva2VyX3R5cGUYAiABKA4yIS54c3RvY2tzdHJhdC5jb21tb24udjEuQnJva2VyVHlwZRIUCghpc19wYXBlchgDIAEoCEICGAESGAoQY3JlZGVudGlhbHNfanNvbhgEIAEoCSJXCh1SZWdpc3RlckJyb2tlckFjY291bnRSZXNwb25zZRI2CgdhY2NvdW50GAEgASgLMiUueHN0b2Nrc3RyYXQudHJhZGluZy52MS5Ccm9rZXJBY2NvdW50IlUKJVVwZGF0ZUJyb2tlckFjY291bnRDcmVkZW50aWFsc1JlcXVlc3QSEgoKYWNjb3VudF9pZBgBIAEoCRIYChBjcmVkZW50aWFsc19qc29uGAIgASgJImAKJlVwZGF0ZUJyb2tlckFjY291bnRDcmVkZW50aWFsc1Jlc3BvbnNlEjYKB2FjY291bnQYASABKAsyJS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkJyb2tlckFjY291bnQiHgocR2V0VHJhZGluZ0Vudmlyb25tZW50UmVxdWVzdCJyCh1HZXRUcmFkaW5nRW52aXJvbm1lbnRSZXNwb25zZRI4Cgx0cmFkaW5nX21vZGUYASABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUSFwoPYXBwbGljYXRpb25fZW52GAIgASgJIhsKGUxpc3RCcm9rZXJBY2NvdW50c1JlcXVlc3QiVQoaTGlzdEJyb2tlckFjY291bnRzUmVzcG9uc2USNwoIYWNjb3VudHMYASADKAsyJS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkJyb2tlckFjY291bnQiNAoeRGVyZWdpc3RlckJyb2tlckFjY291bnRSZXF1ZXN0EhIKCmFjY291bnRfaWQYASABKAkiIQofRGVyZWdpc3RlckJyb2tlckFjY291bnRSZXNwb25zZSpQCglPcmRlclNpZGUSGgoWT1JERVJfU0lERV9VTlNQRUNJRklFRBAAEhIKDk9SREVSX1NJREVfQlVZEAESEwoPT1JERVJfU0lERV9TRUxMEAIqogEKCU9yZGVyVHlwZRIaChZPUkRFUl9UWVBFX1VOU1BFQ0lGSUVEEAASFQoRT1JERVJfVFlQRV9NQVJLRVQQARIUChBPUkRFUl9UWVBFX0xJTUlUEAISEwoPT1JERVJfVFlQRV9TVE9QEAMSGQoVT1JERVJfVFlQRV9TVE9QX0xJTUlUEAQSHAoYT1JERVJfVFlQRV9UUkFJTElOR19TVE9QEAUq8AEKC09yZGVyU3RhdHVzEhwKGE9SREVSX1NUQVRVU19VTlNQRUNJRklFRBAAEhQKEE9SREVSX1NUQVRVU19ORVcQARIhCh1PUkRFUl9TVEFUVVNfUEFSVElBTExZX0ZJTExFRBACEhcKE09SREVSX1NUQVRVU19GSUxMRUQQAxIZChVPUkRFUl9TVEFUVVNfQ0FOQ0VMRUQQBBIYChRPUkRFUl9TVEFUVVNfRVhQSVJFRBAFEhkKFU9SREVSX1NUQVRVU19SRUpFQ1RFRBAGEiEKHU9SREVSX1NUQVRVU19QRU5ESU5HX0FQUFJPVkFMEAcqjQEKEENyZWRlbnRpYWxTdGF0dXMSIQodQ1JFREVOVElBTF9TVEFUVVNfVU5TUEVDSUZJRUQQABIYChRDUkVERU5USUFMX1NUQVRVU19PSxABEh0KGUNSRURFTlRJQUxfU1RBVFVTX0lOVkFMSUQQAhIdChlDUkVERU5USUFMX1NUQVRVU19VTktOT1dOEAMyiQoKDlRyYWRpbmdTZXJ2aWNlElYKClBsYWNlT3JkZXISKS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLlBsYWNlT3JkZXJSZXF1ZXN0Gh0ueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlchJmCgtDYW5jZWxPcmRlchIqLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuQ2FuY2VsT3JkZXJSZXF1ZXN0GisueHN0b2Nrc3RyYXQudHJhZGluZy52MS5DYW5jZWxPcmRlclJlc3BvbnNlElIKCEdldE9yZGVyEicueHN0b2Nrc3RyYXQudHJhZGluZy52MS5HZXRPcmRlclJlcXVlc3QaHS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLk9yZGVyEmMKCkxpc3RPcmRlcnMSKS54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkxpc3RPcmRlcnNSZXF1ZXN0GioueHN0b2Nrc3RyYXQudHJhZGluZy52MS5MaXN0T3JkZXJzUmVzcG9uc2USaAoSU3RyZWFtT3JkZXJVcGRhdGVzEjEueHN0b2Nrc3RyYXQudHJhZGluZy52MS5TdHJlYW1PcmRlclVwZGF0ZXNSZXF1ZXN0Gh0ueHN0b2Nrc3RyYXQudHJhZGluZy52MS5PcmRlcjABEloKDFJlcGxhY2VPcmRlchIrLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuUmVwbGFjZU9yZGVyUmVxdWVzdBodLnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuT3JkZXIShAEKFVJlZ2lzdGVyQnJva2VyQWNjb3VudBI0LnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuUmVnaXN0ZXJCcm9rZXJBY2NvdW50UmVxdWVzdBo1LnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuUmVnaXN0ZXJCcm9rZXJBY2NvdW50UmVzcG9uc2USewoSTGlzdEJyb2tlckFjY291bnRzEjEueHN0b2Nrc3RyYXQudHJhZGluZy52MS5MaXN0QnJva2VyQWNjb3VudHNSZXF1ZXN0GjIueHN0b2Nrc3RyYXQudHJhZGluZy52MS5MaXN0QnJva2VyQWNjb3VudHNSZXNwb25zZRKKAQoXRGVyZWdpc3RlckJyb2tlckFjY291bnQSNi54c3RvY2tzdHJhdC50cmFkaW5nLnYxLkRlcmVnaXN0ZXJCcm9rZXJBY2NvdW50UmVxdWVzdBo3LnhzdG9ja3N0cmF0LnRyYWRpbmcudjEuRGVyZWdpc3RlckJyb2tlckFjY291bnRSZXNwb25zZRKfAQoeVXBkYXRlQnJva2VyQWNjb3VudENyZWRlbnRpYWxzEj0ueHN0b2Nrc3RyYXQudHJhZGluZy52MS5VcGRhdGVCcm9rZXJBY2NvdW50Q3JlZGVudGlhbHNSZXF1ZXN0Gj4ueHN0b2Nrc3RyYXQudHJhZGluZy52MS5VcGRhdGVCcm9rZXJBY2NvdW50Q3JlZGVudGlhbHNSZXNwb25zZRKEAQoVR2V0VHJhZGluZ0Vudmlyb25tZW50EjQueHN0b2Nrc3RyYXQudHJhZGluZy52MS5HZXRUcmFkaW5nRW52aXJvbm1lbnRSZXF1ZXN0GjUueHN0b2Nrc3RyYXQudHJhZGluZy52MS5HZXRUcmFkaW5nRW52aXJvbm1lbnRSZXNwb25zZUI+WjxnaXRodWIuY29tL3hzdG9ja3N0cmF0L2NvbnRyYWN0cy9nZW4vZ28vdHJhZGluZy92MTt0cmFkaW5ndjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.trading.v1.Order
@@ -203,6 +203,20 @@ export type PlaceOrderRequest = Message<"xstockstrat.trading.v1.PlaceOrderReques
    * @generated from field: string account_id = 13;
    */
   accountId: string;
+
+  /**
+   * Trailing-stop parameters. Exactly one of trail_price (dollar offset) or
+   * trail_percent (percent offset) is required when order_type is
+   * ORDER_TYPE_TRAILING_STOP; both must be zero for any other order type.
+   *
+   * @generated from field: double trail_price = 14;
+   */
+  trailPrice: number;
+
+  /**
+   * @generated from field: double trail_percent = 15;
+   */
+  trailPercent: number;
 };
 
 /**
@@ -308,6 +322,29 @@ export type ListOrdersRequest = Message<"xstockstrat.trading.v1.ListOrdersReques
    * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 6;
    */
   tradingMode: TradingMode;
+
+  /**
+   * Additive filters: an UNSPECIFIED enum value or empty string means
+   * "no filter on this dimension" (matches the status/trading_mode semantics above).
+   *
+   * @generated from field: string symbol = 7;
+   */
+  symbol: string;
+
+  /**
+   * @generated from field: xstockstrat.trading.v1.OrderSide side = 8;
+   */
+  side: OrderSide;
+
+  /**
+   * @generated from field: xstockstrat.trading.v1.OrderType order_type = 9;
+   */
+  orderType: OrderType;
+
+  /**
+   * @generated from field: string account_id = 10;
+   */
+  accountId: string;
 };
 
 /**
@@ -360,6 +397,58 @@ export type StreamOrderUpdatesRequest = Message<"xstockstrat.trading.v1.StreamOr
  */
 export const StreamOrderUpdatesRequestSchema: GenMessage<StreamOrderUpdatesRequest> = /*@__PURE__*/
   messageDesc(file_trading_v1_trading, 7);
+
+/**
+ * @generated from message xstockstrat.trading.v1.ReplaceOrderRequest
+ */
+export type ReplaceOrderRequest = Message<"xstockstrat.trading.v1.ReplaceOrderRequest"> & {
+  /**
+   * @generated from field: string order_id = 1;
+   */
+  orderId: string;
+
+  /**
+   * Optional replacement fields; a zero/empty value means "leave unchanged".
+   *
+   * @generated from field: double qty = 2;
+   */
+  qty: number;
+
+  /**
+   * @generated from field: double limit_price = 3;
+   */
+  limitPrice: number;
+
+  /**
+   * @generated from field: double stop_price = 4;
+   */
+  stopPrice: number;
+
+  /**
+   * @generated from field: string time_in_force = 5;
+   */
+  timeInForce: string;
+
+  /**
+   * @generated from field: string user_id = 6;
+   */
+  userId: string;
+
+  /**
+   * New trail offset for a working trailing_stop order (Alpaca's replace body
+   * uses a single `trail` value); zero means "leave unchanged".
+   *
+   * @generated from field: double trail = 7;
+   */
+  trail: number;
+};
+
+/**
+ * Describes the message xstockstrat.trading.v1.ReplaceOrderRequest.
+ * Use `create(ReplaceOrderRequestSchema)` to create a new message.
+ */
+export const ReplaceOrderRequestSchema: GenMessage<ReplaceOrderRequest> = /*@__PURE__*/
+  messageDesc(file_trading_v1_trading, 8);
 
 /**
  * BrokerAccount is a registered broker account (credentials never returned).
@@ -419,7 +508,7 @@ export type BrokerAccount = Message<"xstockstrat.trading.v1.BrokerAccount"> & {
  * Use `create(BrokerAccountSchema)` to create a new message.
  */
 export const BrokerAccountSchema: GenMessage<BrokerAccount> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 8);
+  messageDesc(file_trading_v1_trading, 9);
 
 /**
  * @generated from message xstockstrat.trading.v1.RegisterBrokerAccountRequest
@@ -460,7 +549,7 @@ export type RegisterBrokerAccountRequest = Message<"xstockstrat.trading.v1.Regis
  * Use `create(RegisterBrokerAccountRequestSchema)` to create a new message.
  */
 export const RegisterBrokerAccountRequestSchema: GenMessage<RegisterBrokerAccountRequest> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 9);
+  messageDesc(file_trading_v1_trading, 10);
 
 /**
  * @generated from message xstockstrat.trading.v1.RegisterBrokerAccountResponse
@@ -477,7 +566,7 @@ export type RegisterBrokerAccountResponse = Message<"xstockstrat.trading.v1.Regi
  * Use `create(RegisterBrokerAccountResponseSchema)` to create a new message.
  */
 export const RegisterBrokerAccountResponseSchema: GenMessage<RegisterBrokerAccountResponse> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 10);
+  messageDesc(file_trading_v1_trading, 11);
 
 /**
  * @generated from message xstockstrat.trading.v1.UpdateBrokerAccountCredentialsRequest
@@ -502,7 +591,7 @@ export type UpdateBrokerAccountCredentialsRequest = Message<"xstockstrat.trading
  * Use `create(UpdateBrokerAccountCredentialsRequestSchema)` to create a new message.
  */
 export const UpdateBrokerAccountCredentialsRequestSchema: GenMessage<UpdateBrokerAccountCredentialsRequest> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 11);
+  messageDesc(file_trading_v1_trading, 12);
 
 /**
  * @generated from message xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse
@@ -519,7 +608,7 @@ export type UpdateBrokerAccountCredentialsResponse = Message<"xstockstrat.tradin
  * Use `create(UpdateBrokerAccountCredentialsResponseSchema)` to create a new message.
  */
 export const UpdateBrokerAccountCredentialsResponseSchema: GenMessage<UpdateBrokerAccountCredentialsResponse> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 12);
+  messageDesc(file_trading_v1_trading, 13);
 
 /**
  * @generated from message xstockstrat.trading.v1.GetTradingEnvironmentRequest
@@ -532,7 +621,7 @@ export type GetTradingEnvironmentRequest = Message<"xstockstrat.trading.v1.GetTr
  * Use `create(GetTradingEnvironmentRequestSchema)` to create a new message.
  */
 export const GetTradingEnvironmentRequestSchema: GenMessage<GetTradingEnvironmentRequest> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 13);
+  messageDesc(file_trading_v1_trading, 14);
 
 /**
  * @generated from message xstockstrat.trading.v1.GetTradingEnvironmentResponse
@@ -558,7 +647,7 @@ export type GetTradingEnvironmentResponse = Message<"xstockstrat.trading.v1.GetT
  * Use `create(GetTradingEnvironmentResponseSchema)` to create a new message.
  */
 export const GetTradingEnvironmentResponseSchema: GenMessage<GetTradingEnvironmentResponse> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 14);
+  messageDesc(file_trading_v1_trading, 15);
 
 /**
  * @generated from message xstockstrat.trading.v1.ListBrokerAccountsRequest
@@ -571,7 +660,7 @@ export type ListBrokerAccountsRequest = Message<"xstockstrat.trading.v1.ListBrok
  * Use `create(ListBrokerAccountsRequestSchema)` to create a new message.
  */
 export const ListBrokerAccountsRequestSchema: GenMessage<ListBrokerAccountsRequest> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 15);
+  messageDesc(file_trading_v1_trading, 16);
 
 /**
  * @generated from message xstockstrat.trading.v1.ListBrokerAccountsResponse
@@ -588,7 +677,7 @@ export type ListBrokerAccountsResponse = Message<"xstockstrat.trading.v1.ListBro
  * Use `create(ListBrokerAccountsResponseSchema)` to create a new message.
  */
 export const ListBrokerAccountsResponseSchema: GenMessage<ListBrokerAccountsResponse> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 16);
+  messageDesc(file_trading_v1_trading, 17);
 
 /**
  * @generated from message xstockstrat.trading.v1.DeregisterBrokerAccountRequest
@@ -605,7 +694,7 @@ export type DeregisterBrokerAccountRequest = Message<"xstockstrat.trading.v1.Der
  * Use `create(DeregisterBrokerAccountRequestSchema)` to create a new message.
  */
 export const DeregisterBrokerAccountRequestSchema: GenMessage<DeregisterBrokerAccountRequest> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 17);
+  messageDesc(file_trading_v1_trading, 18);
 
 /**
  * @generated from message xstockstrat.trading.v1.DeregisterBrokerAccountResponse
@@ -618,7 +707,7 @@ export type DeregisterBrokerAccountResponse = Message<"xstockstrat.trading.v1.De
  * Use `create(DeregisterBrokerAccountResponseSchema)` to create a new message.
  */
 export const DeregisterBrokerAccountResponseSchema: GenMessage<DeregisterBrokerAccountResponse> = /*@__PURE__*/
-  messageDesc(file_trading_v1_trading, 18);
+  messageDesc(file_trading_v1_trading, 19);
 
 /**
  * @generated from enum xstockstrat.trading.v1.OrderSide
@@ -822,6 +911,19 @@ export const TradingService: GenService<{
   streamOrderUpdates: {
     methodKind: "server_streaming";
     input: typeof StreamOrderUpdatesRequestSchema;
+    output: typeof OrderSchema;
+  },
+  /**
+   * ReplaceOrder modifies a working order's qty/price/TIF. It is broker-agnostic at
+   * this surface and routes by the persisted order's broker_type
+   * (Alpaca → PATCH /v2/orders/{id}; IBKR → adapter-specific modify). Allowed only
+   * while the order is NEW or PARTIALLY_FILLED.
+   *
+   * @generated from rpc xstockstrat.trading.v1.TradingService.ReplaceOrder
+   */
+  replaceOrder: {
+    methodKind: "unary";
+    input: typeof ReplaceOrderRequestSchema;
     output: typeof OrderSchema;
   },
   /**

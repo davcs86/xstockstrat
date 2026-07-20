@@ -19,6 +19,46 @@ type DataSourceClient interface {
 	StreamQuotes(ctx context.Context, symbols []string) (<-chan *marketdatav1.Quote, error)
 }
 
+// MultiSymbolSource is an optional capability a DataSourceClient may also implement to
+// fetch several symbols in one request. Callers type-assert to it and fall back to the
+// per-symbol DataSourceClient methods when a source does not support batching, so adding
+// this does not force every provider (or test fake) to implement it.
+type MultiSymbolSource interface {
+	GetBarsMulti(ctx context.Context, symbols []string, timeframe string, start, end time.Time) (map[string][]*marketdatav1.Bar, error)
+	GetLatestQuotesMulti(ctx context.Context, symbols []string) (map[string]*marketdatav1.Quote, error)
+}
+
+// Fundamentals is the internal, provider-agnostic fundamental-metrics model
+// (feature 059). The FMP client and the repository depend on this struct rather than
+// the generated proto type, so neither imports gen/go marketdata types.
+type Fundamentals struct {
+	Symbol        string
+	MarketCap     float64
+	PERatio       float64
+	PBRatio       float64
+	DividendYield float64
+	EPS           float64
+	Beta          float64
+	ROE           float64
+	DebtToEquity  float64
+	Price         float64
+	YearHigh      float64
+	YearLow       float64
+	ExtraMetrics  map[string]float64
+	AsOf          time.Time
+	Currency      string
+	Source        string
+}
+
+// FundamentalsSource fetches fundamental metrics for symbols (FMP-backed).
+// Separate from DataSourceClient (OHLCV-shaped) — FR-2: the Alpaca/OHLCV path is
+// untouched, and an FMP provider is held as its own service field, never registered
+// in the OHLCV Registry below.
+type FundamentalsSource interface {
+	GetFundamentals(ctx context.Context, symbol string) (*Fundamentals, error)
+	GetFundamentalsMulti(ctx context.Context, symbols []string) ([]*Fundamentals, error)
+}
+
 // Registry maps named source slugs to DataSourceClient implementations.
 // The default source is "alpaca"; pass an empty string to Get to use it.
 type Registry struct {

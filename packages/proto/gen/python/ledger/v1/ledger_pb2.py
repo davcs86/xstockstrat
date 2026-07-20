@@ -27,7 +27,7 @@ from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 from common.v1 import common_pb2 as common_dot_v1_dot_common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16ledger/v1/ledger.proto\x12\x15xstockstrat.ledger.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x16\x63ommon/v1/common.proto\"\x8a\x03\n\x0bLedgerEvent\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x12\n\nevent_type\x18\x02 \x01(\t\x12\x16\n\x0esource_service\x18\x03 \x01(\t\x12\x16\n\x0e\x63orrelation_id\x18\x04 \x01(\t\x12/\n\x0boccurred_at\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12/\n\x0brecorded_at\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12(\n\x07payload\x18\x07 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x42\n\x08metadata\x18\x08 \x03(\x0b\x32\x30.xstockstrat.ledger.v1.LedgerEvent.MetadataEntry\x12\x10\n\x08sequence\x18\t \x01(\x03\x12\x12\n\nstream_key\x18\n \x01(\t\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xc3\x02\n\x12\x41ppendEventRequest\x12\x12\n\nevent_type\x18\x01 \x01(\t\x12\x16\n\x0esource_service\x18\x02 \x01(\t\x12\x16\n\x0e\x63orrelation_id\x18\x03 \x01(\t\x12\x12\n\nstream_key\x18\x04 \x01(\t\x12(\n\x07payload\x18\x05 \x01(\x0b\x32\x17.google.protobuf.Struct\x12I\n\x08metadata\x18\x06 \x03(\x0b\x32\x37.xstockstrat.ledger.v1.AppendEventRequest.MetadataEntry\x12/\n\x0boccurred_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"j\n\x13\x41ppendEventResponse\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x10\n\x08sequence\x18\x02 \x01(\x03\x12/\n\x0brecorded_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xd3\x01\n\x12QueryEventsRequest\x12\x12\n\nstream_key\x18\x01 \x01(\t\x12\x12\n\nevent_type\x18\x02 \x01(\t\x12\x16\n\x0esource_service\x18\x03 \x01(\t\x12\x34\n\ntime_range\x18\x04 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x30\n\x04page\x18\x05 \x01(\x0b\x32\".xstockstrat.common.v1.PageRequest\x12\x15\n\rfrom_sequence\x18\x06 \x01(\x03\"|\n\x13QueryEventsResponse\x12\x32\n\x06\x65vents\x18\x01 \x03(\x0b\x32\".xstockstrat.ledger.v1.LedgerEvent\x12\x31\n\x04page\x18\x02 \x01(\x0b\x32#.xstockstrat.common.v1.PageResponse\"T\n\x13StreamEventsRequest\x12\x12\n\nstream_key\x18\x01 \x01(\t\x12\x12\n\nevent_type\x18\x02 \x01(\t\x12\x15\n\rfrom_sequence\x18\x03 \x01(\x03\"#\n\x0fGetEventRequest\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t2\x95\x03\n\rLedgerService\x12\x64\n\x0b\x41ppendEvent\x12).xstockstrat.ledger.v1.AppendEventRequest\x1a*.xstockstrat.ledger.v1.AppendEventResponse\x12\x64\n\x0bQueryEvents\x12).xstockstrat.ledger.v1.QueryEventsRequest\x1a*.xstockstrat.ledger.v1.QueryEventsResponse\x12`\n\x0cStreamEvents\x12*.xstockstrat.ledger.v1.StreamEventsRequest\x1a\".xstockstrat.ledger.v1.LedgerEvent0\x01\x12V\n\x08GetEvent\x12&.xstockstrat.ledger.v1.GetEventRequest\x1a\".xstockstrat.ledger.v1.LedgerEventB<Z:github.com/xstockstrat/contracts/gen/go/ledger/v1;ledgerv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16ledger/v1/ledger.proto\x12\x15xstockstrat.ledger.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x16\x63ommon/v1/common.proto\"\x8a\x03\n\x0bLedgerEvent\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x12\n\nevent_type\x18\x02 \x01(\t\x12\x16\n\x0esource_service\x18\x03 \x01(\t\x12\x16\n\x0e\x63orrelation_id\x18\x04 \x01(\t\x12/\n\x0boccurred_at\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12/\n\x0brecorded_at\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12(\n\x07payload\x18\x07 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x42\n\x08metadata\x18\x08 \x03(\x0b\x32\x30.xstockstrat.ledger.v1.LedgerEvent.MetadataEntry\x12\x10\n\x08sequence\x18\t \x01(\x03\x12\x12\n\nstream_key\x18\n \x01(\t\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xdc\x02\n\x12\x41ppendEventRequest\x12\x12\n\nevent_type\x18\x01 \x01(\t\x12\x16\n\x0esource_service\x18\x02 \x01(\t\x12\x16\n\x0e\x63orrelation_id\x18\x03 \x01(\t\x12\x12\n\nstream_key\x18\x04 \x01(\t\x12(\n\x07payload\x18\x05 \x01(\x0b\x32\x17.google.protobuf.Struct\x12I\n\x08metadata\x18\x06 \x03(\x0b\x32\x37.xstockstrat.ledger.v1.AppendEventRequest.MetadataEntry\x12/\n\x0boccurred_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x17\n\x0fidempotency_key\x18\x08 \x01(\t\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"j\n\x13\x41ppendEventResponse\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x10\n\x08sequence\x18\x02 \x01(\x03\x12/\n\x0brecorded_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xd3\x01\n\x12QueryEventsRequest\x12\x12\n\nstream_key\x18\x01 \x01(\t\x12\x12\n\nevent_type\x18\x02 \x01(\t\x12\x16\n\x0esource_service\x18\x03 \x01(\t\x12\x34\n\ntime_range\x18\x04 \x01(\x0b\x32 .xstockstrat.common.v1.TimeRange\x12\x30\n\x04page\x18\x05 \x01(\x0b\x32\".xstockstrat.common.v1.PageRequest\x12\x15\n\rfrom_sequence\x18\x06 \x01(\x03\"|\n\x13QueryEventsResponse\x12\x32\n\x06\x65vents\x18\x01 \x03(\x0b\x32\".xstockstrat.ledger.v1.LedgerEvent\x12\x31\n\x04page\x18\x02 \x01(\x0b\x32#.xstockstrat.common.v1.PageResponse\"T\n\x13StreamEventsRequest\x12\x12\n\nstream_key\x18\x01 \x01(\t\x12\x12\n\nevent_type\x18\x02 \x01(\t\x12\x15\n\rfrom_sequence\x18\x03 \x01(\x03\"#\n\x0fGetEventRequest\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t2\x95\x03\n\rLedgerService\x12\x64\n\x0b\x41ppendEvent\x12).xstockstrat.ledger.v1.AppendEventRequest\x1a*.xstockstrat.ledger.v1.AppendEventResponse\x12\x64\n\x0bQueryEvents\x12).xstockstrat.ledger.v1.QueryEventsRequest\x1a*.xstockstrat.ledger.v1.QueryEventsResponse\x12`\n\x0cStreamEvents\x12*.xstockstrat.ledger.v1.StreamEventsRequest\x1a\".xstockstrat.ledger.v1.LedgerEvent0\x01\x12V\n\x08GetEvent\x12&.xstockstrat.ledger.v1.GetEventRequest\x1a\".xstockstrat.ledger.v1.LedgerEventB<Z:github.com/xstockstrat/contracts/gen/go/ledger/v1;ledgerv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -44,19 +44,19 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_LEDGEREVENT_METADATAENTRY']._serialized_start=484
   _globals['_LEDGEREVENT_METADATAENTRY']._serialized_end=531
   _globals['_APPENDEVENTREQUEST']._serialized_start=534
-  _globals['_APPENDEVENTREQUEST']._serialized_end=857
+  _globals['_APPENDEVENTREQUEST']._serialized_end=882
   _globals['_APPENDEVENTREQUEST_METADATAENTRY']._serialized_start=484
   _globals['_APPENDEVENTREQUEST_METADATAENTRY']._serialized_end=531
-  _globals['_APPENDEVENTRESPONSE']._serialized_start=859
-  _globals['_APPENDEVENTRESPONSE']._serialized_end=965
-  _globals['_QUERYEVENTSREQUEST']._serialized_start=968
-  _globals['_QUERYEVENTSREQUEST']._serialized_end=1179
-  _globals['_QUERYEVENTSRESPONSE']._serialized_start=1181
-  _globals['_QUERYEVENTSRESPONSE']._serialized_end=1305
-  _globals['_STREAMEVENTSREQUEST']._serialized_start=1307
-  _globals['_STREAMEVENTSREQUEST']._serialized_end=1391
-  _globals['_GETEVENTREQUEST']._serialized_start=1393
-  _globals['_GETEVENTREQUEST']._serialized_end=1428
-  _globals['_LEDGERSERVICE']._serialized_start=1431
-  _globals['_LEDGERSERVICE']._serialized_end=1836
+  _globals['_APPENDEVENTRESPONSE']._serialized_start=884
+  _globals['_APPENDEVENTRESPONSE']._serialized_end=990
+  _globals['_QUERYEVENTSREQUEST']._serialized_start=993
+  _globals['_QUERYEVENTSREQUEST']._serialized_end=1204
+  _globals['_QUERYEVENTSRESPONSE']._serialized_start=1206
+  _globals['_QUERYEVENTSRESPONSE']._serialized_end=1330
+  _globals['_STREAMEVENTSREQUEST']._serialized_start=1332
+  _globals['_STREAMEVENTSREQUEST']._serialized_end=1416
+  _globals['_GETEVENTREQUEST']._serialized_start=1418
+  _globals['_GETEVENTREQUEST']._serialized_end=1453
+  _globals['_LEDGERSERVICE']._serialized_start=1456
+  _globals['_LEDGERSERVICE']._serialized_end=1861
 # @@protoc_insertion_point(module_scope)

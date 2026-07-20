@@ -142,6 +142,12 @@ export type BacktestResult = Message<"xstockstrat.analysis.v1.BacktestResult"> &
      * @generated from field: repeated xstockstrat.analysis.v1.CoverageGap coverage_gaps = 13;
      */
     coverageGaps: CoverageGap[];
+    /**
+     * per-bar debug data for every simulated symbol (feature 064)
+     *
+     * @generated from field: repeated xstockstrat.analysis.v1.SymbolDiagnostics diagnostics = 14;
+     */
+    diagnostics: SymbolDiagnostics[];
 };
 /**
  * Describes the message xstockstrat.analysis.v1.BacktestResult.
@@ -190,6 +196,110 @@ export type TradeRecord = Message<"xstockstrat.analysis.v1.TradeRecord"> & {
  * Use `create(TradeRecordSchema)` to create a new message.
  */
 export declare const TradeRecordSchema: GenMessage<TradeRecord>;
+/**
+ * One row of day-by-day backtest diagnostics for a single bar.
+ *
+ * @generated from message xstockstrat.analysis.v1.BarDiagnostic
+ */
+export type BarDiagnostic = Message<"xstockstrat.analysis.v1.BarDiagnostic"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: int32 bar_index = 2;
+     */
+    barIndex: number;
+    /**
+     * @generated from field: google.protobuf.Timestamp timestamp = 3;
+     */
+    timestamp?: Timestamp | undefined;
+    /**
+     * @generated from field: double open = 4;
+     */
+    open: number;
+    /**
+     * @generated from field: double high = 5;
+     */
+    high: number;
+    /**
+     * @generated from field: double low = 6;
+     */
+    low: number;
+    /**
+     * @generated from field: double close = 7;
+     */
+    close: number;
+    /**
+     * @generated from field: int64 volume = 8;
+     */
+    volume: bigint;
+    /**
+     * @generated from field: double vwap = 9;
+     */
+    vwap: number;
+    /**
+     * present-only: a series is absent during its warm-up
+     *
+     * @generated from field: map<string, double> indicators = 10;
+     */
+    indicators: {
+        [key: string]: number;
+    };
+    /**
+     * @generated from field: bool warmup = 11;
+     */
+    warmup: boolean;
+    /**
+     * @generated from field: double signal_score = 12;
+     */
+    signalScore: number;
+    /**
+     * @generated from field: double conviction = 13;
+     */
+    conviction: number;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.BarAction action = 14;
+     */
+    action: BarAction;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.BarDiagnostic.
+ * Use `create(BarDiagnosticSchema)` to create a new message.
+ */
+export declare const BarDiagnosticSchema: GenMessage<BarDiagnostic>;
+/**
+ * Per-symbol diagnostics bundle attached to a BacktestResult.
+ *
+ * @generated from message xstockstrat.analysis.v1.SymbolDiagnostics
+ */
+export type SymbolDiagnostics = Message<"xstockstrat.analysis.v1.SymbolDiagnostics"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.BarDiagnostic bars = 2;
+     */
+    bars: BarDiagnostic[];
+    /**
+     * @generated from field: xstockstrat.analysis.v1.NoTradeReason no_trade_reason = 3;
+     */
+    noTradeReason: NoTradeReason;
+    /**
+     * @generated from field: int32 bars_total = 4;
+     */
+    barsTotal: number;
+    /**
+     * @generated from field: int32 warmup_bars = 5;
+     */
+    warmupBars: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SymbolDiagnostics.
+ * Use `create(SymbolDiagnosticsSchema)` to create a new message.
+ */
+export declare const SymbolDiagnosticsSchema: GenMessage<SymbolDiagnostics>;
 /**
  * @generated from message xstockstrat.analysis.v1.ScoreStrategyRequest
  */
@@ -266,6 +376,110 @@ export type StrategyReport = Message<"xstockstrat.analysis.v1.StrategyReport"> &
  * Use `create(StrategyReportSchema)` to create a new message.
  */
 export declare const StrategyReportSchema: GenMessage<StrategyReport>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ListBacktestsRequest
+ */
+export type ListBacktestsRequest = Message<"xstockstrat.analysis.v1.ListBacktestsRequest"> & {
+    /**
+     * @generated from field: string strategy_id = 1;
+     */
+    strategyId: string;
+    /**
+     * 0 → server default (most recent 20)
+     *
+     * @generated from field: int32 limit = 2;
+     */
+    limit: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ListBacktestsRequest.
+ * Use `create(ListBacktestsRequestSchema)` to create a new message.
+ */
+export declare const ListBacktestsRequestSchema: GenMessage<ListBacktestsRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.BacktestRunSummary
+ */
+export type BacktestRunSummary = Message<"xstockstrat.analysis.v1.BacktestRunSummary"> & {
+    /**
+     * @generated from field: string backtest_id = 1;
+     */
+    backtestId: string;
+    /**
+     * @generated from field: string strategy_id = 2;
+     */
+    strategyId: string;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.BacktestStatus status = 3;
+     */
+    status: BacktestStatus;
+    /**
+     * @generated from field: double total_return = 4;
+     */
+    totalReturn: number;
+    /**
+     * @generated from field: double annualized_return = 5;
+     */
+    annualizedReturn: number;
+    /**
+     * @generated from field: double sharpe_ratio = 6;
+     */
+    sharpeRatio: number;
+    /**
+     * @generated from field: double max_drawdown = 7;
+     */
+    maxDrawdown: number;
+    /**
+     * @generated from field: double win_rate = 8;
+     */
+    winRate: number;
+    /**
+     * @generated from field: int32 total_trades = 9;
+     */
+    totalTrades: number;
+    /**
+     * @generated from field: double profit_factor = 10;
+     */
+    profitFactor: number;
+    /**
+     * @generated from field: repeated string symbols = 11;
+     */
+    symbols: string[];
+    /**
+     * 0 when the run earned no score (e.g. INSUFFICIENT_DATA)
+     *
+     * @generated from field: double overall_score = 12;
+     */
+    overallScore: number;
+    /**
+     * "" when the run earned no score
+     *
+     * @generated from field: string rating = 13;
+     */
+    rating: string;
+    /**
+     * @generated from field: google.protobuf.Timestamp completed_at = 14;
+     */
+    completedAt?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.BacktestRunSummary.
+ * Use `create(BacktestRunSummarySchema)` to create a new message.
+ */
+export declare const BacktestRunSummarySchema: GenMessage<BacktestRunSummary>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ListBacktestsResponse
+ */
+export type ListBacktestsResponse = Message<"xstockstrat.analysis.v1.ListBacktestsResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.BacktestRunSummary runs = 1;
+     */
+    runs: BacktestRunSummary[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ListBacktestsResponse.
+ * Use `create(ListBacktestsResponseSchema)` to create a new message.
+ */
+export declare const ListBacktestsResponseSchema: GenMessage<ListBacktestsResponse>;
 /**
  * @generated from message xstockstrat.analysis.v1.ListStrategiesRequest
  */
@@ -503,6 +717,234 @@ export type SetStrategyLiveResponse = Message<"xstockstrat.analysis.v1.SetStrate
  */
 export declare const SetStrategyLiveResponseSchema: GenMessage<SetStrategyLiveResponse>;
 /**
+ * @generated from message xstockstrat.analysis.v1.ScreenCriterion
+ */
+export type ScreenCriterion = Message<"xstockstrat.analysis.v1.ScreenCriterion"> & {
+    /**
+     * @generated from field: string ref_name = 1;
+     */
+    refName: string;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.ScreenKind kind = 2;
+     */
+    kind: ScreenKind;
+    /**
+     * FUNDAMENTAL only (e.g. "pe_ratio")
+     *
+     * @generated from field: string metric_name = 3;
+     */
+    metricName: string;
+    /**
+     * reused, for TECHNICAL_* kinds
+     *
+     * @generated from field: xstockstrat.analysis.v1.StrategyComponent component = 4;
+     */
+    component?: StrategyComponent | undefined;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.Comparator op = 5;
+     */
+    op: Comparator;
+    /**
+     * @generated from field: double threshold = 6;
+     */
+    threshold: number;
+    /**
+     * for COMPARATOR_BETWEEN
+     *
+     * @generated from field: double threshold_high = 7;
+     */
+    thresholdHigh: number;
+    /**
+     * contribution to the blended score
+     *
+     * @generated from field: double weight = 8;
+     */
+    weight: number;
+    /**
+     * true → failing this excludes the symbol
+     *
+     * @generated from field: bool hard_filter = 9;
+     */
+    hardFilter: boolean;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ScreenCriterion.
+ * Use `create(ScreenCriterionSchema)` to create a new message.
+ */
+export declare const ScreenCriterionSchema: GenMessage<ScreenCriterion>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ScreenResult
+ */
+export type ScreenResult = Message<"xstockstrat.analysis.v1.ScreenResult"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: double score = 2;
+     */
+    score: number;
+    /**
+     * per ref_name; skipped criteria are absent
+     *
+     * @generated from field: map<string, double> criterion_scores = 3;
+     */
+    criterionScores: {
+        [key: string]: number;
+    };
+    /**
+     * @generated from field: bool passed = 4;
+     */
+    passed: boolean;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.ScreenResultStatus status = 5;
+     */
+    status: ScreenResultStatus;
+    /**
+     * populated when status == INSUFFICIENT_DATA
+     *
+     * @generated from field: xstockstrat.analysis.v1.CoverageGap gap = 6;
+     */
+    gap?: CoverageGap | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ScreenResult.
+ * Use `create(ScreenResultSchema)` to create a new message.
+ */
+export declare const ScreenResultSchema: GenMessage<ScreenResult>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ScreenSymbolsRequest
+ */
+export type ScreenSymbolsRequest = Message<"xstockstrat.analysis.v1.ScreenSymbolsRequest"> & {
+    /**
+     * @generated from field: repeated string symbols = 1;
+     */
+    symbols: string[];
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.ScreenCriterion criteria = 2;
+     */
+    criteria: ScreenCriterion[];
+    /**
+     * Blend params — same names the extracted scoring module reads (kept consistent with backtest).
+     *
+     * @generated from field: repeated string signal_sources = 3;
+     */
+    signalSources: string[];
+    /**
+     * @generated from field: double signal_weight = 4;
+     */
+    signalWeight: number;
+    /**
+     * @generated from field: double technical_weight = 5;
+     */
+    technicalWeight: number;
+    /**
+     * @generated from field: double min_conviction = 6;
+     */
+    minConviction: number;
+    /**
+     * @generated from field: int32 rank_limit = 7;
+     */
+    rankLimit: number;
+    /**
+     * Reserved/optional — historical as-of is deferred (OQ-060-e); latest bar is the default.
+     *
+     * @generated from field: xstockstrat.common.v1.TimeRange evaluation_window = 8;
+     */
+    evaluationWindow?: TimeRange | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ScreenSymbolsRequest.
+ * Use `create(ScreenSymbolsRequestSchema)` to create a new message.
+ */
+export declare const ScreenSymbolsRequestSchema: GenMessage<ScreenSymbolsRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ScreenSymbolsResponse
+ */
+export type ScreenSymbolsResponse = Message<"xstockstrat.analysis.v1.ScreenSymbolsResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.ScreenResult results = 1;
+     */
+    results: ScreenResult[];
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.CoverageGap coverage_gaps = 2;
+     */
+    coverageGaps: CoverageGap[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ScreenSymbolsResponse.
+ * Use `create(ScreenSymbolsResponseSchema)` to create a new message.
+ */
+export declare const ScreenSymbolsResponseSchema: GenMessage<ScreenSymbolsResponse>;
+/**
+ * @generated from message xstockstrat.analysis.v1.RunFundamentalsScanRequest
+ */
+export type RunFundamentalsScanRequest = Message<"xstockstrat.analysis.v1.RunFundamentalsScanRequest"> & {
+    /**
+     * ignore the day's idempotency guard / re-emit
+     *
+     * @generated from field: bool force = 1;
+     */
+    force: boolean;
+    /**
+     * score + report but do not emit or spend cache calls
+     *
+     * @generated from field: bool dry_run = 2;
+     */
+    dryRun: boolean;
+    /**
+     * optional explicit override of the computed universe
+     *
+     * @generated from field: repeated string symbols = 3;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.RunFundamentalsScanRequest.
+ * Use `create(RunFundamentalsScanRequestSchema)` to create a new message.
+ */
+export declare const RunFundamentalsScanRequestSchema: GenMessage<RunFundamentalsScanRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.FundamentalsScanSummary
+ */
+export type FundamentalsScanSummary = Message<"xstockstrat.analysis.v1.FundamentalsScanSummary"> & {
+    /**
+     * @generated from field: string run_id = 1;
+     */
+    runId: string;
+    /**
+     * @generated from field: int32 symbols_processed = 2;
+     */
+    symbolsProcessed: number;
+    /**
+     * @generated from field: int32 signals_emitted = 3;
+     */
+    signalsEmitted: number;
+    /**
+     * @generated from field: int32 calls_spent = 4;
+     */
+    callsSpent: number;
+    /**
+     * @generated from field: int32 deferred_count = 5;
+     */
+    deferredCount: number;
+    /**
+     * "completed" | "budget_deferred" | "failed"
+     *
+     * @generated from field: string status = 6;
+     */
+    status: string;
+    /**
+     * @generated from field: google.protobuf.Timestamp finished_at = 7;
+     */
+    finishedAt?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.FundamentalsScanSummary.
+ * Use `create(FundamentalsScanSummarySchema)` to create a new message.
+ */
+export declare const FundamentalsScanSummarySchema: GenMessage<FundamentalsScanSummary>;
+/**
  * @generated from enum xstockstrat.analysis.v1.BacktestStatus
  */
 export declare enum BacktestStatus {
@@ -523,6 +965,86 @@ export declare enum BacktestStatus {
  * Describes the enum xstockstrat.analysis.v1.BacktestStatus.
  */
 export declare const BacktestStatusSchema: GenEnum<BacktestStatus>;
+/**
+ * The engine's decision for a single bar. Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.analysis.v1.BarAction
+ */
+export declare enum BarAction {
+    /**
+     * @generated from enum value: BAR_ACTION_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * bar within the strategy's warm-up window
+     *
+     * @generated from enum value: BAR_ACTION_WARMUP = 1;
+     */
+    WARMUP = 1,
+    /**
+     * flat, no entry this bar
+     *
+     * @generated from enum value: BAR_ACTION_HOLD_FLAT = 2;
+     */
+    HOLD_FLAT = 2,
+    /**
+     * opened a long position this bar
+     *
+     * @generated from enum value: BAR_ACTION_ENTER_LONG = 3;
+     */
+    ENTER_LONG = 3,
+    /**
+     * closed a long position this bar
+     *
+     * @generated from enum value: BAR_ACTION_EXIT_LONG = 4;
+     */
+    EXIT_LONG = 4,
+    /**
+     * holding an existing long, no exit this bar
+     *
+     * @generated from enum value: BAR_ACTION_HOLD_LONG = 5;
+     */
+    HOLD_LONG = 5
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.BarAction.
+ */
+export declare const BarActionSchema: GenEnum<BarAction>;
+/**
+ * Why a symbol produced zero trades. Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.analysis.v1.NoTradeReason
+ */
+export declare enum NoTradeReason {
+    /**
+     * symbol traded, or not classified
+     *
+     * @generated from enum value: NO_TRADE_REASON_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * the whole range was warm-up
+     *
+     * @generated from enum value: NO_TRADE_REASON_ENTIRE_RANGE_WARMUP = 1;
+     */
+    ENTIRE_RANGE_WARMUP = 1,
+    /**
+     * entry condition never satisfied
+     *
+     * @generated from enum value: NO_TRADE_REASON_ENTRY_NEVER_TRUE = 2;
+     */
+    ENTRY_NEVER_TRUE = 2,
+    /**
+     * reserved; not emitted this version
+     *
+     * @generated from enum value: NO_TRADE_REASON_INSUFFICIENT_CAPITAL = 3;
+     */
+    INSUFFICIENT_CAPITAL = 3
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.NoTradeReason.
+ */
+export declare const NoTradeReasonSchema: GenEnum<NoTradeReason>;
 /**
  * @generated from enum xstockstrat.analysis.v1.ComponentKind
  */
@@ -570,6 +1092,103 @@ export declare enum StrategyOperation {
  */
 export declare const StrategyOperationSchema: GenEnum<StrategyOperation>;
 /**
+ * Comparator for a screen criterion's threshold test (closed set → enum).
+ *
+ * @generated from enum xstockstrat.analysis.v1.Comparator
+ */
+export declare enum Comparator {
+    /**
+     * @generated from enum value: COMPARATOR_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: COMPARATOR_LT = 1;
+     */
+    LT = 1,
+    /**
+     * @generated from enum value: COMPARATOR_LTE = 2;
+     */
+    LTE = 2,
+    /**
+     * @generated from enum value: COMPARATOR_GT = 3;
+     */
+    GT = 3,
+    /**
+     * @generated from enum value: COMPARATOR_GTE = 4;
+     */
+    GTE = 4,
+    /**
+     * threshold <= x <= threshold_high
+     *
+     * @generated from enum value: COMPARATOR_BETWEEN = 5;
+     */
+    BETWEEN = 5
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.Comparator.
+ */
+export declare const ComparatorSchema: GenEnum<Comparator>;
+/**
+ * What a screen criterion evaluates.
+ *
+ * @generated from enum xstockstrat.analysis.v1.ScreenKind
+ */
+export declare enum ScreenKind {
+    /**
+     * @generated from enum value: SCREEN_KIND_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * a fundamental metric (metric_name)
+     *
+     * @generated from enum value: SCREEN_KIND_FUNDAMENTAL = 1;
+     */
+    FUNDAMENTAL = 1,
+    /**
+     * a custom formula (component)
+     *
+     * @generated from enum value: SCREEN_KIND_TECHNICAL_FORMULA = 2;
+     */
+    TECHNICAL_FORMULA = 2,
+    /**
+     * a built-in indicator (component)
+     *
+     * @generated from enum value: SCREEN_KIND_TECHNICAL_INDICATOR = 3;
+     */
+    TECHNICAL_INDICATOR = 3,
+    /**
+     * source-weighted signal blend
+     *
+     * @generated from enum value: SCREEN_KIND_SIGNAL = 4;
+     */
+    SIGNAL = 4
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.ScreenKind.
+ */
+export declare const ScreenKindSchema: GenEnum<ScreenKind>;
+/**
+ * @generated from enum xstockstrat.analysis.v1.ScreenResultStatus
+ */
+export declare enum ScreenResultStatus {
+    /**
+     * @generated from enum value: SCREEN_RESULT_STATUS_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: SCREEN_RESULT_STATUS_OK = 1;
+     */
+    OK = 1,
+    /**
+     * @generated from enum value: SCREEN_RESULT_STATUS_INSUFFICIENT_DATA = 2;
+     */
+    INSUFFICIENT_DATA = 2
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.ScreenResultStatus.
+ */
+export declare const ScreenResultStatusSchema: GenEnum<ScreenResultStatus>;
+/**
  * @generated from service xstockstrat.analysis.v1.AnalysisService
  */
 export declare const AnalysisService: GenService<{
@@ -606,6 +1225,16 @@ export declare const AnalysisService: GenService<{
         output: typeof StrategyReportSchema;
     };
     /**
+     * List past backtest runs (summary metrics + earned score) for a strategy, newest first.
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ListBacktests
+     */
+    listBacktests: {
+        methodKind: "unary";
+        input: typeof ListBacktestsRequestSchema;
+        output: typeof ListBacktestsResponseSchema;
+    };
+    /**
      * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ManageStrategy
      */
     manageStrategy: {
@@ -636,5 +1265,25 @@ export declare const AnalysisService: GenService<{
         methodKind: "unary";
         input: typeof SetStrategyLiveRequestSchema;
         output: typeof SetStrategyLiveResponseSchema;
+    };
+    /**
+     * Screen a symbol universe against weighted criteria (feature 060)
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ScreenSymbols
+     */
+    screenSymbols: {
+        methodKind: "unary";
+        input: typeof ScreenSymbolsRequestSchema;
+        output: typeof ScreenSymbolsResponseSchema;
+    };
+    /**
+     * Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan
+     */
+    runFundamentalsScan: {
+        methodKind: "unary";
+        input: typeof RunFundamentalsScanRequestSchema;
+        output: typeof FundamentalsScanSummarySchema;
     };
 }>;

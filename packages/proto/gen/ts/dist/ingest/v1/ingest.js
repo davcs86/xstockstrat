@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: ingest/v1/ingest.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IngestServiceClient = exports.IngestServiceService = exports.ManageSignalSourceResponse = exports.ManageSignalSourceRequest = exports.ListSignalSourcesResponse = exports.ListSignalSourcesRequest = exports.SignalSource = exports.QuerySignalsResponse = exports.QuerySignalsRequest = exports.IngestSignalResponse = exports.IngestSignalRequest = exports.ExternalSignal = exports.NormalizeRawDataResponse = exports.NormalizeRawDataRequest = exports.ListBackfillJobsResponse = exports.ListBackfillJobsRequest = exports.GetBackfillStatusRequest = exports.TriggerBackfillResponse = exports.TriggerBackfillRequest = exports.BackfillJob = exports.FillMode = exports.BackfillStatus = exports.protobufPackage = void 0;
+exports.IngestServiceClient = exports.IngestServiceService = exports.ManageSignalSourceResponse = exports.ManageSignalSourceRequest = exports.ListSignalSourcesResponse = exports.ListSignalSourcesRequest = exports.SignalSource = exports.QuerySignalsResponse = exports.QuerySignalsRequest = exports.IngestSignalResponse = exports.IngestSignalRequest = exports.ExternalSignal = exports.NormalizeRawDataResponse = exports.NormalizeRawDataRequest = exports.ListBackfillJobsResponse = exports.CancelBackfillRequest = exports.ListBackfillJobsRequest = exports.GetBackfillStatusRequest = exports.TriggerBackfillResponse = exports.TriggerBackfillRequest = exports.BackfillJob = exports.FillMode = exports.BackfillStatus = exports.protobufPackage = void 0;
 exports.backfillStatusFromJSON = backfillStatusFromJSON;
 exports.backfillStatusToJSON = backfillStatusToJSON;
 exports.backfillStatusToNumber = backfillStatusToNumber;
@@ -27,6 +27,8 @@ var BackfillStatus;
     BackfillStatus["BACKFILL_STATUS_COMPLETED"] = "BACKFILL_STATUS_COMPLETED";
     BackfillStatus["BACKFILL_STATUS_FAILED"] = "BACKFILL_STATUS_FAILED";
     BackfillStatus["BACKFILL_STATUS_PARTIAL"] = "BACKFILL_STATUS_PARTIAL";
+    /** BACKFILL_STATUS_CANCELED - operator-canceled (FR-4); completed-chunk bars retained */
+    BackfillStatus["BACKFILL_STATUS_CANCELED"] = "BACKFILL_STATUS_CANCELED";
     BackfillStatus["UNRECOGNIZED"] = "UNRECOGNIZED";
 })(BackfillStatus || (exports.BackfillStatus = BackfillStatus = {}));
 function backfillStatusFromJSON(object) {
@@ -49,6 +51,9 @@ function backfillStatusFromJSON(object) {
         case 5:
         case "BACKFILL_STATUS_PARTIAL":
             return BackfillStatus.BACKFILL_STATUS_PARTIAL;
+        case 6:
+        case "BACKFILL_STATUS_CANCELED":
+            return BackfillStatus.BACKFILL_STATUS_CANCELED;
         case -1:
         case "UNRECOGNIZED":
         default:
@@ -69,6 +74,8 @@ function backfillStatusToJSON(object) {
             return "BACKFILL_STATUS_FAILED";
         case BackfillStatus.BACKFILL_STATUS_PARTIAL:
             return "BACKFILL_STATUS_PARTIAL";
+        case BackfillStatus.BACKFILL_STATUS_CANCELED:
+            return "BACKFILL_STATUS_CANCELED";
         case BackfillStatus.UNRECOGNIZED:
         default:
             return "UNRECOGNIZED";
@@ -88,6 +95,8 @@ function backfillStatusToNumber(object) {
             return 4;
         case BackfillStatus.BACKFILL_STATUS_PARTIAL:
             return 5;
+        case BackfillStatus.BACKFILL_STATUS_CANCELED:
+            return 6;
         case BackfillStatus.UNRECOGNIZED:
         default:
             return -1;
@@ -723,7 +732,7 @@ exports.GetBackfillStatusRequest = {
     },
 };
 function createBaseListBackfillJobsRequest() {
-    return { statusFilter: BackfillStatus.BACKFILL_STATUS_UNSPECIFIED, page: undefined };
+    return { statusFilter: BackfillStatus.BACKFILL_STATUS_UNSPECIFIED, page: undefined, symbol: "" };
 }
 exports.ListBackfillJobsRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -732,6 +741,9 @@ exports.ListBackfillJobsRequest = {
         }
         if (message.page !== undefined) {
             common_1.PageRequest.encode(message.page, writer.uint32(18).fork()).join();
+        }
+        if (message.symbol !== "") {
+            writer.uint32(26).string(message.symbol);
         }
         return writer;
     },
@@ -756,6 +768,13 @@ exports.ListBackfillJobsRequest = {
                     message.page = common_1.PageRequest.decode(reader, reader.uint32());
                     continue;
                 }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -772,6 +791,7 @@ exports.ListBackfillJobsRequest = {
                     ? backfillStatusFromJSON(object.status_filter)
                     : BackfillStatus.BACKFILL_STATUS_UNSPECIFIED,
             page: isSet(object.page) ? common_1.PageRequest.fromJSON(object.page) : undefined,
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
         };
     },
     toJSON(message) {
@@ -781,6 +801,9 @@ exports.ListBackfillJobsRequest = {
         }
         if (message.page !== undefined) {
             obj.page = common_1.PageRequest.toJSON(message.page);
+        }
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
         }
         return obj;
     },
@@ -793,6 +816,64 @@ exports.ListBackfillJobsRequest = {
         message.page = (object.page !== undefined && object.page !== null)
             ? common_1.PageRequest.fromPartial(object.page)
             : undefined;
+        message.symbol = object.symbol ?? "";
+        return message;
+    },
+};
+function createBaseCancelBackfillRequest() {
+    return { jobId: "" };
+}
+exports.CancelBackfillRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.jobId !== "") {
+            writer.uint32(10).string(message.jobId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseCancelBackfillRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.jobId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            jobId: isSet(object.jobId)
+                ? globalThis.String(object.jobId)
+                : isSet(object.job_id)
+                    ? globalThis.String(object.job_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.jobId !== "") {
+            obj.jobId = message.jobId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.CancelBackfillRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseCancelBackfillRequest();
+        message.jobId = object.jobId ?? "";
         return message;
     },
 };
@@ -1975,6 +2056,16 @@ exports.IngestServiceService = {
         requestDeserialize: (value) => exports.ListBackfillJobsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.ListBackfillJobsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.ListBackfillJobsResponse.decode(value),
+    },
+    /** Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4). */
+    cancelBackfill: {
+        path: "/xstockstrat.ingest.v1.IngestService/CancelBackfill",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.CancelBackfillRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.CancelBackfillRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.BackfillJob.encode(value).finish()),
+        responseDeserialize: (value) => exports.BackfillJob.decode(value),
     },
     normalizeRawData: {
         path: "/xstockstrat.ingest.v1.IngestService/NormalizeRawData",

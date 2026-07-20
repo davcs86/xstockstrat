@@ -8,7 +8,7 @@ Operational runbooks, one-time setup guides, implementation roadmap, and reusabl
 
 | Directory | What's inside | Use when |
 |---|---|---|
-| [`patterns/`](patterns/CLAUDE.md) | Reusable implementation patterns for new services | Creating a new frontend, backend service, or wiring nginx/auth/propagation |
+| [`patterns/`](patterns/CLAUDE.md) | Reusable implementation patterns for new services | Creating a new frontend or backend service, or wiring auth/header-propagation |
 | [`runbooks/`](runbooks/CLAUDE.md) | Operational procedures for day-to-day platform tasks | Adding a data source, rolling out a config change, backfilling data, building an indicator, managing proto versions |
 | [`setup/`](setup/CLAUDE.md) | One-time setup guides for external services | First-time Alpaca, DigitalOcean, Grafana Cloud, or n8n setup |
 | [`roadmap/`](roadmap/CLAUDE.md) | Implementation roadmap and per-phase deviation notes | Understanding what was built, why a decision was made, or what's left to implement |
@@ -21,7 +21,7 @@ Operational runbooks, one-time setup guides, implementation roadmap, and reusabl
 |---|---|
 | Build or modify a Next.js frontend (auth, middleware, routes) | `patterns/frontend-auth.md` |
 | Other Next.js frontend work (basePath, Suspense, Radix hydration, middleware matcher, app icons, PR stacking) | `patterns/nextjs-frontends.md` |
-| Wire a new frontend through nginx | `patterns/nginx-routing.md` |
+| Understand the legacy nginx routing (removed by feature 045) | `patterns/nginx-routing.md` (deprecated — historical reference) |
 | Add header propagation to a new backend service | `patterns/header-propagation.md` |
 | Triage and fix a bug (SEV-1 hotfix, config fix, or SDD path) | `runbooks/bug-triage.md` |
 | View the production hotfix incident history | `runbooks/hotfix-log.md` |
@@ -38,4 +38,4 @@ Operational runbooks, one-time setup guides, implementation roadmap, and reusabl
 | Wire OpenTelemetry to Grafana Cloud | `setup/grafana-cloud.md` |
 | Import and configure n8n workflows | `setup/n8n.md` |
 | See the full implementation plan and phase status | `roadmap/implementation-roadmap.md` |
-| Understand why a Phase 3–6 service was built a certain way | `roadmap/phase[3-6]-deviations.md` |
+| Understand why a Phase 3–7 service was built a certain way | `roadmap/phase[3-7]-deviations.md` |

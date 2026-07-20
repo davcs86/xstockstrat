@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BackfillJob, GetBackfillStatusRequest, IngestSignalRequest, IngestSignalResponse, ListBackfillJobsRequest, ListBackfillJobsResponse, ListSignalSourcesRequest, ListSignalSourcesResponse, ManageSignalSourceRequest, ManageSignalSourceResponse, NormalizeRawDataRequest, NormalizeRawDataResponse, QuerySignalsRequest, QuerySignalsResponse, TriggerBackfillRequest, TriggerBackfillResponse } from "./ingest_pb.js";
+import { BackfillJob, CancelBackfillRequest, GetBackfillStatusRequest, IngestSignalRequest, IngestSignalResponse, ListBackfillJobsRequest, ListBackfillJobsResponse, ListSignalSourcesRequest, ListSignalSourcesResponse, ManageSignalSourceRequest, ManageSignalSourceResponse, NormalizeRawDataRequest, NormalizeRawDataResponse, QuerySignalsRequest, QuerySignalsResponse, TriggerBackfillRequest, TriggerBackfillResponse } from "./ingest_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -37,6 +37,17 @@ export const IngestService = {
       name: "ListBackfillJobs",
       I: ListBackfillJobsRequest,
       O: ListBackfillJobsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Cancel a QUEUED/RUNNING backfill job; returns the updated job (CANCELED). Completed-chunk bars are retained (FR-4).
+     *
+     * @generated from rpc xstockstrat.ingest.v1.IngestService.CancelBackfill
+     */
+    cancelBackfill: {
+      name: "CancelBackfill",
+      I: CancelBackfillRequest,
+      O: BackfillJob,
       kind: MethodKind.Unary,
     },
     /**

@@ -35,7 +35,7 @@ export async function getSessionFromRequest(req: NextRequest): Promise<JwtClaims
 export function setSessionCookies(
   res: NextResponse,
   accessToken: string,
-  refreshToken: string
+  refreshToken: string,
 ): void {
   const isProduction = process.env.NODE_ENV === 'production';
   res.cookies.set('access_token', accessToken, {
@@ -57,18 +57,27 @@ export function clearSessionCookies(res: NextResponse): void {
   res.cookies.set('refresh_token', '', { maxAge: 0, path: '/' });
 }
 
+// Access-scope bitmap. ADMIN_SCOPE is the single source of truth for the admin bit —
+// BFF admin gates (requireAdminScope in bffShared.ts) reference it instead of inlining 0x04.
+// The DRY guard rail bans the raw 0x04 literal everywhere except this file.
+export const ADMIN_SCOPE = 0x04;
+
 export function rolesToAccessScope(roles: string[]): number {
   const READ = 0x01;
   const WRITE = 0x02;
-  const ADMIN = 0x04;
   const TRADING = 0x08;
   let scope = 0;
   for (const role of roles) {
     if (role === 'viewer') scope |= READ;
     else if (role === 'trader') scope |= READ | WRITE | TRADING;
-    else if (role === 'admin') scope |= READ | WRITE | ADMIN | TRADING;
+    else if (role === 'admin') scope |= READ | WRITE | ADMIN_SCOPE | TRADING;
   }
   return scope;
+}
+
+/** True when the given roles grant the admin scope bit. */
+export function hasAdminScope(roles: string[]): boolean {
+  return (rolesToAccessScope(roles) & ADMIN_SCOPE) !== 0;
 }
 
 export function generateTraceId(): string {

@@ -317,6 +317,52 @@ func TestGetLatestQuote_ConfiguredFeed(t *testing.T) {
 	}
 }
 
+func TestGetBars_TranslatesCanonicalTimeframe(t *testing.T) {
+	// The always-on bar ingester and DB-miss fallback pass the canonical interval
+	// strings (1m/5m/1h/1d). Alpaca rejects those with 400 "invalid timeframe: 1m" —
+	// they must be translated to 1Min/5Min/1Hour/1Day on the outbound request, while
+	// the stored bar keeps the canonical form callers query against.
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"15m", "15Min"},
+		{"1h", "1Hour"},
+		{"1d", "1Day"},
+		{"15Min", "15Min"}, // already-Alpaca form passes through
+		{"1Hour", "1Hour"}, // already-Alpaca form passes through
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			var gotTF string
+			srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				gotTF = r.URL.Query().Get("timeframe")
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"bars": []map[string]interface{}{
+						{"t": "2024-01-02T10:00:00Z", "o": 1.0, "h": 1.0, "l": 1.0, "c": 1.0, "v": int64(1), "vw": 1.0, "n": int32(1)},
+					},
+					"next_page_token": "",
+				})
+			})
+			defer srv.Close()
+
+			c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", DataURL: srv.URL})
+			bars, err := c.GetBars(context.Background(), "AAPL", tc.in, time.Now().Add(-time.Hour), time.Now())
+			if err != nil {
+				t.Fatalf("GetBars failed: %v", err)
+			}
+			if gotTF != tc.want {
+				t.Errorf("timeframe %q: expected outbound timeframe=%q, got %q", tc.in, tc.want, gotTF)
+			}
+			// Stored bars keep the caller's (canonical) timeframe, not the Alpaca spelling.
+			if len(bars) != 1 || bars[0].Timeframe != tc.in { //nolint:staticcheck // SA1019: asserting the deprecated string timeframe field is preserved on the stored bar
+				t.Errorf("timeframe %q: expected stored bar timeframe=%q, got %+v", tc.in, tc.in, bars)
+			}
+		})
+	}
+}
+
 func TestGetBars_SendsFeed(t *testing.T) {
 	var gotFeed string
 	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -332,5 +378,138 @@ func TestGetBars_SendsFeed(t *testing.T) {
 	}
 	if gotFeed != "iex" {
 		t.Errorf("expected feed=iex on bars request, got %q", gotFeed)
+	}
+}
+
+func TestGetBars_DefaultAdjustmentAllAndMaxLimit(t *testing.T) {
+	var gotAdjustment, gotLimit string
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotAdjustment = r.URL.Query().Get("adjustment")
+		gotLimit = r.URL.Query().Get("limit")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"bars": []interface{}{}, "next_page_token": ""})
+	})
+	defer srv.Close()
+
+	// No Adjustment/BatchSize configured → adjustment=all and limit=10000 (spec max).
+	c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", DataURL: srv.URL})
+	if _, err := c.GetBars(context.Background(), "AAPL", "1Day", time.Now().Add(-24*time.Hour), time.Now()); err != nil {
+		t.Fatalf("GetBars failed: %v", err)
+	}
+	if gotAdjustment != "all" {
+		t.Errorf("expected adjustment=all by default, got %q", gotAdjustment)
+	}
+	if gotLimit != "10000" {
+		t.Errorf("expected limit=10000 by default, got %q", gotLimit)
+	}
+}
+
+func TestGetBars_ConfiguredAdjustmentAndBatchSize(t *testing.T) {
+	var gotAdjustment, gotLimit string
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotAdjustment = r.URL.Query().Get("adjustment")
+		gotLimit = r.URL.Query().Get("limit")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"bars": []interface{}{}, "next_page_token": ""})
+	})
+	defer srv.Close()
+
+	c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", DataURL: srv.URL, Adjustment: "split", BatchSize: 500})
+	if _, err := c.GetBars(context.Background(), "AAPL", "1Day", time.Now().Add(-24*time.Hour), time.Now()); err != nil {
+		t.Fatalf("GetBars failed: %v", err)
+	}
+	if gotAdjustment != "split" {
+		t.Errorf("expected adjustment=split, got %q", gotAdjustment)
+	}
+	if gotLimit != "500" {
+		t.Errorf("expected limit=500, got %q", gotLimit)
+	}
+}
+
+func TestGetBars_BatchSizeClampedToMax(t *testing.T) {
+	var gotLimit string
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotLimit = r.URL.Query().Get("limit")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"bars": []interface{}{}, "next_page_token": ""})
+	})
+	defer srv.Close()
+
+	// A batch size above the spec maximum is clamped to 10000.
+	c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", DataURL: srv.URL, BatchSize: 999999})
+	if _, err := c.GetBars(context.Background(), "AAPL", "1Day", time.Now().Add(-24*time.Hour), time.Now()); err != nil {
+		t.Fatalf("GetBars failed: %v", err)
+	}
+	if gotLimit != "10000" {
+		t.Errorf("expected limit clamped to 10000, got %q", gotLimit)
+	}
+}
+
+func TestGetBarsMulti_Success(t *testing.T) {
+	var gotSymbols string
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/stocks/bars" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		gotSymbols = r.URL.Query().Get("symbols")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"bars": map[string]interface{}{
+				"AAPL": []map[string]interface{}{
+					{"t": "2024-01-02T10:00:00Z", "o": 100.0, "h": 105.0, "l": 99.0, "c": 102.0, "v": int64(5000), "vw": 101.5, "n": int32(200)},
+				},
+				"MSFT": []map[string]interface{}{
+					{"t": "2024-01-02T10:00:00Z", "o": 400.0, "h": 405.0, "l": 399.0, "c": 402.0, "v": int64(3000), "vw": 401.5, "n": int32(120)},
+				},
+			},
+			"next_page_token": "",
+		})
+	})
+	defer srv.Close()
+
+	c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", DataURL: srv.URL})
+	out, err := c.GetBarsMulti(context.Background(), []string{"AAPL", "MSFT"}, "1Day",
+		time.Now().Add(-24*time.Hour), time.Now())
+	if err != nil {
+		t.Fatalf("GetBarsMulti failed: %v", err)
+	}
+	if gotSymbols != "AAPL,MSFT" {
+		t.Errorf("expected symbols=AAPL,MSFT, got %q", gotSymbols)
+	}
+	if len(out["AAPL"]) != 1 || out["AAPL"][0].Close != 102.0 {
+		t.Errorf("unexpected AAPL bars: %+v", out["AAPL"])
+	}
+	if len(out["MSFT"]) != 1 || out["MSFT"][0].Open != 400.0 {
+		t.Errorf("unexpected MSFT bars: %+v", out["MSFT"])
+	}
+}
+
+func TestGetLatestQuotesMulti_Success(t *testing.T) {
+	var gotSymbols string
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/stocks/quotes/latest" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		gotSymbols = r.URL.Query().Get("symbols")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"quotes": map[string]interface{}{
+				"AAPL": map[string]interface{}{"t": "2024-01-02T10:00:00Z", "ap": 150.25, "as": int32(100), "bp": 150.20, "bs": int32(200)},
+				"MSFT": map[string]interface{}{"t": "2024-01-02T10:00:00Z", "ap": 400.10, "as": int32(50), "bp": 400.00, "bs": int32(60)},
+			},
+		})
+	})
+	defer srv.Close()
+
+	c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", DataURL: srv.URL})
+	out, err := c.GetLatestQuotesMulti(context.Background(), []string{"AAPL", "MSFT"})
+	if err != nil {
+		t.Fatalf("GetLatestQuotesMulti failed: %v", err)
+	}
+	if gotSymbols != "AAPL,MSFT" {
+		t.Errorf("expected symbols=AAPL,MSFT, got %q", gotSymbols)
+	}
+	if out["AAPL"].AskPrice != 150.25 || out["MSFT"].BidPrice != 400.00 {
+		t.Errorf("unexpected quotes: %+v", out)
 	}
 }

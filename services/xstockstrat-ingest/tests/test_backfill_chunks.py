@@ -33,15 +33,15 @@ class TestPlanChunks:
         for a, b in zip(chunks, chunks[1:]):
             assert a["range_end"] == b["range_start"]
 
-    def test_density_yields_more_chunks_for_1m_than_1d(self):
-        # Same symbols + range; a cap small enough that 1m (390 bars/day) must split symbols
-        # while 1d (1 bar/day) fits all symbols per window.
+    def test_density_yields_more_chunks_for_15m_than_1d(self):
+        # Same symbols + range; a cap small enough that 15m (26 bars/day) must split symbols
+        # while 1d (1 bar/day) fits all symbols per window. 15m is the smallest interval.
         symbols = ["AAPL", "TSLA", "MSFT"]
         start, end = _dt(2023, 1, 1), _dt(2023, 4, 1)
-        cap = 5000
+        cap = 2500
         oneday = backfill_chunks.plan_chunks(symbols, "1d", start, end, 90, cap)
-        onemin = backfill_chunks.plan_chunks(symbols, "1m", start, end, 90, cap)
-        assert len(onemin) > len(oneday)
+        fifteenmin = backfill_chunks.plan_chunks(symbols, "15m", start, end, 90, cap)
+        assert len(fifteenmin) > len(oneday)
 
     def test_no_chunk_exceeds_bar_cap(self):
         cap = 5000

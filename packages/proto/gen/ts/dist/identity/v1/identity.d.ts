@@ -32,38 +32,6 @@ export interface RevokeTokenRequest {
 export interface RevokeTokenResponse {
     success: boolean;
 }
-export interface ApiKey {
-    keyId: string;
-    /** first 8 chars only (rest is hashed) */
-    keyPrefix: string;
-    userId: string;
-    name: string;
-    scopes: string[];
-    createdAt?: Date | undefined;
-    expiresAt?: Date | undefined;
-}
-export interface CreateApiKeyRequest {
-    userId: string;
-    name: string;
-    scopes: string[];
-    expiresAt?: Date | undefined;
-}
-export interface ValidateApiKeyRequest {
-    apiKey: string;
-}
-export interface ListApiKeysRequest {
-    userId: string;
-}
-export interface ListApiKeysResponse {
-    keys: ApiKey[];
-}
-export interface RevokeApiKeyRequest {
-    keyId: string;
-    userId: string;
-}
-export interface RevokeApiKeyResponse {
-    success: boolean;
-}
 /** ── OAuth 2.1 messages (feature 049 Part B) ────────────────────────────────── */
 export interface OAuthClient {
     clientId: string;
@@ -137,13 +105,6 @@ export declare const ValidateTokenRequest: MessageFns<ValidateTokenRequest>;
 export declare const RefreshTokenRequest: MessageFns<RefreshTokenRequest>;
 export declare const RevokeTokenRequest: MessageFns<RevokeTokenRequest>;
 export declare const RevokeTokenResponse: MessageFns<RevokeTokenResponse>;
-export declare const ApiKey: MessageFns<ApiKey>;
-export declare const CreateApiKeyRequest: MessageFns<CreateApiKeyRequest>;
-export declare const ValidateApiKeyRequest: MessageFns<ValidateApiKeyRequest>;
-export declare const ListApiKeysRequest: MessageFns<ListApiKeysRequest>;
-export declare const ListApiKeysResponse: MessageFns<ListApiKeysResponse>;
-export declare const RevokeApiKeyRequest: MessageFns<RevokeApiKeyRequest>;
-export declare const RevokeApiKeyResponse: MessageFns<RevokeApiKeyResponse>;
 export declare const OAuthClient: MessageFns<OAuthClient>;
 export declare const RegisterOAuthClientRequest: MessageFns<RegisterOAuthClientRequest>;
 export declare const GetOAuthClientRequest: MessageFns<GetOAuthClientRequest>;
@@ -194,42 +155,6 @@ export declare const IdentityServiceService: {
         readonly requestDeserialize: (value: Buffer) => RevokeTokenRequest;
         readonly responseSerialize: (value: RevokeTokenResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => RevokeTokenResponse;
-    };
-    readonly createApiKey: {
-        readonly path: "/xstockstrat.identity.v1.IdentityService/CreateApiKey";
-        readonly requestStream: false;
-        readonly responseStream: false;
-        readonly requestSerialize: (value: CreateApiKeyRequest) => Buffer;
-        readonly requestDeserialize: (value: Buffer) => CreateApiKeyRequest;
-        readonly responseSerialize: (value: ApiKey) => Buffer;
-        readonly responseDeserialize: (value: Buffer) => ApiKey;
-    };
-    readonly validateApiKey: {
-        readonly path: "/xstockstrat.identity.v1.IdentityService/ValidateApiKey";
-        readonly requestStream: false;
-        readonly responseStream: false;
-        readonly requestSerialize: (value: ValidateApiKeyRequest) => Buffer;
-        readonly requestDeserialize: (value: Buffer) => ValidateApiKeyRequest;
-        readonly responseSerialize: (value: TokenClaims) => Buffer;
-        readonly responseDeserialize: (value: Buffer) => TokenClaims;
-    };
-    readonly listApiKeys: {
-        readonly path: "/xstockstrat.identity.v1.IdentityService/ListApiKeys";
-        readonly requestStream: false;
-        readonly responseStream: false;
-        readonly requestSerialize: (value: ListApiKeysRequest) => Buffer;
-        readonly requestDeserialize: (value: Buffer) => ListApiKeysRequest;
-        readonly responseSerialize: (value: ListApiKeysResponse) => Buffer;
-        readonly responseDeserialize: (value: Buffer) => ListApiKeysResponse;
-    };
-    readonly revokeApiKey: {
-        readonly path: "/xstockstrat.identity.v1.IdentityService/RevokeApiKey";
-        readonly requestStream: false;
-        readonly responseStream: false;
-        readonly requestSerialize: (value: RevokeApiKeyRequest) => Buffer;
-        readonly requestDeserialize: (value: Buffer) => RevokeApiKeyRequest;
-        readonly responseSerialize: (value: RevokeApiKeyResponse) => Buffer;
-        readonly responseDeserialize: (value: Buffer) => RevokeApiKeyResponse;
     };
     /**
      * OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
@@ -308,10 +233,6 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
     validateToken: handleUnaryCall<ValidateTokenRequest, TokenClaims>;
     refreshToken: handleUnaryCall<RefreshTokenRequest, AuthTokenResponse>;
     revokeToken: handleUnaryCall<RevokeTokenRequest, RevokeTokenResponse>;
-    createApiKey: handleUnaryCall<CreateApiKeyRequest, ApiKey>;
-    validateApiKey: handleUnaryCall<ValidateApiKeyRequest, TokenClaims>;
-    listApiKeys: handleUnaryCall<ListApiKeysRequest, ListApiKeysResponse>;
-    revokeApiKey: handleUnaryCall<RevokeApiKeyRequest, RevokeApiKeyResponse>;
     /**
      * OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
      * OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.
@@ -341,18 +262,6 @@ export interface IdentityServiceClient extends Client {
     revokeToken(request: RevokeTokenRequest, callback: (error: ServiceError | null, response: RevokeTokenResponse) => void): ClientUnaryCall;
     revokeToken(request: RevokeTokenRequest, metadata: Metadata, callback: (error: ServiceError | null, response: RevokeTokenResponse) => void): ClientUnaryCall;
     revokeToken(request: RevokeTokenRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: RevokeTokenResponse) => void): ClientUnaryCall;
-    createApiKey(request: CreateApiKeyRequest, callback: (error: ServiceError | null, response: ApiKey) => void): ClientUnaryCall;
-    createApiKey(request: CreateApiKeyRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ApiKey) => void): ClientUnaryCall;
-    createApiKey(request: CreateApiKeyRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ApiKey) => void): ClientUnaryCall;
-    validateApiKey(request: ValidateApiKeyRequest, callback: (error: ServiceError | null, response: TokenClaims) => void): ClientUnaryCall;
-    validateApiKey(request: ValidateApiKeyRequest, metadata: Metadata, callback: (error: ServiceError | null, response: TokenClaims) => void): ClientUnaryCall;
-    validateApiKey(request: ValidateApiKeyRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: TokenClaims) => void): ClientUnaryCall;
-    listApiKeys(request: ListApiKeysRequest, callback: (error: ServiceError | null, response: ListApiKeysResponse) => void): ClientUnaryCall;
-    listApiKeys(request: ListApiKeysRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListApiKeysResponse) => void): ClientUnaryCall;
-    listApiKeys(request: ListApiKeysRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListApiKeysResponse) => void): ClientUnaryCall;
-    revokeApiKey(request: RevokeApiKeyRequest, callback: (error: ServiceError | null, response: RevokeApiKeyResponse) => void): ClientUnaryCall;
-    revokeApiKey(request: RevokeApiKeyRequest, metadata: Metadata, callback: (error: ServiceError | null, response: RevokeApiKeyResponse) => void): ClientUnaryCall;
-    revokeApiKey(request: RevokeApiKeyRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: RevokeApiKeyResponse) => void): ClientUnaryCall;
     /**
      * OAuth 2.1 authorization-server backend (feature 049 Part B). The MCP agent is the
      * OAuth AS/RS HTTP facade; identity is the durable client/code store + token mint.

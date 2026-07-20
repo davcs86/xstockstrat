@@ -87,6 +87,11 @@ git diff packages/proto/gen/
 # Should be empty if stubs are up to date
 ```
 
+> Running `buf-gen.sh` without the Docker codegen container (Docker unavailable, or GitHub-releases
+> egress blocked so `buf` can't be fetched)? See
+> `docs/runbooks/codegen-toolchain-host-setup.md` to provision the pinned toolchain directly on the
+> host and validate an empty stub diff before editing any `.proto`.
+
 ## BSR (Buf Schema Registry)
 
 Proto definitions are published to `buf.build/xstockstrat/contracts` on every merge to `main`.
