@@ -15,6 +15,7 @@ from gen.analysis.v1 import analysis_pb2
 
 import app.engine.live_loop as live_loop_module
 from app.engine.live_loop import LiveEvaluationLoop
+from app.services.evaluator import FormulaExecutionError
 
 
 def _make_loop() -> LiveEvaluationLoop:
@@ -113,3 +114,44 @@ class TestLiveEvaluationLoopIsolation:
         loop._eval_pair = fake_eval
         await loop._run_cycle()
         assert calls == ["AAA", "BBB"]  # BBB still evaluated despite AAA error
+
+    @pytest.mark.asyncio
+    async def test_formula_error_is_contained_by_the_loop(self):
+        # feature 067: FormulaExecutionError is a plain Exception subclass, so the live
+        # loop's existing broad `except Exception` already catches it and continues — no
+        # new safety code (design § 5, confirm-only). A failing formula must not propagate
+        # out of the cycle, and must leave _last_state untouched for the failed pair.
+        loop = _make_loop()
+        loop._db.fetch = AsyncMock(
+            return_value=[
+                {
+                    "strategy_id": "s1",
+                    "display_name": "S1",
+                    "active": True,
+                    "live_enabled": True,
+                    "definition_json": {},
+                }
+            ]
+        )
+        loop._symbols_for = MagicMock(return_value=["AAA", "BBB"])
+        # The evaluator raises FormulaExecutionError for AAA, returns a clean entry for BBB.
+        evaluated = []
+
+        async def fake_evaluate(defn, bars, signals):
+            symbol = "AAA" if not evaluated else "BBB"
+            evaluated.append(symbol)
+            if symbol == "AAA":
+                raise FormulaExecutionError("f-1", "boom")
+            return [_decision(True, False)]
+
+        loop._evaluator.evaluate = AsyncMock(side_effect=fake_evaluate)
+
+        # Must not raise out of the cycle.
+        await loop._run_cycle()
+
+        # Both pairs attempted; the loop continued past the AAA formula error.
+        assert evaluated == ["AAA", "BBB"]
+        # The failed pair recorded no state; the healthy pair fired its entry alert.
+        assert ("s1", "AAA") not in loop._last_state
+        assert loop._last_state.get(("s1", "BBB")) is True
+        assert loop._notify.EmitAlert.await_count == 1

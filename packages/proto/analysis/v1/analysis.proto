@@ -99,6 +99,7 @@ enum NoTradeReason {
   NO_TRADE_REASON_ENTIRE_RANGE_WARMUP = 1;  // the whole range was warm-up
   NO_TRADE_REASON_ENTRY_NEVER_TRUE = 2;     // entry condition never satisfied
   NO_TRADE_REASON_INSUFFICIENT_CAPITAL = 3; // reserved; not emitted this version
+  NO_TRADE_REASON_FORMULA_ERROR = 4;        // a custom-formula component failed to execute / returned an out-of-contract series
 }
 
 // One row of day-by-day backtest diagnostics for a single bar.

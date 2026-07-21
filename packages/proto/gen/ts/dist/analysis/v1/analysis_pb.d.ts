@@ -1069,7 +1069,13 @@ export declare enum NoTradeReason {
      *
      * @generated from enum value: NO_TRADE_REASON_INSUFFICIENT_CAPITAL = 3;
      */
-    INSUFFICIENT_CAPITAL = 3
+    INSUFFICIENT_CAPITAL = 3,
+    /**
+     * a custom-formula component failed to execute / returned an out-of-contract series
+     *
+     * @generated from enum value: NO_TRADE_REASON_FORMULA_ERROR = 4;
+     */
+    FORMULA_ERROR = 4
 }
 /**
  * Describes the enum xstockstrat.analysis.v1.NoTradeReason.

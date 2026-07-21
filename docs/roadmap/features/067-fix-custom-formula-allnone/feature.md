@@ -1,7 +1,7 @@
 # Feature: fix-custom-formula-allnone
 
 **Type**: bug
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fix-custom-formula-allnone`
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`; bug captured directly via `/sdd-triage` (Track C)
 **Severity**: SEV-2
@@ -18,6 +18,7 @@
 | 2026-07-21 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Dir renumbered 065→067 (collision). |
 | 2026-07-21 | `design-approved` (re-debated) | /sdd-design | Re-opened at user request; rounds 2–3 landed on **Option A** — proto enum `NO_TRADE_REASON_FORMULA_ERROR` + shared UI surface + all-failed-status guard. Scope grew to analysis + proto + ui. design.md rewritten. |
 | 2026-07-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
+| 2026-07-21 | `implementation-ready` → `code-completed` | /sdd-execute (sequential) | All 9 steps executed & verified; 3 deviations logged (D-1 MessageToDict-NaN, D-2 test corrected, D-3 UI e2e CI-equivalent fallback). Pushed as a single PR. |
 
 ---
 
@@ -50,4 +51,4 @@ same data are unaffected. Blocks validation/grading of any custom-formula strate
 
 ## Next Action
 
-`/sdd-review fix-custom-formula-allnone impl-spec` — validate implementation spec, then `/sdd-execute fix-custom-formula-allnone`
+Merge the integration PR (`claude/feature-067-sequence-mode-20vup4` → `main-dev`) once CI passes and reviewers approve. Verify the `formula-error` e2e banner test in the CI `frontend-e2e` job (run locally via the CI-equivalent fallback — see context.md / Deviation Log D-3).
