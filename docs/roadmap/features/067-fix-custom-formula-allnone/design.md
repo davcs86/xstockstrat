@@ -1,130 +1,183 @@
 # Design: fix-custom-formula-allnone
 
 **Created**: 2026-07-21
-**Rounds**: 1 (quick; termination: approved — debate revisions incorporated, no Floor breach)
-**Approved by**: user @ 2026-07-21 (approval via "continue from where you left off" after the interactive gate was declined; recorded in context.md)
+**Rounds**: 3 (quick, extended at user request; termination: approved — Option A, no Floor breach)
+**Approved by**: user @ 2026-07-21 (chose Option A "leaning" at the round-2 gate; approved the round-3 synthesis via "continue"; recorded in context.md per P-04)
 **Grounded in**: recon.md
 
 ---
 
-## Chosen Approach
+## Chosen Approach (Option A — AC-3 satisfied literally via a visible `no_trade_reason`)
 
-Decode-side fix in **xstockstrat-analysis** only; no proto/migration/config/env changes
-(`recon.md` § Dependencies). Two behavioral parts, both scoped to the shared strategy evaluator and
-proven on **both** of its consuming paths (backtest + live loop).
+Root cause (recon.md § Root Cause, confirmed end-to-end): `xstockstrat-indicators` `ExecuteFormula`
+marshals a native list output into a protobuf `ListValue` inside the response `Struct`
+(`app/handlers/servicer.py:171-176`); `xstockstrat-analysis` `_compute_component` gates decoded values
+on `isinstance(raw, (list, tuple))` (`evaluator.py:185-191`), which a `ListValue` fails → all-`None`
+series → empty diagnostics `indicators: {}` → `NO_TRADE_REASON_ENTRY_NEVER_TRUE`.
 
-### 1. Fix the Struct decode in `_compute_component` (the root cause)
+The fix decodes correctly, raises a genuine failure instead of masquerading as all-`None`, and surfaces
+that failure to the operator as a distinct, UI-visible `no_trade_reason`. Scope: **`xstockstrat-analysis`
++ a proto enum value + the shared UI diagnostics renderer.**
 
-`services/xstockstrat-analysis/app/services/evaluator.py:185-191` currently does
-`output = dict(resp.output)` then keeps a value only `if isinstance(raw, (list, tuple))`. A protobuf
-`ListValue` (how `Struct.update()` marshals a native list on the indicators side —
-`recon.md` § Root Cause 1, `xstockstrat-indicators/app/handlers/servicer.py:171-176`) fails that
-check, so every series output is dropped and `value` falls back to `[None] * n`.
+### 1. Proto — new distinct reason (C-04 / C-09)
 
-Replace the `dict()` + `isinstance` gate with a recursive unwrap via
-`google.protobuf.json_format.MessageToDict(resp.output, preserving_proto_field_name=True)` — the same
-stdlib helper already used for the inbound `input_data` on the indicators side
-(`recon.md` § Patterns to REUSE; `xstockstrat-indicators/app/handlers/servicer.py:126`). `MessageToDict`
-turns a `ListValue`→native `list`, so a per-bar series decodes to real numbers.
+Append `NO_TRADE_REASON_FORMULA_ERROR = 4` to the `NoTradeReason` enum
+(`packages/proto/analysis/v1/analysis.proto:97-102`; `4` is the next free number — highest existing is
+`NO_TRADE_REASON_INSUFFICIENT_CAPITAL = 3`; the `NO_TRADE_REASON_UNSPECIFIED = 0` zero-value already
+exists, C-04 satisfied). Appending an enum value is non-breaking for `buf breaking`. Regenerate all
+stubs with `./scripts/buf-gen.sh` (C-09) — changed dirs `packages/proto/gen/{go,python,ts}/analysis/v1/`
+(+ compiled `gen/ts/dist/`). Per the feature-064/066 ledger insight, verify a clean pre-edit regen
+reproduces the committed stubs byte-for-byte **before** editing the `.proto`.
 
-**Harden the decoded series (adversary objections C-01/P-03):** formula outputs are **not** guaranteed
-to be length-`n` with JSON-`null` gaps. A numpy/pandas rolling formula returns a `NaN` warm-up head
-(`json.dumps(float('nan'))` emits the `NaN` token → decodes to `float('nan')`, *not* `None`), and a
-tail-stripped formula returns a **short** list. The decode must therefore:
+### 2. Evaluator — decode + raise (`app/services/evaluator.py`)
 
-- **Normalize `NaN`/`Inf`→`None`** so warm-up gaps read as `None` (matching the builtin series shape
-  from `align_indicator_points`, `evaluator.py:195-209`), not as `float('nan')` that silently poisons
-  `_eval_condition`.
-- **Reconcile length against `n`**: reuse the existing `align_indicator_points`
-  (`evaluator.py:195-209`) to place a short series at the correct trailing bars; on an
-  unreconcilable/over-length mismatch, treat it as a formula failure (part 2) rather than silently
-  indexing the wrong bar via `series[i]` (`servicer.py:788`). This is the guard against turning a
-  visible 0-trades bug into a silent wrong-signal bug.
-- **Preserve the scalar path** already exercised implicitly, without adding new semantics — see
-  Rejected Alternatives re: scalar-broadcast.
+Replace `dict(resp.output)` + the `isinstance(raw, (list, tuple))` gate (`evaluator.py:185-191`) with a
+recursive `google.protobuf.json_format.MessageToDict(resp.output)` decode — the exact in-service
+canonical, comment-annotated for the `ListValue` trap, at
+`app/services/screener.py:259-261`. Normalize `NaN`/`Inf`→`None`. For `COMPONENT_KIND_CUSTOM_FORMULA`,
+require the decoded series `len == n`; on any mismatch (`len<n`, `len>n`, empty) **raise** a new local
+`FormulaExecutionError(comp.formula_id, resp.error)`. Also replace the `resp.success == false` swallow
+(`evaluator.py:180-182`) with the same raise. `align_indicator_points` (`evaluator.py:195-217`) is
+**left untouched** — it serves the builtin path only, and (unlike the formula policy) truncates on
+`len>n`, so the two are deliberately not merged. An all-`None`/all-`NaN` series with `len == n` passes
+through (a legitimate all-warm-up series → existing `NO_TRADE_REASON_ENTIRE_RANGE_WARMUP`).
 
-### 2. Surface a genuine formula failure as per-symbol degradation (AC-3) — not a whole-run abort
+Custom-formula length policy (per decoded key):
 
-`evaluator.py:180-182` swallows `resp.success == false` into an all-`None` series. Correct the
-*visibility*, not by aborting: the servicer already degrades per-symbol and completes the run — the
-`except _InsufficientData` branch at `servicer.py:352-370` logs and skips one symbol, and the broad
-`except Exception` at `servicer.py:374` does `log.warning(... skipping); continue` (adversary factual
-correction — the proposer's "abort" reading was wrong; a whole-run `abort(INTERNAL)` would be a
-**regression** that destroys sibling-symbol evidence cells, feature 065 `servicer.py:331-348`, and
-`INTERNAL` is the wrong status for a caller/config error).
+| Shape | Rule |
+|---|---|
+| scalar (non-list) | dropped (unchanged); scalar-broadcast stays deferred (see Rejected) |
+| list `len == n` | normalize `NaN`/`Inf`→`None`, keep |
+| list `0 < len < n` | **raise** (do NOT tail-align — the contiguous-warm-up-head invariant holds for builtins, not arbitrary user formulas) |
+| list `len > n` | **raise** |
+| empty list | **raise** |
+| all-`None`/all-`NaN`, `len == n` | pass through (legit warm-up) |
 
-So: on `resp.success == false`, raise a small local `FormulaExecutionError` (net-new local exception,
-carrying `resp.error`) from `_compute_component`, and **handle it at every consuming path**:
+### 3. Servicer — surface per-symbol + fix the all-failed status (`app/handlers/servicer.py`)
 
-- **Backtest** (`_backtest_symbol_evaluated`, `servicer.py:741`): catch per symbol, mirror the
-  `_InsufficientData` branch — loud `log.warning` with `resp.error`, skip the symbol, surface it
-  through the existing structured per-symbol channel (the same one used for insufficient-data/coverage
-  gaps) so the failure is distinct from a legitimate 0-trade. The multi-symbol run still completes.
-- **Live loop** (`evaluate()` → `live_loop.py:119` `_eval_pair`): catch there too and degrade-with-log
-  (today an all-`None` series already yields steady-state / no alert; the explicit catch preserves that
-  while making it visible). **This is the C-10 requirement** — the shared `_compute_component` is
-  consumed by both paths, so both are updated and tested (the 056 ledger fail is "second path left
-  behind").
+`_compute_component` raises out of `evaluate_with_series` (`servicer.py:773`) → out of
+`_backtest_symbol_evaluated` (no local try) → into the RunBacktest per-symbol loop. Add an
+`except FormulaExecutionError as fe:` branch **between** the `_InsufficientData` handler
+(`servicer.py:352`) and the broad `except Exception` (`servicer.py:374`):
 
-### 3. Tests (paired, red-before-green — C-08 / P-06)
+- `log.warning(... fe.error)` (the indicators error string — surfaced via log only; see F-04 note).
+- Append `SymbolDiagnostics(symbol=symbol, bars=[], no_trade_reason=NO_TRADE_REASON_FORMULA_ERROR,
+  bars_total=0, warmup_bars=0)` to `all_diagnostics` — the failed symbol now appears in
+  `result.diagnostics` carrying a distinct reason, not silently dropped. Stamp the reason **directly**
+  (bypass `_classify_no_trade_reason` at `servicer.py:1477-1484`, which only sees trades/warmup/n and
+  would misclassify as `ENTRY_NEVER_TRUE`; the raising symbol never reaches `_finalize_symbol_diagnostics`,
+  so exactly one site sets `FORMULA_ERROR` — assert this invariant with a comment + test).
+- Increment a `formula_errors` counter; `continue`. Siblings keep their evidence cells
+  (`servicer.py:336-348`, feature 065).
 
-Regression home is `tests/test_strategy_evaluator.py` (reuse the `Struct`-mock pattern at `:360-362`,
-which already builds a `ListValue` but never asserts the decoded series is non-`None` —
-`recon.md` § Codebase Map). Cases:
+**All-failed-run guard (feature-053 regression — round-3 finding):** the status gate at
+`servicer.py:400-403` flips to `INSUFFICIENT_DATA` only when `coverage_gaps` is truthy. A single-symbol
+(or all-symbols-failed) run leaves `coverage_gaps`/`all_trades` empty and `len(daily_equity) <= 1`, so it
+would report `BACKTEST_STATUS_OK` and persist a **spurious per-run score** (`servicer.py:422,436`
+`_persist_backtest_run`) — the "fabricated flat-equity success" feature 053 explicitly removed
+(`xstockstrat-analysis/CLAUDE.md`). Extend the gate to
+`not all_trades and len(daily_equity) <= 1 and (coverage_gaps or formula_errors)` → `INSUFFICIENT_DATA`
+(records run history with 0 score / empty rating). A **partial** multi-symbol run where some sibling
+traded correctly stays `OK`.
 
-- List-valued output decodes to a non-`None` numeric series equal to the input (the red test that fails
-  today).
-- `NaN`/warm-up head → leading `None`s (not `float('nan')`).
-- Short list → tail-aligned to the correct bars.
-- Empty `ListValue` and over-length/mismatch → treated as failure, not misaligned.
-- `resp.success == false` → `FormulaExecutionError`; **backtest** path skips the symbol and the run
-  completes with the other symbols intact.
-- **Live-loop** path with a failing formula → degrades (no unhandled raise), asserted at the
-  `_eval_pair`/live-loop seam.
+### 4. UI — the shared diagnostics renderer (C-10, mandatory in this feature)
 
-Keep analysis coverage ≥40% (`services/xstockstrat-analysis/CLAUDE.md:253`).
+`services/xstockstrat-ui/.../BacktestDiagnostics.tsx:18-25` declares
+`const NO_TRADE_MESSAGE: Record<NoTradeReason, string>` — an **exhaustive** record over the enum. Once
+`buf-gen` adds `NoTradeReason.FORMULA_ERROR = 4`, that record is missing key `4` and `tsc`/`pnpm build`
+**fails** — so the UI change is not optional, it ships here. Add
+`[NoTradeReason.FORMULA_ERROR]: '<formula failed to execute>'` (final copy at spec/impl time). The
+no-trade banner (`:96`, `NO_TRADE_MESSAGE[sd.noTradeReason] ?? ''`) is **bars-independent**, so the
+`bars=[]`/`bars_total=0` entry renders the reason correctly without synthesizing bars. Add an e2e test
+asserting the `data-testid="no-trade-reason"` banner renders for a `FORMULA_ERROR` symbol
+(C-10 reachability/parity proof, directly answering the 056/060 ledger fails).
+
+### 5. Live loop — no change
+
+`NoTradeReason`/`SymbolDiagnostics` exist only on `BacktestResult`; the live loop emits alerts and has no
+equivalent reason surface. Its broad `except Exception` at `live_loop.py:85-93` already catches
+`FormulaExecutionError` (a plain `Exception` subclass) and logs-and-continues — the raise is contained
+today with no new safety code. Prove it with a test (failing formula in the live path → loop continues,
+`_last_state` untouched), per C-10.
+
+### 6. Sibling `ExecuteFormula` decode sites — verified, left as-is (P-03)
+
+There are three `ExecuteFormula.output` consumers; the decode *mechanic* is uniform after this fix, and
+the *failure policy* legitimately differs per consumer (recorded here, not left to omission):
+- `_compute_component` (the fix) — raises → `FORMULA_ERROR`.
+- `screener.py:257-261` — already decodes via `MessageToDict`; returns `None` on `success==false`
+  (criterion absent, blend continues). Left as-is.
+- `fundamentals_scoring.py:67` — `dict(resp.output)` then `float(out.get("value"/...))`, a **scalar**
+  consumer. `dict(Struct)` leaves scalars as native floats (only nested lists become `ListValue`), so
+  the bug does **not** bite it; an out-of-contract list output would raise `TypeError` loudly, not
+  silently degrade. **Verified no second-path bug — no change needed.**
+
+### 7. Steps & tests (C-08 / P-06, red-green)
+
+1. **Proto step** — append enum; `buf lint` + `buf breaking` + `./scripts/buf-gen.sh`; commit regen stubs.
+2. **Service step (evaluator)** — decode/raise. Tests: list output → non-`None` series == input (RED
+   today, `test_strategy_evaluator.py:354`); `NaN` head → leading `None`s; `len<n`/`len>n`/empty → raises;
+   `success==false` → raises; scalar `{"value":1}` → dropped (documents deferred broadcast).
+3. **Service step (servicer)** — `except FormulaExecutionError` branch + status-gate extension. Tests:
+   multi-symbol run where symbol A fails, B succeeds → A's `SymbolDiagnostics.no_trade_reason ==
+   NO_TRADE_REASON_FORMULA_ERROR`, B keeps its evidence cell, `status == OK`; **all-failed run → status ==
+   INSUFFICIENT_DATA and no persisted score**; invariant test that `_classify_no_trade_reason` never
+   produces `FORMULA_ERROR`.
+4. **UI step** — `NO_TRADE_MESSAGE` map key + e2e banner-render test for a `FORMULA_ERROR` symbol.
+5. **Service step (live loop)** — confirm-only + test (failing formula → loop logs-and-continues).
+6. Coverage: analysis ≥40% (`services/xstockstrat-analysis/CLAUDE.md`); UI e2e per existing Playwright setup.
 
 ## Rejected Alternatives
 
-- **Whole-run `abort(INTERNAL)` on formula failure** — rejected: regresses the service's existing
-  partial-success contract (destroys sibling-symbol evidence cells, feature 065), and `INTERNAL` is the
-  wrong gRPC status for a caller/config error (would mask `resp.error` behind a generic 500).
-- **Keep `dict(resp.output)` and just widen the `isinstance` to include `ListValue`** — rejected:
-  brittle (leaks the proto type into business logic, still needs manual per-element unwrap and
-  NaN/length handling); `MessageToDict` does the recursive conversion in one stdlib call already used
-  elsewhere.
-- **Assume outputs are always full-length-`n` with embedded `None` (no realignment)** — rejected: the
-  sandbox `json.dumps`es arbitrary user output (`xstockstrat-indicators/app/services/sandbox.py:167-168`)
-  with no length enforcement; a short/`NaN` series placed without `align_indicator_points` lands at the
-  wrong bars → silently wrong entry/exit signals (worse than the visible bug being fixed).
-- **Scalar-broadcast `{"value": 1}` → `[1.0] * n`** — deferred out of scope: an undeclared new semantic
-  not required by the reported list-output bug. Spec-time check: confirm whether a "trivial constant
-  formula" (product-spec) actually returns a scalar; only then, and only if required, add broadcast with
-  its own requirement + test.
+- **Option B — log-and-skip, no proto** — rejected by the user (round-2 gate): stops the all-`None`
+  masquerade but leaves no operator/UI-visible reason, satisfying only the second half of AC-3
+  (`product-spec.md:87`). Option A was chosen for the literal "visible `no_trade_reason`."
+- **Whole-run `abort(INTERNAL)` on failure** (round-1 proposal) — rejected: regresses partial-success
+  (destroys feature-065 sibling evidence, `servicer.py:336-348`), wrong gRPC status, masks `resp.error`.
+- **Tail-align a short custom-formula list via `align_indicator_points`** (round-2 proposal) — rejected:
+  imports the builtin contiguous-warm-up-head invariant that arbitrary user formulas don't guarantee →
+  silent bar-misalignment (worse than the visible bug). Custom formulas require `len==n` and raise.
+- **Refactor `align_indicator_points` to a shared `_tail_align`** (round-2 proposal) — rejected: the two
+  paths diverge (`align_indicator_points` truncates on `len>n`; formulas raise), so merging is wrong on
+  the merits and adds hot-path blast radius.
+- **Synthesize full bars (empty indicators) for the failed symbol** (round-3 proposer runner-up) —
+  rejected: the UI banner is bars-independent, so `bars=[]` renders fine once the map key exists; keep
+  the simple loop-level catch.
+- **In-band failure sentinel from `_compute_component`** — rejected: would widen the 064-frozen
+  `evaluate_with_series` return contract; both consumers already isolate per-unit, so raising is contained.
+- **Shared `decode_formula_output()` helper across all three consumers** — rejected for a bug fix:
+  rounds 1–2 settled "no new helper"; `screener` is already correct and `fundamentals` is scalar-safe, so
+  per-consumer decode + documented divergence is acceptable (not a DRY/C-10 violation).
+- **Dedicated `BACKTEST_STATUS_FORMULA_ERROR`** — rejected: a second proto enum + another UI status branch;
+  folding the all-failed run into the existing `INSUFFICIENT_DATA` gate is the minimal correct move.
+- **Scalar-broadcast `{"value":1}` → `[1.0]*n`** — deferred (confirmed safe): the two reported formulas
+  emit per-bar lists (repro `{"value":[1.0 for _ in data["close"]]}`, `product-spec.md:23`), so the
+  `ListValue` decode closes AC-1/AC-2 without broadcast.
 
 ## Open Risks
 
-- [ ] **Length-reconciliation policy** (tail-align vs. treat-as-failure for each mismatch shape) —
-  finalize the exact rule and the `align_indicator_points` reuse at `/sdd-spec`; needs the precise
-  `align_indicator_points` contract (`evaluator.py:195-209`). Target: service step.
-- [ ] **No dedicated `NO_TRADE_REASON_*` for formula failure** — recon did not find one; the per-symbol
-  surface reuses the existing insufficient-data/structured channel rather than a new enum value (avoids a
-  proto change, C-04/F-04). Confirm the exact channel/field at `/sdd-spec`. Target: service step.
-- [ ] **Live-loop degradation shape** — confirm `_eval_pair` (`live_loop.py:119`) has no existing
-  try/except and decide log-and-continue vs. emit-a-health-signal. Target: service step + live-loop test.
+- [ ] **Final UI copy** for `NO_TRADE_MESSAGE[FORMULA_ERROR]` and the exact e2e `data-testid` seam —
+  confirm the renderer's existing testid convention at `/sdd-spec`. Target: UI step.
+- [ ] **`resp.error` not machine-readable** — surfaced via `log.warning` only; `SymbolDiagnostics`/
+  `BacktestResult` have no string error field (`analysis.proto:56-71,123-129`) and F-04 forbids inventing
+  one. If product later wants the error text UI-visible, that is a separate proto field addition, out of
+  scope. Target: noted, not this feature.
+- [ ] **Status-gate predicate exact form** — the `formula_errors` counter + the `:400-403` boolean must be
+  written to preserve the partial-success case (some sibling traded → OK). Target: servicer step.
 
 ## Constitution Rules Touched
 
-- **C-08 / P-06** — honored by: the service step is paired with a red-before-green test step covering
-  decode, NaN, length, and both consuming-path failure behaviors; coverage stays ≥40%.
-- **C-10 (b/parity across shared paths)** — honored by: the failure-surfacing change to the shared
-  `_compute_component` is applied *and tested* on **both** the backtest and live-loop consumers, not
-  just backtest (directly addresses the 056 `fails.md` trap).
-- **P-03 (no silent deviation)** — honored by: the decode raises/surfaces on unreconcilable output
-  instead of silently misaligning; formula failures are logged with `resp.error` and surfaced, not
-  swallowed.
-- **C-04 / F-04 (no invented enum/symbol)** — honored by: no new proto enum value is invented; failure
-  is surfaced through an existing structured channel. Any proto need is escalated at `/sdd-spec`, not
-  guessed.
-- **F-07 (no hardcoded config)** — honored by: no config values introduced; behavior is code-level
-  graceful degradation consistent with existing `_InsufficientData` handling.
+- **C-04** — honored: `NO_TRADE_REASON_FORMULA_ERROR` appended to a closed enum that already has its
+  `_UNSPECIFIED = 0` zero-value; no string used where an enum belongs.
+- **C-09** — honored: proto step runs `buf lint` + `buf breaking` (append is non-breaking) and
+  `./scripts/buf-gen.sh`; regen stubs committed; toolchain verified against committed stubs first.
+- **C-08 / P-06** — honored: every service/proto/UI step is paired with red-before-green tests, incl. the
+  UI e2e banner proof and the all-failed-status test; analysis coverage stays ≥40%.
+- **C-10** — honored: the new enum's **two** shared consumers are updated and proven — the UI renderer
+  (`BacktestDiagnostics.tsx`, else the frontend build breaks) with an e2e reachability test, and the
+  status/scoring path (all-failed guard) — directly closing the 056/060 "forgot the shared consumer" fails.
+- **P-03** — honored: the `fundamentals_scoring` and screener decode sites were *verified now* (not
+  deferred), and the divergent per-consumer failure semantics are recorded here rather than by omission.
+- **F-04** — honored: no invented proto field for `resp.error`; it is surfaced via log only.
+- **F-07** — honored: no config values introduced.
+- **Floor status:** no unresolved `F-*` breach across all three rounds.

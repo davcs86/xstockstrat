@@ -69,16 +69,18 @@ actual `xstockstrat-indicators` `ExecuteFormula` response shape during `/sdd-spe
 
 ## Affected Services
 
-- `xstockstrat-analysis` (primary — evaluator result decoding / backtest diagnostics)
-- `xstockstrat-indicators` (secondary — `ExecuteFormula` response shape; likely read-only reference, not a code change)
+- `xstockstrat-analysis` (primary — evaluator decode/raise + backtest diagnostics surfacing)
+- `xstockstrat-ui` (shared `BacktestDiagnostics.tsx` renderer — mandatory once the new enum value exists, else the frontend build breaks)
+- `packages/proto` (new `NoTradeReason` enum value)
+- `xstockstrat-indicators` (read-only reference — `ExecuteFormula` response shape; no code change)
 
 ## Fix Scope
 
-- [x] No proto changes anticipated
+- [ ] ~~No proto changes anticipated~~ → **Proto change required** (design Option A): append `NO_TRADE_REASON_FORMULA_ERROR` to the `NoTradeReason` enum (`analysis.proto`); non-breaking, run `buf-gen.sh`. See `design.md`.
 - [x] No database migrations anticipated
 - [x] No config key changes anticipated
 
-(Update after investigation — remove or replace each item as needed)
+(Updated by /sdd-design — the design debate chose Option A, which surfaces the failure as a visible `no_trade_reason`, requiring the proto enum + shared UI renderer update. See `design.md` and `context.md`.)
 
 ## Acceptance Criteria
 

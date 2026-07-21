@@ -16,6 +16,7 @@
 |---|---|---|---|
 | 2026-07-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from staging backtest evidence (Issues disabled — no GitHub issue) |
 | 2026-07-21 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Dir renumbered 065→067 (collision). |
+| 2026-07-21 | `design-approved` (re-debated) | /sdd-design | Re-opened at user request; rounds 2–3 landed on **Option A** — proto enum `NO_TRADE_REASON_FORMULA_ERROR` + shared UI surface + all-failed-status guard. Scope grew to analysis + proto + ui. design.md rewritten. |
 
 ---
 
