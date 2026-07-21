@@ -1,6 +1,6 @@
 # Feature: backtest-results-visualization
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/backtest-results-visualization`
 **Created**: 2026-07-21
 **Last Updated**: 2026-07-21
@@ -15,6 +15,7 @@
 | 2026-07-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings) |
 | 2026-07-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
 | 2026-07-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
+| 2026-07-21 | `implementation-ready` → `in-progress` | /sdd-execute | Execution started; impl-spec advisory review PASS WITH WARNINGS (no Floor risk) |
 
 ---
 

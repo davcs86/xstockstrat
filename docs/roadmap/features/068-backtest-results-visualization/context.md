@@ -97,3 +97,23 @@
   4/5 analysis engine capture + tests → 6/7 detail repo/persist/evict/GetBacktest + tests (incl.
   AC-4 parity) → 8/9 UI lib derivation + unit tests → 10/11 UI wiring + e2e → 12 config-key docs
   (C-05).
+
+## Session 2026-07-21 — sdd-execute (start)
+
+- Impl-spec advisory review: PASS WITH WARNINGS (no blockers, no Floor risk). Overlap: CLEAN.
+  Executor guidance carried in (not spec edits — F-09): run `buf breaking` from
+  `packages/proto` with `subdir=packages/proto` on the against ref; concrete
+  `migrate ... down 1` for the Step-3 reversibility check; keep `context.abort(NOT_FOUND)`
+  outside the bare `except` in `GetBacktest`; stale `:83-93` anchor in Step 10 evidence noted
+  (real anchor `:26-34`).
+- **Execution mode deviation (recorded, not silent — P-03)**: steps run as sequential commits
+  on the harness-assigned branch `claude/backtest-results-visualization-ljhyyj` (feature-branch
+  role, see sdd-story entry), one commit per verified step (F-05), single final PR into
+  `main-dev`. Per-step sub-branch PRs are not used: the harness forbids pushing branches other
+  than the assigned one. F-02/F-03 honored (no direct push to main-dev/main; the one PR targets
+  main-dev as the integration PR of the feature-branch-role branch).
+- Environment: no Docker → codegen toolchain provisioned on host per
+  `docs/runbooks/codegen-toolchain-host-setup.md`; empty-diff baseline validated before any
+  proto edit. Local Postgres 16 (no TimescaleDB ext) provisioned; analysis migrations 001–007
+  applied via golang-migrate with the script's `analysis_schema_migrations` tracking-table
+  convention (TimescaleDB not needed by analysis migrations).
