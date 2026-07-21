@@ -39,6 +39,8 @@ export declare enum NoTradeReason {
     NO_TRADE_REASON_ENTRY_NEVER_TRUE = "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
     /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
     NO_TRADE_REASON_INSUFFICIENT_CAPITAL = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
+    /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series */
+    NO_TRADE_REASON_FORMULA_ERROR = "NO_TRADE_REASON_FORMULA_ERROR",
     UNRECOGNIZED = "UNRECOGNIZED"
 }
 export declare function noTradeReasonFromJSON(object: any): NoTradeReason;
@@ -197,6 +199,12 @@ export interface StrategyScore {
     };
     /** A/B/C/D/F */
     rating: string;
+    /** Evidence provenance for the derived cross-stock headline grade (feature 065). */
+    evidenceSymbols: number;
+    /** total trading days of evidence across those symbols */
+    evidenceDays: number;
+    /** true when evidence is below the symbol/day floor */
+    provisional: boolean;
 }
 export interface StrategyScore_ComponentScoresEntry {
     key: string;
@@ -232,6 +240,9 @@ export interface BacktestRunSummary {
     /** "" when the run earned no score */
     rating: string;
     completedAt?: Date | undefined;
+    /** Backtest range covered by this run (feature 065); unset on legacy rows. */
+    rangeStart?: Date | undefined;
+    rangeEnd?: Date | undefined;
 }
 export interface ListBacktestsResponse {
     runs: BacktestRunSummary[];

@@ -178,6 +178,8 @@ export enum NoTradeReason {
   NO_TRADE_REASON_ENTRY_NEVER_TRUE = "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
   /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
   NO_TRADE_REASON_INSUFFICIENT_CAPITAL = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
+  /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series */
+  NO_TRADE_REASON_FORMULA_ERROR = "NO_TRADE_REASON_FORMULA_ERROR",
   UNRECOGNIZED = "UNRECOGNIZED",
 }
 
@@ -195,6 +197,9 @@ export function noTradeReasonFromJSON(object: any): NoTradeReason {
     case 3:
     case "NO_TRADE_REASON_INSUFFICIENT_CAPITAL":
       return NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL;
+    case 4:
+    case "NO_TRADE_REASON_FORMULA_ERROR":
+      return NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -212,6 +217,8 @@ export function noTradeReasonToJSON(object: NoTradeReason): string {
       return "NO_TRADE_REASON_ENTRY_NEVER_TRUE";
     case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
       return "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
+    case NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR:
+      return "NO_TRADE_REASON_FORMULA_ERROR";
     case NoTradeReason.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -228,6 +235,8 @@ export function noTradeReasonToNumber(object: NoTradeReason): number {
       return 2;
     case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
       return 3;
+    case NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR:
+      return 4;
     case NoTradeReason.UNRECOGNIZED:
     default:
       return -1;
@@ -653,6 +662,12 @@ export interface StrategyScore {
   componentScores: { [key: string]: number };
   /** A/B/C/D/F */
   rating: string;
+  /** Evidence provenance for the derived cross-stock headline grade (feature 065). */
+  evidenceSymbols: number;
+  /** total trading days of evidence across those symbols */
+  evidenceDays: number;
+  /** true when evidence is below the symbol/day floor */
+  provisional: boolean;
 }
 
 export interface StrategyScore_ComponentScoresEntry {
@@ -689,7 +704,12 @@ export interface BacktestRunSummary {
   overallScore: number;
   /** "" when the run earned no score */
   rating: string;
-  completedAt?: Date | undefined;
+  completedAt?:
+    | Date
+    | undefined;
+  /** Backtest range covered by this run (feature 065); unset on legacy rows. */
+  rangeStart?: Date | undefined;
+  rangeEnd?: Date | undefined;
 }
 
 export interface ListBacktestsResponse {
@@ -2334,7 +2354,15 @@ export const ScoreStrategyRequest: MessageFns<ScoreStrategyRequest> = {
 };
 
 function createBaseStrategyScore(): StrategyScore {
-  return { strategyId: "", overallScore: 0, componentScores: {}, rating: "" };
+  return {
+    strategyId: "",
+    overallScore: 0,
+    componentScores: {},
+    rating: "",
+    evidenceSymbols: 0,
+    evidenceDays: 0,
+    provisional: false,
+  };
 }
 
 export const StrategyScore: MessageFns<StrategyScore> = {
@@ -2350,6 +2378,15 @@ export const StrategyScore: MessageFns<StrategyScore> = {
     });
     if (message.rating !== "") {
       writer.uint32(34).string(message.rating);
+    }
+    if (message.evidenceSymbols !== 0) {
+      writer.uint32(40).int32(message.evidenceSymbols);
+    }
+    if (message.evidenceDays !== 0) {
+      writer.uint32(48).int32(message.evidenceDays);
+    }
+    if (message.provisional !== false) {
+      writer.uint32(56).bool(message.provisional);
     }
     return writer;
   },
@@ -2396,6 +2433,30 @@ export const StrategyScore: MessageFns<StrategyScore> = {
           message.rating = reader.string();
           continue;
         }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.evidenceSymbols = reader.int32();
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.evidenceDays = reader.int32();
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.provisional = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2435,6 +2496,17 @@ export const StrategyScore: MessageFns<StrategyScore> = {
         )
         : {},
       rating: isSet(object.rating) ? globalThis.String(object.rating) : "",
+      evidenceSymbols: isSet(object.evidenceSymbols)
+        ? globalThis.Number(object.evidenceSymbols)
+        : isSet(object.evidence_symbols)
+        ? globalThis.Number(object.evidence_symbols)
+        : 0,
+      evidenceDays: isSet(object.evidenceDays)
+        ? globalThis.Number(object.evidenceDays)
+        : isSet(object.evidence_days)
+        ? globalThis.Number(object.evidence_days)
+        : 0,
+      provisional: isSet(object.provisional) ? globalThis.Boolean(object.provisional) : false,
     };
   },
 
@@ -2458,6 +2530,15 @@ export const StrategyScore: MessageFns<StrategyScore> = {
     if (message.rating !== "") {
       obj.rating = message.rating;
     }
+    if (message.evidenceSymbols !== 0) {
+      obj.evidenceSymbols = Math.round(message.evidenceSymbols);
+    }
+    if (message.evidenceDays !== 0) {
+      obj.evidenceDays = Math.round(message.evidenceDays);
+    }
+    if (message.provisional !== false) {
+      obj.provisional = message.provisional;
+    }
     return obj;
   },
 
@@ -2478,6 +2559,9 @@ export const StrategyScore: MessageFns<StrategyScore> = {
       {},
     );
     message.rating = object.rating ?? "";
+    message.evidenceSymbols = object.evidenceSymbols ?? 0;
+    message.evidenceDays = object.evidenceDays ?? 0;
+    message.provisional = object.provisional ?? false;
     return message;
   },
 };
@@ -2778,6 +2862,8 @@ function createBaseBacktestRunSummary(): BacktestRunSummary {
     overallScore: 0,
     rating: "",
     completedAt: undefined,
+    rangeStart: undefined,
+    rangeEnd: undefined,
   };
 }
 
@@ -2824,6 +2910,12 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
     }
     if (message.completedAt !== undefined) {
       Timestamp.encode(toTimestamp(message.completedAt), writer.uint32(114).fork()).join();
+    }
+    if (message.rangeStart !== undefined) {
+      Timestamp.encode(toTimestamp(message.rangeStart), writer.uint32(122).fork()).join();
+    }
+    if (message.rangeEnd !== undefined) {
+      Timestamp.encode(toTimestamp(message.rangeEnd), writer.uint32(130).fork()).join();
     }
     return writer;
   },
@@ -2947,6 +3039,22 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
           message.completedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
           continue;
         }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.rangeStart = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          message.rangeEnd = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3018,6 +3126,16 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
         : isSet(object.completed_at)
         ? fromJsonTimestamp(object.completed_at)
         : undefined,
+      rangeStart: isSet(object.rangeStart)
+        ? fromJsonTimestamp(object.rangeStart)
+        : isSet(object.range_start)
+        ? fromJsonTimestamp(object.range_start)
+        : undefined,
+      rangeEnd: isSet(object.rangeEnd)
+        ? fromJsonTimestamp(object.rangeEnd)
+        : isSet(object.range_end)
+        ? fromJsonTimestamp(object.range_end)
+        : undefined,
     };
   },
 
@@ -3065,6 +3183,12 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
     if (message.completedAt !== undefined) {
       obj.completedAt = message.completedAt.toISOString();
     }
+    if (message.rangeStart !== undefined) {
+      obj.rangeStart = message.rangeStart.toISOString();
+    }
+    if (message.rangeEnd !== undefined) {
+      obj.rangeEnd = message.rangeEnd.toISOString();
+    }
     return obj;
   },
 
@@ -3087,6 +3211,8 @@ export const BacktestRunSummary: MessageFns<BacktestRunSummary> = {
     message.overallScore = object.overallScore ?? 0;
     message.rating = object.rating ?? "";
     message.completedAt = object.completedAt ?? undefined;
+    message.rangeStart = object.rangeStart ?? undefined;
+    message.rangeEnd = object.rangeEnd ?? undefined;
     return message;
   },
 };

@@ -21,6 +21,10 @@ interface MockStrategy {
   name?: string;
   rating?: string;
   overallScore?: number;
+  // feature 065 — evidence provenance for the derived grade.
+  evidenceSymbols?: number;
+  evidenceDays?: number;
+  provisional?: boolean;
 }
 
 const MOCK_STRATEGIES: MockStrategy[] = [
@@ -119,6 +123,22 @@ test.describe('InsightsDashboard', () => {
 
     await page.goto('/insights');
     await expect(page.getByText('A', { exact: true }).first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('provisional grade shows a Provisional badge; well-evidenced grade does not', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockAnalysis(page, [
+      { strategyId: 'strat-prov-001', rating: 'B', overallScore: 0.68, provisional: true },
+      { strategyId: 'strat-solid-002', rating: 'A', overallScore: 0.87, provisional: false },
+    ]);
+
+    await page.goto('/insights');
+
+    // Exactly one Provisional badge — for the thin-evidence strategy only.
+    await expect(page.getByText('Provisional', { exact: true })).toHaveCount(1);
+    await expect(page.getByText('strat-solid-002', { exact: true })).toBeVisible({ timeout: 5000 });
   });
 
   test('registered-but-unscored strategy shows "Not scored"', async ({ page }) => {

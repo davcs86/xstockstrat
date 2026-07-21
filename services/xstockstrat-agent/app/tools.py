@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Eleven tools:
+Thirteen tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -13,6 +13,8 @@ Eleven tools:
   manage_formula      — registers/updates/deletes custom formulas in indicators
   manage_signal_source — registers/updates/deactivates signal sources in ingest
   set_strategy_live   — enables/disables live alert evaluation for a strategy
+  trigger_backfill    — triggers an OHLCV history backfill via gRPC TriggerBackfill (admin-scoped)
+  get_backfill_status — checks a backfill job / lists recent jobs (read-only)
 """
 
 import base64
@@ -145,7 +147,13 @@ def register_tools(server: FastMCP) -> None:
             # Credentials are stored in config under the conventional key source.<slug>.credentials
             password = await client.get_config_value(f"source.{source_slug}.credentials")
 
-        text = await _fetch_url(url, password=password)
+        # Optional per-source request headers (e.g. SEC EDGAR rejects requests
+        # without a declared User-Agent identifying the caller).
+        request_headers = config_json.get("request_headers")
+        if not isinstance(request_headers, dict):
+            request_headers = None
+
+        text = await _fetch_url(url, password=password, headers=request_headers)
         return {"raw_text": text}
 
     @server.tool()
@@ -235,7 +243,10 @@ def register_tools(server: FastMCP) -> None:
         initial_capital: float = 100000.0,
     ) -> dict:
         """Trigger a backtest via xstockstrat-analysis.
-        strategy_id: identifies the strategy (e.g. 'sma_crossover').
+        strategy_id: identifies the strategy (e.g. 'sma_crossover'). Must be a REGISTERED strategy
+          definition — the run executes that definition and earns evidence toward its derived
+          headline grade (feature 065). An unregistered id returns NOT_FOUND (the legacy ad-hoc
+          SMA-crossback path is no longer reachable from the agent).
         symbols: list of ticker symbols e.g. ['NVDA', 'AAPL'].
         initial_capital: starting capital in USD (default 100000).
         Returns the full backtest result including per-symbol `diagnostics`: a day-by-day list of
@@ -290,7 +301,36 @@ def register_tools(server: FastMCP) -> None:
         strategy_id: lowercase/underscore identifier (e.g. 'sma_crossover').
         display_name: human-readable name.
         components: list of {ref_name, kind ('builtin'|'formula'), indicator, formula_id, params}.
-        entry_rule / exit_rule: JSON-encoded condition trees.
+            kind='builtin': indicator must be one of the built-in enum ATR, BB, EMA, MACD, RSI,
+            SMA, STOCH, VWAP (case-insensitive). For an indicator outside this set (e.g. a
+            z-score or efficiency-ratio calculation), register a custom formula first via
+            manage_formula and reference it here as kind='formula', formula_id=<id>.
+
+        entry_rule / exit_rule: JSON-encoded condition trees (a JSON string, not a raw object).
+            Two node shapes, nestable to arbitrary depth:
+              - Combinator node: {"op": "AND"|"OR", "conditions": [<node>, ...]}. There is no NOT.
+              - Leaf/comparison node: {"fn": <op>, "lhs": <operand>, "rhs": <operand>}, where
+                <op> is one of '>', '<', '>=', '<=', 'crosses_above', 'crosses_below'
+                (no '==' or '!=').
+            An <operand> is either a JSON number (a literal threshold, rhs only) or a string
+            referencing a component: a bare ref_name (must match a components[].ref_name)
+            resolves to that component's primary "value" series; the dotted form
+            "<ref_name>.<series>" addresses a secondary output series of a multi-output
+            component (e.g. 'bb.upper'/'bb.lower' for Bollinger Bands, 'macd.signal'/
+            'macd.histogram', 'stoch.d'). Every ref referenced in a rule must resolve to a
+            components[] entry or the strategy is rejected (INVALID_ARGUMENT) at write time.
+
+            Worked example — entry when a z-score component 'z' is below -1.0 AND an
+            efficiency-ratio component 'er' is below 0.25 (both registered as kind='formula'
+            components, since neither is a built-in indicator):
+                {
+                  "op": "AND",
+                  "conditions": [
+                    {"fn": "<", "lhs": "z", "rhs": -1.0},
+                    {"fn": "<", "lhs": "er", "rhs": 0.25}
+                  ]
+                }
+            (pass this dict JSON-encoded, e.g. json.dumps(...), as the entry_rule string.)
         signal_params: optional signal-weighting params."""
         definition: dict = {
             "strategy_id": strategy_id,
@@ -328,7 +368,28 @@ def register_tools(server: FastMCP) -> None:
         parameters: typed parameter definitions for register/update — a list of
             {name, type, default, description, required, min, max} where type is one of
             'int'|'float'|'bool'|'string' and min/max apply to numeric params only. Values
-            are read inside the formula via params["<name>"]."""
+            are read inside the formula via params["<name>"].
+
+        source: plain Python, executed in a subprocess sandbox (no filesystem/network access).
+            Two dicts are already in scope — data (series input, e.g. data["close"], a list of
+            floats) and params (validated typed scalars, e.g. params["period"]) — and the
+            formula must assign its output to a `result` dict with at least a "value" key (the
+            primary series); any other keys are declared output series (see the `outputs` field
+            on the underlying RegisterFormula RPC, e.g. for a z-score or efficiency-ratio
+            indicator that emits more than one series).
+            Only imports in the `indicators.sandbox.allowed_imports` config key are permitted
+            (default: numpy, pandas, math, statistics). Within those, at least these functions
+            are available for building custom indicators:
+              - mean(), std(), diff(), shift() — pandas Series/DataFrame methods, e.g.
+                pd.Series(data["close"]).rolling(20).mean() / .std() / .diff() / .shift(1)
+                (or the numpy equivalents, e.g. np.mean(), np.std()).
+              - sum(), abs() — plain Python builtins, no import needed.
+            Example z-score formula body:
+                import pandas as pd
+                s = pd.Series(data["close"])
+                mean = s.rolling(params["period"]).mean()
+                std = s.rolling(params["period"]).std()
+                result = {"value": ((s - mean) / std).tolist()}"""
         formula: dict = {
             "formula_id": formula_id,
             "user_id": formula_author_user_id,
@@ -391,6 +452,67 @@ def register_tools(server: FastMCP) -> None:
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
 
+    @server.tool()
+    async def trigger_backfill(
+        symbols: list[str],
+        timeframe: str = "1d",
+        start: str | None = None,
+        end: str | None = None,
+        overwrite: bool = False,
+        fill_mode: str | None = None,
+    ) -> dict:
+        """Trigger a historical OHLCV backfill in xstockstrat-ingest (admin-scoped write).
+        symbols: explicit ticker list, e.g. ["AAPL", "MSFT"]; max 50 per call.
+        timeframe: one of 15m/15Min/1h/1Hour/1d/1Day (canonicalized; default '1d').
+        start / end: optional ISO 8601 datetimes bounding the range; one-sided allowed;
+            both omitted = the service's default range.
+        overwrite: true re-fetches bars that already exist.
+        fill_mode: 'full' | 'gaps_only'; omitted = server default FULL. 'gaps_only'
+            fetches only missing ranges (cheaper on provider quota).
+        Returns {"job_id", "status"}. Ingest performs NO synchronous input validation —
+        it queues unconditionally and bad input surfaces as a terminal FAILED/PARTIAL
+        job; poll get_backfill_status with the returned job_id to observe the outcome."""
+        try:
+            return await client.trigger_backfill(
+                symbols=symbols,
+                timeframe=timeframe,
+                start=start,
+                end=end,
+                overwrite=overwrite,
+                fill_mode=fill_mode,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def get_backfill_status(
+        job_id: str = "",
+        status_filter: str | None = None,
+        symbol: str = "",
+        limit: int = 0,
+        page_token: str = "",
+    ) -> dict:
+        """Check one backfill job or list recent jobs (read-only — no admin scope).
+        job_id: when set, returns {"job": {...}} with the BackfillJob fields (status,
+            bars_processed, bars_total, chunks_completed, chunks_total, failed_symbols,
+            error). When empty, lists recent jobs instead.
+        status_filter: list mode only — queued/running/completed/failed/partial/canceled;
+            omit or 'unspecified' = all statuses.
+        symbol: list mode only — optional ticker filter.
+        limit: list mode page size; 0 = server default (100).
+        page_token: pass the previous response's next_page_token to fetch the next page.
+        List mode returns {"jobs": [...], "next_page_token": "..."}."""
+        try:
+            return await client.get_backfill_status(
+                job_id=job_id,
+                status_filter=status_filter,
+                symbol=symbol,
+                limit=limit,
+                page_token=page_token,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="backfill job not found")) from e
+
 
 async def _get_source(source_slug: str) -> dict:
     """Fetch a single signal source by slug from the ingest registry.
@@ -422,12 +544,15 @@ def _extract_from_bytes(data: bytes, password: str | None = None) -> str:
             raise ValueError(f"Cannot extract text from attachment: {e}") from e
 
 
-async def _fetch_url(url: str, password: str | None = None) -> str:
+async def _fetch_url(
+    url: str, password: str | None = None, headers: dict[str, str] | None = None
+) -> str:
     """Fetch URL content. For authenticated sources, passes password as Bearer token.
+    headers: optional extra request headers; Authorization from password wins.
     Returns raw text."""
     import httpx  # noqa: PLC0415
 
-    headers: dict[str, str] = {}
+    headers = {str(k): str(v) for k, v in (headers or {}).items()}
     if password:
         headers["Authorization"] = f"Bearer {password}"
 

@@ -14,6 +14,7 @@ from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc
 from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
 from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc
 from gen.notify.v1 import notify_pb2, notify_pb2_grpc
+from google.protobuf.json_format import MessageToDict
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -867,7 +868,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     "authenticated_website source requires credentials_ref",
                 )
                 return
-            cfg_dict = dict(src.config_json) if src.config_json else None
+            # MessageToDict, not dict(): dict() keeps nested Struct/ListValue protobuf
+            # objects as values, which neither json.dumps nor asyncpg can encode.
+            cfg_dict = MessageToDict(src.config_json) if src.config_json else None
             err = validate_config_json(src.source_type, cfg_dict)
             if err:
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)

@@ -100,23 +100,33 @@ resp = stub.TriggerBackfill(ingest_pb2.TriggerBackfillRequest(
 print(f"Job ID: {resp.job_id}, Status: {ingest_pb2.BackfillStatus.Name(resp.status)}")
 ```
 
-### Via Webhook
-```bash
-curl -X POST http://xstockstrat-ingest:8055/webhooks/trigger-backfill \
-  -H 'Content-Type: application/json' \
-  -d '{
-{
-    "symbols": ["AAPL", "MSFT", "NVDA", "TSLA"],
-    "timeframe": "1d",
-    "start": "2020-01-01T00:00:00Z",
-    "end": "2024-12-31T00:00:00Z",
-    "overwrite": false
-  }'
+### Via MCP tool (AI agents)
+
+Agents connected to `xstockstrat-agent` trigger the same job through the `trigger_backfill`
+MCP tool (feature 066) — no private-network access needed. Full parameter/return/error
+reference: `docs/runbooks/mcp-tools.md`.
+
+```text
+trigger_backfill(
+    symbols=["AAPL", "MSFT", "NVDA", "TSLA"],
+    timeframe="1d",                       # accepts 15m/15Min/1h/1Hour/1d/1Day
+    start="2020-01-01T00:00:00Z",
+    end="2024-12-31T00:00:00Z",
+    overwrite=False,
+    fill_mode="gaps_only",                # optional; fetches only missing ranges
+)
+→ {"job_id": "…", "status": "BACKFILL_STATUS_QUEUED"}
 ```
+
+> The former ingest HTTP webhook (`/webhooks/trigger-backfill`) was removed with the backend
+> HTTP servers — the MCP tool and the gRPC/UI paths above are the supported triggers.
 
 ---
 
 ## Step 2 — Monitor Progress
+
+AI agents poll the same job via the `get_backfill_status` MCP tool (`job_id` → single job;
+empty → list recent jobs).
 
 ### Poll job status
 ```python

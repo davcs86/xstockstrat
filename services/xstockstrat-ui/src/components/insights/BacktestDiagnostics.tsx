@@ -22,6 +22,8 @@ const NO_TRADE_MESSAGE: Record<NoTradeReason, string> = {
   [NoTradeReason.ENTRY_NEVER_TRUE]:
     'No trades — the entry condition was never satisfied over this range. Check the indicator values below against your entry rule.',
   [NoTradeReason.INSUFFICIENT_CAPITAL]: 'No trades — insufficient capital to open a position.',
+  [NoTradeReason.FORMULA_ERROR]:
+    'No trades — a custom-formula component failed to execute over this range. Check the formula definition and its inputs.',
 };
 
 function fmtDate(seconds: bigint | undefined): string {

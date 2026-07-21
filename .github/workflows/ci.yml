@@ -52,6 +52,7 @@ jobs:
             xstockstrat-indicators: ['services/xstockstrat-indicators/**']
             xstockstrat-ingest:     ['services/xstockstrat-ingest/**']
             xstockstrat-analysis:   ['services/xstockstrat-analysis/**']
+            xstockstrat-agent:      ['services/xstockstrat-agent/**']
             xstockstrat-config:     ['services/xstockstrat-config/**']
             xstockstrat-ledger:     ['services/xstockstrat-ledger/**']
             xstockstrat-identity:   ['services/xstockstrat-identity/**']
@@ -275,6 +276,7 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-indicators') ||
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ingest') ||
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-analysis') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-agent') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
@@ -285,6 +287,7 @@ jobs:
           - xstockstrat-indicators
           - xstockstrat-ingest
           - xstockstrat-analysis
+          - xstockstrat-agent
     defaults:
       run:
         working-directory: services/${{ matrix.service }}
@@ -313,6 +316,7 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-indicators') ||
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ingest') ||
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-analysis') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-agent') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
@@ -327,6 +331,9 @@ jobs:
             coverage_threshold: 40
             cov_source: app
           - service: xstockstrat-analysis
+            coverage_threshold: 40
+            cov_source: app
+          - service: xstockstrat-agent
             coverage_threshold: 40
             cov_source: app
     defaults:
@@ -474,6 +481,7 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ledger') ||
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-identity') ||
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-notify') ||
+      contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ui') ||
       contains(fromJson(needs.changes.outputs.matched), 'proto') ||
       contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
@@ -489,6 +497,10 @@ jobs:
           - service: xstockstrat-identity
             coverage_threshold: 40
           - service: xstockstrat-notify
+            coverage_threshold: 40
+          # xstockstrat-ui runs the vitest unit suite (feature 065); the real coverage gate is
+          # vitest's own scoped src/lib threshold (vitest.config.ts) — this entry just runs it.
+          - service: xstockstrat-ui
             coverage_threshold: 40
     steps:
       - uses: actions/checkout@v6

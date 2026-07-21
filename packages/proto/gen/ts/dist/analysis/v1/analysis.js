@@ -178,6 +178,8 @@ var NoTradeReason;
     NoTradeReason["NO_TRADE_REASON_ENTRY_NEVER_TRUE"] = "NO_TRADE_REASON_ENTRY_NEVER_TRUE";
     /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
     NoTradeReason["NO_TRADE_REASON_INSUFFICIENT_CAPITAL"] = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
+    /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series */
+    NoTradeReason["NO_TRADE_REASON_FORMULA_ERROR"] = "NO_TRADE_REASON_FORMULA_ERROR";
     NoTradeReason["UNRECOGNIZED"] = "UNRECOGNIZED";
 })(NoTradeReason || (exports.NoTradeReason = NoTradeReason = {}));
 function noTradeReasonFromJSON(object) {
@@ -194,6 +196,9 @@ function noTradeReasonFromJSON(object) {
         case 3:
         case "NO_TRADE_REASON_INSUFFICIENT_CAPITAL":
             return NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL;
+        case 4:
+        case "NO_TRADE_REASON_FORMULA_ERROR":
+            return NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR;
         case -1:
         case "UNRECOGNIZED":
         default:
@@ -210,6 +215,8 @@ function noTradeReasonToJSON(object) {
             return "NO_TRADE_REASON_ENTRY_NEVER_TRUE";
         case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
             return "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
+        case NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR:
+            return "NO_TRADE_REASON_FORMULA_ERROR";
         case NoTradeReason.UNRECOGNIZED:
         default:
             return "UNRECOGNIZED";
@@ -225,6 +232,8 @@ function noTradeReasonToNumber(object) {
             return 2;
         case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
             return 3;
+        case NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR:
+            return 4;
         case NoTradeReason.UNRECOGNIZED:
         default:
             return -1;
@@ -1917,7 +1926,15 @@ exports.ScoreStrategyRequest = {
     },
 };
 function createBaseStrategyScore() {
-    return { strategyId: "", overallScore: 0, componentScores: {}, rating: "" };
+    return {
+        strategyId: "",
+        overallScore: 0,
+        componentScores: {},
+        rating: "",
+        evidenceSymbols: 0,
+        evidenceDays: 0,
+        provisional: false,
+    };
 }
 exports.StrategyScore = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -1932,6 +1949,15 @@ exports.StrategyScore = {
         });
         if (message.rating !== "") {
             writer.uint32(34).string(message.rating);
+        }
+        if (message.evidenceSymbols !== 0) {
+            writer.uint32(40).int32(message.evidenceSymbols);
+        }
+        if (message.evidenceDays !== 0) {
+            writer.uint32(48).int32(message.evidenceDays);
+        }
+        if (message.provisional !== false) {
+            writer.uint32(56).bool(message.provisional);
         }
         return writer;
     },
@@ -1973,6 +1999,27 @@ exports.StrategyScore = {
                     message.rating = reader.string();
                     continue;
                 }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.evidenceSymbols = reader.int32();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 48) {
+                        break;
+                    }
+                    message.evidenceDays = reader.int32();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 56) {
+                        break;
+                    }
+                    message.provisional = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2005,6 +2052,17 @@ exports.StrategyScore = {
                     }, {})
                     : {},
             rating: isSet(object.rating) ? globalThis.String(object.rating) : "",
+            evidenceSymbols: isSet(object.evidenceSymbols)
+                ? globalThis.Number(object.evidenceSymbols)
+                : isSet(object.evidence_symbols)
+                    ? globalThis.Number(object.evidence_symbols)
+                    : 0,
+            evidenceDays: isSet(object.evidenceDays)
+                ? globalThis.Number(object.evidenceDays)
+                : isSet(object.evidence_days)
+                    ? globalThis.Number(object.evidence_days)
+                    : 0,
+            provisional: isSet(object.provisional) ? globalThis.Boolean(object.provisional) : false,
         };
     },
     toJSON(message) {
@@ -2027,6 +2085,15 @@ exports.StrategyScore = {
         if (message.rating !== "") {
             obj.rating = message.rating;
         }
+        if (message.evidenceSymbols !== 0) {
+            obj.evidenceSymbols = Math.round(message.evidenceSymbols);
+        }
+        if (message.evidenceDays !== 0) {
+            obj.evidenceDays = Math.round(message.evidenceDays);
+        }
+        if (message.provisional !== false) {
+            obj.provisional = message.provisional;
+        }
         return obj;
     },
     create(base) {
@@ -2043,6 +2110,9 @@ exports.StrategyScore = {
             return acc;
         }, {});
         message.rating = object.rating ?? "";
+        message.evidenceSymbols = object.evidenceSymbols ?? 0;
+        message.evidenceDays = object.evidenceDays ?? 0;
+        message.provisional = object.provisional ?? false;
         return message;
     },
 };
@@ -2312,6 +2382,8 @@ function createBaseBacktestRunSummary() {
         overallScore: 0,
         rating: "",
         completedAt: undefined,
+        rangeStart: undefined,
+        rangeEnd: undefined,
     };
 }
 exports.BacktestRunSummary = {
@@ -2357,6 +2429,12 @@ exports.BacktestRunSummary = {
         }
         if (message.completedAt !== undefined) {
             timestamp_1.Timestamp.encode(toTimestamp(message.completedAt), writer.uint32(114).fork()).join();
+        }
+        if (message.rangeStart !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.rangeStart), writer.uint32(122).fork()).join();
+        }
+        if (message.rangeEnd !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.rangeEnd), writer.uint32(130).fork()).join();
         }
         return writer;
     },
@@ -2465,6 +2543,20 @@ exports.BacktestRunSummary = {
                     message.completedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 15: {
+                    if (tag !== 122) {
+                        break;
+                    }
+                    message.rangeStart = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 16: {
+                    if (tag !== 130) {
+                        break;
+                    }
+                    message.rangeEnd = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2535,6 +2627,16 @@ exports.BacktestRunSummary = {
                 : isSet(object.completed_at)
                     ? fromJsonTimestamp(object.completed_at)
                     : undefined,
+            rangeStart: isSet(object.rangeStart)
+                ? fromJsonTimestamp(object.rangeStart)
+                : isSet(object.range_start)
+                    ? fromJsonTimestamp(object.range_start)
+                    : undefined,
+            rangeEnd: isSet(object.rangeEnd)
+                ? fromJsonTimestamp(object.rangeEnd)
+                : isSet(object.range_end)
+                    ? fromJsonTimestamp(object.range_end)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -2581,6 +2683,12 @@ exports.BacktestRunSummary = {
         if (message.completedAt !== undefined) {
             obj.completedAt = message.completedAt.toISOString();
         }
+        if (message.rangeStart !== undefined) {
+            obj.rangeStart = message.rangeStart.toISOString();
+        }
+        if (message.rangeEnd !== undefined) {
+            obj.rangeEnd = message.rangeEnd.toISOString();
+        }
         return obj;
     },
     create(base) {
@@ -2602,6 +2710,8 @@ exports.BacktestRunSummary = {
         message.overallScore = object.overallScore ?? 0;
         message.rating = object.rating ?? "";
         message.completedAt = object.completedAt ?? undefined;
+        message.rangeStart = object.rangeStart ?? undefined;
+        message.rangeEnd = object.rangeEnd ?? undefined;
         return message;
     },
 };

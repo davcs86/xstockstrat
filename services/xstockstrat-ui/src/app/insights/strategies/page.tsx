@@ -11,19 +11,7 @@ import { useStrategyDefinitions, useManageStrategy } from '@/hooks/useStrategyDe
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
 import { StrategyOperation } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import type { StrategyScore } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-
-function ratingVariant(rating: string): 'buy' | 'info' | 'warning' | 'destructive' {
-  if (rating === 'A') return 'buy';
-  if (rating === 'B') return 'info';
-  if (rating === 'C') return 'warning';
-  return 'destructive';
-}
-
-function scoreColor(score: number): string {
-  if (score >= 0.8) return 'text-buy';
-  if (score >= 0.6) return 'text-paper';
-  return 'text-destructive';
-}
+import { ratingVariant, scoreColor, formatSymbolYears } from '@/lib/scoreDisplay';
 
 export default function StrategiesPage() {
   const router = useRouter();
@@ -88,6 +76,7 @@ export default function StrategiesPage() {
                           </p>
                           <div className="flex items-center gap-1.5 shrink-0">
                             {!isActive && <Badge variant="secondary">inactive</Badge>}
+                            {score?.provisional && <Badge variant="secondary">Provisional</Badge>}
                             {score?.rating && (
                               <Badge variant={ratingVariant(score.rating)}>{score.rating}</Badge>
                             )}
@@ -103,6 +92,11 @@ export default function StrategiesPage() {
                                 {(score.overallScore * 100).toFixed(0)}%
                               </span>
                             </div>
+                            {/* feature 065: evidence breadth + duration behind the derived grade. */}
+                            <p className="text-[11px] text-muted-foreground">
+                              {score.evidenceSymbols} symbols ·{' '}
+                              {formatSymbolYears(score.evidenceDays)}
+                            </p>
                             {score.componentScores &&
                               Object.entries(score.componentScores as Record<string, number>)
                                 .slice(0, 3)
