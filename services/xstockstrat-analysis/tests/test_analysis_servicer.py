@@ -2003,3 +2003,183 @@ class TestEquityCapture:
 
         result = await svc.RunBacktest(req, context=MagicMock())
         assert result.initial_capital == 25_000.0
+
+
+# ---------------------------------------------------------------------------
+# Feature 068 — detail persistence + GetBacktest (DB-only read path)
+# ---------------------------------------------------------------------------
+
+
+class TestBacktestDetailPersistence:
+    def _empty_req(self, strategy_id="s1", symbols=None):
+        req = MagicMock()
+        req.strategy_id = strategy_id
+        req.symbols = symbols if symbols is not None else []
+        req.initial_capital = 100_000.0
+        req.strategy_id_ref = ""
+        req.HasField = MagicMock(return_value=False)
+        req.range = common_pb2.TimeRange()
+        return req
+
+    @pytest.mark.asyncio
+    async def test_ok_run_persists_detail_bytes(self):
+        """An OK run serializes the full result into the details repo with retention 20."""
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_details_repo = AsyncMock()
+
+        result = await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK
+        svc._backtest_details_repo.insert.assert_awaited_once()
+        kwargs = svc._backtest_details_repo.insert.await_args.kwargs
+        assert kwargs["backtest_id"] == result.backtest_id
+        assert kwargs["strategy_id"] == "s1"
+        assert kwargs["completed_at"] == result.completed_at.ToDatetime()
+        assert kwargs["result_pb"] == result.SerializeToString()
+        assert kwargs["retention"] == 20  # MagicMock cfg returns the call-site default
+
+    @pytest.mark.asyncio
+    async def test_retention_clamped_to_at_least_one(self):
+        """A negative configured retention is clamped to 1, never passed to SQL raw."""
+        svc = make_servicer()
+        svc._cfg.get_int = MagicMock(
+            side_effect=lambda key, default=0: (
+                -5 if key == "analysis.backtest.detail_retention_per_strategy" else default
+            )
+        )
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_details_repo = AsyncMock()
+
+        await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+
+        assert svc._backtest_details_repo.insert.await_args.kwargs["retention"] == 1
+
+    @pytest.mark.asyncio
+    async def test_insufficient_run_persists_no_detail(self):
+        """INSUFFICIENT_DATA runs get a history row but never a detail row (FR-6)."""
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_details_repo = AsyncMock()
+        bars_resp = MagicMock()
+        bars_resp.bars = [MagicMock(), MagicMock(), MagicMock()]  # too few bars
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
+
+        result = await svc.RunBacktest(self._empty_req("s1", ["AAPL"]), context=MagicMock())
+
+        assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
+        svc._backtest_details_repo.insert.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_detail_persist_failure_never_fails_run(self):
+        """A DB error while persisting detail is swallowed (best-effort)."""
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_details_repo = AsyncMock()
+        svc._backtest_details_repo.insert = AsyncMock(side_effect=RuntimeError("db down"))
+
+        result = await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK  # run still returned
+
+    @pytest.mark.asyncio
+    async def test_parity_history_metrics_equal_detail_bytes(self):
+        """AC-4 / C-10(b): the seven ListBacktests metrics equal the deserialized detail's."""
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_runs_repo = AsyncMock()
+        svc._backtest_details_repo = AsyncMock()
+
+        await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+
+        history = svc._backtest_runs_repo.insert.await_args.kwargs
+        detail = analysis_pb2.BacktestResult()
+        detail.ParseFromString(svc._backtest_details_repo.insert.await_args.kwargs["result_pb"])
+        assert history["metrics"]["total_return"] == detail.total_return
+        assert history["metrics"]["annualized_return"] == detail.annualized_return
+        assert history["metrics"]["sharpe_ratio"] == detail.sharpe_ratio
+        assert history["metrics"]["max_drawdown"] == detail.max_drawdown
+        assert history["metrics"]["win_rate"] == detail.win_rate
+        assert history["metrics"]["total_trades"] == detail.total_trades
+        assert history["metrics"]["profit_factor"] == detail.profit_factor
+        assert history["backtest_id"] == detail.backtest_id
+
+
+class TestGetBacktest:
+    @pytest.mark.asyncio
+    async def test_hit_round_trips_persisted_bytes(self):
+        svc = make_servicer()
+        stored = analysis_pb2.BacktestResult(
+            backtest_id="bt-1",
+            strategy_id="s1",
+            total_return=0.12,
+            total_trades=3,
+            initial_capital=100_000.0,
+            status=analysis_pb2.BACKTEST_STATUS_OK,
+        )
+        svc._backtest_details_repo = AsyncMock()
+        svc._backtest_details_repo.get = AsyncMock(return_value=stored.SerializeToString())
+
+        req = MagicMock()
+        req.backtest_id = "bt-1"
+        result = await svc.GetBacktest(req, context=MagicMock())
+
+        assert result == stored  # byte-exact round trip
+        svc._backtest_details_repo.get.assert_awaited_once_with("bt-1")
+
+    @pytest.mark.asyncio
+    async def test_miss_aborts_not_found(self):
+        svc = make_servicer()
+        svc._backtest_details_repo = AsyncMock()
+        svc._backtest_details_repo.get = AsyncMock(return_value=None)
+        req = MagicMock()
+        req.backtest_id = "bt-legacy"
+        context = MagicMock()
+        context.abort = AsyncMock(side_effect=Exception("aborted"))
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.GetBacktest(req, context)
+
+        context.abort.assert_awaited_once()
+        code, msg = context.abort.await_args.args
+        assert code == grpc.StatusCode.NOT_FOUND
+        assert msg == "no detailed data for this run"
+
+    @pytest.mark.asyncio
+    async def test_no_db_path_aborts_not_found(self):
+        """Repo None (no DB) degrades to the same single FR-6 NOT_FOUND state."""
+        svc = make_servicer()  # repos None by default
+        req = MagicMock()
+        req.backtest_id = "bt-1"
+        context = MagicMock()
+        context.abort = AsyncMock(side_effect=Exception("aborted"))
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.GetBacktest(req, context)
+
+        code, msg = context.abort.await_args.args
+        assert code == grpc.StatusCode.NOT_FOUND
+        assert msg == "no detailed data for this run"
+
+    @pytest.mark.asyncio
+    async def test_read_error_aborts_not_found(self):
+        """A DB read error logs a warning and aborts NOT_FOUND (never a 500 leak)."""
+        svc = make_servicer()
+        svc._backtest_details_repo = AsyncMock()
+        svc._backtest_details_repo.get = AsyncMock(side_effect=RuntimeError("db down"))
+        req = MagicMock()
+        req.backtest_id = "bt-1"
+        context = MagicMock()
+        context.abort = AsyncMock(side_effect=Exception("aborted"))
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.GetBacktest(req, context)
+
+        code, msg = context.abort.await_args.args
+        assert code == grpc.StatusCode.NOT_FOUND
+        assert msg == "no detailed data for this run"

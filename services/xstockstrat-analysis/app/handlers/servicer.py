@@ -31,6 +31,7 @@ from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
+from app.repositories.backtest_details import BacktestDetailsRepository
 from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
 from app.repositories.strategies import StrategiesRepository
@@ -103,6 +104,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # appends a summary row here; the ListBacktests RPC reads it back. None in the no-DB
         # test path so make_servicer()-based tests are unaffected.
         self._backtest_runs_repo = BacktestRunsRepository(db_pool) if db_pool else None
+        # Full per-run detail (feature 068): OK runs persist their serialized BacktestResult
+        # here; GetBacktest reads it back (DB-only — never the in-memory dict). None in the
+        # no-DB test path.
+        self._backtest_details_repo = BacktestDetailsRepository(db_pool) if db_pool else None
         # Per-symbol evidence cells for the derived headline grade (feature 065). RunBacktest
         # buffers one cell per symbol on an OK run and flushes here; _recompute_headline reads
         # them back. None in the no-DB test path.
@@ -479,6 +484,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             range_start=range_start_dt,
             range_end=range_end_dt,
         )
+        # feature 068: persist the full result (trades + per-bar equity + diagnostics) for
+        # OK runs only — INSUFFICIENT runs never get detail (permanent FR-6 state, mirrors
+        # the symbol-cells gate above). Best-effort; ordered after the summary insert so the
+        # FK (detail ⇒ listed summary) can hold.
+        if result.status == analysis_pb2.BACKTEST_STATUS_OK:
+            await self._persist_backtest_detail(result)
 
         # feature 065: recompute the headline grade from the strategy's full evidence base (all
         # eligible cells) now that this run's cells have landed. Best-effort — a recompute failure
@@ -1182,6 +1193,32 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         except Exception as e:
             log.warning("failed to persist backtest run history: %s", e)
 
+    async def _persist_backtest_detail(self, result) -> None:
+        """Best-effort persist of an OK run's full serialized result (feature 068).
+
+        Stores the exact wire bytes ``GetBacktest`` will serve back ("store what you
+        serve") and evicts beyond the newest N per strategy in the same repo call.
+        The FK to ``backtest_runs`` makes a failed-summary-insert case fail here too,
+        inside the same warning wrapper (C-10(b) existence parity). No-op in the no-DB
+        test path; a DB error never fails the run.
+        """
+        if self._backtest_details_repo is None:
+            return
+        # Clamp: a negative config value would make the eviction LIMIT raise (and be
+        # silently swallowed by the wrapper → unbounded growth). The get_int zero-trap
+        # means a stored 0 reads as the default 20 (documented in CLAUDE.md).
+        retention = max(1, self._cfg.get_int("analysis.backtest.detail_retention_per_strategy", 20))
+        try:
+            await self._backtest_details_repo.insert(
+                backtest_id=result.backtest_id,
+                strategy_id=result.strategy_id,
+                completed_at=result.completed_at.ToDatetime(),
+                result_pb=result.SerializeToString(),
+                retention=retention,
+            )
+        except Exception as e:
+            log.warning("failed to persist backtest detail: %s", e)
+
     async def _persist_symbol_cells(
         self, cells, *, backtest_id, strategy_id, fingerprint, range_start, range_end
     ) -> None:
@@ -1264,6 +1301,33 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             log.warning("failed to read backtest run history: %s", e)
             return analysis_pb2.ListBacktestsResponse()
         return analysis_pb2.ListBacktestsResponse(runs=[_row_to_backtest_summary(r) for r in rows])
+
+    async def GetBacktest(self, request, context):
+        """Return the persisted full result of a past run (feature 068).
+
+        DB-only read path (design.md — the in-memory ``_backtests`` dict is never
+        consulted: it stores INSUFFICIENT results unconditionally, holds colliding
+        strategy_id keys, and never evicts). NOT_FOUND is the single state for legacy,
+        evicted, and INSUFFICIENT runs — and for the no-DB/read-error paths, which
+        degrade the same way (``ListBacktests`` empty-response precedent). No outbound
+        gRPC calls → nothing to propagate; no admin gate (read parity with
+        ``ListBacktests``).
+        """
+        row_bytes = None
+        if self._backtest_details_repo is not None:
+            try:
+                row_bytes = await self._backtest_details_repo.get(request.backtest_id)
+            except Exception as e:
+                log.warning("failed to read backtest detail: %s", e)
+                row_bytes = None
+        # Abort OUTSIDE the except block: context.abort raises, and a nested abort would
+        # be swallowed by the bare except (impl-spec advisory review note).
+        if row_bytes is None:
+            await context.abort(grpc.StatusCode.NOT_FOUND, "no detailed data for this run")
+            return
+        result = analysis_pb2.BacktestResult()
+        result.ParseFromString(row_bytes)
+        return result
 
     async def ManageStrategy(self, request, context):
         # Role check only — authn/authz is owned by the entry points (UI BFF / MCP agent).
